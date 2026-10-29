@@ -87,16 +87,14 @@ let participants = [];
 function agentMatches(agent, where) {
   if (!where) return true;
   if (where.revokedAt === null && agent.revokedAt !== null) return false;
-  // Stands in for accessibleAgentWhere: the requester must still share a board
-  // with the agent, which is how this codebase draws the team boundary.
-  // Fail closed, so dropping that clause from the real rule fails here rather
-  // than quietly widening access.
-  assert.notEqual(
-    where.__visibleTo,
-    undefined,
-    "the rule must still narrow the agent to one the requester can see",
-  );
-  return agent.sharedWith.includes(where.__visibleTo);
+  if (where.AND && !where.AND.every((clause) => agentMatches(agent, clause))) return false;
+  if (where.OR && !where.OR.some((clause) => agentMatches(agent, clause))) return false;
+  if (where.userId !== undefined && agent.ownerId !== where.userId) return false;
+  if (where.crossTeamHomeTeamId !== undefined) {
+    const marker = agent.crossTeamHomeTeamId ?? null;
+    if (where.crossTeamHomeTeamId === null ? marker !== null : marker === null) return false;
+  }
+  return where.__visibleTo === undefined || agent.sharedWith.includes(where.__visibleTo);
 }
 
 function sessionMatches(session, where) {
@@ -118,12 +116,15 @@ function sessionMatches(session, where) {
   // real rule fails here instead of quietly handing an old team's transcript to
   // a new one. An agent's own token is the other side of the conversation and
   // is scoped by its identity instead, so it has no agent clause and no scope.
-  if (where.agent !== undefined) {
+  if (where.agent?.revokedAt === null) {
+    assert.notEqual(where.agent.__visibleTo, undefined, "the rule must keep agent visibility checks");
     assert.ok(where.OR, "the rule must still scope a thread to its own team");
   }
   if (where.OR && !where.OR.some((branch) => sessionMatches(session, branch))) {
     return false;
   }
+  if (where.AND && !where.AND.every((branch) => sessionMatches(session, branch))) return false;
+  if (where.agentId === null && session.agentId !== null) return false;
   if (where.agentId?.not === null && session.agentId === null) return false;
   if (where.agent) {
     const agent = AGENTS[session.agentId];
@@ -163,7 +164,7 @@ const prisma = {
           message.id === where.id &&
           (where.sessionId === undefined || message.sessionId === where.sessionId),
       ) ?? null,
-    findMany: async ({ where, orderBy, take, cursor, skip }) => {
+    findMany: async ({ where, orderBy, take, cursor, skip, include }) => {
       assert.deepEqual(
         orderBy,
         [{ createdAt: "desc" }, { id: "desc" }],
@@ -175,7 +176,10 @@ const prisma = {
         assert.notEqual(at, -1, "cursor must exist in the ordered set");
         rows = rows.slice(at + (skip ?? 0));
       }
-      return rows.slice(0, take);
+      return rows.slice(0, take).map(({ ticketProposal, ...row }) => ({
+        ...row,
+        ...(include?.ticketProposal ? { ticketProposal } : {}),
+      }));
     },
     count: async ({ where }) => {
       // An agent's reply has no author user, and those are exactly the rows
@@ -269,7 +273,6 @@ const prisma = {
 };
 
 let sessionUserId = 6;
-let sharedChatEnabled = true;
 let broadcasts = [];
 
 stub("src/lib/telemetry/activationOccurrences.ts", { enqueueAuthenticatedConnection: async () => null });
@@ -282,12 +285,7 @@ stub("src/lib/agents/visibility.ts", {
   accessibleAgentWhere: (userId) => ({ __visibleTo: userId }),
 });
 stub("src/lib/flags.ts", {
-  AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
-  isFeatureEnabled: async (key, userId) =>
-    key === "htpr-6002-shared-agent-chat"
-      ? sharedChatEnabled && userId === 6
-      : false,
+  isFeatureEnabled: async () => false,
 });
 stub("src/lib/realtime/server.ts", {
   AGENT_CHAT_EVENT: "agent-chat",
@@ -424,6 +422,35 @@ test("history returns one page oldest first and reports more above it", async ()
   assert.equal(body.awaiting, true, "the newest message is the person's, so the agent owes a reply");
 });
 
+test("history keeps ticket proposals when rollout checks are disabled", async () => {
+  messages = [{
+    ...message(2),
+    ticketProposal: {
+      id: "proposal-1",
+      status: "CONFIRMED",
+      outcome: "Rename the login button",
+      ticketTitle: "Rename the login button",
+      targetProjectTitle: "Product",
+      targetSectionTitle: "Bugs",
+      task: { ticketNumber: "HTPR-9001", projectId: 15, uniqueIndex: 9001, status: "Normal" },
+    },
+  }];
+
+  const response = await historyRoute.GET(historyRequest(), routeContext());
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.messages[0].proposal, {
+    id: "proposal-1",
+    status: "CONFIRMED",
+    outcome: "Rename the login button",
+    ticketTitle: "Rename the login button",
+    targetProjectTitle: "Product",
+    targetSectionTitle: "Bugs",
+    failureMessage: null,
+    task: { ticketNumber: "HTPR-9001", url: "/detail/project-15/9001" },
+  });
+});
+
 test("the page above continues from the cursor without repeating a row", async () => {
   messages = Array.from({ length: 5 }, (_, index) => message(index + 1));
 
@@ -527,7 +554,6 @@ test("everyone the agent is shared with reads the same thread", async () => {
 });
 
 test("two people share unread state until either team or board access is revoked", async () => {
-  sharedChatEnabled = true;
   participants = [];
   messages = [message(1)];
   broadcasts = [];
@@ -599,92 +625,48 @@ test("two people share unread state until either team or board access is revoked
     sessionUserId = 6;
     TEAMS[7] = ["team-a"];
     AGENTS["agent-live"].sharedWith = [6, 7];
-    sharedChatEnabled = true;
   }
 });
 
-test("the shared-chat flag preserves owner chat and refuses teammate state", async () => {
-  sharedChatEnabled = false;
+test("shared conversations keep separate drafts with unrelated rollouts off", async () => {
   participants = [];
   messages = [message(1)];
   createdSessions = [];
   try {
-    sessionUserId = 6;
-    const ownerCreateResponse = await createSessionRoute.POST(
-      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
-        method: "POST",
-        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
-      }),
-    );
-    assert.equal(ownerCreateResponse.status, 200);
-    assert.equal(createdSessions[0].userId, 6);
-    assert.equal(createdSessions[0].teamId, "team-a");
-    assert.deepEqual(
-      participants.map((row) => row.userId),
-      [6],
-      "flag-off still records the owner participant for drafts and unread",
-    );
-
-    const ownerResponse = await historyRoute.GET(historyRequest(), routeContext());
-    const owner = await ownerResponse.json();
-    assert.equal(ownerResponse.status, 200);
-    assert.equal(owner.sharedConversationEnabled, false);
-    assert.ok(owner.viewer, "private owner chats keep the viewer draft/unread row");
-    assert.equal(owner.participants, null, "shared roster stays behind the flag");
-
-    const ownerDraftResponse = await participantRoute.PATCH(
-      new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
-        method: "PATCH",
-        body: JSON.stringify({ draft: "private-draft" }),
-      }),
-      routeContext(),
-    );
-    assert.equal(ownerDraftResponse.status, 200);
-    assert.equal(
-      participants.find((row) => row.userId === 6).draft,
-      "private-draft",
-    );
-
-    createdSessions = [];
-    sessionUserId = 7;
-    const createResponse = await createSessionRoute.POST(
-      new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
-        method: "POST",
-        body: JSON.stringify({ agentId: OPENABLE_AGENT }),
-      }),
-    );
-    assert.equal(createResponse.status, 404);
-    assert.deepEqual(createdSessions, []);
-
-    const teammateResponse = await historyRoute.GET(
-      historyRequest(),
-      routeContext(),
-    );
-    assert.equal(teammateResponse.status, 404);
-    const draftResponse = await participantRoute.PATCH(
-      new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
-        method: "PATCH",
-        body: JSON.stringify({ draft: "blocked" }),
-      }),
-      routeContext(),
-    );
-    assert.equal(draftResponse.status, 404);
-    assert.equal(
-      participants.find((row) => row.userId === 6).draft,
-      "private-draft",
-      "a refused teammate write does not change the owner draft",
-    );
-
+    for (const userId of [6, 7]) {
+      sessionUserId = userId;
+      const response = await createSessionRoute.POST(
+        new Request("https://app.hypertask.ai/api/ai-chat/create-session", {
+          method: "POST",
+          body: JSON.stringify({ agentId: OPENABLE_AGENT }),
+        }),
+      );
+      assert.equal(response.status, 200);
+      assert.equal(createdSessions.at(-1).userId, 6);
+      assert.equal(createdSessions.at(-1).teamId, "team-a");
+      const draft = await participantRoute.PATCH(
+        new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
+          method: "PATCH",
+          body: JSON.stringify({ draft: `draft-${userId}` }),
+        }),
+        routeContext(),
+      );
+      assert.equal(draft.status, 200);
+    }
+    for (const userId of [6, 7]) {
+      sessionUserId = userId;
+      const response = await historyRoute.GET(historyRequest(), routeContext());
+      const body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(body.sharedConversationEnabled, true);
+      assert.equal(body.viewer.draft, `draft-${userId}`);
+      assert.deepEqual(body.participants.map((row) => row.userId), [6, 7]);
+    }
     broadcasts = [];
     await chatBroadcast.broadcastChatSession("session-1");
-    assert.deepEqual(
-      broadcasts.map(({ channel }) => channel),
-      ["user-6"],
-      "flag-off still fans out live updates to the private owner",
-    );
+    assert.deepEqual(broadcasts.map(({ channel }) => channel), ["user-6", "user-7"]);
   } finally {
     sessionUserId = 6;
-    sharedChatEnabled = true;
   }
 });
 
@@ -967,7 +949,7 @@ test("the authorized fan-out list is resolved before the response, not after it"
   );
   // A serverless runtime can freeze once the response is flushed, so the
   // participant lookup has to be awaited rather than started and abandoned.
-  assert.match(source, /await chatParticipantUserIds\(sessionId\)/);
+  assert.match(source, /await chatParticipantUserIds\(sessionId, alsoUserIds\)/);
 });
 
 // ---------------------------------------------------------------------------

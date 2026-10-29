@@ -3,7 +3,6 @@ const test = require('node:test');
 const { NextRequest } = require('next/server');
 const { load } = require('./task-route-loader.cjs');
 
-const key = 'htpr-6924-rest-compat';
 const now = '2026-10-06T08:00:00.000Z';
 const agentId = '00000000-0000-4000-8000-000000000001';
 const session = { id: 'session-1', userId: 985, title: 'Chat', taskId: 50, messages: [], agentId: null };
@@ -36,7 +35,8 @@ const operations = {
 const preferenceOperations = ['getPreferences', 'preferences', 'patchPreferences'];
 const profileOperations = Object.keys(operations).filter((op) => !['createSession', 'allSessions'].includes(op));
 
-async function run(operation, mode = 'OFF', options = {}) {
+async function run(operation, requestedMode = 'OFF', options = {}) {
+  const mode = requestedMode === 'OFF' ? 'NO_SESSION' : requestedMode;
   const [suffix, method, defaultBody] = operations[operation];
   const calls = [], probes = [], limits = [], readers = [];
   const profileId = options.profileId ?? 985;
@@ -84,10 +84,8 @@ async function run(operation, mode = 'OFF', options = {}) {
       if (mode === 'USER_FAILURE') throw new Error('user lookup failed');
       return mode === 'NO_SESSION' ? null : { userId };
     } },
-    '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: key, SHARED_AGENT_CHAT_FLAG: 'shared-agent-chat', isFeatureEnabled: async (...args) => {
-      if (args[0] === 'htpr-7038-reset-saved-model-choices' || args[0] === 'htpr-7052-chat-names') return false;
-      probes.push(['flag', ...args]);
-      if (mode === 'FLAG_FAILURE') throw new Error('flag lookup failed');
+    '@/lib/flags': { isFeatureEnabled: async (...args) => {
+      if (args[0] === 'htpr-7052-chat-names') return false;
       return mode === 'ON';
     } },
     '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return options.limited ? new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again shortly.' }), { status: 429, headers: { 'content-type': 'application/json', 'Retry-After': '17' } }) : null; } },
@@ -127,7 +125,7 @@ async function run(operation, mode = 'OFF', options = {}) {
   const url = new URL(`https://fixture.invalid/api/${suffix}?taskId=50&projectId=15&fieldId=${field.id}&delete=${session.id}&range=week&rangeStart=2026-10-05&rangeEndExclusive=2026-10-12&start=2026-10-05T00:00:00.000Z&endExclusive=2026-10-12T00:00:00.000Z&timezone=UTC&compat=htpr-6924&userId=6`);
   for (const [name, value] of Object.entries(options.query ?? {})) value === null ? url.searchParams.delete(name) : url.searchParams.set(name, value);
   const raw = Object.hasOwn(options, 'raw') ? options.raw : JSON.stringify(defaultBody ?? {});
-  const request = new NextRequest(url, { method, headers: { cookie: 'fixture', 'content-type': 'application/json', 'x-user-id': '6', 'x-feature-flag': key }, ...(['GET', 'DELETE'].includes(method) ? {} : { body: raw }) });
+  const request = new NextRequest(url, { method, headers: { cookie: 'fixture', 'content-type': 'application/json', 'x-user-id': '6' }, ...(['GET', 'DELETE'].includes(method) ? {} : { body: raw }) });
   let jsonReads = 0;
   const originalJson = request.json.bind(request);
   request.json = async () => { jsonReads++; return originalJson(); };
@@ -165,7 +163,26 @@ const baseline = {
               "taskId": 50,
               "messages": {
                 "some": {}
-              }
+              },
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true,
@@ -208,7 +225,26 @@ const baseline = {
           {
             "where": {
               "id": "session-1",
-              "userId": 985
+              "userId": 985,
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true
@@ -259,7 +295,26 @@ const baseline = {
           {
             "where": {
               "id": "session-1",
-              "userId": 985
+              "userId": 985,
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true,
@@ -372,7 +427,26 @@ const baseline = {
           {
             "where": {
               "userId": 985,
-              "id": "session-1"
+              "id": "session-1",
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             },
             "select": {
               "id": true
@@ -430,7 +504,26 @@ const baseline = {
                 "in": [
                   "session-1"
                 ]
-              }
+              },
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
+              ]
             }
           }
         ]
@@ -1977,6 +2070,25 @@ const baseline = {
                     }
                   }
                 }
+              ],
+              "AND": [
+                {
+                  "OR": [
+                    {
+                      "agentId": null
+                    },
+                    {
+                      "agent": {
+                        "crossTeamHomeTeamId": null
+                      }
+                    },
+                    {
+                      "agent": {
+                        "userId": 985
+                      }
+                    }
+                  ]
+                }
               ]
             },
             "include": {
@@ -2017,29 +2129,25 @@ const baseline = {
 
 if (require.main === module) {
   for (const operation of profileOperations) {
-    test(`${operation}: ON/OFF and failed probes preserve frozen success bytes, scope, actors and side effects`, async () => {
-      for (const mode of ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION']) {
+    test(`${operation}: session, legacy and failed probes preserve frozen success bytes, scope, actors and side effects`, async () => {
+      for (const mode of ['ON', 'OFF', 'USER_FAILURE', 'NO_SESSION']) {
         const result = await run(operation, mode);
         assert.deepEqual(contract(result), baseline[operation]);
         assert.equal(result.probes.filter(([kind]) => kind === 'user').length, ['velocity', 'fieldValue'].includes(operation) ? 2 : 1);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), ['ON', 'OFF', 'FLAG_FAILURE'].includes(mode) ? [['flag', key, 985]] : []);
         assert.equal(result.probes[0][1], result.requestHeaders);
       }
     });
     if (preferenceOperations.includes(operation)) continue;
-    // HTPR-7073: a missing, invalid or mismatched profile cookie no longer 401s a signed session
-    // when the REST compat flag is on; the profile is loaded for the session user from the database.
-    test(`${operation}: flag OFF keeps the original 401 for a missing/invalid profile (flag probed once, no profile query)`, async () => {
+    test(`${operation}: no session keeps the original 401 for a missing/invalid profile (no profile query)`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }]) {
         const result = await run(operation, 'OFF', { ...options, raw: '{' });
         assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
         assert.equal(result.jsonReads, 0);
         assert.deepEqual(result.limits, []);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
         assert.ok(!result.calls.some(([name]) => name === 'userFind'));
       }
     });
-    test(`${operation}: flag ON loads the profile of the signed session user when the profile cookie is missing, invalid or mismatched`, async () => {
+    test(`${operation}: a signed session loads the profile of the signed session user when the profile cookie is missing, invalid or mismatched`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }, { profileId: 7 }]) {
         const result = await run(operation, 'ON', { ...options, raw: JSON.stringify(operations[operation][2] ?? {}) });
         // A mismatched cookie (profileId 7) also moves the fixture owner, so only the lookup is compared there.
@@ -2049,12 +2157,11 @@ if (require.main === module) {
         assert.ok(!result.calls.some(([name, args]) => name !== 'userFind' && args.includes(7)), 'must never act as the cookie user 7');
       }
     });
-    test(`${operation}: no session or no user row keeps the original 401 and a mismatched profile stays legacy with the flag OFF`, async () => {
+    test(`${operation}: no session or no user row keeps the original 401 and a mismatched profile stays legacy without a session`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }]) {
         const result = await run(operation, 'NO_SESSION', { ...options, raw: '{' });
         assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
-        assert.ok(!result.calls.some(([name]) => name === 'userFind'));
+          assert.ok(!result.calls.some(([name]) => name === 'userFind'));
       }
       const noRow = await run(operation, 'ON', { noProfile: true, noUserRow: true, raw: '{' });
       assert.deepEqual(contract(noRow), baseline[`${operation}:unauthorized`]);
@@ -2063,42 +2170,36 @@ if (require.main === module) {
       assert.deepEqual(contract(await run(operation, 'NO_SESSION', { profileId: 7 })), contract(legacy));
     });
   }
-  // HTPR-7068: preferences identify the user from the signed session alone when the REST compat flag is on.
   for (const operation of preferenceOperations) {
-    test(`${operation}: flag ON acts as the signed session user when the profile cookie is missing, invalid or mismatched`, async () => {
+    test(`${operation}: a signed session acts as the session user when the profile cookie is missing, invalid or mismatched`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }, { profileId: 7 }]) {
         const result = await run(operation, 'ON', { ...options, raw: JSON.stringify(operations[operation][2] ?? {}) });
         assert.deepEqual(contract(result), baseline[operation]);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
         assert.ok(!result.calls.some(([, args]) => args.includes(7)), 'must never act as the cookie user 7');
       }
     });
-    test(`${operation}: flag OFF keeps the legacy 401 for a missing or invalid profile and the legacy cookie user for a mismatched one`, async () => {
+    test(`${operation}: no session keeps the legacy 401 for a missing or invalid profile and the legacy cookie user for a mismatched one`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }]) {
         const result = await run(operation, 'OFF', { ...options, raw: '{' });
         assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
         assert.equal(result.jsonReads, 0);
         assert.deepEqual(result.limits, []);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
       }
       const legacy = await run(operation, 'OFF', { profileId: 7 });
-      assert.deepEqual(legacy.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
       assert.equal(legacy.status, 200);
-      assert.ok(legacy.calls.some(([, args]) => args.includes(7)), 'flag OFF stays on the legacy cookie user');
-      assert.deepEqual(legacy.readers, []);
+      assert.ok(legacy.calls.some(([, args]) => args.includes(7)), 'no session stays on the legacy cookie user');
+      assert.equal(legacy.readers.length, operations[operation][1] === 'GET' ? 0 : 1);
     });
-    test(`${operation}: without a session the legacy path is unchanged and no flag is probed`, async () => {
+    test(`${operation}: without a session the legacy path is unchanged`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }]) {
         const result = await run(operation, 'NO_SESSION', { ...options, raw: '{' });
         assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
         assert.equal(result.jsonReads, 0);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
-      }
+        }
       const result = await run(operation, 'NO_SESSION', { profileId: 7 });
       assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { profileId: 7 })));
-      assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
       assert.deepEqual(result.limits, []);
-      assert.deepEqual(result.readers, []);
+      assert.equal(result.readers.length, operations[operation][1] === 'GET' ? 0 : 1);
     });
   }
   for (const operation of ['fields', 'createField', 'patchField', 'deleteField', 'reorder', 'fieldValue', 'bindAgent']) {
@@ -2126,7 +2227,7 @@ if (require.main === module) {
         });
         const result = await run(operation, 'ON', { mocks: { '@/lib/auth/getSessionUser': { getSessionUser } } });
         assert.deepEqual(contract(result), baseline[operation]);
-        assert.deepEqual(result.probes, [['flag', key, 985]]);
+        assert.deepEqual(result.probes, []);
         assert.equal(sessionReads, process.env.AUTH_LEGACY_FAST_PATH === '1' ? 0 : ['velocity', 'fieldValue'].includes(operation) ? 2 : 1);
       }
     } finally {
@@ -2153,22 +2254,6 @@ if (require.main === module) {
       }
     }
   });
-  test('remaining routes obey real Owner + QA/OFF/Everyone audience decisions, ignoring forged request opt-in', async () => {
-    for (const mode of [null, 'OFF', 'EVERYONE']) for (const id of [6, 985, 7]) {
-      const flags = load('src/lib/flags.ts', {
-        '@/lib/prisma': { default: { user: { findUnique: async () => ({ email: id === 6 ? 'valentin.yeo@gmail.com' : id === 985 ? 'valentin@hypertask.ai' : 'ordinary@fixture.invalid' }) }, featureFlag: { findUnique: async () => mode === null ? null : { mode } } } },
-        '@/lib/auth/getSessionUser': {},
-        '@/lib/agentRuns/model': {},
-      });
-      for (const operation of profileOperations) {
-        const result = await run(operation, 'ON', { userId: id, profileId: id, mocks: { '@/lib/flags': flags } });
-        assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { userId: id, profileId: id })));
-        const enabled = mode === 'EVERYONE' || (mode === null && id !== 7);
-        if (['taskSessions', 'updateSession', 'addMessage', 'deleteSession'].includes(operation)) assert.equal(result.limits.length, enabled ? 1 : 0);
-        if (['preferences', 'patchPreferences', 'bindAgent', 'updateSession', 'addMessage', 'revoke', 'createField', 'patchField', 'reorder', 'fieldValue'].includes(operation)) assert.equal(result.readers.length, enabled ? 1 : 0);
-      }
-    }
-  });
 }
 if (require.main === module) {
   test('frozen route oracle rejects response field ordering and status drift (positive mutation controls)', async () => {
@@ -2182,4 +2267,4 @@ if (require.main === module) {
     }
   });
 }
-module.exports = { run, contract, baseline, operations, profileOperations, key };
+module.exports = { run, contract, baseline, operations, profileOperations };

@@ -20,7 +20,7 @@ function fixture(enabled, count, usage = {}, mobile = false) {
     "@/store/currentPageActions": { currentPageActionsAtom: {} },
     "@/lib/state": { useRecoilState: atom => React.useState(atom.value), useRecoilValue: atom => atom.value },
     "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
-    "next/navigation": { usePathname: () => "/project-15" },
+    "next/navigation": { useRouter: () => ({ push() {} }), usePathname: () => "/project-15" },
     "reactstrap": { ModalBody: box },
     "@/components/Common/CommonModalComponents": { ModalContainerCustom: box, ModalHintBar: () => null,
       ModalInput: () => React.createElement("input") },

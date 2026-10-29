@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { IFavorites, IProject, ISection } from "@/models/model";
 import { activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -15,7 +16,9 @@ import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import type { SectionCompProps } from "./LandingPageSection";
 
 type Context = Pick<SectionCompProps, "_allProjects" | "_boardLayout" | "_projectIndex" | "_currentUser" | "_readinessProjectId" | "_readinessRouteEntryId" | "_authenticated" | "_localDatabasePilotEnabled" | "_readinessSource">;
@@ -27,7 +30,10 @@ export function useLandingSectionState(context: Context) {
   } = context;
 
 
+const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
+const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
+const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
 const router = useRouter();
 const queryClient = useQueryClient();
 const {
@@ -67,12 +73,14 @@ const { timers: runningTimers, timerDataReady } = useBoardRunningTimers(
 );
 const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
+  agentCreatorFilterEnabled,
+  legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
     : new Set(sections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [assigneeFixEnabled, runningTimers, sections, timerDataReady]);
+}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, runningTimers, sections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]
@@ -80,7 +88,7 @@ useEffect(() => {
 }, [_allProjects, _projectIndex])
 
 const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
-const filteredSectionsForActiveView = useMemo(() => {
+const subtaskSectionsForActiveView = useMemo(() => {
   const persistedFilteredSections = _allProjects?.[_projectIndex]?.filteredSections ?? [];
   if (!_currentProject) return persistedFilteredSections;
 
@@ -92,10 +100,7 @@ const filteredSectionsForActiveView = useMemo(() => {
     buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
     filterRuntimeContext,
   );
-  return getFilteredEmptySections(
-    getAppliedSubtaskSections(filtered, _currentProject),
-    _currentProject,
-  );
+  return getAppliedSubtaskSections(filtered, _currentProject);
 }, [
   _allProjects,
   _currentProject,
@@ -105,6 +110,12 @@ const filteredSectionsForActiveView = useMemo(() => {
   filterRuntimeContext,
   sections,
 ]);
+let filteredSectionsForActiveView = subtaskSectionsForActiveView;
+if (showEmptyViewColumns) {
+  if (_currentProject) filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true);
+} else if (_currentProject) {
+  filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject);
+}
 
 const [favorites, setFavorites] = useState<IFavorites[]>([]);
 const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(isXScrollOnKanbanAtom);

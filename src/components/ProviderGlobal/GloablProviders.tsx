@@ -186,7 +186,7 @@ import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHyd
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -202,7 +202,6 @@ import {
 import {
   areGlobalShortcutsEnabled,
   isGlobalCreateTaskShortcut,
-  shouldOpenGlobalCreateTask,
 } from "@/lib/keyboard/globalShortcutRoutes";
 import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShortcuts";
 import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
@@ -320,7 +319,6 @@ export default function GlobalProvider({
   const pathname = usePathname();
   const firstScreen = useFirstScreenSurface(authenticatedUserId);
   const routeOwnsMobileChrome = Boolean(firstScreen);
-  const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   let boardShortcutLookup = boardFromFreshList;
   if (useFlag(HTPR_7588_BOARD_SHORTCUT_FROM_DEVICE_FLAG)) boardShortcutLookup = boardFromDeviceFirst;
   useAppShellSurfaceShortcuts();
@@ -451,11 +449,8 @@ export default function GlobalProvider({
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const isAgentChatPage = pathname?.startsWith("/agents/chat") ?? false;
   const isTaskDetailPage = pathname?.startsWith("/detail") ?? false;
-  const agentChatMobileFullscreenFlag = useFlag(
-    HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
-  );
   const shouldMountAgentChatRuntime =
-    isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
+    isAgentChatPage && mbl;
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const [sidebarRequested, setSidebarRequested] = useState(false);
   const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
@@ -585,8 +580,8 @@ export default function GlobalProvider({
     agentChatMobileFullscreenAtom,
   );
   const agentChatHidesMobileShell =
-    (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
-    (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
+    agentChatMobileFullscreenAtomOn ||
+    isAgentChatPath(pathname);
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
   let reserveFlaggedBoardChat = false;
   if (useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG) && !aiChatOpenSwitchesEnabled) reserveFlaggedBoardChat = reserveBoardChat;
@@ -1068,9 +1063,7 @@ export default function GlobalProvider({
         e.preventDefault();
         lastgClick.current = null;
         return navigate("Calendar");
-      } else if (
-        shouldOpenGlobalCreateTask(pathname, myTasksShortcutsWidthEnabled)
-      ) {
+      } else {
         e.preventDefault();
         toggleCreateTaskGlobally();
       }
@@ -1323,8 +1316,8 @@ export default function GlobalProvider({
         />
       )}
 
-      {(agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
-      (agentChatMobileFullscreenFlag && isAgentChatPath(pathname)) ? null : (
+      {agentChatMobileFullscreenAtomOn ||
+      isAgentChatPath(pathname) ? null : (
         showMobileShellPath && currentUser && (
         <>
           {!routeOwnsMobileChrome && <MobileTopBar

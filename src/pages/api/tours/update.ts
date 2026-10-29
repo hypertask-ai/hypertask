@@ -1,8 +1,9 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getCurrentUserFromCookies } from '@/utils/getCurrentUser';
 import prisma from '@/lib/prisma';
 import { ProductToursData } from '@/lib/tours';
-import { SESSION_COOKIE, verifySession } from '@/lib/auth/session';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export default async function handler(
   req: NextApiRequest,
@@ -12,12 +13,13 @@ export default async function handler(
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res.status(401).json({ error: 'Unauthorized', code: 'SESSION_REQUIRED' });
   }
 
-  const userId = session.id;
+  const userId = session.userId;
 
   try {
     const { tourId, completed, skipped } = req.body;

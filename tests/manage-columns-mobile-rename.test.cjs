@@ -29,7 +29,7 @@ test("the Save action uses the existing rename persistence path", () => {
   );
   assert.match(
     source,
-    /saveMode === "RENAME"[\s\S]*?axios\.post\(`\/api\/section\/update`/,
+    /saveMode === "RENAME"[\s\S]*?writeSection\(/,
   );
 });
 

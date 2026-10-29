@@ -11,6 +11,7 @@ function inboxCheck() {
   const checks = new Map();
   const register = (name, ...args) => checks.set(name, args.at(-1));
   register.afterEach = () => {};
+  register.describe = () => {};
   register.skip = condition => assert.equal(condition, false);
   const filename = path.resolve("e2e/smoke/prod.spec.ts");
   const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -20,6 +21,7 @@ function inboxCheck() {
     exports: {}, __dirname: path.dirname(filename), process: { env: {} },
     require: specifier => {
       if (specifier === "@playwright/test") return { test: register, expect };
+      if (specifier === "../../src/lib/firstScreen/boardDisplay") return load("src/lib/firstScreen/boardDisplay.ts", {});
       if (specifier.startsWith("./lib/")) return load(`e2e/smoke/${specifier.slice(2)}.ts`, {});
       return require(specifier);
     },

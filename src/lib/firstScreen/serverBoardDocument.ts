@@ -1,10 +1,13 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import "server-only";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
+import { HTPR_7799_PROJECT_ENTRY_FLAG } from "@/lib/flags/keys";
 import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { featureFlagsForUser } from "@/lib/flags";
 import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
 import getFirst from "@/utils/controllers/projects/getFirst";
@@ -28,6 +31,7 @@ export async function readBoardDocument(route: string, displayCookie: string | u
       flags[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] !== true) return null;
   const cookieStore = await cookies();
   let projectId = Number(url.searchParams.get("id"));
+  if (flags[HTPR_7799_PROJECT_ENTRY_FLAG] && (!Number.isSafeInteger(projectId) || projectId <= 0)) return null;
   if (!Number.isSafeInteger(projectId) || projectId <= 0) {
     projectId = Number(cookieStore.get("previousBoard")?.value.split("|&|")[0].replace("project-", ""));
   }
@@ -44,7 +48,11 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   const payload = projectBoardDocumentPayload(response.json as unknown as BoardTasksPayload);
   if (payload.project?.id !== projectId) return null;
   const viewSlug = url.searchParams.get("view");
-  const runtimeContext = { legacyAgentAssigneeMatch: flags[HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG] === false };
+  const runtimeContext = {
+    agentCreatorFilterEnabled: flags[HTPR_7865_AGENT_CREATOR_FILTER_FLAG] === true,
+    legacyAgentAssigneeMatch: flags[HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG] === false,
+    legacyMissingPersonalViewFilters: flags[HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG] === false,
+  };
   const hydratedProject = hydrateBoardWithPayload(payload.project, payload, runtimeContext);
   const pinnedProject = pinProjectViewToUrl(hydratedProject, viewSlug);
   const project = pinnedProject === hydratedProject

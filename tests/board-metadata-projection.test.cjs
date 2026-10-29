@@ -11,8 +11,7 @@ function loadBoardController(prisma) {
   const cache = new Map();
   const stubs = {
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async rows => rows },
     "@/utils/controllers/tasks/attachOpenBlockingTasks": {
       attachOpenBlockingTasks: async (tasks) => tasks,
     },

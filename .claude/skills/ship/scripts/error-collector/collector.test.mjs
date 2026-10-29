@@ -45,7 +45,9 @@ if (name === 'ht') {
   if (args[0] !== 'GET') throw new Error('WRITE FORBIDDEN');
   if (cfg.searchFail) exit();
   const url = new URL(args[1], 'https://fake.invalid');
-  if (url.pathname === '/mcp/projects/4060/sections') {
+  if (url.pathname.startsWith('/mcp/tasks/') && url.pathname.endsWith('/agent-activity')) {
+    console.log(JSON.stringify({ success: true, activities: read('activities.json', []).filter(item => item.ticket === url.pathname.split('/')[3]) }));
+  } else if (url.pathname === '/mcp/projects/4060/sections') {
     console.log(JSON.stringify({ success: true, sections: cfg.sections ?? [{ id: 10414, section_title: 'Backlog', projectId: 4060, deleted: false }] }));
   } else {
     if (url.pathname !== '/mcp/tasks') throw new Error('unexpected read');
@@ -70,6 +72,10 @@ if (name === 'ht') {
     console.log(JSON.stringify({ success: true, task: cfg.badReceipt ? { ticketNumber: 'invalid receipt' } : task }));
   } else if (plain[0] === 'activity' && plain[1] === 'add') {
     if (cfg.activityFail) exit();
+    const saved = read('activities.json', []);
+    saved.unshift({ ticket: plain[2], text: plain[3], createdAt: new Date().toISOString() });
+    writeFileSync(join(home, 'activities.json'), JSON.stringify(saved));
+    if (cfg.ambiguousActivity) exit();
     console.log('fake-activity-id');
   } else throw new Error('unexpected vcc command');
 } else throw new Error('unexpected command');
@@ -120,15 +126,15 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
   assert.notEqual(fingerprint('web', 'failed 42', '/users/1'), fingerprint('api', 'failed 42', '/users/1'));
 });
 
-check('sources', 'PowerShell cancellation sessions count as one new kind across transient scopes', () => withHarness(async h => {
+check('sources', 'PowerShell genuine pipe failures count as one new kind across transient scopes', () => withHarness(async h => {
   const messages = [
     ['run-u2003472.scope', '7.6.7:B:80', 2169841],
     ['run-u2003644.scope', '7.6.7:C:80', 2863890],
     ['run-r1b66062f07d0426abf597f7579b30ec8.scope', '7.6.7:C:80', 3021000],
     ['run-r536fa8835f1f416693556a3156812a26.scope', '7.4.6:C:99', 3051000],
-  ].map(([unit, session, pid]) => `${unit}: (${session}) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: ${pid} in AppDomain: None. Error Message: Operation canceled.`);
+  ].map(([unit, session, pid]) => `${unit}: (${session}) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: ${pid} in AppDomain: None. Error Message: Access denied.`);
   assert.equal(new Set(messages.map(message => fingerprint('vps-journal', message))).size, 1);
-  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Operation canceled.', 'Access denied.')));
+  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Access denied.', 'Connection refused.')));
   assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vercel', messages[0]));
   h.events(messages.map(message => event({ service: 'vps-journal', board: 4060, message })));
   assert.equal(await h.run(), 0);
@@ -308,7 +314,7 @@ check('tickets', 'creation options, redacted escaped HTML, atomic private state 
   h.events([event({ message: `Checkout failed ${unsafe}`, stack: Array.from({ length: 50 }, (_, i) => `${i}: ${unsafe}`).join('\n') })]);
   await h.run();
   const call = creates(h)[0];
-  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', 'Bugs', '--labels', 'prod-error', '--priority', 'high', '--title']);
+  assert.deepEqual(call.args.slice(0, 12), ['--json', 'task', 'create', '--project', '15', '--section', 'Bugs', '--labels', 'Error Log', '--priority', 'high', '--title']);
   assert.match(call.description, /^<p><strong>/);
   assert.match(call.description, /error-fingerprint:[a-f0-9]{16}<\/p>$/);
   assert.ok(!call.description.includes('<script>'));
@@ -413,6 +419,7 @@ check('tickets', 'negative control rejects a known-group data-loss mutation', ()
   writeFileSync(join(directory, 'collector.mjs'), source.replace(old, 'const known = undefined;'));
   writeFileSync(join(directory, 'io.mjs'), readFileSync(join(HERE, 'io.mjs')));
   writeFileSync(join(directory, 'noise.json'), readFileSync(join(HERE, 'noise.json')));
+  writeFileSync(join(directory, 'incident.mjs'), readFileSync(join(HERE, 'incident.mjs')));
   const mutant = await import(pathToFileURL(join(directory, 'collector.mjs')));
   h.events([event()]); await mutant.collect({ env: h.env, now: NOW, sources: [fixture] });
   h.events([event({ ts: new Date(NOW + HOUR).toISOString() })]);
@@ -705,6 +712,80 @@ check('reporting', 'an SSH client hanging up is noise, other sshd failures are e
   assert.equal(creates(h).length, 1);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 1);
   assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 1);
+}));
+
+check('reporting', 'SSH client resets under session scopes are noise, real failures still file (YPER4-450)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, stack: '' };
+  h.events([
+    event({ ...vps, route: 'session-924033.scope', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+    event({ ...vps, route: 'ssh.service', message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+    event({ ...vps, route: 'session-123.scope', message: 'session-123.scope: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe' }),
+    event({ ...vps, route: 'session-123.scope', message: 'session-123.scope: error: bind [127.0.0.1]:7979: Address already in use' }),
+    event({ ...vps, route: 'database.service', message: 'database.service: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+    event({ service: 'vercel', message: 'session-924033.scope: fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer' }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+}));
+
+check('reporting', 'a one-shot gate observer exiting 1 on purpose is noise, other failed units still file (YPER4-833)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, route: 'init.scope', stack: '' };
+  const failed = unit => `init.scope: Failed to start ${unit} - /usr/bin/bash /home/valentin/projects/ceo/runs/IGSH-976/observe-once.sh.`;
+  h.events([
+    event({ ...vps, message: failed('igsh976-observe-180200.service') }),
+    event({ ...vps, message: failed('igsh976-observe-181819.service') }),
+    event({ ...vps, message: failed('igsh976-collect-180200.service') }),
+    event({ ...vps, message: failed('error-collector.service') }),
+    event({ service: 'vercel', message: failed('igsh976-observe-180200.service') }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+}));
+
+check('reporting', 'SSH daemon identifier fallback ignores client resets but retains genuine failures (YPER4-541)', () => withHarness(async h => {
+  const row = (message, overrides = {}) => JSON.stringify({ SYSLOG_IDENTIFIER: 'sshd', MESSAGE: message, __REALTIME_TIMESTAMP: String((NOW - 1000) * 1000), ...overrides });
+  const events = journal.parseJournal([
+    row('fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer'),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Broken pipe'),
+    row('error: bind [127.0.0.1]:7979: Address already in use'),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Permission denied'),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer', { SYSLOG_IDENTIFIER: 'database' }),
+    row('fatal: ssh_packet_send_debug: send DEBUG: Connection reset by peer', { _SYSTEMD_UNIT: 'sshd.service' }),
+  ].join('\n'));
+  h.events(events);
+  await h.run();
+  assert.equal(creates(h).length, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 3);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 3);
+  assert.ok(creates(h).some(call => call.description.includes('Address already in use')));
+  assert.ok(creates(h).some(call => call.description.includes('Permission denied')));
+  assert.ok(creates(h).some(call => call.description.includes('database: fatal: ssh_packet_send_debug')));
+}));
+
+check('reporting', 'PowerShell shutdown cancellation is noise, genuine pipe failures still file', () => withHarness(async h => {
+  const message = 'run-u2003644.scope: (7.6.7:C:80) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: 1990196 in AppDomain: None.  Error Message: Operation canceled.';
+  const vps = { service: 'vps-journal', board: 4060, route: 'run-u2003644.scope', stack: '' };
+  h.events([
+    event({ ...vps, message }),
+    event({ ...vps, message: message.replace('run-u2003644.scope', 'run-r1b66062f07d0426abf597f7579b30ec8.scope') }),
+    event({ ...vps, message: message.replace('Operation canceled.', 'Access denied.') }),
+    event({ ...vps, message: message.replace('Operation canceled.', 'Operation canceled. Unexpected failure.') }),
+    event({ ...vps, message: `${message}\nAccess denied.` }),
+    event({ ...vps, route: 'worker.service', message: message.replace('run-u2003644.scope', 'worker.service') }),
+    event({ ...vps, service: 'vercel', message }),
+  ]);
+  assert.equal(await h.run(), 0);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 2);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 4);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+  assert.equal(creates(h).length, 5);
+  assert.ok(creates(h).some(call => call.description.includes('Access denied.')));
 }));
 
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
@@ -1473,4 +1554,104 @@ check('tickets', 'stale records retain fourteen UTC days without pruning ticket 
   assert.deepEqual(h.state().stale[fp], stale);
   assert.deepEqual(h.state().fingerprints, state.fingerprints);
   assert.deepEqual(h.state().activities, state.activities);
+}));
+
+check('incidents', 'recorded MCP wrapper and four Vercel payloads become one ticket with five activities', async () => withHarness(async h => {
+  const { plain } = await import('./incident.mjs');
+  const recorded = JSON.parse(readFileSync(join(HERE, 'fixtures/project-validation.json'), 'utf8')).tasks;
+  const first = { ...recorded[0], id: 8017, projectId: 15, status: 'Normal', section: 'Bugs' };
+  h.remote([first]);
+  const replay = recorded.slice(1).map((task, index) => event({ service: 'vercel', message: plain(task.description).split('Sample message: ')[1].replace(/\s+error-fingerprint:.*/s, '').trim(), route: index === 0 ? '/mcp' : '/api/mcp/projects', ts: new Date(NOW - 1000 - index).toISOString(), stack: '' }));
+  first.description = first.description.replace('2026-10-26T08:52:23.162Z', new Date(NOW - 2000).toISOString());
+  h.remote([first]);
+  h.events(replay);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 0);
+  assert.equal(activities(h, 'HTPR-8017').filter(call => call.args[3].includes('error-occurrence:')).length, 5);
+  assert.equal(Object.keys(h.state().fingerprints).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 0);
+  await h.run();
+  assert.equal(activities(h, 'HTPR-8017').filter(call => call.args[3].includes('error-occurrence:')).length, 5);
+  h.events([event({ service: 'vercel', message: replay[1].message.replaceAll('updatedAt', 'otherField'), route: '/api/mcp/projects', ts: new Date(NOW + 1000).toISOString(), stack: '' })]);
+  await h.run({ now: NOW + 2000 });
+  assert.equal(creates(h).length, 1, 'different field on the same route must get its own ticket');
+  assert.match(creates(h)[0].description, /unknown-argument:otherField/);
+}));
+
+check('incidents', 'new root ticket groups operations and preserves activities after ambiguous writes', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.findMany()` invocation: Unknown argument `updatedAt`.';
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' }), event({ service: 'vercel', message: message.replace('findMany', 'count'), route: '/api/mcp/projects' })]);
+  h.config({ ambiguousActivity: true });
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(Object.keys(h.state().occurrences).length, 2);
+  h.config({});
+  await h.run();
+  assert.equal(activities(h, 'HTPR-100').length, 2, 'saved activity markers recover ambiguous writes');
+  assert.equal(Object.keys(h.state().occurrences).length, 0);
+}));
+
+check('incidents', 'simultaneous distinct fields never reserve the same untyped MCP report', async () => withHarness(async h => {
+  h.remote([{ id: 8017, ticketNumber: 'HTPR-8017', projectId: 15, status: 'Normal', section: 'Bugs', description: `<p>Tool: hypertask_projects</p><p>HTTP status: 500</p><p>Last seen: ${new Date(NOW - 2000).toISOString()}</p>` }]);
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.findMany()` invocation: Unknown argument `updatedAt`.';
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' }), event({ service: 'vercel', message: message.replace('updatedAt', 'otherField'), route: '/api/mcp/projects' })]);
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(new Set(Object.values(h.state().fingerprints).map(record => record.ticket)).size, 2);
+  assert.equal(activities(h, 'HTPR-8017').length, 0);
+}));
+
+check('incidents', 'legacy message fingerprint on another route cannot own the new route', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.findMany()` invocation: Unknown argument `updatedAt`.';
+  h.remote([{ id: 8000, ticketNumber: 'HTPR-8000', projectId: 15, status: 'Normal', description: `<p>Routes: /api/projects</p><p>First seen: ${new Date(NOW - 2000).toISOString()}</p><p>${message}</p><p>error-fingerprint:${fingerprint('vercel', message)}</p>` }]);
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' })]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, 'HTPR-8000').length, 0);
+}));
+
+check('incidents', 'retained legacy pending roots migrate before filing; deleted legacy matches stay deleted', async () => withHarness(async h => {
+  await h.run();
+  const state = h.state();
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: Unknown argument `updatedAt`.';
+  const fp = fingerprint('vercel', message);
+  state.pending[fp] = { board: 15, service: 'vercel', rules: 3, message, normalized: normalize(message), stack: '', routes: ['/api/mcp/projects'], count: 2, firstSeen: new Date(NOW - 1000).toISOString(), lastSeen: new Date(NOW - 1000).toISOString() };
+  h.seed(state);
+  h.remote([{ id: 8000, ticketNumber: 'HTPR-8000', projectId: 15, status: 'Deleted', description: `<p>Routes: /api/mcp/projects</p><p>First seen: ${new Date(NOW - 1000).toISOString()}</p><p>${message}</p><p>error-fingerprint:${fp}</p>` }]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(Object.keys(h.state().pending).length, 0);
+  assert.equal(Object.values(h.state().fingerprints)[0].deleted, true);
+  assert.equal(activities(h, 'HTPR-8000').length, 0);
+}));
+
+check('incidents', 'repeated hits in one collection window make one counted activity', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: Unknown argument `updatedAt`.';
+  h.events(Array.from({ length: 50 }, (_, index) => event({ service: 'vercel', message, route: '/api/mcp/projects', ts: new Date(NOW - index - 1).toISOString() })));
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, 'HTPR-100').length, 1);
+  assert.match(activities(h, 'HTPR-100')[0].args[3], /50 hits/);
+}));
+
+check('incidents', 'long matching dumps keep distinct-root activities and redact canonical paths', async () => withHarness(async h => {
+  const prefix = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: ' + 'argument dump '.repeat(40);
+  const route = '/api/projects/person@example.invalid/sk-abcdefghijklmnopqrstuv';
+  h.events(['firstField', 'secondField'].map(field => event({ service: 'vercel', route, message: prefix + `Unknown argument \`${field}\`.` })));
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(activities(h).filter(call => call.args[2] !== 'YPER4-354').length, 2);
+  assert.doesNotMatch(JSON.stringify(h.state()) + JSON.stringify(creates(h)), /person@example|sk-abcdefghijkl/);
+}));
+
+check('incidents', 'wrapper-only windows never renew actual root timestamps', async () => withHarness(async h => {
+  const message = 'PrismaClientValidationError: Invalid `prisma.project.count()` invocation: Unknown argument `updatedAt`.';
+  h.events([event({ service: 'vercel', message, route: '/api/mcp/projects' })]); await h.run();
+  const root = Object.values(h.state().fingerprints)[0].incident.ts;
+  for (const minutes of [9, 18]) {
+    h.events([event({ service: 'vercel', message: 'Failed to list projects | Internal server error', route: '/mcp', ts: new Date(NOW + minutes * 60000).toISOString() })]);
+    await h.run({ now: NOW + minutes * 60000 });
+  }
+  assert.equal(creates(h).length, 2);
+  assert.equal(Object.values(h.state().fingerprints).find(record => record.incident)?.incident.ts, root);
 }));

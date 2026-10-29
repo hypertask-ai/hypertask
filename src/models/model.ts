@@ -47,6 +47,23 @@ export interface IChatSession {
   messages: IChatMessage[];
 }
 
+export type ChatTicketGroupReferences = {
+  version: 1;
+  groups: { label?: string; taskIds: number[] }[];
+};
+
+export type ChatTicketRow = Pick<ITask, "id" | "title" | "ticketNumber" | "uniqueIndex" | "projectId" | "section"> & {
+  priority: Pick<IPriority, "id" | "priority_index" | "Priority_Value"> | null;
+  url: string;
+  assignees: {
+    id: number;
+    user?: { displayName?: string | null; photoURL?: string | null } | null;
+    agent?: { id: string; displayName: string; photoURL?: string | null } | null;
+  }[];
+};
+
+export type ChatTicketGroup = { label?: string; tasks: ChatTicketRow[] };
+
 export interface IChatMessage {
   id: string;
   createdAt: Date;
@@ -57,7 +74,9 @@ export interface IChatMessage {
   isDelivered: boolean;
   attachments?: IAttachment[];
   statusSteps?: string[];
+  ticketGroups?: ChatTicketGroup[];
   authorAgent?: { displayName: string } | null;
+  precedesMessageId?: string;
 }
 
 export type RedirectMode =
@@ -525,6 +544,7 @@ export interface ITask {
   sectionChangedAt?: string;
   lastCommentAt?: string | null;
   staleNudgedAt?: string | null;
+  blockerCommentId?: number | null;
   waitingOnUserId?: number | null;
   waitingOnUser?: {
     id: number;
@@ -647,6 +667,7 @@ export interface ILabel {
 }
 
 export interface ISection {
+  wipLimit?: number | null;
   section_title: string;
   ranking?: string;
   id?: number;
@@ -751,7 +772,7 @@ export interface FCMDeviceInfo {
 
 export interface CreateCheckoutParams {
   trialDays?: number;
-  checkoutIntent?: "signup-straight-to-board";
+  checkoutIntent?: "signup-straight-to-board" | "start-plan";
   googleAccountId: string;
   returnUrl: string;
   priceId: string;
@@ -1135,6 +1156,8 @@ export interface IAllCommands {
     isApple: boolean;
     isCurrentUserCreator: boolean;
     isPinned: boolean;
+    blockerCommentEnabled?: boolean;
+    isBlocker?: boolean;
     isStarred: boolean;
     creatorId?: number;
   };

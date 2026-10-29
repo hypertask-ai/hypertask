@@ -1,3 +1,5 @@
+export class SkillValidationError extends Error {}
+
 export const MAX_SKILL_BODY_BYTES = 64 * 1024;
 
 export type ParsedSkillMarkdown = {
@@ -26,7 +28,7 @@ export function parseSkillMarkdown(
 
   if (normalized.startsWith("---\n")) {
     const closing = normalized.indexOf("\n---", 4);
-    if (closing === -1) throw new Error("SKILL.md frontmatter is not closed");
+    if (closing === -1) throw new SkillValidationError("SKILL.md frontmatter is not closed");
     frontmatter = normalized.slice(4, closing);
     body = normalized.slice(closing + 4).replace(/^\n/, "");
   }
@@ -41,11 +43,11 @@ export function parseSkillMarkdown(
   const slug = slugifySkill(name);
   const trimmedBody = body.trim();
 
-  if (!name) throw new Error("Skill name is required");
-  if (!slug) throw new Error("Skill name must contain a letter or number");
-  if (!trimmedBody) throw new Error(`Skill "${name}" has an empty body`);
+  if (!name) throw new SkillValidationError("Skill name is required");
+  if (!slug) throw new SkillValidationError("Skill name must contain a letter or number");
+  if (!trimmedBody) throw new SkillValidationError(`Skill "${name}" has an empty body`);
   if (Buffer.byteLength(trimmedBody, "utf8") > MAX_SKILL_BODY_BYTES) {
-    throw new Error(`Skill "${name}" exceeds the 64KB body limit`);
+    throw new SkillValidationError(`Skill "${name}" exceeds the 64KB body limit`);
   }
 
   return {

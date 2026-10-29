@@ -1,5 +1,8 @@
+import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
+import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionData";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { SuggestionPluginKey } from "@tiptap/suggestion";
 import Placeholder from "@tiptap/extension-placeholder";
 import styles from "@/styles/tiptap.module.scss";
 import {
@@ -18,7 +21,9 @@ export function ControlledComposerEditor({
   ariaLabel,
   editorRef,
   onEditor,
+  agentMentionProjectId,
 }: {
+  agentMentionProjectId?: number;
   value: string;
   onChange: (value: string, cursor: number) => void;
   onKeyDown: (event: ReactKeyboardEvent<HTMLTextAreaElement>) => void;
@@ -27,6 +32,9 @@ export function ControlledComposerEditor({
   editorRef?: RefObject<Editor | null>;
   onEditor: (editor: Editor | null) => void;
 }) {
+  const activeEditor = useRef<Editor | null>(null);
+  const projectIdRef = useRef(agentMentionProjectId);
+  projectIdRef.current = agentMentionProjectId;
   const placeholderRef = useRef(placeholder);
   placeholderRef.current = placeholder;
   const onChangeRef = useRef(onChange);
@@ -44,6 +52,18 @@ export function ControlledComposerEditor({
         gapcursor: false,
         link: { autolink: false },
       }),
+      ...(agentMentionProjectId ? [LinkableMention.configure({
+        HTMLAttributes: { class: "mention" },
+        renderText: ({ node }) => `@${node.attrs.text || node.attrs.id}`,
+        suggestion: { ...createMentionData((item: { type: string; id: string | number }) => {
+          if (item.type === "agent" && activeEditor.current) {
+            const sourceEditor = activeEditor.current;
+            window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
+              agentId: item.id, getDraft: () => ({ html: sourceEditor.getHTML(), text: sourceEditor.getText() }),
+            } }));
+          }
+        }, () => projectIdRef.current), pluginKey: SuggestionPluginKey },
+      })] : []),
       SafeSplitBlock,
       Placeholder.configure({
         placeholder: () => placeholderRef.current,
@@ -59,7 +79,8 @@ export function ControlledComposerEditor({
         role: "textbox",
         class: "outline-none py-2 text-dense",
       },
-      handleKeyDown: (_view, event) => {
+      handleKeyDown: (view, event) => {
+        if (SuggestionPluginKey.getState(view.state)?.active) return false;
         onKeyDownRef.current(
           event as unknown as ReactKeyboardEvent<HTMLTextAreaElement>,
         );
@@ -71,7 +92,8 @@ export function ControlledComposerEditor({
       const before = next.state.doc.textBetween(0, next.state.selection.from);
       onChangeRef.current(text, before.length);
     },
-  });
+  }, [!!agentMentionProjectId]);
+  activeEditor.current = editor;
 
   useEffect(() => {
     onEditor(editor);

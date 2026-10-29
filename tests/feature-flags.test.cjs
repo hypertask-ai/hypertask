@@ -262,17 +262,6 @@ test("phone shortcuts help is an Everyone-default bugfix and respects OFF", asyn
   assert.deepEqual(await Promise.all([6, 985, 2343, 7].map((id) => flags.isFeatureEnabled(key, id))), [false, false, false, false]);
 });
 
-test("activation analytics defaults Owner + QA and respects OFF", async () => {
-  const key = flags.HTPR_7034_ACTIVATION_ANALYTICS_FLAG;
-  assert.equal(key, "htpr-7034-activation-analytics");
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-});
-
 test("sign-in expiry copy is an Everyone bugfix including anonymous recipients and respects OFF", async () => {
   const { HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: key } = flags;
   assert.equal(key, "htpr-7032-email-expiry-copy");
@@ -285,60 +274,6 @@ test("sign-in expiry copy is an Everyone bugfix including anonymous recipients a
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
-});
-
-test("first-time email defaults to Owner + QA and fails closed for recipients without an account", async () => {
-  const { HTPR_7032_FIRST_TIME_EMAIL_FLAG: key } = flags;
-  assert.equal(key, "htpr-7032-first-time-email");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  row = { mode: "EVERYONE", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 0), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-});
-
-test("task writer Sonnet pin is an Owner + QA feature and respects OFF", async () => {
-  const key = flags.HTPR_7038_TASK_WRITER_SONNET_FLAG;
-  assert.equal(key, "htpr-7038-task-writer-sonnet");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  row = { mode: "EVERYONE", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-  assert.equal(await flags.isFeatureEnabled(key, 985), false);
-});
-
-test("Haiku default is an Owner + QA feature, including system ID zero only after release", async () => {
-  const key = flags.HTPR_7038_HAIKU_DEFAULT_FLAG;
-  assert.equal(key, "htpr-7038-haiku-default");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  row = { mode: "EVERYONE", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 0), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 985), false);
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
 });
 
 test("Haiku 5.5 is permanent and its flag is gone", async () => {
@@ -537,13 +472,10 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   }
 });
 
-test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wrapper starts Off)", async () => {
-  const key = "htpr-6926-mcp-route-wrapper";
-  assert.deepEqual(
-    await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-    [false, false, false],
-  );
-  assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
+test("permanent MCP wrapper is absent from the flag registry", async () => {
+  assert.equal("HTPR_6926_MCP_ROUTE_WRAPPER_FLAG" in flags, false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6926-mcp-route-wrapper"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(row => row.key === "htpr-6926-mcp-route-wrapper"), false);
 });
 
 test("permanent assignee preservation is absent from the flag registry", async () => {
@@ -553,15 +485,11 @@ test("permanent assignee preservation is absent from the flag registry", async (
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6962-keep-assignee"), false);
 });
 
-test("back-first-open bugfix defaults to Everyone for plain QA and respects OFF", async () => {
-  const { HTPR_6991_BACK_FIRST_OPEN_FLAG: key } = flags;
-  assert.equal(key, "htpr-6991-back-first-open");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+test("permanent back-first-open behavior is absent from the flag registry", async () => {
+  assert.equal("HTPR_6991_BACK_FIRST_OPEN_FLAG" in flags, false);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes("htpr-6991-back-first-open"), false);
+  assert.equal(definitions.some(entry => entry.key === "htpr-6991-back-first-open"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6991-back-first-open"), false);
 });
 
 test("board-back is no longer registered", async () => {
@@ -634,33 +562,6 @@ test("stable layout has its own dated Owner + QA flag and respects OFF", async (
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [false, false, false]);
-});
-
-test("typed settings API client defaults to Owner + QA and respects OFF", async () => {
-  const key = flags.HTPR_6925_TYPED_API_CLIENT_FLAG;
-  assert.equal(key, "htpr-6925-typed-api-client");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6925");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
-});
-
-test("typed task reads have their own dated Owner + QA flag and respect OFF independently of settings", async () => {
-  const key = flags.HTPR_6967_TYPED_TASK_READS_FLAG;
-  assert.equal(key, "htpr-6967-typed-task-reads");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6967");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
-  assert.equal((await flags.featureFlagsForUser(985))[key], false);
-  assert.equal((await flags.featureFlagsForUser(985))[flags.HTPR_6925_TYPED_API_CLIENT_FLAG], true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
 test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", async () => {
@@ -1046,7 +947,6 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
   const seeded = localFlagModes(defaults, { "htpr-3533-google-calendar": false });
   assert.equal(seeded[key], "EVERYONE");
-  assert.equal(seeded["htpr-6926-mcp-route-wrapper"], "OFF");
   assert.equal(seeded["htpr-3533-google-calendar"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
@@ -1080,21 +980,6 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   }
 });
 
-test("historical Bug labels are display-only and preserve Owner + QA defaults and stored modes", async () => {
-  const key = flags.HTPR_6516_AGENT_ATTRIBUTION_FLAG;
-  assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).kind, "bugfix");
-  assert.deepEqual(await flags.featureFlagCandidateUserIds(key), [6, 985]);
-  for (const mode of [null, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
-    row = mode ? { mode } : null;
-    listedRows = row ? [{ key, ...row }] : [];
-    const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
-    assert.equal(entry.kind, "bugfix");
-    assert.equal(entry.mode, mode ?? "OWNER_AND_QA");
-    assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(key, id))),
-      [6, 985, 7].map(id => flags.featureFlagModeEnabled(mode ?? "OWNER_AND_QA", id === 6, id === 985)));
-  }
-});
-
 test("listed related keys cannot mutate registered flag metadata", async () => {
   const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
   const first = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
@@ -1124,27 +1009,16 @@ test("every registered flag has a valid kind and only registered explicit relate
   assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
-test("typed property writes default Owner + QA and respect OFF", async () => {
-  const key = flags.HTPR_6975_TYPED_WRITES_FLAG;
-  assert.equal(key, "htpr-6975-typed-writes");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("typed property writes are no longer listed as a rollout", async () => {
+  const modes = await flags.listFeatureFlagModes();
+  assert.ok(modes.some((flag) => flag.key === "htpr-3533-google-calendar"));
+  assert.equal(modes.some((flag) => flag.key === "htpr-6975-typed-writes"), false);
 });
 
-test("typed section and notification writes are a feature defaulting Owner + QA", async () => {
-  const key = flags.HTPR_6979_TYPED_WRITES_FLAG;
-  assert.equal(key, "htpr-6979-typed-writes-sections-notifications");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.shippedOn, "2026-10-06");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+test("typed section and notification writes no longer have a feature flag", async () => {
+  assert.equal(flags.HTPR_6979_TYPED_WRITES_FLAG, undefined);
+  assert.equal(flags.FEATURE_FLAG_KEYS.find((key) => key === "htpr-6979-typed-writes-sections-notifications"), undefined);
+  assert.equal(definitions.find((definition) => definition.key === "htpr-6979-typed-writes-sections-notifications"), undefined);
 });
 
 test("saved view deletion no longer has a feature flag", async () => {
@@ -1220,19 +1094,6 @@ test("flags page URL filters are an Owner + QA feature and respect Off", async (
   assert.equal(await flags.isFeatureEnabled(key, 985), true);
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-});
-
-test("saved-choice reset is an Owner + QA feature and respects OFF", async () => {
-  const key = "htpr-7038-reset-saved-model-choices";
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });

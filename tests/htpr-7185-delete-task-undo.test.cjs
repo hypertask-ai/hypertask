@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const test = require("node:test");
 const ts = require("typescript");
 const React = require("react");
@@ -47,6 +49,7 @@ const undoToast = load("src/components/undoToast/index.tsx", {
   "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
   "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
   "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/definitions/htpr-8097-mobile-undo-toast": { HTPR_8097_MOBILE_UNDO_TOAST_FLAG: "htpr-8097-mobile-undo-toast" },
   "@/lib/flags/keys": { HTPR_7657_ONE_TOAST_FLAG: "htpr-7657-one-toast" },
   "@/lib/toastIdsToDismiss": { toastIdsToDismiss: () => [] },
   "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "48px" },
@@ -149,7 +152,7 @@ async function fixture(t, flagOn, failDelete = false) {
     undo = useUndoContext();
     shared = boardActions({
       ...undo, toast: hotToast.toast,
-      globalAPIHandlers, queryClient, dedupe: false,
+      globalAPIHandlers, queryClient: Object.assign(new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }), queryClient), refreshTaskDetailReadAfterWrite,
       _currentProject: { id: 42 }, _currentUser: { id: 985 }, router: { replace: url => navigate("Replace", url) },
       reconcileActiveBoardTasks,
       getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),

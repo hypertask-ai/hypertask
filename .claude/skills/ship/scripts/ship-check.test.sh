@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
 cd "$(dirname "$0")"; fails=0; passes=0
+python3 ./ship-check-finish.test.py || exit 1
+[ "${1:-}" != --finish-only ] || exit 0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
@@ -34,8 +36,26 @@ G 2 vcc task move YPER4-118 $DONE
 ./ship-check bind HTPR-6570 809 >/dev/null && ok "bind HTPR-6570 to 809" || bad "bind HTPR-6570"
 ./ship-check bind HTPR-6570 822 >/dev/null && bad "bind to another ticket's PR accepted" || ok "bind to another ticket's PR rejected"
 
-# Done moves, per command segment.
+# Done moves, by task move and by task update, per command segment.
 G 0 vcc task move YPER4-118 $DONE
+G 2 vcc task move HTPR-6570 --section 'Done""'
+G 2 vcc task move HTPR-6570 --section '"Done"'
+G 2 vcc task move HTPR-6570 --section 'Done\'
+G 2 vcc task move HTPR-6570 --section NoSuchColumn
+G 2 vcc task move HTPR-6570 --section '"Flag: Everyone"'
+# The same move written as a task update gets the same checks (YPER4-742).
+G 2 vcc task update HTPR-6570 --section '"Flag: Everyone"'
+G 2 vcc task update HTPR-6570 --section Done
+G 2 vcc task update HTPR-6570 --section=Done
+G 0 vcc task update HTPR-6570 --section '"In Progress"'
+G 0 vcc task update HTPR-6570 --title 'Ship it'
+# A section title with parentheses stays one argument; hiding a command behind quotes still does not help (YPER4-748).
+G 0 vcc task move HTPR-6570 --section '"Agent Blocked (Infra)"'
+G 2 vcc task move HTPR-6570 --section '"Agent Blocked (Infra)"' '&&' vcc task move HTPR-6570 --section Done
+G 2 '(' vcc task move YPER4-999 --section Done ')'
+# The done column named by its board id, and a working column by id.
+G 2 vcc task move HTPR-6570 --section 4312
+G 0 vcc task move HTPR-6570 --section 4309
 G 2 vcc task move '"HTPR-6570"' $DONE
 G 2 vcc task move "'HTPR-6570'" --section Done
 G 2 echo hi '&&' vcc task move HTPR-6570 --section=Done
@@ -820,6 +840,7 @@ MOCK
   unset -f ND
 }
 no_release_tests
+bash ./ship-check-reviewer.test.sh && ok 'reviewer deployment proof' || bad 'reviewer deployment proof'
 
 # Premerge status boundaries, without browser evidence or live flag reads.
 mkdir -p "$E/flag-bin" "$E/YPER4-999" "$PREMERGE_STATUS_STATE"
@@ -944,6 +965,114 @@ out=$(echo '{"tool_input":{"command":"gh pr merge 999"}}' | env PATH="$E/flag-bi
 out=$(env PATH="$E/flag-bin:$PATH" FLAG_POST_ERROR=1 ./ship-check premerge-status 999 2>&1); got=$?
 [ "$got" = 1 ] && [[ $out == *'cannot post premerge-evidence'* ]] && ok 'status write error is explicit' || bad "status write error: $got $out"
 
+# A repo with no release and no workflow run for the merge accepts a recorded live proof.
+E2="$E/inert"; mkdir -p "$E2/bin" "$E2/evidence/YPER4-999" "$E2/src/systemd" "$E2/src/bin" "$E2/units"
+git -C "$E2/src" init -q; git -C "$E2/src" config user.email t@t; git -C "$E2/src" config user.name t
+printf '[Service]\nExecStart=%s/src/bin/fast-lane-close.sh 6\n' "$E2" > "$E2/src/systemd/fast-lane-close.service"
+printf '#!/usr/bin/env bash\necho shipped\n' > "$E2/src/bin/fast-lane-close.sh"
+git -C "$E2/src" add -A; git -C "$E2/src" commit -qm fixture; inert_sha=$(git -C "$E2/src" rev-parse HEAD)
+printf 'later\n' > "$E2/src/later.txt"; git -C "$E2/src" add -A; git -C "$E2/src" commit -qm later
+cp "$E2/src/systemd/fast-lane-close.service" "$E2/units/fast-lane-close.service"
+cp "$E2/src/bin/fast-lane-close.sh" "$E2/installed-copy"
+printf "838\n" > "$E2/evidence/YPER4-999/pr"
+printf "valentinyeo/ceo\n" > "$E2/evidence/YPER4-999/repo"
+printf "master\n" > "$E2/evidence/YPER4-999/base"
+cat > "$E2/bin/gh" <<MOCK
+#!/usr/bin/env bash
+case "\$1:\$2" in
+  pr:view)
+    if [[ "\$*" != *'-R valentinyeo/ceo '* && "\$*" != *'-R valentinyeo/other '* ]]; then
+      echo '{"title":"YPER4-998 [INFRA] Other repo","baseRefName":"production"}'
+      exit 0
+    fi
+    if [[ "\$*" == *'--json title --jq .title'* ]]; then
+      echo 'YPER4-999 [INFRA] Fixture'
+    else
+      printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"%s","mergeCommit":{"oid":"$inert_sha"},"baseRefName":"master"}\n' "\${INERT_PR_STATE:-MERGED}"
+    fi ;;
+  release:view) exit 1 ;;
+  release:list) echo "\${INERT_RELEASES:-[]}" ;;
+  api:*/compare/*) echo behind ;;
+  api:*/actions/runs?*) printf '{"total_count":1,"workflow_runs":%s}\n' "\${INERT_RUNS:-[]}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E2/bin/systemctl" <<MOCK
+#!/usr/bin/env bash
+case "\$*" in
+  *FragmentPath*) echo "$E2/units/fast-lane-close.service" ;;
+  *Result*) printf 'Result=%s\nExecMainStatus=%s\n' "\${INERT_RESULT:-success}" "\${INERT_STATUS:-0}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+chmod +x "$E2/bin/gh" "$E2/bin/systemctl" "$E2/src/bin/fast-lane-close.sh"
+L() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E2/bin:$PATH" VCC_EVIDENCE_DIR="$E2/evidence" SHIP_REPO=valentinyeo/ceo SHIP_BASE=master SHIP_DEPLOY=none "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
+}
+proof="$E2/evidence/YPER4-999/live-proof"
+L 1 'FAIL: no successful push or workflow_dispatch run for merge'
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$inert_sha" "$E2/src" > "$proof"
+L 0 'deployed ok (recorded live proof, merged'
+printf 'dirty\n' >> "$E2/src/systemd/fast-lane-close.service"
+L 0 'deployed ok (recorded live proof, merged'
+printf '[Service]\nExecStart=/bin/false\n' > "$E2/units/fast-lane-close.service"
+L 1 'FAIL: no successful push'
+git -C "$E2/src" show "$inert_sha:systemd/fast-lane-close.service" > "$E2/units/fast-lane-close.service"
+printf '#!/usr/bin/env bash\necho old build\n' > "$E2/src/bin/fast-lane-close.sh"
+L 1 'FAIL: no successful push'
+cp "$E2/installed-copy" "$E2/src/bin/fast-lane-close.sh"
+L 0 'deployed ok (recorded live proof, merged'
+L 1 'FAIL: no successful push' INERT_RUNS='[{"head_sha":"'"$inert_sha"'","event":"push","head_branch":"master","conclusion":"neutral","status":"completed"}]'
+L 1 'FAIL: no successful push' INERT_RESULT=failure
+L 1 'FAIL: no successful push' INERT_STATUS=1
+printf 'sha: 0123456789abcdef0123456789abcdef01234567\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$E2/src" > "$proof"
+L 1 'FAIL: no successful push'
+printf 'sha: %s\nsource: %s\ncheck: shell any-command\n' "$inert_sha" "$E2/src" > "$proof"
+L 1 'FAIL: no successful push'
+printf 'sha: %s\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$inert_sha" "$E2/src" > "$proof"
+L 1 'FAIL: no release found' INERT_RELEASES='[{"tagName":"v1"}]'
+N() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env -u SHIP_DEPLOY PATH="$E2/bin:$PATH" VCC_EVIDENCE_DIR="$E2/evidence" SHIP_REPO=valentinyeo/ceo SHIP_BASE=master "$@" ./ship-check deployed YPER4-999); got=$?
+  [ "$got" = "$want" ] && [[ $out == "$expected"* ]] && ok "$out" || bad "want $want $expected got $got $out"
+}
+N 0 'deployed ok (recorded live proof, merged'
+N 1 'FAIL: no release found' SHIP_REPO=valentinyeo/other
+unset -f N
+B() {
+  local want=$1 expected=$2 cmd=$3 out got; shift 3
+  out=$(jq -nc --arg c "$cmd" '{tool_input:{command:$c}}' |
+    env -u SHIP_REPO -u SHIP_BASE -u SHIP_DEPLOY PATH="$E2/bin:$PATH" VCC_EVIDENCE_DIR="$E2/evidence" "$@" ./ship-check guard 2>&1); got=$?
+  [ "$got" = "$want" ] && [[ $out == *"$expected"* ]] && ok "bound Done guard: $cmd $expected" || bad "bound Done guard: want $want $expected got $got $out"
+}
+B 0 '' 'vcc task move YPER4-999 --section "Done"'
+B 0 '' 'vcc task update YPER4-999 --section=Done'
+B 0 '' 'SHIP_REPO=valentinyeo/ceo vcc task move YPER4-999 --section "Done"'
+B 0 '' 'SHIP_BASE=master vcc task move YPER4-999 --section "Done"'
+B 2 'no PR titled' 'SHIP_BASE=production vcc task move YPER4-999 --section "Done"'
+B 2 'no PR titled' 'SHIP_REPO=hypertask-ai/hypertask vcc task move YPER4-999 --section "Done"'
+B 2 'no PR titled' 'vcc task move YPER4-999 --section "Done"' SHIP_REPO=hypertask-ai/hypertask
+B 2 'no PR titled' 'vcc task move YPER4-999 --section "Done"' SHIP_BASE=production
+B 2 'no PR titled' 'SHIP_REPO=valentinyeo/ceo vcc task move YPER4-999 --section Done; vcc task move YPER4-999 --section Done' SHIP_REPO=hypertask-ai/hypertask
+B 2 'no PR titled' 'SHIP_BASE=master vcc task move YPER4-999 --section Done; vcc task move YPER4-999 --section Done' SHIP_BASE=production
+mv "$E2/evidence/YPER4-999/repo" "$E2/bound-repo"
+B 2 'no PR titled' 'vcc task move YPER4-999 --section "Done"'
+B 2 'into production' 'SHIP_REPO=valentinyeo/ceo vcc task move YPER4-999 --section "Done"'
+mv "$E2/bound-repo" "$E2/evidence/YPER4-999/repo"
+B 2 'not merged' 'vcc task move YPER4-999 --section "Done"' INERT_PR_STATE=OPEN
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"' INERT_RESULT=failure
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"' INERT_STATUS=1
+mv "$proof" "$E2/bound-live-proof"
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"'
+printf 'sha: 0123456789abcdef0123456789abcdef01234567\nsource: %s\ncheck: systemd-user-unit fast-lane-close.service\n' "$E2/src" > "$proof"
+B 2 'no successful push' 'vcc task move YPER4-999 --section "Done"'
+mv "$E2/bound-live-proof" "$proof"
+B 0 '' 'vcc task move YPER4-999 --section "Done"'
+unset -f B
+rm -rf "$E2"
+
 if [ "${1:-}" = --premerge-only ]; then
   echo "$passes passed, $fails failed"
   [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
@@ -1026,7 +1155,7 @@ cat > "$NC/bin/hypertask" <<'MOCK'
 [[ $1 == comment && $2 == list ]] && cat "$NC/comments" || exit 1
 MOCK
 chmod +x "$NC/bin/gh" "$NC/bin/hypertask"; export NC
-N() { SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
+N() { CLAUDE_CODE_SESSION_ID=nc-fixture SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
 echo '[]' > "$NC/prs"; echo 0 > "$NC/ahead"
 echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted a ticket with no comment" || ok "nochange refuses a ticket with no comment"
@@ -1082,12 +1211,15 @@ N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre b
 for x in merged:merged deployed:deployed proof:proof pr:title docs:docs; do
   N ${x%%:*} YPER4-901 | grep -q "^${x#*:} ok" && ok "nochange passes ${x%%:*}" || bad "nochange ${x%%:*}"
 done
+N branch YPER4-901 r3/yper4-901-fix >/dev/null
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"
 git -C "$NC/work" push -q origin :refs/heads/r3/yper4-901-fix 2>/dev/null
 git -C "$NC/work" branch -q r3/yper4-901-local 2>/dev/null
+N branch YPER4-901 r3/yper4-901-local >/dev/null
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a local branch" || ok "nochange cleaned fails while a local branch exists"
 git -C "$NC/work" worktree add -q "$NC/wt901" -b r3/yper4-901-wt 2>/dev/null
 git -C "$NC/work" branch -q -D r3/yper4-901-local
+N branch YPER4-901 r3/yper4-901-wt >/dev/null
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a worktree" || ok "nochange cleaned fails while a worktree branch exists"
 git -C "$NC/work" worktree remove --force "$NC/wt901"; git -C "$NC/work" branch -q -D r3/yper4-901-wt
 N cleaned YPER4-901 | grep -q 'cleaned ok' && ok "nochange cleaned passes once nothing is left" || bad "nochange cleaned clean case"
@@ -1239,6 +1371,7 @@ if [ "$got" = 0 ] && [ -z "$out" ]; then ok 'no ci-tests in other repo passes si
 else bad "other repo: $got $out"; fi
 unset -f gh hypertask
 unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
+
 
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'

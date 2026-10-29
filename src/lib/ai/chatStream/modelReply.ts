@@ -17,6 +17,9 @@ import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacin
 
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 import { MAX_TOOL_STEPS } from "@/lib/ai/tools/constants";
+import { deferredChatTools } from "@/lib/ai/tools/deferredTools";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7857_HEARTBEAT_STEP_CAP_FLAG, HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG } from "@/lib/flags/keys";
 
 import { selectModel } from "@/lib/ai/chatStream/models";
 
@@ -25,9 +28,18 @@ import { writeToolNames } from "@/lib/ai/tools/metadata";
 
 import type { StreamState } from "./streamState";
 
-export async function generateModelReply(state: StreamState, inputs: { instructions: string; messages: ModelMessage[]; tools: ToolSet; toolExecutions: ToolExecution[] }) {
+export async function generateModelReply(state: StreamState, inputs: { instructions: string; messages: ModelMessage[]; tools: ToolSet; toolExecutions: ToolExecution[]; onContent?: (content: string) => void }) {
   const { dbUser, heartbeatExecutionId, contextTaskId, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = state;
   const { instructions, messages, tools, toolExecutions } = inputs;
+  const heartbeatStepCapEnabled = Boolean(heartbeatExecutionId) &&
+    await isFeatureEnabled(HTPR_7857_HEARTBEAT_STEP_CAP_FLAG, dbUser.id);
+  const maxToolSteps = heartbeatStepCapEnabled ? 4 : MAX_TOOL_STEPS;
+  let completedHeartbeatSteps = 0;
+  const deferredToolsEnabled = await isFeatureEnabled(HTPR_7862_CHAT_DEFERRED_TOOLS_FLAG, dbUser.id);
+  const toolDiscovery = deferredToolsEnabled ? deferredChatTools(tools) : { tools };
+  const modelInstructions = deferredToolsEnabled
+    ? `${instructions}\n\nOnly the listed tools are immediately available. For other actions, find the tool with hypertask_search_tools, then call hypertask_describe_tool with its exact name before calling it. Describing a tool does not execute the requested action.`
+    : instructions;
 
   const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
   const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
@@ -47,19 +59,21 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       agentId: actingAgent?.id ?? null,
       provider: state.selected.usageProvider,
       feature: "chat",
+      reasoningFeature: heartbeatExecutionId ? "heartbeat" : "chat",
     });
     const result = streamText({
       model: state.selected.model,
       experimental_download: downloadWithoutBrotli,
-      instructions,
+      instructions: modelInstructions,
       messages,
-      tools,
-      stopWhen: stepCountIs(MAX_TOOL_STEPS),
+      ...toolDiscovery,
+      stopWhen: stepCountIs(maxToolSteps - completedHeartbeatSteps),
+      onStepFinish: () => { if (heartbeatStepCapEnabled) completedHeartbeatSteps++; },
       maxRetries: 2,
       abortSignal: state.providerAbort.signal,
       onFinish: async ({ usage, finishReason, toolCalls, steps }) => {
         ranTools = toolCalls.length > 0;
-        reachedStepLimit = steps.length >= MAX_TOOL_STEPS;
+        reachedStepLimit = steps.length >= maxToolSteps || completedHeartbeatSteps >= maxToolSteps;
         state.turnUsage = {
           inputTokens: usage.inputTokens ?? undefined,
           outputTokens: usage.outputTokens ?? undefined,
@@ -130,6 +144,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         if (state.errorSent || state.cancelled) break;
         if (!chunk) continue;
         chunks.push(chunk);
+        inputs.onContent?.(chunk);
         state.send("content", { content: chunk });
       }
     } catch (error) {
@@ -146,7 +161,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         sameModelRetry,
       )
       : null;
-    if (!previous) break;
+    if (!previous || completedHeartbeatSteps >= maxToolSteps) break;
     console.warn(
       `[ai-model-fallback] ${state.selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
     );
@@ -182,22 +197,23 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   let emptyCompletionError: unknown;
   let emptyCompletionRetryFailed = false;
   if (!hasVisibleCompletion(chunks)) {
-    if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted) {
+    if (!ranTools && !state.cancelled && !state.providerAbort.signal.aborted && completedHeartbeatSteps < maxToolSteps) {
       try {
         const retry = await generateText({
           model: state.selected.model,
           experimental_download: downloadWithoutBrotli,
-          instructions,
+          instructions: modelInstructions,
           messages,
-          tools,
-          stopWhen: stepCountIs(MAX_TOOL_STEPS),
+          ...toolDiscovery,
+          stopWhen: stepCountIs(maxToolSteps - completedHeartbeatSteps),
+          onStepFinish: () => { if (heartbeatStepCapEnabled) completedHeartbeatSteps++; },
           maxRetries: 1,
           abortSignal: state.providerAbort.signal,
           providerOptions: withHigherEffort(state.selected.providerOptions),
           ...state.selected.settings,
         });
         reachedStepLimit =
-          reachedStepLimit || retry.steps.length >= MAX_TOOL_STEPS;
+          reachedStepLimit || retry.steps.length >= maxToolSteps || completedHeartbeatSteps >= maxToolSteps;
         state.turnUsage = {
           inputTokens:
             (state.turnUsage?.inputTokens ?? 0) + (retry.usage.inputTokens ?? 0),
@@ -209,6 +225,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         if (retryText) {
           state.generationFinishedWithError = retry.finishReason === "error";
           chunks.push(retryText);
+          inputs.onContent?.(retryText);
           state.send("content", { content: retryText });
         }
       } catch (retryError) {
@@ -222,7 +239,8 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     }
   }
   if (state.errorSent) return;
-  if (!hasVisibleCompletion(chunks)) {
+  const completedWithVisibleReply = hasVisibleCompletion(chunks);
+  if (!completedWithVisibleReply) {
     await reportEmptyCompletion(
       emptyCompletionRetryFailed,
       emptyCompletionError
@@ -231,9 +249,10 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       toolExecutions,
       writeToolNames,
       reachedStepLimit,
-      maxToolSteps: MAX_TOOL_STEPS,
+      maxToolSteps,
       currentUserId: dbUser.id,
     });
+    inputs.onContent?.(fallback);
     state.send("content", { content: fallback });
     chunks.push(fallback);
     state.recordTurnOutcome(
@@ -245,5 +264,5 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   } else {
     state.recordTurnOutcome("ok");
   }
-  return { chunks };
+  return { chunks, ticketRowsAllowed: completedWithVisibleReply && !state.generationFinishedWithError };
 }

@@ -31,7 +31,7 @@ function stubPlan(plan = "Pro") {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
-    haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => false,
+    haiku55ModelEnabled: async () => false,
     storePlanIdForProject: async () => plan,
   });
 }
@@ -257,37 +257,37 @@ test("the agent page reads and writes the key through the owner-only route", () 
   assert.match(detail, /"Team key"/);
 });
 
-test("the agents list exposes only a masked key, and only to the owner", () => {
-  const fs = require("./refactored-module-source.cjs");
-  const listRoute = fs.readFileSync(
-    path.join(root, "src/app/api/agents/route.ts"),
-    "utf8",
-  );
-
-  const ownedRoute = fs.readFileSync(
-    path.join(root, "src/app/api/agents/owned/route.ts"),
-    "utf8",
-  );
-  // The register reads /api/agents/owned, so the masked tail has to come from
-  // there too, through the same shared mapping, and never from a disabled row.
-  assert.match(ownedRoute, /maskAgentProviderKey\(byokApiKeys\)/);
-  assert.match(ownedRoute, /where: \{ enabled: true \}/);
-  const shared = fs.readFileSync(
-    path.join(root, "src/lib/agents/maskAgentProviderKey.ts"),
-    "utf8",
-  );
-  assert.match(shared, /if \(row\.enabled === false\) continue;/);
-  assert.match(shared, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
-  const detail = readAgentDetailSource();
-  assert.match(detail, /k\.enabled !== false/);
-
-  assert.match(listRoute, /byokApiKeys,\s*\.\.\.a\s*\}/);
-  assert.match(
-    listRoute,
-    /providerKey:\s*\n?\s*a\.userId === currentUserId \? maskAgentProviderKey\(byokApiKeys\) : null/,
-  );
-  assert.match(listRoute, /maskAgentProviderKey\(byokApiKeys\)/);
-  assert.doesNotMatch(listRoute, /ciphertext: row\.ciphertext,/);
+test("the agents list exposes only a masked key, and only to the owner", async () => {
+  const { load } = require("./task-route-loader.cjs");
+  const rows = [6, 7].map(userId => ({
+    id: `agent-${userId}`, userId, displayName: "Runner", createdAt: new Date("2026-10-01"),
+    revokedAt: null, heartbeatAt: null, mcpTokenJti: "private-token-id", mcpTokenExpiresAt: null,
+    permissions: {}, byokApiKeys: [{ provider: "openrouter", ciphertext: "fixture-key-1234" }],
+    crossTeamHomeTeamId: "team", crossTeamAccessGranted: false,
+    members: [{ project: { id: 15, teamId: "team", name: "Board" } }],
+  }));
+  const queries = [];
+  const route = load("src/app/api/agents/route.ts", {
+    "@/lib/prisma": { default: {
+      agent: { findMany: async query => { queries.push(query); return rows; } },
+      comment: { groupBy: async () => [] }, oAuthAuthorizationCode: { findMany: async () => [] },
+    } },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
+    "@/lib/flags": { isOwnerOrQaUserId: async () => false, isFeatureEnabled: async () => false },
+    "@/lib/agents/crossTeam": { crossTeamAgentsEnabled: async () => false },
+    "@/lib/crypto/byokCipher": { decryptByokSecret: value => value },
+    "@/lib/mcp/auth": {},
+    "@/utils/controllers/agents/boardMembers": {},
+    "@/utils/controllers/agents/ensureDefaultTeamAgent": {},
+    "@/utils/controllers/teams/hasTeamMembershipAccess": { hasTeamMembershipAccess: async () => true },
+    "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}) },
+  });
+  const response = await route.GET({ headers: new Headers(), url: "https://fixture.invalid/api/agents?teamId=team" });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(queries[0].select.byokApiKeys.where, { enabled: true });
+  assert.deepEqual(body.agents.map(agent => agent.providerKey), [{ provider: "openrouter", maskedKey: "••••••••1234" }, null]);
+  assert.doesNotMatch(JSON.stringify(body), /fixture-key|ciphertext|byokApiKeys|private-token-id|crossTeamHomeTeamId|crossTeamAccessGranted/);
 });
 
 test("a team in GDPR safe mode blocks a restricted agent key", async () => {
@@ -361,4 +361,42 @@ test("agent identity reaches every AI key lookup, not just task writing", () => 
   );
   const byokLookup = stream.indexOf("getByokOrTeamGatewayApiKeyForModelOption(");
   assert.ok(acting > 0 && stamped > acting && byokLookup > stamped);
+});
+
+test("agent provider-key rejects Baseten without storing or returning the supplied key", async () => {
+  const fs = require("node:fs");
+  const vm = require("node:vm");
+  const ts = require("typescript");
+  const writes = [];
+  const stubs = {
+    "next/server": { NextResponse: { json: (body, init) => ({ body, status: init?.status ?? 200 }) } },
+    "@/lib/prisma": { default: { agent: { findFirst: async () => ({ id: "fixture-agent" }) } } },
+    "@/lib/crypto/byokCipher": { encryptByokSecret: (key) => `encrypted:${key}` },
+    "@/lib/crypto/maskByokSecret": { maskByokSecret: () => "masked" },
+    "@/lib/aiProviders": loadTs("src/lib/aiProviders.ts"),
+    "@/lib/agents/ownedSlugs": { resolveOwnedAgent: async () => ({ id: "fixture-agent" }) },
+    "@/lib/auth/cookieIdentity": { verifyCookieIdentity: async () => ({ status: "verified", id: 985 }) },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
+    "@/lib/auth/session": { SESSION_COOKIE: "fixture-session" },
+    "@/lib/agents/visibility": { upsertOwnedAgentProviderKey: async (value) => { writes.push(value); return { ok: true }; } },
+  };
+  const filename = path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts");
+  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false } }).outputText;
+  const loadedModule = { exports: {} };
+  vm.runInNewContext(code, { module: loadedModule, exports: loadedModule.exports, require: (id) => {
+    assert.ok(Object.hasOwn(stubs, id), `Unexpected dependency: ${id}`);
+    return stubs[id];
+  }, console }, { filename });
+  const request = (provider) => ({ cookies: { get: () => undefined }, headers: {}, json: async () => ({ provider, apiKey: "fake-agent-secret" }) });
+  const params = { params: Promise.resolve({ agentId: "fixture-agent" }) };
+  const rejected = await loadedModule.exports.PUT(request("baseten"), params);
+  assert.equal(rejected.status, 400);
+  assert.equal(rejected.body.error, "Unsupported provider");
+  assert.equal(writes.length, 0);
+  assert.ok(!JSON.stringify(rejected).includes("fake-agent-secret"));
+  const allowed = await loadedModule.exports.PUT(request("openrouter"), params);
+  assert.equal(allowed.status, 200);
+  assert.equal(allowed.body.success, true);
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].provider, "openrouter");
 });

@@ -11,6 +11,8 @@ Valentin, 2026-10-01: "I don't want this stuff to linger around as it clogs up t
 
 Work from the main checkout (`~/projects/hypertask`), never from inside a worktree you are removing. Never `git stash`, never discard changes.
 
+Record each created branch with `ship-check branch <TICKET> <branch>` before work. If this session created no branch, record `none`. Keep the same full session id when running `ship-check cleaned`; another session's resources are outside that check's scope. A missing ownership record is not permission to assume ownership.
+
 ## For each worktree this session created
 
 1. `git -C <worktree> status --porcelain` must be empty. If not, commit the work or ask Valentin; never discard it.

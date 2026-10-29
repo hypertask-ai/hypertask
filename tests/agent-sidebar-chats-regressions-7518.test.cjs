@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
+const { loadModule: loadChatComponent, findElement } = require("./helpers/loadModule.cjs");
 
 const read = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const hooks = { useCallback: (callback) => callback, useRef: (current) => ({ current }), useEffect: () => {} };
@@ -15,6 +16,12 @@ const deferred = () => {
 const viewer = load("src/lib/agents/chatViewerState.ts", {});
 const sendHook = load("src/app/agents/chat/useAgentChatSend.ts", {
   react: hooks,
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/ai/chipEvents": { signalAiChip: () => {} },
+  "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [null, noop] },
+  "@/lib/state": { useRecoilValue: () => null },
+  "@/store": {},
+  "next/navigation": { usePathname: () => "/project" },
   "react-hot-toast": { default: { error: assert.fail } },
 }).useAgentChatSend;
 const sessionHook = load("src/app/agents/chat/useAgentChatSession.ts", {
@@ -97,6 +104,9 @@ test("embedded selection clears the old lock but an old completion cannot unlock
 });
 
 const sessionsHook = load("src/hooks/MultiPages/AIChat/useAiChatSessions.ts", {
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/ai/chipEvents": { signalAiChip: () => {} },
+  "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },
   react: hooks,
   "@/lib/agents/chatViewerState": viewer,
   "@/lib/constants": { default: {} },
@@ -396,29 +406,6 @@ test("embedded awaiting chats reconcile on visibility before and after polling e
   } finally { global.document = originalDocument; Object.assign(global, originals); console.error = originalError; }
 });
 
-function loadChatComponent(file, mocks) {
-  const ts = require("typescript");
-  const compiled = ts.transpileModule(read(file), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
-    fileName: file,
-  }).outputText;
-  const exports = {};
-  new Function("require", "exports", compiled)((specifier) => {
-    if (specifier === "react/jsx-runtime") return require(specifier);
-    assert.ok(Object.hasOwn(mocks, specifier), `unexpected component dependency: ${specifier}`);
-    return { __esModule: true, ...mocks[specifier] };
-  }, exports);
-  return exports;
-}
-
-function findElement(element, type) {
-  if (!element || typeof element !== "object") return undefined;
-  if (element.type === type) return element;
-  for (const child of [element.props?.children].flat(Infinity)) {
-    const found = findElement(child, type);
-    if (found) return found;
-  }
-}
 
 test("native switching snapshots the latest draft and attachments after open, transcript and invalidation finish", async () => {
   const originalFetch = global.fetch;
@@ -452,10 +439,17 @@ test("native switching snapshots the latest draft and attachments after open, tr
     startNewSession: assert.fail,
   };
   const mocks = {
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     react: { ...react, default: react },
-    "@/hooks/useFlag": { useFlag: () => sidebarFlag },
+    "react-hot-toast": { default: { error: assert.fail } },
+    "@/hooks/useFlag": { useFlag: key => key !== "htpr-8048-agent-sessions" && key !== "htpr-7800-skill-runs-in-sidebar" && sidebarFlag },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
+    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
     "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: (...args) => writes.push(args) },
     "@/lib/agents/chatViewerState": viewer,
@@ -527,7 +521,10 @@ test("sidebar command rows forward mobile context to the shared CommandList", ()
       "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },
       "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
       "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+      "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
+      "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
       "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
       "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({}) },
       "@/models/enums": { CommandMode: { GoToAgentChat: 1 } },
@@ -585,8 +582,10 @@ test("chat orchestration forwards the sidebar flag without coupling it to histor
   for (const enabled of [false, true]) {
     let resolution;
     const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       react: { useState: (value) => [value, noop], useEffect: noop },
       "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+      "@/lib/ai/chipEvents": { signalAiChip: () => {} },
       "@/lib/state": { useRecoilState: () => [null, noop] }, "@/store": {},
       "./useAiChatState": { useAiChatState: () => ({ sessionPagingEnabled: true }) },
       "./useAiChatSessions": { useAiChatSessions: (context) => { resolution = context; return {}; } },
@@ -688,7 +687,10 @@ test("conversation Escape is captured even when the mobile sheet moved focus awa
     "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },
     "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
+    "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
     "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({}) },
     "@/models/enums": { CommandMode: { GoToAgentChat: 1 } },
@@ -751,7 +753,11 @@ test("switching away cancels the recorder and clears retained recording state be
       React.createElement("button", { "aria-label": "Send message", disabled: controlledComposer.sendDisabled }, "Send"));
   }
   const { AgentChatPane } = loadChatComponent("src/app/agents/chat/AgentChatPane.tsx", {
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     react: React,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "@/components/Agents/AgentAvatar": { default: () => null },
     "@/components/AI_CHAT/AI_Tiptap_Container": { AI_Tiptap_Container: Composer },
     "@/components/AI_CHAT/TypingIndicator": { TypingIndicator: () => null },
@@ -857,7 +863,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "./mobileAudioButtonPresentation": { mobileMicPresentation: () => ({ prominent: false }) },
   });
   const composerMocks = Object.fromEntries([
-    "../Global/ModelSelectorDropdown", "../Common/Tooltip", "@/lib/configs/aiTaskWriter.config",
+    "../Global/ModelSelectorDropdown", "../Common/Tooltip", "@/components/Modals/OptionPicker", "@/lib/configs/aiTaskWriter.config",
     "@/lib/controlledComposerEditor", "lucide-react", "../Common/AttachmentsUpload/ImageGalleryView",
     "@/lib/contexts/deviceContext", "@/lib/contexts/mobileContext", "@/store",
     "@/hooks/MultiPages/useGetAllTeamsMinimal", "@/utils/aiChat/sortBoardsByRecent",
@@ -872,7 +878,12 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     audioTiptapCallback: (text) => transcripts.push(text), toggleRecording: (value) => recordingStates.push(value),
   };
   const { AI_Tiptap_Container } = loadChatComponent("src/components/AI_CHAT/AI_Tiptap_Container.tsx", {
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
     ...composerMocks,
+    "@/lib/aiChat/chatShortcuts": load("src/lib/aiChat/chatShortcuts.ts", {}),
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": load("src/lib/flags/definitions/htpr-7766-chat-shortcuts.ts", {}),
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
+    "@/hooks/MultiPages/AIChat/dockedChatScope": load("src/hooks/MultiPages/AIChat/dockedChatScope.ts", {}),
     react: { ...hooks, useContext: () => false, useMemo: (callback) => callback(), useState: (value) => [value, noop], useId: () => "general" },
     "@tiptap/react": { useEditorState: () => true },
     "@/styles/tiptap.module.scss": { default: {} },
@@ -882,6 +893,7 @@ for (const scenario of ["inactive", "active", "pending-permission"]) test({
     "next/navigation": { usePathname: () => "/project" },
     "@/lib/state": { useRecoilState: () => [null, noop] },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
   });
   const container = document.getElementById("root");
   const root = createRoot(container);

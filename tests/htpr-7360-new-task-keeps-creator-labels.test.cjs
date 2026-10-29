@@ -67,7 +67,7 @@ function boardWith({ taskLabelIds, modelMatches }) {
       resolveAutomaticAiModel: () => ({ modelId: "fixture" }),
     },
     "@/app/api/ai/_lib/planGate": {
-      haikuDefaultModelEnabled: async () => false,
+
       batchBackgroundAiEnabled: async () => false,
     },
     "@/app/api/ai/_lib/modelProvider": {
@@ -79,6 +79,7 @@ function boardWith({ taskLabelIds, modelMatches }) {
     "@/app/api/ai/_lib/taskContent": { convertHtmlToText: (value) => value },
     "@/lib/configs/general.config": { generalConfig: { hyperAiId: 100 } },
     "@/lib/ai/labelClassifierOutput": classifierOutput,
+    "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/realtime/server": { broadcastBoardChange: async () => undefined },
     "@/lib/agentWebhooks/outbox": {
       persistAgentTaskUpdatedWebhook: async () => [],

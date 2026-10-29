@@ -71,7 +71,7 @@ test("disabled pages and comments queries stay pending without blocking an insta
   }).outputText;
   const exports = {};
   new Function("require", "exports", compiled)((name) => {
-    if (name === "@/lib/taskDetailReads") return {};
+    if (name === "@/lib/taskDetailReads") return require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/taskDetailReads.ts"));
     if (name === "@/hooks/useFlag") return { ...mocks[name], useFlagReady: () => true, useFlag: key => key !== "htpr-7009-dedupe-task-detail-reads" };
     if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     if (name in mocks) return { __esModule: true, ...mocks[name] };

@@ -14,10 +14,6 @@ concurrency:
 
 jobs:
   parity-contract-trusted:
-    # Self-hosted despite pull_request_target: the job takes no secrets, runs
-    # with contents: read, unsets GITHUB_TOKEN/GH_TOKEN before every command,
-    # and only reads JSON and markdown out of the candidate checkout. It never
-    # executes pull request code, and ci-fast already builds that code anyway.
     runs-on: ubuntu-latest
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"

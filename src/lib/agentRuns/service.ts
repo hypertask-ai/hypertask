@@ -12,7 +12,7 @@ import {
   type Prisma,
 } from "@prisma/client";
 import type { NextRequest } from "next/server";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import {
   persistAgentRunStoppedWebhook,
   persistAgentWebhookEvent,
@@ -29,8 +29,6 @@ import prisma from "@/lib/prisma";
 import {
   AGENT_CHAT_STOPPED_MESSAGE,
   AGENT_CHAT_TIMEOUT_MESSAGE,
-  AGENT_RUN_ACTIVITY_FEATURE_FLAG,
-  AGENT_RUN_FEATURE_FLAG,
   AGENT_RUN_STALE_AFTER_MS,
   AgentRunActivityConflictError,
   AgentRunActivityInputError,
@@ -66,6 +64,7 @@ export type AgentRunPrincipal = {
   teamScope?: AgentTokenTeamScope | null;
   displayName: string;
   source: "agent" | "browser";
+  credentialSource?: SessionUser["source"];
   sdk?: "typescript";
 };
 
@@ -78,7 +77,8 @@ export async function authenticateAgentRunRequest(
     request.headers.get("X-Hypertask-Agent-SDK") === "typescript"
       ? ("typescript" as const)
       : undefined;
-  if (request.headers.has("Authorization")) {
+  const session = await getSessionUser(request.headers);
+  if (request.headers.has("Authorization") && session?.source !== "cli-bearer") {
     const context = await validateMcpAuth(request);
     if (!context?.agentId) return null;
     return {
@@ -91,7 +91,6 @@ export async function authenticateAgentRunRequest(
     };
   }
 
-  const session = await getSessionUser(request.headers);
   if (!session) return null;
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -103,6 +102,7 @@ export async function authenticateAgentRunRequest(
     agentId: null,
     displayName: user.displayName?.trim() || "Hypertask user",
     source: "browser",
+    credentialSource: session.source,
     ...(sdk ? { sdk } : {}),
   };
 }
@@ -129,31 +129,10 @@ async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: 
   };
 }
 
-export async function agentRunsEnabledFor(
-  principal: AgentRunPrincipal,
-): Promise<boolean> {
-  return isFeatureEnabled(AGENT_RUN_FEATURE_FLAG, principal.userId);
-}
-
-export async function agentRunActivitiesEnabledFor(
-  principal: AgentRunPrincipal,
-): Promise<boolean> {
-  return (
-    (await agentRunsEnabledFor(principal)) &&
-    (await isFeatureEnabled(AGENT_RUN_ACTIVITY_FEATURE_FLAG, principal.userId))
-  );
-}
-
 export async function runtimeAgentRunsEnabledFor(
   principal: AgentRunPrincipal,
 ): Promise<boolean> {
-  return (
-    (await agentRunsEnabledFor(principal)) &&
-    (await isFeatureEnabled(
-      HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
-      principal.userId,
-    ))
-  );
+  return isFeatureEnabled(HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, principal.userId);
 }
 
 export async function createRuntimeAgentRun(
@@ -458,7 +437,7 @@ async function reconcileAgentChatTurn(
   });
 
   if (result?.deliveryId) await publishAgentWebhookDeliveries([result.deliveryId]);
-  if (result?.changed) void broadcast(userChannel(principal.userId), AGENT_CHAT_EVENT, { sessionId }).catch(console.warn);
+  if (result?.changed) await broadcastChatSession(sessionId, [principal.userId]);
   return result;
 }
 
@@ -657,14 +636,6 @@ export async function listTaskAgentRunActivities(
   userId: number,
   taskId: number,
 ) {
-  const principal: AgentRunPrincipal = {
-    userId,
-    agentId: null,
-    displayName: "",
-    source: "browser",
-  };
-  if (!(await agentRunActivitiesEnabledFor(principal))) return [];
-
   const activities = await prisma.agentRunActivity.findMany({
     where: {
       type: { not: AgentRunActivityType.RESPONSE },

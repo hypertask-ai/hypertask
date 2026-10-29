@@ -112,7 +112,7 @@ test("malformed YPER4 titles do not bypass the feature flag requirement", async 
   }
 });
 
-test("JavaScript UI paths and API helpers keep the UI-only scope", async (t) => {
+test("JavaScript UI paths and server helpers enforce their respective scopes", async (t) => {
   const jsUi = makeRepo(t);
   const jsUiBase = commit(jsUi.git, "base");
   writeFile(jsUi.dir, "src/features/NewView.js", "export const NewView = () => <div />;\n");
@@ -129,13 +129,116 @@ test("JavaScript UI paths and API helpers keep the UI-only scope", async (t) => 
   const apiHelperBase = commit(apiHelper.git, "base");
   writeFile(apiHelper.dir, "src/app/api/widget/service.ts", "export function buildWidget() { return { ok: true }; }\n");
   const apiHelperHead = commit(apiHelper.git, "api helper");
-  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", apiHelperBase, apiHelperHead, apiHelper.dir)).pass, true);
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", apiHelperBase, apiHelperHead, apiHelper.dir)).pass, false);
 
   const utilJs = makeRepo(t);
   const utilJsBase = commit(utilJs.git, "base");
   writeFile(utilJs.dir, "src/utils/format.js", "export function formatName(value) { return String(value); }\n");
   const utilJsHead = commit(utilJs.git, "util js");
   assert.equal((await evaluate("HTPR-2 [FEATURE] backend", utilJsBase, utilJsHead, utilJs.dir)).pass, true);
+});
+
+test("server-only changes require a changed ticket-specific server gate", async (t) => {
+  for (const file of [
+    "src/lib/mcp/operations/tasks/waiting-on.ts",
+    "src/lib/mcp-server/section.service.ts",
+    "src/app/api/widget/route.ts",
+    "src/pages/api/widget.ts",
+    "src/lib/api/task-writes/create.ts",
+    "src/utils/controllers/tasks.ts",
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, file, 'export async function execute(userId) { return "new"; }\n');
+    const ungated = commit(git, "server feature");
+    for (const tag of ["FEATURE", "IMPROVE"]) {
+      const result = await evaluate(`HTPR-1 [${tag}] server behavior`, base, ungated, dir);
+      assert.equal(result.pass, false, `${tag}: ${file}`);
+      assert.match(result.reason, /isFeatureEnabled/);
+      assert.match(result.reason, /src\/lib\/flags\/definitions\/htpr-1-/);
+    }
+    writeFile(dir, file, 'import { isFeatureEnabled } from "@/lib/flags";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport async function execute(userId) { return await isFeatureEnabled(OTHER_FLAG, userId) ? "new" : "old"; }\n');
+    const gated = commit(git, "server flag");
+    const allowed = await evaluate("HTPR-1 [FEATURE] server behavior", base, gated, dir);
+    assert.equal(allowed.pass, true, file);
+    assert.equal(allowed.ownerReview, "feature-gated-ui");
+    const decision = path.join(dir, "decision.txt");
+    execFileSync(process.execPath, [path.join(root, ".github/scripts/feature-flag-gate.mjs"),
+      "HTPR-1 [FEATURE] server behavior", base, gated, decision], { cwd: dir });
+    assert.equal(fs.readFileSync(decision, "utf8"), "feature-gated-ui\n");
+  }
+});
+
+test("server gates reject client hooks, dead calls, unrelated flags and unchanged reads", async (t) => {
+  for (const source of [
+    'import { useFlag } from "@/hooks/useFlag";\nexport function execute() { return useFlag("htpr-1-other") ? "new" : "old"; }\n',
+    'import { isFeatureEnabled } from "@/lib/flags";\nfunction dead() { return isFeatureEnabled("htpr-1-other", 6); }\nexport function execute() { return "new"; }\n',
+    'import { isFeatureEnabled } from "@/lib/flags";\nexport async function execute() {\n  const enabled = await isFeatureEnabled("htpr-1-other", 6);\n  return enabled ? "new" : "old";\n}\n',
+  ]) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, "src/app/api/widget/route.ts", source);
+    const base = commit(git, "existing server behavior");
+    writeFile(dir, "src/app/api/widget/route.ts", source.replace('"new"', '"changed"'));
+    const head = commit(git, "changed behavior without changed server gate");
+    for (const number of [1, 2]) {
+      assert.equal((await evaluate(`HTPR-${number} [FEATURE] behavior`, base, head, dir)).pass, false);
+    }
+  }
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/api/widget/route.ts", 'import { useFlag } from "@/hooks/useFlag";\nexport function execute() { return useFlag("htpr-1-other") ? "new" : "old"; }\n');
+  const head = commit(git, "client-only gate");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
+});
+
+test("server coverage cannot excuse unrelated UI or use a client gate", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nexport async function GET() { return await isFeatureEnabled("htpr-1-other", 6) ? "new" : "old"; }\n');
+  writeFile(dir, "src/components/Unrelated.tsx", 'export const Unrelated = () => <div />;\n');
+  let head = commit(git, "unrelated ungated UI");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
+  fs.rmSync(path.join(dir, "src/components/Unrelated.tsx"));
+  writeFile(dir, "src/app/api/other/route.ts", 'export { GET } from "../widget/route";\n');
+  head = commit(git, "delegating route");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, true);
+  writeFile(dir, "src/app/api/other/route.ts", 'import { GET as executeGET } from "../widget/route";\nexport const GET = executeGET;\n');
+  head = commit(git, "imported handler alias");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, true);
+  writeFile(dir, "src/app/api/widget/route.ts", 'export async function GET() { return "ungated"; }\n');
+  writeFile(dir, "src/components/Unrelated.tsx", 'import { useFlag } from "@/hooks/useFlag";\nexport function Widget() { return useFlag("htpr-1-other") ? <div /> : null; }\n');
+  head = commit(git, "UI gate does not cover server");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] behavior", base, head, dir)).pass, false);
+});
+
+test("server flags in invoked MCP route wrappers count, but discarded and shadowed wrappers do not", async (t) => {
+  for (const [source, expected] of [
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async (request) => { if (!(await isFeatureEnabled("htpr-1-other", request.userId))) return "off"; return "on"; })(request); }\n', true],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; }); return "ungated"; }\n', false],
+    ['function wrap(callback) { return () => "ungated"; }\nexport async function POST(request) { return wrap(async () => { return await isFeatureEnabled("htpr-1-other", 6) ? "on" : "off"; })(request); }\n', false],
+    ['import { wrapMcpRoute as wrap } from "@/lib/mcp/routeWrapper";\nexport async function POST(request) { return wrap(async function* () { if (await isFeatureEnabled("htpr-1-other", 6)) yield "on"; })(request); }\n', false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/mcp/operations/widget.ts", 'import { isFeatureEnabled } from "@/lib/flags";\n' + source);
+    const head = commit(git, "wrapped server handler");
+    assert.equal((await evaluate("HTPR-1 [FEATURE] wrapped operation", base, head, dir)).pass, expected);
+  }
+});
+
+test("server-only changes preserve existing exemptions and deletion behavior", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/lib/mcp/operation.ts", 'export const oldValue = "old";\n');
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/mcp/operation.ts", 'export const value = "new";\n');
+  const head = commit(git, "server behavior");
+  for (const title of ["YPER4-1 [FEATURE] infra", "HTPR-1 [INFRA] infra", "HTPR-1 [BUGFIX] repair", "HTPR-1 [REFACTOR] cleanup"]) {
+    assert.equal((await evaluate(title, base, head, dir)).pass, true, title);
+  }
+  assert.equal((await evaluate("HTPR-1 [FEATURE] AI chat", base, head, dir, ["AI CHAT 💬"])).pass, true);
+  fs.rmSync(path.join(dir, "src/lib/mcp/operation.ts"));
+  const deleted = commit(git, "remove old code");
+  assert.equal((await evaluate("HTPR-1 [FEATURE] remove code", base, deleted, dir)).pass, true);
 });
 
 test("memo-wrapped exported JSX entries still require a ticket gate", async (t) => {
@@ -200,12 +303,12 @@ test("memo-wrapped exported JSX entries still require a ticket gate", async (t) 
   assert.equal((await evaluate("HTPR-1 [FEATURE] add widget", parenWrappedBase, parenWrappedHead, parenWrapped.dir)).pass, false);
 });
 
-test("App Router API changes do not need a flag", async (t) => {
+test("App Router API changes require a server flag", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
   writeFile(dir, "src/app/api/example/route.ts", "export function GET() { return new Response(); }\n");
   const head = commit(git, "backend");
-  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, true);
+  assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, false);
 });
 
 test("server-side ticket gates cover related UI changes", async (t) => {
@@ -1152,13 +1255,13 @@ test("workflow covers metadata changes, uses trusted code, and reconciles old PR
   assert.match(workflow, /types: \[opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled, closed\]/);
   assert.doesNotMatch(workflow, /pull_request_target:\s+branches: \[production\]/);
   assert.match(workflow, /github\.event\.pull_request\.base\.ref == 'production'/);
-  assert.match(workflow, /push:\s+branches: \[production\]/);
+  assert.doesNotMatch(workflow, /push:/);
+  assert.match(workflow, /cron: "\*\/15 \* \* \* \*"/);
   assert.doesNotMatch(workflow, /workflow_dispatch:/);
   assert.match(workflow, /github\.event\.action != 'closed'/);
-  assert.match(workflow, /if: github\.event_name == 'push' \|\| github\.event_name == 'pull_request_target'/);
+  assert.match(workflow, /if: github\.event_name == 'schedule'/);
   assert.match(workflow, /timeout-minutes: 5/);
-  assert.match(workflow, /Every event reconciles all open PRs/);
-  assert.match(workflow, /group: feature-flag-gate-production/);
+  assert.ok(workflow.includes("group: feature-flag-gate-production"));
   assert.match(workflow, /cancel-in-progress: false/);
   assert.equal((workflow.match(/cache: npm/g) || []).length, 2);
   assert.equal((workflow.match(/cache-dependency-path: \.github\/scripts\/feature-flag-parser\/package-lock\.json/g) || []).length, 2);
@@ -1751,6 +1854,49 @@ test('only the real React useCallback binds a callback', async (t) => {
   }
 });
 
+test("new catch-all route files do not parse Git revision output as source", async (t) => {
+  for (const folder of ["[...slug]", "[[...slug]]"]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    const file = `src/app/detail/${folder}/Restorer.tsx`;
+    writeFile(dir, file, 'export const Restorer = () => <div>Restored</div>;\n');
+    const head = commit(git, "add route restorer");
+    const result = await evaluate("HTPR-7680 [BUGFIX] restore inbox", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
+test("deleted catch-all route files do not parse Git revision output as source", async (t) => {
+  for (const folder of ["[...slug]", "[[...slug]]"]) {
+    const { dir, git } = makeRepo(t);
+    const file = `src/app/detail/${folder}/Restorer.tsx`;
+    writeFile(dir, file, 'export const Restorer = () => <div>Restored</div>;\n');
+    const base = commit(git, "base route restorer");
+    fs.unlinkSync(path.join(dir, file));
+    const head = commit(git, "delete route restorer");
+    const result = await evaluate("HTPR-7680 [BUGFIX] remove restorer", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    assert.equal(result.ownerReview, "exempt-ui");
+  }
+});
+
+test("catch-all route files still reject wider exposure and invalid syntax", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const file = "src/app/detail/[...slug]/Providers.tsx";
+  writeFile(dir, "src/components/Banner.tsx", "export const Banner = () => <div>Consent</div>;\n");
+  writeFile(dir, file, 'import { Banner } from "@/components/Banner";\nexport const Providers = () => <>{!currentUser && <Banner />}</>;\n');
+  const base = commit(git, "guest banner in catch-all route");
+  writeFile(dir, file, 'import { Banner } from "@/components/Banner";\nexport const Providers = () => <Banner />;\n');
+  const widened = await evaluate("HTPR-7680 [BUGFIX] restore inbox", base, commit(git, "widen banner"), dir);
+  assert.equal(widened.pass, false);
+  assert.match(widened.reason, /Banner condition removed\) without a flag/);
+  writeFile(dir, file, "export const Providers = () => <;\n");
+  const malformed = await evaluate("HTPR-7680 [BUGFIX] restore inbox", base, commit(git, "invalid route source"), dir);
+  assert.equal(malformed.pass, false);
+  assert.match(malformed.reason, /UI exposure could not be parsed safely: invalid/);
+});
+
 test("BUGFIX and INFRA cannot drop an existing banner condition (PR 1580)", async (t) => {
   const { dir, git } = makeRepo(t);
   writeFile(dir, "src/components/Global/Banner.tsx", "export const Banner = () => <div>Consent</div>;\n");
@@ -2047,5 +2193,643 @@ export function Provider() {
 }`);
     const result = await evaluate("HTPR-1 [FEATURE] sidebar startup", base, commit(fixture.git, name), fixture.dir);
     assert.equal(result.pass, expected, `${name}: ${result.reason}`);
+  }
+});
+
+test("documented flag-gate shapes stay accepted and reject ungated variants", async (t) => {
+  const reference = fs.readFileSync(path.join(root, ".claude/reference/flags.md"), "utf8");
+  const examples = [...reference.matchAll(/```tsx flag-gate:(\w+)\n([\s\S]*?)\n```/g)];
+  assert.deepEqual(examples.map(([, name]) => name), ["prop", "effect", "rows"]);
+  for (const [, name, source] of examples) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/components/Widget.tsx", source + "\n");
+    const accepted = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, name), dir);
+    assert.equal(accepted.pass, true, `${name}: ${accepted.reason}`);
+    writeFile(dir, "src/components/Widget.tsx", source.replace("useFlag(OTHER_FLAG)", "true") + "\n");
+    const ungated = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, `${name} ungated`), dir);
+    assert.equal(ungated.pass, false, `${name} must refuse an unused flag import`);
+  }
+});
+
+test("documented flag-gate shapes name unsupported prop, effect and map callbacks", async (t) => {
+  for (const [name, body] of [
+    ["mapped conditional prop", "return <>{items.map((item) => <button key={item.id} onClick={enabled ? doWork : undefined} />)}</>;"],
+    ["hidden effect branch", "useEffect(() => { if (!enabled) return; doWork(); }, [enabled]); return <div />;"],
+    ["map callback", "return <>{items.map((item) => <div key={item.id}>{enabled && <button onClick={doWork} />}</div>)}</>;"],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/components/Widget.tsx", `import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+declare function doWork(): void;
+declare const items: { id: string }[];
+export function Widget() { const enabled = useFlag(OTHER_FLAG); ${body} }
+`);
+    const result = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, name), dir);
+    assert.equal(result.pass, false, `${name}: ${result.reason}`);
+  }
+});
+
+test("documented flag-gate shapes follow imports from a gated consumer, not back from a hook", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/hooks/usePreview.ts", `import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+export function usePreview() { return useFlag(OTHER_FLAG) ? "new" : "old"; }
+`);
+  const imports = `import { usePreview } from "../hooks/usePreview";
+import { useFlag } from "@/hooks/useFlag";
+import { OTHER_FLAG } from "@/lib/flags/keys";
+`;
+  writeFile(dir, "src/components/Widget.tsx", imports + "export function Widget() { return <div>{usePreview()}</div>; }\n");
+  const hookOnly = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, "hook gate only"), dir);
+  assert.equal(hookOnly.pass, false, hookOnly.reason);
+  writeFile(dir, "src/components/Widget.tsx", imports + `export function Widget() {
+  const preview = usePreview();
+  return useFlag(OTHER_FLAG) ? <div>{preview}</div> : <div />;
+}
+`);
+  const consumer = await evaluate("HTPR-1 [FEATURE] documented widget", base, commit(git, "gated consumer"), dir);
+  assert.equal(consumer.pass, true, consumer.reason);
+});
+
+test('render-child gates require a consumed custom component callback', async (t) => {
+  const cases = [
+    ['render child', 'return <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', true],
+    ['named render child', 'const render = () => <Row limit={enabled ? 3 : undefined} />; return <Boundary>{render}</Boundary>;', true],
+    ['discarded named render child', 'const render = () => <Row limit={enabled ? 3 : undefined} />; const unused = <Boundary>{render}</Boundary>; return <Row />;', false],
+    ['nested render children', 'return <Boundary>{() => <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</Boundary>;', true],
+    ['discarded render child', 'const unused = <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>; return <Row />;', false],
+    ['dead render child', 'return <>{false && <Boundary>{() => <Row limit={enabled ? 3 : undefined} />}</Boundary>}</>;', false],
+    ['intrinsic function child', 'return <div>{() => <Row limit={enabled ? 3 : undefined} />}</div>;', false],
+    ['shadowed render flag', 'return <Boundary>{(enabled) => <Row limit={enabled ? 3 : undefined} />}</Boundary>;', false],
+    ['unrelated map callback', 'return <>{items.map(() => <Row limit={enabled ? 3 : undefined} />)}</>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    const result = await evaluate('HTPR-1 [FEATURE] render child', base, commit(git, name), dir);
+    assert.equal(result.pass, expected, name);
+  }
+});
+
+test('changed component paths accept private gates without trusting unchanged sibling exports', async (t) => {
+  const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
+  const entry = 'export function Widget() { return <Private />; }\n';
+  const unchanged = 'export function Title() { return <h1>Existing</h1>; }\n';
+  const gated = 'function Private() { return useFlag(OTHER_FLAG) ? <span>New</span> : null; }\n';
+  const cases = [
+    ['private child behind unchanged entry', entry + gated + unchanged, true],
+    ['changed entry reaches private child', entry.replace('<Private />', '<main><Private /></main>') + gated + unchanged, true],
+    ['new unrelated ungated export', entry + gated + unchanged + 'export function Other() { return <aside>New</aside>; }\n', false],
+    ['changed ungated sibling', entry + gated + unchanged.replace('Existing', 'New'), false],
+    ['unused gated private component', entry.replace('<Private />', '<div>New</div>') + gated + unchanged, false],
+    ['shadowed private component', 'export function Widget() { const Private = () => <div>New</div>; return <Private />; }\n' + gated + unchanged, false],
+    ['discarded gated child', 'export function Widget() { const unused = <Private />; return <div>New</div>; }\n' + gated + unchanged, false],
+    ['dead gated child', 'export function Widget() { return <>{false && <Private />}<div>New</div></>; }\n' + gated + unchanged, false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, 'src/components/Widget.tsx', imports + entry + 'function Private() { return null; }\n' + unchanged);
+    const base = commit(git, 'existing components');
+    writeFile(dir, 'src/components/Widget.tsx', imports + source);
+    const result = await evaluate('HTPR-1 [FEATURE] private child', base, commit(git, name), dir);
+    assert.equal(result.pass, expected, name);
+  }
+});
+
+test('deletion anchors never turn an unchanged flag read into a new ticket gate', async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() {\n  const enabled = useFlag(OTHER_FLAG);\n  const unused = 0;\n  return enabled ? <div>Old</div> : null;\n}\n';
+  writeFile(dir, 'src/components/Widget.tsx', source);
+  const base = commit(git, 'existing gate');
+  writeFile(dir, 'src/components/Widget.tsx', source.replace('  const unused = 0;\n', '').replace('Old', 'New'));
+  assert.equal((await evaluate('HTPR-1 [FEATURE] existing gate', base, commit(git, 'delete next to flag'), dir)).pass, false);
+});
+
+test('deletion-only sibling changes still require their own reachable ticket gate', async (t) => {
+  const { dir, git } = makeRepo(t);
+  const source = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nexport function Widget() { return null; }\nexport function Other() {\n  if (!visible) return null;\n  return <aside>Existing</aside>;\n}\n';
+  writeFile(dir, 'src/components/Widget.tsx', source);
+  const base = commit(git, 'existing siblings');
+  const gated = source.replace('return null; }', 'return useFlag(OTHER_FLAG) ? <div>New</div> : null; }');
+  writeFile(dir, 'src/components/Widget.tsx', gated);
+  assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'still allowed'), dir)).pass, true);
+  writeFile(dir, 'src/components/Widget.tsx', gated.replace('  if (!visible) return null;\n', ''));
+  assert.equal((await evaluate('HTPR-1 [FEATURE] sibling control', base, commit(git, 'now refused'), dir)).pass, false);
+});
+
+test('changed module values and rebound exports cannot borrow a sibling gate', async (t) => {
+  const imports = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n';
+  const cases = [
+    ['changed module constant', 'const title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n', 'const title = "New";\nexport function Title() { return <h1>{title}</h1>; }\n'],
+    ['removed module assignment', 'let title = "Old";\ntitle = "New";\nexport function Title() { return <h1>{title}</h1>; }\n', 'let title = "Old";\nexport function Title() { return <h1>{title}</h1>; }\n'],
+    ['same-line module constant', 'const title = "Old"; export function Title() { return <h1>{title}</h1>; }\n', 'const title = "New"; export function Title() { return <h1>{title}</h1>; }\n'],
+    ['edited rebound entry', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>New</aside>;\nOther = () => <aside>New</aside>;\n'],
+    ['only reassignment edited', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>Old</aside>;\n', 'export let Other = () => <aside>Old</aside>;\nOther = () => <aside>New</aside>;\n'],
+  ];
+  for (const [name, before, after] of cases) {
+    const { dir, git } = makeRepo(t);
+    writeFile(dir, 'src/components/Widget.tsx', imports + before);
+    const base = commit(git, 'existing UI');
+    writeFile(dir, 'src/components/Widget.tsx', imports + after + 'export function Gated() { return useFlag(OTHER_FLAG) ? <div>Feature</div> : null; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] sibling gate', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+test('entry-scoped gates cannot come from unrelated module initializers', async (t) => {
+  const cases = [
+    ['module async call', 'async function load() { if (await isFeatureEnabled(OTHER_FLAG)) doWork(); }\nconst settings = load();\n'],
+    ['module JSX callback', 'const unused = <Boundary>{() => <Row limit={useFlag(OTHER_FLAG) ? 3 : undefined}/>}</Boundary>;\n'],
+    ['direct module gate', 'const enabled = useFlag(OTHER_FLAG);\nconst setting = enabled ? 1 : 2;\n'],
+  ];
+  for (const [name, decoy] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + decoy + 'export function Widget() { return <div>Ungated</div>; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] module decoy', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+test('runtime import replacements cannot borrow a sibling gate, while added flag bindings remain allowed', async (t) => {
+  for (const [name, beforeImport, afterImport, content, expected] of [
+    ['named source replacement', 'import { title } from "./old";', 'import { title } from "./new";', '<h1>{title}</h1>', false],
+    ['default source replacement', 'import Title from "./old";', 'import Title from "./new";', '<Title />', false],
+    ['namespace source replacement', 'import * as UI from "./old";', 'import * as UI from "./new";', '<UI.Title />', false],
+    ['named binding replacement', 'import { oldTitle as title } from "./values";', 'import { newTitle as title } from "./values";', '<h1>{title}</h1>', false],
+    ['new side effect', '', 'import "./global-theme";', '<h1>Existing</h1>', false],
+    ['added flag binding', 'import { EXISTING_FLAG } from "@/lib/flags/keys";', 'import { EXISTING_FLAG, OTHER_FLAG } from "@/lib/flags/keys";', '<h1>Existing</h1>', true],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const title = `export function TitleView() { return ${content}; }\n`;
+    writeFile(dir, 'src/components/Widget.tsx', beforeImport + '\n' + title);
+    const base = commit(git, 'existing imports');
+    writeFile(dir, 'src/components/Widget.tsx', afterImport + '\nimport {useFlag} from "@/hooks/useFlag";\n' + (name === 'added flag binding' ? '' : 'import {OTHER_FLAG} from "@/lib/flags/keys";\n') + title + 'export function Gated() { return useFlag(OTHER_FLAG) ? <div>Feature</div> : null; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] import control', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('aliased formatter parameters gate real output, not ignored or overwritten values', async (t) => {
+  const cases = [
+    ['relative return', './formatter', 'return enabled ? "Age" : null;', true],
+    ['aliased return', '@/lib/formatter', 'return enabled ? "Age" : null;', true],
+    ['early null return', '@/lib/formatter', 'if (!enabled) return null; return "Age";', true],
+    ['compound early return', '@/lib/formatter', 'if ((!enabled && data.fresh) || data.missing) { return null; } const suffix = data.days; return `Age ${suffix}`;', true],
+    ['constant default parameter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', true, 'function', 'data, enabled = false'],
+    ['if else return', '@/lib/formatter', 'if (enabled) { return "Age"; } else { return null; }', true],
+    ['finally overrides early returns', '@/lib/formatter', 'try { if (!enabled) return null; return "Age"; } finally { return "Age"; }', false],
+    ['finally overrides conditional return', '@/lib/formatter', 'try { return enabled ? "Age" : null; } finally { return "Age"; }', false],
+    ['finally overrides nested block', '@/lib/formatter', 'try { { if (!enabled) return null; return "Age"; } } finally { return "Age"; }', false],
+    ['exception control flow is unsupported', '@/lib/formatter', 'try { if (!enabled) return null; return "Age"; } catch { return "Age"; }', false],
+    ['nested contradictory guard', '@/lib/formatter', 'if (enabled) { if (!enabled) return null; return "Age"; } return "Age";', false],
+    ['nested loop guard', '@/lib/formatter', 'while (enabled) { if (!enabled) return null; return "Age"; } return "Age";', false],
+    ['async formatter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', false, 'async function'],
+    ['generator formatter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', false, 'function*'],
+    ['async generator formatter', '@/lib/formatter', 'if (!enabled) return null; return "Age";', false, 'async function*'],
+    ['contradictory compound guard', '@/lib/formatter', 'if (enabled && !enabled) return null; return "Age";', false],
+    ['tautological compound guard', '@/lib/formatter', 'if (enabled || !enabled) return null; return "Age";', false],
+    ['contradictory conditional', '@/lib/formatter', 'return enabled && !enabled ? null : "Age";', false],
+    ['aliased contradiction', '@/lib/formatter', 'const inverse = !enabled; if (enabled && inverse) return null; return "Age";', false],
+    ['aliased tautology', '@/lib/formatter', 'const inverse = !enabled; if (enabled || inverse) return null; return "Age";', false],
+    ['transitive alias contradiction', '@/lib/formatter', 'const first = !enabled; const inverse = first; if (enabled && inverse) return null; return "Age";', false],
+    ['destructured alias contradiction', '@/lib/formatter', 'const {inverse} = {inverse: !enabled}; if (enabled && inverse) return null; return "Age";', false],
+    ['aliased conditional contradiction', '@/lib/formatter', 'const inverse = !enabled; return enabled && inverse ? null : "Age";', false],
+    ...['1 === 1', '1 < 2', '(true ? true : false)', '(false || true)'].map(value => ['unsupported compound mask ' + value, '@/lib/formatter', `if (enabled || (${value})) return "Age"; return null;`, false]),
+    ['ignored parameter', '@/lib/formatter', 'if (enabled) log(); return "Age";', false],
+    ['invariant repeated guards', '@/lib/formatter', 'if (!enabled) return \"Age\"; if (enabled) return \"Age\"; return null;', false],
+    ['invariant prior guard with else', '@/lib/formatter', 'if (!enabled) return \"Age\"; if (enabled) return \"Age\"; else return null;', false],
+    ['same returned value', '@/lib/formatter', 'if (!enabled) return "Age"; return "Age";', false],
+    ['same truthy result', '@/lib/formatter', 'if (!enabled) return "Old"; return "Age";', false],
+    ['null and undefined results', '@/lib/formatter', 'if (!enabled) return null; return undefined;', false],
+    ['constant condition', '@/lib/formatter', 'if (!enabled || true) return null; return "Age";', false],
+    ['overwritten parameter', '@/lib/formatter', 'enabled = true; if (!enabled) return null; return "Age";', false],
+    ['unused nested gate', '@/lib/formatter', 'function unused() { if (!enabled) return null; return "Age"; } return "Age";', false],
+    ['external module', 'formatter', 'if (!enabled) return null; return "Age";', false],
+    ['outside source alias', '@/../formatter', 'if (!enabled) return null; return "Age";', false],
+  ];
+  for (const [name, moduleName, body, expected, declaration = 'function', parameters = 'data, enabled'] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    const helper = `export ${declaration} format(${parameters}) { ${body} }\n`;
+    const helperPath = moduleName === './formatter' ? 'src/components/formatter.ts' : 'src/lib/formatter.ts';
+    writeFile(dir, helperPath, helper);
+    writeFile(dir, 'src/components/Widget.tsx', `import {useFlag} from "@/hooks/useFlag";
+import {OTHER_FLAG} from "@/lib/flags/keys";
+import {format} from "${moduleName}";
+export function Widget() {
+  const enabled = useFlag(OTHER_FLAG);
+  const label = format({fresh: true, missing: false, days: 2}, enabled);
+  if (!label) return null;
+  return <p>{label}</p>;
+}
+`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter output', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter gate proof requires an explicit live return branch', async (t) => {
+  const cases = [
+    ['unsupported direct JSX output', 'return <p>{format(enabled)}</p>;', false],
+    ['unsupported assigned JSX output', 'const label = format(enabled); return <p>{label}</p>;', false],
+    ['direct conditional output', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['assigned conditional output', 'const label = format(enabled); return label ? <p>Age</p> : null;', true],
+    ['inverted direct conditional output', 'return !format(enabled) ? null : <p>Age</p>;', true],
+    ['empty conditional fragments', 'return format(enabled) ? <></> : null;', false],
+    ['empty nested conditional fragments', 'return <div>{format(enabled) ? <></> : null}<p>Always</p></div>;', false],
+    ['nested empty fragment children', 'return format(enabled) ? <><></>{null}</> : null;', false],
+    ['boolean-only conditional output', 'return format(enabled) ? true : null;', false],
+    ['nonempty fragment control', 'return format(enabled) ? <><p>Age</p></> : null;', true],
+    ['empty logical fragment', 'return format(enabled) && <></>;', false],
+    ['empty early-return fragment', 'const label = format(enabled); if (!label) return null; return <></>;', false],
+    ['same truthy conditional branches', 'return format(enabled) ? <p>Age</p> : <p>Always</p>;', false],
+    ['assigned early-return output', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['earlier rendering return', 'const always = true; if (always) return <p>Age</p>; const label = format(enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['contradictory consumer', 'const label = format(enabled); if (label && !label) return null; return <p>Age</p>;', false],
+    ['undefined comparison never matches', 'const label = format(enabled); if (label === undefined) return null; return <p>Age</p>;', false],
+    ['false comparison never matches', 'const label = format(enabled); if (label === false) return null; return <p>Age</p>;', false],
+    ['inequality always matches', 'const label = format(enabled); if (label !== undefined) return <p>Age</p>; return null;', false],
+    ['boolean negation preserves truthiness', 'const label = format(enabled); if (!!label) return <p>Age</p>; return null;', true],
+    ['invariant consumer guards', 'const label = format(enabled); if (label) return <p>Age</p>; if (!label) return <p>Age</p>; return null;', false],
+    ['masked direct output', 'return <p>{format(enabled) || \"Age\"}</p>;', false],
+    ['masked assigned output', 'const label = format(enabled); return <p>{label || \"Age\"}</p>;', false],
+    ['masked JSX element', 'return <p>{format(enabled)}</p> && false;', false],
+    ['ignored call argument', 'const ignore = () => {}; ignore(format(enabled)); return <p>Always</p>;', false],
+    ['ignored assigned argument', 'const ignore = () => {}; const label = format(enabled); ignore(label); return <p>Always</p>;', false],
+    ['discarded JSX result', 'const unused = <p>{format(enabled)}</p>; return <p>Always</p>;', false],
+    ['event handler JSX return', 'const label = format(enabled); const row = <div>{label && <p>Age</p>}</div>; const send = () => row; return <button onClick={send}/>;', false],
+    ['rendered JSX binding control', 'const label = format(enabled); const row = <div>{label && <p>Age</p>}</div>; return row;', true],
+    ['dead direct output', 'return <>{false && <p>{format(enabled)}</p>}</>;', false],
+    ['discarded result', 'format(enabled); return <p>Always</p>;', false],
+    ['unused assignment', 'const unused = format(enabled); return <p>Always</p>;', false],
+    ['overwritten result', 'let label = format(enabled); label = "Always"; return <p>{label}</p>;', false],
+    ['dead output', 'const label = format(enabled); return <>{false && <p>{label}</p>}</>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { if (!enabled) return null; return "Age"; }\n');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter return proof follows rendered components, never discarded hook or helper results', async (t) => {
+  const label = 'const enabled = useFlag(OTHER_FLAG); const label = format(enabled);';
+  const guarded = label + ' if (!label) return null; return <p>Age</p>;';
+  const cases = [
+    ['mounted component', `function Private() { ${guarded} } export function Widget() { return <Private/>; }`, true],
+    ['returned JSX binding', `function Private() { ${guarded} } export function Widget() { const row = <Private/>; return row; }`, true],
+    ['discarded inline hook guard', `function useLabel() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) return \"Age\"; return null; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['live action handler', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const send = () => { if (format(enabled)) doWork(); }; return <button onClick={send}/>; }', true],
+    ['dead action branch', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const send = () => { if (format(enabled)) { if (false) doWork(); } }; return <button onClick={send}/>; }', false],
+    ['discarded hook result', `function useLabel() { ${label} return label; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['discarded inverted string hook', `function useLabel() { ${label} if (label) return \"Age\"; return null; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['discarded inverted JSX helper', `function Private() { ${label} if (label) return <p>Age</p>; return null; } export function Widget() { Private(); return <p>Always</p>; }`, false],
+    ['mounted inverted guard', `function Private() { ${label} if (label) return <p>Age</p>; return null; } export function Widget() { return <Private/>; }`, true],
+    ['discarded guarded string hook', `function useLabel() { ${label} if (!label) return null; return "Age"; } export function Widget() { useLabel(); return <p>Always</p>; }`, false],
+    ['discarded JSX helper', `function Private() { ${guarded} } export function Widget() { Private(); return <p>Always</p>; }`, false],
+    ['discarded exported JSX helper', `export function Private() { ${guarded} } export function Widget() { Private(); return <p>Always</p>; }`, false],
+    ['ignored JSX argument', `function Private() { ${guarded} } export function Widget() { const ignore = () => {}; ignore(<Private/>); return <p>Always</p>; }`, false],
+    ['masked JSX component', `function Private() { ${guarded} } export function Widget() { return <Private/> && false; }`, false],
+    ['overwritten JSX binding', `function Private() { ${guarded} } export function Widget() { let row = <Private/>; row = <p>Always</p>; return row; }`, false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { if (!enabled) return null; return "Age"; }\n');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + source);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] rendered formatter consumer', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('early-return formatter truthiness refuses always-visible branches', async (t) => {
+  const cases = [
+    ['null versus text', 'null', '"Age"', true],
+    ['null versus nonempty template', 'null', '`Age ${data.days}`', true],
+    ['undefined versus text', 'undefined', '"Age"', true],
+    ['false versus text', 'false', '"Age"', true],
+    ['zero versus text', '0', '"Age"', true],
+    ['empty text versus text', '""', '"Age"', true],
+    ['object versus text', '{}', '"Age"', false],
+    ['array versus text', '[]', '"Age"', false],
+    ['arrow versus text', '() => {}', '"Age"', false],
+    ['function versus text', 'function() {}', '"Age"', false],
+    ['class versus text', 'class {}', '"Age"', false],
+    ['regexp versus text', '/old/', '"Age"', false],
+    ['constructed object versus text', 'new Boolean(false)', '"Age"', false],
+    ['wrapped object versus text', '({} as unknown)', '"Age"', false],
+    ['nonempty template versus text', '`Old ${data.days}`', '"Age"', false],
+    ['unknown call versus text', 'data.value()', '"Age"', false],
+    ['null versus unknown call', 'null', 'data.value()', false],
+    ['unknown template versus text', '`${data.days}`', '"Age"', false],
+  ];
+  for (const [name, disabled, enabled, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(data, enabled) { if (!enabled) return ${disabled}; return ${enabled}; }\n`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format({}, enabled); if (!label) return null; return <p>Age</p>; }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter truthiness', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('invariant formatter guards cannot prove an early-return gate', async (t) => {
+  const cases = [
+    ['correlated parameter contradiction', 'enabled, inverse', 'if (enabled && inverse) return null; return "Age";', 'const label = format(enabled, !enabled); if (!label) return null; return <p>Age</p>;'],
+    ['correlated parameter tautology', 'enabled, inverse', 'if (enabled || inverse) return "Age"; return null;', 'const label = format(enabled, !enabled); if (!label) return null; return <p>Age</p>;'],
+    ...['undefined', 'null', '"yes"', '0'].map(value => ['impossible comparison ' + value, 'enabled', `if (enabled === ${value}) return null; return "Age";`, 'const label = format(enabled); if (!label) return null; return <p>Age</p>;']),
+    ...['{}', '[]', '`Age ${enabled}`', '() => {}'].map(value => ['truthy mask ' + value, 'enabled', `if (enabled || ${value}) return "Age"; return null;`, 'const label = format(enabled); if (!label) return null; return <p>Age</p>;']),
+    ['nested conditional return', 'enabled', 'if (enabled) return enabled ? "Age" : null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['impossible direct consumer', 'enabled', 'if (!enabled) return null; return "Age";', 'if (format(enabled) !== undefined) return <p>Age</p>; return null;'],
+    ['invariant returned ternary helper', 'enabled', 'return enabled ? !enabled : false;', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant returned alternate helper', 'enabled', 'return enabled ? true : !enabled;', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant returned branch helper', 'enabled', 'return !enabled ? enabled : false;', 'return format(enabled) ? <p>Age</p> : null;'],
+    ['invariant ternary helper', 'enabled', 'if (enabled ? !enabled : false) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant alternate ternary helper', 'enabled', 'if (enabled ? false : enabled) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['default parameter contradiction', 'enabled, inverse = !enabled', 'if (enabled && inverse) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['default parameter tautology', 'enabled, inverse = !enabled', 'if (enabled || inverse) return null; return "Age";', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;'],
+    ['invariant ternary consumer', 'enabled', 'if (!enabled) return null; return "Age";', 'const label = format(enabled); if (label ? !label : false) return null; return <p>Age</p>;'],
+  ];
+  for (const [name, parameters, helper, consumer] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }\n`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + consumer + ' }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter guard', base, commit(git, name), dir)).pass, false, name);
+  }
+});
+
+
+test('imported boolean conjunctions preserve independent caller inputs', async (t) => {
+  const cases = [
+    ['independent direct conditional', 'window.ready', 'return showWidget(window.ready, enabled) ? <p>Age</p> : null;', true],
+    ['independent assigned return', 'window.ready', 'const label = showWidget(window.ready, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['truthy independent input', 'true', 'return showWidget(true, enabled) ? <p>Age</p> : null;', true],
+    ['falsy independent input', 'false', 'return showWidget(false, enabled) ? <p>Age</p> : null;', false],
+    ['correlated direct conditional', '!enabled', 'return showWidget(!enabled, enabled) ? <p>Age</p> : null;', false],
+    ['aliased correlated input', 'inverse', 'const inverse = !enabled; return showWidget(inverse, enabled) ? <p>Age</p> : null;', false],
+    ['same correlated input', 'enabled', 'return showWidget(enabled, enabled) ? <p>Age</p> : null;', false],
+  ];
+  for (const [name, input, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function showWidget(ready, enabled) { return ready && enabled; }\n');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {showWidget} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ' + body + ' }\n');
+    assert.equal((await evaluate('HTPR-1 [FEATURE] independent formatter input', base, commit(git, name), dir)).pass, expected, name + ': ' + input);
+  }
+});
+
+
+test('formatter dependencies and consumed logical rendering stay sound', async (t) => {
+  const cases = [
+    ['constant false object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({inverse: false}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['constant true object mask', 'data, enabled', 'if (enabled || data.always) return "Age"; return null;', '', 'const label = format({always: true}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['aliased constant false object', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const data = {inverse: false}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['nested constant false object', 'data, enabled', 'if (enabled && data.nested.inverse) return null; return "Age";', '', 'const data = {nested: {inverse: false}}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['missing object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['inherited truthy method', 'data, enabled', 'if (enabled || data.toString) return "Age"; return null;', '', 'const label = format({}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['inherited constructor', 'data, enabled', 'return enabled || data.constructor;', '', 'return format({}, enabled) ? <p>Age</p> : null;', false],
+    ['inherited prototype', 'data, enabled', 'return enabled || data.__proto__;', '', 'return format({}, enabled) ? <p>Age</p> : null;', false],
+    ['ignored primitive prototype setter', 'data, enabled', 'return enabled || data.__proto__;', '', 'return format({__proto__: false}, enabled) ? <p>Age</p> : null;', false],
+    ['custom inherited truthy field', 'data, enabled', 'return enabled || data.ready;', '', 'return format({__proto__: {ready: true}}, enabled) ? <p>Age</p> : null;', false],
+    ['custom inherited falsy field', 'data, enabled', 'return enabled && data.ready;', '', 'return format({__proto__: {ready: false}}, enabled) ? <p>Age</p> : null;', false],
+    ['negated inherited field', 'data, enabled', 'return enabled && !data.toString;', '', 'return format({}, enabled) ? <p>Age</p> : null;', false],
+    ['nested inherited field', 'data, enabled', 'return enabled || data.nested.toString;', '', 'return format({nested: {}}, enabled) ? <p>Age</p> : null;', false],
+    ['empty string length', 'data, enabled', 'return enabled && data.length;', '', 'return format("", enabled) ? <p>Age</p> : null;', false],
+    ['spread inherited field', 'data, enabled', 'return enabled || data.toString;', '', 'return format({...{}}, enabled) ? <p>Age</p> : null;', false],
+    ['own falsy method override', 'data, enabled', 'return enabled || data.toString;', '', 'return format({toString: false}, enabled) ? <p>Age</p> : null;', true],
+    ['own truthy method override', 'data, enabled', 'return enabled && data.toString;', '', 'return format({toString: true}, enabled) ? <p>Age</p> : null;', true],
+    ['own field on custom prototype', 'data, enabled', 'return enabled || data.ready;', '', 'return format({__proto__: {ready: true}, ready: false}, enabled) ? <p>Age</p> : null;', true],
+    ['negated constant object mask', 'data, enabled', 'if (enabled || !data.disabled) return "Age"; return null;', '', 'const label = format({disabled: false}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['constant true object control', 'data, enabled', 'if (enabled && data.ready) return "Age"; return null;', '', 'const label = format({ready: true}, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['constant false object control', 'data, enabled', 'if (enabled || data.ready) return "Age"; return null;', '', 'const label = format({ready: false}, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['independent field sharing flag name', 'data, enabled', 'return data.enabled && enabled;', 'props', 'return format(props, enabled) ? <p>Age</p> : null;', true],
+    ['dependent object default', 'enabled, data = {inverse: !enabled}', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format(enabled, undefined); if (!label) return null; return <p>Age</p>;', false],
+    ['nested dependent object default', 'enabled, data = {nested: {inverse: !enabled}}', 'if (enabled && data.nested.inverse) return null; return "Age";', '', 'const label = format(enabled, undefined); if (!label) return null; return <p>Age</p>;', false],
+    ['unsupported caller comparison', 'ready, enabled', 'return enabled || ready;', '', 'return format(1 === 1, enabled) ? <p>Age</p> : null;', false],
+    ['default truthy mask', 'ready = true, enabled', 'if (enabled || ready) return "Age"; return null;', '', 'return format(undefined, enabled) ? <p>Age</p> : null;', false],
+    ['aliased undefined default mask', 'ready = true, enabled', 'return enabled || ready;', '', 'const ready = undefined; return format(ready, enabled) ? <p>Age</p> : null;', false],
+    ['void default mask', 'ready = true, enabled', 'return enabled || ready;', '', 'return format(void 0, enabled) ? <p>Age</p> : null;', false],
+    ['default falsy conjunction', 'ready = false, enabled', 'return enabled && ready;', '', 'return format(undefined, enabled) ? <p>Age</p> : null;', false],
+    ['default falsy disjunction control', 'ready = false, enabled', 'return enabled || ready;', '', 'return format(undefined, enabled) ? <p>Age</p> : null;', true],
+    ['null skips default control', 'ready = true, enabled', 'return enabled || ready;', '', 'return format(null, enabled) ? <p>Age</p> : null;', true],
+    ['false skips default control', 'ready = true, enabled', 'return enabled || ready;', '', 'return format(false, enabled) ? <p>Age</p> : null;', true],
+    ['overwritten secondary parameter', 'ready, enabled', 'const ignored = (ready = true); if (enabled || ready) return "Age"; return null;', '', 'return format(false, enabled) ? <p>Age</p> : null;', false],
+    ['updated secondary parameter', 'ready, enabled', 'const ignored = ready++; if (enabled || ready) return "Age"; return null;', '', 'return format(false, enabled) ? <p>Age</p> : null;', false],
+    ['falsy disjunction input', 'ready, enabled', 'return ready || enabled;', '', 'return format(false, enabled) ? <p>Age</p> : null;', true],
+    ['truthy disjunction mask', 'ready, enabled', 'return ready || enabled;', '', 'return format(true, enabled) ? <p>Age</p> : null;', false],
+    ['aliased falsy conjunction', 'ready, enabled', 'return ready && enabled;', '', 'const ready = false; return format(ready, enabled) ? <p>Age</p> : null;', false],
+    ['aliased falsy disjunction', 'ready, enabled', 'return ready || enabled;', '', 'const ready = false; return format(ready, enabled) ? <p>Age</p> : null;', true],
+    ['correlated object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const label = format({inverse: !enabled}, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['aliased correlated object', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '', 'const data = {inverse: !enabled}; const label = format(data, enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['independent object field', 'data, enabled', 'if (enabled && data.inverse) return null; return "Age";', '{ready}', 'const label = format({inverse: ready}, enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['logical rendering', 'enabled', 'return enabled;', '', 'return format(enabled) && <p>Age</p>;', true],
+    ['nested logical rendering', 'enabled', 'return enabled;', '', 'return <div>{format(enabled) && <p>Age</p>}</div>;', true],
+    ['nested conditional rendering', 'enabled', 'return enabled;', '', 'return <div>{format(enabled) ? <p>Age</p> : null}</div>;', true],
+    ['discarded nested rendering', 'enabled', 'return enabled;', '', 'const discarded = <div>{format(enabled) && <p>Age</p>}</div>; return <p>Age</p>;', false],
+    ['masked nested rendering', 'enabled', 'return enabled;', '', 'return (<div>{format(enabled) && <p>Age</p>}</div>, <p>Age</p>);', false],
+    ['independent destructured prop', 'ready, enabled', 'return ready && enabled;', '{ready}', 'return format(ready, enabled) ? <p>Age</p> : null;', true],
+    ['independent prop alias', 'ready, enabled', 'return ready && enabled;', '{ready}', 'const available = ready; return format(available, enabled) ? <p>Age</p> : null;', true],
+    ['independent parameter prop', 'ready, enabled', 'return ready && enabled;', 'props', 'return format(props.ready, enabled) ? <p>Age</p> : null;', true],
+    ['correlated shorthand field', 'data, enabled', 'if (enabled && data.enabled) return null; return "Age";', '', 'const label = format({enabled}, enabled); if (!label) return null; return <p>Age</p>;', false],
+  ];
+  for (const [name, parameters, helper, props, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + `export function Widget(${props}) { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter dependency', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('async server consumers preserve synchronous formatter gates', async (t) => {
+  const cases = [
+    ['relative conditional', '../lib/formatter', 'export function format(enabled) { return enabled; }', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['alias conditional', '@/lib/formatter', 'export function format(enabled) { return enabled; }', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['assigned early return', '@/lib/formatter', 'export function format(enabled) { return enabled; }', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['async formatter remains refused', '@/lib/formatter', 'export async function format(enabled) { return enabled; }', 'return format(enabled) ? <p>Age</p> : null;', false],
+  ];
+  for (const [name, moduleName, helper, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', helper);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport async function Widget() { const enabled = await isFeatureEnabled(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] async formatter consumer', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter render coercion and omitted defaults preserve real gates', async (t) => {
+  const cases = [
+    ['empty array assigned', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [] : null}</div>;', false],
+    ['empty array direct', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [] : null;', false],
+    ['nested empty array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [[], false, null, <></>] : null;', false],
+    ['sparse empty array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [, , []] : null;', false],
+    ['empty array logical', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label && []}</div>;', false],
+    ['empty spread array', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [...[]] : null}</div>;', false],
+    ['nested empty spread array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...[[], false, null, <></>]] : null;', false],
+    ['empty spread string', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...""] : null;', false],
+    ['unknown spread cannot prove visibility', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...window.items] : null;', false],
+    ['rendered spread array control', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...[<p key="age">Age</p>]] : null;', true],
+    ['rendered spread string control', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [..."Age"] : null;', true],
+    ['rendered string control', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? "Age" : null;', true],
+    ['rendered text array control', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? ["Age"] : null;', true],
+    ['empty text array', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [""] : null;', false],
+    ['rendered sibling of unknown spread', '@/lib/formatter', 'enabled', 'return enabled;', 'return format(enabled) ? [...window.items, <p key="age">Age</p>] : null;', true],
+    ['rendered array control', '@/lib/formatter', 'enabled', 'return enabled;', 'const label = format(enabled); return <div>{label ? [<p key="age">Age</p>] : null}</div>;', true],
+    ['omitted optional relative', '../lib/formatter', 'enabled: boolean, ready?: boolean', 'return enabled || ready;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted optional alias', '@/lib/formatter', 'enabled: boolean, ready?: boolean', 'return ready || enabled;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted optional mask', '@/lib/formatter', 'enabled: boolean, ready?: boolean', 'return enabled && ready;', 'return format(enabled) ? <p>Age</p> : null;', false],
+    ['boolean coerced conditional', '@/lib/formatter', 'enabled', 'return enabled;', 'return !!(format(enabled) ? <p>Age</p> : null);', false],
+    ['negated conditional', '@/lib/formatter', 'enabled', 'return enabled;', 'return !(format(enabled) ? <p>Age</p> : null);', false],
+    ['boolean coerced conjunction', '@/lib/formatter', 'enabled', 'return enabled;', 'return !!(format(enabled) && <p>Age</p>);', false],
+    ['negated condition control', '@/lib/formatter', 'enabled', 'return enabled;', 'return !format(enabled) ? <p>Age</p> : null;', true],
+    ['double negated condition control', '@/lib/formatter', 'enabled', 'return enabled;', 'return !!format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted truthy default relative', '../lib/formatter', 'enabled, ready = true', 'return ready && enabled;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted falsy default alias', '@/lib/formatter', 'enabled, ready = false', 'return ready || enabled;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['omitted truthy default mask', '@/lib/formatter', 'enabled, ready = true', 'return ready || enabled;', 'return format(enabled) ? <p>Age</p> : null;', false],
+    ['omitted falsy default mask', '@/lib/formatter', 'enabled, ready = false', 'return ready && enabled;', 'return format(enabled) ? <p>Age</p> : null;', false],
+    ['omitted correlated default', '@/lib/formatter', 'enabled, ready = !enabled', 'return ready || enabled;', 'return format(enabled) ? <p>Age</p> : null;', false],
+    ['supplied correlated argument', '@/lib/formatter', 'enabled, ready = false', 'return ready || enabled;', 'return format(enabled, !enabled) ? <p>Age</p> : null;', false],
+  ];
+  for (const [name, moduleName, parameters, helper, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(${parameters}) { ${helper} }`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter rendering', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('server boolean responses remain effective gates', async (t) => {
+  const cases = [
+    ['distinct boolean values', 'enabled ? true : false', true],
+    ['identical boolean values', 'enabled ? true : true', false],
+  ];
+  for (const [name, response, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/components/Widget.tsx', 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+    writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `export async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); return Response.json(${response}); }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] server boolean gate', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter consumer defaults do not constrain independent rendering', async (t) => {
+  const cases = [
+    ['relative direct conditional', '../lib/formatter', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['alias direct conditional', '@/lib/formatter', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['assigned early return', '@/lib/formatter', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', true],
+    ['ignored formatter remains refused', '@/lib/formatter', 'format(enabled); return <p>Age</p>;', false],
+  ];
+  for (const [name, moduleName, body, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nconst defaults = {};\nexport function Widget(props = defaults) { const enabled = useFlag(OTHER_FLAG); ${body} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer defaults', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter comparisons, boolean children and action exits require observable behavior', async (t) => {
+  const cases = [
+    ['compound strict comparison', 'if ((enabled && "Age") === true) return "Age"; return null;', 'const label = format(enabled); if (!label) return null; return <p>Age</p>;', false],
+    ['compound loose comparison', 'return (enabled && "Age") == true;', 'return format(enabled) ? <p>Age</p> : null;', false],
+    ['boolean comparison control', 'return enabled === true;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['negated comparison control', 'return !enabled === false;', 'return format(enabled) ? <p>Age</p> : null;', true],
+    ['logical boolean child', 'return enabled;', 'const label = format(enabled); return <div>{label ? [true && true] : null}</div>;', false],
+    ['conditional boolean child', 'return enabled;', 'return format(enabled) ? [ready ? true : false] : null;', false],
+    ['masked logical text child', 'return enabled;', 'return format(enabled) ? [true || "Age"] : null;', false],
+    ['visible zero child', 'return enabled;', 'return <div>{format(enabled) ? 0 : null}</div>;', true],
+    ['visible zero return', 'return enabled;', 'return format(enabled) ? 0 : null;', true],
+    ['nested action exit', 'return enabled;', 'const send = () => { if (ready) { if (!format(enabled)) return "disabled"; doWork(); } }; return <button onClick={send}/>;', true],
+    ['boolean negation child', 'return enabled;', 'const label = format(enabled); return <div>{label ? [!true] : null}</div>;', false],
+    ['boolean comparison child', 'return enabled;', 'return format(enabled) ? [1 === 1] : null;', false],
+    ['void child', 'return enabled;', 'return format(enabled) ? [void 0] : null;', false],
+    ['visible boolean sibling', 'return enabled;', 'return format(enabled) ? [!true, <p key="age">Age</p>] : null;', true],
+    ['direct action exit', 'return enabled;', 'const send = () => { if (!format(enabled)) return "disabled"; doWork(); }; return <button onClick={send}/>;', true],
+    ['assigned action exit', 'return enabled;', 'const send = () => { const label = format(enabled); if (!label) return; doWork(); }; return <button onClick={send}/>;', true],
+    ['action null exit', 'return enabled;', 'const send = () => { if (!format(enabled)) return null; doWork(); }; return <button onClick={send}/>;', true],
+    ['ignored action return', 'return enabled;', 'const send = () => { const label = format(enabled); if (!label) return null; return <p>Age</p>; }; return <button onClick={send}/>;', false],
+    ['unreachable action effect', 'return enabled;', 'const send = () => { if (!format(enabled)) return null; return; doWork(); }; return <button onClick={send}/>;', false],
+    ['ignored formatter', 'return enabled;', 'format(enabled); return <p>Age</p>;', false],
+  ];
+  for (const [name, helper, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', `export function format(enabled) { ${helper} }`);
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "@/lib/formatter";\nexport function Widget() { const enabled = useFlag(OTHER_FLAG); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] observable formatter gate', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+
+test('formatter consumer boundaries preserve action and JavaScript rendering gates', async (t) => {
+  const cases = [
+    ['equivalent text rendering', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : "Age"; }', false],
+    ['equivalent early text rendering', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) return ["Age"]; return "Age"; }', false],
+    ['JavaScript text component', 'js', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; }', true],
+    ['JavaScript arrow component', 'js', 'export const Widget = () => { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; };', true],
+    ['exported TSX action', 'tsx', 'export async function send() { const enabled = useFlag(OTHER_FLAG); if (format(enabled)) await doWork(); }', true],
+    ['discarded action text', 'tsx', 'export function send() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? ["Age"] : null; }', false],
+    ['empty template text', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return label ? `` : null; }', false],
+    ['empty interpolated template child', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return <div>{label ? [`${""}`] : null}</div>; }', false],
+    ['unknown interpolated template child', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); return format(enabled) ? [`${text}`] : null; }', false],
+    ['visible interpolated template child', 'tsx', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); return <div>{label ? [`Age ${days}`] : null}</div>; }', true],
+    ['JavaScript ignored formatter', 'js', 'export function Widget() { const enabled = useFlag(OTHER_FLAG); format(enabled); return "Age"; }', false],
+  ];
+  for (const [name, extension, source, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, `src/components/Widget.${extension}`, 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + source);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] formatter consumer boundary', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('imported formatter server boolean responses remain effective gates', async (t) => {
+  const cases = [
+    ['relative distinct booleans', '../../../lib/formatter', 'format(enabled) ? true : false', true],
+    ['aliased distinct booleans', '@/lib/formatter', 'format(enabled) ? true : false', true],
+    ['invariant boolean response', '@/lib/formatter', 'format(enabled) ? true : true', false],
+    ['assigned distinct booleans', '@/lib/formatter', 'label ? true : false', true, 'const label = format(enabled);'],
+    ['assigned invariant booleans', '@/lib/formatter', 'label ? true : true', false, 'const label = format(enabled);'],
+    ['ignored server formatter', '@/lib/formatter', 'false', false, 'format(enabled);'],
+  ];
+  for (const [name, moduleName, response, expected, setup = ''] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, 'src/components/Widget.tsx', 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+    writeFile(dir, 'src/app/api/widget/route.ts', 'import {isFeatureEnabled} from "@/lib/flags";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\n' + `import {format} from "${moduleName}";\nexport async function GET() { const enabled = await isFeatureEnabled(OTHER_FLAG, 6); ${setup} return Response.json(${response}); }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] imported server boolean gate', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test('formatter consumers reject invisible nullish children and unreachable logical aliases', async (t) => {
+  const cases = [
+    ['nullish boolean child', 'return <div>{label ? [null ?? true] : null}</div>;', false],
+    ['false nullish text child', 'return label ? [false ?? "Age"] : null;', false],
+    ['true nullish text child', 'return label ? [true ?? "Age"] : null;', false],
+    ['undefined nullish boolean child', 'return label ? [undefined ?? false] : null;', false],
+    ['nullish text control', 'return label ? [null ?? "Age"] : null;', true],
+    ['nullish zero control', 'return label ? [0 ?? true] : null;', true],
+    ['nullish empty string', 'return label ? ["" ?? "Age"] : null;', false],
+    ['truthy array alias', 'const empty = []; return empty || <div>{label && <p>Age</p>}</div>;', false],
+    ['truthy array literal', 'return [] || <div>{label && <p>Age</p>}</div>;', false],
+    ['truthy object alias', 'const empty = {}; return empty || <div>{label && <p>Age</p>}</div>;', false],
+    ['transitive truthy alias', 'const empty = []; const mask = empty; return mask || <div>{label && <p>Age</p>}</div>;', false],
+    ['falsy conjunction alias', 'const ready = false; return ready && <div>{label && <p>Age</p>}</div>;', false],
+    ['reachable disjunction control', 'const ready = false; return ready || <div>{label && <p>Age</p>}</div>;', true],
+    ['reachable conjunction control', 'const ready = []; return ready && <div>{label && <p>Age</p>}</div>;', true],
+  ];
+  for (const [name, consumer, expected] of cases) {
+    const { dir, git } = makeRepo(t), base = commit(git, 'base');
+    writeFile(dir, 'src/lib/formatter.ts', 'export function format(enabled) { return enabled; }');
+    writeFile(dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\nimport {format} from "@/lib/formatter";\n' + `export function Widget() { const enabled = useFlag(OTHER_FLAG); const label = format(enabled); ${consumer} }`);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] reachable formatter output', base, commit(git, name), dir)).pass, expected, name);
+  }
+});
+
+test("new money flags must start Owner and QA while existing flags keep their modes", async (t) => {
+  for (const mode of ["OFF", "OWNER_AND_QA", "OWNER_ONLY", "EVERYONE"]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const existing = "src/lib/flags/definitions/htpr-1-other.ts";
+    writeFile(dir, existing, `export const OTHER_FLAG = "htpr-1-other";
+export default { key: OTHER_FLAG, kind: "bugfix", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-11", description: "Existing money flag", releaseRisk: { risk: "small", reason: "Existing billing behavior", highRisk: "money" } } as const;`);
+    writeFile(dir, "src/lib/flags/keys.ts", `export { OTHER_FLAG } from "./definitions/htpr-1-other";`);
+    const base = commit(git, "existing money flag");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money" } } as const;`);
+    const head = commit(git, "new money flag");
+    const result = await evaluate("HTPR-2 [BUGFIX] money fixture", base, head, dir);
+    assert.equal(result.pass, mode === "OWNER_AND_QA", result.reason);
+    if (["OFF", "OWNER_ONLY"].includes(mode)) assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OWNER_AND_QA"/);
   }
 });

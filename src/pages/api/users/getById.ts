@@ -1,5 +1,6 @@
+import { logDesktopCliResponse } from "@/lib/auth/desktopCliTokenUser";
 import { NextApiHandler } from "next";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getUserById from "@/utils/controllers/users/getById";
 
 const handler: NextApiHandler = async (req, res) => {
@@ -7,14 +8,15 @@ const handler: NextApiHandler = async (req, res) => {
     return res.status(405).json({ message: "Method not allowed" });
   }
 
-  const session = verifySession(req.cookies[SESSION_COOKIE]);
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  logDesktopCliResponse(session, req, res);
   if (!session) {
     return res
       .status(401)
       .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
   }
 
-  const response = await getUserById(session.id);
+  const response = await getUserById(session.userId);
   return res.status(response.status).json(response.res);
 };
 

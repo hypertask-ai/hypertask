@@ -3,6 +3,7 @@ import { createHash } from "crypto";
 import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
+import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -25,6 +26,7 @@ const CUSTOM_INSTRUCTION_CHUNK_OVERLAP = 200;
 const CUSTOM_INSTRUCTION_MAX_CHUNKS = 50;
 
 type OpenAIEmbeddingResponse = {
+  usage?: { prompt_tokens?: number; total_tokens?: number };
   data: Array<{
     embedding: number[];
     index: number;
@@ -392,6 +394,21 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
   }
 
   const inputs = texts.map(toEmbeddingInput);
+  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], apiKey);
+  return embedInputs(inputs, apiKey);
+}
+
+const inFlightSingleEmbeddings = new Map<string, Promise<number[][]>>();
+
+function shareInFlightEmbedding(input: string, apiKey: string) {
+  const running = inFlightSingleEmbeddings.get(input);
+  if (running) return running;
+  const started = embedInputs([input], apiKey).finally(() => inFlightSingleEmbeddings.delete(input));
+  inFlightSingleEmbeddings.set(input, started);
+  return started;
+}
+
+async function embedInputs(inputs: string[], apiKey: string) {
   const embeddings: number[][] = [];
 
   for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
@@ -422,60 +439,73 @@ async function embedBatchWithRetry(
       );
     }
 
-    let response: Response;
+    const startedAt = Date.now();
+    let usage: OpenAIEmbeddingResponse["usage"];
+    let succeeded = false;
     try {
-      response = await fetch(EMBEDDINGS_ENDPOINT, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: EMBEDDING_MODEL,
-          input: batch,
-        }),
-      });
-    } catch (networkError) {
-      lastError = networkError;
-      continue;
-    }
-
-    if (!response.ok) {
-      const responseText = await response
-        .text()
-        .catch(() => response.statusText);
-      const error = new Error(
-        `OpenAI embeddings request failed (${response.status}): ${responseText}`
-      );
-      if (response.status === 429 || response.status >= 500) {
-        lastError = error;
+      let response: Response;
+      try {
+        response = await fetch(EMBEDDINGS_ENDPOINT, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: EMBEDDING_MODEL,
+            input: batch,
+          }),
+        });
+      } catch (networkError) {
+        lastError = networkError;
         continue;
       }
-      throw error;
-    }
 
-    const json = (await response.json()) as OpenAIEmbeddingResponse;
-    const batchEmbeddings = json.data
-      .slice()
-      .sort((a, b) => a.index - b.index)
-      .map((item) => item.embedding);
+      if (!response.ok) {
+        const responseText = await response
+          .text()
+          .catch(() => response.statusText);
+        const error = new Error(
+          `OpenAI embeddings request failed (${response.status}): ${responseText}`
+        );
+        if (response.status === 429 || response.status >= 500) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
 
-    if (batchEmbeddings.length !== batch.length) {
-      throw new Error(
-        `OpenAI embeddings returned ${batchEmbeddings.length} embeddings for ${batch.length} inputs`
+      const json = (await response.json()) as OpenAIEmbeddingResponse;
+      usage = json.usage;
+      const batchEmbeddings = json.data
+        .slice()
+        .sort((a, b) => a.index - b.index)
+        .map((item) => item.embedding);
+
+      if (batchEmbeddings.length !== batch.length) {
+        throw new Error(
+          `OpenAI embeddings returned ${batchEmbeddings.length} embeddings for ${batch.length} inputs`
+        );
+      }
+
+      const invalidEmbedding = batchEmbeddings.find(
+        (embedding) => embedding.length !== EMBEDDING_DIM
       );
-    }
+      if (invalidEmbedding) {
+        throw new Error(
+          `OpenAI embeddings returned ${invalidEmbedding.length} dimensions; expected ${EMBEDDING_DIM}`
+        );
+      }
 
-    const invalidEmbedding = batchEmbeddings.find(
-      (embedding) => embedding.length !== EMBEDDING_DIM
-    );
-    if (invalidEmbedding) {
-      throw new Error(
-        `OpenAI embeddings returned ${invalidEmbedding.length} dimensions; expected ${EMBEDDING_DIM}`
-      );
+      succeeded = true;
+      return batchEmbeddings;
+    } finally {
+      await logAiUsage({
+        userId: null, provider: "gateway-embeddings", model: EMBEDDING_MODEL, feature: "embeddings",
+        outcome: succeeded ? "ok" : "failed", inputTokens: usage?.prompt_tokens, totalTokens: usage?.total_tokens,
+        costUsd: null, latencyMs: Date.now() - startedAt,
+      });
     }
-
-    return batchEmbeddings;
   }
 
   throw lastError instanceof Error

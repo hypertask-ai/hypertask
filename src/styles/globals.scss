@@ -874,6 +874,13 @@ svg.lucide.fill-current {
     outline-color: var(--border-pinned) !important;
   }
 
+  [data-task-detail-path] [data-task-comment-blocker],
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-box][data-task-comment-blocker] {
+    border-color: transparent !important;
+    outline: 1px solid hsl(var(--destructive)) !important;
+    outline-offset: -1px;
+  }
+
   html[data-task-box-outlines] [data-task-detail-path] .description-edit-container,
   html[data-task-box-outlines] [data-task-detail-path] .comment-edit-container,
   html[data-task-box-outlines] [data-task-detail-path] .comment-body,
@@ -883,5 +890,15 @@ svg.lucide.fill-current {
     border-color: transparent !important;
     outline: none !important;
     box-shadow: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  html[data-phone-zoom="true"] {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="file"]):not([type="color"]),
+    textarea,
+    [contenteditable="true"] {
+      @apply text-emphasis!;
+    }
   }
 }

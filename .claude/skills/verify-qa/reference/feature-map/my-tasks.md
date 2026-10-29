@@ -12,7 +12,10 @@ page, wait for the table, then look at what sits between the filter row and
 the first table row. Many parts are behind Owner + QA flags (views, scopes,
 bulk selection, snooze), so check with the QA flag identity
 (`storageState-qa.json`) and with the plain account
-(`storageState-qa-normal.json`).
+(`storageState-qa-normal.json`). Pick a board tab, reload, and confirm the
+`board` URL parameter and selected list remain. On desktop, Tab and Shift+Tab
+cycle board tabs; C opens task creation and Back cancels it. The list uses
+the available page width beside the app rail.
 
 ## What usually breaks
 
@@ -22,6 +25,11 @@ bulk selection, snooze), so check with the QA flag identity
 - Ctrl+E not archiving the focused row
   ([HTPR-6445](https://app.hypertask.ai/detail/project-15/6445)).
 
+Phone bulk selection keeps its hidden checkbox grid slot, so ticket IDs and
+titles stay in separate columns. Scroll to the final task and confirm it
+clears the floating Back button. Controls sit together below the heading;
+desktop placement stays unchanged. Check all four themes at 390x844.
+
 ## What proof to collect
 
 Screenshot `/my-tasks` signed in, desktop and phone width, with both
@@ -29,6 +37,23 @@ accounts when a flag is involved. For a removal, also search the page text
 for the removed label (for example "Quick add") and record that it is
 absent.
 
+### Automated evidence
+
+`node --test tests/htpr-6570-my-tasks-no-quick-add.test.cjs` checks that My Tasks source no longer references the removed Quick add component or flag; layout and keyboard behavior still need live proof.
+`npm run test:file -- tests/my-tasks-priority-filter-component.test.cjs tests/global-shortcut-routes.test.cjs`
+exercises board URL restoration, Tab bursts, full-width rendering and global
+C shortcut eligibility without the retired shortcuts/width flag.
+
 ## Cleanup
 
 Nothing to clean up for a look-only check. Hard-delete any task you created.
+
+## Settings button accessible name
+
+With `htpr-8146-settings-name` on, the desktop rail gear is named Settings
+without hovering. From My Tasks, Inbox and a board, locate
+`[data-testid="app-shell-settings"]`, inspect its accessible name, click it,
+and confirm Settings opens. Reload and repeat with the rail expanded.
+The button's size, position and tooltip must stay unchanged. Flag Off
+restores the original unnamed button. On phones, check the existing
+Settings top-bar button remains named and opens Settings.

@@ -144,7 +144,7 @@ test("the real sweep saves the removal description under an adopted lease and re
     throw errors[0][1];
   }
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { filed: 1, keys: [key], failed: [] });
+  assert.deepEqual(await response.json(), { filed: 1, keys: [key], failed: [], deferred: 0 });
   assert.equal(state.task.agentId, FEATURE_FLAG_SWEEP_AGENT_ID);
   assert.equal(state.task.userId, FEATURE_FLAG_OWNER_USER_ID);
   assert.equal(state.description.taskId, state.task.id);

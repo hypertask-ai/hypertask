@@ -7,20 +7,6 @@
     "reason": "The ticket asks instantly opened tickets to stop scrolling after load. Cached phone opens now remain at the top instead of automatically scrolling properties above the title and moving comments past the fixed composer; direct opens and flag-off retain production positioning. Independent composer and title hit-target invariants still apply."
   },
   {
-    "flag": "htpr-7026-agent-connect-check",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7026",
-    "screen": "board/Desktop",
-    "landmarks": ["todo-column", "done-column", "column-title", "card"],
-    "reason": "The requested 'compact Connect your agent card/banner' appears above the landing board content only for a never-connected, non-dismissed user. The toolbar and app frame stay in place."
-  },
-  {
-    "flag": "htpr-7026-agent-connect-check",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7026",
-    "screen": "board/Mobile",
-    "landmarks": ["todo-column", "done-column", "column-title", "card"],
-    "reason": "The requested 'compact Connect your agent card/banner' appears above the landing board content at phone width too, only before connection or dismissal. The toolbar and app frame stay in place."
-  },
-  {
     "flag": "htpr-6422-my-tasks-views",
     "ticket": "https://app.hypertask.ai/detail/project-15/6422",
     "screen": "my-tasks/Desktop",
@@ -53,5 +39,16 @@
       "properties"
     ],
     "reason": "Valentin asks to 'collapse the properties and the title' so the user 'focuses only on the task description'. The title and properties disappear and the description moves up into their space."
+  },
+  {
+    "flag": "htpr-8144-phone-my-tasks",
+    "ticket": "https://app.hypertask.ai/detail/project-15/8144",
+    "screen": "my-tasks/Mobile",
+    "landmarks": [
+      "toolbar",
+      "list"
+    ],
+    "reason": "Requested: \"IDs and titles get their own space\" and \"Back button no longer covers rows\". Phone header controls get a full row below the heading, and the task scroller reserves Back clearance. Desktop landmarks remain unchanged.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/8144"
   }
 ]

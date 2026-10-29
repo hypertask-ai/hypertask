@@ -1,12 +1,15 @@
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
 import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
+  Bot,
   Check,
   ChevronDown,
   ChevronRight,
   Ellipsis,
   History,
+  Loader2,
   Maximize2,
   Minus,
   PanelRight,
@@ -21,9 +24,13 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
+import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
+import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -41,7 +48,7 @@ import {
   showAIChatInterfaceAtom,
 } from "@/store";
 
-type HistorySession = Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId">;
+type HistorySession = Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "agentId"> & { agentName?: string };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -66,22 +73,29 @@ function partitionSessionsByRecency(sessions: HistorySession[]): {
 function ChatSessionRow({
   chat,
   isActive,
+  isRunning,
   onSelect,
+  children,
 }: {
   chat: HistorySession;
   isActive: boolean;
+  isRunning: boolean;
   onSelect: () => void;
+  children?: ReactNode;
 }) {
   return (
-    <li>
+    <li className={children ? "flex items-center" : undefined}>
       <button
         type="button"
+        data-chat-session-id={chat.id}
         onClick={onSelect}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors"
+        className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-content text-white-black hover:bg-active-modal-element transition-colors", children && "min-w-0 flex-1")}
       >
         <span className="min-w-0 flex-1 truncate font-normal">
           {chat.title}
         </span>
+        {chat.agentName && <span className="max-w-24 truncate text-micro text-icon-dark-gray">{chat.agentName}</span>}
+        {isRunning && <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />}
         {isActive && (
           <Check
             size={16}
@@ -91,17 +105,21 @@ function ChatSessionRow({
           />
         )}
       </button>
+      {children}
     </li>
   );
 }
 
 export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext } = {}) => {
+  const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const [agentsOpen, setAgentsOpen] = useState(false);
+  const agentButtonRef = useRef<HTMLButtonElement>(null);
+  const closeAgents = useCallback(() => setAgentsOpen(false), []);
   const [conversationsOpen, setConversationsOpen] = useState(false);
   const titleRef = useRef<HTMLButtonElement>(null);
   const closeConversations = useCallback(() => setConversationsOpen(false), []);
   const aiSessionActionsAvailable = !sidebarChats || sidebarChats.target.kind === "ai";
-  const sidebarTitle = sidebarChats?.target.kind === "ai" ? "AI chat" : sidebarChats?.target.agent.displayName;
-  useEffect(() => { setConversationsOpen(false); }, [sidebarChats?.projectId]);
+  useEffect(() => { setConversationsOpen(false); setAgentsOpen(false); }, [sidebarChats?.projectId]);
   const searchParams = useSearchParams();
   const openFromLink = searchParams?.get("agentSidebar");
   useEffect(() => {
@@ -114,6 +132,9 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const router = useRouter();
   const pathname = usePathname();
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
+  const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
+  const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
   const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
@@ -122,6 +143,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     isSidebarMode,
     sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions,
     currentSession,
+    runningSessionIds,
     isSessionPending,
     startNewSession,
     selectSession,
@@ -130,6 +152,12 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     editor,
     currentAiOption,
   } = useAiChatContext();
+  const sidebarTitle = sidebarChats?.target.kind === "ai"
+    ? (chatHeaderNameEnabled && currentSession?.title) || "AI chat"
+    : sidebarChats?.target.agent.displayName;
+  const runningIndicator = chatRunningEnabled && sidebarChats?.target.kind !== "external-agent" && currentSession && runningSessionIds.includes(currentSession.id)
+    ? <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />
+    : null;
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -160,12 +188,14 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   }, [sessionPagingEnabled, isDropdownOpen, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions]);
 
   const filterAgentSessions = Boolean(sidebarChats);
-  const { previous7Days, older } = useMemo(
-    () => partitionSessionsByRecency(((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId)),
-    [sessions, historySessions, sessionPagingEnabled, filterAgentSessions]
-  );
+  const { previous7Days, older } = useMemo(() => {
+    const personal = ((sessionPagingEnabled ? historySessions : sessions) ?? []).filter((session) => !filterAgentSessions || !session.agentId);
+    const agentChats: HistorySession[] = hasAgentSessions ? (sidebarChats?.agents ?? []).flatMap((agent) =>
+      (agent.sessions ?? []).map((session) => ({ ...session, agentId: agent.id, agentName: agent.displayName }))) : [];
+    return partitionSessionsByRecency(hasAgentSessions ? [...personal, ...agentChats].sort((a, b) => getSessionUpdatedTime(b) - getSessionUpdatedTime(a)) : personal);
+  }, [sessions, historySessions, sessionPagingEnabled, filterAgentSessions, hasAgentSessions, sidebarChats?.agents]);
 
-  const resolvedSessionId = currentSession?.id;
+  const resolvedSessionId = hasAgentSessions && sidebarChats?.target.kind === "external-agent" ? sidebarChats.target.agent.sessionId : currentSession?.id;
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -217,8 +247,49 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     }
   };
 
-  const renderSessionMenu = (alignmentClass: string) =>
-    isDropdownOpen ? (
+  const handleDeleteSession = (sessionId: string) => {
+    if (window.confirm("Delete this chat?")) {
+      void deleteSession(sessionId);
+    }
+  };
+
+  const renderSessionMenu = (alignmentClass: string) => {
+    if (!isDropdownOpen) return null;
+    const sessionRows = (chats: HistorySession[]) => {
+      const rows: ReactNode[] = [];
+      for (const chat of chats) {
+        rows.push(
+          <ChatSessionRow
+            key={chat.id}
+            chat={chat}
+            isActive={chat.id === resolvedSessionId}
+            isRunning={chatRunningEnabled && runningSessionIds.includes(chat.id)}
+            onSelect={() => {
+              setIsDropdownOpen(false);
+              const agent = hasAgentSessions && chat.agentId ? sidebarChats?.agents.find((item) => item.id === chat.agentId) : undefined;
+              if (agent && sidebarChats?.onSelectAgentSession) sidebarChats.onSelectAgentSession(agent, chat.id);
+              else {
+                sidebarChats?.onSelect({ kind: "ai" });
+                selectSession(chat.id);
+              }
+            }}
+          >
+            {phoneChatDelete && isMbl && !(hasAgentSessions && sidebarChats && chat.agentId) && (
+              <button
+                type="button"
+                aria-label="Delete chat"
+                onClick={() => handleDeleteSession(chat.id)}
+                className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
+              >
+                <Trash2 size={16} strokeWidth={1.75} />
+              </button>
+            )}
+          </ChatSessionRow>
+        );
+      }
+      return rows;
+    };
+    return (
       <div
         id="ai-chat-session-history"
         className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
@@ -240,18 +311,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               Previous 7 days
             </div>
             <ul className="pb-1">
-              {previous7Days.map((chat: HistorySession) => (
-                <ChatSessionRow
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === resolvedSessionId}
-                  onSelect={() => {
-                    setIsDropdownOpen(false);
-                    sidebarChats?.onSelect({ kind: "ai" });
-                    selectSession(chat.id);
-                  }}
-                />
-              ))}
+              {sessionRows(previous7Days)}
             </ul>
           </div>
         )}
@@ -264,28 +324,24 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               Older
             </div>
             <ul>
-              {older.map((chat: HistorySession) => (
-                <ChatSessionRow
-                  key={chat.id}
-                  chat={chat}
-                  isActive={chat.id === resolvedSessionId}
-                  onSelect={() => {
-                    setIsDropdownOpen(false);
-                    sidebarChats?.onSelect({ kind: "ai" });
-                    selectSession(chat.id);
-                  }}
-                />
-              ))}
+              {sessionRows(older)}
             </ul>
           </div>
         )}
+        {hasAgentSessions && sidebarChats?.agents.some((agent) => agent.hasMoreSessions) && (
+          <button type="button" className="w-full px-3 py-2 text-left text-content text-icon-dark-gray hover:bg-active-modal-element"
+            onClick={() => sidebarChats.agents.filter((agent) => agent.hasMoreSessions).forEach((agent) => sidebarChats.onLoadMoreAgentSessions?.(agent))}>
+            Show older agent sessions
+          </button>
+        )}
         {sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
       </div>
-    ) : null;
+    );
+  };
 
   const historyButton = (
     <button type="button" onMouseDown={sidebarChats ? (event) => event.stopPropagation() : undefined}
-      onClick={() => { if (sidebarChats) { closeConversations(); setIsOverflowOpen(false); } setIsDropdownOpen((open) => !open); }}
+      onClick={() => { if (sidebarChats) { closeConversations(); closeAgents(); setIsOverflowOpen(false); } setIsDropdownOpen((open) => !open); }}
       aria-label="Chat history" aria-controls="ai-chat-session-history" aria-expanded={isDropdownOpen}
       className={isMbl
         ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
@@ -293,6 +349,16 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
       <History size={isMbl ? 20 : 16} strokeWidth={1.75} />
     </button>
   );
+
+  const agentsButton = hasAgentSessions && sidebarChats ? (
+    <div className="relative shrink-0">
+      <button ref={agentButtonRef} type="button" aria-label="Agent sessions" aria-expanded={agentsOpen}
+        aria-controls="agent-sidebar-agents" onClick={() => { closeConversations(); setIsDropdownOpen(false); setAgentsOpen((open) => !open); }}
+        className={isMbl ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black" : "text-icon-dark-gray hover:text-white-black"}>
+        <Bot size={isMbl ? 20 : 16} strokeWidth={1.75} />
+      </button>
+    </div>
+  ) : null;
 
   if (isMbl) {
     return (
@@ -312,18 +378,20 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
           {sidebarChats ? (
             <div className="relative">
               <button ref={titleRef} type="button" aria-label="Switch conversation" aria-expanded={conversationsOpen}
-                aria-controls="agent-sidebar-conversations" onClick={() => { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
+                aria-controls="agent-sidebar-conversations" onClick={() => { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
                 className={cn(MOBILE_TARGET, "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
-                <span className="truncate">{sidebarTitle}</span><ChevronDown size={18} aria-hidden />
+                <span className="truncate">{sidebarTitle}</span>{runningIndicator}<ChevronDown size={18} aria-hidden />
               </button>
               {conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+              {hasAgentSessions && agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
             </div>
           ) : (
           <div
-            className="truncate px-2 text-modalSmall font-semibold leading-5"
+            className="flex items-center gap-1 truncate px-2 text-modalSmall font-semibold leading-5"
             title={currentSession?.title ?? undefined}
           >
-            {currentSession?.title ?? "AI Chat"}
+            <span className="truncate">{currentSession?.title ?? "AI Chat"}</span>
+            {runningIndicator}
           </div>
           )}
           {(!sidebarChats || sidebarChats.target.kind === "ai") && <div
@@ -336,6 +404,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
             <ChevronDown size={14} strokeWidth={1.75} aria-hidden />
           </div>}
         </div>
+        {agentsButton}
         <div className="relative shrink-0" ref={dropdownRef}>
           {historyButton}
           {renderSessionMenu("right-0")}
@@ -368,7 +437,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
           aria-expanded={sidebarChats ? conversationsOpen : isDropdownOpen}
           aria-controls={sidebarChats ? "agent-sidebar-conversations" : "ai-chat-session-history"}
           onClick={() => {
-            if (sidebarChats) { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
+            if (sidebarChats) { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
             else setIsDropdownOpen((prev) => !prev);
           }}
           className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
@@ -376,6 +445,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
           <span className="min-w-0 truncate font-medium">
             {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
+          {runningIndicator}
           <span
             style={{
               width: 18,
@@ -398,10 +468,12 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
         </button>
 
         {sidebarChats && conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
+        {hasAgentSessions && sidebarChats && agentsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={agentButtonRef} onClose={closeAgents} agentsOnly />}
         {renderSessionMenu("left-0")}
       </div>
 
       <div className="flex shrink-0 items-center space-x-2">
+        {agentsButton}
         {sidebarChats && historyButton}
         <button
           onClick={handleStartNewSession}

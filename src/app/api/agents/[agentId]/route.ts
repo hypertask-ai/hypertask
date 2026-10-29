@@ -32,6 +32,7 @@ import {
   type AgentManagementDatabase,
 } from "@/lib/mcp/agents/ownedAgents";
 import { buildAgentBoardAccess } from "@/lib/agents/boardAccess";
+import { crossTeamAgentsEnabled, ownerTeamWhere } from "@/lib/agents/crossTeam";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
   isVisibilityOnlyBody,
@@ -89,6 +90,10 @@ async function getAgentDetails(
       heartbeatAt: true,
       mcpTokenJti: true,
       runtimeGeneration: true,
+      credentialTeamId: true,
+      credentialTeamAccessBinding: true,
+      crossTeamHomeTeamId: true,
+      crossTeamAccessGranted: true,
       members: {
         where: {
           status: "Accepted",
@@ -153,6 +158,22 @@ async function getAgentDetails(
         select: { project: { select: { teamId: true } } },
       }),
     ]);
+  const crossTeamEnabled = await crossTeamAgentsEnabled(user.id);
+  const eligibleBoardIds = new Set(
+    crossTeamEnabled && !agent.revokedAt && !agent.archivedAt &&
+      (!agent.credentialTeamAccessBinding || agent.credentialTeamId)
+      ? (await prisma.project.findMany({
+          where: {
+            ...getProjectWhere(user.id, actingAgentId),
+            id: { in: accessibleBoards.map((board) => board.id) },
+            status: "Normal",
+            team: ownerTeamWhere(user.id),
+            ...(agent.credentialTeamId ? { teamId: agent.credentialTeamId } : {}),
+          },
+          select: { id: true },
+        })).map((board) => board.id)
+      : [],
+  );
   const working = workingByAgent.get(agent.id);
 
   const {
@@ -160,6 +181,10 @@ async function getAgentDetails(
     members,
     mcpTokenJti,
     runtimeGeneration,
+    credentialTeamId: _credentialTeamId,
+    credentialTeamAccessBinding: _credentialTeamAccessBinding,
+    crossTeamHomeTeamId: _crossTeamHomeTeamId,
+    crossTeamAccessGranted: _crossTeamAccessGranted,
     ...agentFields
   } = agent;
   const storedRuntimeSnapshot = await readAgentRuntimeSnapshot(
@@ -359,8 +384,16 @@ async function getAgentDetails(
           teamName: project.team?.title ?? null,
         })),
         boardIds,
-        allMemberships.map(({ project }) => project.teamId),
-      ),
+        agent.crossTeamAccessGranted && agent.crossTeamHomeTeamId
+          ? [agent.crossTeamHomeTeamId]
+          : allMemberships.map(({ project }) => project.teamId),
+      ).map((board) => crossTeamEnabled && !board.member ? {
+        ...board,
+        canChange: eligibleBoardIds.has(board.id),
+        unavailableReason: eligibleBoardIds.has(board.id)
+          ? null
+          : board.unavailableReason ?? "Agent cannot join this board",
+      } : board),
       postsToImportant:
         (permissions as AgentScopes | null)?.postsToImportant !== false,
       createdAt: agent.createdAt.toISOString(),

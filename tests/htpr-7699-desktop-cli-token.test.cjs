@@ -183,7 +183,7 @@ console.error = (...args) => logs.push(args);
 test.after(() => { console.info = originalInfo; console.log = originalLog; console.error = originalError; });
 test.beforeEach(() => { logs.length = 0; });
 const decisions = () => logs.filter(([label]) => label === "[desktop/cli-bearer]").map(([, payload]) => payload);
-const outcomes = () => logs.filter(([label]) => label === "[desktop/cli-authorization]").map(([, payload]) => payload);
+const outcomes = () => logs.filter(([label]) => label === "[desktop/cli-authorization]").map(([, { path, method, ...payload }]) => payload);
 
 for (const area of ["writer", "defaults", "private", "public", "mentions"]) {
   test(`${area}: human CLI now allowed with verified actor and final authorization log`, async () => {
@@ -439,7 +439,7 @@ test("CLI final outcomes include infrastructure refusals without exposing error 
   }
 });
 
-test("POST createGlobally and other taskWriteHandler routes remain cookie-only with flag On", async () => {
+test("taskWriteHandler refuses when its injected session authenticator rejects the credential", async () => {
   for (const file of ["src/pages/api/tasks/createGlobally.ts", "src/pages/api/tasks/create.ts", "src/pages/api/tasks/recoverTask.ts"]) {
     const h = harness();
     const handler = load(file, h.mocks).default;

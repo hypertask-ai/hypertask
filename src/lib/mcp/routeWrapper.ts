@@ -4,7 +4,6 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import jwt from 'jsonwebtoken'
 import type { NextRequest } from 'next/server'
-import { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG } from '@/lib/flags/keys'
 import {
   checkMcpRateLimit,
   mcpUnauthorizedResponse,
@@ -23,11 +22,7 @@ const instanceRegion = (process.env.VERCEL_REGION || 'unknown')
   .replace(/[^ -~]/g, '')
   .replace(/["\\]/g, '\\$&') || 'unknown'
 
-const FLAG_TTL_MS = 30_000
-const FLAG_MAX_ENTRIES = 1_000
-const flagDecisions = new Map<string, { enabled: boolean; expiresAt: number }>()
-
-export async function shouldUseMcpRouteWrapper(request: NextRequest): Promise<boolean> {
+export function shouldUseMcpRouteWrapper(request: NextRequest): boolean {
   const token = request.headers?.get?.('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
   if (!token || /^(htk_|htmk_|httk_)/.test(token)) return false
   let candidate: unknown
@@ -36,23 +31,7 @@ export async function shouldUseMcpRouteWrapper(request: NextRequest): Promise<bo
   } catch {
     return false
   }
-  if (typeof candidate !== 'number' || !Number.isSafeInteger(candidate) || candidate <= 0) return false
-
-  const key = `${HTPR_6926_MCP_ROUTE_WRAPPER_FLAG}:${candidate}`
-  const cached = flagDecisions.get(key)
-  if (cached && cached.expiresAt > Date.now()) return cached.enabled
-  flagDecisions.delete(key)
-  try {
-    const { isFeatureEnabled } = await import('@/lib/flags')
-    const enabled = await isFeatureEnabled(HTPR_6926_MCP_ROUTE_WRAPPER_FLAG, candidate)
-    if (!flagDecisions.has(key) && flagDecisions.size >= FLAG_MAX_ENTRIES) {
-      flagDecisions.delete(flagDecisions.keys().next().value!)
-    }
-    flagDecisions.set(key, { enabled, expiresAt: Date.now() + FLAG_TTL_MS })
-    return enabled
-  } catch {
-    return false
-  }
+  return typeof candidate === 'number' && Number.isSafeInteger(candidate) && candidate > 0
 }
 
 type RouteScope = {
@@ -122,7 +101,7 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
         throw error
       }
     }
-    if (!(await shouldUseMcpRouteWrapper(request))) return execute(request)
+    if (!shouldUseMcpRouteWrapper(request)) return execute(request)
     const wrappedStarted = performance.now()
     const scope: RouteScope = { originalRequest: request, request, failure: {}, timings: {} }
     const wrappedRequest = new Proxy(request, {

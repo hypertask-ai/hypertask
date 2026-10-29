@@ -31,6 +31,12 @@ function isUiFile(path) {
     UI_INCLUDE.some((pattern) => pattern.test(path));
 }
 
+function isServerFile(path) {
+  return /^src\/(?:lib\/(?:mcp|mcp-server|api)|app\/api|pages\/api|utils\/controllers)\//.test(path) &&
+    /\.[jt]sx?$/.test(path) && !/(^|\/)tests?\//.test(path) &&
+    !/\.(test|spec|stories)\.[jt]sx?$/.test(path);
+}
+
 function refactorUiLineCounts(baseSha, headSha) {
   const diff = git(["-c", "core.quotePath=false", "diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`]);
   const normalizeLine = (line) => line.trim().replace(/\s+/g, " ").replace(/[,;]$/, "");
@@ -79,7 +85,7 @@ function refactorUiLineCounts(baseSha, headSha) {
   };
 }
 
-function addedLinesFor(baseSha, headSha, path) {
+function addedLinesFor(baseSha, headSha, path, includeDeletions = false) {
   const lines = new Set();
   const diff = git(["diff", "--unified=0", "--no-renames", `${baseSha}...${headSha}`, "--", path]);
   for (const row of diff.split("\n")) {
@@ -87,15 +93,28 @@ function addedLinesFor(baseSha, headSha, path) {
     if (!hunk) continue;
     const start = Number(hunk[1]);
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
-    for (let line = start; line < start + count; line += 1) lines.add(line);
+    for (let line = start; line < start + (includeDeletions ? Math.max(count, 1) : count); line += 1) lines.add(line);
   }
   return lines;
 }
 
-function staticBoolean(node) {
+function staticBoolean(node, returnedValue = false, checker = null, seen = new Set()) {
   while (typescript.isParenthesizedExpression(node) || typescript.isAsExpression(node) ||
          typescript.isTypeAssertionExpression(node) || typescript.isNonNullExpression(node) ||
          typescript.isSatisfiesExpression(node)) node = node.expression;
+  if (checker && typescript.isIdentifier(node)) {
+    const symbol = checker.getSymbolAtLocation(node);
+    const declaration = symbol?.valueDeclaration;
+    if (declaration && !seen.has(symbol) && typescript.isVariableDeclaration(declaration) &&
+        declaration.initializer && typescript.isVariableDeclarationList(declaration.parent) &&
+        (declaration.parent.flags & typescript.NodeFlags.Const) &&
+        !writtenBindingSymbols(node.getSourceFile(), checker).has(symbol)) {
+      seen.add(symbol);
+      const value = staticBoolean(declaration.initializer, returnedValue, checker, seen);
+      seen.delete(symbol);
+      return value;
+    }
+  }
   if (node.kind === typescript.SyntaxKind.TrueKeyword) return true;
   if (node.kind === typescript.SyntaxKind.FalseKeyword) return false;
   if (node.kind === typescript.SyntaxKind.NullKeyword) return false;
@@ -103,36 +122,43 @@ function staticBoolean(node) {
   if (typescript.isStringLiteral(node) || typescript.isNoSubstitutionTemplateLiteral(node)) {
     return node.text.length > 0;
   }
+  if (returnedValue && (typescript.isObjectLiteralExpression(node) || typescript.isArrayLiteralExpression(node) ||
+      typescript.isArrowFunction(node) || typescript.isFunctionExpression(node) ||
+      typescript.isClassExpression(node) || typescript.isRegularExpressionLiteral(node) ||
+      typescript.isNewExpression(node) || typescript.isJsxElement(node) ||
+      typescript.isJsxSelfClosingElement(node) || typescript.isJsxFragment(node))) return true;
+  if (returnedValue && typescript.isTemplateExpression(node) &&
+      (node.head.text.length > 0 || node.templateSpans.some((span) => span.literal.text.length > 0))) return true;
   if (typescript.isNumericLiteral(node)) return Number(node.text) !== 0;
   if (typescript.isPrefixUnaryExpression(node) && node.operator === typescript.SyntaxKind.ExclamationToken) {
-    const operand = staticBoolean(node.operand);
+    const operand = staticBoolean(node.operand, returnedValue, checker, seen);
     return operand === null ? null : !operand;
   }
   return null;
 }
 
-function isStaticallyUnreachable(node) {
+function isStaticallyUnreachable(node, checker = null) {
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     if (typescript.isBinaryExpression(parent) && child === parent.right) {
-      const left = staticBoolean(parent.left);
+      const left = staticBoolean(parent.left, true, checker);
       if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && left === false) ||
           (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && left === true)) return true;
     }
     if (typescript.isConditionalExpression(parent)) {
-      const condition = staticBoolean(parent.condition);
+      const condition = staticBoolean(parent.condition, true, checker);
       if ((child === parent.whenTrue && condition === false) ||
           (child === parent.whenFalse && condition === true)) return true;
     }
     if (typescript.isIfStatement(parent)) {
-      const condition = staticBoolean(parent.expression);
+      const condition = staticBoolean(parent.expression, true, checker);
       if ((child === parent.thenStatement && condition === false) ||
           (child === parent.elseStatement && condition === true)) return true;
     }
     if (typescript.isWhileStatement(parent) && child === parent.statement &&
-        staticBoolean(parent.expression) === false) return true;
+        staticBoolean(parent.expression, true, checker) === false) return true;
     if (typescript.isForStatement(parent) && child === parent.statement && parent.condition &&
-        staticBoolean(parent.condition) === false) return true;
+        staticBoolean(parent.condition, true, checker) === false) return true;
     if (typescript.isBlock(parent)) {
       const statementIndex = parent.statements.findIndex((statement) => statement === child);
       if (statementIndex > 0 && parent.statements.slice(0, statementIndex)
@@ -156,10 +182,10 @@ function expressionHasSideEffect(node) {
   return node.getChildren().some(expressionHasSideEffect);
 }
 
-function branchHasBehavior(node) {
+function branchHasBehavior(node, pureReturns = true) {
   if (!node || isStaticallyUnreachable(node) || typescript.isEmptyStatement(node)) return false;
-  if (typescript.isBlock(node)) return node.statements.some(branchHasBehavior);
-  if (typescript.isReturnStatement(node)) return true;
+  if (typescript.isBlock(node)) return node.statements.some((statement) => branchHasBehavior(statement, pureReturns));
+  if (typescript.isReturnStatement(node)) return pureReturns || Boolean(node.expression && expressionHasSideEffect(node.expression));
   if (typescript.isThrowStatement(node) || typescript.isBreakStatement(node) ||
       typescript.isContinueStatement(node)) return true;
   if (typescript.isExpressionStatement(node)) return expressionHasSideEffect(node.expression);
@@ -168,11 +194,11 @@ function branchHasBehavior(node) {
       declaration.initializer && expressionHasSideEffect(declaration.initializer));
   }
   if (typescript.isIfStatement(node)) {
-    return branchHasBehavior(node.thenStatement) || branchHasBehavior(node.elseStatement);
+    return branchHasBehavior(node.thenStatement, pureReturns) || branchHasBehavior(node.elseStatement, pureReturns);
   }
   if (typescript.isForStatement(node) || typescript.isForInStatement(node) ||
       typescript.isForOfStatement(node) || typescript.isWhileStatement(node) ||
-      typescript.isDoStatement(node)) return branchHasBehavior(node.statement);
+      typescript.isDoStatement(node)) return branchHasBehavior(node.statement, pureReturns);
   if (typescript.isJsxElement(node) || typescript.isJsxSelfClosingElement(node) ||
       typescript.isJsxFragment(node)) return true;
   return typescript.isExpression(node) && expressionHasSideEffect(node);
@@ -235,27 +261,28 @@ function functionBindingName(fn, checker = null) {
 
 // True when the JSX holding `node` is consumed: reached through the returned
 // expression, an argument of a call, or a const that is itself consumed.
-function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
+function jsxResultIsConsumed(node, checker, live, seen = new Set(), allowCallArguments = true) {
   // A reference or element on a statically dead path (false && x, if (false)) never renders.
-  if (isStaticallyUnreachable(node)) return false;
+  if (isStaticallyUnreachable(node, checker)) return false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     // A consuming use only counts inside a live function on a reachable path.
     if (typescript.isReturnStatement(parent)) return isLiveCallSite(parent, live);
     if (typescript.isArrowFunction(parent)) return child === parent.body && live.has(parent);
     if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
-        parent.arguments?.includes(child)) return isLiveCallSite(parent, live);
+        parent.arguments?.includes(child)) return allowCallArguments && isLiveCallSite(parent, live);
     if (typescript.isVariableDeclaration(parent)) {
       if (parent.initializer !== child || !typescript.isIdentifier(parent.name)) return false;
       const symbol = checker.getSymbolAtLocation(parent.name);
-      if (!symbol || seen.has(symbol)) return false;
+      if (!symbol || seen.has(symbol) ||
+          (!allowCallArguments && writtenBindingSymbols(node.getSourceFile(), checker).has(symbol))) return false;
       seen.add(symbol);
       let consumed = false;
       (function find(item) {
         if (consumed) return;
         if (typescript.isIdentifier(item) && item !== parent.name &&
             checker.getSymbolAtLocation(item) === symbol &&
-            jsxResultIsConsumed(item, checker, live, seen)) {
+            jsxResultIsConsumed(item, checker, live, seen, allowCallArguments)) {
           consumed = true;
           return;
         }
@@ -263,6 +290,12 @@ function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
       })(node.getSourceFile());
       return consumed;
     }
+    if (!allowCallArguments && typescript.isBinaryExpression(parent) &&
+        !((child === parent.right && (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+             parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) ||
+          (child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken))) return false;
+    if (!allowCallArguments && ((typescript.isConditionalExpression(parent) && child === parent.condition) ||
+        typescript.isJsxAttribute(parent))) return false;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isNonNullExpression(parent) || typescript.isSatisfiesExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isConditionalExpression(parent) ||
@@ -276,12 +309,17 @@ function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
   return false;
 }
 
-// True when `node` is the value of a JSX attribute (onClick={node}) in JSX that is consumed.
-function isJsxAttributeValue(node, checker, live) {
+function isJsxCallbackValue(node, checker, live) {
   let child = node;
   while (child.parent && typescript.isParenthesizedExpression(child.parent)) child = child.parent;
-  return Boolean(child.parent && typescript.isJsxExpression(child.parent) &&
-    typescript.isJsxAttribute(child.parent.parent) && jsxResultIsConsumed(child, checker, live));
+  if (!child.parent || !typescript.isJsxExpression(child.parent)) return false;
+  const container = child.parent.parent;
+  const customChild = typescript.isJsxElement(container) &&
+    (typescript.isPropertyAccessExpression(container.openingElement.tagName) ||
+     (typescript.isIdentifier(container.openingElement.tagName) &&
+      /^[A-Z]/.test(container.openingElement.tagName.text)));
+  return (typescript.isJsxAttribute(container) || customChild) &&
+    jsxResultIsConsumed(child, checker, live);
 }
 
 function isExportedVariableStatement(statement) {
@@ -421,32 +459,75 @@ function enclosingFunctionLike(node) {
   return null;
 }
 
-function isLiveCallSite(node, live) {
+function isLiveCallSite(node, live, allowModuleScope = true) {
   if (isStaticallyUnreachable(node)) return false;
   const enclosing = enclosingFunctionLike(node);
-  return !enclosing || live.has(enclosing);
+  return enclosing ? live.has(enclosing) : allowModuleScope;
 }
 
-function branchIsNullishOrEmpty(node) {
+function branchIsNullishOrEmpty(node, renderOnly = false) {
   if (!node) return true;
   if (typescript.isBlock(node)) {
     if (node.statements.length === 0) return true;
-    if (node.statements.length === 1) return branchIsNullishOrEmpty(node.statements[0]);
+    if (node.statements.length === 1) return branchIsNullishOrEmpty(node.statements[0], renderOnly);
     return false;
   }
-  if (typescript.isReturnStatement(node)) return branchIsNullishOrEmpty(node.expression);
+  if (typescript.isReturnStatement(node)) return branchIsNullishOrEmpty(node.expression, renderOnly);
   const expression = unwrapExpr(node);
   if (!expression) return true;
   if (expression.kind === typescript.SyntaxKind.NullKeyword ||
       expression.kind === typescript.SyntaxKind.UndefinedKeyword ||
-      expression.kind === typescript.SyntaxKind.FalseKeyword) {
+      expression.kind === typescript.SyntaxKind.FalseKeyword ||
+      (renderOnly && expression.kind === typescript.SyntaxKind.TrueKeyword)) {
     return true;
   }
   if (typescript.isIdentifier(expression) && expression.text === "undefined") return true;
-  if (typescript.isStringLiteral(expression) && expression.text === "") return true;
+  if ((typescript.isStringLiteral(expression) || typescript.isNoSubstitutionTemplateLiteral(expression)) && expression.text === "") return true;
+  if (renderOnly && typescript.isTemplateExpression(expression)) return staticBoolean(expression, true) !== true;
+  if (typescript.isJsxExpression(expression)) return branchIsNullishOrEmpty(expression.expression, renderOnly);
+  if (renderOnly && (typescript.isOmittedExpression(expression) || typescript.isVoidExpression(expression) ||
+      (typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken) ||
+      (typescript.isBinaryExpression(expression) &&
+       ((expression.operatorToken.kind >= typescript.SyntaxKind.LessThanToken &&
+         expression.operatorToken.kind <= typescript.SyntaxKind.ExclamationEqualsEqualsToken) ||
+        expression.operatorToken.kind === typescript.SyntaxKind.InKeyword ||
+        expression.operatorToken.kind === typescript.SyntaxKind.InstanceOfKeyword)))) return true;
+  if (renderOnly && typescript.isConditionalExpression(expression)) {
+    const condition = staticBoolean(expression.condition, true);
+    if (condition !== null) return branchIsNullishOrEmpty(condition ? expression.whenTrue : expression.whenFalse, true);
+    return branchIsNullishOrEmpty(expression.whenTrue, true) && branchIsNullishOrEmpty(expression.whenFalse, true);
+  }
+  if (renderOnly && typescript.isBinaryExpression(expression) &&
+      (expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
+       expression.operatorToken.kind === typescript.SyntaxKind.BarBarToken)) {
+    const left = staticBoolean(expression.left, true);
+    if (left !== null) {
+      const returnsLeft = expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ? !left : left;
+      return branchIsNullishOrEmpty(returnsLeft ? expression.left : expression.right, true);
+    }
+    return branchIsNullishOrEmpty(expression.left, true) && branchIsNullishOrEmpty(expression.right, true);
+  }
+  if (renderOnly && typescript.isBinaryExpression(expression) &&
+      expression.operatorToken.kind === typescript.SyntaxKind.QuestionQuestionToken) {
+    const left = unwrapExpr(expression.left);
+    if (left.kind === typescript.SyntaxKind.NullKeyword || typescript.isVoidExpression(left) ||
+        (typescript.isIdentifier(left) && left.text === "undefined")) {
+      return branchIsNullishOrEmpty(expression.right, true);
+    }
+    if (staticBoolean(left, true) !== null) return branchIsNullishOrEmpty(left, true);
+    return branchIsNullishOrEmpty(left, true) || branchIsNullishOrEmpty(expression.right, true);
+  }
+  if (renderOnly && typescript.isSpreadElement(expression)) {
+    const operand = unwrapExpr(expression.expression);
+    return (!typescript.isArrayLiteralExpression(operand) && !typescript.isStringLiteral(operand)) ||
+      branchIsNullishOrEmpty(operand, true);
+  }
+  if (renderOnly && typescript.isArrayLiteralExpression(expression)) {
+    return expression.elements.every((element) => branchIsNullishOrEmpty(element, true));
+  }
   if (typescript.isJsxFragment(expression)) {
     return expression.children.every((child) =>
-      typescript.isJsxText(child) ? child.getText().trim() === "" : false);
+      typescript.isJsxText(child) ? child.getText().trim() === "" : branchIsNullishOrEmpty(child, renderOnly));
   }
   return false;
 }
@@ -495,7 +576,7 @@ function renderedTagCounts(node) {
 
 function exposureSnapshot(ref, path, mergeBase) {
   let source = "";
-  try { source = git(["show", `${ref}:${path}`]); } catch {}
+  try { source = git(["cat-file", "blob", `${ref}:${path}`]); } catch {}
   const scriptKind = path.endsWith(".tsx") ? typescript.ScriptKind.TSX :
     path.endsWith(".jsx") ? typescript.ScriptKind.JSX :
     path.endsWith(".ts") ? typescript.ScriptKind.TS : typescript.ScriptKind.JS;
@@ -679,7 +760,7 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   return null;
 }
 
-function collectLiveFunctions(sourceFile, checker) {
+function collectLiveFunctions(sourceFile, checker, entries = null, renderOnly = false) {
   const functions = [];
   function collect(node) {
     if (typescript.isFunctionLike(node)) functions.push(node);
@@ -698,7 +779,10 @@ function collectLiveFunctions(sourceFile, checker) {
   }));
   // Export recognition remains intact for the ungated-sibling check, but a
   // rebound binding cannot prove which implementation runs. No flow analysis.
-  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) && isExportedUiEntry(fn, identifierExports)));
+  const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) &&
+    (!renderOnly || (!isServerFile(sourceFile.fileName) &&
+      (functionContainsJsx(fn) || /^[A-Z]/.test(functionBindingName(fn, checker)?.text ?? "")))) &&
+    (entries ? entries.has(fn) : isExportedUiEntry(fn, identifierExports))));
   const functionBySymbol = new Map();
   for (const fn of functions) {
     const name = functionBindingName(fn, checker);
@@ -710,7 +794,7 @@ function collectLiveFunctions(sourceFile, checker) {
     changed = false;
     // Returning a named callback from a live hook exposes that callback to its
     // callers. Resolve property values by symbol, never by matching their text.
-    for (const fn of Array.from(live)) {
+    for (const fn of renderOnly ? [] : Array.from(live)) {
       function returned(node) {
         if (node !== fn && typescript.isFunctionLike(node)) return;
         if (isStaticallyUnreachable(node)) return;
@@ -749,7 +833,23 @@ function collectLiveFunctions(sourceFile, checker) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxAttributeValue(fn, checker, live) || !isLiveCallSite(fn, live)) continue;
+      if (renderOnly || live.has(fn) || !isJsxCallbackValue(fn, checker, live) || !isLiveCallSite(fn, live, !entries)) continue;
+      live.add(fn);
+      changed = true;
+    }
+    for (const fn of functions) {
+      if (live.has(fn) || fn.asteriskToken || !typescript.isCallExpression(fn.parent) ||
+          fn.parent.arguments.length !== 1 || fn.parent.arguments[0] !== fn ||
+          !typescript.isIdentifier(fn.parent.expression)) continue;
+      const call = fn.parent;
+      const binding = checker.getSymbolAtLocation(call.expression)?.declarations?.[0];
+      if (!binding || !typescript.isImportSpecifier(binding) ||
+          (binding.propertyName ?? binding.name).text !== "wrapMcpRoute") continue;
+      const declaration = binding.parent.parent.parent;
+      if (!typescript.isImportDeclaration(declaration) ||
+          declaration.moduleSpecifier.text !== "@/lib/mcp/routeWrapper" ||
+          !typescript.isCallExpression(call.parent) || call.parent.expression !== call ||
+          !isLiveCallSite(call.parent, live, !entries)) continue;
       live.add(fn);
       changed = true;
     }
@@ -763,21 +863,21 @@ function collectLiveFunctions(sourceFile, checker) {
       function visit(node) {
         if (referenced || node === fn) return;
         if (isStaticallyUnreachable(node)) return;
-        if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
+        if (!renderOnly && typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
             checker.getSymbolAtLocation(node.expression) === symbol &&
-            isLiveCallSite(node, live)) {
+            isLiveCallSite(node, live, !entries)) {
           referenced = true;
           return;
         }
-        if (typescript.isIdentifier(node) && isJsxAttributeValue(node, checker, live) &&
-            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
+        if (!renderOnly && typescript.isIdentifier(node) && isJsxCallbackValue(node, checker, live) &&
+            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live, !entries)) {
           referenced = true;
           return;
         }
         if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) &&
             typescript.isIdentifier(node.tagName) &&
             checker.getSymbolAtLocation(node.tagName) === symbol &&
-            isLiveCallSite(node, live)) {
+            isLiveCallSite(node, live, !entries) && jsxResultIsConsumed(node, checker, live, new Set(), !renderOnly)) {
           referenced = true;
           return;
         }
@@ -820,8 +920,9 @@ function expressionResultIsObserved(node) {
   return false;
 }
 
-function controlsRuntimeBranch(node) {
+function controlsRuntimeBranch(node, pureReturns = true) {
   if (isStaticallyUnreachable(node)) return false;
+  const hasBehavior = (branch) => branchHasBehavior(branch, pureReturns);
   let controlsOutput = false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
@@ -831,7 +932,7 @@ function controlsRuntimeBranch(node) {
       const right = staticBoolean(parent.right);
       if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && right === false) ||
           (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && right === true)) return false;
-      controlsOutput = branchHasBehavior(parent.right) || expressionResultIsObserved(parent);
+      controlsOutput = hasBehavior(parent.right) || (pureReturns && expressionResultIsObserved(parent));
       continue;
     }
     if (typescript.isConditionalExpression(parent) && child === parent.condition) {
@@ -839,8 +940,8 @@ function controlsRuntimeBranch(node) {
           (branchIsNullishOrEmpty(parent.whenTrue) && branchIsNullishOrEmpty(parent.whenFalse))) {
         controlsOutput = false;
       } else {
-        controlsOutput = (branchHasBehavior(parent.whenTrue) || branchHasBehavior(parent.whenFalse) ||
-          expressionResultIsObserved(parent));
+        controlsOutput = (hasBehavior(parent.whenTrue) || hasBehavior(parent.whenFalse) ||
+          (pureReturns && expressionResultIsObserved(parent)));
       }
       continue;
     }
@@ -851,14 +952,21 @@ function controlsRuntimeBranch(node) {
            branchIsNullishOrEmpty(parent.elseStatement))) {
         controlsOutput = false;
       } else {
-        controlsOutput = branchHasBehavior(parent.thenStatement) || branchHasBehavior(parent.elseStatement);
+        controlsOutput = hasBehavior(parent.thenStatement) || hasBehavior(parent.elseStatement);
+      }
+      let branch = parent.thenStatement;
+      if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
+      if (!pureReturns && !parent.elseStatement && typescript.isReturnStatement(branch) &&
+          typescript.isBlock(parent.parent)) {
+        const following = parent.parent.statements.slice(parent.parent.statements.indexOf(parent) + 1);
+        controlsOutput ||= following.some(hasBehavior);
       }
       continue;
     }
     if ((typescript.isWhileStatement(parent) && child === parent.expression) ||
         (typescript.isDoStatement(parent) && child === parent.expression) ||
         (typescript.isForStatement(parent) && child === parent.condition)) {
-      controlsOutput = branchHasBehavior(parent.statement);
+      controlsOutput = hasBehavior(parent.statement);
       continue;
     }
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
@@ -870,7 +978,7 @@ function controlsRuntimeBranch(node) {
       if (parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
       if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
           parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
-        if (child === parent.right) controlsOutput ||= expressionResultIsObserved(parent);
+        if (child === parent.right) controlsOutput ||= (pureReturns && expressionResultIsObserved(parent));
         continue;
       }
       const other = child === parent.left ? parent.right : parent.left;
@@ -937,9 +1045,11 @@ function assignedGateSymbol(call, checker) {
   return { name, symbol: checker.getSymbolAtLocation(name) };
 }
 
-function resolveRelativeModule(ref, sourcePath, moduleName) {
-  if (!moduleName.startsWith(".")) return null;
-  const base = pathPosix.normalize(pathPosix.join(pathPosix.dirname(sourcePath), moduleName));
+function resolveLocalModule(ref, sourcePath, moduleName) {
+  if (!moduleName.startsWith(".") && !moduleName.startsWith("@/")) return null;
+  const base = moduleName.startsWith("@/")
+    ? pathPosix.normalize(`src/${moduleName.slice(2)}`)
+    : pathPosix.normalize(pathPosix.join(pathPosix.dirname(sourcePath), moduleName));
   if (!base.startsWith("src/")) return null;
   const candidates = /\.[jt]sx?$/.test(base) ? [base] : [
     `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`,
@@ -954,40 +1064,114 @@ function resolveRelativeModule(ref, sourcePath, moduleName) {
   return null;
 }
 
-function controlsReturnedValue(node) {
+function controlsReturnedValue(node, { earlyOnly = false, after = null, independentParameters = new Set(), parameterBoolean = () => undefined, checker = null, live = null } = {}) {
   if (isStaticallyUnreachable(node)) return false;
+  const fn = enclosingFunctionLike(node);
+  if (fn?.asteriskToken || (!earlyOnly && (fn?.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.AsyncKeyword) ||
+      fn?.parameters.some((parameter) => parameter.initializer && staticBoolean(parameter.initializer, true) === null)))) return false;
+  for (let child = node, parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
+    if (typescript.isTryStatement(parent) ||
+        (typescript.isIfStatement(parent) && child !== parent.expression)) return false;
+  }
+  const parameterNames = new Set(fn?.parameters.filter((parameter) => typescript.isIdentifier(parameter.name))
+    .map((parameter) => parameter.name.text));
+  const localBindings = new Set();
+  (function visit(item) {
+    if (typescript.isVariableDeclaration(item)) {
+      (function binding(name) {
+        if (typescript.isIdentifier(name)) localBindings.add(name.text);
+        else typescript.forEachChild(name, binding);
+      })(item.name);
+    }
+    if (!typescript.isFunctionLike(item)) typescript.forEachChild(item, visit);
+  })(fn?.body ?? node);
+  let conditionalGuard = false;
+  let conditionalOutput = false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
-    if (typescript.isReturnStatement(parent) && child === parent.expression) return true;
-    if (typescript.isArrowFunction(parent) && child === parent.body) return true;
+    if (typescript.isReturnStatement(parent) && child === parent.expression) return !earlyOnly || conditionalOutput;
+    if (typescript.isArrowFunction(parent) && child === parent.body) return !earlyOnly || conditionalOutput;
     if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
         typescript.isTypeAssertionExpression(parent) || typescript.isNonNullExpression(parent) ||
-        typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent) ||
-        (typescript.isPrefixUnaryExpression(parent) &&
-         parent.operator === typescript.SyntaxKind.ExclamationToken)) continue;
+        typescript.isSatisfiesExpression(parent) || typescript.isAwaitExpression(parent)) continue;
+    if (typescript.isPrefixUnaryExpression(parent) &&
+        parent.operator === typescript.SyntaxKind.ExclamationToken) {
+      if (earlyOnly && conditionalOutput) return false;
+      continue;
+    }
     if (typescript.isBinaryExpression(parent)) {
       if (parent.operatorToken.kind === typescript.SyntaxKind.CommaToken) return false;
       if (parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken ||
           parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
         const other = child === parent.left ? parent.right : parent.left;
-        const value = staticBoolean(other);
-        if ((child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
-            (child === parent.left && parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
+        let repeated = false;
+        (function visit(item) {
+          if (typescript.isIdentifier(item) &&
+              !(typescript.isPropertyAccessExpression(item.parent) && item.parent.name === item) &&
+              (item.text === node.text || localBindings.has(item.text) ||
+              (parameterNames.has(item.text) &&
+                !independentParameters.has(item.text)))) repeated = true;
+          if (!repeated) typescript.forEachChild(item, visit);
+        })(other);
+        if (repeated || (earlyOnly && branchIsNullishOrEmpty(other, true))) return false;
+        const value = staticBoolean(other, true) ?? parameterBoolean(other);
+        if (value === undefined) return false;
+        if ((parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken && value === false) ||
+            (parent.operatorToken.kind === typescript.SyntaxKind.BarBarToken && value === true)) return false;
+        if (child === parent.left && value !== null) conditionalOutput = true;
         continue;
       }
       const other = child === parent.left ? parent.right : parent.left;
-      if ((parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsToken ||
+      if (!earlyOnly && (parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.EqualsEqualsEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsToken ||
            parent.operatorToken.kind === typescript.SyntaxKind.ExclamationEqualsEqualsToken) &&
-          staticBoolean(other) !== null) continue;
+          [typescript.SyntaxKind.TrueKeyword, typescript.SyntaxKind.FalseKeyword]
+            .includes(unwrapArgumentExpression(other).kind) &&
+          (unwrapArgumentExpression(child) === node ||
+           (typescript.isPrefixUnaryExpression(unwrapArgumentExpression(child)) &&
+            unwrapArgumentExpression(child).operator === typescript.SyntaxKind.ExclamationToken))) continue;
       return false;
     }
+    if (typescript.isIfStatement(parent) && child === parent.expression) {
+      if (conditionalGuard || !typescript.isBlock(parent.parent) || !typescript.isFunctionLike(parent.parent.parent)) return false;
+      const statements = parent.parent.statements;
+      const index = statements.indexOf(parent);
+      if (after) {
+        let declaration = after;
+        while (declaration.parent && declaration.parent !== parent.parent) declaration = declaration.parent;
+        const declarationIndex = statements.indexOf(declaration);
+        if (declarationIndex === -1 || declarationIndex >= index) return false;
+      }
+      const straightLine = (statement) => typescript.isVariableStatement(statement) || typescript.isEmptyStatement(statement);
+      if (!statements.slice(0, index).every(straightLine)) return false;
+      let whenTrue = parent.thenStatement;
+      const following = statements.slice(index + 1).find((statement) => !straightLine(statement));
+      let whenFalse = parent.elseStatement ?? following;
+      if (typescript.isBlock(whenTrue) && whenTrue.statements.length === 1) whenTrue = whenTrue.statements[0];
+      if (whenFalse && typescript.isBlock(whenFalse) && whenFalse.statements.length === 1) whenFalse = whenFalse.statements[0];
+      if (!typescript.isReturnStatement(whenTrue) || !whenFalse || !typescript.isReturnStatement(whenFalse) ||
+          !whenTrue.expression || !whenFalse.expression ||
+          branchesStaticallyEquivalent(whenTrue.expression, whenFalse.expression) ||
+          (earlyOnly && branchIsNullishOrEmpty(whenTrue, true) === branchIsNullishOrEmpty(whenFalse, true))) return false;
+      const a = staticBoolean(whenTrue.expression, true), b = staticBoolean(whenFalse.expression, true);
+      return a !== null && b !== null && (earlyOnly || a !== b);
+    }
+    if (earlyOnly && conditionalOutput && typescript.isJsxExpression(parent) && checker && live) {
+      return jsxResultIsConsumed(parent, checker, live, new Set(), false);
+    }
     if (typescript.isConditionalExpression(parent)) {
+      conditionalGuard = true;
       if (child === parent.condition) {
-        const whenTrue = staticBoolean(parent.whenTrue);
-        const whenFalse = staticBoolean(parent.whenFalse);
-        if (whenTrue !== null && whenTrue === whenFalse) return false;
+        if (earlyOnly && branchIsNullishOrEmpty(parent.whenTrue, true) === branchIsNullishOrEmpty(parent.whenFalse, true)) return false;
+        const whenTrue = staticBoolean(parent.whenTrue, true);
+        const whenFalse = staticBoolean(parent.whenFalse, true);
+        if (whenTrue === null || whenFalse === null ||
+            (!earlyOnly && whenTrue === whenFalse) ||
+            (earlyOnly && branchesStaticallyEquivalent(parent.whenTrue, parent.whenFalse))) return false;
+        conditionalOutput = true;
+      } else {
+        return false;
       }
       continue;
     }
@@ -996,8 +1180,8 @@ function controlsReturnedValue(node) {
   return false;
 }
 
-function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex) {
-  const targetPath = resolveRelativeModule(ref, sourcePath, imported.module);
+function importedParameterControlsReturnValue(ref, sourcePath, imported, argumentIndex, argumentCount, independentArguments, argumentBoolean) {
+  const targetPath = resolveLocalModule(ref, sourcePath, imported.module);
   if (!targetPath) return false;
   const source = git(["show", `${ref}:${targetPath}`]);
   const scriptKind = targetPath.endsWith(".tsx") ? typescript.ScriptKind.TSX :
@@ -1033,13 +1217,44 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   const parameter = declaration?.parameters[argumentIndex];
   if (!declaration?.body || !parameter || !typescript.isIdentifier(parameter.name)) return false;
   const symbol = checker.getSymbolAtLocation(parameter.name);
-  if (!symbol) return false;
+  const written = writtenBindingSymbols(sourceFile, checker);
+  if (!symbol || written.has(symbol)) return false;
 
+  const parameterSymbols = new Set(declaration.parameters.map((item) => checker.getSymbolAtLocation(item.name)));
+  const independentParameters = new Set(declaration.parameters.flatMap((item, index) => {
+    let dependentDefault = false;
+    function visitDefault(node) {
+      if (typescript.isIdentifier(node) && parameterSymbols.has(checker.getSymbolAtLocation(node))) dependentDefault = true;
+      typescript.forEachChild(node, visitDefault);
+    }
+    if (item.initializer) visitDefault(item.initializer);
+    const independent = independentArguments.has(index) ||
+      (index >= argumentCount && (!item.initializer || staticBoolean(item.initializer, true) !== null));
+    return independent && typescript.isIdentifier(item.name) && !dependentDefault &&
+      !written.has(checker.getSymbolAtLocation(item.name)) ? [item.name.text] : [];
+  }));
+  const parameterBoolean = (expression) => {
+    const properties = [];
+    let value = unwrapArgumentExpression(expression);
+    if (typescript.isPrefixUnaryExpression(value) && value.operator === typescript.SyntaxKind.ExclamationToken) {
+      const operand = parameterBoolean(value.operand);
+      return typeof operand === "boolean" ? !operand : operand;
+    }
+    while (typescript.isPropertyAccessExpression(value)) {
+      properties.unshift(value.name.text);
+      value = unwrapArgumentExpression(value.expression);
+    }
+    if (!typescript.isIdentifier(value)) return undefined;
+    const index = declaration.parameters.findIndex((item) =>
+      typescript.isIdentifier(item.name) && checker.getSymbolAtLocation(item.name) === checker.getSymbolAtLocation(value));
+    return index < 0 || !independentParameters.has(value.text) ? undefined
+      : argumentBoolean(index, properties, declaration.parameters[index].initializer);
+  };
   let controls = false;
   function visit(node) {
-    if (controls) return;
+    if (controls || typescript.isFunctionLike(node)) return;
     if (typescript.isIdentifier(node) && node !== parameter.name &&
-        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node)) {
+        checker.getSymbolAtLocation(node) === symbol && controlsReturnedValue(node, { independentParameters, parameterBoolean })) {
       controls = true;
       return;
     }
@@ -1049,7 +1264,7 @@ function importedParameterControlsReturnValue(ref, sourcePath, imported, argumen
   return controls;
 }
 
-function importedArgumentGatesRuntime(node, ref, path, checker, importedFunctions) {
+function importedArgumentGatesRuntime(node, ref, path, checker, importedFunctions, renderFunctions) {
   let argument = node;
   while (argument.parent && (typescript.isParenthesizedExpression(argument.parent) ||
          typescript.isAsExpression(argument.parent) || typescript.isTypeAssertionExpression(argument.parent) ||
@@ -1060,15 +1275,104 @@ function importedArgumentGatesRuntime(node, ref, path, checker, importedFunction
   if (!typescript.isCallExpression(call) || !typescript.isIdentifier(call.expression)) return false;
   const argumentIndex = call.arguments.findIndex((item) => item === argument);
   const imported = importedFunctions.get(checker.getSymbolAtLocation(call.expression));
-  return Boolean(argumentIndex !== -1 && imported &&
-    importedParameterControlsReturnValue(ref, path, imported, argumentIndex) &&
-    gatesRuntimeBehavior(call, checker, node.getSourceFile(), () => false));
+  if (argumentIndex === -1 || !imported || isStaticallyUnreachable(node)) return false;
+  const independentArguments = new Set();
+  const written = writtenBindingSymbols(node.getSourceFile(), checker);
+  const flagSymbol = checker.getSymbolAtLocation(node);
+  call.arguments.forEach((value, index) => {
+    if (index === argumentIndex) return;
+    let dependent = false;
+    const seen = new Set();
+    (function visit(item) {
+      if (dependent) return;
+      if (typescript.isCallExpression(item) || typescript.isElementAccessExpression(item)) {
+        dependent = true;
+        return;
+      }
+      if (typescript.isIdentifier(item) &&
+          !(typescript.isPropertyAccessExpression(item.parent) && item.parent.name === item) &&
+          !(typescript.isPropertyAssignment(item.parent) && item.parent.name === item)) {
+        const symbol = typescript.isShorthandPropertyAssignment(item.parent)
+          ? checker.getShorthandAssignmentValueSymbol(item.parent) : checker.getSymbolAtLocation(item);
+        if (!symbol) return;
+        if (symbol === flagSymbol || written.has(symbol) || seen.has(symbol)) {
+          dependent = true;
+          return;
+        }
+        seen.add(symbol);
+        for (const declaration of symbol.declarations ?? []) {
+          let binding = declaration;
+          while (typescript.isBindingElement(binding) || typescript.isObjectBindingPattern(binding) ||
+                 typescript.isArrayBindingPattern(binding)) {
+            if (binding.initializer) visit(binding.initializer);
+            binding = binding.parent;
+          }
+          if (typescript.isVariableDeclaration(binding) && binding.initializer) visit(binding.initializer);
+          else if (typescript.isParameter(binding)) {
+            if (binding.initializer) visit(binding.initializer);
+          } else dependent = true;
+        }
+        seen.delete(symbol);
+        return;
+      }
+      typescript.forEachChild(item, visit);
+    })(value);
+    if (!dependent) independentArguments.add(index);
+  });
+  const argumentBoolean = (index, properties, defaultValue) => {
+    const seen = new Set();
+    function resolve(value, fields, applyDefault = true) {
+      value = unwrapArgumentExpression(value);
+      if (typescript.isIdentifier(value)) {
+        const symbol = checker.getSymbolAtLocation(value);
+        if (symbol && !written.has(symbol) && !seen.has(symbol)) {
+          const declaration = symbol.valueDeclaration;
+          if (declaration && typescript.isVariableDeclaration(declaration) && declaration.initializer &&
+              typescript.isVariableDeclarationList(declaration.parent) &&
+              (declaration.parent.flags & typescript.NodeFlags.Const)) {
+            seen.add(symbol);
+            const result = resolve(declaration.initializer, fields, applyDefault);
+            seen.delete(symbol);
+            return result;
+          }
+        }
+      }
+      if (applyDefault && defaultValue && ((typescript.isIdentifier(value) && value.text === "undefined") ||
+          typescript.isVoidExpression(value))) value = defaultValue;
+      if (fields.length === 0) {
+        const boolean = staticBoolean(value, true);
+        if (boolean !== null) return boolean;
+        return typescript.isIdentifier(value) || typescript.isPropertyAccessExpression(value) ? null : undefined;
+      }
+      if (!typescript.isObjectLiteralExpression(value)) {
+        return typescript.isIdentifier(value) || typescript.isPropertyAccessExpression(value) ? null : undefined;
+      }
+      if (fields[0] === "__proto__" || value.properties.some((property) =>
+          !typescript.isPropertyAssignment(property) || typescript.isComputedPropertyName(property.name))) return undefined;
+      const matches = value.properties.filter((property) => property.name.text === fields[0]);
+      if (matches.length !== 1) return undefined;
+      return resolve(matches[0].initializer, fields.slice(1), false);
+    }
+    const value = call.arguments[index] ?? defaultValue;
+    if (!value) return properties.length === 0 ? false : undefined;
+    return resolve(value, properties);
+  };
+  if (!importedParameterControlsReturnValue(ref, path, imported, argumentIndex, call.arguments.length, independentArguments, argumentBoolean)) return false;
+  const sourceFile = node.getSourceFile();
+  const live = collectLiveFunctions(sourceFile, checker);
+  return gatesRuntimeBehavior(call, checker, sourceFile,
+    (reference) => renderFunctions.has(enclosingFunctionLike(reference))
+      ? controlsReturnedValue(reference, { earlyOnly: true, after: call, checker, live: renderFunctions })
+      : controlsRuntimeBranch(reference, isServerFile(path)), live,
+    (value) => renderFunctions.has(enclosingFunctionLike(value))
+      ? controlsReturnedValue(value, { earlyOnly: true, checker, live: renderFunctions }) : controlsRuntimeBranch(value, isServerFile(path)));
 }
 
-function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null) {
+function gatesRuntimeBehavior(call, checker, sourceFile, referenceGates = controlsRuntimeBranch, liveFunctions = null,
+    directGates = controlsRuntimeBranch) {
   const live = liveFunctions ?? collectLiveFunctions(sourceFile, checker);
   if (!callEnclosingFunctionIsLive(call, sourceFile, checker, live)) return false;
-  if (controlsRuntimeBranch(call)) return true;
+  if (directGates(call)) return true;
   const assigned = assignedGateSymbol(call, checker);
   if (!assigned?.symbol) return false;
 
@@ -1105,7 +1409,6 @@ function functionContainsJsx(fn) {
 }
 
 function exportedJsxEntryHasTicketGate(
-  fn,
   checker,
   helperSymbols,
   flagSymbols,
@@ -1114,6 +1417,7 @@ function exportedJsxEntryHasTicketGate(
   addedLines,
   sourceFile,
   liveFunctions,
+  renderFunctions,
   ref,
   path,
   importedFunctions,
@@ -1121,10 +1425,10 @@ function exportedJsxEntryHasTicketGate(
   let found = false;
   function visit(node) {
     if (found) return;
-    if (node !== fn && typescript.isFunctionLike(node)) return;
+    if (typescript.isFunctionLike(node) && !liveFunctions.has(node)) return;
     if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
         helperSymbols.has(checker.getSymbolAtLocation(node.expression)) &&
-        !isStaticallyUnreachable(node)) {
+        liveFunctions.has(enclosingFunctionLike(node)) && !isStaticallyUnreachable(node)) {
       let argument = node.arguments[0];
       while (argument && (typescript.isParenthesizedExpression(argument) ||
              typescript.isAsExpression(argument) || typescript.isTypeAssertionExpression(argument) ||
@@ -1148,6 +1452,7 @@ function exportedJsxEntryHasTicketGate(
               path,
               checker,
               importedFunctions,
+              renderFunctions,
             ), liveFunctions)) {
         found = true;
         return;
@@ -1155,19 +1460,20 @@ function exportedJsxEntryHasTicketGate(
     }
     typescript.forEachChild(node, visit);
   }
-  visit(fn);
+  visit(sourceFile);
   return found;
 }
 
 function hasUngatedExportedJsxEntry(
   sourceFile,
+  baseSourceFile,
   checker,
   helperSymbols,
   flagSymbols,
   registry,
   allowedKeys,
   addedLines,
-  liveFunctions,
+  changedLines,
   ref,
   path,
   importedFunctions,
@@ -1178,11 +1484,50 @@ function hasUngatedExportedJsxEntry(
     typescript.forEachChild(node, collect);
   }
   collect(sourceFile);
+  const containsChangedLine = (node) => {
+    const startLine = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1;
+    const endLine = sourceFile.getLineAndCharacterOfPosition(node.getEnd()).line + 1;
+    return [...changedLines].some((line) => line >= startLine && line <= endLine);
+  };
+  const moduleState = (file) => file.statements.filter((statement) => {
+    if (typescript.isImportDeclaration(statement) || typescript.isExportDeclaration(statement) ||
+        typescript.isInterfaceDeclaration(statement) || typescript.isTypeAliasDeclaration(statement) ||
+        typescript.isFunctionDeclaration(statement)) return false;
+    return !typescript.isVariableStatement(statement) ||
+      !statement.declarationList.declarations.every((declaration) =>
+        declaration.initializer && typescript.isFunctionLike(unwrapArgumentExpression(declaration.initializer)));
+  }).map((statement) => statement.getText(file)).join("\n");
+  const runtimeImports = (file) => {
+    const bindings = new Set();
+    for (const statement of file.statements) {
+      if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
+      const clause = statement.importClause;
+      if (clause?.isTypeOnly) continue;
+      const moduleName = statement.moduleSpecifier.text;
+      if (!clause) { bindings.add(`${moduleName}:side-effect`); continue; }
+      if (clause.name) bindings.add(`${moduleName}:default:${clause.name.text}`);
+      const named = clause.namedBindings;
+      if (named && typescript.isNamespaceImport(named)) bindings.add(`${moduleName}:*:${named.name.text}`);
+      if (named && typescript.isNamedImports(named)) {
+        for (const binding of named.elements) {
+          if (!binding.isTypeOnly) bindings.add(`${moduleName}:${binding.propertyName?.text ?? binding.name.text}:${binding.name.text}`);
+        }
+      }
+    }
+    return bindings;
+  };
+  const beforeImports = runtimeImports(baseSourceFile), afterImports = runtimeImports(sourceFile);
+  const importsChanged = [...beforeImports].some((binding) => !afterImports.has(binding)) ||
+    [...afterImports].some((binding) => binding.endsWith(":side-effect") && !beforeImports.has(binding));
+  const moduleChanged = importsChanged || moduleState(sourceFile) !== moduleState(baseSourceFile);
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   for (const fn of functions) {
     if (!isExportedUiEntry(fn, identifierExports) || !functionContainsJsx(fn)) continue;
+    const entryFunctions = collectLiveFunctions(sourceFile, checker, new Set([fn]));
+    const entryChanged = moduleChanged || !entryFunctions.has(fn) ||
+      [...entryFunctions].some(containsChangedLine);
+    if (!entryChanged) continue;
     if (!exportedJsxEntryHasTicketGate(
-      fn,
       checker,
       helperSymbols,
       flagSymbols,
@@ -1190,7 +1535,8 @@ function hasUngatedExportedJsxEntry(
       allowedKeys,
       addedLines,
       sourceFile,
-      liveFunctions,
+      entryFunctions,
+      collectLiveFunctions(sourceFile, checker, new Set([fn]), true),
       ref,
       path,
       importedFunctions,
@@ -1199,7 +1545,7 @@ function hasUngatedExportedJsxEntry(
   return false;
 }
 
-function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
+function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines, changedLines, baseRef) {
   const source = git(["show", `${ref}:${path}`]);
   let scriptKind = typescript.ScriptKind.JS;
   if (path.endsWith(".tsx")) scriptKind = typescript.ScriptKind.TSX;
@@ -1212,7 +1558,10 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
     true,
     scriptKind,
   );
-  const options = { noResolve: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
+  const baseSource = git(["ls-tree", "--name-only", baseRef, "--", path]).trim()
+    ? git(["show", `${baseRef}:${path}`]) : "";
+  const baseSourceFile = typescript.createSourceFile(path, baseSource, typescript.ScriptTarget.Latest, true, scriptKind);
+  const options = { noResolve: true, allowJs: true, jsx: typescript.JsxEmit.Preserve, target: typescript.ScriptTarget.Latest };
   const host = {
     getSourceFile: (fileName) => fileName === path ? sourceFile : undefined,
     getDefaultLibFileName: () => "",
@@ -1233,6 +1582,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
   const flagSymbols = new Map();
   const importedFunctions = new Map();
   const liveFunctions = collectLiveFunctions(sourceFile, checker);
+  const renderFunctions = collectLiveFunctions(sourceFile, checker, null, true);
 
   for (const statement of sourceFile.statements) {
     if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -1244,14 +1594,14 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
       const symbol = checker.getSymbolAtLocation(specifier.name);
       if (!symbol) continue;
       importedFunctions.set(symbol, { imported, module: moduleName });
-      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag") ||
+      if ((moduleName === "@/hooks/useFlag" && imported === "useFlag" && !isServerFile(path)) ||
           (moduleName === "@/lib/flags" && imported === "isFeatureEnabled")) helperSymbols.add(symbol);
       const key = registry.byIdentifier.get(imported);
       if (!key) continue;
       if (!FLAG_KEY_MODULES.has(moduleName)) {
         const definitionPath = moduleName.startsWith("@/lib/flags/definitions/")
           ? `src/${moduleName.slice(2)}${moduleName.endsWith(".ts") ? "" : ".ts"}`
-          : resolveRelativeModule(ref, path, moduleName);
+          : resolveLocalModule(ref, path, moduleName);
         if (!definitionPath || !flagDefinitionPaths(ref).includes(definitionPath)) continue;
         const { identifier, definition } = parseFlagFile(git(["show", `${ref}:${definitionPath}`]), definitionPath);
         if (identifier !== imported || definition.key !== key) continue;
@@ -1262,13 +1612,14 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
 
   if (isUiFile(path) && hasUngatedExportedJsxEntry(
     sourceFile,
+    baseSourceFile,
     checker,
     helperSymbols,
     flagSymbols,
     registry,
     allowedKeys,
     addedLines,
-    liveFunctions,
+    changedLines,
     ref,
     path,
     importedFunctions,
@@ -1304,6 +1655,7 @@ function referencesFlagAtRuntime(ref, path, registry, allowedKeys, addedLines) {
               path,
               checker,
               importedFunctions,
+              renderFunctions,
             ), liveFunctions)) found = key;
     }
     if (!found) typescript.forEachChild(node, visit);
@@ -1539,8 +1891,11 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
       const baseFiles = new Set(flagDefinitionPaths(mergeBase));
       for (const path of flagDefinitionPaths(headSha)) {
-        if (baseFiles.has(path)) continue;
         const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
+        if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
+          throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
+        }
+        if (baseFiles.has(path)) continue;
         if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
             definition.defaultMode !== "EVERYONE" &&
             !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {
@@ -1552,12 +1907,14 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     }
   }
   const uiFiles = changedFiles.filter(isUiFile);
+  const serverFiles = changedFiles.filter(isServerFile).filter((path) =>
+    git(["ls-tree", "--name-only", headSha, "--", path]).trim());
   const runtimeFiles = changedFiles.filter((path) =>
     /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
     !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
     !/\.stories\.[jt]sx?$/.test(path));
-  if (uiFiles.length === 0) {
-    return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
+  if (uiFiles.length === 0 && serverFiles.length === 0) {
+    return { pass: true, ownerReview: null, reason: "No changed file matches the UI/server-change path filter." };
   }
 
   // Title exemptions never bypass registry default validation.
@@ -1655,6 +2012,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         return false;
       }
     });
+    let hasServerGate = false;
     const coveredUiFiles = new Set();
     let matchedGate = null;
 
@@ -1670,19 +2028,27 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         headRegistry,
         ticketKeys,
         addedLinesFor(mergeBase, headSha, path),
+        addedLinesFor(mergeBase, headSha, path, true),
+        mergeBase,
       );
       if (key) {
+        if (isServerFile(path)) hasServerGate = true;
         const covered = runtimeGateCoveredUiFiles(headSha, path, uiFiles);
         for (const uiPath of covered) coveredUiFiles.add(uiPath);
-        if (covered.size > 0 && !matchedGate) matchedGate = { key, path };
+        if ((covered.size > 0 || isServerFile(path)) && !matchedGate) matchedGate = { key, path };
       }
+    }
+    if (serverFiles.length > 0 && !hasServerGate) {
+      return failure(`[${tag}] changes server behavior (${serverFiles.slice(0, 5).join(", ")}) without a ticket-specific server flag. ` +
+        `Define src/lib/flags/definitions/${ticketPrefix}<name>.ts and call isFeatureEnabled from @/lib/flags ` +
+        "with that key on an added or modified server line controlling the behavior.");
     }
     if (matchedGate && (requiredUiFiles.length === 0 ||
         requiredUiFiles.every((path) => coveredUiFiles.has(path)))) {
       return {
         pass: true,
         ownerReview: "feature-gated-ui",
-        reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering every UI entry from ${matchedGate.path}.`,
+        reason: `[${tag}] calls ticket-specific feature gate ${matchedGate.key} in changed code covering the changed server behavior and every UI entry from ${matchedGate.path}.`,
       };
     }
   } catch (error) {

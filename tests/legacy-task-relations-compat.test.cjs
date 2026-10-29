@@ -5,11 +5,9 @@ const { fixture, pages, relationFields } = require("./legacy-task-relations-fixt
 const contract = require("./legacy-task-relations-contract.json");
 
 for (const [name, options] of [
-  ["flag OFF ignores opt-in", { compat: "htpr-6924" }],
-  ["flag ON without opt-in", { enabled: true }],
-  ["flag ON with wrong opt-in", { enabled: true, compat: "other" }],
-  ["flag ON with duplicate opt-in", { enabled: true, compat: ["htpr-6924", "htpr-6924"] }],
-  ["failed flag lookup", { enabled: true, compat: "htpr-6924", failFlag: true }],
+  ["absent opt-in", {}],
+  ["wrong opt-in", { compat: "other" }],
+  ["duplicate opt-in", { compat: ["htpr-6924", "htpr-6924"] }],
 ]) {
   test(`${name} retains frozen task-list bytes, headers and Prisma selection`, async () => {
     const f = fixture(options);
@@ -18,7 +16,6 @@ for (const [name, options] of [
     assert.equal(response.text, contract.text);
     assert.deepEqual(response.headers, {});
     assert.deepEqual(f.calls.queries, [contract.args]);
-    assert.deepEqual(f.calls.flags, options.compat === "htpr-6924" ? [["htpr-6924-rest-compat", 7]] : []);
   });
 }
 
@@ -33,7 +30,7 @@ test("two-argument controller and explicit legacy argument keep the original ful
 for (const access of ["owner", "member", "denied"]) {
   for (const compact of [false, true]) {
     test(`${access} board scope is unchanged in ${compact ? "compact" : "legacy"} mode`, async () => {
-      const f = fixture({ access, enabled: compact, compat: "htpr-6924" });
+      const f = fixture({ access, compat: compact ? "htpr-6924" : undefined });
       const result = await f.invoke();
       assert.equal(result.status, 200);
       assert.equal(result.body.length, access === "denied" ? 0 : 2);
@@ -44,12 +41,11 @@ for (const access of ["owner", "member", "denied"]) {
   }
 }
 
-test("flag ON plus explicit opt-in returns only the complete compact relation fields", async () => {
-  const f = fixture({ enabled: true, compat: "htpr-6924" });
+test("explicit opt-in returns only the complete compact relation fields", async () => {
+  const f = fixture({ compat: "htpr-6924" });
   const result = await f.invoke({ projectId: 15, userId: 999, contract: "legacy" });
   assert.equal(result.status, 200);
   assert.deepEqual(result.headers, {});
-  assert.deepEqual(f.calls.flags, [["htpr-6924-rest-compat", 7]]);
   const legacy = JSON.parse(contract.text);
   for (const [index, item] of result.body.entries()) {
     const { subTasks, parentTask, ...top } = item;
@@ -67,32 +63,29 @@ test("flag ON plus explicit opt-in returns only the complete compact relation fi
   assert.deepEqual(result.body[1].subTasks, []);
 });
 
-for (const enabled of [false, true]) {
-  test(`legacy missing-body, malformed-ID, failure and method contracts survive flag ${enabled}`, async () => {
-    const options = { enabled, compat: "htpr-6924" };
-    assert.equal((await fixture(options).invoke({})).text, '"Missing Required Data"');
-    for (const projectId of ["bad", "0", "-1", "1.5", [15]]) {
-      const f = fixture(options);
-      const response = await f.invoke({ projectId });
-      assert.equal(response.status, 200);
-      assert.equal(response.text, "[]");
-      assert.equal(f.calls.queries.length, 0);
-    }
-    const failure = await fixture({ ...options, failQuery: true }).invoke();
-    assert.equal(failure.status, 200);
-    assert.equal(failure.text, "[]");
-    const method = fixture(options);
-    assert.equal((await method.invoke({}, "GET")).text, '{"message":"Method not allowed"}');
-    assert.equal((await method.invoke({}, "GET")).status, 405);
-    assert.deepEqual(method.calls, { queries: [], flags: [], auth: [] });
-    const unauthorized = fixture({ ...options, userId: null });
-    const response = await unauthorized.invoke({ projectId: 15, userId: 7, contract: "compact" });
-    assert.equal(response.status, 401);
-    assert.equal(response.text, '{"message":"Unauthorized"}');
-    assert.deepEqual(unauthorized.calls.flags, []);
-    assert.deepEqual(unauthorized.calls.queries, []);
-  });
-}
+test("legacy missing-body, malformed-ID, failure and method contracts survive", async () => {
+  const options = { compat: "htpr-6924" };
+  assert.equal((await fixture(options).invoke({})).text, '"Missing Required Data"');
+  for (const projectId of ["bad", "0", "-1", "1.5", [15]]) {
+    const f = fixture(options);
+    const response = await f.invoke({ projectId });
+    assert.equal(response.status, 200);
+    assert.equal(response.text, "[]");
+    assert.equal(f.calls.queries.length, 0);
+  }
+  const failure = await fixture({ ...options, failQuery: true }).invoke();
+  assert.equal(failure.status, 200);
+  assert.equal(failure.text, "[]");
+  const method = fixture(options);
+  assert.equal((await method.invoke({}, "GET")).text, '{"message":"Method not allowed"}');
+  assert.equal((await method.invoke({}, "GET")).status, 405);
+  assert.deepEqual(method.calls, { queries: [], auth: [] });
+  const unauthorized = fixture({ ...options, userId: null });
+  const response = await unauthorized.invoke({ projectId: 15, userId: 7, contract: "compact" });
+  assert.equal(response.status, 401);
+  assert.equal(response.text, '{"message":"Unauthorized"}');
+  assert.deepEqual(unauthorized.calls.queries, []);
+});
 
 
 test("real signed-session resolver rejects forged/expired opt-in and ignores body/profile identity", async () => {
@@ -101,7 +94,7 @@ test("real signed-session resolver rejects forged/expired opt-in and ignores bod
   try {
     const { signSession } = load("src/lib/auth/session.ts", {});
     for (const [token, authorized] of [[undefined, false], ["forged", false], [signSession({ id: 7 }, -1), false], [signSession({ id: 7 }), true]]) {
-      const f = fixture({ enabled: true });
+      const f = fixture();
       const { ["@/lib/auth/currentUser"]: ignoredAuth, ["@/lib/auth/getSessionUser"]: ignoredSession, ...mocks } = f.mocks;
       const handler = load("src/pages/api/tasks/getAll.ts", {
         ...mocks,
@@ -113,7 +106,6 @@ test("real signed-session resolver rejects forged/expired opt-in and ignores bod
         headers: token ? { cookie: `ht_session=${token}` } : {},
       });
       assert.equal(result.status, authorized ? 200 : 401);
-      assert.deepEqual(f.calls.flags, authorized ? [["htpr-6924-rest-compat", 7]] : []);
       assert.equal(f.calls.queries.length, authorized ? 1 : 0);
       if (authorized) assert.deepEqual(Object.keys(result.body[0].subTasks[0]), [...relationFields, "createdAt"]);
       else assert.equal(result.text, '{"message":"Unauthorized"}');

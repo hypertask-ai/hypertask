@@ -364,6 +364,7 @@ const useHTCTaskAndComments = ({
       | "ReplyToComment"
       | "ReactToComment"
       | "StarComment"
+      | "BlockerComment"
       | "CreateTaskFromComment"
       | "CopyCommentLinkURL"
       | "CopyCommentContent"

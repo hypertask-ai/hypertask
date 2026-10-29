@@ -12,10 +12,13 @@ import {
   skillErrorResponse,
 } from "@/app/api/ai/_lib/skillAccess";
 import {
+  SkillValidationError,
   MAX_SKILL_BODY_BYTES,
   parseSkillMarkdown,
   slugifySkill,
 } from "@/app/api/ai/_lib/skillMarkdown";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7781_SKILL_VALIDATION_FLAG } from "@/lib/flags/definitions/htpr-7781-skill-validation";
 import prisma from "@/lib/prisma";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
@@ -105,6 +108,12 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ skill }, { status: 201 });
   } catch (error) {
+    if (
+      (error instanceof SkillValidationError || error instanceof z.ZodError) &&
+      (await isFeatureEnabled(HTPR_7781_SKILL_VALIDATION_FLAG, user.id).catch(() => false))
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     if (error instanceof ProjectAccessError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
@@ -126,11 +135,11 @@ function parseCreateInput(input: z.infer<typeof createSchema>) {
   const name = input.name?.trim() || "";
   const slug = slugifySkill(input.slug || name);
   const body = input.body?.trim() || "";
-  if (!name) throw new Error("Skill name is required");
-  if (!slug) throw new Error("Skill slug is required");
-  if (!body) throw new Error("Skill body is required");
+  if (!name) throw new SkillValidationError("Skill name is required");
+  if (!slug) throw new SkillValidationError("Skill slug is required");
+  if (!body) throw new SkillValidationError("Skill body is required");
   if (Buffer.byteLength(body, "utf8") > MAX_SKILL_BODY_BYTES) {
-    throw new Error("Skill body exceeds the 64KB limit");
+    throw new SkillValidationError("Skill body exceeds the 64KB limit");
   }
   return {
     name,

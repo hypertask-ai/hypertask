@@ -19,6 +19,10 @@ Settings > Board > Members (`src/components/Modals/Settings/BoardMembersSection.
 
 Checklist written before QA; the step 2 and step 3 responses showing the same team members (ids only, no emails in the proof); the 401 and 404 statuses; a screenshot of the invite dialog. Record account ids, never credentials.
 
+### Automated evidence
+
+`node --test tests/htpr-7170-members-getall-board-team.test.cjs` exercises the member-list route: it uses the board's stored team instead of the query team and returns 404 for an inaccessible board.
+
 ## Cleanup
 
 The member-list API reads need no cleanup, but opening the invite dialog fetches the public board join link. If none exists, that GET creates an invite and analytics intent and starts processing it. Follow the agent-list seeding precautions in [Agents and board access](agents-board-access.md) before opening the picker too. Use an approved QA board with an existing link and no required agent seeding for a read-only run. Otherwise record the creation without saving the join URL and do not call the run read-only. Do not reset a shared join link or delete analytics records as cleanup.

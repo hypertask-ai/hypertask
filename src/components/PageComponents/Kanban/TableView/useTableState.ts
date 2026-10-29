@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation";
 import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -35,8 +35,8 @@ export function useTableState(context: Context) {
   myTasksSort, myTasksSortKey, filteredSections, _sections,
   } = context;
 
+  const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
-  const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
@@ -116,7 +116,7 @@ export function useTableState(context: Context) {
     _currentProject,
     assignTask?.projectId,
     currentUser?.id,
-    rowShortcutsEnabled && Boolean(assignTask),
+    Boolean(assignTask),
   );
   useEffect(() => {
     if (!assignTask || assignProjectLoading) return;
@@ -150,7 +150,7 @@ export function useTableState(context: Context) {
     myTasksSortKey,
     _currentProject?.showTimeTotals,
   ]);
-  const sections = useMemo(() => {
+  const sortedSections = useMemo(() => {
     const base = filteredSections ?? _sections ?? [];
     const withoutExcluded =
       excludedTaskIds.size === 0
@@ -160,12 +160,17 @@ export function useTableState(context: Context) {
             items: (section.items || []).filter((task) => !excludedTaskIds.has(task.id)),
           }));
     if (!_currentProject) return withoutExcluded;
-    const emptyFiltered = getFilteredEmptySections(withoutExcluded, _currentProject);
-    return emptyFiltered.map((section) => ({
+    return withoutExcluded.map((section) => ({
       ...section,
       items: returnSortedItems([...(section.items || [])], _currentProject),
     }));
   }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
+  let sections = sortedSections;
+  if (showEmptyViewColumns) {
+    if (_currentProject) sections = getFilteredEmptySections(sortedSections, _currentProject, true);
+  } else if (_currentProject) {
+    sections = getFilteredEmptySections(sortedSections, _currentProject);
+  }
 
   useEffect(() => {
     if (excludedTaskIds.size === 0) return;
@@ -212,7 +217,7 @@ export function useTableState(context: Context) {
   customFieldBySortColumnRef.current = customFieldBySortColumn;
   const customFieldById = useMemo(() => new Map(customFields.map((field) => [field.id, field])), [customFields]);
   return {
-  queryClient, rowShortcutsEnabled, myTasksSnoozeEnabled, router, navigateToTask,
+  queryClient, myTasksSnoozeEnabled, router, navigateToTask,
   toggleCreateTaskGlobally, updateActiveItemAndItemInView, removeFromListWithStatus, updateTaskInCache, starTask,
   showCommands, setShowCommands, persistedActiveItem, myTasksBulk, showArchivedOnBoard,
   isApple, setTasksPlayList, myTasksColumnsControlled, storedVisibleColumns, normalizeVisibleColumns,

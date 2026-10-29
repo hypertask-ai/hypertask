@@ -25,13 +25,13 @@ visit(ast);
 assert.ok(legacyButton, 'retain the production chat trigger while the flag is off');
 const compiled = ts.transpileModule(`const Legacy = () => (${legacyButton});`, { compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS } }).outputText;
 const renderLegacy = (scopeChip, mobile, isOpen) => {
-  const Legacy = new Function('React', 'scopeChip', 'mobile', 'isOpen', 'setIsOpen', 'ListTodo', 'Layers', 'SquareKanban', 'ChevronDown', `${compiled}; return Legacy;`)(React, scopeChip, mobile, isOpen, () => {}, icons.ListTodo, icons.Layers, icons.SquareKanban, icons.ChevronDown);
+  const Legacy = new Function('React', 'scopeChip', 'mobile', 'isOpen', 'setIsOpen', 'ListTodo', 'Layers', 'SquareKanban', 'ChevronDown', 'sharedShortcuts', 'chatShortcutHint', `${compiled}; return Legacy;`)(React, scopeChip, mobile, isOpen, () => {}, icons.ListTodo, icons.Layers, icons.SquareKanban, icons.ChevronDown, false, () => "");
   return renderToStaticMarkup(React.createElement(Legacy));
 };
 
 test('shared chat chip renders exactly the retained production icon, name, chevron and theme classes', () => {
   for (const kind of ['task', 'board', 'boards']) for (const mobile of [false, true]) for (const isOpen of [false, true]) {
-    const props = { kind, label: 'QA Sandbox', title: 'QA Sandbox', mobile, isOpen, onClick() {} };
+    const props = { kind, label: 'QA Sandbox', title: 'QA Sandbox', mobile, isOpen, 'aria-haspopup': 'dialog', onClick() {} };
     const shared = new JSDOM(renderToStaticMarkup(React.createElement(ChatScopeChip, props)));
     const legacy = new JSDOM(renderLegacy(props, mobile, isOpen));
     assert.equal(shared.window.document.body.isEqualNode(legacy.window.document.body), true);

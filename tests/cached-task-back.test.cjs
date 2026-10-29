@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardColumns = true } = {}) {
+function fixture(t, { cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardColumns = true } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -77,7 +77,10 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: url => routerCalls.push(url), refresh: () => routerCalls.push("refresh") }) },
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) }, "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : true },
+    "@/hooks/useFlag": { useFlag: key => {
+      assert.equal(key, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
+      return true;
+    } },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -249,23 +252,6 @@ test("Forward with an evicted child keeps neutral loading until the child route 
   await f.server(child); assert.equal(f.observed().title, child.title);
 });
 
-for (const cachedParent of [true, false]) {
-  test(`flag off preserves ${cachedParent ? "the synchronous cache hit" : "the wrong-task cache-miss fallback as a negative control"}`, async t => {
-    const f = fixture(t, { enabled: false, cachedParent });
-    await f.initialize(); await f.traverse("back");
-    if (cachedParent) {
-      assert.equal(f.observed().title, parent.title);
-      assert.equal(f.checkpoints.at(-1).title, parent.title);
-    } else {
-      assert.equal(f.observed().title, child.title);
-      assert.equal(f.observed().body, child.description_.content);
-      assert.throws(() => assertDestination(f.observed(), parent), assert.AssertionError);
-      assert.deepEqual(f.routerCalls, [href(parent), "refresh"]);
-    }
-    assert.equal(f.observed().loading, undefined);
-  });
-}
-
 test("cold Back retains already-correct source children while the cached viewer is pending", async t => {
   const f = fixture(t, { coldViewer: true });
   await f.initialize({ refreshChild: false });
@@ -278,22 +264,20 @@ test("cold Back retains already-correct source children while the cached viewer 
   assert.equal(document.querySelector("article"), source, "an aborted import must not replace the source");
 });
 
-for (const enabled of [true, false]) {
-  test(`cold cached board open and immediate Back keep source children mounted (flag=${enabled})`, async t => {
-    const f = fixture(t, { enabled, coldViewer: true });
-    const source = await f.openFromBoard();
-    assert.equal(document.getElementById("source-board"), source);
-    assert.equal(f.boardMounts(), 1);
-    assert.equal(f.observed().loading, undefined);
-    await f.traverse("back");
-    assert.equal(window.location.pathname, "/project");
-    assert.equal(document.getElementById("source-board"), source);
-    assert.equal(source.querySelector("input").value, "Local unsaved filter");
-    await React.act(async () => f.resolveViewer());
-    assert.equal(document.getElementById("source-board"), source);
-    assert.equal(f.boardMounts(), 1, "Back must not replay board startup effects");
-  });
-}
+test("cold cached board open and immediate Back keep source children mounted", async t => {
+  const f = fixture(t, { coldViewer: true });
+  const source = await f.openFromBoard();
+  assert.equal(document.getElementById("source-board"), source);
+  assert.equal(f.boardMounts(), 1);
+  assert.equal(f.observed().loading, undefined);
+  await f.traverse("back");
+  assert.equal(window.location.pathname, "/project");
+  assert.equal(document.getElementById("source-board"), source);
+  assert.equal(source.querySelector("input").value, "Local unsaved filter");
+  await React.act(async () => f.resolveViewer());
+  assert.equal(document.getElementById("source-board"), source);
+  assert.equal(f.boardMounts(), 1, "Back must not replay board startup effects");
+});
 
 test("cross-task cold cached Back suppresses the wrong native children until the viewer loads", async t => {
   const f = fixture(t, { coldViewer: true });
@@ -427,20 +411,18 @@ test("native detail always seeds authorized non-embedded routes", () => {
   client.clear();
 });
 
-test("flagged detail misses reach native traversal instead of repairing the source route", () => {
+test("detail misses reach native traversal instead of repairing the source route", () => {
   const body = source.match(/const restoreSourceRoute = \(event: PopStateEvent\) => \{([\s\S]*?)\n    \};/)?.[1];
   assert.ok(body);
-  const restore = new Function("event", "window", "backFirstOpen", "accountId", "previousLocation", "router", "cachedTaskDetailLocation", body);
-  for (const enabled of [true, false]) {
-    let stops = 0;
-    const calls = [];
-    const event = { state: { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, stopImmediatePropagation: () => stops++ };
-    const win = { location: { pathname: href(parent), search: "", hash: "" }, dispatchEvent: () => {} };
-    const previous = { current: { accountId: 2343, taskId: child.id, projectId: child.projectId, uniqueIndex: child.uniqueIndex } };
-    restore(event, win, enabled, 2343, previous, { replace: url => calls.push(url), refresh: () => calls.push("refresh") }, cache.cachedTaskDetailLocation);
-    assert.equal(stops, enabled ? 0 : 1);
-    assert.deepEqual(calls, enabled ? [] : [href(parent), "refresh"]);
-  }
+  const restore = new Function("event", "window", "accountId", "previousLocation", "router", "cachedTaskDetailLocation", body);
+  let stops = 0;
+  const calls = [];
+  const event = { state: { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, stopImmediatePropagation: () => stops++ };
+  const win = { location: { pathname: href(parent), search: "", hash: "" }, dispatchEvent: () => {} };
+  const previous = { current: { accountId: 2343, taskId: child.id, projectId: child.projectId, uniqueIndex: child.uniqueIndex } };
+  restore(event, win, 2343, previous, { replace: url => calls.push(url), refresh: () => calls.push("refresh") }, cache.cachedTaskDetailLocation);
+  assert.equal(stops, 0);
+  assert.deepEqual(calls, []);
 });
 
 for (const stableChildren of [true, false]) {

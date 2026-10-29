@@ -298,7 +298,7 @@ for (const foreignParent of [false, true]) {
     const { default: getBoardTasks } = load("src/utils/controllers/projects/getBoardTasks.ts", {
       ...readerStubs({ project: { findFirst: async () => ({ id: 10 }) }, task: { findMany: async () => [fixture(foreignParent)] } }),
       "@/lib/ai/teamBillingSnapshotSelect": {},
-      "@/utils/controllers/tasks/attachAgentStatus": {},
+      "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async rows => rows },
       "./getAllIncludes": { getProjectWhere: () => ({}), getTaskWhere: () => ({}), getBoardTaskInclude: () => ({}), getProjectIncludeWithoutTasks: () => ({}), getProjectViewInclude: () => ({}) },
       "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: (value) => value },
       "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async (value) => value },

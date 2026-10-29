@@ -44,7 +44,9 @@ test("flag off renders production tooltips and flag on renders the top-layer por
     stub("src/utils/generateTime.ts", { default: () => "just now" });
     stub("src/components/Common/UserAvatar.tsx", { default: () => React.createElement("span", null, "Avatar") });
     stub("src/hooks/MultiPages/usePersonHovercard.ts", { usePersonHovercard: () => ({ isFetching: false, isError: false, data: { kind: "user", displayName: "Ada", email: "ada@example.test" } }) });
-    stub("next/navigation", { usePathname: () => "/project" });
+    stub("next/navigation", { usePathname: () => "/project", useRouter: () => ({ replace: assert.fail }) });
+    stub("src/lib/state.tsx", { useSetRecoilState: () => assert.fail });
+    stub("src/store/index.ts", {});
     const jiti = createJiti(__filename, { interopDefault: true, fsCache: false, alias: { "@": path.join(root, "src") }, jsx: { runtime: "automatic" } });
     const load = (file) => jiti(path.join(root, file));
     const Tooltip = load("src/components/Common/Tooltip.tsx").default;

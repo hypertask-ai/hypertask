@@ -14,20 +14,17 @@ type Props = Pick<
   | "embedded"
   | "agents"
   | "selectedId"
-  | "mobileFullscreenFlag"
   | "isMbl"
-  | "mobileLayoutEnabled"
   | "teamId"
   | "setAgentChatMobileFullscreen"
   | "setMobileTopBarTitle"
   | "setTeamId"
   | "search"
-  | "liveSortEnabled"
 >;
 
 export function useAgentChatNavigation({
-  embedded, agents, selectedId, mobileFullscreenFlag, isMbl, mobileLayoutEnabled, teamId,
-  setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search, liveSortEnabled,
+  embedded, agents, selectedId, isMbl, teamId,
+  setAgentChatMobileFullscreen, setMobileTopBarTitle, setTeamId, search,
 }: Props) {
   const selectedAgent = useMemo(
     () => (agents ?? []).find((a) => a.id === selectedId) ?? null,
@@ -35,15 +32,15 @@ export function useAgentChatNavigation({
   );
   const isExternal = selectedAgent?.runtimeType === "EXTERNAL";
   const mobileFullscreenChrome = Boolean(
-    !embedded && mobileFullscreenFlag && isMbl && selectedAgent,
+    !embedded && isMbl && selectedAgent,
   );
-  const reuseAiComposer = Boolean(embedded || (mobileFullscreenFlag && isMbl));
+  const reuseAiComposer = Boolean(embedded || isMbl);
   const dictationProjectId = useMemo(
     () =>
-      embedded ? embedded.projectId : isMbl && (mobileLayoutEnabled || mobileFullscreenFlag)
+      embedded ? embedded.projectId : isMbl
         ? agentDictationProjectId(selectedAgent, teamId)
         : null,
-    [embedded?.projectId, isMbl, mobileLayoutEnabled, mobileFullscreenFlag, selectedAgent, teamId],
+    [embedded?.projectId, isMbl, selectedAgent, teamId],
   );
 
   useEffect(() => {
@@ -53,11 +50,10 @@ export function useAgentChatNavigation({
   }, [mobileFullscreenChrome, setAgentChatMobileFullscreen]);
 
   useEffect(() => {
-    if (embedded || !mobileLayoutEnabled || !isMbl || mobileFullscreenChrome) return;
+    if (embedded || !isMbl || mobileFullscreenChrome) return;
     setMobileTopBarTitle(selectedAgent?.displayName ?? "Agents");
     return () => setMobileTopBarTitle(null);
   }, [
-    mobileLayoutEnabled,
     isMbl,
     mobileFullscreenChrome,
     selectedAgent?.displayName,
@@ -106,8 +102,8 @@ export function useAgentChatNavigation({
     const matching = needle
       ? inTeam.filter((a) => a.displayName.toLowerCase().includes(needle))
       : inTeam;
-    return sortRosterByActivity(matching, liveSortEnabled);
-  }, [agents, search, teamId, teams, liveSortEnabled]);
+    return sortRosterByActivity(matching);
+  }, [agents, search, teamId, teams]);
 
 
   return {

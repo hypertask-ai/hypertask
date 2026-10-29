@@ -1,11 +1,11 @@
 import type { BoardKnowledgePrincipal } from "@/lib/rag/retrieveBoardKnowledge";
-import { chatContentScopeWhere } from "./chatContentScope";
+import { chatAudienceWhere, chatContentScopeWhere } from "./chatContentScope";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/definitions/htpr-7518-agent-sidebar-chats";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { accessibleAgentWhere } from "@/lib/agents/visibility";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 
 
 export const AGENT_CHAT_SESSION_NOT_FOUND = "Session not found";
@@ -40,11 +40,13 @@ export function userAgentChatSessionWhere(
   teamIds: readonly string[],
 ): Prisma.ChatSessionWhereInput {
   return {
+    ...chatAudienceWhere({ userId }),
     id: sessionId,
     agentId: { not: null },
     OR: [
       { userId },
       { teamId: { in: [...teamIds] } },
+      { agent: { crossTeamHomeTeamId: { not: null }, userId } },
     ],
     agent: {
       ...accessibleAgentWhere(userId),
@@ -72,21 +74,16 @@ export async function ensureChatParticipant(sessionId: string, userId: number) {
 
 export async function chatParticipantUserIds(
   sessionId: string,
+  alsoUserIds: readonly number[] = [],
 ): Promise<number[]> {
   const identity = await findChatSession(
     { id: sessionId, agentId: { not: null } },
-    { agent: { select: { userId: true } } },
+    { agent: { select: { userId: true, crossTeamHomeTeamId: true } } },
   );
   if (!identity?.agentId || !identity.agent) {
     return [];
   }
-  const sharedConversationEnabled = await isFeatureEnabled(
-    SHARED_AGENT_CHAT_FLAG,
-    identity.agent.userId,
-  );
-  if (!sharedConversationEnabled) {
-    return [identity.agent.userId];
-  }
+  if (identity.agent.crossTeamHomeTeamId != null) return [identity.agent.userId];
   const rows = await prisma.chatSessionParticipant.findMany({
     where: { sessionId },
     select: { userId: true },
@@ -108,7 +105,7 @@ export async function chatParticipantUserIds(
       }
     }),
   );
-  return authorized.filter((userId): userId is number => userId !== null);
+  return [...new Set([...alsoUserIds, ...authorized.filter((userId): userId is number => userId !== null)])];
 }
 
 type ChatSessionOf<TSelect extends Prisma.ChatSessionSelect> =
@@ -174,6 +171,7 @@ export async function loadSidebarChatAgent(
       archivedAt: null,
       ...accessibleAgentWhere(userId),
       members: { some: { projectId, status: "Accepted" } },
+      AND: [{ OR: [{ crossTeamHomeTeamId: null }, { userId }] }],
     },
     select: { id: true, userId: true, displayName: true },
   });
@@ -196,21 +194,19 @@ export async function loadUserAgentChatSession<
 }): Promise<ChatAccessResult<ChatSessionOf<TSelect>>> {
   const identity = await findChatSession(
     { id: sessionId, agentId: { not: null } },
-    { agent: { select: { userId: true } } },
+    { agent: { select: { userId: true, crossTeamHomeTeamId: true } } },
   );
   if (!identity?.agentId || !identity.agent) return notFound;
+  if (identity.agent.crossTeamHomeTeamId != null &&
+      (identity.agent.userId !== userId || actingAgentId && actingAgentId !== identity.agentId)) return notFound;
   if (sidebarProjectId !== undefined && !(await loadSidebarChatAgent(
     userId, sidebarProjectId, identity.agentId, actingAgentId,
   ))) return notFound;
-  const sharedConversationEnabled = await isFeatureEnabled(
-    SHARED_AGENT_CHAT_FLAG,
-    identity.agent.userId,
-  );
   const session = await findChatSession(
     userAgentChatSessionWhere(
       sessionId,
       userId,
-      sharedConversationEnabled ? await userTeamIds(userId) : [],
+      await userTeamIds(userId),
     ),
     select,
   );
@@ -219,7 +215,7 @@ export async function loadUserAgentChatSession<
     ok: true,
     session: session as ChatSessionOf<TSelect>,
     agentId: session.agentId,
-    sharedConversationEnabled,
+    sharedConversationEnabled: identity.agent.crossTeamHomeTeamId == null,
   };
 }
 
@@ -248,9 +244,30 @@ export async function loadAgentTokenChatSession<
   };
 }
 
-export async function loadSidebarChatRequest(request: { headers: Headers }, sessionId: string) {
+export async function loadSidebarChatRequest(
+  request: { headers: Headers },
+  sessionId: string,
+  principal?: BoardKnowledgePrincipal,
+) {
   const projectId = sidebarChatProjectId(request.headers);
-  if (projectId === undefined) return { ok: true as const };
+  if (projectId === undefined) {
+    if (!sessionId) return { ok: true as const };
+    const privateSession = await findChatSession(
+      { id: sessionId, agent: { crossTeamHomeTeamId: { not: null } } },
+      {},
+    );
+    if (!privateSession) return { ok: true as const };
+    const { getSessionUser } = await import("@/lib/auth/getSessionUser");
+    const viewer = await getSessionUser(request.headers);
+    if (viewer && principal && viewer.userId !== principal.userId) return notFound;
+    const actor = viewer ?? principal;
+    if (!actor) return notFound;
+    const allowed = await findChatSession({
+      id: sessionId,
+      ...await chatContentScopeWhere({ userId: actor.userId, agentId: actor.agentId, teamScope: actor.teamScope }),
+    }, {});
+    return allowed ? { ok: true as const } : notFound;
+  }
   const { getSessionUser } = await import("@/lib/auth/getSessionUser");
   const viewer = await getSessionUser(request.headers);
   if (!viewer || viewer.agentId) return notFound;

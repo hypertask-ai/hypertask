@@ -9,7 +9,6 @@ import { sendEmail } from '@/lib/email/sendEmail'
 import prisma from '@/lib/prisma'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
-  HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
@@ -221,7 +220,7 @@ export async function POST(request: NextRequest) {
     })
     const recipientId = existingUser?.id ?? 0
     const correctExpiry = await isFeatureEnabled(HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, recipientId)
-    const firstTime = !existingUser && await isFeatureEnabled(HTPR_7032_FIRST_TIME_EMAIL_FLAG, recipientId)
+    const firstTime = !existingUser
 
     await sendEmailWithLink(normalizedEmail, signInLink, verificationCode, { correctExpiry, firstTime })
 

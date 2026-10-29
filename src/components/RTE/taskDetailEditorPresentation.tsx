@@ -20,7 +20,7 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function taskDetailEditorPresentation(context: TaskDetailEditorContext) {
-  const { shouldShowAiTaskWriter, getDefaultMode, mobileExistingEditOpen, shouldShowInlineDraftAiRef, mode, editor, defaultContent, currentTask, editorContent, aiTriggerData, isReadOnlyContent, setCarousalItems, carouselAttachments, attachments, router, inboxFlow } = context;
+  const { descriptionInlineDrafts, shouldShowAiTaskWriter, getDefaultMode, mobileExistingEditOpen, shouldShowInlineDraftAiRef, mode, editor, defaultContent, currentTask, editorContent, aiTriggerData, isReadOnlyContent, setCarousalItems, carouselAttachments, attachments, router, inboxFlow } = context;
 
   const skillWriter = context.commentSkillRun &&
     (mode === "create-comment" || mode === "read-edit-comments") &&
@@ -56,7 +56,7 @@ export function taskDetailEditorPresentation(context: TaskDetailEditorContext) {
   const taskWriterOpening = resolveTaskDetailWriterOpening(
     aiTriggerData.autoTrigger,
     aiTriggerData.initialPrompt,
-    autoDraftPrompt,
+    descriptionInlineDrafts && mode === "read-edit-description" ? null : autoDraftPrompt,
   );
 
   const handleReadOnlyContentClick = (

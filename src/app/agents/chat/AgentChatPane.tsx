@@ -1,6 +1,7 @@
 "use client";
 
 import AgentAvatar from "@/components/Agents/AgentAvatar";
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
@@ -8,6 +9,8 @@ import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { ArrowLeft, ChevronLeft, ChevronRight, Info } from "lucide-react";
 import { useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { ActivityGroup, chatStatusText, emptyFeedText, FeedFilter, MessageBubble, ScrollToBottomButton } from "./AgentChatFeedItems";
 import type { useAgentChatComposer } from "./useAgentChatComposer";
 import type { useAgentChatFeed } from "./useAgentChatFeed";
@@ -38,7 +41,6 @@ type Props = { embedded?: boolean; active?: boolean } & Pick<
   | "setFeedFilter"
   | "showScrollToBottom"
   | "isMbl"
-  | "mobileLayoutEnabled"
   | "messageListRef"
   | "messagesError"
   | "sessionLoading"
@@ -62,7 +64,6 @@ type Props = { embedded?: boolean; active?: boolean } & Pick<
   | "isDictationProcessing"
   | "setIsRecording"
   | "setIsDictationProcessing"
-  | "mobileFullscreenFlag"
   | "isRecording"
 > &
   Pick<
@@ -105,15 +106,17 @@ export function AgentChatPane({
   embedded, active = true, selectedAgent, isNarrow, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
-  mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
+  scrollMessagesToBottom, messageListRef, handleMessageListScroll,
   messagesError, sessionLoading, messages, visibleFeed, activeFeedFilter, projectIdForPrefix,
   handleProposalAction, sending, queuedMessages, removeQueuedMessage,
   awaiting, deliveryNotice, replyTimedOut, handleStop, stopping, reuseAiComposer, mentionOpen,
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
-  mobileFullscreenFlag, dictationProjectId, isRecording, handleSend,
+  dictationProjectId, isRecording, handleSend,
 }: Props) {
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const contextEnabled = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   useEffect(() => {
     if (embedded && !active) setIsRecording(false);
   }, [embedded, active, setIsRecording]);
@@ -193,7 +196,7 @@ export function AgentChatPane({
             </div>
           )}
           <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
-            {showScrollToBottom && !(isMbl && mobileLayoutEnabled) && (
+            {showScrollToBottom && !isMbl && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
               />
@@ -203,7 +206,7 @@ export function AgentChatPane({
             onScroll={handleMessageListScroll}
             className={cn(
               "flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-y-contain px-4 py-4",
-              isMbl && mobileLayoutEnabled && showScrollToBottom && "pb-12",
+              isMbl && showScrollToBottom && "pb-12",
             )}
           >
             {messagesError && (
@@ -230,7 +233,7 @@ export function AgentChatPane({
                 <ActivityGroup
                   key={item.id}
                   group={item}
-                  constrainRows={isMbl && mobileLayoutEnabled}
+                  constrainRows={isMbl}
                 />
               ),
             )}
@@ -277,7 +280,7 @@ export function AgentChatPane({
               !reuseAiComposer && "bg-cardBackground px-4 pb-4 pt-1",
             )}
           >
-            {showScrollToBottom && isMbl && mobileLayoutEnabled && (
+            {showScrollToBottom && isMbl && (
               <ScrollToBottomButton
                 onClick={() => scrollMessagesToBottom("smooth")}
                 className="-top-12 z-50"
@@ -326,7 +329,9 @@ export function AgentChatPane({
               )}
               {reuseAiComposer ? (
                 <AI_Tiptap_Container
+                  sidebarAgent={agentSessionsEnabled && embedded ? selectedAgent.displayName : undefined}
                   controlledComposer={{
+                    ...(contextEnabled && embedded ? { showScope: true } : {}),
                     value: draft,
                     inputRef: composerRef,
                     editorRef: composerEditorRef,
@@ -343,13 +348,8 @@ export function AgentChatPane({
                     onProcessingChange: setIsDictationProcessing,
                     onDictation: insertDictation,
                     dictationDisabled:
-                      sending ||
-                      ((mobileLayoutEnabled || mobileFullscreenFlag) &&
-                        dictationProjectId === null),
-                    projectId:
-                      embedded || mobileLayoutEnabled || mobileFullscreenFlag
-                        ? dictationProjectId
-                        : undefined,
+                      sending || dictationProjectId === null,
+                    projectId: dictationProjectId,
                     sendDisabled:
                       !draft.trim() ||
                       sending ||
@@ -390,10 +390,10 @@ export function AgentChatPane({
                     onProcessingChange={setIsDictationProcessing}
                     disabled={
                       sending ||
-                      (isMbl && mobileLayoutEnabled && dictationProjectId === null)
+                      (isMbl && dictationProjectId === null)
                     }
                     projectId={
-                      isMbl && mobileLayoutEnabled ? dictationProjectId : undefined
+                      isMbl ? dictationProjectId : undefined
                     }
                     ariaLabel="Dictate message"
                     className="min-h-9 gap-1 rounded-[4px] px-2 text-text-light-gray hover:bg-hoverCardBackground"

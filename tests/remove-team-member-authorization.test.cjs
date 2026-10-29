@@ -180,6 +180,7 @@ test("the route passes the verified caller identity into the controller", async 
     {
       method: "POST",
       cookies: { [SESSION_COOKIE]: signSession({ id: 6 }) },
+      headers: { cookie: `${SESSION_COOKIE}=${signSession({ id: 6 })}` },
       body: { teamId: "team-1", userId: 8 },
     },
     response,
@@ -201,6 +202,7 @@ test("the route forwards controller authorization failures", async () => {
     {
       method: "POST",
       cookies: { [SESSION_COOKIE]: signSession({ id: 6 }) },
+      headers: { cookie: `${SESSION_COOKIE}=${signSession({ id: 6 })}` },
       body: { teamId: "team-1", userId: 8 },
     },
     response,

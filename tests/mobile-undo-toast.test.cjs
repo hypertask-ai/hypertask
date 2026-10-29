@@ -24,15 +24,6 @@ test("the compact toast keeps its shared visual footprint", () => {
   assert.match(undoToastSource, /transition: "opacity 200ms ease-in-out"/);
 });
 
-test("the mobile undo toast anchors left above the dock without moving other toasts", () => {
-  assert.match(undoToastSource, /position="bottom-left"/);
-  assert.match(undoToastSource, /left: appShellRailOn \? APP_SHELL_RAIL_OFFSET : 16/);
-  assert.match(undoToastSource, /bottom: mobile \? "calc\(72px \+ env\(safe-area-inset-bottom\)\)" : 16/);
-  const globals = read("src/styles/globals.scss");
-  const container = globals.slice(globals.indexOf(".toastContainerMobile {"), globals.indexOf(".toastP"));
-  assert.doesNotMatch(container, /\bleft:/);
-});
-
 test("the five-second toast keeps the longer desktop and mobile undo windows", () => {
   assert.match(undoToastSource, /UNDO_ACTION_WINDOW_MS = 15_000/);
   assert.match(undoToastSource, /MOBILE_UNDO_ACTION_WINDOW_MS = 7_500/);

@@ -1,6 +1,7 @@
 import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from '@/lib/prisma';
+import { ValidationError } from '@/lib/mcp-server/utils/errors';
 import { getUniqueSlug, getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
 import { matchLabelIds, validateProjectAccess, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
 import { broadcastBoardChange } from '@/lib/realtime/server';
@@ -59,7 +60,7 @@ async function buildLabelsFilterEntry(
     });
     const { ids, unresolved } = matchLabelIds(projectLabels, labelNames);
     if (unresolved.length) {
-        throw new Error(
+        throw new ValidationError(
             `Label(s) not found in project: ${unresolved.join(', ')}`
         );
     }
@@ -177,7 +178,7 @@ export async function createView(input: CreateViewInput) {
         select: { id: true },
     });
     if (existing) {
-        throw new Error(`A view titled "${title}" already exists on this board`);
+        throw new ValidationError(`A view titled "${title}" already exists on this board`);
     }
 
     const board_filters = input.board_filters === undefined

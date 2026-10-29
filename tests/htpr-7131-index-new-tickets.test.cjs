@@ -184,7 +184,7 @@ test("all public creation paths converge on the tested creators", () => {
   assert.match(source("src/lib/api/task-writes/create-global.ts"), /schedulePostCreateWork\(\{/);
   assert.match(source("src/lib/mcp/operations/tasks/create/operation.ts"), /await createTask\(\{/);
   assert.match(source("src/lib/mcp/tasks/services.ts"), /\/api\/tasks\/createGlobally/);
-  assert.match(source("src/lib/ai/tools/createTask.ts"), /await createTask\(\{/);
+  assert.match(source("src/lib/ai/tools/createTask.ts"), /\bcreateTask\(\{/);
   assert.match(source("src/app/api/agent-chat/[sessionId]/proposals/[proposalId]/route.ts"), /await createTaskCore\(\{/);
   assert.match(source("src/utils/controllers/tasks/spawnRecurrence.ts"), /await createTaskCore\(\{/);
 });

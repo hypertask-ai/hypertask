@@ -1,11 +1,10 @@
 "use client";
 
 import AgentAvatar from "@/components/Agents/AgentAvatar";
-import { useFlag } from "@/hooks/useFlag";
 import { type AgentChatActivity, type AgentChatActivityGroup, type AgentChatFilter } from "@/lib/agents/chatActivityFeed";
 import { PROPOSAL_HEADING_CREATED, PROPOSAL_HEADING_PENDING, type SerializedChatTicketProposal, } from "@/lib/agents/chatTicketProposal";
 import { tokenizeMessageLinks, type TProjectIdForPrefix } from "@/lib/agents/messageLinks";
-import { chatRosterStatus, isWorking, statusOf, type TChatRosterStatus } from "@/lib/agents/registerView";
+import { chatRosterStatus, isWorking, type TChatRosterStatus } from "@/lib/agents/registerView";
 import formatDateDifference from "@/utils/generateTime";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 import { interceptMessageLinkClick, wrapTablesInMessageHtml, } from "@/utils/helperFunctions/messageHtmlLinks";
@@ -35,10 +34,6 @@ export function agentDictationProjectId(
     if (match) return match.id;
   }
   return boards[0]?.id ?? null;
-}
-
-export function rosterDotClass(agent: TAgent): string {
-  return statusOf(agent) === "running" ? "bg-green-500" : "bg-gray-400";
 }
 
 export const rosterStatusDotClass: Record<TChatRosterStatus["kind"], string> = {
@@ -427,8 +422,7 @@ export function RosterRow({
   onSelect: (agent: TAgent) => void;
   now: number;
 }) {
-  const statusViewEnabled = useFlag("htpr-6287-agent-chat-roster-status");
-  const status = statusViewEnabled ? chatRosterStatus(agent, now) : null;
+  const status = chatRosterStatus(agent, now);
   return (
     <button
       type="button"
@@ -443,7 +437,7 @@ export function RosterRow({
       <span
         className={cn(
           "w-2 h-2 rounded-full shrink-0",
-          status ? rosterStatusDotClass[status.kind] : rosterDotClass(agent),
+          rosterStatusDotClass[status.kind],
         )}
       />
       <span className="min-w-0 flex-1">
@@ -451,14 +445,7 @@ export function RosterRow({
           {agent.displayName}
         </span>
         <span className="block text-[11px] text-text-light-gray truncate">
-          {status ? (
-            rosterStatusLine(agent, status, now)
-          ) : (
-            <>
-              {agent.runtimeType === "EXTERNAL" ? "External" : "Native"}
-              {isWorking(agent) && agent.working ? ` · ${agent.working.ticket}` : ""}
-            </>
-          )}
+          {rosterStatusLine(agent, status, now)}
         </span>
       </span>
       {!selected && (agent.unreadCount ?? 0) > 0 && (

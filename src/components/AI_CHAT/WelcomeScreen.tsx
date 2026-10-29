@@ -1,10 +1,11 @@
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"
+import { signalAiChip } from "@/lib/ai/chipEvents"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, currentProjectAtom, currentUserAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
@@ -12,7 +13,7 @@ import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys"
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -20,6 +21,25 @@ type TaskSessionSummary = {
   title: string;
   updatedAt: string;
 };
+
+export const taskSessionQueryOptions = (taskId: number | null | undefined, userId?: number) => ({
+  queryKey: ["task-sessions", taskId, userId],
+  queryFn: async (): Promise<TaskSessionSummary[]> => {
+    const response = await fetch(
+      `/api/ai-chat/task-sessions?taskId=${taskId}`,
+      { credentials: "include" }
+    );
+    if (!response.ok) {
+      throw new Error("Failed to load task chat sessions");
+    }
+    const data = (await response.json()) as {
+      sessions: TaskSessionSummary[];
+    };
+    return data.sessions;
+  },
+  staleTime: 60 * 1000,
+  refetchOnWindowFocus: false,
+});
 
 const TICKET_QUERIES = (ref: string) => [
   `Summarize ${ref}`,
@@ -97,10 +117,12 @@ export const WelcomeScreen = () => {
   const isDemo = (pathname?.startsWith("/demo") ?? false) || isGuestCookieUser();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const inViewObject = useRecoilValue(inViewObjectAtom);
+  const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom) as IProject | null;
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
   let isEditMode = false;
   if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
@@ -138,23 +160,8 @@ export const WelcomeScreen = () => {
     enabled: Boolean(taskId) && taskDetailDataReady && !isEditMode && !hasPendingTicketQuestions,
   });
   const taskSessions = useQuery({
-    queryKey: ["task-sessions", taskId],
-    queryFn: async (): Promise<TaskSessionSummary[]> => {
-      const response = await fetch(
-        `/api/ai-chat/task-sessions?taskId=${taskId}`,
-        { credentials: "include" }
-      );
-      if (!response.ok) {
-        throw new Error("Failed to load task chat sessions");
-      }
-      const data = (await response.json()) as {
-        sessions: TaskSessionSummary[];
-      };
-      return data.sessions;
-    },
+    ...taskSessionQueryOptions(taskId, currentUser?.id),
     enabled: Boolean(taskId) && taskDetailDataReady,
-    staleTime: 60 * 1000,
-    refetchOnWindowFocus: false,
   });
   const suggestions = useMemo(() => {
     if (!hydrated) return SUGGESTED_QUERIES_POOL.slice(0, QUERIES_TO_SHOW);
@@ -246,16 +253,60 @@ export const WelcomeScreen = () => {
     setBoardBuild(isGuestBoardBuild(currentProject));
   }, [currentProject]);
 
+  const shownGenerated = taskQuestions.data?.questions?.filter(Boolean) ?? [];
+  let shownChips = suggestions;
+  let shownSurface = "welcome-board";
+  let shownType = "suggested";
+  if (taskId) {
+    shownSurface = "welcome-ticket";
+    shownType = "ticket-prompt";
+    if (isEditMode) {
+      shownChips = EDIT_QUERIES;
+      shownSurface = "welcome-edit";
+      shownType = "edit-prompt";
+    } else if (shownGenerated.length) {
+      shownChips = shownGenerated;
+      shownType = "generated-question";
+    }
+  } else if (boardBuild) {
+    shownChips = BOARD_BUILD_EXAMPLES;
+    shownSurface = "welcome-board-build";
+    shownType = "board-example";
+  } else if (isDemo) {
+    shownSurface = "welcome-demo";
+    shownType = "demo-prompt";
+  }
+  const shownKey = JSON.stringify([shownSurface, shownType, shownChips]);
+  const shownProjectId = currentProject?.id ?? null;
+  useEffect(() => {
+    if (!hydrated || !chipEventsEnabled) return;
+    const controls: { chipType: string; label: string }[] = [];
+    if (taskId && !isEditMode) {
+      if (taskSummaryAction) controls.push({ chipType: "summary-action", label: taskSummaryAction.label });
+      if (shownGenerated.length > 0 && !taskQuestions.isLoading) controls.push({ chipType: "ask-all", label: "Ask all" });
+    }
+    signalAiChip({ kind: "shown", surface: shownSurface, chipType: shownType, chips: shownChips, projectId: shownProjectId, taskId: taskId ?? null, controls });
+    return () => signalAiChip({ kind: "dismiss", surface: shownSurface });
+  }, [hydrated, chipEventsEnabled, shownKey, shownProjectId, taskId, Boolean(taskSummaryAction), shownGenerated.length > 0 && !taskQuestions.isLoading]);
+
+  const clickChip = (sent: string, index: number, chipType: string, label?: string) => {
+    if (chipEventsEnabled) signalAiChip({ kind: "clicked", text: sent, index, chipType, label });
+    handleSendMessage(sent);
+  };
+
   if (taskId) {
     const generatedQuestions = taskQuestions.data?.questions?.filter(Boolean) ?? [];
     const displayedQuestions = isEditMode ? EDIT_QUERIES : generatedQuestions.length
       ? generatedQuestions
       : suggestions;
     const askAll = () => {
-      handleSendMessage(
+      clickChip(
         `Answer each of these about this ticket:\n${generatedQuestions
           .map((question, index) => `${index + 1}. ${question}`)
-          .join("\n")}`
+          .join("\n")}`,
+        -1,
+        "ask-all",
+        "Ask all"
       );
     };
 
@@ -267,7 +318,7 @@ export const WelcomeScreen = () => {
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded border-thin border-hypertasks-ai-purple/70 bg-hypertasks-ai-purple/10 p-2 text-left text-xs text-white-black hover:bg-hypertasks-ai-purple/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-ai-purple"
-              onClick={() => handleSendMessage(taskSummaryAction.prompt)}
+              onClick={() => clickChip(taskSummaryAction.prompt, -1, "summary-action", taskSummaryAction.label)}
             >
               <Sparkles
                 aria-hidden="true"
@@ -282,7 +333,7 @@ export const WelcomeScreen = () => {
             <button
               key={suggestion}
               className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
-              onClick={() => handleSendMessage(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion)}
+              onClick={() => clickChip(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion, index, shownType, suggestion)}
             >
               {suggestion}
             </button>
@@ -329,11 +380,11 @@ export const WelcomeScreen = () => {
           <p className="px-2 mb-1 text-[11px] text-text-light-gray">
             Describe it in one sentence and I&apos;ll build your board.
           </p>
-          {BOARD_BUILD_EXAMPLES.map((example) => (
+          {BOARD_BUILD_EXAMPLES.map((example, index) => (
             <button
               key={example}
               className="bg-kanban-active-cardbg hover:bg-hover-active rounded text-white-black p-2 text-meta text-left w-full"
-              onClick={() => handleSendMessage(example)}
+              onClick={() => clickChip(example, index, "board-example")}
             >
               {example}
             </button>
@@ -346,11 +397,11 @@ export const WelcomeScreen = () => {
   return (
     <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">
       <div className="flex flex-col gap-2 w-full max-w-md">
-        {suggestions.map((suggestion) => (
+        {suggestions.map((suggestion, index) => (
           <button
             key={suggestion}
             className="bg-kanban-active-cardbg hover:bg-hover-active rounded text-white-black p-2 text-meta text-left w-full"
-            onClick={() => handleSendMessage(suggestion)}
+            onClick={() => clickChip(suggestion, index, shownType)}
           >
             {suggestion}
           </button>

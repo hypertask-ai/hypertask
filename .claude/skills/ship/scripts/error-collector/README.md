@@ -38,7 +38,7 @@ Copies collector, sources, noise and unit templates to `~/.local/lib/hypertask/e
 
 Optional `~/.config/hypertask-agents/error-collector.env` supplies `ERROR_COLLECTOR_STATE_DIR` (isolates state without changing authentication HOME), `ERROR_COLLECTOR_FIXTURE`, `ERROR_COLLECTOR_HOURLY_CAP` (default 5; zero pauses creation), `ERROR_COLLECTOR_STALE_HOURS` (default 2; positive finite hours, zero/invalid values fall back to 2), or a PATH containing Node 24 and the CLI tools. Keep it private; acquire API credentials through `stack-key` and never print credentials. Source credentials are obtained in memory through `stack-key`, except Neon's private read-only login file; provider response bodies and CLI errors are never logged.
 
-Production writes only go through `vcc`. The collector asks for native CLI JSON (`vcc --json task create`); it requires `success: true` and a valid `task.ticketNumber`. Board 15 uses `Bugs`. Board 4060 reads `ht GET /mcp/projects/4060/sections` before creation and selects active `Backlog`, otherwise `To Do`/`Todo`; on 2026-10-14 the live intake was **Backlog, section 10414**. If none exists, the group stays pending rather than guessing another column.
+Production writes only go through `vcc`. Created tickets carry the label `Error Log` and never `Bug`; the app skips the AI Bug label on any ticket that has Error Log. The collector asks for native CLI JSON (`vcc --json task create`); it requires `success: true` and a valid `task.ticketNumber`. Board 15 uses `Bugs`. Board 4060 reads `ht GET /mcp/projects/4060/sections` before creation and selects active `Backlog`, otherwise `To Do`/`Todo`; on 2026-10-14 the live intake was **Backlog, section 10414**. If none exists, the group stays pending rather than guessing another column.
 
 ## Source contract
 
@@ -120,3 +120,15 @@ Source-only read, without board writes or state changes (use an unused state pat
 ```sh
 ERROR_COLLECTOR_STATE_DIR=/tmp/realtime-collector-dry-run node .claude/skills/ship/scripts/error-collector/collector.mjs --once --sources realtime --dry-run
 ```
+
+
+## Related production incidents
+
+Prisma errors share a root by route, model, and unknown field. Project-list
+wrappers join only one root within ten minutes. Other fields, models, routes,
+and ambiguous wrappers stay separate. One nearby open MCP HTTP 500 report can
+own the incident. Counted activities group identical hits within one collection
+window; durable markers recover interrupted writes. Ordinary errors retain their
+six-hour activity policy. Tagged product alerts get the same related-incident
+check before `ship-claim` writes. The sanitized historical replay lives in
+`fixtures/project-validation.json`; hosted tests prove writes with fake CLIs.

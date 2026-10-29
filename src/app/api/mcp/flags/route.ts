@@ -1,3 +1,4 @@
+import { getAgentRole, insufficientScopeResponse, roleMeets } from "@/lib/mcp/agents/scopes";
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -20,7 +21,6 @@ import {
 import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
 import { authorize } from "@/lib/flags/agentAuthorization";
-import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import { FEATURE_FLAG_RELEASE_RISKS } from "@/lib/flags/releaseRisk";
 import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
@@ -90,15 +90,15 @@ export async function PATCH(request: NextRequest) {
       throw new FeatureFlagApprovalError("A review cannot switch a high-risk flag; use a Question with Valentin's thumbs-up");
     }
     if (usesFailure) {
-      if (typeof body.failure !== "string" || body.failure.length > 300
-        || !URL.canParse(body.failure) || new URL(body.failure).protocol !== "https:") {
-        return noStore({ error: "Failure must be an https URL (max 300 characters)" }, 400);
+      if (typeof body.failure !== "string" || !body.failure.trim() || body.failure.length > 300) {
+        return noStore({ error: "Failure must be a nonblank reason or URL (max 300 characters)" }, 400);
       }
       if (body.mode !== "OFF") throw new FeatureFlagApprovalError("A failure record can only switch a flag Off");
-      const risk = FEATURE_FLAG_RELEASE_RISKS[body.key];
-      const definition = FEATURE_FLAG_DEFINITIONS.find((flag) => flag.key === body.key);
-      if (!risk || risk.highRisk || definition?.kind === "bugfix") {
-        throw new FeatureFlagApprovalError("Failure-Off is not allowed for high-risk, unclassified or bugfix flags; use a Question with Valentin's thumbs-up");
+      const role = ctx.agentRole ?? await getAgentRole(ctx);
+      if (!roleMeets(role, "write")) {
+        const refusal = insufficientScopeResponse(role, "write");
+        refusal.headers.set("Cache-Control", "private, no-store");
+        return refusal;
       }
     }
     const link = typeof body.reason === "string" && body.reason.length <= 500
@@ -120,18 +120,23 @@ export async function PATCH(request: NextRequest) {
       reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `live-qa-failed:${body.failure}` : body.reason as string,
       source: "api",
     }, async (tx) => {
-      if (usesReview || usesFailure) {
-        if (usesReview) {
-          await tx.$queryRaw`SELECT id FROM "FeatureFlagReview" WHERE id = ${body.review as number} FOR UPDATE`;
-          const review = await tx.featureFlagReview.findUnique({ where: { id: body.review as number } });
-          if (!review || review.key !== body.key || review.mode !== body.mode
-            || review.usedAt !== null || review.reviewerUserId !== ctx.user.id
-            || review.createdAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
-            throw new FeatureFlagApprovalError("Review must be unused, less than 24 hours old, and match this user, flag and mode");
-          }
-          if (review.reviewerAgentId === ctx.agentId) {
-            throw new FeatureFlagApprovalError("The review must be recorded by a different agent");
-          }
+      if (usesFailure) {
+        const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
+        if ((stored?.mode ?? defaultFeatureFlagMode(body.key as string)) === body.mode) {
+          throw new FeatureFlagApprovalError("Flag is already in that mode");
+        }
+        return;
+      }
+      if (usesReview) {
+        await tx.$queryRaw`SELECT id FROM "FeatureFlagReview" WHERE id = ${body.review as number} FOR UPDATE`;
+        const review = await tx.featureFlagReview.findUnique({ where: { id: body.review as number } });
+        if (!review || review.key !== body.key || review.mode !== body.mode
+          || review.usedAt !== null || review.reviewerUserId !== ctx.user.id
+          || review.createdAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
+          throw new FeatureFlagApprovalError("Review must be unused, less than 24 hours old, and match this user, flag and mode");
+        }
+        if (review.reviewerAgentId === ctx.agentId) {
+          throw new FeatureFlagApprovalError("The review must be recorded by a different agent");
         }
         const commentId = FLAG_REVIEW_POLICY_COMMENT_ID;
         await lockCommentReactions(tx, commentId);

@@ -19,7 +19,7 @@ export async function DELETE(request: NextRequest) {
   if (principal.status === "error") {
     return noStore({ error: "Figma connection is unavailable" }, 503);
   }
-  if (!trustedMutationOrigin(request)) {
+  if (principal.source !== "cli-bearer" && !trustedMutationOrigin(request)) {
     return noStore({ error: "Forbidden" }, 403);
   }
 

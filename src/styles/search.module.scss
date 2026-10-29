@@ -40,3 +40,31 @@
     text-overflow: ellipsis;
   }
 }
+
+@media (max-width: 767px) {
+  .phone_layout {
+    [data-testid="my-tasks-toolbar"] {
+      flex-wrap: wrap;
+
+      > span {
+        width: 100%;
+      }
+    }
+
+    [data-testid="my-tasks-list"] {
+      padding-bottom: 3rem;
+    }
+
+    :global(.table-view-row) > button:first-child,
+    :global(.table-view-header) > button:first-child {
+      display: block;
+      visibility: hidden;
+    }
+
+    :global(.table-view-row) > span:first-of-type {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+}

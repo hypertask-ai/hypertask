@@ -19,6 +19,7 @@ function loadTs(file, stubs) {
     mod, mod.exports, (request) => {
       if (request in stubs) return stubs[request];
       if (request === "@/lib/auth/agentScope") return require("./agent-board-scope.cjs").enforcedScope;
+      if (request === "@/lib/auth/crossTeamContext") return require("../task-route-loader.cjs").load("src/lib/auth/crossTeamContext.ts", {});
       if (request === "@/lib/mcp/routeWrapper") return require("./mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
       if (request === "@/lib/mcp/operationCrashReport") return { reportMcpOperationCrash: () => {} };
       assert.ok(request in stubs, `Unexpected import: ${request}`);

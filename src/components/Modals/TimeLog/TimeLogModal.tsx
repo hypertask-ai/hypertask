@@ -27,7 +27,7 @@ import { ModalBody } from "reactstrap";
 type DateRange = "today" | "week" | "month" | "all";
 
 const dateInputClassName =
-  "h-9 border-x-0 border-t-0 border-b border-border bg-transparent px-1 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert";
+  "h-9 border-x-0 border-t-0 border-b border-border bg-transparent px-1 text-dense text-white-black outline-none [&::-webkit-calendar-picker-indicator]:[filter:var(--filter-calendar-picker)]";
 
 const noSpinnerClassName =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";

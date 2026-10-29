@@ -16,7 +16,7 @@ const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 const option = catalog.getAiModelOptionById("claude-haiku-5-5");
 
 function moduleWithStubs(relativePath, stubs, extra = "") {
-  stubs = withStubs({ "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } }, "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" } }, stubs);
+  stubs = withStubs({ "@/lib/net/fetchWithoutBrotli": { fetchWithoutBrotli: async () => { throw new Error("Unexpected network request"); } }, "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" } }, stubs);
   const filename = path.join(root, relativePath);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -99,17 +99,44 @@ function harness({ flagError = false, userId = 985, input = 100, output = 20, an
 
 const params = { prompt: [], temperature: 0.2, topP: 0.7, topK: 3 };
 
-test("Haiku 5.5 is adjacent to 4.5, tier 1, adaptive medium, with gateway and direct ids", () => {
+test("Haiku 5.5 is the only Haiku, tier 1, adaptive medium, with gateway and direct ids", () => {
   assert.ok(option);
   assert.equal(option.source, "claude");
   assert.equal(option.model, "claude-haiku-5.5");
   assert.equal(option.directModel, "claude-haiku-5-5");
-  assert.equal(catalog.aiModelOptions.indexOf(option), catalog.aiModelOptions.findIndex((entry) => entry.id === "claude-haiku-4.5") + 1);
+  assert.deepEqual(catalog.aiModelOptions.filter((entry) => entry.modelKey.startsWith("claude-haiku")).map((entry) => entry.id), ["claude-haiku-5-5"]);
+  assert.equal(catalog.getAiModelDefinition("claude-haiku-4.5"), undefined);
   assert.equal(catalog.getAiModelDefinition(option.modelKey).priceTier, 1);
   assert.equal(catalog.getAiModelDefinition(option.modelKey).provider, "anthropic");
   assert.equal(catalog.isPremiumAiModelKey(option.modelKey), false);
   assert.equal(option.providerOptions.anthropic.thinking.type, "adaptive");
   assert.equal(option.providerOptions.anthropic.effort, "medium");
+});
+
+test("Haiku catalog aliases and raw legacy ids resolve regardless of the flag", () => {
+  for (const enabled of [false, true]) {
+    for (const id of [
+      "claude-haiku-4.5", "claude-haiku-4-5", "claude-haiku-4-5-20251001",
+      "anthropic/claude-haiku-4.5", "anthropic/claude-haiku-4-5",
+      "claude-haiku-5.5", "claude-haiku-5-5",
+      "anthropic/claude-haiku-5.5", "anthropic/claude-haiku-5-5",
+    ]) {
+      assert.equal(catalog.getAiModelOptionById(id, enabled), option);
+    }
+    assert.equal(catalog.getAiModelOptionById("unknown-model", enabled), undefined);
+    for (const prefix of ["", "anthropic/", "provider/"]) {
+      for (const id of ["claude-haiku-4.5", "claude-haiku-4-5", "claude-haiku-4.5-20251001", "claude-haiku-4-5-20251001"]) {
+        assert.equal(catalog.resolveHaikuModelId(`${prefix}${id}`, enabled), prefix ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5");
+      }
+    }
+    for (const id of [option.model, option.directModel, `anthropic/${option.model}`, "gpt-6-luna", "unknown-model"]) {
+      assert.equal(catalog.resolveHaikuModelId(id, enabled), id);
+    }
+    for (const entry of catalog.aiModelOptions) {
+      assert.equal(catalog.isAiModelOptionVisible(entry, enabled), entry.modelKey !== "deepseek-v4.1-flash-fast" && !catalog.isGrokGemini4ModelKey(entry.modelKey));
+      assert.equal(catalog.isAiModelOptionVisible(entry, enabled, true), !catalog.isGrokGemini4ModelKey(entry.modelKey));
+    }
+  }
 });
 
 test("web, settings and agent pickers permanently enable Haiku; Android retains context filtering", () => {
@@ -120,7 +147,7 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.doesNotMatch(source, /HTPR_7010_HAIKU_5_5_FLAG/);
-    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true)?\)/);
+    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true(?:, (?:true|grokGemini4Enabled))?)?\)/);
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visibilityExpression;
     function visit(node) {
@@ -136,37 +163,33 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
         const visible = vm.runInNewContext(visibilityExpression, {
           haiku55Enabled,
           haikuDefaultEnabled,
+          gatedModelOptions: catalog.aiModelOptions.filter((entry) => !catalog.isGrokGemini4ModelKey(entry.modelKey)),
           flagModelOptions: catalog.aiModelOptions,
           isAiModelOptionVisible: catalog.isAiModelOptionVisible,
         });
-        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true)));
+        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true, true) && !catalog.isGrokGemini4ModelKey(entry.modelKey)));
       }
     }
   }
-  assert.equal(catalog.isAiModelOptionVisible(option, false), false);
+  assert.equal(catalog.isAiModelOptionVisible(option, false), true);
   assert.equal(catalog.isAiModelOptionVisible(option, true), true);
   assert.equal(catalog.isAiModelOptionVisible(catalog.getAiModelOptionById("claude-haiku-4.5"), false), true);
   const input = { settings: {}, customEndpointConfigured: false, storePlanId: "Free", providersWithByok: new Set() };
   const off = composer.buildComposerConfig(input);
   const on = composer.buildComposerConfig({ ...input, haiku55Enabled: true });
-  assert.equal(off.models.some((entry) => entry.id === option.id), false);
+  assert.equal(off.models.some((entry) => entry.id === option.id), true);
   assert.equal(on.models.some((entry) => entry.id === option.id), true);
   assert.equal(on.selectedModelId, input.storePlanId === "Free" ? "gpt-6-luna" : "claude-haiku-5-5");
   assert.equal(on.models.some((entry) => entry.id === "claude-haiku-4.5"), false);
   const mentions = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/taskSearchByParam.ts"), "utf8");
-  assert.match(mentions, /haiku55Enabled\s*\? model.key !== "claude-haiku-4.5"\s*: model.key !== "claude-haiku-5-5"/);
+  assert.match(mentions, /: \[\.\.\.aiModelDefinitions, \.\.\.aiImageModelDefinitions\]\s*\.filter\(\(model\) =>\s*\[model\.label, model\.key\]\.some/);
+  assert.doesNotMatch(mentions, /haiku55Enabled|haiku55ModelEnabled/);
 });
 
-test("missing user fails closed without altering older models", async () => {
-  const missingUser = harness({ userId: null });
-  await assert.rejects(missingUser.makeModel().doGenerate(params), /model is unavailable/);
-  assert.equal(missingUser.calls.length, 0);
-  await missingUser.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
-  assert.equal(missingUser.calls[0].temperature, 0.2);
-  await missingUser.flush();
+test("a flag read error does not change the model", async () => {
   const h = harness({ flagError: true });
   await h.makeModel().doGenerate(params);
-  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985]]);
+  assert.deepEqual(h.checks, []);
   await h.flush();
 });
 
@@ -312,9 +335,7 @@ test("real OpenRouter SDK sends reasoning disabled for short structured Haiku ca
 
 test("anonymous short structured legacy calls preserve their original settings", async () => {
   for (const [provider, modelId, credential] of [
-    ["claude", "claude-haiku-4.5", "fixture-direct"],
     ["gateway", "google/gemini-3.5-flash-lite", "vck_fixture"],
-    ["openrouter", "anthropic/claude-haiku-4.5", "fixture-direct"],
   ]) {
     const h = harness({ userId: null });
     const input = { ...params, maxOutputTokens: 500, responseFormat: { type: "json" }, providerOptions: { gateway: { tags: ["task-questions"] } } };
@@ -355,6 +376,9 @@ test("editor and chat selectors preserve Haiku ids and omit temperature", () => 
   for (const credential of ["fixture-direct", "vck_fixture"]) {
     const selectedChat = chat.selectModel("claude", option.model, credential, option);
     const selectedEditor = editor.selectEditorModel("claude", option.model, credential, { modelOption: option });
+    const legacyEditor = editor.selectEditorModel("claude", "claude-haiku-4.5", credential);
+    assert.equal(legacyEditor.modelId, "claude-haiku-5-5");
+    assert.equal("temperature" in legacyEditor.settings, false);
     for (const selected of [selectedChat, selectedEditor]) {
       assert.equal(selected.model.modelId, credential.startsWith("vck_") ? `anthropic/${option.model}` : option.directModel);
       assert.equal("temperature" in selected.settings, false);
@@ -382,7 +406,7 @@ test("both price tiers apply to total request tokens, including the exact bounda
   assert.ok(Math.abs(h.rows[0].costUsd - 0.0700025) < 1e-12);
 });
 
-test("plan defaults, automatic replacements, fast ladder and stream fallbacks remain unchanged", () => {
+test("plan defaults and stream fallbacks stay unchanged while automatic picks and the fast ladder use Haiku 5.5", () => {
   assert.equal(catalog.defaultAiModelOption.id, "gemini-3.5-flash-lite");
   assert.equal(catalog.preferredAiModelOption.id, "gpt-6-luna");
   for (const plan of ["Free", "Pro", "AI", "BYOK", null]) {
@@ -392,14 +416,14 @@ test("plan defaults, automatic replacements, fast ladder and stream fallbacks re
   assert.equal(catalog.getDefaultAiModelOptionForPlan("BYOK", true).id, "gpt-6-luna");
   assert.equal(catalog.getDefaultAiModelOptionForPlan("Free", false).id, "gpt-6-luna");
   assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.map((entry) => entry.model), [
-    "google/gemini-3.5-flash-lite", "openai/gpt-6-luna", "anthropic/claude-haiku-4.5",
+    "google/gemini-3.5-flash-lite", "openai/gpt-6-luna", "anthropic/claude-haiku-5.5",
     "deepseek/deepseek-v4.1-flash-1017", "moonshotai/kimi-k2.5", "alibaba/qwen3.7-plus", "zai/glm-5.3-flash",
   ]);
   assert.equal(ladder.resolveUserFacingModelOption("aiChat", {}).id, "gemini-3.5-flash-lite");
   assert.equal(ladder.resolveUserFacingModelOption("aiChat", {}, option.id).id, option.id);
   const anthropic = catalog.aiModelOptions.filter((entry) => catalog.getAiModelDefinition(entry.modelKey).provider === "anthropic");
-  assert.equal(catalog.pickAutoAiModelOption(anthropic).id, "claude-haiku-4.5");
-  assert.equal(catalog.pickReplacementAiModelOption("claude-haiku-4.5", anthropic).id, "claude-haiku-4.5");
+  assert.equal(catalog.pickAutoAiModelOption(anthropic).id, option.id);
+  assert.equal(catalog.pickReplacementAiModelOption("claude-haiku-4.5", anthropic).id, option.id);
   const fallback = load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts"));
   assert.equal(fallback.previousModelForFailedStream(option.model, { status: 404 }, false, false), null);
 });
@@ -428,16 +452,6 @@ test("server upgrades every saved/raw Haiku 4.5 spelling for generate and stream
         if (enabled) assert.ok(Math.abs(h.rows[0].costUsd - 0.00002) < 1e-12);
       }
     }
-  }
-});
-
-test("Haiku 4.5 is untouched without a user", async () => {
-  for (const setup of [{ userId: null }]) {
-    const h = harness(setup);
-    await h.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
-    assert.equal(h.calls[0].requestedModelId, "claude-haiku-4.5");
-    assert.equal(h.calls[0].temperature, 0.2);
-    await h.flush();
   }
 });
 
@@ -478,7 +492,7 @@ test("chat and editor selection resolve saved personal, team and agent Haiku pic
   for (const api of [chat, editor]) {
     assert.equal(api.defaultModelSelection({}, "aiChat", "claude-haiku-4.5", true, option).modelOption.id, option.id);
     assert.equal(api.defaultModelSelection({ featureModels: { aiChat: "claude-haiku-4.5" } }, "aiChat", null, true, option).modelOption.id, option.id);
-    assert.equal(api.defaultModelSelection({}, "aiChat", "claude-haiku-4.5", true, catalog.preferredAiModelOption).modelOption.id, "claude-haiku-4.5");
+    assert.equal(api.defaultModelSelection({}, "aiChat", "claude-haiku-4.5", true, catalog.preferredAiModelOption).modelOption.id, option.id);
   }
   for (const raw of ["claude-haiku-4.5", "claude-haiku-4-5", "anthropic/claude-haiku-4.5"]) {
     assert.equal(chat.resolveModelSelection("claude", raw, raw, {}, "aiChat", null, option).modelOption.id, option.id);
@@ -507,7 +521,7 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: async (load) => load(),
       getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(byokProvider), byok: enabled && plan !== "Free" && byokProvider ? { provider: byokProvider, credential } : undefined }),
@@ -529,7 +543,7 @@ test("editor request defaults to Haiku and its unavailable-model fallback resolv
     const h = harness({ unavailableHaiku: true });
     const credentialPicks = [];
     const editor = editorWithFallback(h, credentialPicks);
-    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: {} } });
     assert.equal(selected.modelId, option.model);
     const result = await selected.model[method](params);
     if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
@@ -551,7 +565,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
   });
   const reply = moduleWithStubs("src/lib/ai/chatStream/modelReply.ts", {
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled },
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled },
     "@/app/api/ai/_lib/byokKeys": {
       resolveAiFallbackCredential: async (load) => load(),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-openai"; },
@@ -564,6 +578,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     "@/app/api/ai/_lib/heartbeatExecution": {}, "@/app/api/ai/chat/stream/bulkTools": { hasVisibleCompletion: (chunks) => chunks.length > 0 },
     "@/lib/ai/chatStream/types": {}, "@/lib/ai/tools/constants": { MAX_TOOL_STEPS: 1 },
     "@/lib/ai/chatStream/content": {}, "@/lib/ai/tools/metadata": {},
+    "@/lib/ai/tools/deferredTools": load(path.join(root, "src/lib/ai/tools/deferredTools.ts")),
     ai: { stepCountIs: () => ({}), streamText: ({ model, onError }) => ({ textStream: (async function* () {
       try {
         const result = await model.doStream(params);
@@ -582,6 +597,8 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     recordTurnOutcome: () => {},
   };
   const route = moduleWithStubs("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "@/lib/ai/chatStream/ticketGroups": {},
     "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async () => ({ ...state, teamProviderSettings: settings }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => {
@@ -635,7 +652,7 @@ test("editor fallback respects team provider settings before resolving credentia
         const h = harness({ unavailableHaiku: true });
         const credentialPicks = [];
         const editor = editorWithFallback(h, credentialPicks, true, credential);
-        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openai } } } });
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openai } } } });
         if (openai === false) {
           await assert.rejects(selected.model[method](params), /model unavailable/);
           assert.equal(h.calls.length, 1);
@@ -697,7 +714,7 @@ test("editor request plan-aware defaults route paid and eligible BYOK to Haiku a
         const credentialPicks = [];
         const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
         const editor = editorWithFallback(h, credentialPicks, enabled, credential, plan, provider);
-        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
         const useHaiku = enabled && (plan !== "Free");
         assert.equal(catalog.isHaiku55Model(selected.modelId), Boolean(useHaiku));
         if (!useHaiku) assert.equal(selected.modelId, "gpt-6-luna");
@@ -716,7 +733,7 @@ test("editor cross-provider fallback rebuilds gateway tags for generation and ev
       const h = harness({ unavailableHaiku: true, streamFailure });
       const picks = [];
       const editor = editorWithFallback(h, picks, true, "fixture-direct", "Pro", provider, "vck_fixture");
-      const selected = await editor.selectTaskWriterModel({ userId: 985, projectId: 15, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
+      const selected = await editor.selectTaskWriterModel({ userId: 985, projectId: 15, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
       const result = await selected.model[method]({ ...params, providerOptions: selected.providerOptions });
       if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
       assert.equal(h.calls.length, 2);
@@ -755,7 +772,7 @@ function automaticKeys(h, picks, { openai = true, credential = "vck_fixture" } =
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/ai/customEndpoint": {},
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-    "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => true, storePlanIdForProject: async () => "Pro" },
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => true, storePlanIdForProject: async () => "Pro" },
     "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
   });
 }
@@ -869,7 +886,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
           "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
           "@/app/api/ai/_lib/modelProvider": h.api,
-          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
           "@/app/api/ai/_lib/byokKeys": {
             getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: enabled && plan !== "Free" && provider ? { provider, credential } : undefined }),
             getByokOrTeamGatewayApiKeyForModelOption: async () => credential,
@@ -891,7 +908,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
         if (!useHaiku) assert.equal(turn.selected.modelId, "gpt-6-luna");
         if (useHaiku && provider === "openrouter") assert.equal(turn.selected.provider, "openrouter");
         const savedTurn = await chat.loadTurnModel({ aiFeature: "aiChat", modelOptionId: "claude-haiku-4.5" }, { id: 985 });
-        assert.equal(catalog.isHaiku55Model(savedTurn.selected.modelId), enabled);
+        assert.equal(catalog.isHaiku55Model(savedTurn.selected.modelId), true);
         await h.flush();
       }
     }
@@ -904,7 +921,7 @@ test("editor Haiku BYOK override respects OpenRouter provider restrictions", asy
     const h = harness();
     const picks = [];
     const editor = editorWithFallback(h, picks, true, "fixture-openrouter", "Pro", "openrouter");
-    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter } } } });
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter } } } });
     assert.equal(selected.provider, openrouter === true ? "openrouter" : "claude");
     assert.deepEqual(picks, openrouter === true ? [] : [option.id]);
     await h.flush();
@@ -919,7 +936,7 @@ test("editor Luna fallback removes Claude-native tools but preserves function to
   for (const [method, streamFailure] of [["doGenerate", "throw"], ["doStream", "throw"], ["doStream", "read"], ["doStream", "chunk"]]) {
     const h = harness({ unavailableHaiku: true, streamFailure });
     const editor = editorWithFallback(h, []);
-    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "writeWithAi", teamContext: { teamId: "fixture-team", settings: {} } });
     assert.ok(selected.tools.web_search);
     const result = await selected.model[method]({ ...params, tools });
     if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");

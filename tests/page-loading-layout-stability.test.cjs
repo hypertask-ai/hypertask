@@ -122,6 +122,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
     react: React,
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
@@ -396,6 +397,7 @@ function editorPanels(cachedStaticFirst = false) {
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
     HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
+    HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
     useSetRecoilState: () => noop,
     useRecoilValue: () => false,
@@ -444,6 +446,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
     HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "server-description",
+    HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "ticket-chat-reminder",
     useThreadSettled: () => ({ settled: true, slotRef: () => {} }),
     SettledComposerSlot: ({ children }) => children,
     useTaskContext: () => ({
@@ -458,6 +461,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     ServerRenderedDescription: () => React.createElement("article", { "data-server-description": true }, "Server description"),
     BaseCommentAndDescriptionContainer: ({ children }) => React.createElement("main", null, children),
     RichTextPersonHovercards: noop,
+    TicketChatSessionsReminder: noop,
     Description: () => React.createElement("article", { style: { height: 711 }, "data-description": true }, "Cached description"),
     NewCommentComponent: () => React.createElement("div", { id: "comment", style: { height: 168 } }, "Composer"),
     taskDetailSpacing: { mobile: {} },

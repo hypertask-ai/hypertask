@@ -53,7 +53,7 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
 import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG } from '@/lib/flags/keys'
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
@@ -160,8 +160,8 @@ export type AddCommentResponse = {
 type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
 
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
-  const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
-  if (!(await runtimeAgentRunsEnabledFor(principal)) || !(await agentRunActivitiesEnabledFor(principal))) return null
+  const { runtimeAgentRunsEnabledFor } = await import('@/lib/agentRuns/service')
+  if (!(await runtimeAgentRunsEnabledFor(principal))) return null
   const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH } = await import('@/lib/agentRuns/model')
   const text = (await htmlToLogText(html)).slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
   return text ? { principal, text } : null
@@ -262,14 +262,12 @@ function applyDurableCommentAttribution<T extends object>(
   mapped: T,
   comment: any,
   userId: number,
-  projectId: number,
-  attributionEnabled: boolean
+  projectId: number
 ): T {
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
-    attributionEnabled,
   })
 }
 
@@ -398,11 +396,6 @@ export async function GET(request: NextRequest) {
       ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
-    const attributionEnabled = await isFeatureEnabled(
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-      user.id
-    )
-
     const reactionAgents = await loadVisibleReactionAgents(
       [...new Set([
         ...reactionAgentIds(comments),
@@ -419,8 +412,7 @@ export async function GET(request: NextRequest) {
         mapped,
         comments[index],
         user.id,
-        task.projectId,
-        attributionEnabled
+        task.projectId
       )
     )
 
@@ -990,10 +982,6 @@ export async function POST(request: NextRequest) {
           include: commentInclude(user.id, task.projectId)
         })
 
-        const attributionEnabled = await isFeatureEnabled(
-          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-          user.id
-        )
         const editorAgents = await loadVisibleReactionAgents(
           comment.editedByAgentId ? [comment.editedByAgentId] : [],
           user.id,
@@ -1007,8 +995,7 @@ export async function POST(request: NextRequest) {
               mappedComment,
               commentWithAttachments,
               user.id,
-              task.projectId,
-              attributionEnabled
+              task.projectId
             )
           : null
 

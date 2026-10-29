@@ -65,8 +65,12 @@ export const useLearnTutorialActions = (context: LearnTutorialRuntime) => {
     async (target: LearnTutorialInboxTarget, projectId: number) => {
       try {
         const response = await fetch(
-          `/api/notifications/markAsDone?id=${target.notificationId}&taskId=${target.taskId}&tutorial=1`,
-          { method: "GET" },
+          "/api/notifications/markAsDone",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: target.notificationId, taskId: target.taskId, tutorial: 1 }),
+          },
         );
         if (!response.ok) {
           pendingInboxArchiveTarget.current = null;

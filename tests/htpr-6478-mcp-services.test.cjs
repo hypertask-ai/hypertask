@@ -30,6 +30,8 @@ function stub(file, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
 stub('src/lib/flags.ts', { isFeatureEnabled: async () => false })
+stub('src/lib/prisma.ts', { default: {} })
+stub('src/lib/auth/agentScope.ts', { prepareAgentScope: async () => {}, withAgentScopeRequest: (req, fn) => fn() })
 stub('src/lib/mcp/auth.ts', {
   validateMcpAuth: async () => { credentialChecks++; return auth },
   checkMcpRateLimit: async () => { limitChecks++; return limitedResponse ?? null },
@@ -47,7 +49,7 @@ stub('src/lib/mcp/operations/index.ts', {
   },
 })
 const { mapHttpErrorToMcpError } = load('src/lib/mcp-server/utils/errors.ts')
-const { createInProcessMcpClient } = load('src/lib/mcp/inProcessClient.ts')
+const { createDirectOperationClient } = load('src/lib/mcp/directOperationClient.ts')
 const { MCP_TOOLS } = load('src/lib/mcp-server/tools/index.ts')
 const { selectMcpTools } = load('src/lib/mcp-server/consolidated-tools.ts')
 const { resolvePortableTools } = load('src/lib/mcp-server/listQueryContract.ts')
@@ -175,7 +177,7 @@ test('concurrent compound operations share one rate check without consuming the 
   limitChecks = 0
   calls = []
   try {
-    const { client } = await context.withMcpExecutionContext(token, auth, () => createInProcessMcpClient(token))
+    const client = await context.withMcpExecutionContext(token, auth, () => createDirectOperationClient(token, auth))
     const results = await Promise.allSettled([client.makeRequest('/mcp/tasks'), client.makeRequest('/mcp/tasks')])
     for (const result of results) {
       assert.equal(result.status, 'rejected')
@@ -186,7 +188,7 @@ test('concurrent compound operations share one rate check without consuming the 
   } finally { limitedResponse = undefined }
 })
 test('operation endpoints cannot turn the in-process client into an outbound client', async () => {
-  const { client } = await context.withMcpExecutionContext(token, auth, () => createInProcessMcpClient(token))
+  const client = await context.withMcpExecutionContext(token, auth, () => createDirectOperationClient(token, auth))
   for (const endpoint of ['https://app.hypertask.ai/api/mcp/tasks', '//attacker.example/mcp/tasks', '/api/mcp/tasks']) {
     await assert.rejects(client.makeRequest(endpoint), /Invalid MCP operation endpoint/)
   }

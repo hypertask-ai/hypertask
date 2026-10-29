@@ -61,11 +61,7 @@ test("closed boards do not mount or preload the AI chat provider", () => {
     globalProvider,
     /const isTaskDetailPage = pathname\?\.startsWith\("\/detail"\) \?\? false/,
   );
-  assert.match(
-    globalProvider,
-    /const shouldMountAgentChatRuntime\s*=\s*isAgentChatPage && mbl && agentChatMobileFullscreenFlag/,
-    "Agent Chat must not change provider startup for desktop or flag-off users",
-  );
+
   assert.match(
     globalProvider,
     /const shouldMountChatRuntime\s*=\s*chatRuntimeMounted \|\|\s*sidebarRequested \|\|\s*isFullScreenChat \|\|\s*shouldMountAgentChatRuntime \|\|\s*isTaskDetailPage \|\|\s*showAiChatInterface/,
@@ -102,4 +98,26 @@ test("closed boards do not mount or preload the AI chat provider", () => {
   );
   assert.match(closedLayout, /data-ai-workspace/);
   assert.match(closedLayout, /onClick=\{onOpenAIChat\}/);
+});
+
+
+test("only mobile Agent Chat eagerly starts its runtime", () => {
+  const ts = require("typescript");
+  const source = ts.createSourceFile("GloablProviders.tsx", read(
+    "src/components/ProviderGlobal/GloablProviders.tsx",
+  ), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let initializer;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === "shouldMountAgentChatRuntime") {
+      initializer = node.initializer;
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(initializer);
+  const shouldMount = new Function("isAgentChatPage", "mbl", `return ${initializer.getText(source)}`);
+  assert.equal(shouldMount(true, true), true);
+  assert.equal(shouldMount(true, false), false);
+  assert.equal(shouldMount(false, true), false);
+  assert.equal(shouldMount(false, false), false);
 });

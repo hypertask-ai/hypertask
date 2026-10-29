@@ -192,7 +192,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                             <span className={cn('footer_tags min-w-0 max-w-[min(18rem,calc(100vw-8rem))] truncate', isActive && '!font-semibold')}>
                               {label}
                             </span>
-                            <p className="font-normal footer_tags text-micro text-gray-600 dark:text-gray-300">
+                            <p className="font-normal footer_tags text-micro text-[var(--color-view-caption)]">
                               {count}
                             </p>
                             {!isBuiltinView(view) && view.visibility === ViewVisibility.Private && (

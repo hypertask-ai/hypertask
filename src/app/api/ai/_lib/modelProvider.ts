@@ -33,7 +33,7 @@ import {
   type TAiModelOption,
   type TAiProviderOptions,
 } from "@/lib/aiModelOptions";
-import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
+import { BASETEN_BYOK_PROVIDER, BASETEN_MODEL_SLUGS, getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
 import {
   FREE_TEAM_AI_ALLOWANCE_USD,
   PAID_TEAM_AI_ALLOWANCE_USD,
@@ -47,6 +47,7 @@ import {
   normalizeCustomEndpointConfig,
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
+import type { ReasoningEffort } from "@/app/api/ai/_lib/reasoningEffort";
 
 export class AiGatewayKeyRequiredError extends Error {
   constructor(message: string) {
@@ -59,7 +60,16 @@ export { isCustomEndpointConfig };
 
 export type ModelProviderId =
   "claude" | "openai" | "openrouter" | "gateway" | "custom";
-export type AiModelCredential = string | CustomEndpointConfig;
+export type BasetenCredential = {
+  kind: "baseten";
+  apiKey: string;
+  modelKey: keyof typeof BASETEN_MODEL_SLUGS;
+};
+export type AiModelCredential = string | CustomEndpointConfig | BasetenCredential;
+
+function isBasetenCredential(credential: AiModelCredential | undefined): credential is BasetenCredential {
+  return credential !== null && typeof credential === "object" && "kind" in credential && credential.kind === "baseten";
+}
 export type AiGatewayFeature =
   | "chat"
   | "summary"
@@ -71,7 +81,8 @@ export type AiGatewayFeature =
   | "custom-instructions"
   | "smart-label"
   | "onboarding-board"
-  | "status-update";
+  | "status-update"
+  | "suggest-reply";
 
 export type AiProviderOptions = TAiProviderOptions;
 
@@ -218,6 +229,17 @@ function resolveUntracedAiModel(
     if (stub) return stub;
   }
 
+  if (isBasetenCredential(byokCredential)) {
+    const slug = BASETEN_MODEL_SLUGS[byokCredential.modelKey];
+    if (!slug || modelOption?.modelKey !== byokCredential.modelKey || modelOption.model !== model) {
+      throw new Error("Baseten credential does not match the selected model");
+    }
+    return createOpenAI({
+      apiKey: byokCredential.apiKey,
+      baseURL: BASETEN_BYOK_PROVIDER.openAiCompatibleBaseUrl,
+    }).chat(slug);
+  }
+
   const byokApiKey =
     typeof byokCredential === "string" ? byokCredential : undefined;
 
@@ -294,9 +316,22 @@ type ModelUsageContext = Partial<Pick<AiUsageRecord,
   initiatingUserId?: number | null;
   trustedChatSessionId?: string | null;
   promptCachingEnabled?: Promise<boolean>;
+  directPromptCachingEnabled?: Promise<boolean>;
+  reasoningFeature?: string | null;
+  reasoningEffort?: ReasoningEffort | null;
 };
 
 const modelUsageContexts = new WeakMap<object, ModelUsageContext>();
+
+function reasoningApi(): typeof import("@/app/api/ai/_lib/reasoningEffort") | null {
+  try {
+    const loaded = require("@/app/api/ai/_lib/reasoningEffort") as Partial<typeof import("@/app/api/ai/_lib/reasoningEffort")> | null;
+    if (!loaded || typeof loaded.aiThinkingOptInEnabled !== "function" || typeof loaded.applyReasoningToParams !== "function") return null;
+    return loaded as typeof import("@/app/api/ai/_lib/reasoningEffort");
+  } catch {
+    return null;
+  }
+}
 
 export function configureAiModelUsage(model: LanguageModel, context: ModelUsageContext): void {
   if (typeof model === "string") return;
@@ -314,9 +349,16 @@ export function inheritAiModelUsage(model: LanguageModel, source: LanguageModel)
 }
 
 export async function aiPromptCachingEnabled(model: LanguageModel): Promise<boolean> {
-  if (typeof model === "string" || model.provider !== "gateway") return false;
+  if (typeof model === "string") return false;
   const context = modelUsageContexts.get(model);
   if (!context?.initiatingUserId) return false;
+  if (model.provider === "anthropic.messages" && context.feature === "chat") {
+    return context.directPromptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7855-direct-prompt-cache")
+      .then(({ HTPR_7855_DIRECT_PROMPT_CACHE_FLAG }) => import("@/lib/flags")
+        .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7855_DIRECT_PROMPT_CACHE_FLAG, context.initiatingUserId!)))
+      .catch(() => false);
+  }
+  if (model.provider !== "gateway") return false;
   return context.promptCachingEnabled ??= import("@/lib/flags/definitions/htpr-7689-prompt-caching")
     .then(({ HTPR_7689_PROMPT_CACHING_FLAG }) => import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, context.initiatingUserId!)))
@@ -327,6 +369,21 @@ function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsage
   return {
     specificationVersion: "v4",
     transformParams: async ({ params }) => {
+      if (typeof model !== "string" && model.provider === "anthropic.messages" && context.feature === "chat" && await enabled()) {
+        const lastSystemIndex = params.prompt.findLastIndex((message) => message.role === "system");
+        return {
+          ...params,
+          prompt: params.prompt.map((message, index) => index === lastSystemIndex
+            ? {
+              ...message,
+              providerOptions: {
+                ...message.providerOptions,
+                anthropic: { ...message.providerOptions?.anthropic, cacheControl: { type: "ephemeral" } },
+              },
+            }
+            : message),
+        };
+      }
       if (typeof model === "string" || model.provider !== "gateway" ||
         (!model.modelId.startsWith("anthropic/") && !model.modelId.startsWith("openai/")) ||
         !await enabled()) return params;
@@ -363,7 +420,7 @@ function createPromptCachingMiddleware(model: LanguageModel, context: ModelUsage
 
 async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number, cacheReadTokens = 0, cacheWriteTokens = 0) {
   if (!inputTokens && !outputTokens) return 0;
-  if (provider === "byok:custom") return null;
+  if (provider === "byok:custom" || provider === "byok:baseten") return null;
   const slug = modelId.includes("/") ? modelId : `${modelId.startsWith("claude-") ? "anthropic" : "openai"}/${modelId}`;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -457,12 +514,17 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
   return {
     specificationVersion: "v4",
     transformParams: async ({ params }) => {
-      if (!isHaiku55Model(modelId)) return params;
+      const reasoning = reasoningApi();
+      const optIn = reasoning ? await reasoning.aiThinkingOptInEnabled(context.userId) : false;
+      if (!isHaiku55Model(modelId)) {
+        return optIn && reasoning ? reasoning.applyReasoningToParams(params, context, modelId) : params;
+      }
       const enabled = await import("@/app/api/ai/_lib/planGate")
         .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
         .catch(() => false);
       if (!enabled) throw new Error("This AI model is unavailable.");
       const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
+      if (optIn && reasoning) return reasoning.applyReasoningToParams(supportedParams, context, modelId);
       const directOutput = params.responseFormat?.type === "json" ||
         (params.maxOutputTokens != null && params.maxOutputTokens <= 1200);
       return {
@@ -624,6 +686,7 @@ export function aiUsageProviderForCredential(
   modelOption?: TAiModelOption,
   directProvider?: TAiProviderKey,
 ) {
+  if (isBasetenCredential(credential)) return "byok:baseten";
   if (isCustomEndpointConfig(credential)) return "byok:custom";
   if (typeof credential !== "string" || isVercelAiGatewayKey(credential)) {
     return provider;

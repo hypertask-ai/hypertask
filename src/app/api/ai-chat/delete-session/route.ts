@@ -1,6 +1,6 @@
+import { chatAudienceWhere } from "@/lib/agents/chatContentScope";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { deleteTaskAttachmentFromS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -31,14 +31,7 @@ export async function DELETE(req: NextRequest) {
 
 
     const currentUser = await loadCurrentUser(req.headers, true).catch(() => null);
-    let restCompat = false;
-    if (currentUser) {
-      try {
-        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
-      } catch {
-      }
-    }
-    const { isValid, user } = restCompat && currentUser
+    const { isValid, user } = currentUser
       ? { isValid: true, user: currentUser.user }
       : isValidUser(userCookie?.value);
 
@@ -46,7 +39,7 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    if (restCompat && currentUser) {
+    if (currentUser) {
       const limited = await checkRestRateLimit(currentUser.userId, "write");
       if (limited) return limited;
     }
@@ -64,6 +57,7 @@ export async function DELETE(req: NextRequest) {
     const sessions = await prisma.chatSession.findMany({
       where: {
         userId: user.id,
+        ...chatAudienceWhere({ userId: user.id, agentId: currentUser?.agentId }),
         ...(toDelete === "ALL" ? {} : { id: toDelete }),
       },
       select: { id: true },
@@ -106,7 +100,7 @@ export async function DELETE(req: NextRequest) {
         });
       }
       await tx.chatSession.deleteMany({
-        where: { userId: user.id, id: { in: sessionIds } },
+        where: { userId: user.id, id: { in: sessionIds }, ...chatAudienceWhere({ userId: user.id, agentId: currentUser?.agentId }) },
       });
     });
 

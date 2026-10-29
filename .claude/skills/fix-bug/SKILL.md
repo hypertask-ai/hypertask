@@ -1,63 +1,33 @@
 ---
 name: fix-bug
-description: Ticket in Bugs describing wrong behaviour on app.hypertask.ai
+description: Reproduce wrong behavior, prove its cause, and ship the smallest tested correction.
 ---
 
-# fix-bug
+# Fix a bug
 
-Use with `simplify-before-pr` and `design-compliance` (right before the PR step) and, if the change is visible on screen, `verify-on-phone` before the PR. After the deploy, run `verify-qa` yourself. Board writes go through `vcc`.
+Use [/ship](../ship/SKILL.md) for claim, gates, PR, deployment, live QA, and cleanup. Follow [repository flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior). A bug fix restores intended behavior; new behavior uses [ship-feature-behind-flag](../ship-feature-behind-flag/SKILL.md).
 
-**Flag rule (matches `INDEX.md`):** a real bug fix restores behaviour that used to work or was clearly intended. Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (HTPR-7389). A `[BUGFIX]` title is only a hint to the mechanical gate. The reviewer decides from the diff whether it really restores intended behaviour; new visible behaviour dressed as a fix still needs a flag.
+## Before coding
 
-Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
+Read the ticket and reproduce the problem on production. For security findings, use the read-only checks in [security-findings](reference/security-findings.md). If it does not reproduce, record that fact rather than guessing at a change.
 
-Only Valentin widens an existing flag to Everyone. A new flag defaulting to Everyone follows the rule above; a fix touching money, login and access, data deletion or customer emails sets `releaseRisk.highRisk` and stays Owner + QA. A PR that widens an existing flag, removes a flag gate, or changes a feature default-on state is not self-mergeable: park it in `Valentin Review` with one line.
+Trace the real entry point through affected middleware, routes, controllers/services, auth, queues, realtime, and caches. Confirm the cause with runtime evidence or a failing behavior check. Reading code alone is not proof. Fix the first wrong state, not a later symptom.
 
-This skill covers bug fixes such as crashes, 500s, wrong or lost data, and restoring intended behaviour, as well as performance work with identical output, security fixes, dependency or CI changes, and spelling corrections. **"Flag-exempt" is not the same as "invisible".** Restoring a broken screen changes what is on it, and a spelling fix changes what a user reads. So step 7 still applies whenever the result shows up on screen: with or without a flag, still a phone screenshot. If the change introduces new behaviour or design rather than fixing a bug, use `ship-feature-behind-flag`.
+For money, access, security, or irreversible-data work, load [interrogate](../interrogate/SKILL.md) before coding and resolve required decisions. Ordinary ai-review work must not use it. For any rendered change, load [reuse-existing-ui](../reuse-existing-ui/SKILL.md); reuse the real shared component instead of rebuilding it.
 
-## Before coding and helper prompts
+## Make and prove the correction
 
-For the `valentin-review` lane only (money, login and access, security, data that cannot be undone), load `interrogate` before coding. Ordinary `ai-review` work keeps the existing ai-review check and must not use `interrogate`.
+1. Capture the failure through the real implementation or external boundary. Never copy the implementation into a test or assert only source strings. Exercise each independent input form; clipboard handlers need both items and files paths. Every access/security refusal also needs a legitimate still-allowed caller through the same boundary.
+2. Make the smallest complete correction. Apply the ticket-specific bugfix flag unless an existing exemption applies. Keep server authorization independent of client visibility. Follow the registry documentation instead of editing shared generated lists.
+3. Write the targeted behavior tests with the repo's test helpers and CI's Node major, push, and let CI run them; never run tests or builds on the VPS. A local run killed with exit 137 or similar is not a blocker and not a failed repair: push and let CI prove it. Never mark the ticket blocked on HT Product Lead for a killed local test. Keep the CI run link and result in agent activity. Never convert TypeScript into JavaScript just to make a test import work.
+4. If a repair fails, undo only your own disproven change and re-test the cause before another repair. Never stack guesses or revert someone else's work. After two failed repairs, record the blocker and hand off under /ship.
+5. For rendered output, capture the before baseline and run [verify-on-phone](../verify-on-phone/SKILL.md) before the PR. Flag-exempt does not mean invisible: spelling and restored screens still need visual proof. Check the matching feature-map recipe.
+6. Run [simplify-before-pr](../simplify-before-pr/SKILL.md). For UI, also run [design-compliance](../design-compliance/SKILL.md). Run [update-docs](../update-docs/SKILL.md) when user-visible behavior changes.
+7. Write the PR body before opening it. Start with **Summary for non-engineers** and include the opening action plus **What went wrong**, **What changes**, **What you will see**, and **Watch out for**. Use [open-pr.sh](scripts/open-pr.sh) with a body file; its usage owns syntax. It pushes and opens, but does not branch or commit. Keep one PR, auto-merge off, ticket In Progress.
+8. Bind the PR and follow /ship's current-head checks, fresh ticket reread, merge, deployment, and [verify-qa](../verify-qa/SKILL.md). A skipped required test is not a pass. Diagnose red checks with `ci-why`; never toggle labels or bypass protection to force green.
 
-Give helpers the ticket scope, observed cause and failing check. Point them at these short principles, not a whole playbook:
+## Keep the change in scope
 
-- `.claude/skills/fix-bug/principles/fix-root-causes.md`
-- `.claude/skills/fix-bug/principles/prove-it-works.md`
-- `.claude/skills/fix-bug/principles/test-behavior-not-implementation.md`
+Use your own worktree off production. Native CLI fixes belong in the Zig CLI repo, never the retired Node package. Previews share production data and cannot host destructive tests. Prefer clearer names, assertions, and logs over explanatory code comments. Helper briefs contain the observed cause, failing check, scope, and the [root-cause](principles/fix-root-causes.md), [proof](principles/prove-it-works.md), and [behavior-test](principles/test-behavior-not-implementation.md) principles, not another copy of the workflow.
 
-## Steps
-
-1. **If the ticket touches UI, run `reuse-existing-ui` first.** Before writing a line of code for any bug whose fix changes what's on screen, work through `reuse-existing-ui/SKILL.md`: list the UI elements the fix needs and reuse the existing component for each. A bug fix that quietly rebuilds a component instead of fixing the real one is not a fix.
-2. **Reproduce on production first.** Before touching code, confirm the bug is real on `https://app.hypertask.ai` right now: `curl` the affected endpoint, or drive it with `agent-browser` for a UI bug. If you cannot reproduce it, say so on the ticket and stop. Do not guess at a fix. A ticket filed by the Strix scanner needs the read-only variant of this step: see `reference/security-findings.md`.
-3. **Trace and confirm the cause.** Before editing, follow the change through middleware, route handler, controller or service layer, queue side effects, auth and cookie behaviour, and realtime/cache invalidation where relevant. Business logic usually lives in `src/utils/controllers/`, not in the route file. Watch the app run in a browser, inspect runtime logs, or run a failing behaviour test that confirms the proposed cause. Reading code alone is not proof. Record the observation before writing the fix.
-4. **Write a failing test** that captures the reported behaviour. It must fail before your fix and pass after. It must exercise the real production implementation or its real external boundary, never a copied implementation plus string-matching the source. For clipboard file bugs, drive the real paste handler with `DataTransfer.items` and `DataTransfer.files` independently because browsers may populate only one collection; assert that the event is consumed, content is inserted, and the original file reaches the upload boundary. For an access or security fix, also add a "still allowed" test next to the "now refused" one: a legitimate caller goes through the same changed boundary and still succeeds after the fix. The refused test fails before the fix; the allowed test passes before and after. Without it the PR is not ready (YPER4-352).
-5. **Fix the bug** with the smallest diff that resolves it. Unless it fixes saved data, security or crashes (or another existing non-product exemption applies), add only one client-safe file `src/lib/flags/definitions/<flag-key>.ts`, exporting its key constant and a default definition with `kind: "bugfix"` and `releaseRisk: { risk, reason }`, default Everyone. Do not edit shared registry files or test lists, and never commit `index.generated.ts`. Add per-flag tests in their own test file, and gate the fix on the client and server where relevant. Do not reuse another ticket's flag. After it ships, record the production release date and persist its Everyone mode through the approved flags API/admin UI so the existing 14-day cleanup countdown starts; never widen a feature flag. Create the cleanup follow-up after 14 days on Everyone. Do not refactor unrelated code. File an optional improvement as its own ticket. Cleanup jobs must identify resources owned by the current run, such as with a unique name, label, or network; never remove every resource sharing an image or type.
-6. **Run the relevant tests** (not the whole suite unless the change is broad) on the same Node major CI uses, plus a fresh typecheck. Fix test loading through the repo's own test helpers; never convert a `.ts` file to `.js` just to satisfy an import. Keep the command and its result in this session's notes. If a fix fails a check, undo only your change motivated by that cause, then question and re-test the cause before trying again. Never stack a second fix on an unproven first one. Do not revert anyone else's changes.
-7. **Take the phone screenshot** if the result is visible on screen at all: `verify-on-phone`, before the PR, not after. Skip it only for a change with no rendered output, such as a dependency bump, a CI workflow, or a server-side-only fix. Keep the `phone-shot.sh` PNG path in this session's notes. If the ticket's area has a `verify-qa/reference/feature-map/*.md` file, also capture the "before" shot from that file's proof section on production, while the bug still reproduces. `verify-qa` takes the "after" shot once the fix is deployed.
-8. **Write the PR body first**, into a file. Start with "Summary for non-engineers" (the problem, what changed, what looks different, risks). The script needs `--body-file` and the five sections it checks (a first action line, What went wrong, What changes, What you will see, Watch out for). There is no `--fill` shortcut, because `--fill` would drop that summary.
-9. **Run `update-docs`** if a user-visible behaviour changed.
-10. **Run `simplify-before-pr`.** The change works and the tests pass — now simplify the diff before anyone reviews it.
-11. **Run `design-compliance`.** The diff is final. Now prove the UI matches the style guide and that `node scripts/design-lint.mjs` is clean, before `design-gate` says so on the PR.
-12. **Open the PR:**
-   ```
-   .claude/skills/fix-bug/scripts/open-pr.sh <PREFIX-NNN> BUGFIX "<short title>" \
-     --body-file <path> [--lane <lane>]
-   ```
-   It pushes the current branch, opens the PR against `production`, titles it `HTPR-NNNN [BUGFIX] ...`, leaves auto-merge off, moves the ticket with `vcc`, and reads the board back with `hypertask`. It does not branch or commit: do that first. Default lane is `ai-review`.
-   **Lane by risk:** `ai-review` for an ordinary bug fix and for an additive migration behind a flag (the ticket stays In Progress; Valentin, 2026-10-10). `valentin-review` for money, auth, security, irreversible data, a destructive migration, or a pull request that widens a flag. Post one question. Never assign userId 6.
-   Keep the pull request URL in this session's notes.
-13. **Request full CI if the workflow would otherwise skip it**, and confirm required checks and review pass on the final commit head before you merge. A skipped test job is not a pass. If checks read green but GitHub still blocks the merge, look for cancelled duplicate runs of those required jobs and rerun only those, one at a time. Never bypass branch protection and never toggle a label to force a merge green. On a red check, run `.claude/skills/ship/scripts/ci-why <pr>` first; never ask for a secret or key change unless the failed step's own error names it (YPER4-604).
-14. **Re-read the ticket's latest comments before merging.** A green CI run does not override a correction posted after it. Don't restart a full review cycle for a small follow-up fix; a fresh look at the delta on top of the already-reviewed diff is enough.
-15. **After the production deployment for the merge sha is success, run `verify-qa`.** You verify the live app. A separate checker does not.
-16. **Write no explanatory comments.** Say it in code: a clearer name, a smaller function, or an assertion or log message. The `local/no-comments` lint rule fails the PR otherwise; only tool-read comments (`eslint-disable`, `@ts-expect-error <reason>`, bundler pragmas, JSDoc `@deprecated`/`@type`) pass (YPER4-379).
-
-## Conventions (from `~/projects/hypertasks/AGENTS.md` and `~/.claude/CLAUDE.md`)
-
-- **A ticket labeled `cli` is fixed in `~/projects/hypertask-cli-zig` (remote `hypertask-ai/cli`, PRs base `main`), not in this app worktree.** This is the live native CLI: `~/.local/bin/hypertask` is built from it. See RULE-MAP #63 and #99. `~/projects/hypertask-mcp` also contains a folder called `CLI/`, but that is the **retired Node package** (`@hypertask/hypertask_cli`) — AGENTS.md says explicitly not to extend it. Fixing a `cli`-labeled ticket there ships a change nobody runs.
-- Branch off `<remote>/production` of `hypertask-ai/hypertask`. Never base work on the legacy `valentinyeo/hypertasks` repo, which is what `origin` points at in some older checkouts. The script uses `$HT_GIT_REMOTE` (falling back to `origin`); check `git remote -v` if you are unsure which is which.
-- PR base is `production`, never `main`. `main` is frozen legacy. Title format is `HTPR-NNNN [TYPE] ...`.
-- Merging to `production` deploys `app.hypertask.ai` in about three minutes. **Bug fixes may deploy directly**, severe ones especially, and this session checks them on production afterwards with `verify-qa`. Features do not get this: they stay behind the Owner+QA flag.
-- Opening a PR is a review handoff. `open-pr.sh` never merges and never enables auto-merge. After required checks are green, this session merges.
-- Previews are opt-in and share the live production database. Visual verification only, never destructive testing. Never poll a building preview by reloading a browser tab: poll headlessly with `curl -o /dev/null -w '%{http_code}'` or `gh pr checks`, and open the browser only once it is ready.
-- If `gh pr edit` fails on an old gh version, use the REST PATCH endpoint with a JSON body file. Never interpolate prose into shell code.
-- Never open a duplicate PR because an existing branch looks awkward. Recover it instead.
+If flagged behavior fails live, switch it Off through the approved failure path before repairing. Never widen an existing flag as part of a routine self-merge. Document what users now experience before closing; a merged PR alone is not completion.

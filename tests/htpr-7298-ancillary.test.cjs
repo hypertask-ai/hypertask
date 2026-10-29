@@ -28,6 +28,7 @@ function load(file, mocks = {}, runtime = {}) {
 
 const access = load("src/utils/controllers/projects/getAllIncludes.ts", {
   "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+  "@/lib/auth/crossTeamContext": require("./task-route-loader.cjs").load("src/lib/auth/crossTeamContext.ts", {}),
   "@/utils/controllers/notifications/visibleInboxScope": {},
 });
 const boards = [
@@ -303,6 +304,7 @@ test("page index includes, rows, schema and namespace contain only page-owned me
     "./configs/search.config": { searchConfig: { collections: { task: {}, comment: {} } } },
   }).turbopufferNamespaces;
   const index = load("src/utils/controllers/turbopuffer/turbopufferHelper.ts", {
+    "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
     "@/lib/prisma": { default: { page: { findFirst: async (args) => {
       query = args;
       return { ...page, contentText: "Page text", project: { title: "Page board" }, task: null, taskId: null };
@@ -361,10 +363,10 @@ for (const flagsEnabled of [false, true]) {
           "next/navigation": { useRouter: () => ({ replace: (href) => calls.push(href) }) },
           "next/dynamic": { default: (loader) => loader.toString().includes("AttachmentsCarousel") ? (props) => { gallery = props; return null; } : () => null },
           "react-hot-toast": { default: { error: noop } },
-          "@/hooks/useFlag": { useFlag: () => flagsEnabled },
+          "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6872-page-image-gallery" && flagsEnabled },
           "@/hooks/General/useContentZoom": { useContentZoom: () => ({ zoom: 1 }) },
           "@/hooks/General/useDebounceWithCancel": { default: () => [noop, noop, noop] },
-          "@/lib/flags/keys": {},
+          "@/lib/flags/keys": { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG: "htpr-6872-page-image-gallery" },
           "@/lib/configs/general.config": {}, "@/utils/undoActions/helperFuncs": { cn: noop },
           "@/lib/constants/APIRouteConstants": { pageRoute: noop },
           "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },

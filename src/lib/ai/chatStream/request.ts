@@ -82,4 +82,4 @@ export const chatRequestSchema = z.object({
 
 export type ChatRequest = z.infer<typeof chatRequestSchema>;
 
-export type SendSse = (event: SseEvent, data: Record<string, unknown>) => void;
+export type SendSse = (event: SseEvent, data: Record<string, unknown>) => boolean;

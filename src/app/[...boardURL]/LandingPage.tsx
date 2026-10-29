@@ -1,6 +1,10 @@
 'use client'
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import Unauthorized from "../unauthorized/page";
+import { HTPR_7799_PROJECT_ENTRY_FLAG, HTPR_7885_INVITE_LINK_DIALOG_FLAG } from "@/lib/flags/keys";
 import { HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
@@ -22,7 +26,7 @@ import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
 import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -84,7 +88,9 @@ export function useLandingBoardAccess(context: useLandingBoardAccessContext) {
 const queryClient = useQueryClient();
 const setRouteCurrentProject = useSetRecoilState(currentProjectAtom)
 const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
+const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
+const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
 const router = useRouter()
 const {
   releaseSecondaryStartup,
@@ -178,7 +184,7 @@ const markLocalBoardPublished = useCallback(
           )
         : undefined
     if (!localProject) return
-    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }, restoreUrlViewSections))
+    setRouteCurrentProject(pinProjectToUrlView(localProject, currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
       (current.status === "authorized" || current.status === "denied")
@@ -188,6 +194,8 @@ const markLocalBoardPublished = useCallback(
   },
   [
     assigneeFixEnabled,
+    agentCreatorFilterEnabled,
+    defaultFiltersFixEnabled,
     restoreUrlViewSections,
     boardAccessKey,
     currentView,
@@ -580,7 +588,9 @@ type useLandingBoardSurfaceContext = Pick<LandingPageInput, "user"> &
 
 export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
   const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
+  const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
+  const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
   const {
   setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
   setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
@@ -708,10 +718,10 @@ const projectsForSection = useMemo(() => {
   if (!data?.updatedProjects) return []
   const projects = [...data.updatedProjects]
   if (projectIndex >= 0 && projects[projectIndex]) {
-    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled }, restoreUrlViewSections)
+    projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView, { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled }, restoreUrlViewSections)
   }
   return projects
-}, [assigneeFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
+}, [assigneeFixEnabled, agentCreatorFilterEnabled, defaultFiltersFixEnabled, restoreUrlViewSections, data?.updatedProjects, projectIndex, currentView])
 
 const pinnedProject = projectsForSection[projectIndex]
 const boardLayoutForRender =
@@ -981,6 +991,7 @@ const  LandingPage= ({
   authenticated: boolean,
 }) =>{
   const connectOverlayEnabled = useFlag(HTPR_7550_CONNECT_OVERLAY_FLAG);
+  const projectEntryEnabled = useFlag(HTPR_7799_PROJECT_ENTRY_FLAG);
   const {
   queryClient, router, releaseSecondaryStartup, secondaryStartupEnabled, isMblForChat,
   searchParams, slugs, pilotParameter, currentView, requestedSurface,
@@ -1099,14 +1110,16 @@ const readyProject = data?.updatedProjects?.[projectIndex]
 const boardDataReady = Boolean(
   readyProject && isBoardPayloadHydrated(readyProject),
 )
-const firstTaskEmailEnabled = useFlag(HTPR_7028_FIRST_TASK_EMAIL_FLAG)
-const inviteRequested = firstTaskEmailEnabled ? searchParams?.get("invite") === "1" : false
-const setShowCommands = useSetRecoilState(showCommandsAtom)
+const inviteRequested = searchParams?.get("invite") === "1"
+const inviteLinkDialogEnabled = useFlag(HTPR_7885_INVITE_LINK_DIALOG_FLAG)
+const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom)
 const inviteProject = useRecoilValue(currentProjectAtom)
 const inviteHandledRef = useRef<string | null>(null)
+const [inviteOpenAttempts, setInviteOpenAttempts] = useState(0)
 useEffect(() => {
   if (!inviteRequested) {
     inviteHandledRef.current = null;
+    setInviteOpenAttempts(0);
     return;
   }
   if (!authenticated || isGuest || !boardDataReady ||
@@ -1114,12 +1127,23 @@ useEffect(() => {
       inviteProject?.id !== requestedProjectId) return;
   const key = `${user.id}:${requestedProjectId}`;
   if (inviteHandledRef.current === key) return;
+  if (inviteLinkDialogEnabled && !isMblForChat) {
+    if (inviteOpenAttempts === 0 || !showCommands.show || showCommands.mode !== CommandMode.InviteMember) {
+      if (inviteOpenAttempts < 2) {
+        setInviteOpenAttempts(inviteOpenAttempts + 1);
+        setShowCommands({ show: true, mode: CommandMode.InviteMember });
+      }
+      return;
+    }
+  }
   inviteHandledRef.current = key;
-  setShowCommands({ show: true, mode: CommandMode.InviteMember });
+  if (!inviteLinkDialogEnabled || isMblForChat) {
+    setShowCommands({ show: true, mode: CommandMode.InviteMember });
+  }
   const url = new URL(window.location.href);
   url.searchParams.delete("invite");
   window.history.replaceState(getNextRouterAwareHistoryState(window.history.state), "", `${url.pathname}${url.search}${url.hash}`);
-}, [inviteRequested, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
+}, [inviteRequested, inviteLinkDialogEnabled, isMblForChat, showCommands, inviteOpenAttempts, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
 const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
   () =>
     boardDataReady && readyProject
@@ -1161,10 +1185,16 @@ const boardRender =
       : null)
 
 return (
-    <BoardDocumentBoundary fallback={<></>}>
+    <BoardDocumentBoundary fallback={projectEntryEnabled ? (
+      <div className="flex min-h-[50vh] items-center justify-center text-content text-secondary" role="status">
+        Loading board…
+      </div>
+    ) : <></>}>
       <FirstScreenMobileChrome currentUser={user} />
 
-      {data &&
+      {projectEntryEnabled && (projectLookupFailed || currentBoardAccessStatus === "denied" || (!data && !boardRender && (projectsError || (!dataFetching && fetchedData)))) ? (
+        <Unauthorized />
+      ) : data &&
       Array.isArray(data.updatedProjects) &&
       data.updatedProjects.length === 0 ? (
         <NoBoardsEmptyState user={user} />
@@ -1201,6 +1231,10 @@ return (
             Loading board…
           </div>
         )
+      ) : projectEntryEnabled ? (
+        <div className="flex min-h-[50vh] items-center justify-center text-content text-secondary" role="status">
+          Loading board…
+        </div>
       ) : null}
     </BoardDocumentBoundary>
 )

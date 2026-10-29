@@ -1,5 +1,8 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
+
 import { ReactNode, useEffect, useRef } from "react";
 
 const LONG_PRESS_MS = 500;
@@ -12,6 +15,7 @@ const SwipeableCommentRow = ({
   children: ReactNode;
   onMore: () => void;
 }) => {
+  const phoneZoom = useFlag(HTPR_8145_PHONE_ZOOM_FLAG);
   const blockClick = useRef(false);
   const longPressTimer = useRef<number | null>(null);
   const longPressStart = useRef<{ x: number; y: number; id: number } | null>(
@@ -32,7 +36,7 @@ const SwipeableCommentRow = ({
     <div
       className="relative"
       style={{
-        touchAction: "pan-y",
+        touchAction: phoneZoom ? "pan-y pinch-zoom" : "pan-y",
         WebkitTouchCallout: "none",
         WebkitUserSelect: "none",
         userSelect: "none",

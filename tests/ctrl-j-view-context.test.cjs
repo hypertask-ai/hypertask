@@ -88,12 +88,12 @@ async function withComposer(check, { writerFails = false } = {}) {
   };
   try { await check(api); } finally { global.fetch = original; }
 }
-async function send(api, { currentProject = project(), destinationProject, pathname = "/project", existingTaskId } = {}) {
+async function send(api, { currentProject = project(), destinationProject, pathname = "/project", existingTaskId, text = "Describe this task" } = {}) {
   const mounted = { current: true };
   const calls = [];
   const context = {
     enabled: true, boardChipEnabled: false, targetBoardId: undefined, waitingForBoards: false, queueEnterWhileBoardsLoad: true, textHeldUntilBoardsLoad: { current: null }, textBoardId: undefined, invokeSkills: false, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
-    text: "Describe this task", files: [], showProgress: false, composer: { current: null },
+    text, files: [], showProgress: false, composer: { current: null },
     setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {}, setError(error) { if (error) throw new Error(error); },
     taskContextRef: { current: null }, newTaskWindow: Boolean(existingTaskId), destinationProject,
     window: { location: { pathname, href: `https://app.hypertask.ai${pathname}${pathname === "/project" ? "?id=15" : ""}` } },
@@ -101,7 +101,7 @@ async function send(api, { currentProject = project(), destinationProject, pathn
     axios: { get: async () => ({ data: { id: existingTaskId, projectId: 15, uniqueIndex: 1 } }) },
     isEmptyComposeTarget: () => true, composeTaskBoardId: api.composeTaskBoardId,
     parseCookies: () => ({ previousBoard: "project-15|&|todo" }), lastUsedBoards: {},
-    user: { id: 985 }, unfurlImageUrls: false, inlineAgentImages: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
+    user: { id: 985 }, inlineAgentImages: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
     createComposedTask: async body => {
       calls.push(body);
       const result = await api.createComposedTask(body);
@@ -256,5 +256,17 @@ test("active unsaved filters override the saved view, and writer fallback retain
     assert.equal(api.creates[0].tags, undefined);
     assert.deepEqual(api.creates[0].assignees, []);
     assert.equal(api.creates[0].priority, undefined);
+  }, { writerFails: true });
+});
+
+
+test("composer submission always preserves a pasted image link when the writer is unavailable", async () => {
+  const url = "https://screencast2.com/hCUBu.png";
+  await withComposer(async api => {
+    await send(api, { text: url });
+    assert.equal(api.creates.length, 1);
+    assert.equal(api.writes[0].body.taskDescription, "<p>[[HT_MEDIA_1]]</p>");
+    assert.match(api.creates[0].description, /<a [^>]*href="https:\/\/screencast2\.com\/hCUBu\.png"/);
+    assert.match(api.creates[0].description, /<img [^>]*src="https:\/\/screencast2\.com\/hCUBu\.png"/);
   }, { writerFails: true });
 });

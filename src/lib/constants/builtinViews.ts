@@ -6,6 +6,7 @@ export const BUILTIN_VIEW_IDS = {
   myTasks: "builtin:my-tasks",
   overdue: "builtin:overdue",
   blocked: "builtin:blocked",
+  blockedByMe: "builtin:blocked-by-me",
   agents: "builtin:agents",
   currentCycle: "builtin:current-cycle",
   nextCycle: "builtin:next-cycle",
@@ -60,6 +61,9 @@ export const overduePredicate: BuiltinView["predicate"] = (task, context) =>
 export const blockedPredicate: BuiltinView["predicate"] = (task) =>
   task.waitingOnUserId != null || (task.blockingTasks?.length ?? 0) > 0;
 
+export const blockedByMePredicate: BuiltinView["predicate"] = (task, context) =>
+  context.currentUserId != null && task.waitingOnUserId === context.currentUserId;
+
 export const agentsPredicate: BuiltinView["predicate"] = (task) =>
   (task.assignees ?? []).some((assignee) => assignee.agentId != null);
 
@@ -103,6 +107,12 @@ export const BUILTIN_VIEWS: readonly BuiltinView[] = [
     title: "Blocked",
     builtin: true,
     predicate: blockedPredicate,
+  },
+  {
+    id: BUILTIN_VIEW_IDS.blockedByMe,
+    title: "Blocked by me",
+    builtin: true,
+    predicate: blockedByMePredicate,
   },
   {
     id: BUILTIN_VIEW_IDS.agents,

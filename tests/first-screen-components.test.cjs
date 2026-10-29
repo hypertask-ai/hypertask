@@ -42,7 +42,7 @@ const mocks = {
   'next/navigation': { usePathname: () => pathname, useRouter: () => ({ push: noop, refresh: noop }), useSearchParams: () => new URLSearchParams() },
   '@/lib/contexts/mobileContext': { MobileViewContext: mobile, useMobileView: () => React.useContext(mobile) },
   '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
-  '@/hooks/useFlag': { useFlag: () => false },
+  '@/hooks/useFlag': { useFlag: () => false, useFlagReady: () => true },
   '@/hooks/Task Detail/useTimeTracking': { useBoardRunningTimers: () => ({ showTimeTotals: false, timers: new Map(), timeTotals: new Map() }) },
   '@/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime': { useTimerNow: () => Date.parse(snapshot.now), formatElapsed: () => '' },
   '@/hooks/Homepage/Views/useKanbanViews': { __esModule: true, default: () => ({ switchViewHandler: noop, resetView: noop }) },
@@ -310,7 +310,7 @@ test('integration retains the old import/readiness path, offscreen policy and gl
   assert.match(global, /<CachedTaskDetailNavigation accountId={authenticatedUserId}>/);
   assert.match(source('src/app/inbox/page.tsx'), /getServerInboxDocument/);
   assert.doesNotMatch(source('src/app/inbox/page.tsx'), /FirstScreenSurfaceProvider|initialFlags=|initialValues=/, 'inbox shares the existing root, never a state island');
-  assert.match(source('src/utils/Providers.tsx'), /initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags\}/);
+  assert.match(source('src/utils/Providers.tsx'), /initialFlags=\{snapshot\?\.flags \?\? shell\?\.flags \?\? flagSeed \?\? undefined\}/);
   assert.match(source('src/app/[...boardURL]/page.tsx'), /if \(firstScreen\)/);
 });
 

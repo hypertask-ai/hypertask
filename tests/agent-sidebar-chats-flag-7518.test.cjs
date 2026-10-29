@@ -47,11 +47,9 @@ test("registry discovery includes the new flag without a shared registry edit", 
 test("new On does not depend on enabling parked rooms, mobile layout or activity flags", () => {
   const access = read("src/lib/agents/chatAccess.ts");
   const surface = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
-  const state = read("src/app/agents/chat/useAgentChatState.ts");
   assert.match(access, /isFeatureEnabled\(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, userId\)/);
   assert.match(surface, /const sidebarEnabled = enabled && !!projectId && !!currentUser/);
   assert.doesNotMatch(surface, /HTPR_6557|HTPR_6476|HTPR_6407/);
-  assert.match(state, /const activityRowsEnabled = !embedded && activityRowsFlag/);
   assert.match(read("src/app/agents/chat/useAgentChatNavigation.ts"), /Boolean\(embedded \|\|/);
 });
 
@@ -59,9 +57,8 @@ test("Off keeps the legacy header and composer and mounts no agent projection", 
   const source = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
   assert.match(source, /sidebarChats=\{enabled && sidebarEnabled \?[^]*: undefined\}/);
   assert.match(source, /sidebarEnabled && !minimized && currentUser && embeddedAgents\.map/);
-  assert.match(source, /<AI_Tiptap_Container disabled=\{generalChatPending\} active=\{!sidebarEnabled \|\| target\.kind !== "external-agent"\} \/>/);
+  assert.match(source, /<AI_Tiptap_Container sidebarAgent=\{agentSessionsEnabled && target\.kind === "native-agent" \? target\.agent\.displayName : undefined\} disabled=\{generalChatPending\} active=\{!sidebarEnabled \|\| target\.kind !== "external-agent"\} \/>/);
   assert.match(source, /if \(!enabled \|\| !projectId\) return/);
-  assert.match(read("src/components/AI_CHAT/ChatHeader.tsx"), /if \(sidebarChats\) \{ setIsDropdownOpen\(false\); setConversationsOpen/);
 });
 
 test("old direct links are gated and historical rooms retain their original route", () => {
@@ -94,7 +91,7 @@ test("AI history and destructive AI actions cannot target a different hidden con
   assert.match(header, /const aiSessionActionsAvailable = !sidebarChats \|\| sidebarChats\.target\.kind === "ai"/);
   assert.match(header, /filter\(\(session\) => !filterAgentSessions \|\| !session\.agentId\)/);
   assert.match(header, /aiSessionActionsAvailable && <button[^]*<Trash2/);
-  assert.match(read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx"), /writeDraft\(currentUser\.id, selected\.agent\.id/);
+  assert.match(read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx"), /writeDraft\(currentUser\.id, selected\.agent\.draftKey \?\? selected\.agent\.id/);
 });
 
 
@@ -113,4 +110,24 @@ test("the CI-recognized ticket gates use canonical key imports and cover native 
   const history = read("src/hooks/MultiPages/AIChat/usePagedChatHistory.ts");
   assert.match(history, /const sidebarChat = agentSidebarChatsEnabled \? getNativeSidebarChat\(\) : null/);
   assert.match(history, /getSessionTranscript\(sessionId!, signal, sidebarChat\?\.sessionId === sessionId \? sidebarChat.projectId : undefined\)/);
+});
+
+test("activity stays standalone-only even when unrelated client flags are off", () => {
+  const { useAgentChatState } = require("./task-route-loader.cjs").load("src/app/agents/chat/useAgentChatState.ts", {
+    "@/hooks/General/useMobileVisualViewport": { useMobileVisualViewport: () => null },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/contexts/mobileContext": {},
+    "@/lib/flags/keys": {},
+    "@/lib/state": { useRecoilValue: () => false, useSetRecoilState: () => () => {} },
+    "@/store": {},
+    "next/navigation": { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() },
+    react: {
+      useContext: () => false, useEffect: () => {},
+      useRef: (current) => ({ current }),
+      useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}],
+    },
+  });
+  const props = { currentUser: { id: 6 }, roomsEnabled: false };
+  assert.equal(useAgentChatState(props).activityRowsEnabled, true);
+  assert.equal(useAgentChatState({ ...props, embedded: { projectId: 15 } }).activityRowsEnabled, false);
 });

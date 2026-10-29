@@ -41,7 +41,6 @@ type Props = Pick<
   | "setFeedFilter"
   | "showScrollToBottom"
   | "isMbl"
-  | "mobileLayoutEnabled"
   | "messageListRef"
   | "messagesError"
   | "sessionLoading"
@@ -65,7 +64,6 @@ type Props = Pick<
   | "isDictationProcessing"
   | "setIsRecording"
   | "setIsDictationProcessing"
-  | "mobileFullscreenFlag"
   | "isRecording"
   | "detailsSheetOpen"
   | "detailsDialogRef"
@@ -141,14 +139,14 @@ export function AgentChatView({
   currentUser, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
-  mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
+  scrollMessagesToBottom, messageListRef, handleMessageListScroll,
   messagesError, sessionLoading, messages, visibleFeed, activeFeedFilter, projectIdForPrefix,
   handleProposalAction, sending, queuedMessages, removeQueuedMessage,
   awaiting, deliveryNotice, replyTimedOut, handleStop, stopping, reuseAiComposer, mentionOpen,
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
   composerLocked, isDictationProcessing, setIsRecording, setIsDictationProcessing, insertDictation,
-  mobileFullscreenFlag, dictationProjectId, isRecording, handleSend, detailsSheetShown,
+  dictationProjectId, isRecording, handleSend, detailsSheetShown,
   detailsSheetOpen, detailsDialogRef, creatingAgent, setCreateAgentError, setNewAgentName,
   setNewAgentToken, setTokenCopied, newAgentToken, showCreateAgent, tokenCopied, newAgentName,
   createAgent, createAgentError, mobileAgentChatViewport,
@@ -200,7 +198,6 @@ export function AgentChatView({
               setFeedFilter={setFeedFilter}
               showScrollToBottom={showScrollToBottom}
               isMbl={isMbl}
-              mobileLayoutEnabled={mobileLayoutEnabled}
               scrollMessagesToBottom={scrollMessagesToBottom}
               messageListRef={messageListRef}
               handleMessageListScroll={handleMessageListScroll}
@@ -238,7 +235,6 @@ export function AgentChatView({
               setIsRecording={setIsRecording}
               setIsDictationProcessing={setIsDictationProcessing}
               insertDictation={insertDictation}
-              mobileFullscreenFlag={mobileFullscreenFlag}
               dictationProjectId={dictationProjectId}
               isRecording={isRecording}
               handleSend={handleSend}
@@ -323,8 +319,7 @@ export function AgentChatView({
       <div
         className={cn(
           "flex flex-col overflow-hidden bg-pageBackground text-white-black text-[14px]",
-          !(isMbl && (mobileLayoutEnabled || mobileFullscreenChrome)) &&
-            "h-screen",
+          !isMbl && "h-screen",
           isMbl &&
             !hideDockInset &&
             "mobile-tab-bar-content pt-[var(--mobile-top-bar-h)] pb-[max(var(--mobile-dock-h,64px),64px)]",
@@ -333,7 +328,6 @@ export function AgentChatView({
             !keyboardOpen &&
             "pb-[env(safe-area-inset-bottom)]",
           isMbl &&
-            (mobileLayoutEnabled || mobileFullscreenChrome) &&
             "mobile-agent-chat min-h-0 overscroll-y-none",
         )}
         style={{

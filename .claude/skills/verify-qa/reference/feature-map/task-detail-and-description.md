@@ -49,8 +49,51 @@ capture it above the Send box, with no overlap or estimated-height gap. Check
 empty and one-comment threads, repeat with `htpr-6899-stable-layout` on and off in a disposable local build, and
 confirm the separate fixed mobile composer at 390x844 is unchanged.
 
+## Ctrl+O ticket link labels
+
+Open a QA Sandbox task containing absolute and relative ticket links in its
+saved description or comments. Wait for the composer, then press Ctrl+O.
+Every readable ticket row shows its current ticket ID and title. Search by
+title, select the row, and confirm the destination is unchanged. Missing or
+unreadable tickets show a URL-derived `PROJECT-<board>-<number>` identifier,
+never another board's private title or a raw ticket URL. External links and
+attachments keep their labels and destinations. Check after reload and at
+1440x900 and 390x844 across Porcelain, Graphite, AMOLED and Dia.
+
+The `htpr-8096-ctrl-o-ticket-titles` bugfix flag defaults to Everyone. Off
+preserves the old link labels; test Off only in an isolated route test.
+
+## Background smart labels
+
+Creating a task schedules `scheduleClassifyNewTaskAiLabels`; changing its title
+or description schedules `scheduleClassifyTaskAiLabels`. Use only disposable
+`[qa-runner]` tasks on QA 985's private QA runner board. Create, edit and reload;
+verify saved text and existing labels survive. Save the create/update responses
+and label readback. Never change funding, plans or keys to exhaust an allowance.
+
+With `htpr-8099-smart-label-refusal` on, typed daily/monthly allowance refusals
+skip classification without clearing labels or raising server-error alerts.
+Real provider faults still report. Exercise direct and wrapped refusals, funding
+lookup failure, success, Off and unavailable flag-store cases through the
+scheduled dispatch in `tests/htpr-8099-smart-label-refusal.test.cjs`. Record live
+refusal coverage as UNREACHABLE unless a QA team is already exhausted; local
+fixtures do not replace live proof. Read production task-route logs after the
+live create/edit to confirm their background jobs did not emit allowance errors.
+
 ## Cleanup
 
 If you created a test task, hard-delete it via the product UI. Never leave a
 task you created (the smoke prefix is `QA_TASK_PREFIX` in
 `e2e/smoke/lib/boardSetup.ts`) past the run.
+
+## Description AI draft review
+
+With `htpr-8173-description-inline-drafts` on, open a disposable task's
+**Edit with AI** button. Also check Ctrl+J / Cmd+J from the focused description
+and targeted description AI events. The existing inline writer opens without
+requesting a draft automatically. Submit only when authorized, review multiple
+versions, apply one, save, and reload to confirm the chosen description persists.
+Check mobile and desktop, empty descriptions, and existing comments. Confirm
+comment AI and New Task compose retain their own behavior. With the flag off,
+confirm the previous sidebar routing in an isolated test. Delete disposable QA
+tasks and drafts after verification. Never use Valentin's browser or login.

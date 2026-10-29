@@ -397,7 +397,8 @@ test('related search GET and POST rehydrate only accessible boards after Turbopu
 
 test('MCP timer running/report and team presence forward the authenticated agent to real services', async () => {
   const f = await bearerFixture();
-  const entries = f.tasks.map(task => ({ id: task.id, taskId: task.id, userId: f.user.id, task, user: f.user, startedAt: new Date(), endedAt: null, pausedAt: null }));
+  const startedAtByProject = { 15: '2026-01-15T12:02:00.000Z', 4060: '2026-01-15T12:01:00.000Z', 2128: '2026-01-15T12:00:00.000Z' };
+  const entries = f.tasks.map(task => ({ id: task.id, taskId: task.id, userId: f.user.id, task, user: f.user, startedAt: new Date(startedAtByProject[task.projectId]), endedAt: null, pausedAt: null }));
   f.prisma.timeEntry = { findMany: async args => entries.filter(row => matches(row, args.where)) };
   f.prisma.taskSession = { findMany: async args => f.tasks.map(task => ({ task, agentId: `other-${task.projectId}`, agent: { id: `other-${task.projectId}` }, lastSeenAt: new Date() })).filter(row => matches(row, args.where)) };
   f.prisma.taskLease = { findMany: async () => [] };
@@ -516,7 +517,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
           assert.equal(Boolean(event), miss, `miss for ${board}`);
           if (event) assert.deepEqual(event, { distinctId: '6', event: 'agent_board_scope_miss', properties: { agentId: f.agent.id, ownerUserId: f.user.id, projectId: board, route: action === 'write' ? '/api/priority/setPriority' : action === 'comment' ? '/api/mcp/comments' : `/api/mcp/tasks${action === 'search' ? '/search' : ''}`, action: ['write', 'comment'].includes(action) ? 'write' : 'read', zeroBoard: kind === 'zero' || kind === 'pending' } });
         }
-        assert.equal(f.state.grantReads, mode === 'WATCH' && kind !== 'human' ? 2 : 0);
+        assert.equal(f.state.grantReads, mode === 'WATCH' && !['human', 'revoked', 'other-owner'].includes(kind) ? 2 : 0);
       });
     }
   }

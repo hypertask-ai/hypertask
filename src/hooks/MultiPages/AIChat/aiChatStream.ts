@@ -1,3 +1,4 @@
+import { invalidateSlashSkills } from "@/lib/skills/slashSkills";
 import { IChatMessage, IChatSession } from "@/models/model";
 import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
@@ -6,7 +7,8 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat"> & {
+type Context = Pick<AiChatSendContext, "ticketRowsEnabled" | "skillDraftsEnabled" | "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat" | "progressiveChatCreateEnabled" | "navigateToTask"> & {
+  isCurrentStream?: () => boolean;
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -15,8 +17,8 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 
 export async function consumeAiChatStream(context: Context) {
   const {
-  response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat,
+  isCurrentStream, response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
+  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat, progressiveChatCreateEnabled = false, navigateToTask,
   } = context;
 
 
@@ -24,10 +26,12 @@ export async function consumeAiChatStream(context: Context) {
       const decoder = new TextDecoder("utf-8");
       let done = false;
       let aiContent = "";
+      let savedTaskContent = "";
       let buffer = "";
       let currentEventType = "";
       let replyAuthorAgent: { id: string; name: string } | null = null;
       let streamErrorHandled = false;
+      let navigationFailed = false;
       let sawDone = false;
 
       while (!done) {
@@ -73,7 +77,7 @@ export async function consumeAiChatStream(context: Context) {
                     break;
                   case "status":
                     console.log(`🔥 Received status: ${parsed.content}`);
-                    setAgentStatus(parsed.content);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(parsed.content);
                     break;
                   case "thinking":
                     console.log(`🔥 Received thinking: ${parsed.content}`);
@@ -89,8 +93,40 @@ export async function consumeAiChatStream(context: Context) {
                       };
                     }
                     break;
+                  case "open_task": {
+                    try {
+                      if (!navigateToTask || !Number.isSafeInteger(parsed.projectId) || parsed.projectId <= 0 || !Number.isSafeInteger(parsed.uniqueIndex) || parsed.uniqueIndex <= 0) {
+                        throw new Error("Task navigation is unavailable");
+                      }
+                      navigateToTask(parsed.projectId, parsed.uniqueIndex);
+                    } catch {
+                      navigationFailed = true;
+                      streamErrorHandled = true;
+                      addMessageToSessionQuery(session.id, {
+                        id: assistantMessageId,
+                        content: "I could not open the task. Please open it from the board.",
+                        role: "assistant",
+                        createdAt: new Date(),
+                        sessionId: session.id,
+                        isDelivered: true,
+                      }, false, true);
+                    }
+                    break;
+                  }
+                  case "task_updated":
+                    if (!progressiveChatCreateEnabled) break;
+                    if (Number.isSafeInteger(parsed.taskId) && parsed.taskId > 0) {
+                      window.dispatchEvent(new CustomEvent(TASK_EVENT, { detail: { taskId: parsed.taskId } }));
+                    }
+                    break;
+                  case "task_created":
                   case "content":
-                    setAgentStatus(undefined);
+                    if (navigationFailed || typeof parsed.content !== "string") break;
+                    if (currentEventType === "task_created") {
+                      if (!progressiveChatCreateEnabled) break;
+                      savedTaskContent += parsed.content;
+                    }
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     aiContent += parsed.content;
 
                     const initialAssistantMessage: IChatMessage = {
@@ -122,7 +158,7 @@ export async function consumeAiChatStream(context: Context) {
                   case "complete":
                     break;
                   case "error": {
-                    setAgentStatus(undefined);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     streamErrorHandled = true;
                     const rawError =
                       typeof parsed.content === "string" ? parsed.content : "";
@@ -130,7 +166,7 @@ export async function consumeAiChatStream(context: Context) {
                     console.log("🔥 Received error event:", rawError);
                     const errorAssistantMessage: IChatMessage = {
                       id: assistantMessageId,
-                      content: errorText,
+                      content: savedTaskContent + errorText,
                       role: "assistant",
                       createdAt: new Date(),
                       sessionId: session.id,
@@ -142,11 +178,12 @@ export async function consumeAiChatStream(context: Context) {
                       false,
                       true
                     );
-                    setIsTyping(false);
+                    if (!isCurrentStream || isCurrentStream()) setIsTyping(false);
                     break;
                   }
                   case "done":
-                    setAgentStatus(undefined);
+                    if (context.skillDraftsEnabled) invalidateSlashSkills();
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     sawDone = true;
                     console.log("🔥 Stream complete:", parsed);
                     void queryClient
@@ -155,7 +192,26 @@ export async function consumeAiChatStream(context: Context) {
                         console.warn("[AI chat] inbox refresh failed", error)
                       );
                     if (parsed.status === "error") {
-                      if (!streamErrorHandled) {
+                      if (!streamErrorHandled && parsed.cancelled === true) {
+                        const stoppedMessage: IChatMessage = {
+                          id: assistantMessageId,
+                          content:
+                            aiContent.trim().length > 0
+                              ? aiContent
+                              : "Stream cancelled.",
+                          role: "assistant",
+                          createdAt: new Date(),
+                          isDelivered: true,
+                          sessionId: session.id,
+                        };
+                        addMessageToSessionQuery(
+                          session.id,
+                          stoppedMessage,
+                          false,
+                          true
+                        );
+                        streamErrorHandled = true;
+                      } else if (!streamErrorHandled) {
                         const rawDone =
                           typeof parsed.content === "string"
                             ? parsed.content
@@ -165,7 +221,7 @@ export async function consumeAiChatStream(context: Context) {
                           : "Sorry, an error occurred while processing your request.";
                         const errorMessage: IChatMessage = {
                           id: assistantMessageId,
-                          content: errorText,
+                          content: savedTaskContent + errorText,
                           role: "assistant",
                           createdAt: new Date(),
                           isDelivered: true,
@@ -183,6 +239,7 @@ export async function consumeAiChatStream(context: Context) {
                       const initialAssistantMessage: IChatMessage = {
                         id: assistantMessageId,
                         content: aiContent,
+                        ...(context.ticketRowsEnabled && parsed.assistant_persisted === true && Array.isArray(parsed.ticketGroups) ? { ticketGroups: parsed.ticketGroups } : {}),
                         role: "assistant",
                         createdAt: new Date(),
                         sessionId: session.id,
@@ -215,10 +272,10 @@ export async function consumeAiChatStream(context: Context) {
                         );
                       }
                     }
-                    setIsTyping(false);
+                    if (!isCurrentStream || isCurrentStream()) setIsTyping(false);
                     break;
                   default:
-                    setAgentStatus(undefined);
+                    if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
                     console.warn(
                       "🔥 Unknown event type:",
                       currentEventType,
@@ -228,7 +285,7 @@ export async function consumeAiChatStream(context: Context) {
                 }
               }
             } catch (error) {
-              setAgentStatus(undefined);
+              if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
               console.error(
                 "🔥 Error processing stream line:",
                 error,
@@ -242,7 +299,7 @@ export async function consumeAiChatStream(context: Context) {
 
       if (!sawDone && !streamErrorHandled) {
         const partial = aiContent.trim().length > 0;
-        setAgentStatus(undefined);
+        if (!isCurrentStream || isCurrentStream()) setAgentStatus(undefined);
         addMessageToSessionQuery(
           session.id,
           {

@@ -1320,6 +1320,9 @@
           },
           {
             "startedAt": "desc"
+          },
+          {
+            "id": "asc"
           }
         ],
         "take": 1000
@@ -1719,7 +1722,11 @@
                 }
               }
             }
-          }
+          },
+          "credentialTeamId": true,
+          "credentialTeamAccessBinding": true,
+          "crossTeamHomeTeamId": true,
+          "crossTeamAccessGranted": true
         }
       },
       "planned": {
@@ -1752,7 +1759,11 @@
                   }
                 }
               }
-            ]
+            ],
+            "credentialTeamId": null,
+            "credentialTeamAccessBinding": null,
+            "crossTeamHomeTeamId": null,
+            "crossTeamAccessGranted": null
           }
         ],
         "count": 4

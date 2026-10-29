@@ -34,7 +34,7 @@ function moduleWithStubs(file, stubs) {
   const loadedModule = { exports: {} };
   vm.runInNewContext(code, {
     module: loadedModule, exports: loadedModule.exports, Error, Date, AbortController, Response, Headers, ReadableStream, TextEncoder, TextDecoder, DOMParser: new (require("jsdom").JSDOM)("").window.DOMParser, fetch: (...args) => global.fetch(...args), performance,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
     require: (id) => {
       if (id in stubs) return stubs[id];
       if (id === "@/lib/api/errorMessage") return moduleWithStubs("src/lib/api/errorMessage.ts", {});
@@ -159,6 +159,10 @@ function harness(options = {}) {
     "@/lib/ai/chatStream/errors": errors,
   });
   const create = moduleWithStubs("src/lib/ai/tools/createTask.ts", {
+    "@/lib/flags/definitions/htpr-7758-progressive-chat-create": { HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG: "htpr-7758-progressive-chat-create" },
+    "@/lib/ai/taskWriterDuplicateGuard": duplicateGuard,
+    "@/utils/helperFunctions/escapeHtml": load(path.join(root, "src/utils/helperFunctions/escapeHtml.ts")),
+    "./updateOneTask": { createTaskUpdater: () => { throw new Error("Legacy creation must not complete another ticket"); } },
     ai,
     "@/app/api/ai/chat/stream/bulkTools": { buildBulkOperationKey: (kind, tasks) => JSON.stringify([kind, tasks]) },
     "@/lib/ai/bulkConfirmation": { requireCrossMessageConfirmation: async (args) => { confirmations.push(args); return options.confirmed ? "execute" : "preview"; } },
@@ -266,7 +270,7 @@ function harness(options = {}) {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": load(path.join(root, "src/utils/aiWriterUtils.ts")),
     "@/utils/htmlEscape": load(path.join(root, "src/utils/htmlEscape.ts")),
-    "./taskWriterMedia": { createTaskWriterMediaTokenFactory() {}, extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
+    "./taskWriterMedia": { extractTaskWriterPromptMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory() {}, extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads() {} },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => ({ addedFilters: ["labels"] }) },
     "@/utils/helperFunctions/Views/NewTaskViewDefaults": { getNewTaskViewDefaults: () => ({ tags: options.viewTags ?? [], assignees: [] }) },

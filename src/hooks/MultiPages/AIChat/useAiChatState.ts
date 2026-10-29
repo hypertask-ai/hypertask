@@ -1,3 +1,5 @@
+import { createSessionStreams } from "@/lib/aiChat/sessionStreams";
+import { useAiChatDraft } from "./useAiChatDraft";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { TAiModal } from "@/models/AI_Task_writer_model";
@@ -11,14 +13,17 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
 import { useQueryClient } from "@tanstack/react-query";
+import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
-import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
 
-export function useAiChatState() {
+export function useAiChatState(parallelChatsEnabled = false) {
+  const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const agentSidebarEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
   const queryClient = useQueryClient();
@@ -97,6 +102,9 @@ export function useAiChatState() {
   const [isTyping, setIsTyping] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
   const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
+  const [, refreshStreams] = useState(0);
+  const sessionStreams = useMemo(() => createSessionStreams(() => refreshStreams((version) => version + 1)), [currentUser?.id]);
+  const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
   const persistentQueueEnabled = useFlag(HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG);
   const [, refreshQueue] = useState(0);
   const sessionQueue = useMemo(() => {
@@ -107,7 +115,7 @@ export function useAiChatState() {
     }
     return createSessionMessageQueue(currentUser?.id ?? 0, storage, () => refreshQueue((version) => version + 1));
   }, [currentUser?.id]);
-  const persistentQueue = persistentQueueEnabled ? sessionQueue : undefined;
+  const persistentQueue = persistentQueueEnabled || parallelChatsEnabled ? sessionQueue : undefined;
   const [showScrollUpIndicator, setShowScrollUpIndicator] =
     useState<boolean>(false);
   const { currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption } =
@@ -116,6 +124,7 @@ export function useAiChatState() {
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
   const sendInFlightRef = useRef(false);
+  const settleSendRef = useRef<(() => void) | null>(null);
   const [currentStreamingSession, setCurrentStreamingSession] = useState<
     string | null
   >(null);
@@ -174,8 +183,19 @@ export function useAiChatState() {
     } else if (mentionData.type === "name") {
     }
   }
-  const contextCallbackRef = useRef(contextCallback);
-  contextCallbackRef.current = contextCallback;
+  function agentContextCallback(mentionData: MentionItem) {
+    if (mentionData.type === "agent" && currentProject?.id && currentUser && editor?.view.dom.closest('[data-testid="ai-sidebar"]')) {
+      window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
+        agentId: mentionData.id, getDraft: () => ({ html: editor.getHTML(),
+          text: editor.getText({ textSerializers: { mention: ({ node }) => `@${node.attrs.text || node.attrs.id}` } }),
+        }),
+      } }));
+      return;
+    }
+    contextCallback(mentionData);
+  }
+  const contextCallbackRef = useRef(agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback);
+  contextCallbackRef.current = agentSessionsEnabled && agentSidebarEnabled ? agentContextCallback : contextCallback;
   const stableContextCallback = useCallback(
     (node: any) => contextCallbackRef.current(node),
     []
@@ -210,7 +230,8 @@ export function useAiChatState() {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
+  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
+  useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
     sessionQueue.sessionId = currentSession?.id;
@@ -262,7 +283,9 @@ export function useAiChatState() {
   if (persistentQueue) {
     visibleQueuedMessages = currentSession ? persistentQueue.get(currentSession.id) : [];
   }
+  const selectedStream = currentSession && parallelStreams?.get(currentSession.id);
   return {
+  parallelStreams,
   lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
   aiChatBoardSessionMap, setAiChatBoardSessionMap, setRecentChatBoardIds, setAiChatPinned, isSidebarMode,
@@ -271,7 +294,7 @@ export function useAiChatState() {
   chatMounted, setChatMounted, minimized, setMinimized, isTyping,
   setIsTyping, queuedMessages: visibleQueuedMessages, persistentQueue, setQueuedMessages, messageQueueRef, showScrollUpIndicator,
   setShowScrollUpIndicator, currentAiOption, setAiOption, modelTeamId, modelBilling, usesPlanDefault, agentSessionAiOption,
-  streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, currentStreamingSession,
+  streamingSessionRef, streamingAssistantMessageRef, streamingRequestRef, sendInFlightRef, settleSendRef, currentStreamingSession,
   setCurrentStreamingSession, isRecording, setIsRecording, displayAiOptions, contextList,
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
@@ -281,5 +304,15 @@ export function useAiChatState() {
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
+  ...(selectedStream ? {
+    isTyping: selectedStream.isTyping, setIsTyping: selectedStream.setIsTyping,
+    agentStatus: selectedStream.agentStatus, setAgentStatus: selectedStream.setAgentStatus,
+    sendInFlightRef: selectedStream.sendInFlightRef, settleSendRef: selectedStream.settleSendRef,
+    streamingSessionRef: selectedStream.streamingSessionRef,
+    streamingAssistantMessageRef: selectedStream.streamingAssistantMessageRef,
+    streamingRequestRef: selectedStream.streamingRequestRef,
+    currentStreamingSession: selectedStream.streamingSessionRef.current,
+    setCurrentStreamingSession: selectedStream.setCurrentStreamingSession,
+  } : {}),
   };
 }

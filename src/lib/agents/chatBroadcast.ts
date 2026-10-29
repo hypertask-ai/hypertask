@@ -7,12 +7,12 @@ export async function broadcastChatSession(
 ): Promise<void> {
   let participantIds: number[] = [];
   try {
-    participantIds = await chatParticipantUserIds(sessionId);
+    participantIds = await chatParticipantUserIds(sessionId, alsoUserIds);
   } catch (error) {
     console.warn("[agent-chat] participant fan-out lookup failed", sessionId, error);
   }
   await Promise.all(
-    [...new Set([...alsoUserIds, ...participantIds])].map((userId) =>
+    [...new Set(participantIds)].map((userId) =>
       broadcast(userChannel(userId), AGENT_CHAT_EVENT, { sessionId }).catch(
         (error) => console.warn("[agent-chat] fan-out failed", sessionId, error),
       ),

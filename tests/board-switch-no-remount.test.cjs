@@ -190,7 +190,7 @@ test("HTPR-6072: project re-sync restarts SectionComp before descendants reconci
     "utf8",
   );
   const syncStart = src.indexOf("syncedBoardInput.projects !== _allProjects");
-  const descendantWork = src.indexOf("const filteredSectionsForActiveView");
+  const descendantWork = src.search(/(?:const|let) filteredSectionsForActiveView/);
   assert.ok(syncStart >= 0 && syncStart < descendantWork);
   assert.doesNotMatch(
     src,

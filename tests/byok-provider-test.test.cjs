@@ -22,9 +22,10 @@ test("BYOK test requests use one-token provider calls without exposing keys in U
   );
   const secret = "sk-test-secret-value";
   const expected = {
+    baseten: ["https://inference.baseten.co/v1/chat/completions", "deepseek-ai/DeepSeek-V4.1-Flash-1017"],
     gateway: ["https://ai-gateway.vercel.sh/v1/chat/completions", "openai/gpt-6-luna"],
     openai: ["https://api.openai.com/v1/chat/completions", "gpt-6-luna"],
-    claude: ["https://api.anthropic.com/v1/messages", "claude-haiku-4.5"],
+    claude: ["https://api.anthropic.com/v1/messages", "claude-haiku-5-5"],
     google: ["https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini-3.5-flash-lite"],
     deepseek: ["https://api.deepseek.com/chat/completions", "deepseek-flash"],
     moonshot: ["https://api.moonshot.ai/v1/chat/completions", "kimi-k2.5"],
@@ -40,6 +41,17 @@ test("BYOK test requests use one-token provider calls without exposing keys in U
     assert.equal(request.url.includes(secret), false);
     const body = JSON.parse(request.init.body);
     assert.equal(body.model, model);
+    if (provider === "baseten") {
+      assert.equal(request.init.method, "POST");
+      assert.equal(request.init.headers.Authorization, `Bearer ${secret}`);
+      assert.equal(request.init.headers["Content-Type"], "application/json");
+      assert.equal(request.init.cache, "no-store");
+      assert.deepEqual(body, {
+        model,
+        messages: [{ role: "user", content: "Reply OK" }],
+        max_tokens: 1,
+      });
+    }
     assert.equal(body.max_tokens ?? body.max_completion_tokens, 1);
   }
 

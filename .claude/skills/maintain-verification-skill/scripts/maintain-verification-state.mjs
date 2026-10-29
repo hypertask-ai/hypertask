@@ -22,7 +22,10 @@ function answer(file) {
 }
 
 if (action === 'plan') {
-  const pages = readdirSync(path.join(repo, mapPath)).filter(name => name.endsWith('.md') && name !== 'INDEX.md').sort();
+  const pages = [mapPath, '.claude/skills/verify-qa/reference/ops-map'].flatMap(directory =>
+    existsSync(path.join(repo, directory)) ? readdirSync(path.join(repo, directory))
+      .filter(name => name.endsWith('.md') && name !== 'INDEX.md').sort()
+      .map(name => path.relative(mapPath, path.join(directory, name)).split(path.sep).join('/')) : []);
   const sha = git(['rev-parse', 'HEAD']);
   const previous = existsSync(path.join(state, 'last-run-sha')) ? read(path.join(state, 'last-run-sha')).trim() : '';
   let changed;
@@ -35,11 +38,11 @@ if (action === 'plan') {
   }
   const pendingFile = path.join(state, 'pending.json');
   const pending = existsSync(pendingFile) ? json(pendingFile).filter(page => pages.includes(page)) : [];
-  const affected = pages.filter(page => !changed || changed.includes(`${mapPath}/${page}`) || repoPaths(read(path.join(repo, mapPath, page))).some(cited => changed.some(file => file === cited || file.startsWith(cited.replace(/\/$/, '') + '/'))));
+  const affected = pages.filter(page => !changed || changed.includes(path.posix.join(mapPath, page)) || repoPaths(read(path.join(repo, mapPath, page))).some(cited => changed.some(file => file === cited || file.startsWith(cited.replace(/\/$/, '') + '/'))));
   const problems = checkFeatureMap(repo);
   const queue = [...new Set([...pending, ...affected])];
   const requested = forced ? [...new Set(forced.split(','))] : queue;
-  if (requested.some(page => !pages.includes(page))) throw new Error('--pages must name existing area-page siblings');
+  if (requested.some(page => !pages.includes(page))) throw new Error('--pages must name existing customer or ../ops-map/ recipes');
   const picked = requested.slice(0, 8);
   const skipped = [...new Set([...requested.slice(8), ...queue.filter(page => !picked.includes(page))])];
   writeFileSync(path.join(run, 'plan.json'), JSON.stringify({ sha, picked, skipped, problems }, null, 2) + '\n');
@@ -47,14 +50,14 @@ if (action === 'plan') {
   writeFileSync(path.join(run, 'checker.md'), formatProblems(problems));
   for (const page of skipped) console.log(`maintain-verification: skipped to next run: ${page}`);
 } else if (action === 'validate') {
-  answer(path.join(run, forced + '.json'));
+  answer(path.join(run, forced.replaceAll('/', '_') + '.json'));
 } else if (action === 'report') {
   const plan = json(path.join(run, 'plan.json'));
   const drift = new Map();
   const failures = [];
   for (const page of plan.picked) {
     try {
-      const value = answer(path.join(run, page + '.json'));
+      const value = answer(path.join(run, page.replaceAll('/', '_') + '.json'));
       if (value.drift !== 'none') drift.set(page, { citations: value.drift, recipe: value.liveRecipe, summary: value.summary, entryPoints: value.entryPoints });
     } catch {
       failures.push(page);
@@ -70,7 +73,7 @@ if (action === 'plan') {
       continue;
     }
     let recipe = 'Doctor first with verify-qa; check index links against sibling pages. No app clicks for index-only drift.';
-    if (problem.page !== 'INDEX.md') {
+    if (path.basename(problem.page) !== 'INDEX.md') {
       const markdown = read(path.join(repo, mapPath, problem.page));
       const drive = markdown.match(/## How to drive it\s+([\s\S]*?)(?=\n## |$)/)?.[1]?.trim();
       recipe = `Doctor first with verify-qa, then follow ${mapPath}/${problem.page}: ${drive || 'open the area using its documented customer entry point; verify the cited surface, reload and collect proof; clean up only your fixtures.'}`;

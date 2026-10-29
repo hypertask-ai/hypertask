@@ -1,3 +1,5 @@
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { hydrateChatTicketMessages } from "@/lib/ai/chatStream/ticketGroups";
 import { loadSidebarChatRequest } from "@/lib/agents/chatAccess";
 import { loadTurnModel } from "@/lib/ai/chatStream/turnModel";
 import { createChatStream } from "@/lib/ai/chatStream/stream";
@@ -7,7 +9,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7765_PARALLEL_CHATS_FLAG, HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -49,7 +51,7 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse(requestErrorMessage(error, "validation"));
   }
 
-  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "");
+  const sidebarAccess = await loadSidebarChatRequest(request, body.session_id ?? "", { userId: requestUser.id });
   if (!sidebarAccess.ok) return createSseErrorResponse(sidebarAccess.error, sidebarAccess.status);
 
   const heartbeatExecutionId = request.headers.get(
@@ -152,11 +154,15 @@ export async function POST(request: NextRequest) {
         );
       }
       if (replay.status === "completed") {
+        const hydrated = await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id)
+          ? await hydrateChatTicketMessages({ id: body.session_id, messages: [replay] }, dbUser.id, true)
+          : { messages: [{ content: replay.content }] };
         return new Response(
           sseFrame("content", { content: replay.content }) +
           sseFrame("done", {
             status: "complete",
             replayed: true,
+            ...("ticketGroups" in hydrated.messages[0] ? { ticketGroups: hydrated.messages[0].ticketGroups } : {}),
             user_message_persisted: userMessagePersisted,
             assistant_persisted: true,
           }),
@@ -214,6 +220,7 @@ export async function POST(request: NextRequest) {
     undefined,
     actingAgent?.id,
     isolateAgentLease,
+    await isFeatureEnabled(HTPR_7765_PARALLEL_CHATS_FLAG, dbUser.id),
   );
   if (streamLease === "busy") {
     return createSseErrorResponse(

@@ -8,6 +8,9 @@ import {
   skillErrorResponse,
 } from "@/app/api/ai/_lib/skillAccess";
 import { importSkillsFromGitHub } from "@/app/api/ai/_lib/skillImport";
+import { SkillValidationError } from "@/app/api/ai/_lib/skillMarkdown";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7781_SKILL_VALIDATION_FLAG } from "@/lib/flags/definitions/htpr-7781-skill-validation";
 import prisma from "@/lib/prisma";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest) {
       ? parsed.filter((skill) => input.slugs?.includes(skill.slug))
       : parsed;
     if (input.dryRun) return NextResponse.json({ skills: parsed });
-    if (selected.length === 0) throw new Error("Select at least one skill to import");
+    if (selected.length === 0) throw new SkillValidationError("Select at least one skill to import");
 
     const skills = await prisma.$transaction(
       selected.map((skill) => {
@@ -72,6 +75,12 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json({ skills });
   } catch (error) {
+    if (
+      (error instanceof SkillValidationError || error instanceof z.ZodError) &&
+      (await isFeatureEnabled(HTPR_7781_SKILL_VALIDATION_FLAG, user.id).catch(() => false))
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

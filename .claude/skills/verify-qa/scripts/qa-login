@@ -1,0 +1,28 @@
+#!/usr/bin/env node
+
+const { homedir } = require('node:os');
+const { join } = require('node:path');
+
+const accounts = {
+  flags: [985, 'hypertask-videos/storageState-qa.json'],
+  plain: [2343, 'hypertask-videos/storageState-qa-normal.json'],
+  free: [3411, 'ht-qa/state-free.json'],
+  byok: [3412, 'ht-qa/state-byok.json'],
+  pro: [3413, 'ht-qa/state-pro.json'],
+  owner: [4036, 'ht-qa/state-owner.json'],
+  member: [4037, 'ht-qa/state-member.json'],
+  guest: [null, null],
+};
+const [account = 'flags', option, ...extra] = process.argv.slice(2);
+if (!Object.hasOwn(accounts, account) || (option && option !== '--state') || extra.length ||
+    (account === 'guest' && option === '--state')) {
+  console.error('usage: qa-login [flags|plain|free|byok|pro|owner|member|guest] [--state]');
+  process.exitCode = 2;
+} else {
+  const [userId, path] = accounts[account];
+  const stateFile = path ? join(homedir(), '.config', path) : null;
+  let refresh = null;
+  if (account === 'flags') refresh = '/qa/login';
+  else if (account !== 'guest') refresh = 'hypertask-qa-runner/scripts/login.mjs';
+  console.log(option === '--state' ? stateFile : JSON.stringify({ account, userId, stateFile, refresh }));
+}

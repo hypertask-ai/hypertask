@@ -34,7 +34,7 @@ function harness(mode, options = {}) {
       googleAccount: { userId: owner.id }, stripe_customer_id: options.needsSeat ? "cus_test" : null,
     },
   };
-  const targetAgent = { id: siblingAgentId, userId: owner.id, displayName: "Sibling", members: [] };
+  const targetAgent = { id: siblingAgentId, userId: owner.id, displayName: "Sibling", boardHomeTeamId: "team", members: [] };
   const membership = async (args, inTransaction) => {
     const queries = inTransaction ? state.transactionQueries : state.outsideQueries;
     queries.push(args);
@@ -112,6 +112,7 @@ function harness(mode, options = {}) {
   };
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/auth/agentScope": {
       agentScopeEnforced: () => mode === "ENFORCE",
       agentScopeMode: async () => mode,

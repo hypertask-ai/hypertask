@@ -54,7 +54,7 @@ async function withPalette(t, config, check) {
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
+  const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const TaskContext = React.createContext(undefined);
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -105,7 +105,10 @@ async function withPalette(t, config, check) {
     source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return config.boards ?? [project, { ...project, id: 8 }]; } } });
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
-    source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => cacheUpdates.push(args) }) });
+    source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => {
+      jiti(path.join(root, 'src/lib/taskDetailReads.ts')).refreshTaskDetailReadAfterWrite(queryClient, 985, args[1], args[0]);
+      cacheUpdates.push(args);
+    } }) });
     // Exercise the real greeting/board resolution, but defer the network workflow
     // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
@@ -845,9 +848,10 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
     source('src/app/unauthorized/page.tsx', { default: () => null });
     source('src/utils/api/Task Detail/index.ts', { fetchCommentsHelper: () => assert.fail('cached detail must not block on comments') });
     const Detail = jiti(path.join(root, 'src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx')).default;
-    const { cachedTaskDetailKey } = jiti(path.join(root, 'src/lib/navigation/cachedTaskDetail.ts'));
-    const key = cachedTaskDetailKey(985, 52);
-    queryClient.setQueryData(key, targetTask);
+    const { taskDetailReadKey, TASK_DETAIL_READ_FRESH_MS } = jiti(path.join(root, 'src/lib/taskDetailReads.ts'));
+    const key = taskDetailReadKey(985, 52);
+    queryClient.setQueryData(['cached-task-detail', 985, 52], targetTask);
+    queryClient.setQueryData(key, targetTask, { updatedAt: Date.now() - TASK_DETAIL_READ_FRESH_MS });
     await mountProbe(() => React.createElement(Detail, { taskId: 52, projectId: 7, uniqueIndex: 4, initialTask: targetTask, embedded: false }));
     assert.equal(document.querySelector('[data-task-title]').textContent, targetTask.title);
     assert.ok(pendingFetch, 'the old detail fetch is in flight');
@@ -1050,6 +1054,7 @@ test('edit-mode and empty writer events retain inline writer with 6937 off but r
     await withPalette(t, { enabled, newWindow, open: false }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
+      source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });
       const { useTaskDetailEditorEvents } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorEvents.tsx'));
       const openings = [];
       const context = { mode: 'read-edit-description', id: 'description', shouldTriggerAiTaskWriter: true,
@@ -1079,6 +1084,7 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
       stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({}) });
       stub(require.resolve('next/navigation'), { useRouter: () => ({}), useSearchParams: () => new URLSearchParams() });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { default: () => null, OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
+      source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });
       source('src/lib/contexts/TaskDetail/TiptapProvider.tsx', { default: ({ children }) => children });
       source('src/components/RTE/Components/TiptapBubbleMenu.tsx', { default: () => null });
       source('src/components/RTE/Components/TiptapMainContainer.tsx', { default: () => null });
@@ -1731,4 +1737,85 @@ test('three-switch creation marks the new ticket and leaves opening to its page 
     assert.equal(values.get('showAIChatInterfaceAtom'), false);
     assert.equal(values.get('aiChatAutoOpenSuppressedAtom'), true);
   });
+});
+
+for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
+  test(`AMOLED mode outline flag ${modeOutline} preserves tab switching on ${mobile ? 'phone' : 'desktop'}`, async (t) => {
+    await withPalette(t, { newWindow: true, modeOutline, mobile }, async ({ press, input, values }) => {
+      const tabs = document.querySelector('[aria-label="Commands mode"]');
+      assert.ok(tabs);
+      for (const token of ['[outline:var(--outline-floating-panel)]']) {
+        assert.equal(tabs.classList.contains(token), modeOutline);
+      }
+      await React.act(async () => [...tabs.querySelectorAll('[role="tab"]')].find(tab => tab.textContent.startsWith('New Task')).click());
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      assert.ok(input());
+      await press('Tab', {}, input());
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+    });
+  });
+}
+
+test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and keeps click and draft', async (t) => {
+  for (const apple of [false, true]) {
+    let starts = 0;
+    const AudioButton = (props) => React.createElement('button', {
+      id: props.id, 'aria-label': props.ariaLabel, onClick: () => { starts++; },
+    }, 'Mic');
+    await withPalette(t, { newWindow: true, tab: 'compose', apple, AudioButton }, async ({ flags, rerender, type, press, input, requests }) => {
+      flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
+      await rerender();
+      await type('Keep this draft');
+      const modifiers = apple ? { metaKey: true } : { ctrlKey: true };
+      const event = await press('D', { ...modifiers, shiftKey: true });
+      assert.equal(starts, 1);
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(input().value, 'Keep this draft');
+      await React.act(async () => document.getElementById('compose-task-audio-button').click());
+      assert.equal(starts, 2);
+      for (const extra of [{ repeat: true }, { isComposing: true }, { altKey: true }, { ctrlKey: true, metaKey: true }, { shiftKey: false }]) {
+        const ignored = await press('D', { ...modifiers, shiftKey: true, ...extra });
+        assert.equal(ignored.defaultPrevented, false);
+      }
+      assert.equal(starts, 2);
+      await press('k', modifiers);
+      await press('D', { ...modifiers, shiftKey: true });
+      assert.equal(starts, 2);
+      await press('j', modifiers);
+      assert.equal(input().value, 'Keep this draft');
+      flags['htpr-8140-ctrlj-dictation-shortcut'] = false;
+      await rerender();
+      const off = await press('D', { ...modifiers, shiftKey: true });
+      assert.equal(off.defaultPrevented, false);
+      assert.equal(starts, 2);
+      assert.equal(requests.length, 0);
+    });
+  }
+});
+
+
+test('HTPR-8141 board tooltip matches platform footer and preserves picker and flag-off behavior', async (t) => {
+  for (const apple of [false, true]) {
+    await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {
+      const before = chip().outerHTML;
+      assert.equal(document.querySelector('[data-tooltip="Change board"]'), null);
+      flags['htpr-8141-board-shortcut-tooltip'] = true;
+      await rerender();
+      assert.equal(document.querySelector('[data-tooltip="Change board"]').textContent, apple ? 'CMD+SHIFT+B' : 'CTRL+SHIFT+B');
+      assert.equal(chip().outerHTML, before);
+      await type('Keep the draft');
+      await React.act(async () => chip().click());
+      assert.ok(boardList());
+      await press('Escape', { code: 'Escape' });
+      assert.equal(input().value, 'Keep the draft');
+      await press('B', boardKey(apple));
+      assert.ok(boardList());
+      await press('Escape', { code: 'Escape' });
+      assert.equal(input().value, 'Keep the draft');
+      flags['htpr-8141-board-shortcut-tooltip'] = false;
+      await rerender();
+      assert.equal(document.querySelector('[data-tooltip="Change board"]'), null);
+      assert.equal(chip().outerHTML, before);
+    });
+  }
 });

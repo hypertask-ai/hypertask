@@ -2,7 +2,7 @@ import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
 import { inlineAgentImageFields } from "./schemas";
 import { z } from "zod";
-import { resolveBulkTaskTargets, buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
+import { resolveBulkTaskTargets, buildBulkOperationKey, bulkOperationSubjectKeys } from "@/app/api/ai/chat/stream/bulkTools";
 import { requireCrossMessageConfirmation } from "@/lib/ai/bulkConfirmation";
 import prisma from "@/lib/prisma";
 import { buildMcpTaskUrl } from "@/lib/mcp/boards/links";
@@ -12,8 +12,6 @@ import { linkifyTicketRefs } from "@/utils/controllers/comments/linkifyTicketRef
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { buildMcpImageUrls, persistUrlsForComment } from "@/utils/controllers/urls/extractUrlsFromContent";
 import { broadcastTaskComment } from "@/lib/realtime/server";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { COMMENT_TASK_LINK_RULE } from "@/lib/ai/chatStream/prompt";
 import { TOOL_TASK_ID_DESCRIPTION, MAX_BULK_TOOL_TARGETS, bulkTaskTargetCount } from "@/lib/ai/tools/constants";
 import { withToolErrors, resolveTaskForTool } from "@/lib/ai/tools/execution";
@@ -89,25 +87,30 @@ export function createAddCommentTool(context: ToolContext) {
           seenTaskIds.add(taskId);
           return true;
         });
-        if (targets.length >= 4) {
-          const operationKey = buildBulkOperationKey(
-            "comment-on-tasks",
-            operationTargets.map(({ identifier, resolution }) => ({
-              identifier,
-              resolvedTaskId: resolution.task?.id ?? null,
-            })),
-            [
-              ["text", input.text.trim()],
-              ...(input.image_urls !== undefined ? [["image_urls", input.image_urls]] : []),
-              ...(input.inline_images !== undefined ? [["inline_images", input.inline_images]] : []),
-            ]
-          );
+        const operationKey = buildBulkOperationKey(
+          "comment-on-tasks",
+          [],
+          [
+            ["text", input.text.trim()],
+            ...(input.images !== undefined ? [["images", input.images]] : []),
+            ...(input.mentions !== undefined ? [["mentions", input.mentions]] : []),
+            ...(input.image_urls !== undefined ? [["image_urls", input.image_urls]] : []),
+            ...(input.inline_images !== undefined ? [["inline_images", input.inline_images]] : []),
+          ]
+        );
+        if (targets.length >= 4 || input.confirmed !== undefined || bulkPreviewsIssued.has(operationKey)) {
+          const operationSubjects = operationTargets.map(({ identifier, resolution }) => ({
+            identifier,
+            resolvedTaskId: resolution.task?.id ?? null,
+          }));
           if (
             await requireCrossMessageConfirmation({
               userId: user.id,
               sessionId: confirmationSessionId,
               operationKey,
+              subjectKeys: bulkOperationSubjectKeys(operationSubjects),
               confirmed: input.confirmed,
+              ...(context.bulkScopeConfirmationEnabled ? { scopePreviewsThisRequest: context.bulkScopePreviews } : {}),
               previewsIssuedThisRequest: bulkPreviewsIssued,
             }) === "preview"
           ) {
@@ -137,7 +140,7 @@ export function createAddCommentTool(context: ToolContext) {
               ...(input.inline_images !== undefined ? { inline_images: input.inline_images } : {}),
               message:
                 `This would comment on ${targets.length} tasks. Nothing has been changed yet. ` +
-                "End your turn now: list the affected tasks for the user and ask them to confirm. Only after they say yes, in a new message, call this tool again with confirmed: true.",
+                "If there are more comments in the requested scope, preview them now with confirmed: false too. Then end your turn: list the full scope for the user and ask them to confirm once. Only after they say yes, in a new message, call this tool again with confirmed: true for each batch; the yes covers only previewed tasks with the same comment and attachments.",
             });
           }
         }
@@ -225,8 +228,7 @@ export function createAddCommentTool(context: ToolContext) {
               createdCommentPayload.comment,
               commentWithAttachments,
               user.id,
-              taskWithOwner.projectId,
-              await isFeatureEnabled(HTPR_6516_AGENT_ATTRIBUTION_FLAG, user.id)
+              taskWithOwner.projectId
             );
           }
           return sanitizeForJson(createdCommentPayload);

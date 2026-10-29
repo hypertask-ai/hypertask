@@ -41,3 +41,14 @@ Record command navigation to the register and the reachable No board group witho
 ## Cleanup
 
 Delete only this run's recorded names/ids through owner detail **Archive or delete → Delete agent → confirmation**. Match DELETE by method and route family, because UUID detail URLs can canonicalize to slugs. Require HTTP 200 deletion and HTTP 404 detail for each, reload Agents and verify names absent, and confirm both ids absent from owned/team lists. Compare pre-existing ids against the baseline, accounting separately for automatic seeds. Do not delete default agents as throwaway fixtures or remove them just to restore the original list count; list reads can recreate them. Never revoke all tokens, alter other agents, change tasks, or write flags.
+
+
+## Cross-team identities
+
+For the cross-team rollout, use one throwaway QA-owned agent and two QA-owned sandbox boards in different teams. Record the agent ID once, add it to the first board, then add the same ID to the second through Board access. Reload both boards and verify the same identity in the mention results and assignment list. Pair this with a normal-account flag-off check, a foreign-team refusal, and a team-bound credential refusal. Never change a real lead's credentials or remove an existing identity.
+
+An agent that enters cross-team use keeps its original team durably. Turning the rollout Off denies its later-team grants without promoting another board when the original board is removed. Cross-team conversations remain private to owner and agent permanently, including older history and notifications; rollback must never restore teammate chat access. Read, send, drafts, history, polling and broadcasts all need the paired owner-allowed / teammate-refused proof.
+
+Mention results come from `GET /api/tasks/searchByParam?param=<name>&projectId=<board>`. Assignment options come from `GET /api/members/getAllForAssignees?projectId=<board>` (`boardAgents`). The board agent list uses `GET /api/agents/all?projectId=<board>`. Each must contain the same agent ID only after an explicit Accepted board grant. Never confuse a register candidate with an assigned board member. Team agent responses must not expose another team's boards or comment timestamps.
+
+Use QA 985 for browser evidence. A specifically requested real-board check may use authorized read-only CLI/API surfaces, not the owner's browser or cookies. Record any inaccessible picker as UNREACHABLE, with the exact permission reason; an API membership record alone is not visual picker proof.

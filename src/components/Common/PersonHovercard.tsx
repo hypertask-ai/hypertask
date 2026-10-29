@@ -6,9 +6,12 @@ import { usePersonHovercard } from "@/hooks/MultiPages/usePersonHovercard";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { agentPageHref } from "@/lib/agents/pageHref";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useSetRecoilState } from "@/lib/state";
+import { aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, isAiChatSidebarModeAtom, showAIChatInterfaceAtom } from "@/store";
+import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import {
   autoUpdate,
   flip,
@@ -106,6 +109,13 @@ const PersonHovercardSurfaceContent = ({
     role,
   ]);
   const pathname = usePathname();
+  const router = useRouter();
+  const agentHoverChat = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
+  const agentSidebarChats = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
+  const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
+  const setChatSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
+  const setExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
+  const setChatOpen = useSetRecoilState(showAIChatInterfaceAtom);
   const detailRoute = pathname?.startsWith("/detail/");
   const query = usePersonHovercard(projectId, subject ?? null, open);
   const profile = query.isFetching || query.isError ? undefined : query.data;
@@ -173,6 +183,28 @@ const PersonHovercardSurfaceContent = ({
               <p id={headingId} className="truncate text-content font-semibold">
                 {profile.displayName}
               </p>
+              {agentHoverChat && agentSidebarChats && projectId && profile.kind === "agent" && (
+                <button
+                  type="button"
+                  aria-label={`Chat with ${profile.displayName}`}
+                  className="relative z-20 mt-2 min-h-[28px] rounded-sm px-2 text-dense text-text-light-gray outline-none hover:bg-hover-active hover:text-white-black focus-visible:ring-1 focus-visible:ring-hypertasks-purple"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const params = new URLSearchParams(window.location.search);
+                    params.set("agentSidebar", "1");
+                    params.set("sidebarAgent", profile.id);
+                    setSidebarMode(true);
+                    setChatSuppressed(false);
+                    setExplicitOpenAt(Date.now());
+                    setChatOpen(true);
+                    router.replace(`${window.location.pathname}?${params.toString()}`, { scroll: false });
+                    window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: { agentId: profile.id } }));
+                    setOpen(false);
+                  }}
+                >
+                  Chat
+                </button>
+              )}
               {email && (
                 <button
                   type="button"

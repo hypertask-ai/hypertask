@@ -92,7 +92,7 @@ test('review-app-token exits 1 with empty stdout when GitHub answers 500', { ski
   assert.doesNotMatch(result.stderr, /test-token/)
 })
 
-test('dispatch scripts use the App config for the app repo and the old credential for the reviewer repo', async () => {
+test('dispatch scripts use the App config for the app repo and for the reviewer repo', async () => {
   for (const name of ['dispatch-scan', 'dispatch-review']) {
     const text = await readFile(`${dir}/${name}`, 'utf8')
     assert.match(text, /app_config=\$\(.*hypertask-review-app-token/)
@@ -104,7 +104,7 @@ test('dispatch scripts use the App config for the app repo and the old credentia
     assert.ok(calls.length > 0)
     for (const line of calls) {
       if (line.includes('repos/hypertask-ai/hypertask/')) assert.match(line, /--config "\$app_config"/, line)
-      if (line.includes('repos/hypertask-ai/reviewer/')) assert.match(line, /--config "\$curl_config"/, line)
+      if (line.includes('repos/hypertask-ai/reviewer/')) assert.match(line, /--config "\$app_config"/, line)
     }
   }
   const install = await readFile(`${dir}/install-wrappers.sh`, 'utf8')

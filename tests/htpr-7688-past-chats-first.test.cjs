@@ -15,6 +15,8 @@ function load(file, mocks = {}) {
   }).outputText;
   new Function("require", "module", "exports", js)((name) => {
     if (name === "react/jsx-runtime") return require(name);
+    if (name === "@/lib/flags/definitions/htpr-8048-agent-sessions") return { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" };
+    if (name === "@/lib/flags/definitions/htpr-7737-agent-hover-chat") return { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" };
     assert.ok(Object.hasOwn(mocks, name), `Unexpected dependency ${name}`);
     return { __esModule: true, ...mocks[name] };
   }, loaded, loaded.exports);
@@ -70,11 +72,14 @@ function menu({ enabled = true, paging = false, mobile = false } = {}) {
   const context = { target: { kind: "ai" }, agents, error: null, onSelectSession: id => selections.push(id), onSelect: target => targets.push(target), onRetry: noop };
   const { AgentSidebarChatCommands } = load("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
     react: { ...state.react, useContext: () => mobile },
+    "lucide-react": require("lucide-react"),
     "@/hooks/useFlag": { useFlag: key => {
-      if (key === "htpr-7702-phone-chat-list") return false;
+      if (["htpr-7702-phone-chat-list", "htpr-7764-chat-running"].includes(key)) return false;
       assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;
     } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
+    "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
     "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => history },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
@@ -152,19 +157,25 @@ test("flag off preserves AI and agent-only rows, legacy status words and agent s
   assert.deepEqual(view.selections, []);
 });
 
-function sidebar(initialSession = { id: "remembered", agentId: null }) {
+function sidebar(initialSession = { id: "remembered", agentId: null }, { createSession = () => assert.fail("An explicit saved chat must not create a replacement") } = {}) {
+  let shortcutOptions;
   const events = [];
   const state = hooks(value => { if (value?.kind) events.push(`mode:${value.kind}`); });
   let nativeContext = null;
   let chat = {
     currentSession: initialSession, fileItems: [], editor: { getHTML: () => "", getText: () => "", commands: { setContent: noop } },
-    resetFiles: noop, startNewSession: () => assert.fail("An explicit saved chat must not create a replacement"),
+    resetFiles: noop, startNewSession: createSession,
     selectSession: id => { events.push(`select:${id}`); chat = { ...chat, currentSession: { id, agentId: id === "native-session" ? "native" : null } }; },
   };
   const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
+    "react-hot-toast": { default: { error: assert.fail } },
     react: { ...state.react, default: state.react },
-    "@/hooks/useFlag": { useFlag: () => true }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
+    "@/hooks/useFlag": { useFlag: key => !["htpr-7800-skill-runs-in-sidebar", "htpr-8048-agent-sessions"].includes(key) }, "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "sidebar" },
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: (options) => { shortcutOptions = options; return { enabled: true }; } },
+    "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/app/agents/chat/AgentChatClient": { default: "AgentChatClient" },
     "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: noop },
     "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => nativeContext, setNativeSidebarChat: value => { nativeContext = value; events.push(value ? "native:set" : "native:clear"); } },
@@ -179,7 +190,7 @@ function sidebar(initialSession = { id: "remembered", agentId: null }) {
     "./AI_Tiptap_Container": { AI_Tiptap_Container: "Composer" }, "./AiChatSidebarResizeHandle": { AiChatSidebarResizeHandle: "Resize" },
     "@/lib/configs/style.config": { AI_CHAT_SIDEBAR_MIN_PX: 280 }, "@/utils/undoActions/helperFuncs": { cn: () => "" },
   });
-  return { events, get nativeContext() { return nativeContext; }, get currentSession() { return chat.currentSession; }, showSession(session) { chat = { ...chat, currentSession: session }; }, render() {
+  return { events, get shortcuts() { return shortcutOptions; }, get nativeContext() { return nativeContext; }, get currentSession() { return chat.currentSession; }, showSession(session) { chat = { ...chat, currentSession: session }; }, render() {
     state.reset();
     return find(AI_Chat_Sidebar({}), "ChatHeader").props.sidebarChats;
   } };
@@ -261,8 +272,9 @@ function roster(enabled) {
     "@/lib/agents/chatService": { openAgentChat: noop }, "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
     "@/lib/agents/chatAvailability": availability,
     "@/utils/controllers/agents/boardMembers": { getAgentTeamIds: async () => new Map() },
-    "@/lib/flags": { SHARED_AGENT_CHAT_FLAG: "shared", isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { flagReads.push([key, userId]); return key === "htpr-8048-agent-sessions" ? false : enabled; } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag, "@/lib/agentStatus/chip": chip,
+    "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
     "@/lib/api/rateLimit": { checkRestRateLimit: noop }, "@/lib/agentRuns/service": { browserMutationIsSameOrigin: noop },
     "@/lib/agents/runtimeState": {
       readAgentRuntimeSnapshot: async id => { snapshots.push(id); return id === "working" ? { status: "waiting" } : null; },
@@ -282,7 +294,7 @@ test("roster batches authorized agent IDs once and marks only fresh ACTIVE runs 
   assert.deepEqual(body.agents.map(agent => [agent.id, agent.status, agent.deliveryMode]), [
     ["working", "working", "webhook"], ["quiet", null, "polling"], ["stale", null, null], ["done", null, null],
   ]);
-  assert.deepEqual(view.flagReads, [[flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
+  assert.deepEqual(view.flagReads, [["htpr-8048-agent-sessions", 6], [flag.HTPR_7688_PAST_CHATS_FIRST_FLAG, 6]]);
   assert.equal(view.queries.length, 1);
   const query = view.queries[0];
   assert.deepEqual(query.where.agentId.in, ["working", "quiet", "stale", "done"]);
@@ -309,4 +321,23 @@ test("the ticket bugfix flag defaults to Everyone with the agreed ship date and 
   assert.equal(flag.default.shippedOn, "2026-10-23");
   assert.equal(flag.default.releaseRisk.risk, "small");
   assert.ok(flag.default.releaseRisk.reason.length > 0);
+});
+
+test("native-to-AI new-chat shortcut creates one session and external targets disable native keys", async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({ ok: true, json: async () => ({ success: true, session: { id: "native-session" } }) });
+  let created = 0;
+  try {
+    const view = sidebar(null, { createSession: async () => { created += 1; } });
+    view.render().onSelect(native);
+    await tick();
+    view.render();
+    await view.shortcuts.onNewChat();
+    assert.equal(created, 1);
+    assert.equal(view.render().target.kind, "ai");
+    assert.equal(view.shortcuts.active, true);
+    view.render().onSelect({ kind: "external-agent", agent: agents[0] });
+    view.render();
+    assert.equal(view.shortcuts.active, false);
+  } finally { global.fetch = originalFetch; }
 });

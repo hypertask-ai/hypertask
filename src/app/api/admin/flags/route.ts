@@ -45,7 +45,8 @@ export async function PATCH(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    if (!trustedOrigin(request)) return noStore({ error: "Forbidden" }, 403);
+    const principal = await getSessionUser(request.headers);
+    if (principal?.source !== "cli-bearer" && !trustedOrigin(request)) return noStore({ error: "Forbidden" }, 403);
     if (!request.headers.get("content-type")?.startsWith("application/json")) {
       return noStore({ error: "Content-Type must be application/json" }, 415);
     }

@@ -6,16 +6,34 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("agent webhook owner routes require a verified session and same-origin mutations", () => {
-  const route = read("src/app/api/agents/[agentId]/webhook/route.ts");
-
-  assert.match(route, /getSessionUser\(request\.headers\)/);
-  assert.doesNotMatch(route, /nookies_user|JSON\.parse/);
-  assert.match(route, /new URL\(origin\)\.host === host/);
-  assert.equal(
-    (route.match(/if \(!hasTrustedMutationOrigin\(request\)\)/g) ?? []).length,
-    3,
-  );
+test("agent webhook owner routes require verified identity and selected-cookie origin", async () => {
+  const { load } = require("./task-route-loader.cjs");
+  const { NextRequest } = require("next/server");
+  let session = { userId: 6, source: "legacy" };
+  const calls = [];
+  const route = load("src/app/api/agents/[agentId]/webhook/route.ts", {
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => session },
+    "@/lib/agentWebhooks/management": {
+      AgentWebhookInputError: class extends Error {},
+      upsertAgentWebhook: async input => { calls.push(input); return { success: true }; },
+      manageAgentWebhook: async input => { calls.push(input); return { success: true }; },
+    },
+  });
+  const invoke = (method, origin) => route[method](new NextRequest("https://app.example.test/api/agents/fixture/webhook", {
+    method, headers: { host: "app.example.test", ...(origin ? { origin } : {}) },
+    ...(method === "DELETE" ? {} : { body: JSON.stringify({ action: "test" }) }),
+  }), { params: Promise.resolve({ agentId: "fixture" }) });
+  for (const method of ["PUT", "POST", "DELETE"]) {
+    assert.equal((await invoke(method)).status, 403);
+    assert.equal((await invoke(method, "https://foreign.example.test")).status, 403);
+    assert.equal((await invoke(method, "https://app.example.test")).status, method === "POST" ? 202 : 200);
+    assert.equal(calls.at(-1).userId, 6);
+    session = { userId: 6, source: "cli-bearer" };
+    assert.equal((await invoke(method)).status, method === "POST" ? 202 : 200);
+    session = null;
+    assert.equal((await invoke(method, "https://app.example.test")).status, 401);
+    session = { userId: 6, source: "legacy" };
+  }
 });
 
 test("mention and assignment outbox rows share their domain transactions", () => {

@@ -1,3 +1,4 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
@@ -221,6 +222,7 @@ const TaskStalenessLine = ({
   task: ITask;
 }) => {
   const snapshot = useFirstScreenSurface();
+  const showFresh = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   if (!enabled) return null;
 
   const now = snapshot ? Date.parse(snapshot.now) : undefined;
@@ -246,21 +248,23 @@ const TaskStalenessLine = ({
     daysSinceLastComment: commentDays,
     level,
     commentLevel,
-  });
+  }, showFresh);
 
   if (!ageLine) return null;
 
-  return (
+  return showFresh || level !== "none" ? (
     <p
       className={`basis-full text-micro leading-none ${
         level === "hot"
-          ? "text-red-600 dark:text-red-400/70"
-          : "text-amber-600 dark:text-amber-400/70"
+          ? "text-[var(--color-card-age-hot)]"
+          : level === "warn"
+            ? "text-[var(--color-card-age-warn)]"
+            : "text-text-light-gray"
       }`}
     >
       {ageLine}
     </p>
-  );
+  ) : null;
 };
 
 export const TaskTitle = ({ title }: { title: string }) => {

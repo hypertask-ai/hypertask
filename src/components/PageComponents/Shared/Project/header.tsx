@@ -77,7 +77,7 @@ const ReadOnlyHeader = ({
                       <UserAvatar
                         key={member.id}
                         agentId={member.agent?.id}
-                        className="w-[30px] h-[30px] dark:border-[#212429] border-[#f7f7f7] border-[3px]  ml-[-8px] rounded-[600px]  overflow-hidden "
+                        className="w-[30px] h-[30px] border-[var(--border-board-avatar)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden "
                         alt={member.agent?.displayName ?? member.user?.displayName ?? "Board member"}
                         name={member.agent?.displayName ?? member.user?.displayName ?? member.user?.email}
                         photoURL={member.agent?.photoURL ?? member.user?.photoURL}
@@ -88,7 +88,7 @@ const ReadOnlyHeader = ({
                     {project.members.length > 5 && (
                       <div
                         key="extra-members"
-                        className="w-[30px] h-[30px] dark:border-[#212429] border-[#f7f7f7] bg-[#4F5765]  border-[3px]  ml-[-8px] rounded-[600px]  overflow-hidden flex items-center justify-center text-micro leading-[10.98px] font-normal text-white"
+                        className="w-[30px] h-[30px] border-[var(--border-board-avatar)] bg-[var(--bg-board-avatar-overflow)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro leading-[var(--leading-board-avatar-overflow)] font-normal text-white"
                       >
                         +{project.members.length - 5}
                       </div>
@@ -98,7 +98,7 @@ const ReadOnlyHeader = ({
               : project.members.length > 0 && (
                   <div
                     key="extra-members"
-                    className="w-[24px] h-[24px] dark:border-[#212429] border-[#f7f7f7] bg-[#4F5765]  border-[3px]  ml-[-8px] rounded-[600px]  overflow-hidden flex items-center justify-center text-micro font-normal text-white"
+                    className="w-[24px] h-[24px] border-[var(--border-board-avatar)] bg-[var(--bg-board-avatar-overflow)] border-[3px] ml-[-8px] rounded-[600px] overflow-hidden flex items-center justify-center text-micro font-normal text-white"
                   >
                     +{project.members.length}
                   </div>

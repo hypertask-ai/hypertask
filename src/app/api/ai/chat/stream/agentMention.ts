@@ -23,13 +23,11 @@ export type AgentMentionDecision =
   | { route: false; reason: string };
 
 export function decideAgentMentionRouting(input: {
-  routingEnabled: boolean;
   mentionedAgentIds: string[];
   hasAttachments: boolean;
   hasBoardContext: boolean;
   hasActingAgent: boolean;
 }): AgentMentionDecision {
-  if (!input.routingEnabled) return { route: false, reason: "flag-off" };
   if (input.hasActingAgent) return { route: false, reason: "native-agent-session" };
   if (input.hasAttachments) return { route: false, reason: "attachments" };
   if (!input.hasBoardContext) return { route: false, reason: "no-board-context" };

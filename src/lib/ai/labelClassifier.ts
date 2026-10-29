@@ -1,3 +1,7 @@
+import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
+import { isFeatureEnabled } from "@/lib/flags";
+import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
+import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
 import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -5,14 +9,13 @@ import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
 import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
-import { batchBackgroundAiEnabled, haikuDefaultModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import { batchEligibleFunding, batchEligibleModel, labelTaskContentHash } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
 import {
   gatewayFundingSourceForApiKey,
   gatewayProviderOptionsForModel,
-  resolveGatewayModel,
 } from "@/app/api/ai/_lib/modelProvider";
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -21,6 +24,7 @@ import {
   LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
   labelClassifierPrompt,
   parseMatchingLabelIds,
+  withholdBugFromErrorLog,
   type AiLabelDefinition,
 } from "@/lib/ai/labelClassifierOutput";
 import prisma from "@/lib/prisma";
@@ -32,7 +36,6 @@ import {
 import type { IUser } from "@/models/model";
 import createLabelActivity from "@/utils/controllers/activities/createLabelActivity";
 
-const MODEL = "google/gemini-3.1-flash-lite";
 const BACKFILL_LIMIT = 500;
 const BACKFILL_CONCURRENCY = 5;
 
@@ -66,6 +69,9 @@ export async function classifyTaskAgainstLabels(
   try {
     gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: tags.teamId });
   } catch (error) {
+    if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_8099_SMART_LABEL_REFUSAL_FLAG, tags.userId ?? 0).catch(() => false)) {
+      return null;
+    }
     console.error(
       `[labelClassifier] Skipping inference: team gateway key lookup failed for ${tags.teamId}`,
       error,
@@ -79,36 +85,42 @@ export async function classifyTaskAgainstLabels(
     return null;
   }
 
-  const haikuDefaultEnabled = await haikuDefaultModelEnabled(tags?.userId);
-  const model = haikuDefaultEnabled
-    ? resolveAutomaticAiModel("gateway", "anthropic/claude-haiku-5.5", gatewayApiKey, {
-        haiku55Enabled: true,
-        lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
-        feature: "smart-label",
-      })
-    : resolveGatewayModel(MODEL, gatewayApiKey);
+  const model = resolveAutomaticAiModel("gateway", "anthropic/claude-haiku-5.5", gatewayApiKey, {
+    haiku55Enabled: true,
+    lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
+    feature: "smart-label",
+  });
   configureAiModelUsage(model, {
-    userId: haikuDefaultEnabled ? tags?.userId ?? 0 : tags?.userId ?? generalConfig.hyperAiId,
+    userId: tags?.userId ?? 0,
     teamId: tags?.teamId,
     projectId: tags?.projectId,
     taskId: tags?.taskId,
     agentId: tags?.agentId,
-    provider: haikuDefaultEnabled ? "anthropic" : "google",
+    provider: "anthropic",
     feature: "smart-label",
+    reasoningFeature: "labels",
   });
-  const result = await generateText({
-    experimental_download: downloadWithoutBrotli,
-    model,
-    instructions: LABEL_CLASSIFIER_INSTRUCTIONS,
-    prompt: labelClassifierPrompt(task, definitions),
-    maxRetries: 2,
-    maxOutputTokens: LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
-    providerOptions: gatewayProviderOptionsForModel(
+  let result;
+  try {
+    result = await generateText({
+      experimental_download: downloadWithoutBrotli,
       model,
-      "smart-label",
-      tags
-    ),
-  });
+      instructions: LABEL_CLASSIFIER_INSTRUCTIONS,
+      prompt: labelClassifierPrompt(task, definitions),
+      maxRetries: 2,
+      maxOutputTokens: LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
+      providerOptions: gatewayProviderOptionsForModel(
+        model,
+        "smart-label",
+        tags
+      ),
+    });
+  } catch (error) {
+    if (findSharedAiAllowanceError(error) && await isFeatureEnabled(HTPR_8099_SMART_LABEL_REFUSAL_FLAG, tags.userId ?? 0).catch(() => false)) {
+      return null;
+    }
+    throw error;
+  }
 
   const matchingLabelIds = parseMatchingLabelIds(
     result.text.trim(),
@@ -167,7 +179,7 @@ export async function applyAiLabelVerdict({
       id: { in: definitions.map(({ labelId }) => labelId) },
       ai_prompt: { not: null },
     },
-    select: { id: true, ai_prompt: true },
+    select: { id: true, ai_prompt: true, value: true },
   });
   const currentPrompts = new Map(
     currentLabels.map(({ id, ai_prompt }) => [id, ai_prompt?.trim()])
@@ -178,6 +190,7 @@ export async function applyAiLabelVerdict({
   if (activeDefinitions.length === 0) return;
 
   const aiLabelIds = activeDefinitions.map(({ labelId }) => labelId);
+  const errorLogGuardEnabled = await isFeatureEnabled(YPER4_915_ERROR_LOG_NEVER_BUG_FLAG, actor.id).catch(() => true);
   const matchingIds = new Set(matchingLabelIds);
   const result = await prisma.$transaction(async (tx) => {
     const lockedTasks = contentHash
@@ -226,10 +239,20 @@ export async function applyAiLabelVerdict({
       include: { label: true },
     });
     const existingIds = new Set(existing.map(({ labelId }) => labelId));
-    const toAdd = aiLabelIds.filter(
+    const toRemove = existing.filter(({ labelId }) => !matchingIds.has(labelId));
+    const removedIds = new Set(toRemove.map(({ labelId }) => labelId));
+    const matchedToAdd = aiLabelIds.filter(
       (labelId) => matchingIds.has(labelId) && !existingIds.has(labelId)
     );
-    const toRemove = existing.filter(({ labelId }) => !matchingIds.has(labelId));
+    const toAdd = errorLogGuardEnabled
+      ? withholdBugFromErrorLog(
+          matchedToAdd,
+          new Map(currentLabels.map(({ id, value }) => [id, value])),
+          labelsBefore
+            .filter(({ labelId }) => !removedIds.has(labelId))
+            .map(({ label }) => label.value),
+        )
+      : matchedToAdd;
 
     for (const labelId of toAdd) {
       const taskLabel = await tx.taskLabel.upsert({
@@ -452,15 +475,14 @@ async function trySmartLabelBatch(
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
     if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId))) return false;
-    const haikuDefaultEnabled = await haikuDefaultModelEnabled(userId);
-    const model = gatewayCatalogModelSlug(haikuDefaultEnabled ? "anthropic/claude-haiku-5.5" : MODEL);
+    const model = gatewayCatalogModelSlug("anthropic/claude-haiku-5.5");
     if (!batchEligibleModel(model)) return false;
     await submitSmartLabelBatch({
       label,
       model,
       gatewayKey,
       teamId,
-      usageUserId: haikuDefaultEnabled ? userId : generalConfig.hyperAiId,
+      usageUserId: userId,
       tasks: tasks.flatMap((task) =>
         task.updatedAt
           ? [{

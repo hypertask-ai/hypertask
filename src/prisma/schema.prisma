@@ -1161,6 +1161,7 @@ model Section {
   deleted       Boolean    @default(false)
   ranking       String     @default("A0200")
   isDone        Boolean?
+  wipLimit      Int?
   autoAssignUserId Int?
   autoAssignAgentId String?
   project       Project    @relation(fields: [projectId], references: [id])
@@ -1192,6 +1193,8 @@ model Task {
   sectionChangedAt    DateTime        @default(now())
   lastCommentAt       DateTime?
   staleNudgedAt       DateTime?
+  blockerCommentId    Int?            @unique
+  blockerComment      Comment?        @relation("TaskBlockerComment", fields: [blockerCommentId], references: [id], onDelete: SetNull)
   waitingOnUserId     Int?
   waitingOnSetById    Int?
   waitingOnSetAt      DateTime?
@@ -1854,10 +1857,12 @@ model Follower {
 }
 
 model Comment {
+  blockerForTask Task?          @relation("TaskBlockerComment")
   kind          String?
   id            Int            @id @default(autoincrement())
   text          String
   summary       String?
+  summaryTextHash String? @db.VarChar(64)
   taskId        Int
   task          Task           @relation(fields: [taskId], references: [id])
   creatorId     Int?
@@ -1996,6 +2001,7 @@ model Attachment {
   task   Task? @relation(fields: [taskId], references: [id])
 
   @@index([commentId])
+  @@index([chatMessageId])
   // HTPR-6000: the minute-ly hard-delete sweep deletes Attachment rows by
   // taskId with no supporting index, forcing a full table scan per task deleted.
   @@index([taskId])
@@ -2293,6 +2299,8 @@ model AgentWebhookSubscription {
   project        Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   url            String
   secret         String
+  authHeaderName  String?
+  authHeaderValue String?
   events         String[]
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -2500,6 +2508,7 @@ model ChatSession {
   taskId Int? // Deliberately no FK: tasks can be hard-deleted while chat history remains.
   projectId Int? // Deliberately no FK: projects can be deleted while chat history remains.
   agentId String? // Set when this session's conversation target is a native agent.
+  agentSessionKey String @default("default")
   agent Agent? @relation(fields: [agentId], references: [id])
   // The team this conversation belongs to, written once the first time the
   // thread is opened while the agent is on a team's board, and never rewritten.
@@ -2526,11 +2535,7 @@ model ChatSession {
   // Covers the team foreign key, which Postgres does not index for us: a team
   // deletion has to find the sessions pointing at it to null them out.
   @@index([teamId])
-  // One thread per agent: enforced in the DB (not just app-level dedup) so
-  // two concurrent "open this agent's chat" requests can't create two
-  // sessions. Postgres treats NULL as distinct, so plain (taskId-only or
-  // blank) sessions are unaffected.
-  @@unique([userId, agentId])
+  @@unique([userId, agentId, agentSessionKey], name: "userId_agentId")
   // Backs the sweep's stale-session scan (src/pages/api/queues/sweep.ts).
   @@index([updatedAt])
 }
@@ -2565,6 +2570,8 @@ model ChatMessage {
   id String @id @default(uuid())
   createdAt DateTime @default(now())
   content String
+  context Json?
+  ticketGroups Json?
   role ChatRole
   sessionId String
   session ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -2648,6 +2655,9 @@ model Agent {
   mcpTokenHash              String?   @db.VarChar(64)
   mcpTokenJti               String?
   mcpTokenExpiresAt         DateTime?
+  boardHomeTeamId             String?
+  crossTeamHomeTeamId         String?
+  crossTeamAccessGranted      Boolean  @default(false)
   credentialTeamId            String?
   credentialTeamAccessBinding String?
   // Monotonic credential/runtime generation. Heartbeats from a destroyed or

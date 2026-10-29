@@ -493,7 +493,7 @@ async function runHeartbeat(request: NextRequest) {
       }
 
       const session = await prisma.chatSession.upsert({
-        where: { userId_agentId: { userId: agent.userId, agentId: agent.id } },
+        where: { userId_agentId: { userId: agent.userId, agentId: agent.id, agentSessionKey: "default" } },
         update: {},
         create: {
           userId: agent.userId,

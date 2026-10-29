@@ -17,6 +17,8 @@ import { AttachmentButton } from "@/components/AI_CHAT/AttachmentButton";
 import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
+import Tooltip from "@/components/Common/Tooltip";
+import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/keys";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
@@ -28,10 +30,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
@@ -55,6 +58,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const chatAutoOpenAllowed = useRef(false);
   chatAutoOpenAllowed.current = false;
   if (!aiChatOpenSwitchesEnabled) chatAutoOpenAllowed.current = aiChatOpenSwitchesReady && chatAutoOpenReady && !keepAiChatClosed;
+  const boardShortcutTooltip = useFlag(HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG);
+  const dictationShortcutEnabled = useFlag(HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG);
   const ctrljFooterOneLine = useFlag(HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG);
   const skillFollowupFlag = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   let skillFollowupEnabled = false;
@@ -71,7 +76,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
-  const unfurlImageUrls = useFlag(HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
@@ -228,6 +232,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
       if (boardChipEnabled && boardPickerOpen) return;
+      if (dictationShortcutEnabled && newTaskWindow && !event.repeat && !event.isComposing &&
+          ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
+          !event.altKey && event.shiftKey && event.code === "KeyD") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!addingImages) document.getElementById("compose-task-audio-button")?.click();
+        return;
+      }
       if (boardChipEnabled && event.target === input.current && !event.isComposing &&
           ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
           !event.altKey && event.shiftKey && event.code === "KeyB") {
@@ -245,7 +257,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating]);
+  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -306,7 +318,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
-        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
@@ -503,6 +515,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                     } else setText((previous) => previous + transcript);
                   }} />}
                 {boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
+                  {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
                   <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
                     aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
                     aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}

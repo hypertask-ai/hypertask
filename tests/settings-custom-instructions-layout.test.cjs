@@ -28,16 +28,19 @@ test("custom instructions keeps a definite full-height editor chain", () => {
 });
 
 test("custom instructions save action keeps its size with neutral settings colors", () => {
-  const actionRow = read(
-    "src/components/Modals/AICustomPrompt/ActionRow.tsx",
-  );
-
-  assert.match(
-    actionRow,
-    /rounded-\[4px\] px-6 py-2\.5 font-medium leading-normal/,
-  );
-  assert.match(actionRow, /text-white-black/);
-  assert.match(actionRow, /hover:bg-hover-active/);
-  assert.match(actionRow, /className=\{customInstructionsActionButtonClass\}/);
-  assert.doesNotMatch(actionRow, /bg-hypertasks-ai-purple/);
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  const { JSDOM } = require("jsdom");
+  const { loadModule } = require("./helpers/loadModule.cjs");
+  const { ActionButton } = loadModule("src/components/Modals/AICustomPrompt/ActionRow.tsx", {
+    "@/hooks/MultiPages/useUpdateTaskInBoards": {}, "@/lib/state": {}, "@/store": {},
+    "@/lib/contexts/Multipages/customAiInstructionContext": {},
+  });
+  const html = renderToStaticMarkup(React.createElement(ActionButton, { onClick() {} }));
+  const button = new JSDOM(html).window.document.querySelector("button");
+  assert.equal(button.textContent, "Save instructions");
+  for (const token of ["rounded-[4px]", "px-6", "py-2.5", "font-medium", "leading-normal", "text-white-black", "hover:bg-hover-active"]) {
+    assert.equal(button.classList.contains(token), true, token);
+  }
+  assert.equal(button.classList.contains("bg-hypertasks-ai-purple"), false);
 });

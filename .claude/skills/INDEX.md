@@ -40,13 +40,13 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
 | verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
 
-`prototype` is the `/prototype` slash command, not a `/ship` step. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
+Design work uses the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 
 `wireframe` is required before new or changed visible UI code, except a `[BUGFIX]` restoring intended behaviour: build options from the live app (Ctrl+K for menus, no invented UI), publish a clickable link, then move to **UX Sign-off** (board 15 column 22502). The last comment has the wireframe link, `New elements: <ComponentName>, ...` (or `New elements: none`), and one yes/no `Question:` @mentioning Valentin. Wait for his yes before code; every new component file still needs his yes naming it, including in a `[BUGFIX]`. The `ux-signoff` check enforces this (Valentin, 2026-10-10).
 
 ## The flag rule
 
 A real bug fix restores behaviour that used to work or was clearly intended.
-Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint to the mechanical gate: the
+Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get cleanup after 7 days on Everyone; money, access and data-deletion flags stay at 14 days. The daily cron at `/api/cron/feature-flag-removals` files the removal ticket and does not switch the flag. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint to the mechanical gate: the
 reviewer decides from the diff whether this is truly a fix. New visible
 behaviour dressed as a fix still needs a flag. (Matches `fix-bug/SKILL.md`.)

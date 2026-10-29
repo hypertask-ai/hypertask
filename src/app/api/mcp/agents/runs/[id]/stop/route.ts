@@ -2,7 +2,6 @@ import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
-  agentRunsEnabledFor,
   authenticateAgentRunRequest,
   browserMutationIsSameOrigin,
   runtimeAgentRunsEnabledFor,
@@ -41,12 +40,10 @@ export async function POST(
     }
     if (
       principal.source === "browser" &&
+      principal.credentialSource !== "cli-bearer" &&
       !browserMutationIsSameOrigin(request)
     ) {
       return noStore({ success: false, error: "Cross-origin request rejected" }, 403);
-    }
-    if (!(await agentRunsEnabledFor(principal))) {
-      return noStore({ success: false, error: "Run not found" }, 404);
     }
 
     const rawBody = await request.text();

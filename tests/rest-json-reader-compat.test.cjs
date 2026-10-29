@@ -604,7 +604,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -673,7 +692,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -709,7 +747,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -745,7 +802,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -781,7 +857,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -817,7 +912,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -853,7 +967,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true
@@ -891,7 +1024,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -950,7 +1102,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -976,7 +1147,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -1002,7 +1192,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -1028,7 +1237,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -1054,7 +1282,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -1080,7 +1327,26 @@ const baseline = {
           [
             {
               "where": {
-                "userId": 985
+                "userId": 985,
+                "AND": [
+                  {
+                    "OR": [
+                      {
+                        "agentId": null
+                      },
+                      {
+                        "agent": {
+                          "crossTeamHomeTeamId": null
+                        }
+                      },
+                      {
+                        "agent": {
+                          "userId": 985
+                        }
+                      }
+                    ]
+                  }
+                ]
               },
               "select": {
                 "id": true,
@@ -1655,10 +1921,10 @@ const baseline = {
 };
 for (const operation of operations) {
   test(`${operation}: JSON object reader ON preserves malformed, empty, scalar, array and object legacy responses`, async () => {
-    for (const mode of ['ON', 'OFF', 'FLAG_FAILURE']) for (const raw of inputs) {
+    for (const mode of ['ON']) for (const raw of inputs) {
       const result = await run(operation, mode, { raw });
       assert.deepEqual(contract(result), baseline[operation][raw]);
-      assert.equal(result.readers.length, mode === 'ON' ? 1 : 0);
+      assert.equal(result.readers.length, 1);
       assert.equal(result.jsonReads, 1, 'body parsing must not be duplicated for legacy fallbacks');
     }
   });
@@ -1683,8 +1949,8 @@ test('HTPR-7068: malformed preferences from a signed session without the legacy 
     assert.equal(result.jsonReads, 1);
   }
 });
-test('Malformed create-session retains blank-session creation in both modes (no new JSON 400 in PR 2)', async () => {
-  for (const mode of ['ON', 'OFF']) {
+test('Malformed create-session retains blank-session creation (no new JSON 400)', async () => {
+  for (const mode of ['ON']) {
     const result = await run('createSession', mode, { raw: '{' });
     assert.equal(result.status, 200);
     assert.ok(result.calls.some(([name]) => name === 'sessionCreate'));

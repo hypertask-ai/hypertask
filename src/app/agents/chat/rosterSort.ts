@@ -1,17 +1,15 @@
 export type TRosterSortable = {
   id?: string;
   displayName: string;
-  lastPostedAt?: string | null;
   lastChatMessageAt?: string | null;
 };
 
 export function sortRosterByActivity<T extends TRosterSortable>(
   agents: readonly T[],
-  liveSortEnabled: boolean,
 ): T[] {
   return [...agents].sort((a, b) => {
-    const at = (liveSortEnabled ? a.lastChatMessageAt : a.lastPostedAt) ?? "";
-    const bt = (liveSortEnabled ? b.lastChatMessageAt : b.lastPostedAt) ?? "";
+    const at = a.lastChatMessageAt ?? "";
+    const bt = b.lastChatMessageAt ?? "";
     if (at !== bt) return at < bt ? 1 : -1;
     return a.displayName.localeCompare(b.displayName);
   });

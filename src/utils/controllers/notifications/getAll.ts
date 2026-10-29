@@ -1,3 +1,6 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -260,6 +263,12 @@ const notificationGetAll = async (
         orderBy: { waitingOnSetAt: "asc" },
         select: {
           ...inboxTaskSelect(parsedUserId),
+          notifications: {
+            where: { userId: parsedUserId, agentId: null, status: "Archive", archivedAt: { not: null } },
+            orderBy: { archivedAt: "desc" },
+            take: 1,
+            select: { archivedAt: true },
+          },
           project: {
             select: {
               id: true,
@@ -284,6 +293,26 @@ const notificationGetAll = async (
         select: { notificationMatrix: true },
       }),
     ]);
+    const humanFacingCommentRows = actorActivityRows.some((row) => row.type === "Comment" && row.fromAgentId) &&
+      await isFeatureEnabled(HTPR_8090_ASSIGNEE_INBOX_FLAG, parsedUserId)
+      ? await prisma.notification.findMany({
+          where: {
+            ...inboxWhere,
+            type: "Comment",
+            taskId: { in: notifications.flatMap((row) => row.taskId == null ? [] : [row.taskId]) },
+            fromAgentId: { not: null },
+            task: { assignees: { some: { userId: parsedUserId, agentId: null } } },
+            comment: { kind: { in: ["question", "qa", "done"] } },
+          },
+          include: {
+            comment: { select: { id: true, text: true } },
+            fromUser: { select: { displayName: true, photoURL: true } },
+            fromAgent: { select: { displayName: true, photoURL: true } },
+          },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          distinct: ["taskId", "fromAgentId"],
+        })
+      : [];
     const activeNotificationTypeRows = normalizeInboxActorActivityRows(
       actorActivityRows,
     );
@@ -355,6 +384,13 @@ const notificationGetAll = async (
         const usersById = new Map(
           actorAndWaitingUsers.map((user) => [user.id, user])
         );
+        const humanFacingCommentsByTask = new Map<number, (typeof humanFacingCommentRows)[number]>();
+        for (const row of humanFacingCommentRows) {
+          if (row.taskId != null && row.fromAgentId && !mutedAgentIds.has(row.fromAgentId) &&
+            !humanFacingCommentsByTask.has(row.taskId)) {
+            humanFacingCommentsByTask.set(row.taskId, row);
+          }
+        }
         const waitingOnSetByUserMap = usersById;
         const agentsById = new Map(pageAgents.map((agent) => [agent.id, agent]));
 
@@ -390,7 +426,8 @@ const notificationGetAll = async (
           agentOnlyTypesByTaskId[Number(taskId)] = types.filter(
             (type) =>
               agentAuthoredTypes.has(`${taskId}:${type}`) &&
-              !humanAuthoredTypes.has(`${taskId}:${type}`)
+              !humanAuthoredTypes.has(`${taskId}:${type}`) &&
+              !(type === "Comment" && humanFacingCommentsByTask.has(Number(taskId)))
           );
           mutedTypesByTaskId[Number(taskId)] = types.filter(
             (type) =>
@@ -501,6 +538,7 @@ const notificationGetAll = async (
         return {
           notificationsWithActors,
           earnerRows,
+          humanFacingCommentsByTask,
           swapWanted,
           mutedAgentIds,
           mutedTypesByTaskId,
@@ -587,6 +625,7 @@ const notificationGetAll = async (
     ]);
     const {
       earnerRows,
+      humanFacingCommentsByTask,
       swapWanted,
       mutedAgentIds,
       mutedTypesByTaskId,
@@ -615,12 +654,15 @@ const notificationGetAll = async (
     }
     const displayedNotifications = enrichedNotifications.map((notification) => {
       if (notification.taskId == null) return notification;
-      const wantedType = swapWanted.get(notification.taskId);
-      if (!wantedType || wantedType === notification.type) return notification;
-      const earner = earnersByTaskAndType.get(
-        `${notification.taskId}:${wantedType}`
-      );
-      if (!earner) return notification;
+      const wantedType = swapWanted.get(notification.taskId) ?? notification.type;
+      const defaultEarner = wantedType !== notification.type
+        ? earnersByTaskAndType.get(`${notification.taskId}:${wantedType}`)
+        : notification;
+      const humanFacingComment = wantedType === "Comment" && defaultEarner?.fromAgentId
+        ? humanFacingCommentsByTask.get(notification.taskId)
+        : undefined;
+      const earner = humanFacingComment ?? defaultEarner;
+      if (!earner || earner === notification) return notification;
       const earnerActor = earner.fromAgent
         ? { displayName: earner.fromAgent.displayName ?? "", photoURL: earner.fromAgent.photoURL ?? null }
         : earner.fromUser
@@ -649,7 +691,16 @@ const notificationGetAll = async (
       };
     });
 
-    const blockedByYouRows = blockedTasks.map((task) => {
+    const dismissedBlockedTasks = blockedTasks.filter((task) =>
+      task.notifications.some((notification) =>
+        notification.archivedAt && notification.archivedAt >= (task.waitingOnSetAt ?? task.createdAt)
+      )
+    );
+    const blockedInboxArchive = dismissedBlockedTasks.length > 0
+      && await isFeatureEnabled(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG, parsedUserId).catch(() => false);
+    const dismissedBlockedTaskIds = new Set(blockedInboxArchive ? dismissedBlockedTasks.map((task) => task.id) : []);
+    const blockedByYouRows = blockedTasks.filter((task) => !dismissedBlockedTaskIds.has(task.id))
+      .map(({ notifications: _archivedNotifications, ...task }) => {
       const fromUser =
         (task.waitingOnSetById
           ? waitingOnSetByUserMap.get(task.waitingOnSetById)

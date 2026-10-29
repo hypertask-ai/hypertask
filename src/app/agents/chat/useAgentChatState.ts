@@ -4,7 +4,6 @@ import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport
 import { useFlag } from "@/hooks/useFlag";
 import { type AgentChatActivity, type AgentChatFilter } from "@/lib/agents/chatActivityFeed";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG, HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { ITask } from "@/models/model";
 import { agentChatMobileFullscreenAtom, appShellRailAtom, mobileTopBarTitleAtom } from "@/store";
@@ -13,24 +12,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useContext, useEffect, useRef, useState } from "react";
 import type { TAgent } from "../AgentsRegister";
 import { IProp, TAgentChatSession, TChatMessage } from "./agentChatTypes";
+import type { QueuedAgentChatMessage } from "@/lib/agents/chatContext";
 
 export function useAgentChatState(props: IProp) {
   const { currentUser, roomsEnabled, embedded } = props;
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
-  const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
-  const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
-  const activityRowsFlag = useFlag("htpr-6094-agent-activity-rows");
-  const activityRowsEnabled = !embedded && activityRowsFlag;
-  const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
+  const activityRowsEnabled = !embedded;
   const [rosterNow, setRosterNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!rosterStatusEnabled) return;
     const tick = setInterval(() => setRosterNow(Date.now()), 30_000);
     return () => clearInterval(tick);
-  }, [rosterStatusEnabled]);
-  const liveSortEnabled = useFlag(HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG);
+  }, []);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
   const setAgentChatMobileFullscreen = useSetRecoilState(
@@ -56,9 +50,9 @@ export function useAgentChatState(props: IProp) {
   const [awaiting, setAwaiting] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [queuedMessages, setQueuedMessages] = useState<
-    { id: string; content: string }[]
+    QueuedAgentChatMessage[]
   >([]);
-  const messageQueueRef = useRef<{ id: string; content: string }[]>([]);
+  const messageQueueRef = useRef<QueuedAgentChatMessage[]>([]);
   const blockedQueueIdRef = useRef<string | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState(false);
   const [deliveryMode, setDeliveryMode] = useState<
@@ -124,7 +118,7 @@ export function useAgentChatState(props: IProp) {
 
   return {
     currentUser, roomsEnabled, embedded, router, searchParams, isMbl,
-    mobileLayoutEnabled, mobileFullscreenFlag, activityRowsEnabled, rosterNow, liveSortEnabled,
+    activityRowsEnabled, rosterNow,
     appShellRailOn, setMobileTopBarTitle,
     setAgentChatMobileFullscreen, agents, setAgents, rosterError, setRosterError, search, setSearch,
     teamId, setTeamId, selectedId, setSelectedId, mobileAgentChatViewport, session, setSession,

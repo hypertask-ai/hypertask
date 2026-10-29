@@ -25,3 +25,37 @@ Checklist written before QA; screenshots after attaching, of the toast, and of t
 ## Cleanup
 
 Archive the QA task created for the run.
+
+## Mobile dictated Task Writer save
+
+For https://app.hypertask.ai/detail/project-15/8028, use the mobile add button
+or `/new?board=<QA board>`. Put a completed speech transcript into the real
+description editor, then press **Save with task writer**. The ticket flag
+`htpr-8028-mobile-writer-save` keeps the existing phone writer and its source
+form together; the empty command-center writer must not replace the draft.
+Require a saved task containing the transcript after reload. Repeat with a
+503, blocked writer, and empty writer response: the guarded raw Save must
+keep the original description, attachments, board and form properties.
+A persistence failure must leave the draft available, without retry loops
+or duplicate tasks. Test iPhone and Android sizes with a reduced visual
+viewport, all four themes, desktop unchanged, and flag-off behavior. A
+transcript injected at the speech-output boundary does not prove microphone
+hardware or speech-service accuracy; name that limitation. Archive only the
+QA tasks created by the run.
+
+Also submit fresh dictation inside the phone writer, including literal angle
+brackets and line breaks. A failed or empty manual response must retain those
+new words in the saved description, or in the draft if persistence fails.
+Hold a form attachment upload until after fallback starts; release it and
+require the saved task to contain the completed file after reload.
+
+## New Task keyboard handoff
+
+On `/new?board=<QA board>`, enter a title and description without AI
+mentions, then press Ctrl+J (Cmd+J on Mac). Require exactly one task save,
+the saved task detail URL, and its AI sidebar. Reload and confirm the same
+title and description. Repeat on phone and with the board's C modal; the
+modal must close without leaving a temporary Back entry. Do not send an AI
+message for this navigation check. The ticket switch
+`htpr-8172-new-task-ai-navigation` preserves this handoff on the standalone
+New Task page; switch-off retains the previous board redirect there.

@@ -6,11 +6,9 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_LIVE_UPDATES_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_TIME_GROUP_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
@@ -56,20 +54,14 @@ export default async function Page({
   const [
     viewsEnabled,
     scopesEnabled,
-    timeGroupEnabled,
     overdueBadgesEnabled,
   ] = await Promise.all([
     isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_TIME_GROUP_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
   ]);
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
-    sessionUser.userId,
-  );
-  const liveUpdatesEnabled = await isFeatureEnabled(
-    MY_TASKS_LIVE_UPDATES_FLAG,
     sessionUser.userId,
   );
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
@@ -136,23 +128,17 @@ export default async function Page({
     }
   }
 
-  let accessibleProjectIds: number[] = [];
-  if (liveUpdatesEnabled) {
-    const { json: projects } = await getAllMinimal(
-      sessionUser.userId,
-      "Calendar",
-      false,
-    );
-    accessibleProjectIds = projects.map((project) => project.id);
-  }
+  const { json: projects } = await getAllMinimal(
+    sessionUser.userId,
+    "Calendar",
+    false,
+  );
+  const accessibleProjectIds = projects.map((project) => project.id);
 
   return (
     <Suspense fallback={<>Loading...</>}>
       {snoozeEnabled ? (
         <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
-      ) : null}
-      {timeGroupEnabled ? (
-        <span className="hidden" data-htpr-6455-my-tasks-time-group aria-hidden />
       ) : null}
       {overdueBadgesEnabled ? (
         <span
@@ -174,7 +160,6 @@ export default async function Page({
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
-          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled
         />
       ) : (
@@ -190,7 +175,6 @@ export default async function Page({
           initialViews={viewsEnabled ? views : []}
           initialViewId={initialViewId}
           viewsEnabled={viewsEnabled}
-          timeGroupEnabled={timeGroupEnabled}
           scopesEnabled={false}
         />
       )}

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
 
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { provisionLearnBoard } from "@/lib/demo/provisionGuest";
 import prisma from "@/lib/prisma";
 import { getProjectWhere, projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -56,7 +56,7 @@ async function learnBoard(request: NextRequest) {
     );
   }
 
-  const session = verifySession(request.cookies.get(SESSION_COOKIE)?.value);
+  const session = await getSessionUser(request.headers);
   if (!session) {
     return NextResponse.json(
       { error: "Sign in to start the tutorial" },
@@ -64,7 +64,7 @@ async function learnBoard(request: NextRequest) {
     );
   }
 
-  await prepareAgentScope(session.id, session.agentId);
+  await prepareAgentScope(session.userId, session.agentId);
 
   const parsedBody: unknown = await request.json().catch(() => ({}));
   if (
@@ -151,10 +151,10 @@ async function learnBoard(request: NextRequest) {
 
   const existingBoard = await prisma.project.findFirst({
     where: {
-      ownerId: session.id,
+      ownerId: session.userId,
       status: "Normal",
       title: BOARD_TITLE,
-      AND: [projectContentAccessWhere(session.id, session.agentId, session.teamScope)],
+      AND: [projectContentAccessWhere(session.userId, session.agentId, session.teamScope)],
     },
     orderBy: { createdAt: "asc" },
     select: { id: true },
@@ -163,7 +163,7 @@ async function learnBoard(request: NextRequest) {
     let projectId = existingBoard?.id;
     if (!projectId) {
       const membership = await prisma.member_Team.findFirst({
-        where: { userId: session.id, status: "Accepted" },
+        where: { userId: session.userId, status: "Accepted" },
         orderBy: { acceptedAt: "asc" },
         select: { googleAccountId: true, teamId: true },
       });
@@ -175,7 +175,7 @@ async function learnBoard(request: NextRequest) {
       }
 
       const board = await provisionLearnBoard({
-        userId: session.id,
+        userId: session.userId,
         googleAccountId: membership.googleAccountId,
         teamId: membership.teamId,
       });
@@ -187,8 +187,8 @@ async function learnBoard(request: NextRequest) {
             where: {
               id: requestedReturnBoardId,
               status: "Normal",
-              ...getProjectWhere(session.id),
-              AND: [getProjectWhere(session.id, session.agentId, session.teamScope)],
+              ...getProjectWhere(session.userId),
+              AND: [getProjectWhere(session.userId, session.agentId, session.teamScope)],
             },
             select: { id: true },
           })
@@ -206,11 +206,11 @@ async function learnBoard(request: NextRequest) {
           archivedNotificationIds: requestedArchivedNotificationIds ?? [],
           projectId,
           targets: requestedTargets,
-          userId: session.id,
+          userId: session.userId,
         })
       : await ensureLearnTutorialInbox({
           projectId,
-          userId: session.id,
+          userId: session.userId,
         });
     if (!tutorialInboxTargets) {
       return NextResponse.json(

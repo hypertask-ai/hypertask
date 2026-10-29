@@ -63,12 +63,11 @@ function writerProperties({ priority, estimate }: Pick<ReturnType<typeof extract
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false, inlineAgentImages = false,
+  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, inlineAgentImages = false,
   applyWriterProperties = false, invokeSkills = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   invokeSkills?: boolean;
-  unfurlImageUrls?: boolean;
   inlineAgentImages?: boolean;
   applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
@@ -91,7 +90,7 @@ export async function createComposedTask({
   }));
   const nextMediaToken = createTaskWriterMediaTokenFactory(text, ...uploads.flatMap(({ url, fileName }) => [url, fileName]));
   const optedOut = inlineAgentImages && imageEmbeddingOptOut(text);
-  const promptMedia = unfurlImageUrls && !inlineAgentImages ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
+  const promptMedia = !inlineAgentImages ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
   const draftDescription = `<p>${escapeHtml(promptMedia.html).replace(/\n/g, "<br>")}</p>` +
     uploads.map(({ url, fileName, mimeType }) => !optedOut && isBrowserRenderableImage(mimeType, fileName)
       ? `<p><img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}"></p>`

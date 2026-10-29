@@ -1,5 +1,3 @@
-import { featureFlagCandidateUserIds } from "@/lib/flags";
-import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from "@/lib/flags/keys";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 
 const BOARD_ACTIVITY_BROADCAST_WINDOW_MS = 15_000;
@@ -25,13 +23,11 @@ export function shouldBroadcastBoardActivity(
 }
 
 type BoardRefreshDeps = {
-  candidateUserIds: (key: string) => Promise<number[] | null>;
   broadcast: (projectId: number, options: { originUserId: number }) => Promise<unknown>;
   shouldBroadcast: (projectId: number, taskId: number) => boolean;
 };
 
 const defaultDeps: BoardRefreshDeps = {
-  candidateUserIds: featureFlagCandidateUserIds,
   broadcast: broadcastBoardChange,
   shouldBroadcast: shouldBroadcastBoardActivity,
 };
@@ -43,8 +39,6 @@ export async function refreshBoardForAgentRun(
   deps: BoardRefreshDeps = defaultDeps,
 ): Promise<boolean> {
   if (!options.lifecycle && !deps.shouldBroadcast(projectId, options.taskId ?? 0)) return false;
-  const candidates = await deps.candidateUserIds(HTPR_7071_AGENT_STATUS_CHIP_FLAG);
-  if (candidates !== null && candidates.length === 0) return false;
   await deps.broadcast(projectId, { originUserId });
   return true;
 }

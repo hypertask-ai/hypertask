@@ -68,7 +68,7 @@ function fixture(options = {}) {
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/utils/controllers/tasks/attachWaitingOnUsers': { attachWaitingOnUsers: async rows => rows },
     '@/utils/controllers/tasks/attachOpenBlockingTasks': { attachOpenBlockingTasks: async rows => rows },
-    '@/utils/controllers/tasks/attachAgentStatus': {},
+    '@/utils/controllers/tasks/attachAgentStatus': { attachAgentStatus: async rows => rows },
     '@/lib/prisma': { default: prisma },
     '@/lib/auth/getSessionUser': { getSessionUser: async () => userId === null ? null : { userId } },
     '@/lib/auth/sessionUserRecord': { loadSessionUserRecord: async () => ({ id: 42 }) },

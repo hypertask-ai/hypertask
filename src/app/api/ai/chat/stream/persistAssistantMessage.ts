@@ -1,3 +1,5 @@
+import { isDeepStrictEqual } from "node:util";
+import type { ChatTicketGroupReferences } from "@/models/model";
 import type { PrismaClient } from "@prisma/client";
 
 type ChatPersistenceDb = Pick<PrismaClient, "chatMessage" | "chatSession">;
@@ -10,6 +12,7 @@ type PersistAssistantMessageArgs = {
   content: string;
   linkify: (content: string, userId: number) => Promise<string>;
   authorAgentId?: string | null;
+  ticketGroups?: ChatTicketGroupReferences;
 };
 
 export async function persistAssistantMessage({
@@ -20,6 +23,7 @@ export async function persistAssistantMessage({
   content,
   linkify,
   authorAgentId,
+  ticketGroups,
 }: PersistAssistantMessageArgs): Promise<boolean> {
   if (!content.trim()) return false;
 
@@ -51,6 +55,7 @@ export async function persistAssistantMessage({
         role: "assistant",
         isDelivered: true,
         authorAgentId: resolvedAuthorAgentId,
+        ...(ticketGroups ? { ticketGroups } : {}),
       },
     ],
     skipDuplicates: true,
@@ -59,11 +64,12 @@ export async function persistAssistantMessage({
   if (created.count === 0) {
     const storedMessage = await db.chatMessage.findFirst({
       where: { id: messageId, sessionId },
-      select: { id: true, role: true, content: true },
+      select: { id: true, role: true, content: true, ticketGroups: true },
     });
     if (
       storedMessage?.role !== "assistant" ||
-      storedMessage.content !== storedContent
+      storedMessage.content !== storedContent ||
+      !isDeepStrictEqual(storedMessage.ticketGroups ?? null, ticketGroups ?? null)
     ) {
       return false;
     }

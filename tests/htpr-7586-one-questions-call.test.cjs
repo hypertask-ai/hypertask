@@ -46,7 +46,10 @@ async function withSidebar(options, check) {
     aiChatEditTaskIdAtom: "edit", composeTaskChatIntroAtom: "intro", composeTaskQuestionsTaskIdAtom: "questionsTaskId", aiChatSidebarWidthPxAtom: "width",
   };
   const mocks = {
+    "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
+    "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {
       HTPR_7586_ONE_QUESTIONS_CALL_FLAG: flag,
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,
@@ -94,7 +97,11 @@ async function withSidebar(options, check) {
     const { AI_Chat_Sidebar } = load("src/components/AI_CHAT/AI_Chat_Sidebar.tsx", {
       ...mocks, "./WelcomeScreen": { WelcomeScreen }, "./MessageList": { MessageList },
       "@/app/agents/chat/AgentChatClient": { default: () => null },
+      "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
+      "@/lib/flags/definitions/htpr-7737-agent-hover-chat": { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" },
+      "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
       "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "htpr-7688-past-chats-first" },
+      "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
       "@/lib/agents/chatDrafts": { readDraft: () => "", writeDraft: () => {} },
       "@/lib/agents/chatViewerState": { getNativeSidebarChat: () => null, setNativeSidebarChat: () => {} },
       "@/utils/api/ai_chat/aiChatHelpers": { AI_Chat_API: {} },

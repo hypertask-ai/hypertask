@@ -32,6 +32,8 @@ import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
 import RichTextPersonHovercards from "@/components/Common/RichTextPersonHovercards";
 import AgentRunActivityRow from "./AgentRunActivityRow";
+import { TicketChatSessionsReminder } from "./TicketChatSessionsReminder";
+import { HTPR_7318_TICKET_CHAT_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder";
 
 const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const {
@@ -80,6 +82,13 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     showLiveRows,
   } = useTaskContext();
   const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
+  let ticketChatSessionsReminder: React.ReactNode = null;
+  if (ticketChatReminder) {
+    ticketChatSessionsReminder = secondaryPanelsReady !== false && currentTask
+      ? <TicketChatSessionsReminder taskId={currentTask.id} />
+      : null;
+  }
   const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
 
   const {
@@ -190,7 +199,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
-            contentToRender = <div id="bottom-description" className="h-0" />;
+            contentToRender = (
+              <>
+                <div id="bottom-description" className="h-0" />
+                {ticketChatSessionsReminder}
+              </>
+            );
           } else if (
             currentItemIndex >= commentsStartVirtualIndex &&
             currentItemIndex < commentsStartVirtualIndex + numberOfComments

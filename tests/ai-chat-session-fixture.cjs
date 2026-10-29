@@ -1,6 +1,5 @@
 const assert = require('node:assert/strict');
 const { load } = require('./task-route-loader.cjs');
-const flag = 'htpr-6924-rest-compat';
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const session = (n, overrides = {}) => ({
   id: id(n), createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -15,8 +14,14 @@ function matches(row, where) {
   for (const [key, value] of Object.entries(where)) {
     if (key === 'AND' || key === 'OR') continue;
     if (key === 'messages') { if (value.none && row.messages.length) return false; continue; }
-    if (key === 'agent') { if (row.runtimeType === value.runtimeType.not) return false; continue; }
+    if (key === 'agent') {
+      if (!row.agentId || !matches(row.agent ?? {
+        id: row.agentId, userId: row.userId, runtimeType: row.runtimeType, crossTeamHomeTeamId: null,
+      }, value)) return false;
+      continue;
+    }
     if (value && typeof value === 'object' && !(value instanceof Date)) {
+      if ('not' in value && row[key] === value.not) return false;
       if ('lt' in value && !(row[key] < value.lt)) return false;
       if ('in' in value && !value.in.includes(row[key])) return false;
     } else if (value instanceof Date ? +row[key] !== +value : row[key] !== value) return false;
@@ -29,7 +34,7 @@ function project(row, args) {
 }
 function fixture(options = {}) {
   const rows = options.rows ?? Array.from({ length: 8 }, (_, n) => session(n + 1));
-  const calls = [], writes = [], flags = [], limits = [], redisCalls = [];
+  const calls = [], writes = [], limits = [], redisCalls = [];
   const cache = options.cache ?? new Map();
   const redis = {
     get: async (key) => { redisCalls.push(['get', key]); if (options.redisError) throw new Error('cache unavailable'); return cache.get(key) ?? null; },
@@ -51,11 +56,10 @@ function fixture(options = {}) {
     '@/lib/prisma': { default: { chatSession } },
     '@/lib/auth/currentUser': { loadCurrentUser: async () => options.unauthorized ? null : { userId, user: { id: userId } } },
     '@/lib/redis': { getRedis: async () => redis },
-    '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: flag, isFeatureEnabled: async (...args) => { flags.push(args); if (options.flagError) throw new Error('flag unavailable'); return options.on ?? true; } },
     '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return options.limited ? Response.json({ error: 'Rate limit exceeded. Please try again shortly.' }, { status: 429, headers: { 'Retry-After': '17' } }) : null; } },
     '@/lib/api/response': { unauthorized: () => Response.json({ error: 'Unauthorized' }, { status: 401 }) },
     'next/server': { NextResponse: Response },
   });
-  return { rows, calls, writes, flags, limits, cache, redisCalls, get: (query = '') => GET(new Request(`https://example.test/api/ai-chat/all-sessions${query ? '?' + query : ''}`)) };
+  return { rows, calls, writes, limits, cache, redisCalls, get: (query = '') => GET(new Request(`https://example.test/api/ai-chat/all-sessions${query ? '?' + query : ''}`)) };
 }
-module.exports = { assert, fixture, session, id, flag };
+module.exports = { assert, fixture, session, id };

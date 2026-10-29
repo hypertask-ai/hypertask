@@ -209,6 +209,52 @@ test("selected paths are committed test files the runner accepts", async () => {
   }
 });
 
+test("importing a barrel does not select every file under that directory", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { execFileSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "select-barrel-"));
+  const put = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  };
+  put("scripts/test-inventory.mjs", fs.readFileSync(path.join(root, "scripts/test-inventory.mjs"), "utf8"));
+  put(".github/scripts/select-tests.mjs", fs.readFileSync(path.join(root, ".github/scripts/select-tests.mjs"), "utf8"));
+  put("src/utils/index.ts", "export const base = 1;\n");
+  put("src/utils/leaf.ts", "export const leaf = 1;\n");
+  put("src/lib/usesBarrel.ts", 'import { base } from "@/utils";\nexport const uses = base;\n');
+  put("tests/barrel-importer.test.cjs", 'require("../src/lib/usesBarrel.ts");\n');
+  put("tests/leaf-importer.test.cjs", 'require("../src/utils/leaf.ts");\n');
+  put("tests/scan-utils.test.cjs", 'require("node:fs").readdirSync("src/utils");\n');
+  put("tests/prefix-utils.test.cjs", "const name = process.env.X;\nconst p = `src/utils/${name}`;\n");
+  put("tests/copy-utils.test.cjs", 'require("node:fs").cpSync("src/utils", "dest", { recursive: true });\n');
+  put("tests/join-utils.test.cjs", 'require("node:path").join("src", "utils");\n');
+  put("tests/require-barrel.test.cjs", 'require("../src/utils");\n');
+  put("tests/side-effect-barrel.test.cjs", 'import "../src/utils";\n');
+  const pick = (file) =>
+    execFileSync(process.execPath, [".github/scripts/select-tests.mjs", file], { cwd: dir, encoding: "utf8" })
+      .trim()
+      .split("\n");
+  try {
+    const leaf = pick("src/utils/leaf.ts");
+    assert.ok(leaf.includes("tests/leaf-importer.test.cjs"), "the test that imports the leaf still runs");
+    assert.ok(leaf.includes("tests/scan-utils.test.cjs"), "a directory walk still runs");
+    assert.ok(leaf.includes("tests/prefix-utils.test.cjs"), "a dynamic path prefix still runs");
+    assert.ok(!leaf.includes("tests/barrel-importer.test.cjs"), "import \"@/utils\" is not every file under src/utils");
+    assert.ok(!leaf.includes("tests/require-barrel.test.cjs"), "require(\"../src/utils\") is that module");
+    assert.ok(!leaf.includes("tests/side-effect-barrel.test.cjs"), "import \"../src/utils\" is that module");
+    assert.ok(leaf.includes("tests/copy-utils.test.cjs"), "cpSync of the directory still runs");
+    assert.ok(leaf.includes("tests/join-utils.test.cjs"), "path.join of the directory still runs");
+    const index = pick("src/utils/index.ts");
+    assert.ok(index.includes("tests/barrel-importer.test.cjs"), "the barrel file itself still selects its importer");
+    assert.ok(index.includes("tests/require-barrel.test.cjs"), "require of the barrel still selects its test");
+    assert.ok(index.includes("tests/copy-utils.test.cjs"), "copying the directory still runs for the barrel file");
+    assert.notEqual(leaf.join("\n"), "ALL");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a test added by the same PR does not count as coverage", async () => {
   // A PR could otherwise add a test naming its source file and buy its way
   // out of the full suite.

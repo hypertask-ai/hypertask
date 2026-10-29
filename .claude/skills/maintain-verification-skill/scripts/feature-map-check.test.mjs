@@ -10,6 +10,7 @@ import { mapPath, repoPaths, apiRoutes, routePatterns, routeExists, checkFeature
 const here = path.dirname(fileURLToPath(import.meta.url));
 const checker = path.join(here, 'feature-map-check.mjs');
 const runner = path.join(here, 'maintain-verification-weekly');
+const opsPath = '.claude/skills/verify-qa/reference/ops-map';
 
 function fixture(t, count = 1) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'feature-map-'));
@@ -27,6 +28,7 @@ function fixture(t, count = 1) {
   const pages = Array.from({ length: count }, (_, index) => `area-${String(index).padStart(2, '0')}.md`);
   put(`${mapPath}/INDEX.md`, '| Area | File |\n|---|---|\n' + pages.map(page => `| ${page} | [${page}](${page}) |`).join('\n') + '\n');
   for (const page of pages) put(`${mapPath}/${page}`, '# Area\n\n`src/shared.ts`\n\n## How to drive it\nOpen area, reload and collect proof.\n');
+  put(`${opsPath}/INDEX.md`, '# Ops map\n');
   put('src/shared.ts', 'export const fixture = true;\n');
   git('add', '.');
   git('commit', '-m', 'fixture');
@@ -52,18 +54,28 @@ function weeklyFixture(t, count = 1) {
   mkdirSync(bin, { recursive: true });
   const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, FIXTURE_HOME: home };
   delete env.GITHUB_STEP_SUMMARY;
-  executable(path.join(home, 'projects/token-ladder/bin/token-ladder'), 'console.log("Token ladder (Valentin Yeo / Hypertask): CODEX mode (Claude 26% used). Every session stays a Claude Code orchestrator.");');
+  executable(path.join(home, 'projects/token-ladder/bin/token-ladder'), `
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.FIXTURE_HOME + '/ladder-calls', JSON.stringify(args) + '\\n');
+if (args.join(' ') !== 'pick --role runner --harness hax --json') process.exit(9);
+if (process.env.LADDER_FAIL) process.exit(1);
+if (process.env.LADDER_INVALID) { console.log('{}'); process.exit(0); }
+const allowed = !process.env.LADDER_REFUSE;
+console.log(JSON.stringify({ role: 'runner', harness: 'hax', allowed, pool: allowed ? 'codex' : null }));
+process.exit(allowed ? 0 : 3);
+`);
   executable(path.join(bin, 'hax'), `
 const fs = require('node:fs');
 const path = require('node:path');
 const home = process.env.FIXTURE_HOME;
 const args = process.argv.slice(2);
 const prompt = args.at(-1);
-const page = prompt.match(/feature-map\\/(area-\\d+\\.md)/)?.[1];
+const page = prompt.match(/feature-map\\/((?:\\.\\.\\/ops-map\\/)?[a-z0-9-]+\\.md)/)?.[1];
 if (!page || !prompt.startsWith('Token ladder: CODEX mode.') || !prompt.includes('Use the unlazy skill') || !prompt.includes('Only read source.') || !args.includes('--provider=codex') || !args.includes('--no-session')) process.exit(9);
 fs.appendFileSync(path.join(home, 'helpers'), page + '\\n');
 fs.appendFileSync(path.join(home, 'events'), 'start ' + page + '\\n');
-const attemptFile = path.join(home, page + '.attempts');
+const attemptFile = path.join(home, page.replaceAll('/', '_') + '.attempts');
 const attempts = fs.existsSync(attemptFile) ? Number(fs.readFileSync(attemptFile)) : 0;
 fs.writeFileSync(attemptFile, String(attempts + 1));
 console.error('stderr must be discarded');
@@ -113,6 +125,48 @@ test('index requires table coverage, existing siblings and unique entries and ro
   assert.deepEqual(checkFeatureMap(f.repo), [{ page: 'INDEX.md', kind: 'missing directory', value: mapPath }]);
 });
 
+test('ops map receives the same index, path and route checks as customer recipes', t => {
+  const f = fixture(t);
+  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
+  f.put(`${opsPath}/build.md`, '`src/shared.ts`');
+  assert.deepEqual(checkFeatureMap(f.repo), []);
+  f.put(`${opsPath}/build.md`, '`src/missing.ts` POST /api/missing');
+  assert.deepEqual(checkFeatureMap(f.repo), [
+    { page: '../ops-map/build.md', kind: 'missing path', value: 'src/missing.ts' },
+    { page: '../ops-map/build.md', kind: 'missing API route', value: '/api/missing' },
+  ]);
+  f.put(`${opsPath}/build.md`, '`src/shared.ts`');
+  f.put(`${opsPath}/unlisted.md`, '# Unlisted');
+  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/INDEX.md' && value.kind === 'unindexed page' && value.value === 'unlisted.md'));
+  rmSync(path.join(f.repo, opsPath, 'unlisted.md'));
+  rmSync(path.join(f.repo, opsPath, 'build.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.page === '../ops-map/INDEX.md' && value.kind === 'missing file' && value.value === 'build.md'));
+  rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
+  assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing index' && value.page === '../ops-map/INDEX.md'));
+  rmSync(path.join(f.repo, opsPath), { recursive: true });
+  assert.ok(checkFeatureMap(f.repo).some(value => value.kind === 'missing directory' && value.value === opsPath));
+});
+
+test('CLI fails for ops drift and weekly reports its moved recipe', t => {
+  const f = weeklyFixture(t);
+  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Build | [build](build.md) |\n');
+  f.put(`${opsPath}/build.md`, '`docs/removed.md`\n\n## How to drive it\nRead the hosted build log.\n');
+  const result = spawnSync(process.execPath, [checker, f.repo], { encoding: 'utf8' });
+  assert.equal(result.status, 1);
+  assert.match(result.stdout, /ops-map\/build.md: missing path: docs\/removed.md/);
+  f.git('add', '.'); f.git('commit', '-m', 'ops citation drift');
+  ok(f.run('--dry-run'));
+  const firstRun = f.runs()[0];
+  const report = readFileSync(path.join(firstRun, 'description.html'), 'utf8');
+  assert.match(report, /ops-map\/build.md:1: missing path: docs\/removed.md/);
+  assert.match(report, /Read the hosted build log/);
+  rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
+  f.git('add', '.'); f.git('commit', '-m', 'missing ops index');
+  ok(f.run('--dry-run'));
+  const missingIndexReport = readFileSync(path.join(f.runs().find(run => run !== firstRun), 'description.html'), 'utf8');
+  assert.match(missingIndexReport, /ops-map\/INDEX.md:1: missing index/);
+});
+
 test('repo paths strip citations, punctuation, commands and anchors; ignore globs, placeholders and explicit external-repo scopes', t => {
   const f = fixture(t);
   const markdown = '`src/shared.ts:1#anchor`, `e2e/smoke/`. `.claude/tool run args` `docs/a.md:2:3-8`; `scripts/*.sh` `public/<name>.png` `prisma/{a,b}` `src/x?.ts` (installers live in the `other/project` repo, `public/install.sh`). `src/a.ts src/b.ts`';
@@ -152,6 +206,34 @@ test('CLI exits 0/1 and appends identical Markdown to the Actions summary', t =>
   assert.equal(readFileSync(summary, 'utf8'), clean.stdout + stale.stdout);
 });
 
+test('weekly uses machine-readable Codex admission, not the human hook wording', t => {
+  const f = weeklyFixture(t);
+  ok(f.run('--dry-run'));
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.home, 'ladder-calls'), 'utf8').trim()), ['pick', '--role', 'runner', '--harness', 'hax', '--json']);
+  assert.equal(readFileSync(path.join(f.home, 'helpers'), 'utf8').trim(), 'area-00.md');
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.state, 'pending.json'))), []);
+  assert.equal(existsSync(path.join(f.home, 'vcc-calls')), false);
+});
+
+for (const mode of ['REFUSE', 'FAIL', 'INVALID']) {
+  test(`weekly admission ${mode} preserves pending pages without helpers or filing`, t => {
+    const f = weeklyFixture(t);
+    f.env['LADDER_' + mode] = 'yes';
+    mkdirSync(f.state, { recursive: true });
+    writeFileSync(path.join(f.state, 'pending.json'), JSON.stringify(['area-00.md']));
+    const result = f.run();
+    if (mode === 'REFUSE') ok(result);
+    else assert.notEqual(result.status, 0, result.stdout + result.stderr);
+    assert.equal(existsSync(path.join(f.home, 'helpers')), false);
+    assert.equal(existsSync(path.join(f.home, 'vcc-calls')), false);
+    assert.equal(existsSync(path.join(f.state, 'last-run-sha')), false);
+    assert.deepEqual(JSON.parse(readFileSync(path.join(f.state, 'pending.json'))), ['area-00.md']);
+    delete f.env['LADDER_' + mode];
+    ok(f.run());
+    assert.equal(readFileSync(path.join(f.home, 'helpers'), 'utf8').trim(), 'area-00.md');
+  });
+}
+
 test('weekly first run caps eight helpers, max two concurrent, and drains backlog on next run', t => {
   const f = weeklyFixture(t, 11);
   const firstResult = f.run();
@@ -180,6 +262,29 @@ test('weekly first run caps eight helpers, max two concurrent, and drains backlo
   ok(f.run());
   assert.equal(readFileSync(path.join(f.home, 'helpers'), 'utf8'), before);
   for (const run of f.runs()) assert.equal(existsSync(path.join(run, 'checkout')), false);
+});
+
+test('weekly keeps moved ops recipes in incremental audits and pending retries without name collisions', t => {
+  const f = weeklyFixture(t);
+  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Ops | [ops](area-00.md) |\n');
+  f.put(`${opsPath}/area-00.md`, '`src/ops.ts`');
+  f.put('src/ops.ts', 'first');
+  f.git('add', '.'); f.git('commit', '-m', 'ops recipe');
+  ok(f.run());
+  assert.deepEqual(readFileSync(path.join(f.home, 'helpers'), 'utf8').trim().split('\n').sort(), ['../ops-map/area-00.md', 'area-00.md']);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.runs()[0], 'result.json'))).failures, []);
+  rmSync(path.join(f.home, 'helpers'));
+  f.put('src/ops.ts', 'second');
+  f.git('add', '.'); f.git('commit', '-m', 'ops source change');
+  f.env.HELPER_FAIL = 'always';
+  assert.notEqual(f.run().status, 0);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.state, 'pending.json'))), ['../ops-map/area-00.md']);
+  delete f.env.HELPER_FAIL;
+  rmSync(path.join(f.home, 'helpers'));
+  ok(f.run());
+  assert.equal(readFileSync(path.join(f.home, 'helpers'), 'utf8').trim(), '../ops-map/area-00.md');
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.state, 'pending.json'))), []);
+  ok(f.run('--dry-run', '--pages', '../ops-map/area-00.md'));
 });
 
 test('load hold fetches but starts no helpers or tickets and leaves checkpoint unchanged', t => {
@@ -346,7 +451,7 @@ test('GitHub workflow and policy keep the tiny check free, pinned, scoped and no
   const workflow = read('.github/workflows/feature-map-weekly.yml');
   assert.match(workflow, /schedule:\n    - cron: '37 3 \* \* 1'\n  workflow_dispatch:\n  pull_request:/);
   assert.match(workflow, /branches: \[production\]/);
-  for (const scope of ['.claude/skills/maintain-verification-skill/**', '.claude/skills/verify-qa/reference/feature-map/**', '.github/workflows/feature-map-weekly.yml']) assert.ok(workflow.includes(`- '${scope}'`));
+  for (const scope of ['.claude/skills/maintain-verification-skill/**', '.claude/skills/verify-qa/reference/feature-map/**', '.claude/skills/verify-qa/reference/ops-map/**', '.github/workflows/feature-map-weekly.yml']) assert.ok(workflow.includes(`- '${scope}'`));
   assert.match(workflow, /permissions:\n  contents: read\n/);
   assert.match(workflow, /runs-on: ubuntu-latest\n    timeout-minutes: 5/);
   assert.match(workflow, /node-version: \^24\.\d+\.\d+\n          check-latest: true/);

@@ -71,7 +71,7 @@ stub("src/utils/controllers/projects/getAllIncludes.ts", { getProjectWhere: () =
 stub("src/app/api/ai/_lib/planGate.ts", {
   storePlanIdForProject: async () => plan,
   haiku55ModelEnabled: async () => false,
-  haikuDefaultModelEnabled: async () => false,
+
   backgroundClaudeModelEnabled: async () => false,
 });
 const managed = new Set();
@@ -853,6 +853,7 @@ test("BYOK titles use shared or customer credentials", async () => {
     "@/app/api/ai/_lib/modelProvider": {
       isAiGatewayEnabled: () => true, resolveAiModel: (_provider, _model, credential) => { credentials.push(credential); return {}; },
       providerOptionsForAiModel: () => ({}),
+      configureAiModelUsage: () => {},
     },
     "@/lib/aiModelOptions": { defaultModelKeyFor: () => "gpt-6-luna" },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "title instructions" },

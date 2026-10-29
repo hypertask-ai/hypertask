@@ -1,4 +1,7 @@
 import { useMemo } from "react";
+import { useAgents } from "@/hooks/MultiPages/useAgents";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { calendarTaskFiltersAtom, currentProjectAtom } from "@/store";
 import { useGetAllMembersForAssign } from "@/hooks/MultiPages/useGetMembersForAssignees";
 import { IAgent, IUser } from "@/models/model";
@@ -13,11 +16,16 @@ export const useCreatedByFilter = ({
     calendarMembers,
     view,
 }: {
-    createdByHandler: (param?: IUser | CalendarUserSummary) => Promise<void>;
+    createdByHandler: (param?: IUser | CalendarUserSummary | IAgent) => Promise<void>;
     calendarMembers?: CalendarUserSummary[];
     view: "Kanban" | "Calendar" | "MyTasks";
 }) => {
+    const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
     const currentProject = useRecoilValue(currentProjectAtom);
+    const { allAgents } = useAgents({
+        projectId: view === "Kanban" && agentCreatorFilterEnabled ? currentProject?.id : null,
+        teamId: view === "Kanban" && agentCreatorFilterEnabled ? currentProject?.teamId : null,
+    });
     const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom);
     const myTasksFilters = useMyTasksFilterController();
     const { data: membersAndOwner } = useGetAllMembersForAssign(
@@ -45,28 +53,28 @@ export const useCreatedByFilter = ({
             if (owner) uniqueUsersMap.set(owner.id, owner);
         }
 
-        return Array.from(uniqueUsersMap.values());
-    }, [view, calendarMembers, membersAndOwner]);
+        const agents = view === "Kanban" && agentCreatorFilterEnabled
+            ? (allAgents ?? []).filter(agent => !agent.revokedAt)
+            : [];
+        return [...uniqueUsersMap.values(), ...agents];
+    }, [view, calendarMembers, membersAndOwner, allAgents, agentCreatorFilterEnabled]);
 
     const activeFiltersFlatMap = useMemo(() => {
         if (view === "Calendar") {
             return calendarTaskFilters.createdBy;
         }
         if (view === "MyTasks") {
-            return myTasksFilters?.activeFilters.addedFilters.find((x) => x.type === "CreatedBy")?.searchPayload.flatMap((x: { id: number }) => x.id) ?? [];
+            return myTasksFilters?.activeFilters.addedFilters.find((x) => x.type === "CreatedBy")?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? [];
         }
-        return activeFilters?.searchPayload.flatMap((x: { id: number }) => x.id) ?? [];
+        return activeFilters?.searchPayload.flatMap((x: { id: number | string }) => x.id) ?? [];
     }, [view, calendarTaskFilters.createdBy, activeFilters, myTasksFilters?.activeFilters]);
 
     const onSelectHandler = (
         selectedUsers?: UserSelectionEntry | UserSelectionEntry[],
     ) => {
-        const isHuman = (
-            entry: UserSelectionEntry,
-        ): entry is IUser | CalendarUserSummary => typeof entry.id === "number";
-        if (Array.isArray(selectedUsers) && selectedUsers.length > 0 && isHuman(selectedUsers[0])) {
+        if (Array.isArray(selectedUsers) && selectedUsers.length > 0) {
             createdByHandler(selectedUsers[0]);
-        } else if (selectedUsers && !Array.isArray(selectedUsers) && isHuman(selectedUsers)) {
+        } else if (selectedUsers && !Array.isArray(selectedUsers)) {
             createdByHandler(selectedUsers);
         } else {
             createdByHandler(undefined);

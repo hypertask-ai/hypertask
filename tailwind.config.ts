@@ -71,6 +71,10 @@ const config: Config = {
         "button-arrow-disabled":"var(--button-arrow-disabled)",
         "button-arrow":"var(--button-arrow)",
         "kanban-column-scrollbar":"var(--color-kanban-column-scrollbar)",
+        "menu-scroll": "var(--color-menu-scrollbar-thumb)",
+        "list-scroll": "var(--color-list-scrollbar-thumb)",
+        "onboarding-scroll": "var(--color-onboarding-scrollbar-thumb)",
+        "list-scroll-hover": "var(--color-list-scrollbar-hover)",
         "selectionLight": '#d3d3d3', // Light grey for light theme
         'selectionDark': '#555555',  // Dark grey for dark theme
         'light-white': 'rgba(255, 255, 255, 0.8)', // White with 80% opacity

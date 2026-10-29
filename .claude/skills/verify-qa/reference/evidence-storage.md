@@ -118,7 +118,6 @@ Found and intentionally unchanged:
 | Site | Why left |
 | --- | --- |
 | `.claude/skills/wireframe/scripts/wireframe:59`, `:64`, `:128` | Captures a PNG, optionally uses cached npx Playwright, and copies an HTML base kit; no app build or install into evidence. |
-| `.agents/skills/prototype/SKILL.md:45` | Self-contained HTML/CSS/JS prototype, not an app build. |
 | `scripts/speed/measure.mjs:1`, `scripts/speed/README.md:9` | Live measurement using existing dependencies/browser, not app builds. Development setup instructions do not target evidence. |
 | `scripts/speed/fetch-github-runs.mjs:22`, `:57` | Downloads/decrypts small results in `mkdtemp`, removes them in `finally`; no app build. |
 | `.claude/skills/speed-analyst/PLAYBOOK.md:73`, `:99`, `:252`, `:367`, `:401`, `:481` | Historical premerge/live measurement records and small probe/JSON evidence; not executable build instructions. |
@@ -131,9 +130,9 @@ Found and intentionally unchanged:
 | `scripts/heavy-job.sh:4` | Only gates an existing command and does not choose build/output paths. |
 | `.claude/skills/ship/scripts/disk-guard.py:38`, `:831`, `:940`, `:985`, `:1112` | Existing conservative disk inspection/pruning, not a build writer; intentionally preserves QA evidence. This pruner adds a separate allowlist. |
 | `scripts/verify-inbox-first-screen-evidence.cjs:9` | Historical evidence assertions, not an app build. |
-| `.claude/skills/verify-qa/reference/feature-map/boards-and-views.md:48`, `cli-install.md:20`, `posthog-error-alerts.md:14`, `signup-check.md:10` | Existing small live-check scripts/reports in evidence, not dependency or build creation. |
+| `.claude/skills/verify-qa/reference/feature-map/boards-and-views.md:48`, `cli-install.md:20`, `.claude/skills/verify-qa/reference/ops-map/posthog-error-alerts.md:14`, `.claude/skills/verify-qa/reference/ops-map/signup-check.md:10` | Existing small live-check scripts/reports in evidence, not dependency or build creation. |
 | `.claude/skills/maintain-verification-skill/scripts/maintain-verification-weekly:105`, `scripts/proc-watchdog.py:114` | A source-only prohibition and process classification respectively, not build commands or evidence writers. |
-| `.claude/skills/verify-qa/reference/feature-map/production-build.md:13` | Describes Vercel deploy build diagnostics, not local evidence builds. |
+| `.claude/skills/verify-qa/reference/ops-map/production-build.md:13` | Describes Vercel deploy build diagnostics, not local evidence builds. |
 | `~/projects/company-skills/skills/speed-check/measure.md:6`, `tools.md:14` | External shared pack resolves an installed browser/dependencies and suggests an analyzer; no script builds into evidence. Read only here: edits are restricted to this worktree. Local caller skills now require trapped scratch for any manual analyzer experiment. |
 
 The skill/script search found no toolchain installer writing into evidence.

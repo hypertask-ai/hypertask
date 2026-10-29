@@ -39,7 +39,7 @@ function moduleWithStubs(file, stubs) {
     module: loaded, exports: loaded.exports,
     require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { DEMO_AI_GATEWAY_API_KEY: "demo-key" } },
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
     Error, Promise, Object, Array, Set, Map,
   }, { filename: path.join(root, file) });
   return loaded.exports;
@@ -85,11 +85,11 @@ test("an explicit non-Claude team pick for a system feature is still honoured", 
   );
 });
 
-test("with the flag off the old fast ladder is unchanged", () => {
+test("with the flag off the fast ladder keeps its order and uses Haiku 5.5", () => {
   const resolved = ladder.resolveSystemModel("summaries", {}, false, {});
   assert.equal(resolved.provider, "google");
   assert.equal(resolved.model, "google/gemini-3.5-flash-lite");
-  assert.ok(ladder.SYSTEM_MODEL_LADDERS.fast.some((entry) => entry.model === "anthropic/claude-haiku-4.5"));
+  assert.deepEqual(ladder.SYSTEM_MODEL_LADDERS.fast.filter((entry) => entry.provider === "anthropic").map((entry) => entry.model), [HAIKU_SLUG]);
 });
 
 test("every default with no user choice is Haiku 5.5 when the flag is on", () => {
@@ -128,8 +128,7 @@ test("saved picks of older Claude versions read as the 5.5 model of the same cla
     const oldClass = saved.split("-")[1];
     assert.equal(catalog.getAiModelDefinition(option.modelKey).modelClass, `claude-${oldClass}`);
   }
-  // Read-time only: flag off, Haiku 4.5 is still its own option.
-  assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false)?.id, "claude-haiku-4.5");
+  assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false)?.id, "claude-haiku-5-5");
 });
 
 test("a team that disabled Anthropic is reported, and callers return no result instead of switching provider", async () => {
@@ -137,7 +136,6 @@ test("a team that disabled Anthropic is reported, and callers return no result i
     const byok = moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
       "@/app/api/ai/_lib/planGate": {
         backgroundClaudeModelEnabled: async () => true,
-        haikuDefaultModelEnabled: async () => true,
         haiku55ModelEnabled: async () => true,
         storePlanIdForProject: async () => "Free",
       },
@@ -200,6 +198,7 @@ test("the demo board generator uses Haiku 5.5 with the flag on and Luna with it 
   for (const enabled of [true, false]) {
     const seen = [];
     const api = moduleWithStubs("src/lib/demo/generateDemoBoard.ts", {
+      "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
       "./demoAllowance": { demoCapsEnabled: async () => false },
       zod: require("zod"),
       ai: {
@@ -224,14 +223,13 @@ test("getAiDefaultModelContext reports Claude 5.5 mode for the no-user and user 
     const byok = moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
       "@/app/api/ai/_lib/planGate": {
         backgroundClaudeModelEnabled: async () => enabled,
-        haikuDefaultModelEnabled: async () => enabled,
         haiku55ModelEnabled: async () => enabled,
         storePlanIdForProject: async () => "Free",
       },
     });
     const context = await byok.getAiDefaultModelContext({ userId: 7 });
     assert.equal(context.backgroundClaudeEnabled, enabled);
-    assert.equal(context.haiku55Enabled, enabled);
+    assert.equal(context.haiku55Enabled, true);
   }
 });
 
@@ -248,7 +246,7 @@ const ENTRY_POINTS = [
   ["chat titles", "src/lib/ai/chatStream/title.ts", /getAiDefaultModelContext[\s\S]*defaultModelKeyFor\(defaultContext/],
   ["custom instructions", "src/app/api/ai/_lib/customInstructions.ts", /getAiDefaultModelContext[\s\S]*defaultModelKeyFor\(defaultContext/],
   ["board memory", "src/app/api/ai/_lib/boardMemory.ts", /getAiDefaultModelContext[\s\S]*defaultModelKeyFor\(defaultContext/],
-  ["label classifier", "src/lib/ai/labelClassifier.ts", /haikuDefaultModelEnabled\(tags\?\.userId\)/],
+  ["label classifier", "src/lib/ai/labelClassifier.ts", /anthropic\/claude-haiku-5\.5/],
   ["demo board", "src/lib/demo/generateDemoBoard.ts", /backgroundClaudeModelEnabled\(null\)[\s\S]*DEMO_CLAUDE_MODEL/],
   ["native agent heartbeat and chat turns", "src/lib/ai/chatStream/turnModel.ts", /getAiDefaultModelContext/],
   ["task writer fallback", "src/app/api/ai/_lib/editorAi.ts", /sameModelRetry/],
@@ -266,7 +264,6 @@ test("the Claude 5.5 flag reaches every background decision through one server g
   const gate = read("src/app/api/ai/_lib/planGate.ts");
   assert.match(gate, /export async function backgroundClaudeModelEnabled/);
   assert.match(gate, /HTPR_7075_BACKGROUND_CLAUDE_FLAG, userId \?\? 0/);
-  assert.match(gate, /return backgroundClaudeModelEnabled\?\.\(userId\) \?\? false/);
 });
 
 test("the flagged Claude 5.5 paths never name Luna, Gemini or an older Claude as a fallback", () => {

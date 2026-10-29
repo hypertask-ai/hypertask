@@ -26,6 +26,17 @@ has height >=24px and `elementFromPoint` at its centre hits it; the
 input. Repeat on desktop to check
 the unchanged desktop path (https://app.hypertask.ai/detail/project-15/6970).
 
+For description-only New Task creation (`/new?id=<private QA board>`), leave the
+title empty, enter a description, and save. Under `htpr-8031-auto-title`, the
+`/api/ai/task-writer` request carries `requestKind: "auto-title"`; a title-only
+reply is valid, but a full task draft still needs a description. Check the saved
+title and original description after reload on iPhone-sized, Android-sized and
+desktop viewports. Repeat with a manual title and confirm it stays unchanged.
+Intercept only the title request with a 503 in a separate browser context to
+prove saving uses the first 80 description characters and shows the fallback
+notice. This injected failure proves recovery, not live provider health. Never
+change shared provider settings. Delete only this run's QA fixtures.
+
 ## What usually breaks
 
 Mobile-only layout and interaction bugs desktop testing never catches, most
@@ -49,3 +60,15 @@ change and reshoot to confirm it held at that viewport.
 
 Same as whichever underlying area you were testing (task, comment, board);
 mobile isn't a separate data surface.
+
+## Phone zoom
+
+With `htpr-8145-phone-zoom` enabled, inspect the server viewport on a phone:
+`user-scalable=yes`, `maximum-scale=5`. Pinch to at least 200% on My Tasks,
+Inbox rows and task comments. Swipe rows must keep vertical scrolling and
+pinch zoom. Text inputs, textareas and editable composers must compute to at
+least 16px; focusing them from 100% must not enlarge the visual viewport.
+Capture phone screenshots before/after pinching and after focus. Check the
+unchanged desktop viewport and the flag-off phone viewport separately. Browser
+emulation proves Chromium behavior; record physical iPhone Safari as
+unreachable unless a real device is available.

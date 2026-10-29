@@ -1,8 +1,12 @@
 "use client";
 
-import { setNotificationSeen } from "@/lib/api/typedClient";
+import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
+import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
+import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
+import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
+import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+
 import {
-  HTPR_6979_TYPED_WRITES_FLAG,
   HTPR_7311_DECISION_COMMENT_LINK_FLAG,
   SHORTCUT_NUDGES_FLAG,
 } from "@/lib/flags/keys";
@@ -196,9 +200,12 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
-  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  let typedWrite: typeof setNotificationSeen | undefined;
-  if (typedWrites) typedWrite = setNotificationSeen;
+  const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
+  const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
+  const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
+  const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
+  const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
+  const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
   const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const noPhoneNudges = useFlag(HTPR_5906_NO_PHONE_NUDGES_FLAG) && isMbl;
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
@@ -325,7 +332,7 @@ const InboxSplit = ({
 
   const focusKeyboardRow = (
     row: InboxKeyboardTimelineRow,
-    direction?: -1 | 1,
+    direction?: -1 | 1 | "boundary",
   ) => {
     setActiveKeyboardRowKey(row.key);
     if (row.item.kind === "notification") {
@@ -342,6 +349,8 @@ const InboxSplit = ({
       scrollToCenterIfNearTop(activeElement);
     } else if (activeElement && direction === 1) {
       scrollToCenterIfNearBottom(activeElement);
+    } else if (activeElement && direction === "boundary") {
+      activeElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   };
 
@@ -366,8 +375,17 @@ const InboxSplit = ({
         <SelectionCheckbox
           className="!border-white-black mr-2"
           alwaysVisible
-          isChecked={isAllSelected}
-          onClick={() => selectAllFromAllTabs()}
+          isChecked={tabScopedSelection
+            ? _notifications.length > 0 && _notifications.every(({ id }) => selectedIdsArray.includes(parseInt(id)))
+            : isAllSelected}
+          onClick={() => {
+            if (!tabScopedSelection) return selectAllFromAllTabs();
+            if (_notifications.every(({ id }) => selectedIdsArray.includes(parseInt(id)))) {
+              clearSelection();
+            } else {
+              selectAll();
+            }
+          }}
         />
         <Tooltip
           shouldReAdjustToViewport
@@ -453,6 +471,8 @@ const InboxSplit = ({
   const {
     selectedIds,
     selectedCount,
+    selectAll,
+    clearSelection,
     toggleSelection,
     handleKeyDown: bulkHandleKeyDown,
   } = useBulkActions({
@@ -520,6 +540,11 @@ const InboxSplit = ({
     ) {
       lastgClick.current = null;
       e.preventDefault();
+      if (inboxBoundaryOrder) {
+        const targetRow = keyboardRows[e.shiftKey ? keyboardRows.length - 1 : 0];
+        if (targetRow) focusKeyboardRow(targetRow, "boundary");
+        return;
+      }
       const targetIndex = jumpToInboxBoundary(
         _notifications,
         e.shiftKey,
@@ -649,7 +674,6 @@ const InboxSplit = ({
         Number.parseInt(selectedNotification.id),
         selectedNotification.seen,
         undefined,
-        typedWrite,
       ).finally(() =>
         queryClient.invalidateQueries({
           queryKey: queryKey ?? inboxDataQueryKey(currentUser?.id),
@@ -724,7 +748,15 @@ const InboxSplit = ({
     prefetchHoverTimeout.current = null;
   }, []);
 
-  const handleMouseEnter = (index: number) => {
+  const handleMouseEnter = (
+    index: number,
+    pointerMovement?: { movementX: number; movementY: number },
+  ) => {
+    if (
+      inboxKeyboardFocus &&
+      (!pointerMovement ||
+        (pointerMovement.movementX === 0 && pointerMovement.movementY === 0))
+    ) return;
     currentHoveredDiv.current = index;
     const hoveredRow = keyboardRows.find(
       (row) =>
@@ -786,7 +818,7 @@ const InboxSplit = ({
       });
     }
 
-    void markNotificationSeen(Number.parseInt(notification.id), typedWrite).finally(() =>
+    void markNotificationSeen(Number.parseInt(notification.id)).finally(() =>
       queryClient.invalidateQueries({ queryKey: cacheKey, exact: true }),
     );
   };
@@ -911,6 +943,7 @@ const InboxSplit = ({
   }, [
     _notifications,
     decisionCommentLinks,
+    inboxBoundaryOrder,
     activeDrafts,
     keyboardRows,
     selectedKeyboardRow?.key,
@@ -1022,6 +1055,8 @@ const InboxSplit = ({
                     notification.waitingOnSynthetic ||
                     String(notification.id).startsWith("-");
 
+                  const canBulkSelect = !isWaitingOnSynthetic || bulkBlockedInbox;
+
                   return (
                     <div
                       className={`${isBulkSelected ? "bulk-active" : ""}`}
@@ -1063,12 +1098,15 @@ const InboxSplit = ({
                               },
                             )}
                             onMouseEnter={() => handleMouseEnter(globalIndex)}
+                            onMouseMove={(event) => {
+                              if (inboxKeyboardFocus) handleMouseEnter(globalIndex, event);
+                            }}
                             onMouseLeave={handleMouseLeave}
                             onTouchStart={() => handleTouchStart(globalIndex)}
                           >
                             {!disableRowButtons &&
                               !disableBulkActions &&
-                              isWaitingOnSynthetic && (
+                              !canBulkSelect && (
                                 <div
                                   className="hidden w-[15px] shrink-0 sm:block md:hidden"
                                   aria-hidden="true"
@@ -1076,7 +1114,7 @@ const InboxSplit = ({
                               )}
                             {!disableRowButtons &&
                               !disableBulkActions &&
-                              !isWaitingOnSynthetic && (
+                              canBulkSelect && (
                                 <SelectionCheckbox
                                   alwaysVisible={selectedIdsArray.length > 0}
                                   className={cn(
@@ -1098,7 +1136,7 @@ const InboxSplit = ({
                             <div className="inbox-row-gutter hidden shrink-0 items-center justify-end gap-2 pr-[1px] md:flex">
                               {!disableRowButtons &&
                                 !disableBulkActions &&
-                                (isWaitingOnSynthetic ? (
+                                (!canBulkSelect ? (
                                   <div
                                     className="w-[15px] shrink-0"
                                     aria-hidden="true"

@@ -29,7 +29,7 @@ Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. Th
 
 ## Enforced reuse checks
 
-Run `npm run lint:changed` before hand-off. It includes committed, staged, unstaged and untracked JavaScript/TypeScript changes against `origin/production`, and falls back to full lint when lint configuration, rules or dependencies change. The required `ci-tests` job runs full `npm run lint` with caching. `eslint-local-rules/ui-patterns.mjs` enforces:
+CI runs `npm run lint:changed` and full lint; do not run them on the VPS. A tiny single-file `npm run lint:changed` may be run optionally, and a kill is not a blocker. It includes committed, staged, unstaged and untracked JavaScript/TypeScript changes against `origin/production`, and falls back to full lint when lint configuration, rules or dependencies change. The required `ci-tests` job runs full `npm run lint` with caching. `eslint-local-rules/ui-patterns.mjs` enforces:
 
 - `hypertask-ui/no-new-choice-menus`: use Ctrl+K commands and `OptionPickerModal`, `AssignModal`, `TableColumnsPicker`, `BoardPriorityMode` or existing filter modals instead of new dropdowns or native selects.
 - `hypertask-ui/no-new-view-save-actions`: import the existing kanban `SaveView` and `SaveViewModal`, never a parallel Save as view button.
@@ -37,7 +37,7 @@ Run `npm run lint:changed` before hand-off. It includes committed, staged, unsta
 
 Exact import paths and the rule table are in AGENTS.md under "Reuse existing UI (enforced)". `eslint-local-rules/ui-patterns-baseline.json` allows existing production debt per file, not copies in new files or count increases. Lower counts when deleting debt; never raise them to make your change pass. These are syntax ratchets, not permission to invent a control the matcher cannot recognize. Any exception belongs on the offending line with a human-approved reason and expiry date.
 
-Prove the checks still reject past mistakes with `node --test tests/ui-patterns.test.cjs`. The historical controls cite PRs #547, #571, #578 and #706.
+CI proves the checks still reject past mistakes with `node --test tests/ui-patterns.test.cjs`. The historical controls cite PRs #547, #571, #578 and #706.
 
 ## Notes
 

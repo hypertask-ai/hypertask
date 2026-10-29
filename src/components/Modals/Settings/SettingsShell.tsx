@@ -4,7 +4,7 @@ import { SettingsScopeTabs } from "./SettingsScopeTabs";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import {
@@ -107,6 +107,10 @@ const BoardStalenessSection = dynamic(
   },
 );
 const BoardAiSection = dynamic(() => import("./BoardAiSection"), {
+  ssr: false,
+  loading: () => <SettingsSectionLoading />,
+});
+const BoardTaskTemplatesSection = dynamic(() => import("./BoardTaskTemplatesSection"), {
   ssr: false,
   loading: () => <SettingsSectionLoading />,
 });
@@ -241,6 +245,7 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
   "ai-features": AiFeaturesSection,
   "default-models": AiDefaultModelsSection,
   "board-ai": BoardAiSection,
+  "board-task-templates": BoardTaskTemplatesSection,
   "board-memory": BoardMemorySection,
   "board-skills": BoardSkillsSection,
   "board-files": BoardFilesSection,
@@ -274,7 +279,9 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const aiSettingsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
   const [settingsRevision, setSettingsRevision] = useState(0);
-  const activeSection = normalizeSettingsSection(section);
+  const taskTemplatesEnabled = useFlag(HTPR_7472_TASK_TEMPLATES_FLAG);
+  const activeSection = section === "board-task-templates" && !taskTemplatesEnabled
+    ? "board-ai" : normalizeSettingsSection(section);
   const activeTab = getSettingsTabForSection(activeSection);
   const mbl = useMobileView();
   const { open: openAiChat, close: closeAiChat } = useUIStateManager("aiChatInterface");
@@ -389,6 +396,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
           ...group,
           items: group.items.filter(
             (item) =>
+              (isSettingsNavLink(item) || item.id !== "board-task-templates" || taskTemplatesEnabled) &&
               (isSettingsNavLink(item) ||
                 item.id !== "apiKeys" ||
                 Boolean(billing && billing.storePlanId !== "Free")) &&
@@ -409,7 +417,7 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
       bottomGroups: filterGroups(SETTINGS_CROSS_TAB_GROUPS),
       primaryGroups: filterGroups(navigationTab.groups),
     };
-  }, [billing, navigationTab.groups, searchTerm]);
+  }, [billing, navigationTab.groups, searchTerm, taskTemplatesEnabled]);
 
   const isSearching = searchTerm.trim().length > 0;
   const hasVisibleGroups = primaryGroups.length > 0 || bottomGroups.length > 0;

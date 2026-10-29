@@ -225,10 +225,8 @@ test("resolver requires exact board membership and a non-revoked agent", async (
 test("route requires a signed session before resolving a person", async () => {
   let resolverCalls = 0;
   const route = execute(compile("src/pages/api/members/personHovercard.ts"), {
-    "@/lib/auth/session": {
-      SESSION_COOKIE: "ht_session",
-      verifySession: () => null,
-    },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/utils/controllers/members/personHovercard": {
       resolvePersonHovercard: async () => {
         resolverCalls += 1;
@@ -264,10 +262,8 @@ test("route requires a signed session before resolving a person", async () => {
 test("route passes the signed user id and parsed subject to the resolver", async () => {
   let resolverArgs;
   const route = execute(compile("src/pages/api/members/personHovercard.ts"), {
-    "@/lib/auth/session": {
-      SESSION_COOKIE: "ht_session",
-      verifySession: (token) => (token === "signed" ? { id: 23 } : null),
-    },
+    "@/lib/auth/getSessionUser": { getSessionUser: async headers => headers.get("cookie") === "ht_session=signed" ? { userId: 23, source: "legacy" } : null },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/utils/controllers/members/personHovercard": {
       resolvePersonHovercard: async (...args) => {
         resolverArgs = args;
@@ -281,6 +277,7 @@ test("route passes the signed user id and parsed subject to the resolver", async
   const req = {
     method: "GET",
     cookies: { ht_session: "signed" },
+    headers: { cookie: "ht_session=signed" },
     query: { projectId: "15", kind: "user", id: "42" },
   };
   let status;
@@ -310,7 +307,8 @@ test("route passes the signed user id and parsed subject to the resolver", async
 
 test("route parser rejects lossy ids and preserves exact subject kinds", () => {
   const route = execute(compile("src/pages/api/members/personHovercard.ts"), {
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => null },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+    "@/lib/auth/desktopCliTokenUser": { logDesktopCliResponse() {} },
     "@/utils/controllers/members/personHovercard": {
       resolvePersonHovercard: async () => null,
     },

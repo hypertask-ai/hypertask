@@ -4,7 +4,6 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { loadUserAgentChatSession, sidebarChatProjectId } from "@/lib/agents/chatAccess";
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { getAgentRole } from "@/lib/mcp/agents/scopes";
 import { getSectionForTask, validateProjectAccess } from "@/lib/mcp/tasks/services";
@@ -37,13 +36,6 @@ async function confirmProposal(
       return NextResponse.json(
         { success: false, error: "action must be confirm or dismiss" },
         { status: 400 }
-      );
-    }
-
-    if (!(await isFeatureEnabled(AGENT_CHAT_TICKET_CONFIRM_FLAG, userId))) {
-      return NextResponse.json(
-        { success: false, error: "Ticket confirmation is not enabled" },
-        { status: 403 }
       );
     }
 

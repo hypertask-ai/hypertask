@@ -17,8 +17,7 @@ test("smart labels resolve and pass the task team's gateway key", () => {
   );
   assert.match(source, /if \(!tags\?\.teamId\)[\s\S]*?return null;/);
   assert.match(source, /if \(!gatewayApiKey\)[\s\S]*?return null;/);
-  assert.match(source, /resolveGatewayModel\(MODEL, gatewayApiKey\)/);
-  assert.doesNotMatch(source, /resolveGatewayModel\(MODEL\)/);
+  assert.match(source, /resolveAutomaticAiModel\("gateway", "anthropic\/claude-haiku-5\.5", gatewayApiKey/);
   assert.doesNotMatch(
     source,
     /Smart label classification returned unparsable output/,

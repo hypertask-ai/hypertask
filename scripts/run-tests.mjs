@@ -1,11 +1,19 @@
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { fileURLToPath } from "node:url";
 import {
   discoverTestFiles,
   supportedTestSuffixes,
 } from "./test-inventory.mjs";
+import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 
+const startedAt = performance.now();
 const root = process.cwd();
+const durationReporter = fileURLToPath(new URL("./test-duration-reporter.mjs", import.meta.url));
+const fileDurations = [];
+let timingDirectory;
 const testsRoot = path.join(root, "tests");
 // A hung or runaway test file is cancelled after 20 minutes instead of running for hours (YPER4-279).
 const FILE_TIMEOUT = `--test-timeout=${process.env.TEST_FILE_TIMEOUT_MS ?? 20 * 60 * 1000}`;
@@ -19,20 +27,61 @@ function relative(absolute) {
   return path.relative(root, absolute).split(path.sep).join("/");
 }
 
-function run(command, args, label) {
-  console.log(`\n> ${label}`);
-  const result = spawnSync(command, args, {
-    cwd: root,
-    env: process.env,
-    stdio: "inherit",
-  });
+const quarantineFile = process.env.QUARANTINE_CONFIG || path.join(root, "config/quarantined-tests.json");
+const quarantine = loadQuarantine(quarantineFile);
 
-  if (result.error) throw result.error;
-  if (result.signal) {
-    console.error(`${label} terminated by ${result.signal}`);
-    process.exit(1);
+function run(command, args, label, concurrency = 1) {
+  const nodeTests = args[0] === "--test";
+  const timingFile = path.join(timingDirectory, `${fileDurations.length}.jsonl`);
+  if (nodeTests) {
+    args = [
+      "--test-reporter=spec", "--test-reporter-destination=stdout",
+      `--test-reporter=${durationReporter}`, `--test-reporter-destination=${timingFile}`,
+      ...args,
+    ];
   }
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  const runStartedAt = performance.now();
+  console.log(`\n> ${label}`);
+  const parser = createTapParser();
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: root,
+      env: process.env,
+      stdio: ["inherit", "pipe", "pipe"],
+    });
+    child.stdout.on("data", (chunk) => {
+      process.stdout.write(chunk);
+      parser.push(chunk.toString());
+    });
+    child.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      parser.push(chunk.toString());
+    });
+    child.on("error", reject);
+    child.on("close", (status, signal) => {
+      if (nodeTests) {
+        for (const line of readFileSync(timingFile, "utf8").trim().split("\n").filter(Boolean)) {
+          fileDurations.push({ ...JSON.parse(line), concurrency });
+        }
+      } else {
+        fileDurations.push({ file: args.at(-1), durationMs: performance.now() - runStartedAt, concurrency });
+      }
+      const outcome = checkOutcome(status ?? 1, parser.finish(), quarantine);
+      if (signal) {
+        console.error(`${label} terminated by ${signal}`);
+        process.exit(1);
+      }
+      if (outcome.quarantined.length > 0) {
+        console.error(`Quarantine: ${outcome.quarantined.length} failing test(s) still ran and did not fail the check.`);
+        for (const failure of outcome.quarantined) {
+          const entry = quarantine.find((item) => item.test === failure.name || (failure.file || "").endsWith(item.test));
+          console.error(`- ${failure.name} (${entry?.owner || "unowned"} ${entry?.ticket || ""})`);
+        }
+      }
+      if (outcome.failCheck) process.exit(status ?? 1);
+      resolve();
+    });
+  });
 }
 
 const requested = process.argv.slice(2);
@@ -81,20 +130,68 @@ console.log(
   `Test inventory: ${cjsTests.length} Node tests, ${tsTests.length} TypeScript tests.`,
 );
 
+timingDirectory = mkdtempSync(path.join(tmpdir(), "hypertask-test-durations-"));
+process.on("exit", (exitCode) => {
+  try {
+    const durationMs = performance.now() - startedAt;
+    fileDurations.sort((a, b) => b.durationMs - a.durationMs || a.file.localeCompare(b.file));
+    const totalFileDurationMs = fileDurations.reduce((total, file) => total + file.durationMs, 0);
+    const concurrencyAdjustedDurationMs = totalFileDurationMs / Number(TEST_CONCURRENCY);
+    const laneAdjustedDurationMs = fileDurations.reduce((total, file) => total + file.durationMs / file.concurrency, 0);
+    const differencePercent = 100 * (concurrencyAdjustedDurationMs - durationMs) / durationMs;
+    const report = {
+      durationMs,
+      concurrency: Number(TEST_CONCURRENCY),
+      totalFileDurationMs,
+      concurrencyAdjustedDurationMs,
+      laneAdjustedDurationMs,
+      differencePercent,
+      selectedFiles: selected.length,
+      recordedFiles: fileDurations.length,
+      exitCode,
+      files: fileDurations,
+    };
+    if (isCi) {
+      writeFileSync(path.join(root, "test-durations.json"), `${JSON.stringify(report, null, 2)}\n`);
+    }
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      const seconds = (ms) => (ms / 1000).toFixed(2);
+      const rows = fileDurations.slice(0, 20).map((file, index) =>
+        `| ${index + 1} | ${file.file.replaceAll("|", "\\|")} | ${seconds(file.durationMs)} | ${file.concurrency} |`,
+      );
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+        "\n## Slowest 20 test files",
+        `Recorded ${fileDurations.length}/${selected.length} selected files; runner exit code: ${exitCode}.`,
+        "",
+        "| Rank | File | Duration (s) | Lane concurrency |",
+        "| ---: | --- | ---: | ---: |",
+        ...rows,
+        "",
+        `Total file time: ${seconds(totalFileDurationMs)}s / concurrency ${TEST_CONCURRENCY} = ${seconds(concurrencyAdjustedDurationMs)}s; elapsed runner: ${seconds(durationMs)}s; difference: ${differencePercent.toFixed(1)}% (target: within 20%).`,
+        `Accounting for serial isolated/TypeScript lanes: ${seconds(laneAdjustedDurationMs)}s. Remaining elapsed time includes worker startup, scheduling/idle slots, inventory and reporter overhead; npm/heavy-job startup is outside this runner measurement.`,
+        "File durations are whole child-process wall time, not sums of nested test durations. TypeScript files are timed around their existing serial tsx invocation.",
+        "",
+      ].join("\n"));
+    }
+  } finally {
+    rmSync(timingDirectory, { recursive: true, force: true });
+  }
+});
+
 if (cjsTests.length > 0) {
   const isolated = cjsTests.filter((file) => isolatedCjsTests.has(file));
   const shared = cjsTests.filter((file) => !isolatedCjsTests.has(file));
   for (const file of isolated) {
-    run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`);
+    await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`);
   }
   if (shared.length > 0) {
     // Cap at 4 workers in CI and 2 on the shared VPS: the default (one per core)
     // put 18+ node processes on the box (owner, 2026-08-25; YPER4-339).
-    run(process.execPath, ["--test", FILE_TIMEOUT, `--test-concurrency=${TEST_CONCURRENCY}`, ...shared], "Node test suite");
+    await run(process.execPath, ["--test", FILE_TIMEOUT, `--test-concurrency=${TEST_CONCURRENCY}`, ...shared], "Node test suite", Number(TEST_CONCURRENCY));
   }
 }
 
 const tsxCli = path.join(root, "node_modules", "tsx", "dist", "cli.mjs");
 for (const file of tsTests) {
-  run(process.execPath, [tsxCli, file], `TypeScript test: ${file}`);
+  await run(process.execPath, [tsxCli, file], `TypeScript test: ${file}`);
 }

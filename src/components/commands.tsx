@@ -1,5 +1,4 @@
-import { createSection } from "@/lib/api/typedClient";
-import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { renderCommandModals1 } from "./commandModalPanels1";
 import { renderCommandModals2 } from "./commandModalPanels2";
 
@@ -14,11 +13,16 @@ import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
 
 import { CommandMode } from "@/models/enums";
+import { useArchiveColumn } from "@/hooks/Kanban/useArchiveColumn";
+import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
+import { MoveToColumn } from "./commandModals";
+import ConfirmDialog from "./Modals/Common Modals/ConfirmDialog";
 
 import "./Modals/commands/HTC/AllCommands";
 
@@ -61,6 +65,8 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
+  const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   let agentSidebarChatsEnabled = false;
   if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
@@ -70,12 +76,9 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
-  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  let createSectionWriter: typeof createSection | undefined;
-  if (typedWrites) createSectionWriter = createSection;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
@@ -102,6 +105,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     contextOptions, callbackHandler,
     ...(kanbanSelectAllEnabled ? { kanbanSelectAllEnabled: true } : {}),
   });
+  const columnArchive = useArchiveColumn({ enabled: columnArchiveEnabled, active: columnArchiveEnabled && showCommands.show && commandMode === CommandMode.ArchiveColumn, projectId: _currentProject?.id, userId: currentUser.id, onClose: boardCloseHandler });
   const {
   setRecurrenceHandler, saveTaskTemplateHandler, openTaskTemplateHandler, generateStatusUpdateHandler, toggleStalenessHandler,
   toggleAutoArchiveHandler, updateAutoAssignHandler, toggleStalenessViewHandler, sortByStalenessHandler, acceptTaskHandler,
@@ -133,11 +137,16 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
     setShowCommands, setCommandMode,
     ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
-    createSectionWriter,
   });
   let switchCommandTheme = switchToTheme;
   if (!roundedEnabled) {
     switchCommandTheme = (theme) => switchToTheme(theme === "rounded" ? "system" : theme);
+  }
+  let dispatchCommentFunction = commentFunctionHandler;
+  if (!blockerCommentEnabled) {
+    dispatchCommentFunction = (type, payload) => {
+      if (type !== "BlockerComment") commentFunctionHandler(type, payload);
+    };
   }
   const {
   handleAction,
@@ -154,7 +163,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
     markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
     saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
-    summarizeTicketHandler, viewSubTasksHandler, commentFunctionHandler, GoToOnboarding, isMbl,
+    summarizeTicketHandler, viewSubTasksHandler, commentFunctionHandler: dispatchCommentFunction, GoToOnboarding, isMbl,
     setShowAiChatInterface, showAiChatInterface, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, setAiChatPinned,
     aiChatPinned, setIsSidebarMode, copyCurrentPageURL, subscribeGoogleCalendar, copyURLFunctionHandler,
     moveTaskToInboxHandler, copyBranchNameHandler, starTaskHandler, setReminderHandler, myTasksSnoozeEnabled,
@@ -169,6 +178,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
 
       if (
         commandMode !== CommandMode.SwipeThroughUnread &&
+        commandMode !== CommandMode.ArchiveColumn &&
         (e.key === "Escape" || (e.key === "k" && e.ctrlKey))
       ) {
         e.preventDefault();
@@ -185,11 +195,35 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   }, [commandMode, resetShowCommands, showCommands.show]);
 
   if (!showCommands.show) return null;
-  if (rowShortcutsEnabled && isRowTaskProjectFallback && isTaskProjectLoading)
+  if (isRowTaskProjectFallback && isTaskProjectLoading)
     return <span className="hidden" />;
 
   return (
     <>
+      {columnArchiveEnabled && commandMode === CommandMode.ArchiveColumn && _currentProject && (
+        columnArchive.state.kind === "pick" ? (
+          <MoveToColumn
+            mode="CreatingTask"
+            projectId={_currentProject.id}
+            title="Archive tickets: choose a column"
+            moveTaskToColumnHandler={columnArchive.close}
+            callback={columnArchive.prepare}
+          />
+        ) : (
+          <ConfirmDialog
+            id="archive-column-confirm"
+            message={columnArchive.state.kind === "loading"
+              ? `Counting tickets in “${columnArchive.state.column}”…`
+              : `Archive ${columnArchive.state.snapshot.tasks.length} tickets from “${columnArchive.state.snapshot.column}”? Other columns stay unchanged.`}
+            confirmLabel="Archive tickets"
+            loading={columnArchive.state.kind !== "confirm"}
+            loadingLabel={columnArchive.state.kind === "loading" ? "Counting tickets…" : "Archiving tickets…"}
+            confirmDisabled={columnArchive.state.kind === "confirm" && columnArchive.state.snapshot.tasks.length === 0}
+            onConfirm={columnArchive.confirm}
+            onCancel={columnArchive.close}
+          />
+        )
+      )}
       {renderCommandModals1({
         commandMode,
       })}

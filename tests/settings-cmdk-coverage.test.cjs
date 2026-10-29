@@ -71,7 +71,7 @@ function labelValues(node, file) {
   const text = node.getText().replace(/\s+/g, " ");
   if (text === "provider.label") return labelsFrom("src/lib/aiProviders.ts", "AI_PROVIDERS");
   if (text === "row.label" && file.endsWith("ApiKeysSection.tsx")) {
-    return [...labelsFrom("src/lib/aiProviders.ts", "AI_PROVIDERS"), ...strings(property(declaration("src/lib/aiProviders.ts", "AI_GATEWAY_BYOK_PROVIDER"), "label"))];
+    return [...labelsFrom("src/lib/aiProviders.ts", "AI_PROVIDERS"), ...["AI_GATEWAY_BYOK_PROVIDER", "BASETEN_BYOK_PROVIDER"].flatMap((name) => strings(property(declaration("src/lib/aiProviders.ts", name), "label")))];
   }
   if (text === "AI_FEATURES[feature].label") {
     const features = declaration("src/lib/systemModelLadder.ts", "AI_FEATURES");
@@ -273,11 +273,13 @@ test("unresolved shared row labels fail rather than silently dropping a setting"
 });
 
 const gatedCommands = [
+  { keys: ["settingsApiKeysBasetenApiKey"], flag: "basetenByokEnabled", dependency: "hiddenBasetenCommandKey", file: "ApiKeysSection.tsx", uiFlag: "basetenEnabled" },
+  { keys: ["settingsApiKeysXaiApiKey", "settingsAiModelsXai"], flag: "grokGemini4Enabled", dependency: "hiddenXaiCommandKeys", file: "ApiKeysSection.tsx", uiFlag: "grokGemini4Enabled" },
   { keys: ["settingsCalendarKeepTasksUpdated"], flag: "googleCalendarSettingsEnabled", file: "CalendarSection.tsx", uiFlag: "enabled" },
   { keys: ["settingsTaskPageSuggestDescriptionsFromTaskTitles"], flag: "autoTaskDescriptionsEnabled", file: "src/components/sidebars/RightSidebar/UserPreference.tsx", uiFlag: "autoTaskDescriptionsEnabled" },
 ];
 
-for (const { keys, flag, file, uiFlag } of gatedCommands) {
+for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
   test(`settings commands respect the UI flag: ${flag}`, () => {
     const menuFile = "src/components/Modals/commands/HTC/commands.tsx";
     const flagKey = (file, name) => {
@@ -294,7 +296,7 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
       if (ts.isCallExpression(node) && node.expression.getText() === "useMemo" && /get(All)?Commands\(/.test(node.arguments[0].getText())) dependencies = node.arguments[1];
     });
     assert.ok(predicate, "Command availability filter missing");
-    assert.ok(dependencies.elements.some((item) => item.getText() === flag), `${flag}: missing memo dependency`);
+    assert.ok(dependencies.elements.some((item) => item.getText() === dependency), `${dependency}: missing memo dependency`);
     const bindings = {
       CommandMode: new Proxy({}, { get: (_, key) => key }), showByokApiKeys: true,
       isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
@@ -302,7 +304,16 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
     };
-    const js = ts.transpileModule(`const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+    const setup = [];
+    for (const { dependency: derivedDependency } of gatedCommands.filter((item) => item.dependency && item.dependency !== item.flag)) {
+      const start = setup.length;
+      walk(source(menuFile), (node) => {
+        if (ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText() === derivedDependency)) setup.push(node.getText());
+        if (ts.isIfStatement(node) && ts.isExpressionStatement(node.thenStatement) && ts.isBinaryExpression(node.thenStatement.expression) && node.thenStatement.expression.left.getText() === derivedDependency) setup.push(node.getText());
+      });
+      assert.equal(setup.length - start, 2, `${derivedDependency}: missing derived command gate setup`);
+    }
+    const js = ts.transpileModule(`${setup.join("\n")} const filter = ${predicate.getText()};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
     const evaluate = () => new Function(...Object.keys(bindings), `${js}; return filter;`)(...Object.values(bindings));
     for (const key of keys) {
       assert.ok(commands.some((command) => command.key === key), `Missing gated settings command ${key}`);

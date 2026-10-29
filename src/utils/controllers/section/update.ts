@@ -36,6 +36,7 @@ const sectionUpdate = async (
     deleted: newSection.deleted,
     visibility: newSection.visibility,
     isDone: newSection.isDone,
+    wipLimit: newSection.wipLimit,
     userId: _userId
   })
   return {

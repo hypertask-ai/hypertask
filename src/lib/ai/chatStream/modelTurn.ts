@@ -1,12 +1,16 @@
+import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { hydrateTicketGroups } from "./ticketGroups";
+import { TICKET_ROWS_PROMPT } from "@/lib/ai/tools/showTicketRows";
+import type { ChatTicketGroupReferences } from "@/models/model";
 
 
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingsPages, type SettingProposalCard } from "@/lib/ai/settings/catalog";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7363_CHAT_TASK_WRITER_FLAG, HTPR_7760_CHAT_SURFACE_FLAG } from "@/lib/flags/keys";
 
 import { loadCurrentTaskContext } from "@/app/api/ai/_lib/currentTaskContext";
 import { type ModelMessage } from "ai";
@@ -26,6 +30,7 @@ import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib
 import { createUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
 import { generateConversationTitle } from "@/lib/ai/chatStream/title";
+import { HTPR_7768_CHAT_SKILL_DRAFTS_FLAG } from "@/lib/flags/keys";
 import { buildTools } from "@/lib/ai/tools";
 import type { StreamState } from "./streamState";
 
@@ -46,15 +51,26 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
   const settingsEnabled = !actingAgent && !!resolvedBody.settings_context && await isFeatureEnabled(HTPR_7622_AI_SETTINGS_FLAG, dbUser.id);
   const settingsScope = settingsEnabled ? resolvedBody.settings_context : undefined;
+  const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
+  const bulkScopeConfirmationEnabled = await isFeatureEnabled(HTPR_7755_BULK_PREVIEW_CONFIRMATION_FLAG, dbUser.id);
+  const skillDraftsEnabled = await isFeatureEnabled(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG, dbUser.id);
+  const ticketRowsEnabled = Boolean(body.session_id && body.assistant_message_id) && await isFeatureEnabled(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG, dbUser.id);
+  let ticketGroups: ChatTicketGroupReferences | undefined;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    skillDraftsEnabled ? renderPrompt("chat-skill-drafts") : null,
+    chatOpensTaskEnabled ? "When the user asks to open a task, including one from a previous list, call hypertask_get_tasks with open=true and exactly that task. This is navigation, not detail enrichment. Do not say Opened or claim navigation happened before the tool returns navigation_emitted=true. If it fails or no navigation was emitted, say you could not open the task." : null,
     settingsScope ? `The person is in Settings, section ${settingsScope.section}: ${settingsPages[settingsScope.section]}. Use hypertask_settings to read current values before proposing one change. You can propose theme, notification category/channel and board roles only on their open page. Every change requires the app's Apply/Cancel card; never apply through any other action or claim it is done. The app renders the real card; do not fabricate buttons or review links. For unsupported changes, explain the location and use open. The page catalog covers nearby settings, but other pages' values and actions require navigating there first. This Settings scope overrides unrelated board/task instructions.` : null,
     resolvedBody.surface && await isFeatureEnabled(HTPR_7760_CHAT_SURFACE_FLAG, dbUser.id)
       ? chatSurfacePrompt(resolvedBody.surface)
       : null,
+    bulkScopeConfirmationEnabled
+      ? "For bulk task updates, assignments, unassignments and comments: preview EVERY batch with confirmed: false before asking the user once for the full list. A confirmation_required response ends execution, but not collection of the remaining previews in that turn. After the user approves in a later message, call each previewed batch directly with confirmed: true; do not issue a fresh preview or ask again for unchanged tasks and changes. Repartitioning the same previewed list into internal batches does not require another yes. If tasks or changes differ, preview the changed scope and ask again."
+      : null,
     inlineAgentImagesEnabled ? renderPrompt("inline-agent-images") : null,
     skillResolution.systemPromptAddition,
     agentPromptAddition,
+    ticketRowsEnabled ? TICKET_ROWS_PROMPT : null,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -67,6 +83,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   configureAiModelUsage(state.selected.model, {
     initiatingUserId: dbUser.id,
     trustedChatSessionId: state.trustedChatSessionId,
+    feature: "chat",
   });
   const promptCachingEnabled = await aiPromptCachingEnabled(state.selected.model);
   const messages: ModelMessage[] = [
@@ -76,10 +93,18 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     },
   ];
   const toolExecutions: ToolExecution[] = [];
-  const tools = buildTools(
+  const taskProgress: string[] = [];
+  const streamedContent: string[] = [];
+  const catalogTools = buildTools(
     dbUser,
     resolvedBody,
-    state.send,
+    (event, data) => {
+      if (event === "task_created" && typeof data.content === "string") {
+        taskProgress.push(data.content);
+        streamedContent.push(data.content);
+      }
+      return state.send(event, data);
+    },
     (execution) => {
       toolExecutions.push(execution);
     },
@@ -109,8 +134,13 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     state.providerAbort.signal,
     inlineAgentImagesEnabled,
     actingAgent ? actingAgent.teamScope : null,
-    settingsEnabled
+    bulkScopeConfirmationEnabled,
+    skillDraftsEnabled,
+    ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
+    settingsEnabled,
   );
+  const tools = ticketRowsEnabled ? catalogTools
+    : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (
     heartbeatExecutionId &&
     body.session_id &&
@@ -131,9 +161,17 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
   state.generationStartedAt = Date.now();
-  const reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions });
-  if (!reply) return;
-  const { chunks } = reply;
+  let reply: Awaited<ReturnType<typeof generateModelReply>> = undefined;
+  let replyFailure: { error: unknown } | undefined;
+  try {
+    reply = await generateModelReply(state, { instructions, messages, tools, toolExecutions, onContent: (content) => streamedContent.push(content) });
+  } catch (error) {
+    if (!taskProgress.length) throw error;
+    replyFailure = { error };
+  }
+  if (!reply && !taskProgress.length) return;
+  const chunks = taskProgress.length ? streamedContent : reply?.chunks ?? [];
+  if (!reply) chunks.push("<p>Reply stopped. Your saved ticket remains.</p>");
   if (settingsEnabled) {
     const result = toolExecutions.find((execution) => execution.name === "hypertask_settings" && (execution.result as { proposal?: SettingProposalCard })?.proposal)?.result as { proposal: SettingProposalCard } | undefined;
     if (result?.proposal) {
@@ -143,6 +181,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
 
+  const ticketRowsAllowed = reply?.ticketRowsAllowed ?? false;
   state.turnDeadline?.clear();
 
   let completionFenceToken: string | null = null;
@@ -180,6 +219,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
         userId: dbUser.id,
         content: chunks.join(""),
         linkify: linkifyTicketRefs,
+        ...(ticketGroups && ticketRowsAllowed ? { ticketGroups } : {}),
       });
     } catch (error) {
       console.error(
@@ -216,6 +256,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       }
     }
   }
+
+  if (replyFailure) throw replyFailure.error;
+  if (!reply) return;
 
   if (heartbeatExecutionId) {
     if (assistantPersisted) {
@@ -261,8 +304,18 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     }
   }
 
+  let hydratedTicketGroups;
+  if (assistantPersisted && ticketGroups && ticketRowsAllowed) {
+    try {
+      hydratedTicketGroups = await hydrateTicketGroups(ticketGroups.groups, dbUser.id, actingAgent);
+    } catch (error) {
+      console.error("[ai/chat/stream] ticket row hydration failed", error);
+    }
+  }
+
   state.finish("complete", {
     user_message_persisted: userMessagePersisted,
     assistant_persisted: assistantPersisted,
+    ...(hydratedTicketGroups ? { ticketGroups: hydratedTicketGroups } : {}),
   });
 }

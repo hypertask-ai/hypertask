@@ -17,7 +17,7 @@ import type { useTableRows } from "./useTableRows";
 import { SortColumn, initialDirection, SortState, myTasksSortFromTable, isTaskRow, Row, TASK_SHORTCUT_COMMAND_MODES } from "./tableViewShared";
 
 type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_currentProject" | "currentUser"> &
-  Pick<ReturnType<typeof useTableState>, "customFieldBySortColumn" | "sortState" | "setSortState" | "setTableSortViewAndReturn" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setTasksPlayList" | "navigateToTask" | "draggedTaskRef" | "setDragOverSectionId" | "currentProjectSectionIds" | "moveTaskToSection" | "timerToggling" | "queryClient" | "removeFromListWithStatus" | "setExcludedTaskIds" | "router" | "updateTaskInCache" | "starTask" | "assignTask" | "setAssignTask" | "myTasksSnoozeEnabled" | "lastGAt" | "setShowCommands" | "rowShortcutsEnabled" | "isApple" | "didRestore" | "persistedActiveItem" | "selectedIndex"> &
+  Pick<ReturnType<typeof useTableState>, "customFieldBySortColumn" | "sortState" | "setSortState" | "setTableSortViewAndReturn" | "setSelectedIndex" | "updateActiveItemAndItemInView" | "setTasksPlayList" | "navigateToTask" | "draggedTaskRef" | "setDragOverSectionId" | "currentProjectSectionIds" | "moveTaskToSection" | "timerToggling" | "queryClient" | "removeFromListWithStatus" | "setExcludedTaskIds" | "router" | "updateTaskInCache" | "starTask" | "assignTask" | "setAssignTask" | "myTasksSnoozeEnabled" | "lastGAt" | "setShowCommands" | "isApple" | "didRestore" | "persistedActiveItem" | "selectedIndex"> &
   Pick<ReturnType<typeof useTableRows>, "rows" | "focusRowElement" | "focusTo">;
 
 export function useTableActions(context: Context) {
@@ -28,7 +28,7 @@ export function useTableActions(context: Context) {
   currentProjectSectionIds, moveTaskToSection, timerToggling, queryClient, removeFromListWithStatus,
   setExcludedTaskIds, router, updateTaskInCache, starTask, currentUser,
   assignTask, setAssignTask, myTasksSnoozeEnabled, lastGAt, setShowCommands,
-  rowShortcutsEnabled, isApple, didRestore, persistedActiveItem, focusTo,
+  isApple, didRestore, persistedActiveItem, focusTo,
   selectedIndex,
   } = context;
 
@@ -289,7 +289,6 @@ export function useTableActions(context: Context) {
         });
         return true;
       }
-      if (!rowShortcutsEnabled) return false;
       const action = getTaskShortcutAction(event, isApple);
       if (!action) return false;
 
@@ -327,7 +326,6 @@ export function useTableActions(context: Context) {
       isApple,
       myTasksSnoozeEnabled,
       openTask,
-      rowShortcutsEnabled,
       setShowCommands,
       starTaskFromTable,
       updateActiveItemAndItemInView,

@@ -33,22 +33,19 @@ function moduleWithStubs(file, stubs) {
     require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { AI_GATEWAY_API_KEY: sharedKey } },
     performance, setTimeout, clearTimeout, ReadableStream, Response, TextEncoder, Error,
-    console: { log() {}, warn() {}, error() {} },
+    console: { log() {}, info() {}, warn() {}, error() {} },
   }, { filename });
   return loadedModule.exports;
 }
 
-function harness({ enabled = false, plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, flagError = false, haiku = false, background = false, failFirst = false } = {}) {
+function harness({ plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, haiku = false, background = false, failFirst = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
     checks.push([key, id]);
-    if (key === keys.HTPR_7038_TASK_WRITER_SONNET_FLAG) {
-      if (flagError) throw new Error("Fixture flag read failed");
-      return enabled;
-    }
+    assert.notEqual(key, "htpr-7038-task-writer-sonnet");
     if (key === keys.HTPR_7075_BACKGROUND_CLAUDE_FLAG) return background;
-    return haiku && key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG;
+    return false;
   } };
   const prisma = { __esModule: true, default: {
     project: {
@@ -237,7 +234,7 @@ async function main() {
   for (const kind of ["app", "mcp"]) {
     for (const plan of ["Free", "BYOK", "Pro", "AI"]) {
       for (const saved of [null, "claude-opus-5-5-thinking", "gpt-6.1-sol-high", "custom-endpoint"]) {
-        const h = harness({ enabled: true, plan, saved });
+        const h = harness({ plan, saved });
         assert.equal((await h.post(kind)).status, 200);
         const call = h.calls.at(-1);
         assert.equal(call.modelId, "anthropic/claude-sonnet-5.5");
@@ -248,41 +245,20 @@ async function main() {
         assert.equal(h.usage.at(-1).userId, userId);
         assert.equal(h.usage.at(-1).feature, "task-writer");
         if (kind === "mcp") assert.equal(h.usage.at(-1).totalTokens, 12);
-        assert.deepEqual(h.checks.find(([key]) => key === keys.HTPR_7038_TASK_WRITER_SONNET_FLAG), [keys.HTPR_7038_TASK_WRITER_SONNET_FLAG, userId]);
         assert.equal(h.reservations.at(-1).allowanceUsd, ["Free", "BYOK"].includes(plan) ? policy.FREE_TEAM_AI_ALLOWANCE_USD : policy.PAID_TEAM_AI_ALLOWANCE_USD);
       }
     }
-    for (const enabled of [false, true]) {
-      const h = harness({ enabled, plan: "Pro", saved: "claude-opus-5-5-thinking", teamByok: true });
-      assert.equal((await h.post(kind)).status, 200);
-      assert.equal(h.calls.at(-1).modelId, enabled ? "claude-sonnet-5-5" : "claude-opus-5-5");
-      assert.equal(h.calls.at(-1).params.providerOptions.anthropic.effort, enabled ? "medium" : "high");
-      if (enabled) {
-        assert.equal(h.calls.at(-1).credential, teamKey);
-        assert.equal(h.reservations.length, 0);
-      }
-    }
-    for (const plan of ["Free", "Pro", "BYOK"]) {
-      const h = harness({ plan });
-      assert.equal((await h.post(kind)).status, 200);
-      assert.equal(h.calls.at(-1).modelId, plan === "Free" ? "openai/gpt-6-luna" : "anthropic/claude-haiku-5.5");
-      if (plan === "Free") assert.equal(h.calls.at(-1).params.providerOptions?.anthropic, undefined);
-      else assert.equal(h.calls.at(-1).params.providerOptions.anthropic.thinking.type, "adaptive");
-    }
-    const offPremium = harness({ plan: "Free", saved: "claude-sonnet-5-5-thinking" });
-    assert.equal((await offPremium.post(kind)).status, 403);
-    assert.equal(offPremium.calls.length, 0);
-    const flagFailure = harness({ enabled: true, plan: "Pro", flagError: true });
-    assert.equal((await flagFailure.post(kind)).status, 200);
-    assert.equal(flagFailure.calls.at(-1).modelId, "anthropic/claude-haiku-5.5");
-    const oldDefault = harness({ enabled: false, haiku: true });
-    assert.equal((await oldDefault.post(kind)).status, 200);
-    assert.equal(oldDefault.calls.at(-1).modelId, "anthropic/claude-haiku-5.5");
-    const newDefault = harness({ enabled: true, haiku: true });
+    const teamCredential = harness({ plan: "Pro", saved: "claude-opus-5-5-thinking", teamByok: true });
+    assert.equal((await teamCredential.post(kind)).status, 200);
+    assert.equal(teamCredential.calls.at(-1).modelId, "claude-sonnet-5-5");
+    assert.equal(teamCredential.calls.at(-1).params.providerOptions.anthropic.effort, "medium");
+    assert.equal(teamCredential.calls.at(-1).credential, teamKey);
+    assert.equal(teamCredential.reservations.length, 0);
+    const newDefault = harness({ haiku: true });
     assert.equal((await newDefault.post(kind)).status, 200);
     assert.equal(newDefault.calls.at(-1).modelId, "anthropic/claude-sonnet-5.5");
     for (const teamByok of [false, true]) {
-      const h = harness({ enabled: true, plan: "Pro", teamByok, unavailable: true });
+      const h = harness({ plan: "Pro", teamByok, unavailable: true });
       const result = await h.post(kind);
       assert.equal(result.status, 200);
       assert.ok(result.content.includes(output));
@@ -291,60 +267,42 @@ async function main() {
       assert.equal(h.calls[1].credential, teamByok ? teamKey : managedKey);
       assert.equal(h.calls[1].params.providerOptions.anthropic.effort, "medium");
     }
-    const disabledProvider = harness({ enabled: true, settings: { providers: { anthropic: false } } });
+    const disabledProvider = harness({ settings: { providers: { anthropic: false } } });
     assert.equal((await disabledProvider.post(kind)).status, 200);
     assert.ok(!disabledProvider.calls.at(-1).modelId.includes("sonnet"));
-    const comment = harness({ enabled: true, plan: "Pro", saved: "claude-opus-5-5-thinking" });
+    const comment = harness({ plan: "Pro", saved: "claude-opus-5-5-thinking" });
     assert.equal((await comment.post(kind, "write_with_ai")).status, 200);
     assert.equal(comment.calls.at(-1).modelId, "anthropic/claude-opus-5.5");
-    assert.ok(!comment.checks.some(([key]) => key === keys.HTPR_7038_TASK_WRITER_SONNET_FLAG));
-    const disabledFeature = harness({ enabled: true, settings: { featureToggles: { taskWriter: false } } });
+    const disabledFeature = harness({ settings: { featureToggles: { taskWriter: false } } });
     assert.equal((await disabledFeature.post(kind)).status, 403);
     assert.equal(disabledFeature.calls.length, 0);
   }
-  for (const enabled of [false, true]) {
-    const h = harness({ enabled, plan: "Pro", teamByok: true, agentByok: true, agentId: "fixture-agent" });
-    assert.equal((await h.post("mcp")).status, 200);
-    if (enabled) {
-      assert.equal(h.calls.at(-1).credential, agentKey);
-      assert.ok(h.agentLookups.some((lookup) => lookup.agentId === "fixture-agent" && lookup.provider === "claude"));
-      assert.equal(h.reservations.length, 0);
-    } else {
-      assert.equal(h.agentLookups.length, 0);
-      assert.equal(h.calls.at(-1).modelId, "claude-haiku-5-5");
-      assert.equal(h.calls.at(-1).credential, teamKey);
-    }
-    assert.deepEqual(h.checks.find(([key]) => key === keys.HTPR_7038_TASK_WRITER_SONNET_FLAG), [keys.HTPR_7038_TASK_WRITER_SONNET_FLAG, userId]);
-  }
-  const agentWithoutKey = harness({ enabled: true, plan: "Pro", teamByok: true, agentId: "fixture-agent" });
+  const agentCredential = harness({ plan: "Pro", teamByok: true, agentByok: true, agentId: "fixture-agent" });
+  assert.equal((await agentCredential.post("mcp")).status, 200);
+  assert.equal(agentCredential.calls.at(-1).credential, agentKey);
+  assert.ok(agentCredential.agentLookups.some((lookup) => lookup.agentId === "fixture-agent" && lookup.provider === "claude"));
+  assert.equal(agentCredential.reservations.length, 0);
+  const agentWithoutKey = harness({ plan: "Pro", teamByok: true, agentId: "fixture-agent" });
   assert.equal((await agentWithoutKey.post("mcp")).status, 200);
   assert.equal(agentWithoutKey.calls.at(-1).credential, teamKey);
-  const agentFallback = harness({ enabled: true, plan: "Pro", agentByok: true, agentId: "fixture-agent", unavailable: true });
+  const agentFallback = harness({ plan: "Pro", agentByok: true, agentId: "fixture-agent", unavailable: true });
   assert.equal((await agentFallback.post("mcp")).status, 200);
   assert.equal(agentFallback.calls[1].modelId, "claude-sonnet-5");
   assert.equal(agentFallback.calls[1].credential, agentKey);
   assert.ok(agentFallback.usage.length > 0);
   assert.ok(agentFallback.usage.every((row) => row.userId === userId && row.agentId === "fixture-agent"));
-  // HTPR-7075: with background Claude on, an unavailable Sonnet 5.5 retries on the
-  // same 5.5 model (never Sonnet 5, Luna or another provider) and then fails visibly.
   for (const teamByok of [false, true]) {
-    const retried = harness({ enabled: true, background: true, plan: "Pro", teamByok, failFirst: true });
+    const retried = harness({ background: true, plan: "Pro", teamByok, failFirst: true });
     assert.equal((await retried.post("app")).status, 200);
     assert.equal(retried.calls.length, 2);
     assert.equal(retried.calls[1].modelId, retried.calls[0].modelId);
     assert.equal(retried.calls[1].credential, retried.calls[0].credential);
     assert.match(retried.calls[1].modelId, /claude-sonnet-5[.-]5$/);
-    const failing = harness({ enabled: true, background: true, plan: "Pro", teamByok, unavailable: true });
+    const failing = harness({ background: true, plan: "Pro", teamByok, unavailable: true });
     await failing.post("app").catch(() => null);
     assert.ok(failing.calls.length >= 1);
     assert.ok(failing.calls.every((call) => /claude-sonnet-5[.-]5$/.test(call.modelId)), failing.calls.map((call) => call.modelId).join());
   }
-  for (const feature of ["improveWriting", "boardGeneration", "askAi", "aiChat"]) {
-    const h = harness({ enabled: true, plan: "Pro" });
-    await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, teamContext: { teamId, settings: {} } });
-    assert.ok(!h.checks.some(([key]) => key === keys.HTPR_7038_TASK_WRITER_SONNET_FLAG));
-  }
-  // The installed SDK must encode medium as output_config.effort, not a token budget.
   const { createAnthropic } = require("@ai-sdk/anthropic");
   const model = createAnthropic({ apiKey: "fixture-sdk", fetch: async (_url, init) => {
     const body = JSON.parse(init.body);
@@ -353,7 +311,7 @@ async function main() {
     assert.equal(body.output_config.effort, "medium");
     return Response.json({ id: "fixture", type: "message", role: "assistant", model: "claude-sonnet-5-5", content: [{ type: "text", text: output }], stop_reason: "end_turn", usage: { input_tokens: 1, output_tokens: 1 } });
   } })("claude-sonnet-5-5");
-  const built = harness({ enabled: true, plan: "Pro", teamByok: true });
+  const built = harness({ plan: "Pro", teamByok: true });
   await built.post("mcp");
   await model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "Fixture" }] }], maxOutputTokens: 16000, providerOptions: built.calls[0].params.providerOptions });
   console.log("HTPR-7038 task writer verification passed");

@@ -13,7 +13,6 @@ import type { CustomFieldType } from '@prisma/client';
 import axios from 'axios';
 import React from 'react'
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from '@/lib/flags/keys';
 import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
 import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
@@ -81,9 +80,8 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
     dueDate,priority, estimate, taskLabels, hasDraft = false, blockingUser, agents = [],
     showTimeTotals, runningTimer, timeTotal}) => {
 
-      const agentStatusEnabled = useFlag(HTPR_7071_AGENT_STATUS_CHIP_FLAG)
-      const agentMinute = useMinuteClock(Boolean(agentStatusEnabled && task.agentStatus))
-      const agentStatusLine = agentStatusEnabled && task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
+      const agentMinute = useMinuteClock(Boolean(task.agentStatus))
+      const agentStatusLine = task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
         ? agentStatusText(
             task.agentStatus.agentName,
             agentStepFor(

@@ -1,5 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
-import { createGateway, generateText, Output } from "ai";
+import { createGateway, generateText, Output, type LanguageModelUsage } from "ai";
+import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { z } from "zod";
 
 import { cappedDemoModel, demoCapsEnabled } from "./demoAllowance";
@@ -101,8 +102,11 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
   const modelSlug = claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL;
   const rawModel = createGateway({ apiKey })(modelSlug);
   const model = capsEnabled ? cappedDemoModel(rawModel, modelSlug, apiKey, teamId) : rawModel;
+  const startedAt = Date.now();
+  let usage: LanguageModelUsage | undefined;
+  let succeeded = false;
   try {
-    const { output } = await generateText({
+    const result = await generateText({
       experimental_download: downloadWithoutBrotli,
       model,
       output: Output.object({ schema: BoardSchema }),
@@ -116,9 +120,18 @@ export async function generateDemoBoard(purpose: string, teamId?: string): Promi
       prompt: `Board purpose: ${purpose}`,
     });
 
-    return ensureMinimumDueDates(output);
+    usage = result.totalUsage;
+    succeeded = true;
+    return ensureMinimumDueDates(result.output);
   } catch (error) {
     if (capsEnabled) throw new DemoBoardGenerationUnavailableError();
     throw error;
+  } finally {
+    await logAiUsage({
+      userId: null, teamId, provider: "gateway-demo", model: modelSlug, feature: "demo-board",
+      outcome: succeeded ? "ok" : "failed",
+      inputTokens: usage?.inputTokens, outputTokens: usage?.outputTokens, totalTokens: usage?.totalTokens,
+      costUsd: null, latencyMs: Date.now() - startedAt,
+    });
   }
 }

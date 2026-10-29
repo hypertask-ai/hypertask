@@ -1,6 +1,8 @@
 "use client";
 
-import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -15,6 +17,9 @@ import {
 import {
   AI_GATEWAY_BYOK_PROVIDER,
   AI_PROVIDERS,
+  BASETEN_BYOK_PROVIDER,
+  BASETEN_MODEL_SLUGS,
+  isByokProviderRestrictedInGdprSafeMode,
   type TAiProviderInfo,
   type TByokProviderKey,
 } from "@/lib/aiProviders";
@@ -99,6 +104,17 @@ const gatewayRow: ProviderRow = {
   keyUrl: AI_GATEWAY_BYOK_PROVIDER.keyUrl,
   keyUrlLabel: AI_GATEWAY_BYOK_PROVIDER.keyUrlLabel,
   modelLabels: ["Entire AI catalog"],
+};
+
+const basetenRow: ProviderRow = {
+  source: BASETEN_BYOK_PROVIDER.byokKey,
+  label: BASETEN_BYOK_PROVIDER.label,
+  placeholder: BASETEN_BYOK_PROVIDER.keyPlaceholder,
+  keyUrl: BASETEN_BYOK_PROVIDER.keyUrl,
+  keyUrlLabel: BASETEN_BYOK_PROVIDER.keyUrlLabel,
+  badge: BASETEN_BYOK_PROVIDER.badge,
+  requestDestination: "Baseten",
+  modelLabels: Object.keys(BASETEN_MODEL_SLUGS).map((key) => modelLabel(key as TAiModelKey)),
 };
 
 const providerRows: ProviderRow[] = AI_PROVIDERS.map((provider) => ({
@@ -761,7 +777,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
           <SettingsCard title="Providers">
             <div className="flex flex-col">
               {visibleProviderRows
-                .filter((row) => !gdprSafeMode || !row.chinaHosted)
+                .filter((row) => !gdprSafeMode || !isByokProviderRestrictedInGdprSafeMode(row.source))
                 .map(renderRow)}
             </div>
           </SettingsCard>
@@ -773,15 +789,18 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
 };
 
 const ApiKeysSection = () => {
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const basetenEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
+  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
+  const flagProviderRows = grokGemini4Enabled ? providerRows : providerRows.filter((row) => row.source !== "xai");
   const visibleProviderRows = haikuDefaultEnabled || haiku55Enabled
-    ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
-    : providerRows;
+    ? flagProviderRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5" && (grokGemini4Enabled || label !== "Gemini 4 Argon")) }))
+    : flagProviderRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => grokGemini4Enabled || label !== "Gemini 4 Argon") }));
 
   const { billing } = useSettingsTeam();
   if (!billing || billing.storePlanId === "Free") return null;
-  return <ApiKeysSectionContent visibleProviderRows={visibleProviderRows} />;
+  return <ApiKeysSectionContent visibleProviderRows={basetenEnabled ? [...visibleProviderRows, basetenRow] : visibleProviderRows} />;
 };
 
 export default ApiKeysSection;

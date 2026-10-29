@@ -2,8 +2,6 @@ import { tool } from "ai";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from "@/lib/flags/keys";
 import { withActivityMetadata } from "@/lib/mcp/comments/activityMetadata";
 import { TOOL_TASK_ID_DESCRIPTION } from "@/lib/ai/tools/constants";
 import { sortOrderSchema } from "@/lib/ai/chatStream/request";
@@ -69,10 +67,6 @@ export function createGetCommentsForTaskTool(context: ToolContext) {
           }),
         ]);
 
-        const attributionEnabled = await isFeatureEnabled(
-          HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-          user.id
-        );
         const commentsPayload = {
           success: true,
           comments: comments.map((comment) =>
@@ -92,8 +86,7 @@ export function createGetCommentsForTaskTool(context: ToolContext) {
             mapped,
             comments[index],
             user.id,
-            task.projectId,
-            attributionEnabled
+            task.projectId
           )
         );
         return sanitizeForJson(commentsPayload);

@@ -27,8 +27,7 @@ CHECKS=0
 
 # Skills that predate this INDEX.md and are not a /ship step.
 # Add a name here only with a reason.
-#   prototype - HTPR-5931, a /prototype slash-command skill, not a /ship step.
-EXEMPT_SKILLS=(prototype)
+EXEMPT_SKILLS=()
 
 is_exempt() {
   local name="$1" ex

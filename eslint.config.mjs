@@ -5,6 +5,7 @@ import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
 import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
+import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,6 +39,7 @@ export default defineConfig([
   styleGuideLintConfig,
   uiPatternsLintConfig,
   noCommentsLintConfig,
+  testHarnessLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
     // component importing it breaks the production build with `Can't resolve 'tls'`.
@@ -58,6 +60,7 @@ export default defineConfig([
       "src/app/qa/login/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
+      "src/app/\\[...boardURL\\]/page.tsx",
       // HTPR-7278: server root layout; reads the memory-only tracking flag for PostHog.
       "src/app/layout.tsx",
     ],

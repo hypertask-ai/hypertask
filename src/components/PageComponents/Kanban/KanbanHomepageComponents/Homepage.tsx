@@ -1,8 +1,8 @@
+import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
 import { useFlag } from "@/hooks/useFlag";
 import { BoardCardDataProvider } from "../KanbanTaskComponents/BoardCardData";
 import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7677-board-card-data-once";
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, HTPR_7550_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
 
 import React, { useCallback, useContext, useMemo, useRef, useState } from "react";
@@ -107,6 +107,7 @@ const HomePage = ({
 
 ) => {
   const { secondaryStartupEnabled } = useBoardStartup();
+  const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG);
   const store = useStore();
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
   const getFocusedTaskId = useCallback(
@@ -217,9 +218,6 @@ const HomePage = ({
   const { archiveNotificationGetter } = useGlobalFocusHandler()
   const { currentSetting } = useSubTask()
   const queryClient = useQueryClient();
-  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
-  let typedWrite: typeof writeSection | undefined;
-  if (typedWrites) typedWrite = writeSection;
   const { setBoardColumnsViewAPI } = useKanbanViews(_currentProject);
   useBoardRealtime(_currentProject?.id, {
     accountId: currentUser.id,
@@ -246,6 +244,7 @@ const HomePage = ({
     currentUser,
     _currentProject,
     _sections,
+    archiveFocusOrder,
     sections,
     displaySections,
     updateTaskInCache,
@@ -261,6 +260,7 @@ const HomePage = ({
     currentUser,
     _currentProject,
     _sections,
+    archiveFocusOrder,
     sections,
     displaySections,
     updateTaskInCache,
@@ -350,11 +350,7 @@ const HomePage = ({
         updatedColumns
       );
       try {
-        typedWrite ? await typedWrite({
-          userId: currentUser.id,
-          sectionId: updatedSectionId,
-          newSection: { ranking },
-        }) : await axios.post(`/api/section/update`, {
+        await writeSection({
           userId: currentUser.id,
           sectionId: updatedSectionId,
           newSection: { ranking },
@@ -368,7 +364,6 @@ const HomePage = ({
       console.log("🚀 ~ handleColumnDragEnd ~ error:", error);
     }
   }, [
-    typedWrite,
     _currentProject,
     currentUser.id,
     displaySections,
@@ -472,6 +467,8 @@ const HomePage = ({
   ) => {
     const {
       _sections,
+      displaySections,
+      archiveFocusOrder,
       sections,
       _currentProject,
       removeFromListWithStatus,
@@ -485,7 +482,14 @@ const HomePage = ({
     if (parentTask) {
       updateParentTask(parentTask, itemId, 'Archive')
     }
-    await removeFromListWithStatus(sections[sectionIndex].sectionId, _currentProject.id, itemId, 'Archive')
+    await removeFromListWithStatus(
+      sections[sectionIndex].sectionId,
+      _currentProject.id,
+      itemId,
+      'Archive',
+      undefined,
+      archiveFocusOrder ? { focusSections: displaySections } : undefined,
+    )
   }, [lastgClick, updateParentTask]);
 
   const deleteTaskHandler = async(response: boolean) =>{

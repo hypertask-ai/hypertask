@@ -28,6 +28,7 @@ export type SettingsSectionId =
   | "board-general"
   | "board-planning"
   | "board-staleness"
+  | "board-task-templates"
   | "board-ai"
   | "board-memory"
   | "board-skills"
@@ -174,6 +175,7 @@ export const SETTINGS_TABS: SettingsTab[] = [
           { id: "board-members", label: "Members" },
           { id: "board-agents", label: "Agents" },
           { id: "board-ai", label: "Custom instructions" },
+          { id: "board-task-templates", label: "Task templates" },
           { id: "board-memory", label: "Memory" },
           { id: "board-skills", label: "Skills" },
           { id: "board-files", label: "Files" },

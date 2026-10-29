@@ -156,7 +156,8 @@ test('server board reservation renders the existing empty chat slot at its final
   const width = reservations().sidebarWidthPx;
   assert.equal(width, 517);
   const { default: Layout } = load('src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx', {
-    react: React, '@/hooks/useFlag': { useFlag: () => true, useFlagLoaded: () => true },
+    react: React, '@/hooks/useFlag': { useFlag: () => true, useFlagLoaded: () => true, useFlagReady: () => true },
+    "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     '@/lib/flags/keys': {}, 'next/navigation': { usePathname: () => '/project' },
     'lucide-react': { ChevronLeft: () => null }, '@/components/Common/Tooltip': { __esModule: true, default: () => null },
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(false) },

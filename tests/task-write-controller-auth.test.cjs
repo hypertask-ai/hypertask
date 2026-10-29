@@ -158,7 +158,8 @@ function loadUpdateController(
     },
     task: {
       findUnique: async () => ({ ...currentTask }),
-      update: async ({ data }) => {
+      update: async ({ data, where }) => {
+        calls.updateWhere = where;
         if (updateErrorCode) {
           const error = new PrismaClientKnownRequestError("Update failed");
           error.code = updateErrorCode;
@@ -1091,4 +1092,62 @@ test("cross-board move after permanent deletes allocates beyond the highest surv
   assert.equal(result.success, true);
   assert.equal(result.task.uniqueIndex, 5);
   assert.equal(result.task.ticketNumber, "T-5");
+});
+
+
+test("column archive refuses changed targets and atomically binds the successful write", async () => {
+  for (const concurrentState of [{}, { sectionId: SECTION_ID }, { projectId: MEMBER_PROJECT }, { status: "Archive" }]) {
+    const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, { stateAtFence: concurrentState });
+    const result = await updateTaskSingle({ id: TASK_ID, status: "Archive" }, { id: USER_ID }, null, {
+      expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1, expectedStatus: "Normal", skipAutoAssign: true, skipRecurrence: true,
+    });
+    if (Object.keys(concurrentState).length) {
+      assert.equal(result.status, 409);
+      assert.equal(calls.updateWhere, undefined);
+      assert.equal(calls.sideEffects, 0);
+    } else {
+      assert.equal(result.status, 200);
+      assert.equal(result.json.status, "Archive");
+      assert.deepEqual(calls.updateWhere, { id: TASK_ID, projectId: OWNER_PROJECT, sectionId: SECTION_ID - 1, status: "Normal" });
+    }
+  }
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, { updateErrorCode: "P2025" });
+  const result = await updateTaskSingle({ id: TASK_ID, status: "Archive" }, { id: USER_ID }, null, {
+    expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1, expectedStatus: "Normal", skipAutoAssign: true, skipRecurrence: true,
+  });
+  assert.equal(result.status, 409);
+  assert.equal(calls.sideEffects, 0);
+});
+
+test("conditional movement preserves a newer hold or revision under the mutation fence", async () => {
+  const revision = new Date("2026-01-01T00:00:00Z");
+  for (const concurrentState of [
+    {},
+    { sectionId: SECTION_ID + 1, section: "Valentin Review" },
+    { updatedAt: new Date("2026-01-01T00:00:01Z") },
+    { status: "Archive" },
+  ]) {
+    const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, {
+      stateAtFence: concurrentState,
+    });
+    const result = await updateTaskSingle(
+      { id: TASK_ID, sectionId: SECTION_ID, section: "Todo" },
+      { id: USER_ID }, OWNED_AGENT,
+      { expectedProjectId: OWNER_PROJECT, expectedSectionId: SECTION_ID - 1,
+        expectedStatus: "Normal", expectedUpdatedAt: revision, expectedAssigneeAgentId: OWNED_AGENT, skipAutoAssign: true, skipRecurrence: true,
+        taskMovedActivity: { fromAgent: { id: OWNED_AGENT, userId: USER_ID, displayName: "Runner 6" } } },
+    );
+    const conflict = Object.keys(concurrentState).length > 0;
+    assert.equal(result.status, conflict ? 409 : 200);
+    if (conflict) {
+      assert.equal(calls.order, undefined);
+      assert.equal(calls.sideEffects, 0);
+    } else {
+      assert.equal(result.json.section, "Todo");
+      assert.equal(result.json.sectionId, SECTION_ID);
+      assert.equal(calls.updateWhere.sectionId, SECTION_ID - 1);
+      assert.equal(calls.updateWhere.updatedAt.getTime(), revision.getTime());
+      assert.deepEqual(calls.updateWhere.assignees, { some: { agentId: OWNED_AGENT } });
+    }
+  }
 });

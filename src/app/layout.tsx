@@ -1,13 +1,15 @@
+import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
 import "@/styles/globals.scss";
 import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import Provider from "@/utils/Providers";
 import { FeatureFlagProvider, SubscribedFeatureFlagProvider } from "@/hooks/useFlag";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
+import { AiChipEventRecorder } from "@/lib/ai/AiChipEventRecorder";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
 import FilesImageFallback from "@/components/FilesImageFallback";
 import { isMobileDevice } from "@/utils/serverActions";
@@ -15,7 +17,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -31,12 +33,17 @@ import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/clien
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import { getServerTicketShell } from "@/lib/firstScreen/serverTicketShell";
+import { getFirstVisitFlagSeed } from "@/lib/firstScreen/serverFlags";
+import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
+import { HTPR_7718_FIRST_VISIT_FLAG_SEED_FLAG } from "@/lib/flags/definitions/htpr-7718-first-visit-flag-seed";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
 import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export async function generateViewport() {
   const device = await isMobileDevice();
+  const session = verifySession((await cookies()).get(SESSION_COOKIE)?.value);
+  const phoneZoom = device.isMobile && await isFeatureEnabled(HTPR_8145_PHONE_ZOOM_FLAG, session?.id ?? -1);
 
   return {
     width: "device-width",
@@ -47,6 +54,7 @@ export async function generateViewport() {
     viewportFit: "cover",
     height: "device-height",
     interactiveWidget: "resizes-content",
+    ...(phoneZoom && { maximumScale: 5, userScalable: true }),
   };
 }
 
@@ -73,14 +81,25 @@ export default async function RootLayout(
     } catch {}
   }
   const [device, boardDocument, inboxDocument] = await firstScreenPromise;
+  const phoneZoom = device.isMobile && await isFeatureEnabled(HTPR_8145_PHONE_ZOOM_FLAG, analyticsSession?.id ?? -1);
   const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);
   const shellSeed = ticketShellEnabled ? await getServerTicketShell() : null;
   const firstScreen = boardDocument ?? inboxDocument;
+  let flagSeed: FirstScreenFlags | null = null;
+  if (analyticsSession && !firstScreen && !shellSeed) {
+    try {
+      const requestHeaders = await headers();
+      if (requestHeaders.get("rsc") !== "1" && await isFeatureEnabled(HTPR_7718_FIRST_VISIT_FLAG_SEED_FLAG, analyticsSession.id)) {
+        flagSeed = await getFirstVisitFlagSeed(analyticsSession.id);
+      }
+    } catch {}
+  }
   const deferUnusedBoardFonts = boardDocument &&
     (boardDocument.display as BoardDisplay).isMobile &&
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
+  const chipEventsFlag = await isFeatureEnabled(HTPR_7978_AI_CHIP_EVENTS_FLAG, analyticsSession?.id ?? -1);
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
@@ -117,6 +136,7 @@ export default async function RootLayout(
   return (
     <html
       lang="en"
+      data-phone-zoom={phoneZoom ? "true" : undefined}
       suppressHydrationWarning
       className={`${themeClassName} ${inter.variable} ${newsreader.variable} ${ibmPlexSans.variable} ${inter.className}`}
       data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}
@@ -190,6 +210,7 @@ export default async function RootLayout(
         ) : null}
         <FilesImageFallback />
         <ClientErrorReporter />
+        {chipEventsFlag && analyticsSession && !analyticsIsGuest ? <AiChipEventRecorder /> : null}
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
@@ -204,6 +225,7 @@ export default async function RootLayout(
           authenticatedUserId={analyticsSession?.id ?? null}
           firstScreen={firstScreen}
           shellSeed={shellSeed}
+          flagSeed={flagSeed}
           flagProvider={flagReaderSubscribe ? SubscribedFeatureFlagProvider : FeatureFlagProvider}
         >
           {children}

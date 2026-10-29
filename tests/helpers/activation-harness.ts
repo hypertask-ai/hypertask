@@ -150,7 +150,7 @@ export function activationHarness() {
     "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
       constructor() { if (failure === "constructor") throw Error("mock client unavailable"); }
@@ -203,7 +203,7 @@ export function activationHarness() {
       if (name.startsWith(".")) key = "@/" + path.relative(path.join(root, "src"), path.resolve(path.dirname(absolute), name)).replace(/\.ts$/, "");
       if (key in mocks) return { __esModule: true, ...mocks[key] };
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
         return load(`src/${key.slice(2)}.ts`);
       }

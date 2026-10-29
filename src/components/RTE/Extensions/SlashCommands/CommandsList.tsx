@@ -1,6 +1,7 @@
 
 import { currentProjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7879_SKILL_MENU_FLAG } from "@/lib/flags/definitions/htpr-7879-skill-menu";
 import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
 import { AI_TASK_WRITER_EVENT } from "@/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
@@ -29,6 +30,11 @@ export type SuggestionListProps = SuggestionProps;
 const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
   (props, ref) => {
     const [currentProject, _] =useRecoilState(currentProjectAtom);
+    const projectSkills = useFlag(HTPR_7879_SKILL_MENU_FLAG);
+    const getProjectId = (props.editor?.storage as any)?.slashCommands?.getProjectId as
+      | (() => number | null | undefined)
+      | undefined;
+    const projectId = projectSkills && getProjectId ? getProjectId() : currentProject?.id;
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [skillItems, setSkillItems] = useState<SkillSlashItem[]>([]);
     const mode = (props.editor?.storage as any)?.slashCommands?.mode as
@@ -52,13 +58,13 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
         return;
       }
       let cancelled = false;
-      fetchSlashSkills(currentProject?.id).then((skills) => {
+      fetchSlashSkills(projectId).then((skills) => {
         if (!cancelled) setSkillItems(buildSkillSlashItems(skills));
       });
       return () => {
         cancelled = true;
       };
-    }, [skillsEnabled, currentProject?.id]);
+    }, [skillsEnabled, projectId]);
   
     const [filteredItems, setFilteredItems] = useState(props.items)
     const selectItem = (index: number) => {
@@ -68,7 +74,7 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
 
       const command = {
         ...filteredItems[index],
-        currentProjectId: currentProject?.id,
+        currentProjectId: projectId,
       };
 
       if (runCommentSkill && command.type === "SKILL") {
@@ -151,7 +157,7 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
     return filteredItems.length > 0 ? (
       <div
         id={SLASH_MENU_DOM_ID}
-        className="rounded-md shadow-xl dark:bg-[#333B47] bg-[#ffffff]   flex flex-col p-2 gap-2"
+        className="rounded-md shadow-xl bg-[var(--bg-editor-menu)] flex flex-col p-2 gap-2"
         style={{ maxHeight: "calc(100dvh - 24px)" }}
       >
         <ul 
@@ -168,7 +174,7 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
                 selectItem(index);
               }}
               className={`cursor-pointer text-content p-2 ${
-                  index === selectedIndex ? "bg-[#ececec] dark:bg-[#4f5766]" : "transparent"
+                  index === selectedIndex ? "bg-[var(--bg-editor-option-selected)]" : "transparent"
                 } rounded-md py-1 px4 `}
             >
             <div 
@@ -213,12 +219,12 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
                 className="text-center text-meta text-gray-500"
                 >
                 <kbd
-                  className="ml-[1] text-white-black p-1 px-2 bg-taskDetailPage border-[1px] dark:border-none border-icon-hover-gray "
+                  className="ml-[1] text-white-black p-1 px-2 bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray "
                     
                     >↑
                 </kbd>
                 <kbd
-                  className="mx-[1px] p-1 px-2 text-white-black  rounded  font-medium bg-taskDetailPage border-[1px] dark:border-none border-icon-hover-gray "
+                  className="mx-[1px] p-1 px-2 text-white-black rounded font-medium bg-taskDetailPage border-[1px] [border-style:var(--style-editor-key-border)] border-icon-hover-gray "
                     
                     >↓
                 </kbd>
@@ -228,7 +234,7 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
               className="text-right text-meta"
                 >
                 <kbd
-                  className="rounded bg-taskDetailPage border-[1px] border-icon-hover-gray dark:border-none text-white-black p-1 mr-[1px] px-[1.5px]"
+                  className="rounded bg-taskDetailPage border-[1px] border-icon-hover-gray [border-style:var(--style-editor-key-border)] text-white-black p-1 mr-[1px] px-[1.5px]"
                     
                     >
                         Enter

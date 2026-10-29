@@ -31,7 +31,7 @@ const Section = ({
       <div
         style={{ scrollBehavior: "unset" }}
         className={
-          "overflow-y-auto w-full sm:pb-20 h-full max-h-inherit scrollbar hover:scrollbar-thumb-gray-500 scrollbar-thumb-[#D3D1CB] scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766] scrollbar-corner-button-arrow-disabled"
+          "overflow-y-auto w-full sm:pb-20 h-full max-h-inherit scrollbar hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-onboarding-scroll scrollbar-track-kanban-column-scrollbar scrollbar-corner-button-arrow-disabled"
         }
       >
         <SectionHeader title={title} taskCount={taskCount} />

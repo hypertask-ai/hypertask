@@ -25,7 +25,7 @@ test("non-embedded mobile Agent Chat always follows the keyboard-visible viewpor
   assert.match(chat, /const mobileChromeAwareHeight = isMbl;/);
   assert.match(
     narrowLayout,
-    /!\(isMbl && \(mobileLayoutEnabled \|\| mobileFullscreenChrome\)\) &&\s*\n\s*"h-screen"/,
+    /!isMbl && "h-screen"/,
   );
   assert.match(narrowLayout, /height: mobileAgentChatHeight/);
   assert.match(narrowLayout, /mobileShellPaddingStyle/);

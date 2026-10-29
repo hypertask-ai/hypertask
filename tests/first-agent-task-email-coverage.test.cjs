@@ -103,7 +103,7 @@ function fixture(options = {}) {
       calls.scheduled.push(work);
     } },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags": { HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email", HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout", isFeatureEnabled: async () => true },
+    "@/lib/flags": { HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout", isFeatureEnabled: async () => true },
     "@/lib/mcp/boards/columnRole": load("src/lib/mcp/boards/columnRole.ts", {}),
     "@/lib/telemetry/activationAnalytics": { trackActivation: () => {} },
     "@/lib/email/sendEmail": { sendEmail: async (input) => {
@@ -116,6 +116,9 @@ function fixture(options = {}) {
     "./emailTemplates": {},
   });
   const service = load(serviceFile, {
+    "@/lib/flags/definitions/htpr-7975-column-work-limits": require("./task-route-loader.cjs").load("src/lib/flags/definitions/htpr-7975-column-work-limits.ts", {}),
+    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/api/contracts/sectionWrites": require("./task-route-loader.cjs").load("src/lib/api/contracts/sectionWrites.ts", {}),
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/notifications/agentFirstTaskEmail": scheduler,
     "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },

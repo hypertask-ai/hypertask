@@ -48,7 +48,7 @@ const TrialModal: React.FC<IProps> = ({closeCallback}) => {
                 <div className='lg:mt-4 gap-3 max-w-[340px] flex flex-col '>
                     <TrialsButton teamId={_currentProject.teamId!} />
                     <SeeAllPlans onClick={onClickSeeAllPlans}/>
-                    <p className="mt-2 dark:text-text-light-gray font-normal text-content text-text-light-gray">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Stripe shows your plan terms before you confirm." : "No payment is due today. If you change your mind, you can switch to the free plan any time."}</p>
+                    <p className="mt-2 text-text-light-gray font-normal text-content">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Stripe shows your plan terms before you confirm." : "No payment is due today. If you change your mind, you can switch to the free plan any time."}</p>
                 </div>
             </PlansWrapper>
             <BackButton closeHandler={toggle}/>

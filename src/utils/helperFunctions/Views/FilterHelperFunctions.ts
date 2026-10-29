@@ -272,8 +272,16 @@ export const updatedByFilterCondition = (item: ITask, value: any[]) =>
     return item.updatedByUserIds?.includes(v.id) ?? false;
   })) ?? false;
 
-export const createdByFilterCondition = (item: ITask, value: any[]) =>
-  (value.length === 0 || value.some(v => Number(item.userId) === Number(v.id))) ?? false;
+export const createdByFilterCondition: TCondition = (item, value: Array<{ id: number | string }>, _project, _match, runtimeContext) =>
+  value.length === 0 || value.some(v => {
+    if (!runtimeContext?.agentCreatorFilterEnabled) {
+      return Number(item.userId) === Number(v.id);
+    }
+    if (typeof v.id === "string" && !/^\d+$/.test(v.id)) {
+      return item.agentId === v.id;
+    }
+    return item.agentId == null && Number(item.userId) === Number(v.id);
+  });
 
 const assigneeRowMatches = (row: any, v: any, legacyAgentAssigneeMatch?: boolean) =>
   "uid" in v
@@ -346,7 +354,7 @@ export const getFilteredSections = (
       : builtinSections;
   }
 
-  const localStorageFilters = getActiveFiltersFromProject(project)
+  const localStorageFilters = getActiveFiltersFromProject(project, runtimeContext)
 
   return applyFilters(
     sections,

@@ -68,8 +68,9 @@ function memoryRedis() {
       }
       if (script.includes("local active =")) {
         const registered = values.get(keys[4]);
-        const scopedActive = keyCount === 6 ? values.get(keys[5]) : undefined;
-        if (!registered || (registered !== values.get(keys[3]) && registered !== scopedActive)) return 4;
+        const scopedActive = values.get(keys[5]);
+        const sessionActive = values.get(keys[6]);
+        if (!registered || (registered !== values.get(keys[3]) && registered !== scopedActive && registered !== sessionActive)) return 4;
         if (values.get(keys[1]) === "complete") return 0;
         if (values.has(keys[1])) return 3;
         values.set(keys[0], "1");
@@ -98,6 +99,8 @@ function harness({ enabled = true } = {}) {
   };
   const next = { NextResponse: { json: (body, options) => Response.json(body, options) } };
   const route = load("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
+    "@/lib/ai/chatStream/ticketGroups": {},
     "@/lib/agents/chatAccess": { loadSidebarChatRequest: async (request) => { assert.equal(request.headers.get("x-hypertask-sidebar-project"), null); return { ok: true }; } },
     "@/lib/ai/chatStream/turnModel": { loadTurnModel: async (body) => ({ actingAgent: body.session_id === agentSession ? { id: agentId } : null }) },
     "@/lib/ai/chatStream/stream": { createChatStream: (options) => { started.push(options); return new Response("reply started"); } },
@@ -147,7 +150,7 @@ async function composeTask() {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": { extractTitleAndDescription: () => ({ title: "Saved task", description: "<p>Body</p>" }) },
     "@/utils/htmlEscape": { escapeHtml: (text) => text },
-    "./taskWriterMedia": { extractTaskWriterMedia: (html) => ({ html, media: [] }), createTaskWriterMediaTokenFactory: () => {}, restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
+    "./taskWriterMedia": { extractTaskWriterPromptMedia: html => ({ html, media: [] }), extractTaskWriterMedia: (html) => ({ html, media: [] }), createTaskWriterMediaTokenFactory: () => {}, restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads: () => {} },
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async () => { calls.push("save"); return { resposne: { newTask: { id: 42 } } }; } },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => undefined },

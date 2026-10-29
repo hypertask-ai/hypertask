@@ -37,7 +37,7 @@ of the bugs above only showed up after a refresh or a second board switch.
 
 ## First agent connection
 
-https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). It requires `htpr-7026-agent-connect-check` to be true (default Owner + QA) and `htpr-7078-remove-connect-block` to be false. The removal flag defaults to Everyone and suppresses this inline card. Read effective flags before running the card checks; if removed, record the inline path as unreachable rather than enabling it or failing for a missing card. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
+https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). The card shows for a never-connected, non-dismissed user when `htpr-7078-remove-connect-block` is false. The removal flag defaults to Everyone and suppresses this inline card. Read effective flags before running the card checks; if removed, record the inline path as unreachable rather than enabling it or failing for a missing card. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
 
 On a disposable new-user fixture, confirm Claude Code, Cursor, Codex appear first. Select a tool and use the shared onboarding CLI or MCP instructions. While the card is in view, the status checks every four seconds; hidden tabs and offscreen cards stop polling. The first connection shows the actual recorded client or the onboarding choice, plus Ask your agent to pick up the top task. Dismiss and reload, then check another device: the card stays hidden. A connection also hides it on the next visit without needing dismissal. Confirm flag-off users cannot read first-run card state or save a dismissal.
 
@@ -57,3 +57,179 @@ https://app.hypertask.ai/detail/project-15/7263 adds phone selection behind `htp
 
 None if you only viewed and switched. If you changed a saved filter or view
 on the account's own board, revert it to the account's default state.
+
+## Column limits and card age
+
+https://app.hypertask.ai/detail/project-15/7975 is controlled by
+`htpr-7975-column-work-limits`, default Everyone. Off hides the limit
+editor and count denominator, refuses limit writes on the server, and
+restores stale-only ages without deleting saved limits.
+
+Open Commands, Manage board columns, then a column's settings. Set **Work
+limit** to a positive whole number, leave the field, and reload the board.
+The existing column count shows active tasks / limit. Above the limit it
+turns red; its accessible label says **over limit**. It remains advisory:
+creating or moving a task is never blocked. Archived and deleted tasks do
+not count. A saved view or filter must not hide the board's total workload.
+Clear the field to remove the limit; reload to prove it stayed cleared.
+
+Settings → Board → Staleness controls the board's age display, warning
+and hot thresholds, and stale reminders. With Staleness enabled, cards
+show days on board and in column, including fresh cards in muted text;
+warning and hot cards retain their existing amber and red treatment.
+Check both desktop and phone in all four themes. Restore the QA board's
+original limit and staleness settings after the run.
+
+## Board hygiene report
+
+On a board, Ctrl+K → Manage tags → Board hygiene. Check the report on
+1440x900 and 390x844 in all four themes. Expanding the report must not
+resize the modal or change the board, labels or saved views. Reload and
+reopen; counts must match the read-only `/api/projects/hygiene?projectId=N`
+response. Agents use `hypertask_projects` action `hygiene`, input
+`{ "project_id": N }`, or GET `/api/mcp/projects/N/manifest?include=hygiene`.
+
+Report all board tags, since project/category tag classification is not
+stored. Only a public view filtering solely one tag covers that tag.
+Private views and views with extra filters never hide missing shared views.
+Open means Normal tickets outside done/deleted columns; null-column
+tickets count toward untagged. Idle means no ticket update for seven days.
+With `htpr-7975-column-work-limits` on, the report uses saved column
+limits and counts how many columns exceed them. Off retains unknown
+limits; `null` is unknown, not zero. Confirm other boards return 404 for outsiders.
+
+Use a QA-owned scratch board for known labels and tickets. Compare label
+and view lists before and after reading. This report never repairs data.
+
+## MCP duplicate view titles
+
+Creating a view with an existing title must return the same readable
+400 refusal, without changing the existing view or board default.
+For https://app.hypertask.ai/detail/project-15/7985, verify through both
+`POST /api/mcp/view` and `hypertask_views` action `create` on `/mcp`.
+Use a disposable QA-owned view, list it before and after, and remove only
+that fixture. Duplicate refusals log warnings; unexpected storage failures
+must still log errors. Local behavior coverage:
+`node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
+
+## MCP board-list sorting
+
+For https://app.hypertask.ai/detail/project-15/8017, list boards through
+`GET /api/mcp/projects` and `hypertask_projects` action `list` on `/mcp`.
+Default/title and `createdAt` sorts must still return accessible boards;
+check descending order and cursor continuation. Boards have no update-time
+field: `sort_by=updatedAt`, `sort=updatedAt:desc`, and
+`filter.updated_since` must return readable validation refusals, not server
+errors. Check both JSON and dotted filter query parameters. Unsupported
+sort directions must also fail before database access. These reads need
+no fixtures or cleanup. Local behavior coverage:
+`node --test tests/htpr-8017-project-list-sort.test.cjs`.
+
+## Repeated keyboard archive stays in its column
+
+For https://app.hypertask.ai/detail/project-15/8039, create two disposable
+columns on QA 985's sandbox (7049). Put two prefixed fixtures in Done and
+one in AI Review. Focus the first Done card after hydration settles.
+Press Ctrl+E repeatedly, then hold it: only the Done fixtures may archive.
+Focus must stop when Done empties, not jump to AI Review. Reload and read
+`POST /api/projects/boardTasks`: the AI Review fixture must remain Normal.
+Check a single archive and Undo restore the same fixture. Manual keyboard
+navigation into AI Review must still work. Capture desktop and phone
+shots, plus the main path video. Delete only the created fixtures and
+columns afterward. Flag: `htpr-8039-archive-column-boundary` (bugfix, Everyone).
+
+## MCP permanent board deletion
+
+For https://app.hypertask.ai/detail/project-15/8075, the released deletion
+path no longer depends on a feature flag. `POST /api/mcp/projects/archive`
+with `{ "project_id": N, "status": "Deleted" }` still requires a write-capable,
+board-scoped caller and the existing owner's/admin's deletion permission.
+Archive (including omitted status) and Normal still use the quota-aware
+status controller.
+
+Run `npm run test:file -- tests/mcp-project-delete.test.cjs` for the actual
+POST handler: deletion with flag services unavailable, unauthenticated and
+out-of-scope refusals, controller permission refusals, archive and restore.
+On production, use only invalid IDs or an inaccessible board to verify the
+refused path, and reload an accessible board to prove it remains available.
+Do not delete or archive shared production boards. Successful destructive
+deletion is covered locally, not claimed as live verification.
+## Blocked by me
+
+Every board includes the built-in **Blocked by me** view, including an empty
+board. Select it from the existing desktop tabs or phone view picker. It matches
+`waitingOnUserId` to the signed-in viewer, not the task assignee or the
+board owner. Tickets blocked by another person, unblocked tickets, and
+blocking-task dependencies alone stay out. Set, clear, and reassign a
+blocker on QA-owned fixtures; check the view and count after each change,
+then reload and switch boards. Check a second account sees its own blockers.
+Capture desktop and phone in all themes. With `htpr-7804-blocked-by-me`
+Off, the view disappears and any active selection returns to the saved
+view; resetting view order must not bring it back. Delete only the fixtures
+created for this check.
+
+## MCP missing view labels
+
+For https://app.hypertask.ai/detail/project-15/8094, submit a unique view
+name with an absent `filters.label_names` value through
+`POST /api/mcp/view` and `hypertask_views` action `create` on `/mcp`.
+Both must return the readable missing-label refusal. List views before and
+after: no view or board-default change is allowed. Existing labels still
+save their filter. Expected label refusals log warnings; unexpected storage
+failures must still log errors. Local behavior coverage:
+`node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
+
+## Visible archive focus order
+
+For https://app.hypertask.ai/detail/project-15/8149, use QA-owned fixtures
+in one column: fourteen matching cards, interleaved with cards hidden by
+**Find in view**, plus a matching card in another column. Press Ctrl+F,
+filter the titles, and press Enter to leave search without clearing it.
+Focus the first matching card and press Ctrl+E fourteen times. After each
+archive, focus must select the next visible card, never a hidden cached
+neighbor. Archiving the last visible card selects the visible card above;
+exhausting the column focuses its outer `.section-container`, not the body
+or another column. Held Ctrl+E must still archive only once. Undo restores
+the same card; reload must retain hidden cards and the neighboring column.
+
+Flag `htpr-8149-archive-focus-order` defaults to Everyone. Off retains the
+old cached-card focus path; cover both paths in targeted tests without
+switching production flags. Collect desktop and phone theme captures and
+the archive-request/focus sequence. Remove only the fixtures created.
+
+## Agent creator filter
+
+With `htpr-7865-agent-creator-filter` enabled, open board filters, then
+**Created by**. The existing people picker also lists active agents.
+Choose an agent: only that agent's created tickets remain, not its owner's
+or another agent's. Choose the owner: agent-created tickets stay excluded.
+Save the view, reload its URL, and verify the same rows and view count.
+Combine Created by with Priority under ANY and ALL. Check archived rows
+and a ticket update still respect the selected creator. With the flag off,
+agent choices disappear and existing human filters restore owner matching.
+Calendar and My Tasks retain their existing creator picker.
+## Empty views with hidden empty columns
+
+For https://app.hypertask.ai/detail/project-15/7807, use a QA-owned saved
+view with empty columns set to Hidden. With `htpr-7807-empty-view-columns`
+(Everyone), an empty view shows its existing visible columns rather than
+the empty-board help screen. Explicitly hidden columns remain hidden.
+Add a disposable task: other empty columns hide again. Remove the fixture:
+empty columns return. Reload and switch views away/back; the saved Hidden
+setting must remain unchanged. Check desktop and phone in all four themes.
+With the flag off, the original empty-state behavior remains. Builtin views
+that exclude every section and boards with no visible columns stay unchanged.
+
+## Agent status chips
+
+After https://app.hypertask.ai/detail/project-15/8161, agent status chips
+are permanent. `POST /api/projects/boardTasks` includes `agentStatus` for
+every authorized task (null when no recent active run exists). Board access
+checks must still happen before task or agent-run reads. On a board with an
+active run, reload and confirm one chip names the agent and its current step.
+Reports older than six hours stay hidden; an empty board shows no chips.
+Run activity refresh remains throttled per card; lifecycle start/stop bypass
+the throttle. Do not change flags or stop another agent's run for this check.
+If the QA board has no active run, record the positive chip as unreachable;
+use the null-status payload, empty chip rendering and CI's real component
+and controller tests as the closest checks.

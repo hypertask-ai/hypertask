@@ -134,7 +134,7 @@ async function fixture(t, { enabled = true, stable = false, legacyStatic = false
     "@/store": { currentUserAtom: {} },
     "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
     "@/utils/api/Task Detail": { fetchCommentsHelper: () => new Promise(noop) },
-    "@/lib/taskDetailReads": { fetchScopedTaskDetail: () => new Promise(noop) },
+    "@/lib/taskDetailReads": { ...require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true })(path.join(root, "src/lib/taskDetailReads.ts")), fetchScopedTaskDetail: () => new Promise(noop) },
     "@/app/detail/[...slug]/TaskDetailComp": { default: () => React.createElement("article", null, React.createElement("h1", { id: "title-input" }, initialTask.title), React.createElement(Body, { draftTQ: draft ? [draft] : [] })) },
   }, baseline).default;
   const container = document.getElementById("root");
@@ -292,6 +292,7 @@ test("the editor's initial null-editor render retains the static geometry under 
   const Placeholder = React.createContext(null);
   let enabled = true;
   const panels = load("src/components/RTE/TaskDetailEditorPanels.tsx", {
+    "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: flag },
     "@/hooks/useFlag": { useFlag: key => (key === flag && enabled) },
     "@/lib/state": { useRecoilValue: () => false, useSetRecoilState: () => noop },

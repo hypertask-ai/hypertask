@@ -101,7 +101,6 @@ stubModule("src/lib/agents/chatAccess.ts", {
       : { ok: false, status: 404, error: "Session not found" },
 });
 stubModule("src/lib/flags.ts", {
-  AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
   isFeatureEnabled: async () => false,
 });
 stubModule("src/lib/agents/chatBroadcast.ts", {

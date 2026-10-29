@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { useMemo } from 'react'
 import { useRecoilValue } from '@/lib/state'
 import { IProject, ISection, IView } from '@/models/model'
@@ -8,6 +9,7 @@ import { applySubTaskSetting } from '@/utils/helperFunctions/Views/SubtaskHelper
 import {
   BoardView,
   BUILTIN_VIEWS,
+  BUILTIN_VIEW_IDS,
   buildBuiltinViewContext,
   getActiveBoardViewId,
   isBuiltinView,
@@ -17,9 +19,12 @@ import useOrderedViews from './useOrderedViews'
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { useFlag } from '@/hooks/useFlag'
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/definitions/htpr-7804-blocked-by-me'
 import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
 const useRenderedViews = (project: IProject | null) => {
+  const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
+  const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const orderedViews = useOrderedViews(project)
   const hiddenViewTabIds = useRecoilValue(hiddenViewTabIdsAtom)
@@ -29,8 +34,9 @@ const useRenderedViews = (project: IProject | null) => {
   const { timers: runningTimers } = useBoardRunningTimers(project?.id ?? null)
   const filterRuntimeContext = useMemo(() => ({
     legacyAgentAssigneeMatch: !assigneeFixEnabled,
+    agentCreatorFilterEnabled,
     runningTaskIds: new Set(runningTimers.keys()),
-  }), [assigneeFixEnabled, runningTimers])
+  }), [agentCreatorFilterEnabled, assigneeFixEnabled, runningTimers])
   const defaultViewId = project?.project_view?.default_view_id
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
 
@@ -92,7 +98,12 @@ const useRenderedViews = (project: IProject | null) => {
     })
   }, [activeViewId, defaultViewId, showEmptyViewTabs, viewTaskCounts, views])
 
-  return { views, orderedViews, renderedViews, viewTaskCounts }
+  const viewsWithBlockedByMe = useMemo(
+    () => views.filter((view) => view.id === BUILTIN_VIEW_IDS.blockedByMe || renderedViews.includes(view)),
+    [views, renderedViews],
+  )
+  const visibleViews = blockedByMeEnabled ? viewsWithBlockedByMe : renderedViews
+  return { views, orderedViews, renderedViews: visibleViews, viewTaskCounts }
 }
 
 export default useRenderedViews

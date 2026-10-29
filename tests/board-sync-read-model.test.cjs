@@ -1293,7 +1293,7 @@ test("the product integration restores, reconciles, measures, and clears", () =>
   assert.doesNotMatch(hook, /"indexeddb_miss",/);
   assert.match(
     landing,
-    /pinProjectToUrlView\(projects\[projectIndex\], currentView, \{ legacyAgentAssigneeMatch: !assigneeFixEnabled \}, restoreUrlViewSections\)/,
+    /pinProjectToUrlView\(projects\[projectIndex\], currentView, \{ legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled \}, restoreUrlViewSections\)/,
   );
   assert.match(
     landing,
@@ -1394,13 +1394,13 @@ test("the product integration restores, reconciles, measures, and clears", () =>
   assert.doesNotMatch(indexedDb, /request\.onblocked = \(\) => resolve\(/);
   assert.match(
     signout,
-    /localReadModelsCleared = await clearAllLocalReadModels\(\)/,
+    /localReadModelsCleared = await Promise\.race/,
   );
   assert.match(signout, /if \(!localReadModelsCleared\)/);
   assert.match(signout, /return false/);
   assert.ok(
-    signout.indexOf("if (!localReadModelsCleared)") <
-      signout.indexOf("await signOutAllAccounts()"),
+    signout.indexOf("await signOutAllAccounts()") <
+      signout.indexOf("if (!localReadModelsCleared)"),
   );
 });
 

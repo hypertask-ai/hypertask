@@ -35,8 +35,10 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
+    if (id === "@/lib/flags/definitions/htpr-7736-chat-follows-task") return jiti(path.join(root, "src/lib/flags/definitions/htpr-7736-chat-follows-task.ts"));
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
     if (id === "@/lib/ai/prompts/registry") return registry;
+    if (id === "@/lib/ai/chipEvents") return { signalAiChip: () => {} };
     if (id.startsWith("@/") || id.startsWith(".")) throw new Error(`Unstubbed ${file}: ${id}`);
     return require(id);
   }, mod, mod.exports);
@@ -205,7 +207,7 @@ function composeApi(writes = []) {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": jiti(path.join(root, "src/utils/aiWriterUtils.ts")),
     "@/utils/htmlEscape": jiti(path.join(root, "src/utils/htmlEscape.ts")),
-    "./taskWriterMedia": { createTaskWriterMediaTokenFactory: () => () => "", extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (value) => value },
+    "./taskWriterMedia": { extractTaskWriterPromptMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory: () => () => "", extractTaskWriterMedia: (html) => ({ html, media: [] }), restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (value) => value },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads() {} },
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async (payload) => { writes.push(payload); return { resposne: { newTask: task } }; } },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {}, "@/utils/helperFunctions/Views/NewTaskViewDefaults": {},
@@ -275,7 +277,7 @@ async function withCompose(options, check) {
   const set = (atom, next) => { const value = typeof next === "function" ? next(get(atom)) : next; if (atom === atoms.composeTaskChatIntroAtom && value) introWrites.push(value); values.set(atom, value); subscribers.forEach((fn) => fn()); };
   const setters = new Map(Object.values(atoms).map((atom) => [atom, (next) => set(atom, next)]));
   const state = { useRecoilValue: (atom) => React.useSyncExternalStore(subscribe, () => get(atom)), useSetRecoilState: (atom) => setters.get(atom), useRecoilState: (atom) => [React.useSyncExternalStore(subscribe, () => get(atom)), setters.get(atom)] };
-  const flags = new Set([keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7312_CTRLJ_SKILLS_FLAG, keys.HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, keys.HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG]);
+  const flags = new Set([keys.HTPR_7736_CHAT_FOLLOWS_TASK_FLAG, keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7312_CTRLJ_SKILLS_FLAG, keys.HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, keys.HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG]);
   if (options.enabled !== false) flags.add(flag);
   if (options.paged) flags.add(keys.HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   for (const key of options.extraFlags ?? []) flags.add(key);
@@ -349,6 +351,7 @@ async function withCompose(options, check) {
     "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => ["task-43"] },
     "@/lib/realtime/taskDetailRefresh": { preserveTaskAssigneesChangedDuringFetch: (_current, saved) => saved, refreshTaskDetailQueryCache: async () => {}, shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_current, saved) => saved },
     "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": {},
+    "@/components/Common/Tooltip": { default: () => null },
     "@/components/AI_CHAT/ChatScopeChip": {}, "@/components/Modals/MoveTaskToBoard": {},
     "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu": { useSkillSlashMenu: () => ({ onKeyDown: () => false, onInput() {}, onCaretMove() {}, close() {}, menu: null }) },
     "@/lib/createTaskAttachmentUploads": { discardUnboundCreateTaskUploads() {} },
@@ -600,6 +603,7 @@ async function sendAfterIntro(session, question) {
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
     "@/lib/agents/chatViewerState": { sidebarChatHeaders: () => ({}) },
     "./aiChatStream": { consumeAiChatStream: async () => {} },
+    "@/lib/ai/ticketRowsHistory": { historyContent: (message) => message.content },
     "react-hot-toast": { default: { error: assert.fail } },
     "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
     "@/lib/aiChat/streamRefusal": {},

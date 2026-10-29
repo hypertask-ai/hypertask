@@ -166,6 +166,10 @@ function matchAgent(agent, where) {
         return scalar(agent.revokedAt, value, key);
       case "OR":
         return value.some((branch) => matchAgent(agent, branch));
+      case "AND":
+        return value.every((branch) => matchAgent(agent, branch));
+      case "crossTeamHomeTeamId":
+        return scalar(agent.crossTeamHomeTeamId ?? null, value, key);
       case "members":
         return agent.projects.some((project) =>
           matchAgentMembership(project, someWhere(value, "agent member")),
@@ -211,6 +215,8 @@ function matchSession(session, where) {
       }
       case "OR":
         return value.some((branch) => matchSession(session, branch));
+      case "AND":
+        return value.every((branch) => matchSession(session, branch));
       case "agent": {
         // The same agent rule, applied to the thread's agent: a thread whose
         // agent this caller may no longer see must not come back.
@@ -270,7 +276,6 @@ const prisma = {
         sessions.find((row) => matchSession(row, where)) ?? null;
       if (!session) return null;
       const agent = AGENTS.find((row) => row.id === session.agentId);
-      // chatAccess looks up the agent owner to evaluate the shared-chat flag.
       return { ...session, agent: agent ? { userId: agent.userId } : null };
     },
     create: async () => {
@@ -292,12 +297,7 @@ stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: sessionUserId }),
 });
-stub("src/lib/flags.ts", {
-  SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
-  // Visibility tests need the shared mode on so a teammate can open a TEAM
-  // agent; the private-agent denials still come from accessibleAgentWhere.
-  isFeatureEnabled: async (key) => key === "htpr-6002-shared-agent-chat",
-});
+stub("src/lib/flags.ts", { isFeatureEnabled: async () => false });
 
 const route = createJiti(path.join(root, "tests/agent-chat-create-session-visibility-load.cjs"), {
   alias: { "@": path.join(root, "src") },
@@ -322,7 +322,7 @@ async function openChat(userId, agentId) {
 test("the owner can open their own private agent's chat", async () => {
   const result = await openChat(OWNER, PRIVATE_ID);
   assert.equal(result.status, 200);
-  assert.deepEqual(upserts, [{ userId: OWNER, agentId: PRIVATE_ID }]);
+  assert.deepEqual(upserts, [{ userId: OWNER, agentId: PRIVATE_ID, agentSessionKey: "default" }]);
   assert.deepEqual(participants, [
     { sessionId: "session-1", userId: OWNER },
   ]);
@@ -341,7 +341,7 @@ test("a teammate on the same board can open a team agent's chat", async () => {
   assert.equal(result.status, 200);
   // Keyed on the agent's owner, not on whoever opened it: everyone the agent is
   // shared with lands in one thread rather than a private copy each.
-  assert.deepEqual(upserts, [{ userId: OWNER, agentId: TEAM_ID }]);
+  assert.deepEqual(upserts, [{ userId: OWNER, agentId: TEAM_ID, agentSessionKey: "default" }]);
   assert.deepEqual(participants, [
     { sessionId: "session-1", userId: TEAMMATE },
   ]);

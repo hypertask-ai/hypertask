@@ -11,7 +11,6 @@ import { broadcastChatSession } from '@/lib/agents/chatBroadcast'
 import { listAgentChatActivity } from '@/lib/agents/agentChatActivity'
 import { activityContextMessages, asksForAgentActivity } from '@/lib/agents/chatActivityFeed'
 import { isFeatureEnabled } from '@/lib/flags'
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG } from '@/lib/flags'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import { getSectionForTask, validateProjectAccess } from '@/lib/mcp/tasks/services'
 import {
@@ -20,6 +19,8 @@ import {
   serializeChatTicketProposal,
 } from '@/lib/agents/chatTicketProposal'
 import { loadAgentTokenChatSession } from '@/lib/agents/chatAccess'
+import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from '@/lib/flags/definitions/htpr-7734-agent-chat-context'
+import { agentChatContextPayload, readableAgentChatContextIds } from '@/lib/agents/chatContext'
 
 const MAX_MESSAGE_LENGTH = 8000
 const TRANSCRIPT_LIMIT = 50
@@ -79,18 +80,22 @@ export async function GET(
       })
     ).reverse()
 
-    const normalMessages = messages.map(({ id, role, content, createdAt }) => ({
+    const contextEnabled = await isFeatureEnabled(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG, ctx.user.id)
+    const readableContextIds = contextEnabled
+      ? await readableAgentChatContextIds(prisma, { userId: ctx.user.id, agentId: tokenAgentId, teamScope: ctx.teamScope }, messages)
+      : new Set<string>()
+    const normalMessages = messages.map(({ id, role, content, context, createdAt }) => ({
       id,
       role,
-      content,
+      content: readableContextIds.has(id) && role === 'human' ? agentChatContextPayload(content, context).text : content,
+      ...(readableContextIds.has(id) && role === 'human' && context ? { context } : {}),
       createdAt,
     }))
     const latestMessage = messages[messages.length - 1]
     let transcript: Array<Record<string, unknown>> = normalMessages
     if (
       latestMessage?.role === 'human' &&
-      asksForAgentActivity(latestMessage.content) &&
-      (await isFeatureEnabled('htpr-6094-agent-activity-rows', session.userId))
+      asksForAgentActivity(latestMessage.content)
     ) {
       const activity = await listAgentChatActivity({
         agentId: tokenAgentId,
@@ -244,42 +249,36 @@ export async function POST(
       targetSectionTitle: string
     } | null = null
     if (parsedProposal.proposal) {
-      const enabled = await isFeatureEnabled(
-        AGENT_CHAT_TICKET_CONFIRM_FLAG,
-        session.userId
+      const scopeError = await requireRole(ctx, 'write')
+      if (scopeError) return scopeError
+      const projectCheck = await validateProjectAccess(
+        parsedProposal.proposal.targetProjectId,
+        session.userId,
+        ctx.agentId, ctx.teamScope
       )
-      if (enabled) {
-        const scopeError = await requireRole(ctx, 'write')
-        if (scopeError) return scopeError
-        const projectCheck = await validateProjectAccess(
-          parsedProposal.proposal.targetProjectId,
-          session.userId,
-          ctx.agentId, ctx.teamScope
+      if (projectCheck.error) {
+        return NextResponse.json(
+          { success: false, error: projectCheck.error.message },
+          { status: projectCheck.error.status }
         )
-        if (projectCheck.error) {
-          return NextResponse.json(
-            { success: false, error: projectCheck.error.message },
-            { status: projectCheck.error.status }
-          )
-        }
-        const sectionCheck = await getSectionForTask(
-          parsedProposal.proposal.targetProjectId,
-          parsedProposal.proposal.targetSectionId
+      }
+      const sectionCheck = await getSectionForTask(
+        parsedProposal.proposal.targetProjectId,
+        parsedProposal.proposal.targetSectionId
+      )
+      if (sectionCheck.error) {
+        return NextResponse.json(
+          { success: false, error: sectionCheck.error.message },
+          { status: sectionCheck.error.status }
         )
-        if (sectionCheck.error) {
-          return NextResponse.json(
-            { success: false, error: sectionCheck.error.message },
-            { status: sectionCheck.error.status }
-          )
-        }
-        proposalData = {
-          outcome: parsedProposal.proposal.outcome,
-          ticketTitle: parsedProposal.proposal.ticketTitle,
-          targetProjectId: projectCheck.project.id,
-          targetProjectTitle: projectCheck.project.title,
-          targetSectionId: sectionCheck.section.id,
-          targetSectionTitle: sectionCheck.section.section_title,
-        }
+      }
+      proposalData = {
+        outcome: parsedProposal.proposal.outcome,
+        ticketTitle: parsedProposal.proposal.ticketTitle,
+        targetProjectId: projectCheck.project.id,
+        targetProjectTitle: projectCheck.project.title,
+        targetSectionId: sectionCheck.section.id,
+        targetSectionTitle: sectionCheck.section.section_title,
       }
     }
 

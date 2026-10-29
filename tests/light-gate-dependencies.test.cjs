@@ -192,7 +192,7 @@ test("an explicit installed parser still permits the unchanged non-UI gate", () 
   });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /No changed file matches the UI-change path filter/);
+  assert.match(result.stdout, /No changed file matches the UI\/server-change path filter/);
 });
 
 for (const script of ["scripts/generate-flag-index.mjs", "scripts/flags/production-flag-modes.mjs"]) {

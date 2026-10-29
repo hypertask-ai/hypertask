@@ -2,9 +2,7 @@ import { webhookCredentialAllows } from "@/lib/webhooks/credentialScope";
 import crypto from "crypto";
 import type { AgentRun, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
 import {
-  AGENT_RUN_FEATURE_FLAG,
   NONTERMINAL_AGENT_RUN_STATUSES,
   type AgentRunContext,
   agentRunContextForEvent,
@@ -405,24 +403,6 @@ export async function persistAgentRunTriggerWebhooks(
   if (!subscription || !await webhookCredentialAllows(input.agentId, input, { projectId: subscription.projectId }, tx)) return [];
 
   const triggerSubscribed = subscription.events.includes(input.event);
-  const runsEnabled = await isFeatureEnabled(
-    AGENT_RUN_FEATURE_FLAG,
-    subscription.agent.userId,
-    tx,
-  );
-  if (!runsEnabled) {
-    return triggerSubscribed
-      ? [
-          await createAgentWebhookDelivery(
-            tx,
-            subscription.id,
-            input.agentId,
-            input,
-          ),
-        ]
-      : [];
-  }
-
   const lifecycleSubscribed = subscription.events.some((event) =>
     event.startsWith("run."),
   );
@@ -518,12 +498,7 @@ export async function persistAgentTaskRunPromptWebhooks(
       !subscription?.active ||
       !subscription.events.includes("run.prompted") ||
       (subscription.projectId !== null &&
-        subscription.projectId !== input.projectId) ||
-      !(await isFeatureEnabled(
-        AGENT_RUN_FEATURE_FLAG,
-        run.agent.userId,
-        tx,
-      ))
+        subscription.projectId !== input.projectId)
     ) {
       continue;
     }

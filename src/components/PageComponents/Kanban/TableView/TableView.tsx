@@ -164,7 +164,7 @@ const TableView = ({
   enableMyTasksBulkSelection = false,
 }: TableViewProps) => {
   const {
-  queryClient, rowShortcutsEnabled, myTasksSnoozeEnabled, router, navigateToTask,
+  queryClient, myTasksSnoozeEnabled, router, navigateToTask,
   toggleCreateTaskGlobally, updateActiveItemAndItemInView, removeFromListWithStatus, updateTaskInCache, starTask,
   showCommands, setShowCommands, persistedActiveItem, myTasksBulk, showArchivedOnBoard,
   isApple, setTasksPlayList, myTasksColumnsControlled, storedVisibleColumns, normalizeVisibleColumns,
@@ -190,7 +190,7 @@ const TableView = ({
     columnWidths, setColumnWidths, titleHeaderRef, enableMyTasksBulkSelection,
   });
   const {
-  crossBoardPrioritySortEnabled, isPrioritySort, savedViewPrioritySort, rows, buildCommandContext,
+  isPrioritySort, savedViewPrioritySort, rows, buildCommandContext,
   focusRowElement, focusTo, expandSection,
   } = useTableRows({
     sortState, myTasksSort, _currentProject, customFieldBySortColumnRef, sectionOrderBySid,
@@ -209,7 +209,7 @@ const TableView = ({
     currentProjectSectionIds, moveTaskToSection, timerToggling, queryClient, removeFromListWithStatus,
     setExcludedTaskIds, router, updateTaskInCache, starTask, currentUser,
     assignTask, setAssignTask, myTasksSnoozeEnabled, lastGAt, setShowCommands,
-    rowShortcutsEnabled, isApple, didRestore, persistedActiveItem, focusTo,
+    isApple, didRestore, persistedActiveItem, focusTo,
     selectedIndex,
   });
   const {
@@ -217,7 +217,7 @@ const TableView = ({
   } = useTableKeyboard({
     _currentProject, rows, selectedIndex, sections, toggleCreateTaskGlobally,
     setShowCommands, isApple, handleBoardChange, _sections, lastGAt,
-    rowShortcutsEnabled, showCommands, assignTask, runTaskShortcut, enableMyTasksBulkSelection,
+    showCommands, assignTask, runTaskShortcut, enableMyTasksBulkSelection,
     myTasksBulk, archiveTaskFromTable, timerToggling, toggleSelectedTaskTimer, changeBoardLayout,
     focusTo, openTask, expandSection,
   });
@@ -255,7 +255,7 @@ const TableView = ({
 
   return (
     <div
-      data-task-shortcuts={rowShortcutsEnabled ? "enabled" : undefined}
+      data-task-shortcuts="enabled"
       className="w-full h-full min-h-0 bg-taskDetailPage overflow-x-auto overflow-y-auto table-hscroll"
       style={{ maxHeight: "calc(100vh - 64px)" }}
     >
@@ -361,8 +361,7 @@ const TableView = ({
           {(shouldFlattenSortedRows(
             Boolean(_currentProject),
             sortState.length > 0,
-            isPrioritySort,
-            crossBoardPrioritySortEnabled
+            isPrioritySort
           ) || savedViewPrioritySort) ? (
             <div className="bg-containerBackground shadow-md rounded-md py-2">
               <ul className="px-0">
@@ -436,7 +435,7 @@ const TableView = ({
           <HypertasksCommands contextOptions={buildCommandContext()} />
         </Suspense>
       )}
-      {rowShortcutsEnabled && assignTask && assignProject?.name && (
+      {assignTask && assignProject?.name && (
         <Suspense fallback={null}>
           <AssignModal
             onClose={closeAssignModal}

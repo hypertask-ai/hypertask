@@ -2,6 +2,8 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { QueryClient } = require("@tanstack/react-query");
+const { refreshTaskDetailReadAfterWrite } = require("jiti")(__filename, { alias: { "@": path.resolve(__dirname, "../src") }, interopDefault: true })(path.resolve(__dirname, "../src/lib/taskDetailReads.ts"));
 const ts = require("typescript");
 const React = require("react");
 const { JSDOM } = require("jsdom");
@@ -20,6 +22,7 @@ new Function("require", "module", "exports", compile(read("src/components/undoTo
     "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px]" },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8097-mobile-undo-toast": { HTPR_8097_MOBILE_UNDO_TOAST_FLAG: "htpr-8097-mobile-undo-toast" },
     "@/lib/flags/keys": { HTPR_7657_ONE_TOAST_FLAG: "htpr-7657-one-toast" },
     "@/lib/toastIdsToDismiss": { toastIdsToDismiss: () => [] },
     "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "48px" },
@@ -83,12 +86,12 @@ function boardRemoval(f, subtasks = false) {
   const project = { sections: [section], filteredSections: [section], tasks: [task] };
   const env = {
     toast: hotToast.toast,
-    _currentProject: { id: 2 }, _currentUser: { id: 985 }, dedupe: false,
+    _currentProject: { id: 2 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),
     reAdjustFocusFromCurrContext() {}, returnSortedItems: (items) => items, mutationHandler() {},
     globalAPIHandlers: { deleteTaskAPI: async () => {}, archiveTask: async () => {} },
     deleteTodo: (text, data) => f.register(data, text),
-    queryClient: { refetchQueries: async () => {} },
+    queryClient: new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } }),
   };
   return load(boardFile, ["removeFromListWithStatus"], env).removeFromListWithStatus;
 }

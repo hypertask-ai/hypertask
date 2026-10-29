@@ -6,16 +6,23 @@ export const defaultEmptySections: TBoardEmptySections = "Show";
 
 export const getFilteredEmptySections = (
   sections: ISection[],
-  project: IProject
+  project: IProject,
+  showEmptyViewColumns = false,
 ) => {
   const currentSetting = getActiveEmptySectionSettingFromProject(project);
-  return applyEmptySectionSetting(sections, currentSetting);
+  return applyEmptySectionSetting(sections, currentSetting, showEmptyViewColumns);
 };
 
 function applyEmptySectionSetting(
   sections: ISection[],
-  setting: TBoardEmptySections
+  setting: TBoardEmptySections,
+  showEmptyViewColumns: boolean,
 ): ISection[] {
+  if (setting === "Hidden" && showEmptyViewColumns &&
+      !sections.some((section) => section.visibility && (section.items?.length ?? 0) > 0)) {
+    return sections.filter((section) => section.visibility);
+  }
+
   let filteredSections: ISection[] = [];
   for (const section of sections) {
     if (setting === "Hidden") {

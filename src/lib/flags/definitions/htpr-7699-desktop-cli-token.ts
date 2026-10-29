@@ -7,10 +7,10 @@ export default {
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-24",
-  description: "Lets a person's desktop CLI login use Task Writer, creation defaults, comment stars and pins, and mention suggestions without changing cookie access.",
+  description: "Lets a person's desktop CLI login use existing web features with the same per-user permissions, without changing cookie access.",
   releaseRisk: {
     risk: "new",
     highRisk: "access",
-    reason: "Adds human CLI bearer access to four existing web APIs while preserving their cookie paths and permission checks.",
+    reason: "Adds human CLI bearer access to shared web login boundaries while preserving cookie paths, revocation and per-user permissions.",
   },
 } as const satisfies FeatureFlagDefinition;

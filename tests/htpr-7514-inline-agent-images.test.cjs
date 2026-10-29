@@ -167,7 +167,7 @@ for (const enabled of [false, true]) {
           text: `Compare this screenshot ${image}${optOut ? ". Link only." : ""}`,
           files: attached ? [{ name: "Screenshot.png", type: "image/png" }] : [],
           project: { id: 15, uniqueIdentifier: "HTPR" }, userId: 985,
-          inlineAgentImages: enabled, unfurlImageUrls: true,
+          inlineAgentImages: enabled,
         });
         assert.equal(saved.length, 1);
         assert.equal(count(saved[0].description), attached ? enabled && optOut ? 0 : 1 : enabled && !optOut ? 1 : 0);
@@ -273,7 +273,7 @@ for (const enabled of [false, true]) {
       const writes = [];
       const task = { id: 91, projectId: 15, userId: 985, uniqueIndex: 91, title: "Evidence", sectionId: 7 };
       const comment = { id: 44, creatorId: 985, taskId: 91, task: { id: 91, projectId: 15, project: {} } };
-      const context = { inlineAgentImagesEnabled: enabled, user: { id: 985 }, actingAgentId: null, sendStatus() {}, body: { message: optOut ? "Add these screenshots, attachment only." : `Create two tasks using ${image} and https://files.hypertask.app/other.png.`, images64: [png, { url: "https://files.hypertask.app/other.png", mimeType: "image/png" }] } };
+      const context = { inlineAgentImagesEnabled: enabled, bulkPreviewsIssued: new Set(), user: { id: 985 }, actingAgentId: null, sendStatus() {}, body: { message: optOut ? "Add these screenshots, attachment only." : `Create two tasks using ${image} and https://files.hypertask.app/other.png.`, images64: [png, { url: "https://files.hypertask.app/other.png", mimeType: "image/png" }] } };
       const stubs = {
         "@/lib/errors/reportError": { reportError: async () => {} },
         ai: { tool: (definition) => definition },
@@ -564,9 +564,8 @@ for (const mode of ["update", "comment", "create", "writer-create"]) {
         assert.equal(result.confirmation_required, true);
         return { key: keys.at(-1), fields: creating ? result.affected[taskIndex] : result };
       };
-      const legacySubjects = taskIds.map((task_id) => ({ identifier: { task_id }, resolvedTaskId: task_id }));
       const legacyKey = creating ? buildBulkOperationKey("create-tasks", tasks.map((task) => ({ key: JSON.stringify(["project", task.project_id, writer ? "brief" : "title", writer ? task.brief : task.title]) })))
-        : buildBulkOperationKey(mode === "update" ? "update-tasks" : "comment-on-tasks", mode === "update" ? [] : legacySubjects, [[mode === "update" ? "description" : "text", html]]);
+        : buildBulkOperationKey(mode === "update" ? "update-tasks" : "comment-on-tasks", [], [[mode === "update" ? "description" : "text", html]]);
       const baseline = await preview();
       assert.equal(baseline.key, legacyKey);
       assert.equal(Object.hasOwn(baseline.fields, "image_urls"), false);

@@ -52,11 +52,13 @@ async function fixture(run) {
 
 function commonMocks(calls) {
   return {
+    "@/lib/flags/definitions/htpr-7865-agent-creator-filter": load("src/lib/flags/definitions/htpr-7865-agent-creator-filter.ts"),
     "@/hooks/useFlag": { useFlag: (key) => {
       if (key === "htpr-6175-quick-entry-cards") throw new Error("Removed flag must not be read");
       return false;
     }, useFlagLoaded: () => true },
     "@/lib/flags/keys": { HTPR_7047_SHARP_PLUS_SIGNS_FLAG: "htpr-7047-sharp-plus-signs" },
+    "@/lib/flags/definitions/htpr-8149-archive-focus-order": load("src/lib/flags/definitions/htpr-8149-archive-focus-order.ts"),
     "@/utils/helperFunctions/helperFunctions": {
       throttle: (handler) => handler,
       returnIfModalOrInputActive: () => Boolean(document.querySelector(".modal") || document.activeElement.matches("input,textarea,[contenteditable='true']")),

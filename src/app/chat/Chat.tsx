@@ -1,11 +1,17 @@
 "use client";
 
+import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
+import { chatShortcutHint } from "@/lib/aiChat/chatShortcuts";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
+import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { MessageList } from "@/components/AI_CHAT/MessageList";
 import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
+import { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG } from "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch";
 import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
@@ -181,6 +187,8 @@ function FullScreenChatBoardSelector({
   scope: FullScreenChatScope;
   onScopeChange: (scope: FullScreenChatScope) => void;
 }) {
+  const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const { editor } = useAiChatContext();
   const currentUser = useRecoilValue(currentUserAtom);
   const [recentChatBoardIds, setRecentChatBoardIds] = useRecoilState<number[]>(
     recentChatBoardIdsAtom
@@ -219,7 +227,7 @@ function FullScreenChatBoardSelector({
       : `Board ${scope}`;
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || sharedShortcuts) return;
 
     const handleClickOutside = (event: MouseEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -229,7 +237,7 @@ function FullScreenChatBoardSelector({
 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, sharedShortcuts]);
 
   const selectScope = (nextScope: FullScreenChatScope) => {
     if (typeof nextScope === "number") {
@@ -242,13 +250,15 @@ function FullScreenChatBoardSelector({
     }
     onScopeChange(nextScope);
     setIsOpen(false);
+    if (sharedShortcuts) requestAnimationFrame(() => editor?.commands.focus("end"));
   };
 
   return (
-    <div ref={rootRef} className="relative w-full text-left">
+    <div data-chat-board-selector ref={rootRef} className="relative w-full text-left">
       <button
         type="button"
-        aria-haspopup="menu"
+        title={sharedShortcuts ? chatShortcutHint("scope") : undefined}
+        aria-haspopup={sharedShortcuts ? "dialog" : "menu"}
         aria-expanded={isOpen}
         className="flex w-full items-center justify-between gap-2 rounded bg-kanban-active-cardbg px-3 py-2 text-left text-content transition-colors hover:bg-hover-active"
         onClick={() => setIsOpen((open) => !open)}
@@ -263,7 +273,16 @@ function FullScreenChatBoardSelector({
         />
       </button>
 
-      {isOpen && (
+      {isOpen && sharedShortcuts && <OptionPickerModal
+        header="Chat boards"
+        options={[
+          { id: null, label: "All boards", checked: scope === null },
+          ...teams.flatMap((team) => team.projects.map((project) => ({ id: project.id, label: projectLabel(project), hint: team.title, checked: scope === project.id }))),
+        ]}
+        onClose={() => { setIsOpen(false); requestAnimationFrame(() => editor?.commands.focus("end")); }}
+        onSelect={({ id }) => { if (id === null || typeof id === "number") selectScope(id); }}
+      />}
+      {isOpen && !sharedShortcuts && (
         <div
           role="menu"
           className="absolute left-0 top-[calc(100%+6px)] z-50 max-h-60 w-full overflow-y-auto rounded-md bg-modalBackground py-1 shadow-lg scrollbar-thin hover:scrollbar-thumb-gray-500 scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
@@ -325,8 +344,57 @@ function ChatRailFilterRow({
   );
 }
 
+function CtrlTabSessionSwitch({
+  groups,
+  currentSessionId,
+  onSelect,
+  router,
+  returnPath,
+  editor,
+}: {
+  groups: { title: string; sessions: { id: string }[] }[];
+  currentSessionId?: string;
+  onSelect: (sessionId: string) => void;
+  router: ReturnType<typeof useRouter>;
+  returnPath: string;
+  editor: ChatContextType["editor"];
+}) {
+  useEffect(() => {
+    const handleSessionKeydown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        window.innerWidth < 768 ||
+        event.key !== "Tab" ||
+        !event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) return;
+
+      event.preventDefault();
+      const visibleSessions = groups.flatMap((group) => group.sessions);
+      const currentIndex = visibleSessions.findIndex(
+        (session) => session.id === currentSessionId
+      );
+      if (currentIndex < 0) return;
+      const nextSession = visibleSessions[currentIndex + (event.shiftKey ? -1 : 1)];
+      if (!nextSession) return;
+
+      onSelect(nextSession.id);
+      router.replace(buildFullScreenChatPath(returnPath, nextSession.id));
+      setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+    };
+
+    document.addEventListener("keydown", handleSessionKeydown);
+    return () => document.removeEventListener("keydown", handleSessionKeydown);
+  }, [groups, currentSessionId, onSelect, router, returnPath, editor]);
+  return null;
+}
+
 export default function Chat({ initialSessionId }: ChatProps) {
+  const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
+  const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
+  const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -348,6 +416,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
       : null;
   const railWidthPx = railWidthState as number;
   const [searchQuery, setSearchQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+  const [searchIndex, setSearchIndex] = useState(0);
   const {
     activeSession,
     currentSession,
@@ -408,8 +478,22 @@ export default function Chat({ initialSessionId }: ChatProps) {
     if (!newSession || newSession.id !== activeSession) return;
 
     sessionsBeforeNewSession.current = null;
-    router.replace(buildFullScreenChatPath(returnPath, newSession.id));
-  }, [activeSession, returnPath, router, sessions]);
+    const path = buildFullScreenChatPath(returnPath, newSession.id);
+    if (!newSessionFocusEnabled) {
+      router.replace(path);
+      return;
+    }
+    window.history.replaceState(null, "", path);
+    const focusComposer = () => { try { editor?.view.dom.focus(); } catch {} };
+    const first = setTimeout(focusComposer, 0);
+    const retry = setTimeout(() => {
+      if (!(editor?.view.hasFocus?.() ?? false)) focusComposer();
+    }, 120);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(retry);
+    };
+  }, [activeSession, editor, newSessionFocusEnabled, returnPath, router, sessions]);
 
   useEffect(() => {
     if (fullScreenChatScopeState !== fullScreenChatScope) {
@@ -451,19 +535,22 @@ export default function Chat({ initialSessionId }: ChatProps) {
     railSessions,
     fullScreenChatScope,
   ]);
-  const displayedSessionGroups = [
+  const displayedSessionGroups = useMemo(() => [
     ...(pinnedSessions.length > 0
       ? [{ title: "Pinned" as const, sessions: pinnedSessions }]
       : []),
     ...sessionGroups,
-  ];
+  ], [pinnedSessions, sessionGroups]);
+
+  const displayedSessions = displayedSessionGroups.flatMap((group) => group.sessions);
 
   const handleStartNewSession = () => {
     sessionsBeforeNewSession.current = new Set(
       sessions.map((session) => session.id)
     );
-    void startNewSession();
-    setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+    const creation = startNewSession();
+    if (!newSessionFocusEnabled) setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
+    return creation;
   };
 
   const handleTogglePinnedSession = (
@@ -490,6 +577,16 @@ export default function Chat({ initialSessionId }: ChatProps) {
     }
   };
 
+  const shortcuts = useChatShortcuts({
+    enabled: sharedShortcutsEnabled,
+    onNewChat: handleStartNewSession,
+    sessionIds: displayedSessions.map((session) => session.id),
+    onSelectSession: (id) => {
+      selectSession(id);
+      window.history.replaceState(null, "", buildFullScreenChatPath(returnPath, id));
+    },
+    onSearch: () => { setSearchIndex(0); searchRef.current?.focus(); },
+  });
   const switchToDocked = () => {
     setChatMounted(true);
     setAiChatExplicitOpenAt(Date.now());
@@ -500,7 +597,18 @@ export default function Chat({ initialSessionId }: ChatProps) {
   };
 
   return (
-    <main className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
+    <main ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "fullscreen" : undefined} onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined} tabIndex={shortcuts.enabled ? -1 : undefined} className="flex h-SVH-full min-h-0 w-full overflow-hidden bg-ai-chat text-white-black">
+      {shortcuts.modal}
+      {ctrlTabSessionSwitchEnabled && !shortcuts.enabled && (
+        <CtrlTabSessionSwitch
+          groups={displayedSessionGroups}
+          currentSessionId={currentSession?.id}
+          onSelect={selectSession}
+          router={router}
+          returnPath={returnPath}
+          editor={editor}
+        />
+      )}
       <aside
         className="relative hidden h-full shrink-0 flex-col border-r border-light-black-border-1 bg-modalBackground md:flex"
         style={{ width: clampFullScreenChatRailWidth(railWidthPx) }}
@@ -509,6 +617,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
           <button
             type="button"
             onClick={handleStartNewSession}
+            title={shortcuts.enabled ? chatShortcutHint("new") : undefined}
             className="flex w-full items-center gap-2 rounded bg-kanban-active-cardbg px-3 py-2 text-left text-content transition-colors hover:bg-hover-active"
           >
             <SquarePen
@@ -536,9 +645,29 @@ export default function Chat({ initialSessionId }: ChatProps) {
               strokeWidth={1.75}
             />
             <input
+              ref={searchRef}
               type="search"
+              title={shortcuts.enabled ? chatShortcutHint("search") : undefined}
               value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
+              onChange={(event) => { setSearchQuery(event.target.value); setSearchIndex(0); }}
+              onKeyDown={shortcuts.enabled ? (event) => {
+                if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+                const results = displayedSessions;
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setSearchIndex((index) => Math.max(0, Math.min(results.length - 1, index + (event.key === "ArrowDown" ? 1 : -1))));
+                } else if (event.key === "Enter" && results[searchIndex]) {
+                  event.preventDefault();
+                  selectSession(results[searchIndex].id);
+                  window.history.replaceState(null, "", buildFullScreenChatPath(returnPath, results[searchIndex].id));
+                  requestAnimationFrame(() => editor?.commands.focus("end"));
+                } else if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setSearchQuery("");
+                  requestAnimationFrame(() => editor?.commands.focus("end"));
+                }
+              } : undefined}
               placeholder="Search chats"
               aria-label="Search chats"
               className="w-full border-0 border-b border-light-black-border-1 bg-transparent py-2 pl-7 pr-2 text-content text-white-black outline-none placeholder:text-icon-dark-gray"
@@ -580,11 +709,12 @@ export default function Chat({ initialSessionId }: ChatProps) {
                       <li key={session.id}>
                         <div
                           className={`group relative flex w-full items-center rounded transition-colors hover:bg-hover-active ${
-                            isActive ? "bg-kanban-active-cardbg" : ""
+                            isActive || (shortcuts.enabled && searchQuery && displayedSessions[searchIndex]?.id === session.id) ? "bg-kanban-active-cardbg" : ""
                           }`}
                         >
                           <button
                             type="button"
+                            aria-current={shortcuts.enabled && displayedSessions[searchIndex]?.id === session.id && searchQuery ? "true" : undefined}
                             onClick={() => {
                               selectSession(session.id);
                               router.replace(
@@ -603,6 +733,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
                           <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-[0] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
                             <button
                               type="button"
+                              title={shortcuts.enabled ? chatShortcutHint("pin") : undefined}
                               aria-label={isPinned ? "Unpin chat" : "Pin chat"}
                               onClick={(event) =>
                                 handleTogglePinnedSession(event, session.id)
@@ -620,6 +751,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
                             </button>
                             <button
                               type="button"
+                              title={shortcuts.enabled ? chatShortcutHint("delete") : undefined}
                               aria-label="Delete chat"
                               onClick={(event) =>
                                 handleDeleteSession(event, session.id)

@@ -46,7 +46,6 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const provider = load("src/lib/contexts/TaskDetail/TaskProvider.tsx", {
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
-    "@/hooks/useFlag": { useFlag: () => dedupeReads },
     "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/lib/taskDetailReads": require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, interopDefault: true })(path.join(__dirname, "..", "src/lib/taskDetailReads.ts")),
@@ -61,7 +60,6 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const queryClient = new QueryClient();
   let embedded = true;
   let authenticatedUserId = 2343;
-  let dedupeReads = true;
   const cachedKey = id => ["cached-task-detail", 2343, id];
   const stubs = {
     "@/store": {},
@@ -144,12 +142,11 @@ test("real task detail reads the provider snapshot without duplicate props and r
   assert.equal(queryClient.getQueryData(readKey), undefined, "embedded snapshots must not seed verified full-detail reads");
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "embedded detail must not publish a native-navigation seed");
   embedded = false;
-  dedupeReads = false;
   await render(nextTask);
-  assert.deepEqual(queryClient.getQueryData(cachedKey(nextTask.id)), nextTask, "native routes seed navigation even when dedupe reads are off");
-  assert.equal(queryClient.getQueryData(readKey), undefined, "dedupe-off routes must not seed the new read cache");
+  assert.deepEqual(queryClient.getQueryData(cachedKey(nextTask.id)), nextTask, "native routes seed navigation");
+  assert.deepEqual(queryClient.getQueryData(readKey), nextTask, "native routes always seed verified reads");
+  queryClient.removeQueries({ queryKey: readKey, exact: true });
   queryClient.removeQueries({ queryKey: cachedKey(nextTask.id), exact: true });
-  dedupeReads = true;
   authenticatedUserId = 985;
   await render(nextTask);
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "an old server account cannot seed the signed-in account's cache");

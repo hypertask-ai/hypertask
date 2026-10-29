@@ -1,7 +1,10 @@
+import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { isFeatureEnabled } from "@/lib/flags";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
+import { getBoardHygiene } from '@/utils/controllers/projects/hygiene'
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -58,6 +61,7 @@ export async function GET(
             section_title: true,
             isDone: true,
             ranking: true,
+            wipLimit: true,
           },
           orderBy: {
             ranking: 'asc',
@@ -76,16 +80,20 @@ export async function GET(
       )
     }
 
+    const workLimits = await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, ctx.user.id);
     return NextResponse.json({
       success: true,
       projectId: project.id,
       boardTitle: project.title || '',
+      ...(request.nextUrl.searchParams.get('include') === 'hygiene' ? {
+        report: await getBoardHygiene(projectId, ctx.user.id, ctx.agentId, ctx.teamScope),
+      } : {}),
       columns: project.section.map((section) => ({
         id: section.id,
         title: section.section_title,
         position: section.ranking,
         role: columnRoleFor(section),
-        wipLimit: null,
+        wipLimit: workLimits ? section.wipLimit : null,
       })),
       transitions: 'any',
     })

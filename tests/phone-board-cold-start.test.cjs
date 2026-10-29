@@ -12,7 +12,7 @@ const read = file => fs.readFileSync(path.join(root, file), "utf8");
 const assets = ["e4af272ccee01ff0", "5611c55482296524", "4b9bb515ce6d026f"].map(hash => `/_next/static/media/${hash}-s.woff2`);
 const plex = "/_next/static/media/26d4368bf94c0ec4-s.woff2";
 
-function loadLayout(board, inbox = null) {
+function loadLayout(board, inbox = null, overrides = {}) {
   const font = { variable: "font-variable", className: "font-class" };
   const mocks = {
     "next/headers": { cookies: async () => ({ get: name => name === "theme" ? { value: "porcelain" } : undefined }) },
@@ -33,9 +33,10 @@ function loadLayout(board, inbox = null) {
     "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
     "@/utils/Providers": { default: ({ children }) => children },
   };
+  Object.assign(mocks, overrides);
   const exports = {};
   const code = ts.transpileModule(read("src/app/layout.tsx"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText;
-  vm.runInNewContext(code, { exports, require: id => {
+  vm.runInNewContext(code, { exports, process: { env: {} }, require: id => {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
     if (id.endsWith(".css") || id.endsWith(".scss")) return {};
     if (id.startsWith("@/") || id === "@vercel/speed-insights/next") return { __esModule: true, default: () => null, SpeedInsights: () => null };
@@ -72,4 +73,54 @@ test("font assets stay available but Next no longer unconditionally preloads unu
   assert.match(read("src/lib/fonts/inter.ts"), /e4af272ccee01ff0-s\.woff2/);
   assert.match(read("src/lib/fonts/newsreader.ts"), /5611c55482296524-s\.woff2/);
   assert.match(read("src/lib/fonts/newsreader.ts"), /4b9bb515ce6d026f-s\.woff2/);
+});
+
+test("HTPR-7718: layout seeds only authenticated first document visits and isolates seed failures", async () => {
+  const flagKey = "htpr-7718-first-visit-flag-seed";
+  const flagSeed = { accountId: 985, evaluatedAt: new Date().toISOString(), values: { "visible-ticket-flag": true } };
+  for (const scenario of [
+    { name: "first visit", seeded: true },
+    { name: "board seed", board: document() },
+    { name: "inbox seed", inbox: document(true, "porcelain", "/inbox") },
+    { name: "ticket shell", shell: { accountId: 985, display: { theme: "porcelain" } } },
+    { name: "RSC request", rsc: "1" },
+    { name: "flag off", enabled: false },
+    { name: "no session", anonymous: true },
+    { name: "headers failure", failure: "headers" },
+    { name: "flag failure", failure: "flag" },
+    { name: "seed failure", failure: "seed" },
+  ]) {
+    const calls = [];
+    const Provider = () => null;
+    const layout = loadLayout(scenario.board ?? null, scenario.inbox ?? null, {
+      "next/headers": { cookies: async () => ({ get: () => undefined }), headers: async () => {
+        if (scenario.failure === "headers") throw Error("headers unavailable");
+        return new Headers(scenario.rsc ? { rsc: scenario.rsc } : {});
+      } },
+      "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => scenario.anonymous ? null : { id: 985 } },
+      "@/lib/firstScreen/serverTicketShell": { getServerTicketShell: async () => scenario.shell ?? null },
+      "@/lib/flags/definitions/htpr-7718-first-visit-flag-seed": { HTPR_7718_FIRST_VISIT_FLAG_SEED_FLAG: flagKey },
+      "@/lib/flags": { isFeatureEnabled: async (key, accountId) => {
+        if (key !== flagKey) return key === "htpr-7627-ticket-first-screen";
+        assert.equal(accountId, 985);
+        calls.push("flag");
+        if (scenario.failure === "flag") throw Error("flag unavailable");
+        return scenario.enabled !== false;
+      } },
+      "@/lib/firstScreen/serverFlags": { getFirstVisitFlagSeed: async accountId => {
+        assert.equal(accountId, 985);
+        calls.push("seed");
+        if (scenario.failure === "seed") throw Error("seed unavailable");
+        return flagSeed;
+      } },
+      "@/utils/Providers": { default: Provider },
+    });
+    const tree = await layout({ children: "existing-content" });
+    const provider = tree.props.children[1].props.children.find(child => child?.type === Provider);
+    assert.ok(provider, scenario.name);
+    assert.equal(provider.props.flagSeed, scenario.seeded ? flagSeed : null, scenario.name);
+    assert.equal(provider.props.children, "existing-content", scenario.name);
+    const eligible = !scenario.board && !scenario.inbox && !scenario.shell && !scenario.rsc && !scenario.anonymous && scenario.failure !== "headers";
+    assert.deepEqual(calls, !eligible ? [] : scenario.enabled === false || scenario.failure === "flag" ? ["flag"] : ["flag", "seed"], scenario.name);
+  }
 });

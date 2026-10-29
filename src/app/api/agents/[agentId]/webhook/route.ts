@@ -48,7 +48,8 @@ export async function GET(
   props: { params: Promise<{ agentId: string }> },
 ) {
   try {
-    const userId = await currentUserId(request);
+    const session = await getSessionUser(request.headers);
+    const userId = session?.userId;
     if (!userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -69,14 +70,15 @@ export async function PUT(
   props: { params: Promise<{ agentId: string }> },
 ) {
   try {
-    const userId = await currentUserId(request);
+    const session = await getSessionUser(request.headers);
+    const userId = session?.userId;
     if (!userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
-    if (!hasTrustedMutationOrigin(request)) {
+    if (session?.source !== "cli-bearer" && !hasTrustedMutationOrigin(request)) {
       return NextResponse.json(
         { success: false, error: "Invalid request origin" },
         { status: 403 },
@@ -103,14 +105,15 @@ export async function DELETE(
   props: { params: Promise<{ agentId: string }> },
 ) {
   try {
-    const userId = await currentUserId(request);
+    const session = await getSessionUser(request.headers);
+    const userId = session?.userId;
     if (!userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
-    if (!hasTrustedMutationOrigin(request)) {
+    if (session?.source !== "cli-bearer" && !hasTrustedMutationOrigin(request)) {
       return NextResponse.json(
         { success: false, error: "Invalid request origin" },
         { status: 403 },
@@ -130,14 +133,15 @@ export async function POST(
   props: { params: Promise<{ agentId: string }> },
 ) {
   try {
-    const userId = await currentUserId(request);
+    const session = await getSessionUser(request.headers);
+    const userId = session?.userId;
     if (!userId) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
         { status: 401 },
       );
     }
-    if (!hasTrustedMutationOrigin(request)) {
+    if (session?.source !== "cli-bearer" && !hasTrustedMutationOrigin(request)) {
       return NextResponse.json(
         { success: false, error: "Invalid request origin" },
         { status: 403 },

@@ -228,6 +228,7 @@ function policyController(name, role, effects, options = {}) {
     "../turbopuffer/turbopufferHelper": {},
     "@/lib/ai/teamBillingSnapshotSelect": { teamBillingSnapshotSelect: {} },
     "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: value => value },
+    "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async value => value },
     "@/utils/controllers/tasks/attachWaitingOnUsers": { attachWaitingOnUsers: async value => value },
     "@/utils/controllers/tasks/attachOpenBlockingTasks": { attachOpenBlockingTasks: async value => value },
   };

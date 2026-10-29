@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import type { FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectDisplayDate } from "@/lib/firstScreen/display";
 import { ITask } from "@/models/model";
@@ -18,6 +19,28 @@ import type { useTableState } from "./useTableState";
 import type { useTableActions } from "./useTableActions";
 import type { useTableColumns } from "./useTableColumns";
 import { taskInColumnDays, taskNoCommentDays, taskOnBoardDays, SortColumn, isCustomFieldSortColumn, getCustomFieldValue, customFieldIdFromSortColumn, LABEL_CLASS, renderAssigneeAvatars, TABLE_GRID_CLASS } from "./tableViewShared";
+
+export function TableTicketCell({ ticket, className = "", style }: { ticket: string; className?: string; style?: CSSProperties }) {
+  return <span style={style} className={`font-bold text-icon-dark-gray whitespace-nowrap ${className}`}>{ticket}</span>;
+}
+
+export function TableTitleCell({ task, compact = false, className = "", style }: {
+  task: Pick<ITask, "title" | "blockingTasks">;
+  compact?: boolean;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <span style={style} className={`flex items-center gap-1 overflow-hidden font-medium text-white-black min-w-0 ${compact ? "" : "whitespace-nowrap"} ${className}`}>
+      <span className={compact ? "line-clamp-2 break-words" : "truncate"}>{task.title ?? ""}</span>
+      {task.blockingTasks?.map((blockingTask) => <BlockerTaskChip key={blockingTask.id} task={blockingTask} />)}
+    </span>
+  );
+}
+
+export function TableStatusCell({ section }: { section: string }) {
+  return <span className="min-w-0 flex items-center text-micro text-text-light-gray truncate">{section}</span>;
+}
 
 type Context = { snapshot?: FirstScreenSnapshot | null } & Pick<TableViewProps, "_currentProject" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableState>, "selectedIndex" | "dragOverSectionId" | "currentProjectSectionIds" | "sortState" | "customFieldBySortColumn" | "sectionTitleBySid" | "timeTotals" | "timeNow" | "draggedTaskRef" | "myTasksBulk"> &
@@ -62,34 +85,15 @@ export function createTableRowRenderer(context: Context) {
       switch (column) {
         case "ticket":
           return (
-            <span
-              key="ticket"
-              style={{ left: frozenColumnOffset("ticket") }}
-              className={`md:sticky md:z-[1] font-bold text-icon-dark-gray whitespace-nowrap ${stickyBackground}`}
-            >
-              {getTicketText(task)}
-            </span>
+            <TableTicketCell key="ticket" ticket={getTicketText(task)} style={{ left: frozenColumnOffset("ticket") }} className={`md:sticky md:z-[1] ${stickyBackground}`} />
           );
         case "title":
           return (
-            <span
-              key="title"
-              style={{ left: frozenColumnOffset("title") }}
-              className={`md:sticky md:z-[1] flex items-center gap-1 overflow-hidden font-medium text-white-black whitespace-nowrap min-w-0 ${stickyBackground}`}
-            >
-              <span className="truncate">{task.title ?? ""}</span>
-              {task.blockingTasks?.map((blockingTask) => (
-                <BlockerTaskChip key={blockingTask.id} task={blockingTask} />
-              ))}
-            </span>
+            <TableTitleCell key="title" task={task} style={{ left: frozenColumnOffset("title") }} className={`md:sticky md:z-[1] ${stickyBackground}`} />
           );
         case "status":
           return (
-            <span key="status" className="min-w-0 flex items-center text-[11px] text-text-light-gray truncate">
-              {_currentProject
-                ? sectionTitleBySid.get(task.sectionId ?? "") ?? task.section
-                : task.section}
-            </span>
+            <TableStatusCell key="status" section={_currentProject ? sectionTitleBySid.get(task.sectionId ?? "") ?? task.section : task.section} />
           );
         case "board":
           return (
@@ -168,7 +172,7 @@ export function createTableRowRenderer(context: Context) {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
           });
-          const colorClass = level === "hot" ? "text-red-600 dark:text-red-400/70" : level === "warn" ? "text-amber-600 dark:text-amber-400/70" : "text-text-light-gray";
+          const colorClass = level === "hot" ? "text-[var(--color-card-age-hot)]" : level === "warn" ? "text-[var(--color-card-age-warn)]" : "text-text-light-gray";
           return (
             <span key="inColumn" title={stalenessTooltip} className="min-w-0 flex items-center">
               {days !== null && (
@@ -186,7 +190,7 @@ export function createTableRowRenderer(context: Context) {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
           });
-          const colorClass = level === "hot" ? "text-red-600 dark:text-red-400/70" : level === "warn" ? "text-amber-600 dark:text-amber-400/70" : "text-text-light-gray";
+          const colorClass = level === "hot" ? "text-[var(--color-card-age-hot)]" : level === "warn" ? "text-[var(--color-card-age-warn)]" : "text-text-light-gray";
           return (
             <span key="noComment" title={stalenessTooltip} className="min-w-0 flex items-center">
               {days !== null && (
@@ -204,7 +208,7 @@ export function createTableRowRenderer(context: Context) {
             warnDays: _currentProject?.staleWarnDays,
             hotDays: _currentProject?.staleHotDays,
           });
-          const colorClass = level === "hot" ? "text-red-600 dark:text-red-400/70" : level === "warn" ? "text-amber-600 dark:text-amber-400/70" : "text-text-light-gray";
+          const colorClass = level === "hot" ? "text-[var(--color-card-age-hot)]" : level === "warn" ? "text-[var(--color-card-age-warn)]" : "text-text-light-gray";
           return (
             <span key="onBoard" title={stalenessTooltip} className="min-w-0 flex items-center">
               {days !== null && (

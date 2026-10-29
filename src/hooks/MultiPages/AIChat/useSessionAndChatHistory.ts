@@ -1,5 +1,6 @@
+import { HTPR_7736_CHAT_FOLLOWS_TASK_FLAG } from "@/lib/flags/definitions/htpr-7736-chat-follows-task";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -32,8 +33,10 @@ const createDemoSession = (user: IUser): IChatSession => {
 export const useSessionAndChatHistory = (
   taskId?: number,
   historyEnabled = true,
-  isTaskScoped = false
+  isTaskScoped = false,
+  preserveSessionSelection = false
 ) => {
+  const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
@@ -50,6 +53,14 @@ export const useSessionAndChatHistory = (
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
+  const taskNavigationEnabled = useFlag(HTPR_7736_CHAT_FOLLOWS_TASK_FLAG);
+  let followsTaskNavigation = false;
+  if (taskNavigationEnabled && isTaskScoped && !pathname?.startsWith("/chat")) followsTaskNavigation = true;
+  const explicitTaskRef = useRef<{ taskId: number | undefined; generation: number }>({ taskId: undefined, generation: 0 });
+  const hasExplicitTask = taskId !== undefined && (composeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
+  if (hasExplicitTask && explicitTaskRef.current.taskId !== taskId) explicitTaskRef.current.generation += 1;
+  explicitTaskRef.current.taskId = hasExplicitTask ? taskId : undefined;
+  const selectionScope = followsTaskNavigation ? `following:${explicitTaskRef.current.generation}` : taskId;
   const currentProject = useRecoilValue(currentProjectAtom);
   const [dockedScope] = useDockedChatScope();
   const fullScreenScope = useRecoilValue(fullScreenChatScopeAtom);
@@ -70,7 +81,7 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef);
+  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef, { key: selectionScope, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId });
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
 
   const {
@@ -222,11 +233,13 @@ export const useSessionAndChatHistory = (
             previous.map((session) => {
               if (session.id !== sessionId) return session;
               const previousMessages = session.messages ?? [];
-              const messages = updateLastMessage
-                ? previousMessages.length > 0
-                  ? [...previousMessages.slice(0, -1), message]
-                  : [message]
-                : [...previousMessages, message];
+              const messageIndex = stopClosesStream && updateLastMessage
+                ? previousMessages.findIndex((previous) => previous.id === message.id)
+                : -1;
+              const messages = [...previousMessages];
+              if (messageIndex >= 0) messages[messageIndex] = message;
+              else if (updateLastMessage && messages.length > 0) messages[messages.length - 1] = message;
+              else messages.push(message);
               return { ...session, messages, updatedAt: new Date() };
             }),
           );
@@ -244,11 +257,13 @@ export const useSessionAndChatHistory = (
 
             const target = sessionsList[index];
             const prevMessages = target.messages ?? [];
-            const nextMessages = updateLastMessage
-              ? prevMessages.length > 0
-                ? [...prevMessages.slice(0, -1), message]
-                : [message]
-              : [...prevMessages, message];
+            const messageIndex = stopClosesStream && updateLastMessage
+              ? prevMessages.findIndex((previous) => previous.id === message.id)
+              : -1;
+            const nextMessages = [...prevMessages];
+            if (messageIndex >= 0) nextMessages[messageIndex] = message;
+            else if (updateLastMessage && nextMessages.length > 0) nextMessages[nextMessages.length - 1] = message;
+            else nextMessages.push(message);
 
             const updatedSession = {
               ...target,
@@ -312,7 +327,7 @@ export const useSessionAndChatHistory = (
         console.error("Error adding message to session:", error);
       }
     },
-    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient, stopClosesStream]
   );
 
   const updateLastMessageInSessionCache = useCallback(
@@ -399,7 +414,7 @@ export const useSessionAndChatHistory = (
     async (sessionId: string) => {
       if (!hasRequiredData || !currentUser?.uid) {
         console.warn("Cannot delete session: missing user data");
-        return;
+        return false;
       }
 
       const queryKey = ["chat-sessions", currentUser.uid] as const;
@@ -420,14 +435,14 @@ export const useSessionAndChatHistory = (
               : [createDemoSession(currentUser)];
           setDemoSessions(nextSessions);
           setActiveSession(nextSessions[0].id);
-          return;
+          return true;
         }
 
         await AI_Chat_API.deleteSession(sessionId);
 
         if (onlySessionInCache) {
           await queryClient.invalidateQueries({ queryKey });
-          return;
+          return true;
         }
 
         const nextSessions = sessionsList.filter((s) => s.id !== sessionId);
@@ -452,9 +467,11 @@ export const useSessionAndChatHistory = (
         if (deletedWasActive) {
           setActiveSession(nextSessions[0]?.id ?? null);
         }
+        return true;
       } catch (error) {
         console.error("Error deleting chat session:", error);
         await queryClient.invalidateQueries({ queryKey });
+        return false;
       }
     },
     [
@@ -491,9 +508,16 @@ export const useSessionAndChatHistory = (
 
         const sessions = sessionsData?.data?.sessions ?? [];
 
+        if (followsTaskNavigation && !hasExplicitTask && sessions.length > 0) {
+          setActiveSession((selected) => sessions.some((session) => session.id === selected && session.userId === currentUser.id) ? selected : sessions[0]?.id);
+          return;
+        }
+
         if (taskId === undefined) {
           if (isTaskScoped) return;
-          setActiveSession(sessions[0]?.id);
+          if (preserveSessionSelection) {
+            setActiveSession((selected) => sessions.some((session) => session.id === selected) ? selected : sessions[0]?.id);
+          } else setActiveSession(sessions[0]?.id);
           return;
         }
 
@@ -530,13 +554,14 @@ export const useSessionAndChatHistory = (
     isTaskScoped,
     sessionsData,
     taskId,
-    startNewSession, paged,
+    startNewSession, paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
-  const currentSession = paged ? pagedHistory.currentSession : activeSession
+  const selectedSession = paged ? pagedHistory.currentSession : activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
+  const currentSession = followsTaskNavigation && hasExplicitTask && selectedSession?.taskId !== taskId ? undefined : selectedSession;
   useEffect(() => {
     if (!waitingForSkillFollowup && composeEnabled && composeIntro && isTaskScoped &&
         taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {

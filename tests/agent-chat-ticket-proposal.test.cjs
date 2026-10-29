@@ -22,7 +22,6 @@ function load(relativePath) {
 }
 
 // --- mutable test state -----------------------------------------------------
-let flagEnabled = true;
 let agentRole = "write";
 let projectAccess = {
   project: { id: 15, title: "Product", uniqueIdentifier: "HTPR", teamId: "t1" },
@@ -146,8 +145,7 @@ stub("src/lib/auth/getSessionUser.ts", {
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/flags.ts", {
-  AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-  isFeatureEnabled: async () => flagEnabled,
+  isFeatureEnabled: async () => false,
 });
 stub("src/lib/realtime/server.ts", {
   AGENT_CHAT_EVENT: "agent-chat:changed",
@@ -210,7 +208,6 @@ function confirmPost(action = "confirm") {
 }
 
 test.beforeEach(() => {
-  flagEnabled = true;
   agentRole = "write";
   projectAccess = {
     project: { id: 15, title: "Product", uniqueIdentifier: "HTPR", teamId: "t1" },

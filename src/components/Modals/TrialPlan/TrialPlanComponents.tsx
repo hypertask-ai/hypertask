@@ -1,6 +1,8 @@
+import { HTPR_7919_ALLOWANCE_PERCENT_FLAG } from "@/lib/flags/definitions/htpr-7919-allowance-percent";
 import { IconsGlobal } from "@/components/Common/IconsGlobal";
 import { getTeamById } from "@/lib/serverActions";
-import { storeSubscriptionPlans } from "@/lib/subscriptionPlans";
+import { HTPR_7686_FREE_PLAN_COPY_FLAG } from "@/lib/flags/definitions/htpr-7686-free-plan-copy";
+import { subscriptionPlansFor, trialComparisonColumns, trialPlanBlurb } from "@/lib/subscriptionPlans";
 import { CreateCheckoutParams, IPricingSearchParams } from "@/models/model";
 import { StartPlanButton, requestCheckout } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
@@ -118,10 +120,10 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
     if (!flagReady) return null;
     if (startPlanEnabled) return <StartPlanButton teamId={teamId} />;
     if (fetchingInfo){
-        return (<p className="text-[#444444] text-content sm:text-emphasis dark:text-text-light-gray font-normal">Checking plan access…</p>)
+        return (<p className="text-content sm:text-emphasis text-[var(--color-plan-message)] font-normal">Checking plan access…</p>)
     }
     if (teamInfo?.hasCompletedTrial){
-        return (<p className="text-[#444444] text-content sm:text-emphasis dark:text-text-light-gray font-normal">You have already used your free trial</p>)
+        return (<p className="text-content sm:text-emphasis text-[var(--color-plan-message)] font-normal">You have already used your free trial</p>)
     }
     return (
         <>
@@ -134,18 +136,46 @@ export const TrialsButton = ({teamId}:{teamId:string}) => {
 export const PlansTable = ()=>{
     const startPlanEnabled = useFlag(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
     const flagReady = useFlagReady(HTPR_7551_START_PLAN_CHECKOUT_FLAG);
+    const showCorrectedCopy = useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG);
+    const percentageAllowance = useFlag(HTPR_7919_ALLOWANCE_PERCENT_FLAG);
+    const columns = trialComparisonColumns(showCorrectedCopy, percentageAllowance
+        ? subscriptionPlansFor({ planLimits: false, unlimitedTickets: false }, true)
+        : undefined);
     return(
         <>
         <h2 className="text-4xl text-center sm:text-4xl font-semibold mb-2 sm:mb-0 lg:w-3/5 ">{!flagReady ? "Checking plan access…" : startPlanEnabled ? "Start a Hypertask plan" : "Try the Pro plan for free for 14 days"}</h2>
-        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.</p>
+        <p className="font-medium  text-center text-content sm:text-emphasis text-text-light-gray lg:w-3/5">{trialPlanBlurb(useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG))}</p>
         <div className="py-2 sm:py-6 max-h-[58svh] max-w-[80vw] overflow-auto lg:scrollbar-none scrollbar-thin scrollbar-thumb-inherit scrollbar-track-inherit text-left font-semibold ">
                 <div className="flex xs:gap-3 lg:gap-8">
-
+                    {useFlag(HTPR_7686_FREE_PLAN_COPY_FLAG) ? (
+                    <>
+                    {([
+                        ["starter", columns.starter, false],
+                        ["pro", columns.proWithAi, true],
+                    ] as const).map(([key, perks, highlighted]) => (
+                        <div key={key} className={highlighted ? "xs:px-3 lg:px-6 bg-[var(--bg-plan-highlight)] py-2" : "lg:px-4 xs:px-2 py-2"}>
+                            <div className={highlighted ? "flex gap-2 items-center font-bold" : undefined}>
+                                <ColumnTitle content={highlighted ? "Pro with " : "Starter"} />
+                                {highlighted ? <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span> : null}
+                            </div>
+                            <div className={`flex flex-col ${highlighted ? "items-center" : ""}`}>
+                                {perks.map((perk, index) => (
+                                    <div key={`${key}-${index}`}>
+                                        <RowContent type="title" AIPrefix={!!perk.titlePrefix} content={perk.title} />
+                                        <RowContent type="amount" checkVariant={highlighted ? (perk.titlePrefix ? "AI" : "black") : "gray"} showCheck={highlighted ? true : !perk.excludeCheck} content={perk.amount} />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                    </>
+                    ) : (
+                    <>
                     <div className="lg:px-4 xs:px-2 py-2">
                         <ColumnTitle content={""} />
                         <div className="flex flex-col font-bold">
                             {
-                                storeSubscriptionPlans[0].perks.map((perk, index) =>
+                                (columns.sharedTitles ?? []).map((perk, index) =>
                                     <RowContent type="title" key={`perk-${index}`} AIPrefix={!!perk.titlePrefix} content={perk.title} />
 
                                 )
@@ -158,7 +188,7 @@ export const PlansTable = ()=>{
 
                         <div className="flex flex-col">
                             {
-                                storeSubscriptionPlans[1].perks.map((perk, index) =>
+                                columns.starter.map((perk, index) =>
                                     <RowContent type="amount" key={`perk-amount-${index}`} checkVariant="gray" showCheck={perk.excludeCheck ? false : true} content={perk.amount} />
 
 
@@ -167,7 +197,7 @@ export const PlansTable = ()=>{
                             }
                         </div>
                     </div>
-                    <div className="xs:px-3  lg:px-6  bg-[#F3F3F3] dark:bg-active-elementBg py-2">
+                    <div className="xs:px-3 lg:px-6 bg-[var(--bg-plan-feature)] py-2">
                         <div className="flex gap-2 items-center font-bold">
                             <ColumnTitle content={"Pro with "} />
                             <span className="text-hypertasks-ai-purple text-heading min-h-[40px] mb-2">AI</span>
@@ -175,7 +205,7 @@ export const PlansTable = ()=>{
 
                         <div className="flex flex-col items-center">
                             {
-                                storeSubscriptionPlans[0].perks.map((perk, index) =>
+                                columns.proWithAi.map((perk, index) =>
                                     <RowContent type="amount" key={`perk-amount-${index}`} showCheck={true} checkVariant={perk.titlePrefix ? "AI" : "black"} content={perk.amount} />
 
 
@@ -183,6 +213,8 @@ export const PlansTable = ()=>{
                             }
                         </div>
                     </div>
+                    </>
+                    )}
                 </div>
 
             </div>

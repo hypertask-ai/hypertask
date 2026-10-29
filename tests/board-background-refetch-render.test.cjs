@@ -36,6 +36,9 @@ const noop = () => {};
 const noopComponent = () => null;
 const atoms = new Proxy({}, { get: (_, key) => key });
 const moduleMocks = {
+  "@/lib/flags/definitions/htpr-7865-agent-creator-filter": require("./helpers/flag-files.cjs").load(path.join(__dirname, "../src/lib/flags/definitions/htpr-7865-agent-creator-filter.ts")),
+  "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
+  "../unauthorized/page": { __esModule: true, default: noopComponent },
   "@/components/Global/FirstScreenMobileChrome": { __esModule: true, default: noopComponent },
   "@/hooks/useConnectAgentOverlay": { useConnectAgentOverlay: () => ({ blocked: false }) },
   "@/components/PageComponents/Onboarding/AgentConnectCard": { AgentConnectCard: noopComponent },

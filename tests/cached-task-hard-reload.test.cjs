@@ -59,14 +59,14 @@ test("cached Back skips the RSC mount refresh even with stable layout off", t =>
   assert.deepEqual(flow.projects, [{ id: 6859 }]);
 });
 
-test("another task's cached marker does not suppress a native mount refresh", t => {
+test("another task's cached marker cannot force a redundant route refresh", t => {
   const flow = mount(t, { cachedLayout: false, cachedNavigation: true, cachedTaskId: 57095 });
-  assert.deepEqual(flow.refreshes, ["Refresh"]);
+  assert.deepEqual(flow.refreshes, []);
 });
 
-test("native detail still refreshes on mount", t => {
+test("native detail uses the shared read without redundant route refresh", t => {
   const flow = mount(t, { cachedLayout: false });
-  assert.deepEqual(flow.refreshes, ["Refresh"]);
+  assert.deepEqual(flow.refreshes, []);
   assert.deepEqual(flow.projects, [{ id: 6859 }]);
 });
 

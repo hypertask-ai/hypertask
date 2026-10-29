@@ -404,5 +404,19 @@
     "version": "1",
     "partsHash": "115522d00fa6bf535c3cbb8af94cd89ec4be0a4823d808106e48988103009ac9",
     "expressionsHash": "3987f615e6ce9d82f477171cd015d3ba142e7eebe2703e76c58394b77af57461"
+  },
+  {
+    "id": "chat-skill-drafts",
+    "file": "src/lib/ai/chatStream/modelTurn.ts",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+    "version": "1",
+    "partsHash": "5b3d57bfd16e047bd3a473f4ac362e47f34e261da49b4e48a106c3d4cade3c65"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-writer-template-ideation-rule",
+    "version": "1",
+    "partsHash": "5572ba2c19dd3d1ef10b6743aa544cdfec4d4c1d75e51f74803d9d233d2e9ea7",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   }
 ]

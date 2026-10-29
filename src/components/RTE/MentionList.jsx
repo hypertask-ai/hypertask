@@ -195,7 +195,7 @@ const MentionList = forwardRef((props, ref) => {
                   onMouseEnter={() => setSelectedIndex(index)}
                   className={`item ${
                     index === selectedIndex
-                      ? "bg-[#ececec] dark:bg-active-mentionList"
+                      ? "bg-[var(--bg-editor-mention-selected)]"
                       : ""
                   }`}
                   onPointerDown={(e) => pointerSelectHandler(e, index)}

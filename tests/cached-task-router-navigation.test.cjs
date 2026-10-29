@@ -12,7 +12,6 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const cache = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
-const { HTPR_6991_BACK_FIRST_OPEN_FLAG } = flags;
 const parent = { id: 42, projectId: 6859, uniqueIndex: 43, status: "Normal", title: "Parent title", description_: { content: "Parent body" } };
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" }, parentTask: parent };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
@@ -53,8 +52,7 @@ function fixture(t, sourcePath = "/inbox") {
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
-      if (key === flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG) return true;
-      assert.ok([HTPR_6991_BACK_FIRST_OPEN_FLAG].includes(key));
+      assert.equal(key, flags.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
       return true;
     } },
     "@/lib/flags/keys": flags,

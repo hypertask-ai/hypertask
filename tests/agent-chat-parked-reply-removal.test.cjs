@@ -104,7 +104,6 @@ function loadMessageRoute({
     userChannel: (userId) => `user-${userId}`,
   });
   stubModule("src/lib/flags.ts", {
-    AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     isFeatureEnabled: async (key) => {
       assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
       return false;
@@ -240,7 +239,6 @@ function loadTranscriptRoute() {
     checkMcpRateLimit: async () => null,
   });
   stubModule("src/lib/flags.ts", {
-    AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
     isFeatureEnabled: async () => false,
   });
   stubModule("src/lib/agents/agentChatActivity.ts", {
@@ -358,10 +356,7 @@ function loadHistoryRoute({
     getSessionUser: async () => ({ userId: 6 }),
   });
   stubModule("src/lib/flags.ts", {
-    AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-    SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
     isFeatureEnabled: async (key) => {
-      if (key === "htpr-6002-shared-agent-chat") return true;
       assert.notEqual(key, "htpr-6322-agent-chat-parked-reply");
       return false;
     },

@@ -5,7 +5,7 @@ const { fixture, matches, hydrate } = require("./helpers/agent-board-scope.cjs")
 
 const areas = ["field", "restore", "versions", "cycle-get", "cycle-post", "defaults"];
 
-function harness({ actor = "agent", enforce = true, grant = "none", teamless = false, restCompat = false, profile = true, authenticated = true, bypassProject = false } = {}) {
+function harness({ actor = "agent", enforce = true, grant = "none", teamless = false, profile = true, authenticated = true, bypassProject = false } = {}) {
   const f = fixture();
   f.state.enforce = enforce;
   if (actor !== "agent") f.state.ctx.agentId = null;
@@ -62,7 +62,6 @@ function harness({ actor = "agent", enforce = true, grant = "none", teamless = f
     "@/lib/auth/getSessionUser": { getSessionUser: session },
     "next/headers": { cookies: async () => ({ get: () => profile ? { value: JSON.stringify({ id: f.user.id }) } : undefined }) },
     "@/utils/edgeHelpers": { isValidUser: value => ({ isValid: !!value, user: value ? f.user : null }) },
-    "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "htpr-6924-rest-compat", isFeatureEnabled: async () => restCompat },
     "@/utils/controllers/customFields": {
       CustomFieldValidationError,
       getCustomFieldForProjectById: async (projectId, fieldId) => projectId === project.id && fieldId === "field-1" ? { id: "field-1" } : null,
@@ -167,8 +166,8 @@ for (const area of areas) {
 }
 
 for (const area of ["field", "restore", "versions"]) {
-  test(`${area}: REST compat profile fallback preserves owner access`, async () => {
-    const h = harness({ actor: "owner", restCompat: true, profile: false });
+  test(`${area}: profile fallback preserves owner access`, async () => {
+    const h = harness({ actor: "owner", profile: false });
     await allowed(h, area);
   });
 }

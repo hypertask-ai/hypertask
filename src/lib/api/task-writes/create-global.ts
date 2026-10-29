@@ -1,7 +1,7 @@
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
 import { isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
-import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7513_WRITER_PROJECT_LABELS_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG } from "@/lib/flags/keys";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -222,6 +222,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       }
     }
     if (!tagIds.length) tagIds = writerLabelIds;
+    const initializeWriterDefaults = body.initializeWriterDefaults === true &&
+      await isFeatureEnabled(HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, session.userId);
+    const initialPriority = initializeWriterDefaults ? { priority_index: 0, Priority_Value: "No Priority" } : priority;
     let priorityCreated: any = undefined;
     let estimateCreated: any = undefined;
     let relatedTasks: any = { status: 200, json: [] };
@@ -417,20 +420,24 @@ const route = (requestStartedAt: number) => taskWriteRoute({
             description_: true,
           },
         });
-        const createdPriority = priority
+        const createdPriority = initialPriority
           ? await tx.priority.create({
               data: {
                 taskId: task.id,
                 sectionId: task.sectionId ?? -1,
                 projectId: task.projectId,
                 addedByUserId: currentUser.id,
-                priority_index: priority.priority_index,
-                Priority_Value: priority.Priority_Value,
+                priority_index: initialPriority.priority_index,
+                Priority_Value: initialPriority.Priority_Value,
                 addedByAgentId: agentId,
               },
               include: { addedByAgent: true },
             })
           : undefined;
+        const defaultEstimate = initializeWriterDefaults ? await tx.estimate.create({
+          data: { taskId: task.id, sectionId: task.sectionId ?? -1, projectId: task.projectId,
+            addedByUserId: currentUser.id, addedByAgentId: agentId, estimate_index: 0, estimate_value: "No size" },
+        }) : undefined;
         if (tagIds.length > 0) {
           await tx.taskLabel.createMany({
             data: tagIds.map((labelId) => ({
@@ -466,6 +473,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           result: {
             task,
             priority: createdPriority,
+            estimate: defaultEstimate,
             taskLabels: createdTaskLabels,
             assignments: createdAssignments,
           },
@@ -492,6 +500,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       newTask = created.result.task as TaskCreatedGlobally;
       boardWebhookDeliveryIds = created.boardWebhookDeliveryIds;
       priorityCreated = created.result.priority;
+      estimateCreated = created.result.estimate;
       tagsCreated = created.result.taskLabels;
       assignmentsCreated = created.result.assignments;
     } catch (e) {
@@ -528,7 +537,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (priorityCreated) {
       await createPriorityActivity(newTask, currentUser, priorityCreated);
     }
-    if (estimate) {
+    if (estimate && !initializeWriterDefaults) {
       const { estimate: newEstimate } =
         await createEstimateAndActivity(newTask, currentUser, estimate, agentId);
       estimateCreated = newEstimate;

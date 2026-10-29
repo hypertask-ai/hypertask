@@ -80,11 +80,12 @@ function routeError(error: unknown) {
 }
 
 async function authorizeMutation(request: NextRequest) {
-  const userId = await authenticatedUserId(request)
+  const session = await getSessionUser(request.headers)
+  const userId = session?.userId
   if (!userId) {
     throw new WorkspaceWebhookError('Unauthorized', 401)
   }
-  if (!trustedMutationOrigin(request)) {
+  if (session?.source !== "cli-bearer" && !trustedMutationOrigin(request)) {
     throw new WorkspaceWebhookError('Invalid request origin', 403)
   }
   return userId

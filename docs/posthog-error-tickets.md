@@ -46,6 +46,14 @@ The robust canary design is a **nightly-unique fingerprint**, not a repeat on an
 
 `PostHog Error Pipeline Watchdog` independently observes failed or timed-out `PostHog Error Alert` and `PostHog Error Nightly Canary` runs. It checks out trusted production code and calls the MCP app API directly using the existing CI token. It never calls PostHog, the receiver, dispatch signer or incident parser. Failures reuse one exact-title ticket on project 4060, including archived/deleted matches, with an idempotent run-link comment. Reporter delivery failures make the watchdog itself red; GitHub Actions failure notifications remain the last resort if the app API or CI credential is down. Silent alert delivery failure is caught by the nightly canary.
 
+## GitHub-independent native alert delivery
+
+If GitHub refuses a signed production native alert with HTTP 403 or 429, the receiver creates an Infra ticket on board 4060 through the existing product task controller. The system bot authors it; no MCP bearer token, new credential, or GitHub request is needed. Each ticket links the PostHog issue and records the native event ID. The existing event claim prevents concurrent delivery; a durable description receipt prevents duplicate tickets after retries or a lost acknowledgement. The function's 60-second lifetime stays below the claim's five-minute lease. Failed board writes remain HTTP 503, so PostHog can retry. Preview alerts and invalid signatures cannot use this fallback. The legacy emergency-rollback relay remains unchanged.
+
+The nightly canary accepts either the normal board-15 native ticket or this board-4060 receipt. For the fallback it first reads the paginated PostHog issues REST API for its unique run marker, without SQL or HogQL, then finds the native receipt and independently verifies that issue's description contains its exact run marker. Exception ingestion alone is not success. Only the matching canary ticket is closed, using its board's Done section, and its PostHog issue is resolved. Ambiguous issues, missing receipts, failed writes and late delivery still fail the check.
+
+Quota changes are tracked separately: https://app.hypertask.ai/detail/project-4060/678 and https://app.hypertask.ai/detail/project-4060/782. This fallback belongs to https://app.hypertask.ai/detail/project-4060/806.
+
 ## Expected errors, without hiding real faults
 
 - `src/app/api/ai/_lib/modelProvider.ts` throws `AiGatewayKeyRequiredError` when neither a dedicated team Gateway key nor a direct BYOK key is available. `src/lib/ai/chatStream/errors.ts:reportHandledChatError` already skips this typed error and `AiPlanAccessError`; other AI routes' catch blocks can still report the raw message.
@@ -56,3 +64,24 @@ The robust canary design is a **nightly-unique fingerprint**, not a repeat on an
 Small follow-up proposal: consistently detect named key/plan/allowance errors and explicit input-validation failures at existing catch boundaries, returning their existing 4xx response without reportError or tagging `extra.ht_expected_error=true`. Keep unclassified failures visible. Do not infer expectedness from every 4xx, JSON parse error or empty model reply. This change rates known messages P3 without suppressing other alerts.
 
 Backfill drafts and the prior log-backed root cause remain in the uncommitted `.unlazy/helper/backfill.json` and `.unlazy/helper/root-cause.md`.
+
+## Explicit feature attribution
+
+A catch boundary that knows which flagged path failed can pass
+`extra: { featureFlag: "htpr-6238-posthog-error-alert" }` to `reportError`.
+The server sanitizer retains a well-formed ticket flag as `ht_featureFlag`.
+The issue query reads that property from the latest production exception,
+including an empty value when the latest exception has no attribution.
+Only keys with a definition in `src/lib/flags/definitions/` are accepted.
+
+For a confirmed key, the writer relates the bug to the key's HTPR ticket through
+`POST /api/mcp/tasks/relations` and adds a comment linking its flag page.
+The relation is an upsert; the comment uses one issue-and-flag idempotency key,
+so created/reopened retries do not create duplicate links or comments.
+Deleted bug tickets remain untouched. Relation failures fail the alert job,
+leaving the existing issue marker available for a retry.
+
+Untagged, malformed and unknown keys produce no relation. The initial ticket
+or subsequent alert comment says “No confirmed feature flag.” Flags merely
+enabled for a user and filenames appearing in a stack are not causal proof;
+the writer never guesses from them. This does not automatically switch flags.

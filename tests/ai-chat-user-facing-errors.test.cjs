@@ -28,7 +28,7 @@ function loadErrorFormatters(logs = []) {
   const javascript = ts.transpileModule(routeSource.slice(start, end), {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  const logger = { error: (...args) => logs.push(args), info: () => {} };
+  const logger = { error: (...args) => logs.push(args), info: (...args) => logs.push(args) };
   return new Function(
     "console",
     "z",
@@ -147,8 +147,7 @@ test("request validation names an empty message without leaking Zod detail", () 
   assert.doesNotMatch(message, /\[|code|origin/);
   assert.equal(message.includes("\n"), false);
   assert.equal(logs.length, 1);
-  assert.match(logs[0][0], /request-validation user-facing error/);
-  assert.equal(logs[0][1], result.error);
+  assert.deepEqual(logs[0], ["[ai/chat/stream] request-validation refused: invalid request"]);
 });
 
 test("malformed JSON uses its own plain request-body message", () => {
@@ -163,8 +162,7 @@ test("malformed JSON uses its own plain request-body message", () => {
     "Invalid request: the request body could not be read."
   );
   assert.equal(logs.length, 1);
-  assert.match(logs[0][0], /request-body user-facing error/);
-  assert.equal(logs[0][1], error);
+  assert.deepEqual(logs[0], ["[ai/chat/stream] request-body refused: invalid JSON"]);
   assert.match(
     routeSource,
     /try \{\s*json = await request\.json\(\);\s*\} catch \(error\) \{\s*return createSseErrorResponse\(requestErrorMessage\(error, "body"\)\);\s*\}/

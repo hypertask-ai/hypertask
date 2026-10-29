@@ -1,6 +1,7 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
-import { useAiDefaultModelContext, useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
+import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
@@ -8,6 +9,7 @@ import {
   aiModelDefinitions,
   aiModelOptions,
   isAiModelOptionVisible,
+  isGrokGemini4ModelKey,
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelDefinition,
@@ -81,6 +83,9 @@ const AIModelDropDownList = ({
   visibleModelOptions,
   haiku55Enabled,
   haikuDefaultEnabled,
+  keyboardNavigation = false,
+  onKeyboardClose,
+  shortcutHint,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -96,11 +101,14 @@ const AIModelDropDownList = ({
   visibleModelOptions: TAiModelOption[];
   haiku55Enabled: boolean;
   haikuDefaultEnabled: boolean;
+  keyboardNavigation?: boolean;
+  onKeyboardClose?: () => void;
+  shortcutHint?: string;
 }) => {
-  const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
-  const modelFlagsLoaded = haikuDefaultLoaded &&
-    (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded);
+  const grokGemini4Loaded = useFlagLoaded(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
+  const modelFlagsLoaded = (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded) &&
+    (!isGrokGemini4ModelKey(aiSelected?.id) || grokGemini4Loaded);
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
     : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
@@ -265,7 +273,8 @@ const AIModelDropDownList = ({
       event.stopPropagation();
       setIsOpen(false);
       setSubmenu(null);
-      triggerRef.current?.focus();
+      if (keyboardNavigation) onKeyboardClose?.();
+      else triggerRef.current?.focus();
     };
 
     document.addEventListener("mousedown", closeOnOutsideClick);
@@ -274,7 +283,7 @@ const AIModelDropDownList = ({
       document.removeEventListener("mousedown", closeOnOutsideClick);
       document.removeEventListener("keydown", closeOnEscape, true);
     };
-  }, [isOpen]);
+  }, [isOpen, keyboardNavigation, onKeyboardClose]);
 
   useEffect(() => {
     if (!mobileQuickPicker || !isOpen) return;
@@ -331,6 +340,48 @@ const AIModelDropDownList = ({
     optionCallback(nextOption);
     setSubmenu(null);
   };
+
+  const keyboardProps = keyboardNavigation ? {
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const target = event.target;
+      if (!(target instanceof HTMLButtonElement)) return;
+      if (!isOpen) {
+        setIsOpen(true);
+        requestAnimationFrame(() => menuRef.current?.querySelector<HTMLButtonElement>("button:not([disabled])")?.focus());
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        if (target.getAttribute("aria-expanded") === "false") target.click();
+        else return;
+      }
+      requestAnimationFrame(() => {
+        const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+        const index = buttons.indexOf(target);
+        const direction = event.key === "ArrowUp" ? -1 : 1;
+        buttons[(index + direction + buttons.length) % buttons.length]?.focus();
+      });
+    },
+    onClickCapture: (event: React.MouseEvent<HTMLDivElement>) => {
+      const target = event.target instanceof Element ? event.target.closest("button") : null;
+      if (!target || event.detail !== 0) return;
+      if (target === triggerRef.current || target.hasAttribute("aria-expanded")) {
+        requestAnimationFrame(() => {
+          const buttons = Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not([disabled])") ?? []);
+          const index = buttons.indexOf(target);
+          buttons[index + 1]?.focus();
+        });
+      } else {
+        requestAnimationFrame(() => {
+          setIsOpen(false);
+          setSubmenu(null);
+          onKeyboardClose?.();
+        });
+      }
+    },
+  } : {};
 
   const submenuPositionClass = {
     right: "left-[calc(100%+6px)] top-0",
@@ -475,7 +526,7 @@ const AIModelDropDownList = ({
   }
 
   return (
-    <div ref={rootRef} className="relative inline-block min-w-0 max-w-full text-left">
+    <div ref={rootRef} {...keyboardProps} data-ai-chat-model={keyboardNavigation || undefined} className="relative inline-block min-w-0 max-w-full text-left">
       <button
         ref={triggerRef}
         type="button"
@@ -483,7 +534,7 @@ const AIModelDropDownList = ({
         title={
           isByokPlan && !anyListedModelEnabled
             ? "Add team API keys to enable AI models"
-            : undefined
+            : shortcutHint
         }
         className={cn(
           "inline-flex w-full min-w-0 items-center rounded-[4px] px-2 py-1 text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active",
@@ -563,7 +614,7 @@ const AIModelDropDownList = ({
           {submenu === "model" ? (
             <div
               className={cn(
-                "z-10 max-h-[360px] overflow-y-auto rounded-[4px] bg-modalBackground p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)] scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/20 dark:scrollbar-thumb-[#4F5766]",
+                "z-10 max-h-[360px] overflow-y-auto rounded-[4px] bg-modalBackground p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.45)] scrollbar-thin scrollbar-track-transparent scrollbar-thumb-menu-scroll",
                 stackSubmenus
                   ? "relative mt-1 w-full"
                   : cn("absolute w-[220px] max-w-[calc(100vw-16px)]", submenuPositionClass)
@@ -803,14 +854,18 @@ type AIModelDropDownButtonProps = Omit<
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
+  const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
     ? aiModelOptions
     : aiModelOptions.filter((option) => option.modelKey !== "deepseek-v4.1-flash-fast");
-  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
+  const gatedModelOptions = grokGemini4Enabled
+    ? flagModelOptions
+    : flagModelOptions.filter((option) => !isGrokGemini4ModelKey(option.modelKey));
   const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
-    ? flagModelOptions.filter((option) => isAiModelOptionVisible(option, true, true))
-    : flagModelOptions.filter((option) => isAiModelOptionVisible(option, false, true));
+    ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
+    : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
 };
 

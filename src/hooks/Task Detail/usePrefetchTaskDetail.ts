@@ -11,8 +11,6 @@ import {
   getDraftsHelper,
 } from "@/utils/api/Task Detail";
 
-import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { fetchScopedTaskDetail, fetchTaskDetailMeta, taskDetailReadKey, TASK_DETAIL_READ_FRESH_MS } from "@/lib/taskDetailReads";
 
 const TASK_DETAIL_PREFETCH_STALE_TIME = 5 * 60 * 1000;
@@ -54,11 +52,8 @@ export const usePrefetchTaskDetailTargets = ({
   userId?: number;
 }) => {
   const queryClient = useQueryClient();
-  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
-  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
 
   return useCallback((targets: PrefetchTaskDetailTarget[]) => {
-    if (!flagReady) return;
     const prefetch = (
       queryKey: readonly unknown[],
       queryFn: () => Promise<unknown> | unknown,
@@ -73,7 +68,7 @@ export const usePrefetchTaskDetailTargets = ({
     };
 
     targets.forEach((target) => {
-      if (dedupe && userId) {
+      if (userId) {
         if (target.uniqueIndex != null) void queryClient.prefetchQuery({
           queryKey: taskDetailReadKey(userId, target.id),
           queryFn: ({ signal }) => fetchScopedTaskDetail(target.id, target.projectId, target.uniqueIndex!, signal, { cache: "no-store", credentials: "same-origin" }),
@@ -106,7 +101,7 @@ export const usePrefetchTaskDetailTargets = ({
         getDraftsHelper(target.id, userId),
       );
     });
-  }, [queryClient, userId, dedupe, flagReady]);
+  }, [queryClient, userId]);
 };
 
 export const usePrefetchTaskDetail = ({

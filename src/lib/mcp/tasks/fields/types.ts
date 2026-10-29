@@ -60,6 +60,8 @@ export interface UpdateTaskBody {
     inline_images?: boolean;
     title?: string;
     sectionId?: number;
+    expected_section_id?: number;
+    expected_updated_at?: string;
     status?: typeof VALID_STATUSES[number];
     labels?: (string | number)[];
     add_labels?: (string | number)[];

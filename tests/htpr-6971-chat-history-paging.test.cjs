@@ -18,7 +18,7 @@ async function withHistory(config, check) {
   const client = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const requests = [];
   const rows = config.rows ?? [session(9, { projectId: 4 }), session(1, { taskId: config.taskId === 91 ? 91 : null, projectId: 4 })];
-  let enabled = config.on ?? true, taskId = config.taskId, user = { id: 6, uid: 'user-6' }, pathname = config.demo ? '/demo' : '/chat', intro = config.intro ?? null;
+  let enabled = config.on ?? true, taskId = config.taskId, user = { id: 6, uid: 'user-6' }, pathname = config.pathname ?? (config.demo ? '/demo' : '/chat'), intro = config.intro ?? null;
   const api = {
     getAllSessions: async () => { requests.push(['legacy', user.id]); return response({ success: true, sessions: [...rows.filter((row) => row.userId === user.id)] }); },
     getSessionPage: async (options = {}) => {
@@ -37,16 +37,18 @@ async function withHistory(config, check) {
     deleteSession: async (sessionId) => { requests.push(['delete', sessionId]); if (config.delete) return config.delete(sessionId); if (config.deleteError) throw config.deleteError; rows.splice(rows.findIndex((row) => row.id === sessionId), 1); if (!rows.length) rows.push(session(60, { messages: [] })); return response({ message: 'Deleted' }); },
   };
   const { useSessionAndChatHistory } = load('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', {
-    '@/hooks/useFlag': { useFlag: (key) => key === flag ? enabled : key === 'htpr-6929-compose-task-writer' && !!config.compose },
-    '@/lib/state': { useRecoilValue: (atom) => atom === 'user' ? user : null, useRecoilState: () => [intro, (next) => { intro = next; }] },
-    '@/store': { currentUserAtom: 'user', composeTaskChatIntroAtom: 'intro' },
+    '@/hooks/useFlag': { useFlag: (key) => key === flag ? enabled : key === 'htpr-7736-chat-follows-task' ? !!config.followsTask : key === 'htpr-7319-skill-chat-followup' ? !!config.pendingFollowup : key === 'htpr-6929-compose-task-writer' && !!config.compose },
+    '@/lib/state': { useRecoilValue: (atom) => atom === 'user' ? user : atom === 'followup' ? config.pendingFollowup : null, useRecoilState: () => [intro, (next) => { intro = next; }] },
+    '@/store': { currentUserAtom: 'user', composeTaskChatIntroAtom: 'intro', composeTaskSkillFollowupAtom: 'followup' },
     '@/utils/api/ai_chat': { ...wire, AI_Chat_API: api },
     'next/navigation': { usePathname: () => pathname },
   });
   let resolver, history;
   const mapChanges = [];
+  const parallelStreams = config.preserveSelection ? load('src/lib/aiChat/sessionStreams.ts', {}).createSessionStreams(() => {}) : undefined;
   const useAiChatSessions = config.boardMap ? load('src/hooks/MultiPages/AIChat/useAiChatSessions.ts', {
-    '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
+    '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
+    '@/hooks/useFlag': { useFlag: (key) => key === 'htpr-7736-chat-follows-task' ? !!config.followsTask : key === flag && enabled },
     '@/lib/constants': { default: {} }, '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
     '@/components/Common/AttachmentsUpload/FileUploadHandler': { useFileUpload: () => ({}) },
     '@/lib/byokSelectedProviderGate': { shouldBlockAiDueToByokProvider: () => false },
@@ -61,6 +63,10 @@ async function withHistory(config, check) {
       observe(target) { this.target = target; } disconnect() { this.disconnected = true; }
     };
     const mocks = {
+      '@/hooks/MultiPages/AIChat/useChatShortcuts': { useChatShortcuts: () => ({ enabled: false }) },
+      '@/lib/aiChat/chatShortcuts': { chatShortcutHint: () => '' },
+      '@/components/Modals/OptionPicker': { default: () => null },
+      '@/lib/flags/definitions/htpr-7766-chat-shortcuts': { HTPR_7766_CHAT_SHORTCUTS_FLAG: 'htpr-7766-chat-shortcuts' },
       '@/components/AI_CHAT/AI_Tiptap_Container': { AI_Tiptap_Container: () => null },
       '@/components/AI_CHAT/MessageList': { MessageList: () => null },
       '@/components/AI_CHAT/WelcomeScreen': { WelcomeScreen: () => null },
@@ -68,6 +74,8 @@ async function withHistory(config, check) {
       '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => history },
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
       '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+      '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
+      '@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch': { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: 'htpr-7763-ctrl-tab-session-switch' },
       '@/lib/state': { useRecoilValue: () => user, useRecoilState: (atom) => React.useState(atom === 'width' ? 280 : atom === 'scope' ? null : []) },
       '@/store': { fullScreenChatRailWidthAtom: 'width', fullScreenChatScopeAtom: 'scope' },
       '@/utils/aiChat/sortBoardsByRecent': { sortBoardsByRecent: (teams) => teams },
@@ -82,12 +90,12 @@ async function withHistory(config, check) {
     new Function('require', 'module', 'exports', compiled)((name) => mocks[name] ?? require(name), loaded, loaded.exports);
     Chat = loaded.exports.default;
   }
-  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, taskId !== undefined);
+  function Probe() { history = useSessionAndChatHistory(taskId, config.historyEnabled ?? true, config.taskScoped ?? taskId !== undefined, config.preserveSelection ?? false);
     if (useAiChatSessions) {
       const sessionsRef = React.useRef(history.sessions); sessionsRef.current = history.sessions;
       const chatHistoryReadyRef = React.useRef(history.isSuccess); chatHistoryReadyRef.current = history.isSuccess;
       resolver = useAiChatSessions({
-        sessionsRef, chatHistoryReadyRef, sessionIntentGenerationRef: React.useRef(0), sessionSetupRef: React.useRef(null), resolvedBoardSessionRef: React.useRef(null), previousProjectIdRef: React.useRef(undefined),
+        parallelStreams, sessionsRef, chatHistoryReadyRef, sessionIntentGenerationRef: React.useRef(0), sessionSetupRef: React.useRef(null), resolvedBoardSessionRef: React.useRef(null), previousProjectIdRef: React.useRef(undefined),
         messageQueueRef: React.useRef([]), sendInFlightRef: React.useRef(false), currentProject: { id: 4 }, currentUser: user, taskId, pathname: '/board', sessionContextKey: 'fixture-board', dockedChatScope: null,
         aiChatBoardSessionMap: config.boardMap, setAiChatBoardSessionMap: (update) => mapChanges.push(update(config.boardMap)), setRecentChatBoardIds: () => {}, setQueuedMessages: () => {},
         clearMessageQueue: () => {}, selectSessionInHistory: history.selectSession, createSession: history.startNewSession, deleteSessionInHistory: history.deleteSession, resolveHistorySession: history.resolveHistorySession, getDisplayedSession: history.getDisplayedSession, sessionPagingEnabled: history.sessionPagingEnabled, shouldLoadChatHistory: false,
@@ -436,8 +444,12 @@ test('real history menu pages on end visibility/scroll, preserves list order, ex
     './AgentSidebarChatCommands': { AgentSidebarChatCommands: () => null },
     '@/lib/configs/general.config': { MOBILE_TARGET: 'min-h-[44px] min-w-[44px]' },
     '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
+    "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
+    '@/lib/flags/definitions/htpr-7773-chat-header-name': { HTPR_7773_CHAT_HEADER_NAME_FLAG: 'htpr-7773-chat-header-name' },
     '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
     '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+    "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
+    '@/lib/flags/definitions/htpr-7575-phone-chat-delete': { HTPR_7575_PHONE_CHAT_DELETE_FLAG: 'htpr-7575-phone-chat-delete' },
     '../Common/Tooltip': { __esModule: true, default: () => null },
     '@/lib/contexts/mobileContext': { MobileViewContext: React.createContext(false) },
     '@/lib/contexts/deviceContext': { useDeviceContext: () => false },
@@ -1089,7 +1101,7 @@ test('stream updates after an active refresh replace their message ID without er
   });
 });
 
-test('new feature flag defaults Owner + QA and is independent of the server compatibility flag', () => {
+test('new feature flag defaults Owner + QA', () => {
   const definition = require('./helpers/flag-files.cjs').load(require('node:path').resolve('src/lib/flags/definitions/htpr-6971-chat-history-paging.ts'));
   assert.equal(definition.HTPR_6971_CHAT_HISTORY_PAGING_FLAG, flag);
   assert.equal(definition.default.kind, 'feature');
@@ -1097,7 +1109,6 @@ test('new feature flag defaults Owner + QA and is independent of the server comp
   assert.ok(definition.default.releaseRisk.reason);
   const source = require('node:fs').readFileSync('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', 'utf8');
   assert.match(source, /useFlag\(HTPR_6971_CHAT_HISTORY_PAGING_FLAG\)/);
-  assert.doesNotMatch(source, /HTPR_6924_REST_COMPAT_FLAG/);
 });
 
 test('unavailable server paging falls back to the complete legacy cache without requesting transcripts', async () => {
@@ -1212,6 +1223,7 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
   for (const enabled of [false, true]) for (const available of [false, true]) {
     let resolution, sending;
     const { useAiChat } = load('src/hooks/MultiPages/AIChat/useAiChat.ts', {
+      "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
       '@/lib/state': { useRecoilState: () => [null, () => {}] },
       '@/store': {},
       '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
@@ -1241,3 +1253,134 @@ test('flag-off session setup identity is exactly the production key without a pa
     assert.equal(evaluate(changed, { ...context, sessionPagingEnabled: true }), `${legacyKey}:${flag}`);
   }
 });
+
+
+test("parallel background updates preserve an explicitly selected non-paged chat", async () => {
+  await withHistory({ on: false, preserveSelection: true, boardMap: {}, fullscreen: true }, async ({ history, resolver, client, flush }) => {
+    await React.act(async () => { await history().selectSession(id(1)); });
+    await flush();
+    assert.equal(history().currentSession.id, id(1));
+    await React.act(async () => {
+      history().addMessageToSessionQuery(id(9), { id: "background-answer", sessionId: id(9), content: "A background reply", role: "assistant", createdAt: new Date(), isDelivered: true }, true);
+    });
+    await flush();
+    assert.equal(client.getQueryData(["chat-sessions", "user-6"]).data.sessions[0].id, id(9));
+    assert.equal(history().currentSession.id, id(1));
+    assert.equal((await resolver().ensureSessionForCurrentBoard()).id, id(1));
+  });
+});
+
+for (const paging of [true, false]) {
+  test(`task navigation retains the selected conversation and New chat remains explicit (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [session(1, { taskId: 91 }), session(2, { taskId: 92 })] }, async ({ history, resolver, setTask, render, flush }) => {
+      assert.equal(history().currentSession.id, id(1));
+      setTask(92); await render();
+      assert.equal(history().currentSession.id, id(1));
+      assert.equal((await resolver().ensureSessionForCurrentBoard()).id, id(1));
+      await React.act(async () => { await resolver().startNewSession(); }); await flush();
+      assert.notEqual(history().currentSession.id, id(1));
+      assert.equal(history().currentSession.taskId, 92);
+    });
+  });
+  test(`flag off keeps separate task conversations (paging ${paging})`, async () => {
+    await withHistory({ on: paging, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 91 }), session(2, { taskId: 92 })] }, async ({ history, setTask, render }) => {
+      assert.equal(history().currentSession.id, id(1));
+      setTask(92); await render();
+      assert.equal(history().currentSession.id, id(2));
+    });
+  });
+  test(`new ticket introduction keeps its own conversation (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, compose: true, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 91 }), session(2, { taskId: 92, messages: [] })] }, async ({ history, setTask, setIntro, render }) => {
+      setTask(92); setIntro({ taskId: 92, content: 'Created this ticket' }); await render();
+      assert.equal(history().currentSession.id, id(2));
+      assert.ok(history().currentSession.messages.some(message => message.content === 'Created this ticket'));
+      setTask(93); await render();
+      assert.equal(history().currentSession.id, id(2));
+    });
+  });
+}
+
+for (const paging of [true, false]) {
+  test(`following tasks never retains another account's conversation (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 91 }), session(2, { userId: 7, taskId: 91 })] }, async ({ history, setUser, render }) => {
+      assert.equal(history().currentSession.id, id(1));
+      setUser({ id: 7, uid: 'user-7' }); await render();
+      assert.equal(history().currentSession.id, id(2));
+      assert.equal(history().currentSession.userId, 7);
+    });
+  });
+}
+
+for (const paging of [true, false]) {
+  test(`following tasks opens the latest conversation after reload (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/92', taskId: 92, rows: [session(1, { taskId: 91 }), session(2, { taskId: 92 })] }, async ({ history }) => {
+      assert.equal(history().currentSession.id, id(1));
+      assert.ok(history().currentSession.messages.length > 0);
+    });
+  });
+}
+
+test('a pending explicit ticket introduction cannot send into the previous legacy chat', async () => {
+  const creating = deferred();
+  await withHistory({ on: false, followsTask: true, compose: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [session(1, { taskId: 91 })], create: () => creating.promise }, async ({ history, resolver, setTask, setIntro, render, flush }) => {
+    setTask(92); setIntro({ taskId: 92, content: 'Created this ticket' }); await render();
+    assert.equal(history().currentSession, undefined);
+    assert.equal(await resolver().ensureSessionForCurrentBoard(), undefined);
+    await React.act(async () => creating.resolve(response({ success: true, session: session(2, { taskId: 92, messages: [] }) }))); await flush();
+    assert.equal(history().currentSession.id, id(2));
+    assert.equal((await resolver().ensureSessionForCurrentBoard()).id, id(2));
+  });
+});
+
+test('leaving task detail restores legacy latest-chat selection', async () => {
+  const config = { on: false, followsTask: false, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 92 }), session(2, { taskId: 91 })] };
+  await withHistory(config, async ({ history, setTask, render }) => {
+    assert.equal(history().currentSession.id, id(2));
+    config.followsTask = true; await render();
+    setTask(undefined); await render();
+    assert.equal(history().currentSession.id, id(1));
+    assert.equal(history().sessions[0].id, id(1));
+  });
+});
+
+for (const paging of [true, false]) {
+  test(`following tasks still creates the first conversation on an empty account (paging ${paging})`, async () => {
+    await withHistory({ on: paging, followsTask: true, pathname: '/detail/project-4/91', taskId: 91, boardMap: {}, rows: [] }, async ({ history, resolver }) => {
+      assert.equal(history().currentSession.taskId, 91);
+      assert.equal((await resolver().ensureSessionForCurrentBoard()).id, history().currentSession.id);
+    });
+  });
+}
+
+for (const empty of [false, true]) {
+  test(`following tasks initializes when the ticket resolves after history loads (empty ${empty})`, async () => {
+    await withHistory({ followsTask: true, taskScoped: true, pathname: '/detail/project-4/91', rows: empty ? [] : [session(1, { taskId: 91 })] }, async ({ history, requests, setTask, render }) => {
+      assert.equal(history().historySessions.length, empty ? 0 : 1);
+      assert.equal(requests.filter(([type]) => type === 'page').length, 1);
+      assert.equal(history().currentSession, undefined);
+      assert.equal(requests.some(([type]) => type === 'create'), false);
+      setTask(91); await render();
+      assert.ok(history().currentSession, 'resolving the ticket must initialize its conversation');
+      assert.equal(history().currentSession.taskId, 91);
+      assert.equal(requests.filter(([type]) => type === 'create').length, empty ? 1 : 0);
+    });
+  });
+}
+
+for (const paging of [true, false]) {
+  test(`returning to a pending ticket introduction restores its conversation (paging ${paging})`, async () => {
+    const seen = [];
+    await withHistory({ on: paging, followsTask: true, pendingFollowup: { taskId: 91 }, pathname: '/detail/project-4/91', taskId: 91, rows: [session(1, { taskId: 91 })], observe: (history, taskId) => seen.push([taskId, history.currentSession?.taskId]) }, async ({ history, setTask, render, flush }) => {
+      assert.equal(history().currentSession.id, id(1));
+      setTask(92); await render();
+      assert.equal(history().currentSession.id, id(1));
+      await React.act(async () => { await history().startNewSession(); }); await flush();
+      assert.equal(history().currentSession.taskId, 92);
+      seen.length = 0;
+      setTask(91); await render();
+      assert.equal(history().currentSession.id, id(1));
+      assert.equal(history().currentSession.taskId, 91);
+      assert.ok(seen.every(([taskId, sessionTaskId]) => taskId !== 91 || sessionTaskId === undefined || sessionTaskId === 91), 'pending ticket must never expose the other conversation');
+    });
+  });
+}

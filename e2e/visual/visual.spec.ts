@@ -18,9 +18,10 @@ const screens = ['board', 'task-detail', 'comment-box', 'ctrl-j', 'inbox'] as co
 async function navigate(page: Page, route: string) {
   const url = new URL(route, 'http://127.0.0.1:3100')
   url.searchParams.set('realtime', 'off')
-  const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(url.toString(), { waitUntil: 'load' })
-  const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
+  const flagsResponse = await page.request.get(new URL('/api/flags', url).toString())
+  expect(flagsResponse.ok()).toBe(true)
+  const { flags } = await flagsResponse.json() as { flags: Record<string, boolean> }
   for (const [key, enabled] of Object.entries(fixture.flags)) expect(flags[key] === true, `visual flag ${key}`).toBe(enabled)
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'porcelain')
 }

@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
+import { signalAiChip } from "@/lib/ai/chipEvents";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -6,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, inViewObjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG } from "@/lib/flags/keys";
+import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
 
@@ -37,6 +38,9 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
+  const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
+  let chipSignal: typeof signalAiChip | undefined;
+  if (chipEventsEnabled) chipSignal = signalAiChip;
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
   let pendingFollowup: typeof pendingFollowupState = null;
   if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
@@ -66,6 +70,12 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     if (showTicketQuestions && newTicketId === questionsTaskId) setQuestionsTaskId(null);
   }, [showTicketQuestions, newTicketId, questionsTaskId, setQuestionsTaskId]);
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
+  const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
+  useEffect(() => {
+    if (!chipSignal || !active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;
+    chipSignal({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
+    return () => chipSignal({ kind: "dismiss", surface: "new-ticket-questions" });
+  }, [chipSignal, active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey]);
 
   useLayoutEffect(() => {
     registerMessageListRef(messageListRef.current);
@@ -108,7 +118,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
           away: !nearBottom && (movedUp || Boolean(saved?.away)) });
         handleMessageListScroll(element);
       }}
-      className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin  hover:scrollbar-thumb-gray-500  scrollbar-thumb-gray-500 scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766]"
+      className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"
     >
       <div ref={messagesContentRef} className="space-y-2">
         {messages.map((message) => (
@@ -129,12 +139,15 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
         {showTicketQuestions && newTicketQuestions.length > 0 && (
           <div className="flex flex-col gap-2 px-2">
             <p className="px-2 text-micro text-text-light-gray">Questions and ideas for this ticket</p>
-            {newTicketQuestions.map((question) => (
+            {newTicketQuestions.map((question, index) => (
               <button
                 key={question}
                 data-compose-question
                 className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full"
-                onClick={() => handleSendMessage(question)}
+                onClick={() => {
+                  chipSignal?.({ kind: "clicked", text: question, index, chipType: "generated-question" });
+                  handleSendMessage(question);
+                }}
               >
                 {question}
               </button>

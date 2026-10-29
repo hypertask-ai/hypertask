@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { useHydrated } from "@/hooks/General/useHydrated";
+import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { projectDisplayDay } from "@/lib/firstScreen/display";
 import { useEffect, useRef, useState } from "react";
@@ -25,6 +28,10 @@ interface MobileTabBarProps {
 
 const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
   const pathname = usePathname();
+  const deferChatOpen = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
+  const chatOpenFlagReady = useFlagReady(HTPR_8038_CHAT_OPENER_READY_FLAG);
+  const hydrated = useHydrated();
+  const openerDisabled = !hydrated && (!chatOpenFlagReady || deferChatOpen);
   const dockRef = useRef<HTMLElement>(null);
   const dockOwner = useRef({});
   const snapshot = useFirstScreenSurface(currentUserId);
@@ -167,7 +174,9 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
           type="button"
           aria-pressed={showAiChatInterface}
           onClick={toggleAIChatInterface}
-          className={tabClassName(showAiChatInterface)}
+          disabled={openerDisabled}
+          aria-busy={openerDisabled || undefined}
+          className={cn(tabClassName(showAiChatInterface), "disabled:cursor-wait")}
         >
           <Sparkles size={18} strokeWidth={1.75} aria-hidden />
           <span>AI</span>

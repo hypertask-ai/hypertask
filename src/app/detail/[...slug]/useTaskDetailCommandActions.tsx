@@ -2,18 +2,20 @@ import { TaskRelations, ISection } from "@/models/model";
 import axios from "axios";
 
 import { useCallback } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import toast from "react-hot-toast";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 import { LIKESHORTCUTEVENT } from "@/lib/constants/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
-function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
+function createTaskDetailCommandActions(getContext: () => TaskDetailContext, blockerCommentEnabled: boolean) {
   const { currentId, comments, markAsDone, setCurrentTask, summarizeTicket, callBackHandlerSubtaskLinking, currentUser, currentTask, handleStarTask, navigateToNextTask, setShowRemindMeModal, callBackHandlerRemoveParent, PostFollower, queryClient, setAiChatAutoOpenSuppressed, showAiChatInterface, setAiChatExplicitOpenAt, setShowAiChatInterface, copyCommentToAiChat, summarizeComment, setEditMode, focusOn, copyTicketNumber, copyTitleAndTicketNumber, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL } = getContext();
 
 
   const callback = (payload: any, mode: string) => {
-    const { handleReplyCommentFromHTC, handleReactToCommentFromHTC, deleteComment, moveTaskToNextColumn, openAifromHtc, viewSubTasksfromHtc, copyCommentURLFromHTC, copyCommentContentFromHTC, createTaskFromCommentHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, toggleRemoveSubtaskModal, UnFollowCallback, getTask } = getContext();
+    const { handleReplyCommentFromHTC, handleReactToCommentFromHTC, deleteComment, moveTaskToNextColumn, openAifromHtc, viewSubTasksfromHtc, copyCommentURLFromHTC, copyCommentContentFromHTC, createTaskFromCommentHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, handleBlockerCommentFromHTC, toggleRemoveSubtaskModal, UnFollowCallback, getTask } = getContext();
     if (mode === taskDetailConfig.commandModes.delete) deleteComment(payload);
     else if (mode === taskDetailConfig.commandModes.archive) return markAsDone();
     else if (mode === taskDetailConfig.commandModes.acceptTask)
@@ -48,6 +50,7 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
       );
     else if (mode === taskDetailConfig.commandModes.starTask) handleStarTask();
     else if (mode === taskDetailConfig.commandModes.starComment) handleStarCommentFromHTC(payload);
+    else if (mode === "BlockerComment" && blockerCommentEnabled) void handleBlockerCommentFromHTC();
     else if (mode === taskDetailConfig.commandModes.copyFunctions) handleCopyFunctionsFromHTC(payload);
     else if (mode === taskDetailConfig.commandModes.archiveTaskNotification) navigateToNextTask(true, true);
     else if (mode === taskDetailConfig.commandModes.setReminder) setShowRemindMeModal((prev) => !prev);
@@ -259,7 +262,10 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
 }
 
 export function useTaskDetailCommandActions(getContext: () => TaskDetailContext) {
-  const actions = createTaskDetailCommandActions(getContext);
+  const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  let blockerCommentEnabled = false;
+  if (blockerCommentFlag) blockerCommentEnabled = true;
+  const actions = createTaskDetailCommandActions(getContext, blockerCommentEnabled);
   const { getCurrentCommentIndex } = actions;
   const { currentId, comments, toggleEmojiPicker, replyToCommentHandler } = getContext();
 

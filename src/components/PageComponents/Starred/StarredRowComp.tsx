@@ -551,6 +551,9 @@ const StarredRow = ({
 
   useEffect(() => {
     setSavedContent(_savedContent);
+    setSelectedIndex((index) =>
+      Math.max(0, Math.min(index, _savedContent.length - 1))
+    );
   }, [_savedContent]);
 
   return (

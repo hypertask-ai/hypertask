@@ -141,7 +141,8 @@ export async function applyPriorityUpdate(
   taskId: number,
   priorityValue: string,
   userId: number,
-  activityUser: IUser
+  activityUser: IUser,
+  options: { onlyIfUnchangedDefault?: boolean } = {},
 ): Promise<{ error: string | null }> {
   const constant = PriorityConstants.find((p) => p.Priority_Value === priorityValue);
   if (!constant) return { error: `Invalid priority "${priorityValue}"` };
@@ -151,6 +152,28 @@ export async function applyPriorityUpdate(
     include: { priority: true },
   });
   if (!task) return { error: "Task not found" };
+
+  if (options.onlyIfUnchangedDefault) {
+    if (constant.priority_index === 0) return { error: null };
+    const { count } = await prisma.priority.updateMany({
+      where: { taskId, priority_index: 0 },
+      data: {
+        taskId,
+        sectionId: task.sectionId ?? -1,
+        projectId: task.projectId,
+        addedByUserId: userId,
+        priority_index: constant.priority_index,
+        Priority_Value: constant.Priority_Value,
+      },
+    });
+    if (count) await createPriorityActivity({
+      userObj: activityUser,
+      taskId,
+      toPriority: { priority_index: constant.priority_index, Priority_Value: constant.Priority_Value },
+      fromPriority: { priority_index: 0, Priority_Value: "No Priority" },
+    });
+    return { error: null };
+  }
 
   if (constant.priority_index === 0) {
     if (task.priority) {
@@ -219,7 +242,8 @@ export async function applyEstimateUpdate(
   taskId: number,
   estimateIndex: number,
   userId: number,
-  activityUser: IUser
+  activityUser: IUser,
+  options: { onlyIfUnchangedDefault?: boolean } = {},
 ): Promise<{ error: string | null }> {
   const constant = EstimateConstants.find(
     (estimate) => estimate.estimate_index === estimateIndex
@@ -231,6 +255,28 @@ export async function applyEstimateUpdate(
     include: { estimate: true },
   });
   if (!task) return { error: "Task not found" };
+
+  if (options.onlyIfUnchangedDefault) {
+    if (constant.estimate_index === 0) return { error: null };
+    const { count } = await prisma.estimate.updateMany({
+      where: { taskId, estimate_index: 0 },
+      data: {
+        taskId,
+        sectionId: task.sectionId ?? -1,
+        projectId: task.projectId,
+        addedByUserId: userId,
+        estimate_index: constant.estimate_index,
+        estimate_value: constant.estimate_value,
+      },
+    });
+    if (count) await createEstimateActivity({
+      fromUser: activityUser,
+      taskId,
+      toEstimate: { estimate_index: constant.estimate_index, estimate_value: constant.estimate_value },
+      fromEstimate: { estimate_index: 0, estimate_value: "No size" },
+    });
+    return { error: null };
+  }
 
   if (constant.estimate_index === 0) {
     if (task.estimate) await prisma.estimate.deleteMany({ where: { taskId } });
@@ -386,14 +432,12 @@ export function applyDurableCommentAttribution<T extends object>(
   mapped: T,
   comment: any,
   userId: number,
-  projectId: number,
-  attributionEnabled: boolean
+  projectId: number
 ): T {
   return overlayDurableAgentDisplayName(mapped, {
     hasAgentRow: Boolean(comment.agent),
     visibleAgent: mapVisibleMcpAgent(comment.agent, userId, projectId),
     storedDisplayName: comment.agentDisplayName,
-    attributionEnabled,
   });
 }
 

@@ -222,7 +222,7 @@ export function useSkillSlashMenu({
             : { bottom: placement.bottom }),
           zIndex: 9999,
         }}
-        className="rounded-md shadow-xl dark:bg-[#333B47] bg-[#ffffff] flex flex-col p-2 gap-2"
+        className="rounded-md shadow-xl bg-[var(--bg-editor-menu)] flex flex-col p-2 gap-2"
       >
         <ul className="max-h-72 no-scrollbar scrollbar-none overflow-y-auto gap-1">
           {items.map((skill, i) => (
@@ -239,7 +239,7 @@ export function useSkillSlashMenu({
                 select(skill);
               }}
               className={`cursor-pointer text-content p-2 ${
-                i === index ? "bg-[#ececec] dark:bg-[#4f5766]" : "transparent"
+                i === index ? "bg-[var(--bg-editor-option-selected)]" : "transparent"
               } rounded-md py-1`}
             >
               <div className="flex gap-2 items-start px-1">

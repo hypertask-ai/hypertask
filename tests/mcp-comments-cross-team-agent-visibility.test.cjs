@@ -46,36 +46,7 @@ function loadRoute(comments) {
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/agents": { mcpVisibleAgentSelect, mapVisibleMcpAgent },
-    "@/lib/agents/publicAgent": {
-      resolvePublicAgentDisplayName({ hasAgentRow, visibleAgent, storedDisplayName, attributionEnabled }) {
-        if (hasAgentRow && !visibleAgent) return "Private agent";
-        if (!attributionEnabled && !hasAgentRow && storedDisplayName) return "Private agent";
-        const stored = storedDisplayName && String(storedDisplayName).trim();
-        if (stored) return stored;
-        const live =
-          visibleAgent &&
-          visibleAgent.displayName &&
-          String(visibleAgent.displayName).trim();
-        return live || null;
-      },
-      overlayDurableAgentDisplayName(mapped, opts) {
-        if (!opts.attributionEnabled) return mapped;
-        const name = (function resolve({ hasAgentRow, visibleAgent, storedDisplayName }) {
-          if (hasAgentRow && !visibleAgent) return "Private agent";
-          const stored = storedDisplayName && String(storedDisplayName).trim();
-          if (stored) return stored;
-          const live =
-            visibleAgent &&
-            visibleAgent.displayName &&
-            String(visibleAgent.displayName).trim();
-          return live || null;
-        })(opts);
-        const next = { ...mapped };
-        if (name) next.agent_display_name = name;
-        else delete next.agent_display_name;
-        return next;
-      },
-    },
+    "@/lib/agents/publicAgent": require("./task-route-loader.cjs").load("src/lib/agents/publicAgent.ts", {}),
     "@/utils/controllers/urls/extractUrlsFromContent": {
       buildMcpImageUrls: () => [],
       persistUrlsForComment: async () => {},
@@ -129,11 +100,11 @@ function loadRoute(comments) {
       reactionAgentIds: () => [],
     },
     "@/lib/flags": {
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+
       isFeatureEnabled: async () => false,
     },
     "@/lib/flags/keys": {
-      HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
+
     },
     "@/lib/mcp/listQuery": {
       parseNumericCursor: () => null,
@@ -201,6 +172,7 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
       agentDisplayName: "Outsider Team Agent",
       agent: outsiderAgent,
     }),
+    commentFixture({ id: 3, agentDisplayName: "Deleted Team Agent" }),
     commentFixture({
       id: 2,
       agentDisplayName: "Insider Team Agent",
@@ -215,10 +187,13 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
   });
 
   assert.equal(response.status, 200);
-  const [outsiderComment, insiderComment] = response.body.comments;
+  const [outsiderComment, deletedComment, insiderComment] = response.body.comments;
 
   assert.equal(outsiderComment.agent, undefined);
   assert.equal(outsiderComment.agent_display_name, "Private agent");
+
+  assert.equal(deletedComment.agent_display_name, "Deleted Team Agent");
+  assert.equal(deletedComment.agent, undefined);
 
   assert.equal(insiderComment.agent?.id, "insider-agent");
   assert.equal(insiderComment.agent_display_name, "Insider Team Agent");
