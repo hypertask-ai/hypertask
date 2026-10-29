@@ -17,6 +17,7 @@ import { getRedis } from "@/lib/redis";
 const ROOT = "ai-model-canary:v1";
 const LATEST = `${ROOT}:latest`;
 const LOCK = `${ROOT}:lock`;
+const STATE = `${ROOT}:state`;
 const PROBE_MS = 45_000;
 const BUDGET_MS = 230_000;
 const RELEASE = `if redis.call("GET", KEYS[1]) == ARGV[1] then return redis.call("DEL", KEYS[1]) end return 0`;
@@ -69,11 +70,24 @@ export function modelCanaryInventory(): Target[] {
   ];
 }
 
-function modelCanaryGatewayKey() {
+export type ModelCanaryState = "never_run" | "enabled" | "disabled";
+
+export type ModelCanaryStateRow = {
+  state: ModelCanaryState;
+  reason: string | null;
+  checkedAt: string | null;
+};
+
+function modelCanaryGatewayKeyState(): { key: string; reason: null } | { key: undefined; reason: string } {
   const apiKey = process.env.MODEL_CANARY_AI_GATEWAY_API_KEY?.trim();
-  return apiKey && /^vck_\S+$/.test(apiKey) && apiKey !== process.env.AI_GATEWAY_API_KEY?.trim()
-    ? apiKey
-    : undefined;
+  if (!apiKey) return { key: undefined, reason: "missing_internal_gateway_key" };
+  if (!/^vck_\S+$/.test(apiKey)) return { key: undefined, reason: "malformed_internal_gateway_key" };
+  if (apiKey === process.env.AI_GATEWAY_API_KEY?.trim()) return { key: undefined, reason: "internal_key_equals_trials_key" };
+  return { key: apiKey, reason: null };
+}
+
+function modelCanaryGatewayKey() {
+  return modelCanaryGatewayKeyState().key;
 }
 
 function originalError(error: unknown) {
@@ -147,10 +161,22 @@ export async function probeModelCanary(option: TAiModelOption, lane: string, cre
 
 export async function readModelCanaryStatus() {
   const redis = await getRedis();
-  const [checkedAt, stored] = await Promise.all([redis.get(`${ROOT}:checkedAt`), redis.hvals(LATEST)]);
+  const [checkedAt, stored, stateRow] = await Promise.all([redis.get(`${ROOT}:checkedAt`), redis.hvals(LATEST), redis.get(STATE)]);
   const models = stored.map((value) => JSON.parse(value) as ModelCanaryRow).map((row) => ({ ...row, id: row.optionId, status: row.outcome, lastCheckedAt: row.checkedAt }));
   models.sort((a, b) => modelCanaryKey(a.optionId, a.lane).localeCompare(modelCanaryKey(b.optionId, b.lane)));
-  return { checkedAt, models };
+  const state: ModelCanaryStateRow = stateRow
+    ? JSON.parse(stateRow) as ModelCanaryStateRow
+    : { state: checkedAt ? "enabled" : "never_run", reason: null, checkedAt };
+  const { key, reason } = modelCanaryGatewayKeyState();
+  return {
+    checkedAt,
+    state: state.state,
+    reason: state.reason,
+    stateCheckedAt: state.checkedAt,
+    configured: Boolean(key),
+    configuredReason: key ? null : reason,
+    models,
+  };
 }
 
 export async function runModelCanary(): Promise<ModelCanaryCounts> {
@@ -170,8 +196,11 @@ export async function runModelCanary(): Promise<ModelCanaryCounts> {
 
 async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCounts> {
   const counts: ModelCanaryCounts = { checked: 0, pass: 0, fail: 0, skipped: 0, inconclusive: 0 };
-  const gatewayKey = modelCanaryGatewayKey();
-  if (!gatewayKey) return counts;
+  const { key: gatewayKey, reason } = modelCanaryGatewayKeyState();
+  if (!gatewayKey) {
+    await (await getRedis()).set(STATE, JSON.stringify({ state: "disabled", reason, checkedAt: new Date().toISOString() }));
+    return counts;
+  }
   const started = Date.now();
   const deadline = started + BUDGET_MS;
   const redis = await getRedis();
@@ -272,8 +301,10 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
 if redis.call("GET", KEYS[1]) ~= ARGV[1] then return 0 end
 redis.call("SET", KEYS[2], ARGV[2])
 redis.call("SET", KEYS[3], ARGV[3])
+redis.call("SET", KEYS[4], ARGV[4])
 return 1
-`, 3, LOCK, `${ROOT}:pending`, `${ROOT}:checkedAt`, token, JSON.stringify(remaining), new Date().toISOString());
+`, 4, LOCK, `${ROOT}:pending`, `${ROOT}:checkedAt`, STATE, token, JSON.stringify(remaining), new Date().toISOString(),
+      JSON.stringify({ state: "enabled", reason: null, checkedAt: new Date().toISOString() }));
   } finally {
     await redis.eval(RELEASE, 1, LOCK, token);
   }
