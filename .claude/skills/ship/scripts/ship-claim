@@ -2,9 +2,10 @@
 # ship-claim: the whole claim step, with a race check (YPER4-264).
 #   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
 #   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
-#   ship-claim hold <TICKET>                            read-only: would unfinished work refuse this claim?
+#   ship-claim hold <TICKET>                            read-only: would unfinished work, the queue brake or infra first refuse this claim?
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error,
-#   4 HOLD (this RUNNER n has open PRs or unfinished merged work: finish it, claim nothing new).
+#   4 HOLD (this RUNNER n has open PRs or unfinished merged work: finish it, claim nothing new; or, for an app
+#   ticket, the PR queue is full (more than QUEUE_MAX open non-draft PRs: infra only) or a free Fleet Infra ticket waits).
 # Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id, then log ids.
 # Ownership is the session resume id in the comment text, not the agent name. Assignment is never
 # consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
@@ -58,14 +59,40 @@ decide() {
       end' "$2"
 }
 
+QUEUE_MAX=20  # queue brake: above this many open non-draft PRs, RUNNER n may claim YPER4 (Fleet Infra) tickets only
+
+# Infra first (Valentin, 2026-10-27: "infrastructure fixes always go first, in code, not prose"). After the open-PR and
+# unfinished-merged-work holds, a NEW app (non-YPER4) claim is refused while more than QUEUE_MAX non-draft PRs are open
+# or while board 4060 Backlog has a free ticket (no agent, no agent assignee, not "do not touch"). Reads every page.
+# A ticket that already has an open PR is adoption, not new work, and is never braked.
+infra_free() {
+  local page offset=0 total count found=""
+  while :; do
+    page=$(${SHIP_CLAIM_HYPERTASK:-hypertask} tasks list --project 4060 --status Normal --limit 100 --offset "$offset" --json) || return 1
+    jq -e '.success == true and (.tasks | type == "array") and all(.tasks[];
+      (.ticketNumber | type == "string") and (.section | type == "string"))' <<<"$page" >/dev/null || return 1
+    total=$(jq '.total // (.tasks | length)' <<<"$page"); count=$(jq '.tasks | length' <<<"$page")
+    found+=$(jq -r '[.tasks[]
+      | select(.section == "Backlog" and ((.title // "") | ascii_downcase | contains("do not touch") | not)
+          and .agent == null and ([.assignees[]? | select(.agent)] | length) == 0)
+      | .ticketNumber] | join(" ")' <<<"$page") || return 1
+    found+=' '
+    [ "$((offset + count))" -lt "$total" ] || break
+    [ "$count" -gt 0 ] || return 1
+    offset=$((offset + count))
+  done
+  read -ra found <<<"$found"; echo "${found[*]:0:3}"
+}
+
 hold_check() {
-  local t=$1 rn open board page total offset count expected_total candidates ticket project number merged matches seen unfinished=''
+  local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
-  open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title) \
+  open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft) \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
   jq -e 'type == "array" and length < 300 and all(.[];
-    (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string"))' <<<"$open" >/dev/null \
+    (.number | type == "number") and (.headRefName | type == "string") and (.title | type == "string")
+    and (.isDraft | type == "boolean"))' <<<"$open" >/dev/null \
     || { echo "ship-claim: HOLD. Open PR read is malformed or incomplete for RUNNER $rn." >&2; return 4; }
   HELD=$(jq -r --arg n "$rn" --arg t "$t" '
     [.[] | select(.headRefName | test("(^|[/_-])runner-?" + $n + "($|[/_-])"; "i"))] as $m
@@ -121,6 +148,26 @@ hold_check() {
   if [ -n "$unfinished" ]; then
     echo "ship-claim: HOLD. RUNNER $rn has unfinished merged work: $unfinished."
     echo "ship-claim: finish live QA, verify its flag, then move it to Done before claiming $t. Resume the unfinished ticket instead."
+    return 4
+  fi
+  # Finishing an existing PR is never new work (Valentin, 2026-10-28 and 2026-10-29: the PR queue goes first). A ticket
+  # with any open PR, whoever opened it, stays claimable: that is adoption, and the brake only stops new app work.
+  if jq -e --arg t "$t" 'any(.[];
+      (.title | ascii_upcase | startswith($t + " "))
+      or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))' <<<"$open" >/dev/null; then
+    return 0
+  fi
+  [[ $t == YPER4-* ]] && return 0  # Fleet Infra work is never braked
+  n=$(jq -e '[.[] | select(.isDraft | not)] | length' <<<"$open") \
+    || { echo "ship-claim: HOLD. Cannot count open PRs for RUNNER $rn." >&2; return 4; }
+  if [ "$n" -gt "$QUEUE_MAX" ]; then
+    echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) ticket or nothing."
+    return 4
+  fi
+  free=$(infra_free) \
+    || { echo "ship-claim: HOLD. Cannot read board 4060 to check infra first, so no app claim for RUNNER $rn." >&2; return 4; }
+  if [ -n "$free" ]; then
+    echo "ship-claim: HOLD. infra first: free Fleet Infra tickets wait ($free). Do NOT claim $t; claim one of those."
     return 4
   fi
   return 0
