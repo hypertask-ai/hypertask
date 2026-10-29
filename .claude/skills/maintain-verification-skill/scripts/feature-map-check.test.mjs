@@ -156,13 +156,14 @@ test('CLI fails for ops drift and weekly reports its moved recipe', t => {
   assert.match(result.stdout, /ops-map\/build.md: missing path: docs\/removed.md/);
   f.git('add', '.'); f.git('commit', '-m', 'ops citation drift');
   ok(f.run('--dry-run'));
-  const report = readFileSync(path.join(f.runs()[0], 'description.html'), 'utf8');
+  const firstRun = f.runs()[0];
+  const report = readFileSync(path.join(firstRun, 'description.html'), 'utf8');
   assert.match(report, /ops-map\/build.md:1: missing path: docs\/removed.md/);
   assert.match(report, /Read the hosted build log/);
   rmSync(path.join(f.repo, opsPath, 'INDEX.md'));
   f.git('add', '.'); f.git('commit', '-m', 'missing ops index');
   ok(f.run('--dry-run'));
-  const missingIndexReport = readFileSync(path.join(f.runs().at(-1), 'description.html'), 'utf8');
+  const missingIndexReport = readFileSync(path.join(f.runs().find(run => run !== firstRun), 'description.html'), 'utf8');
   assert.match(missingIndexReport, /ops-map\/INDEX.md:1: missing index/);
 });
 
