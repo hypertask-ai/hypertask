@@ -2,12 +2,17 @@ import prisma from "@/lib/prisma";
 
 type MemberRole = "Admin" | "Member";
 
+// HTPR-7622: a receipt written in the same transaction as the role change, so a lost Redis
+// status write can be reconciled later instead of guessing whether this write happened.
+export type SettingOperationReceipt = { id: string; userId: number; proposalId: string; action: string };
+
 const setMemberRole = async (
   actingUserId: number,
   projectId: number,
   targetUserId: number,
   role: MemberRole,
   expectedRole?: MemberRole,
+  operation?: SettingOperationReceipt,
 ) => {
   try {
     if (!actingUserId || !projectId || !targetUserId || !role) {
@@ -75,17 +80,21 @@ const setMemberRole = async (
     }
 
     if (expectedRole !== undefined) {
-      const changed = await prisma.member.updateMany({
-        where: {
-          id: member.id,
-          userId: targetUserId,
-          status: "Accepted",
-          agentId: null,
-          role: expectedRole,
-          project: { ownerId: actingUserId, status: { not: "Deleted" } },
-        },
-        data: { role },
-      });
+      const where = {
+        id: member.id,
+        userId: targetUserId,
+        status: "Accepted",
+        agentId: null,
+        role: expectedRole,
+        project: { ownerId: actingUserId, status: { not: "Deleted" } },
+      } as const;
+      const changed = operation
+        ? await prisma.$transaction(async (tx) => {
+          const result = await tx.member.updateMany({ where, data: { role } });
+          if (result.count === 1) await tx.aiSettingOperation.create({ data: operation });
+          return result;
+        })
+        : await prisma.member.updateMany({ where, data: { role } });
       if (changed.count !== 1) {
         return { status: 409, json: { message: "Role or board access changed since the preview. Ask for a fresh proposal." } };
       }

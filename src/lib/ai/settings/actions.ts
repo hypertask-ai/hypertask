@@ -78,7 +78,9 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
   return { label: `${member.user.displayName || member.user.email} — role on ${page.board || `board ${scope.projectId}`}`, value: member.role };
 }
 
-export async function applySettingChange(proposal: SettingProposal, undo: boolean, currentTheme?: SettingsScope["theme"]): Promise<{ theme?: SettingsScope["theme"] }> {
+export type SettingOperation = { id: string; action: "apply" | "undo" };
+
+export async function applySettingChange(proposal: SettingProposal, undo: boolean, currentTheme?: SettingsScope["theme"], operation?: SettingOperation): Promise<{ theme?: SettingsScope["theme"] }> {
   const scope = { ...proposal.scope, ...(currentTheme ? { theme: currentTheme } : {}) };
   const expected = undo ? proposal.after : proposal.before;
   const next = undo ? proposal.before : proposal.after;
@@ -89,11 +91,14 @@ export async function applySettingChange(proposal: SettingProposal, undo: boolea
     if (next === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, proposal.userId))) throw new Error("Material theme is not available for your account.");
     return { theme: next as SettingsScope["theme"] };
   }
+  const receipt = operation
+    ? { id: operation.id, userId: proposal.userId, proposalId: proposal.id, action: operation.action }
+    : undefined;
   if (change.kind === "notification") {
-    await updateNotificationMatrix(proposal.userId, { category: change.category, channel: change.channel, expected: expected as boolean, value: next as boolean });
+    await updateNotificationMatrix(proposal.userId, { category: change.category, channel: change.channel, expected: expected as boolean, value: next as boolean }, receipt);
     return {};
   }
-  const result = await setMemberRole(proposal.userId, scope.projectId!, change.targetUserId, next as "Admin" | "Member", expected as "Admin" | "Member");
+  const result = await setMemberRole(proposal.userId, scope.projectId!, change.targetUserId, next as "Admin" | "Member", expected as "Admin" | "Member", receipt);
   if (result.status !== 200) {
     const message = (result.json as { message?: string }).message ?? "Could not change member role";
     throw result.status < 500 ? new SettingChangeRejectedError(message) : new Error(message);

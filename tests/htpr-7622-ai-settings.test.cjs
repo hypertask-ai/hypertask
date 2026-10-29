@@ -13,7 +13,7 @@ function harness() {
       { id: 102, userId: 17, role: "Admin", status: "Accepted", agentId: null, user: { displayName: "Ada", email: "ada@example.com" } },
     ],
     settings: new Map([[6, { notificationPreference: "all", notification: true, notificationMatrix: { comments: { email: true, push: true }, moves: { email: false, push: true }, splitsNoImportant: ["project:15"], showImportantSplit: true } }], [42, { notificationPreference: "direct", notification: true, notificationMatrix: {} }]]),
-    records: new Map(), writes: 0, beforeRoleWrite: null, failProposalSave: null,
+    records: new Map(), writes: 0, beforeRoleWrite: null, failProposalSave: null, failReceipt: false, operations: new Map(),
   };
   const db = {
     chatSession: { findFirst: async ({ where }) => where.id === ({ 6: sessionId, 42: memberSessionId, 17: adminSessionId, 99: outsiderSessionId })[where.userId] ? { id: where.id } : null },
@@ -40,7 +40,16 @@ function harness() {
       findUnique: async ({ where }) => state.settings.get(where.userId) ?? null,
       update: async ({ where, data }) => { const setting = state.settings.get(where.userId); Object.assign(setting, data); state.writes++; return setting; },
     },
-    $transaction: async (fn) => fn(db),
+    aiSettingOperation: {
+      create: async ({ data }) => { if (state.failReceipt) throw new Error("Could not record the change"); state.operations.set(data.id, data); return data; },
+      findFirst: async ({ where }) => { const row = state.operations.get(where.id); return row && row.proposalId === where.proposalId && row.userId === where.userId ? row : null; },
+      deleteMany: async ({ where }) => ({ count: state.operations.delete(where.id) ? 1 : 0 }),
+    },
+    // A transaction that rolls its writes back, so a failing receipt write cannot leave a change behind.
+    $transaction: async (fn) => {
+      const snapshot = { members: structuredClone(state.members), settings: structuredClone([...state.settings]), operations: new Map(state.operations) };
+      try { return await fn(db); } catch (error) { state.members = snapshot.members; state.settings = new Map(snapshot.settings); state.operations = snapshot.operations; throw error; }
+    },
   };
   const redis = {
     get: async (key) => state.records.get(key) ?? null,
@@ -69,7 +78,7 @@ function harness() {
     "@/lib/agentRuns/service": { browserMutationIsSameOrigin: (request) => request.headers.get("origin") === request.nextUrl.origin },
     "@/utils/controllers/users/fetch_preferences": { invalidateUserPreferenceCache: async () => {} },
     "@/lib/realtime/server": { broadcastBoardChange: async () => {} },
-    "@/lib/ai/tools/execution": { withToolErrors: (fn) => fn },
+    "@/lib/ai/tools/execution": { withToolErrors: (fn) => async (...args) => { try { return await fn(...args); } catch (error) { return { success: false, error: error instanceof Error ? error.message : String(error) }; } } },
   };
   return {
     state,
@@ -138,7 +147,8 @@ for (const kind of ["board-role", "notification"]) {
     assert.equal(value(), card.after);
     assert.equal(h.state.writes, 1);
     const interrupted = JSON.parse(h.state.records.get(key));
-    assert.deepEqual([interrupted.status, interrupted.operation, interrupted.before], ["pending", { action: "apply", committed: true }, card.before]);
+    assert.deepEqual([interrupted.status, interrupted.operation.action, interrupted.operation.committed, interrupted.before], ["pending", "apply", true, card.before]);
+    assert.equal(typeof interrupted.operation.id, "string");
     await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "cancel"), /no longer pending/);
     const retried = await h.proposals.actOnSettingProposal(6, card.id, "apply", scope);
     assert.deepEqual([retried.proposal.status, value(), h.state.writes], ["applied", card.after, 1]);
@@ -161,7 +171,7 @@ for (const kind of ["board-role", "notification"]) {
     await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", scope), /Redis proposal SET failed/);
     assert.deepEqual([value(), h.state.writes], [card.before, 2]);
     const interrupted = JSON.parse(h.state.records.get(key));
-    assert.deepEqual([interrupted.status, interrupted.operation], ["applied", { action: "undo", committed: true }]);
+    assert.deepEqual([interrupted.status, interrupted.operation.action, interrupted.operation.committed], ["applied", "undo", true]);
     const retried = await h.proposals.actOnSettingProposal(6, card.id, "undo", scope);
     assert.deepEqual([retried.proposal.status, value(), h.state.writes], ["undone", card.before, 2]);
     assert.equal(JSON.parse(h.state.records.get(key)).operation, undefined);
@@ -193,7 +203,7 @@ for (const failCleanup of [false, true]) {
     h.state.beforeRoleWrite = null;
     const rejected = JSON.parse(h.state.records.get(key));
     assert.equal(rejected.status, "pending");
-    assert.deepEqual(rejected.operation, failCleanup ? { action: "apply" } : undefined);
+    assert.equal(rejected.operation?.action, failCleanup ? "apply" : undefined);
     await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope), /changed since the preview/);
     await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", boardScope), /already been handled/);
     assert.deepEqual([h.state.members[0].role, h.state.writes], ["Admin", 0]);
@@ -201,18 +211,45 @@ for (const failCleanup of [false, true]) {
   });
 }
 
-for (const action of ["apply", "undo"]) {
-  test(`${action}: a matching role value without a committed receipt is not recovered as this proposal's write`, async () => {
+for (const kind of ["board-role", "notification"]) {
+  for (const action of ["apply", "undo"]) {
+    test(`${kind} ${action}: a lost commit marker is reconciled from the database receipt written with the change`, async () => {
+      const h = harness();
+      const scope = kind === "board-role" ? boardScope : { section: "notifications" };
+      const change = kind === "board-role" ? roleChange : { kind, category: "comments", channel: "email", value: false };
+      const value = () => kind === "board-role" ? h.state.members[0].role : h.state.settings.get(6).notificationMatrix.comments.email;
+      const card = await h.proposals.createSettingProposal(6, sessionId, scope, change);
+      if (action === "undo") await h.proposals.actOnSettingProposal(6, card.id, "apply", scope);
+      const destination = action === "undo" ? card.before : card.after;
+      h.state.failProposalSave = `${action}-committed`;
+      await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action, scope), /Redis proposal SET failed/);
+      assert.equal(value(), destination);
+      const interrupted = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
+      assert.deepEqual([interrupted.operation.action, interrupted.operation.committed], [action, undefined]);
+      assert.equal(h.state.operations.get(interrupted.operation.id).proposalId, card.id);
+      const retried = await h.proposals.actOnSettingProposal(6, card.id, action, scope);
+      assert.deepEqual([retried.proposal.status, value()], [action === "undo" ? "undone" : "applied", destination]);
+      assert.equal(h.state.operations.size, 0);
+    });
+  }
+}
+
+for (const kind of ["board-role", "notification"]) {
+  test(`${kind}: a receipt write failure rolls the change back, so it never lands without a record`, async () => {
     const h = harness();
-    const card = await h.proposals.createSettingProposal(6, sessionId, boardScope, roleChange);
-    if (action === "undo") await h.proposals.actOnSettingProposal(6, card.id, "apply", boardScope);
-    h.state.failProposalSave = `${action}-committed`;
-    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action, boardScope), /Redis proposal SET failed/);
-    const interrupted = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
-    assert.deepEqual([interrupted.status, interrupted.operation], [action === "undo" ? "applied" : "pending", { action }]);
-    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action, boardScope), /changed since the preview/);
-    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, action === "undo" ? "apply" : "undo", boardScope), /already been handled/);
-    assert.deepEqual([h.state.members[0].role, h.state.writes], action === "undo" ? ["Member", 2] : ["Admin", 1]);
+    const scope = kind === "board-role" ? boardScope : { section: "notifications" };
+    const change = kind === "board-role" ? roleChange : { kind, category: "comments", channel: "email", value: false };
+    const value = () => kind === "board-role" ? h.state.members[0].role : h.state.settings.get(6).notificationMatrix.comments.email;
+    const card = await h.proposals.createSettingProposal(6, sessionId, scope, change);
+    h.state.failReceipt = true;
+    await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "apply", scope), /Could not record the change/);
+    assert.deepEqual([value(), h.state.members[0].role], [card.before, "Member"]);
+    assert.equal(h.state.operations.size, 0);
+    const pending = JSON.parse(h.state.records.get(`ai-setting:6:${card.id}`));
+    assert.deepEqual([pending.status, pending.operation], ["pending", undefined]);
+    h.state.failReceipt = false;
+    const applied = await h.proposals.actOnSettingProposal(6, card.id, "apply", scope);
+    assert.deepEqual([applied.proposal.status, value()], ["applied", card.after]);
   });
 }
 
@@ -499,6 +536,28 @@ test("Material theme's own availability flag is respected on proposal and Undo",
   assert.equal(applied.theme, "graphite");
   h.state.rounded = false;
   await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", { ...themeScope, theme: "graphite" }), /not available/);
+});
+
+test("theme: a repeat of a completed Apply re-sends the destination cookie instead of failing", async () => {
+  const h = harness();
+  const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
+  const apply = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
+  assert.equal(apply.cookies.get("theme").value, "graphite");
+  const again = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
+  assert.equal(again.status, 200);
+  assert.equal(again.cookies.get("theme").value, "graphite");
+  assert.equal((await again.json()).proposal.status, "applied");
+});
+
+test("theme: a lost Apply response can be retried after the commit marker is lost", async () => {
+  const h = harness();
+  const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
+  h.state.failProposalSave = "apply-committed";
+  await assert.rejects(h.route.POST(request({ id: card.id, action: "apply", scope: themeScope })), /Redis proposal SET failed/);
+  const retried = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
+  assert.equal(retried.status, 200);
+  assert.equal(retried.cookies.get("theme").value, "graphite");
+  assert.equal((await retried.json()).proposal.status, "applied");
 });
 
 test("Undo from Material restores an available theme after Material is disabled", async () => {

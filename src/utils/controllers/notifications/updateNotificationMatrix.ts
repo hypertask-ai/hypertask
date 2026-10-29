@@ -19,7 +19,11 @@ type MatrixUpdate = { matrix: NotificationMatrix } | {
   expected: boolean;
 };
 
-export async function updateNotificationMatrix(userId: number, input: MatrixUpdate) {
+// HTPR-7622: a receipt written in the same transaction as the change, so a lost Redis status
+// write can be reconciled later instead of guessing whether this write happened.
+export type SettingOperationReceipt = { id: string; userId: number; proposalId: string; action: string };
+
+export async function updateNotificationMatrix(userId: number, input: MatrixUpdate, operation?: SettingOperationReceipt) {
   return prisma.$transaction(async (tx) => {
     const current = await tx.userSetting.findUnique({
       where: { userId },
@@ -53,6 +57,7 @@ export async function updateNotificationMatrix(userId: number, input: MatrixUpda
       },
       select: { notificationMatrix: true },
     });
+    if (operation) await tx.aiSettingOperation.create({ data: operation });
     return updated.notificationMatrix;
   }, { isolationLevel: "Serializable" });
 }
