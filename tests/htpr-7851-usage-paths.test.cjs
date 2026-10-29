@@ -52,7 +52,7 @@ function harness() {
 }
 
 function languageModel(h, text = '<p>Suggested reply</p>') {
-  return new MockLanguageModelV4({ doGenerate: async (params) => {
+  return new MockLanguageModelV4({ provider: 'gateway', doGenerate: async (params) => {
     h.calls.push(params);
     return { content: [{ type: 'text', text }], usage: { inputTokens: { total: 40 }, outputTokens: { total: 10 } }, finishReason: { unified: 'stop', raw: 'stop' }, warnings: [] };
   } });
