@@ -9,6 +9,6 @@ export const useGetStarredContent = (userId: number, initialData?: any) => {
     refetchOnWindowFocus: true,
     refetchOnMount: true,
     gcTime: 60 * 1000 * 60,
-    initialData: initialData ?? [],
+    initialData: initialData ?? { starredTasks: [], pinnedComments: [] },
   });
 };
