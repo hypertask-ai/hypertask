@@ -2,6 +2,7 @@
 
 import { AgentBoardAccessDecision } from "../NotificationRow";
 
+import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
 import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
@@ -202,6 +203,7 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const boardAccessDecisions = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
   const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
@@ -1166,7 +1168,7 @@ const InboxSplit = ({
                                 ))}
                               <Seen notification={notification} />
                             </div>
-                            {notification.type === "AgentBoardAccessRequest" ? (
+                            {boardAccessDecisions && notification.type === "AgentBoardAccessRequest" ? (
                               <AgentBoardAccessDecision />
                             ) : notification.type === "AgentMessage" ? (
                               <div
