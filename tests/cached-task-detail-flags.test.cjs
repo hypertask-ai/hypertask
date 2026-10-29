@@ -22,10 +22,10 @@ function load(relative, mocks) {
 
 test("server board and My Tasks always include cached bodies after their authorized first read", async () => {
   let firstRead = Promise.withResolvers();
-  const flagCalls = [];
   let boardArgs;
   const board = load("src/utils/controllers/projects/getBoardTasks.ts", {
-    "@/lib/flags": { isFeatureEnabled: async (flag, userId) => { flagCalls.push([flag, userId]); return false; } },
+    "@/lib/flags": { isFeatureEnabled: () => assert.fail("board data must not read a feature flag") },
+    "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async (tasks) => tasks },
     "@/lib/prisma": { __esModule: true, default: {
       project: { findFirst: () => firstRead.promise },
       task: { findMany: async (args) => { boardArgs = args; return []; } },
@@ -36,11 +36,9 @@ test("server board and My Tasks always include cached bodies after their authori
   }).default;
   const boardResult = board(15, 985, 985);
   assert.equal(boardArgs, undefined, "board authorization must finish before reading tasks");
-  assert.deepEqual(flagCalls, [], "cached bodies do not need a flag lookup");
   firstRead.resolve({ id: 15 });
   assert.equal((await boardResult).status, 200);
   assert.deepEqual(boardArgs.include.description_, { select: { content: true } });
-  assert.deepEqual(flagCalls, [["htpr-7071-agent-status-chip", 985]], "only the independent agent-status flag remains");
 
   firstRead = Promise.withResolvers();
   let myTasksArgs;
