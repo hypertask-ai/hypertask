@@ -133,15 +133,16 @@ test.afterEach(() => {
   }
 });
 
-test("inventory derives every visible option and effort variant", async () => {
+test("inventory derives every visible option and effort variant; images are skipped, never chat passes", async () => {
   const inventory = canary.modelCanaryInventory();
   const expected = catalog.aiModelOptions.filter((option) => catalog.isAiModelOptionVisible(option, true));
-  assert.deepEqual(inventory.map((target) => target.optionId), expected.map((option) => option.id));
-  assert.ok(inventory.every((target) => target.capability === "chat"));
+  assert.deepEqual(inventory.filter((target) => target.capability === "chat").map((target) => target.optionId), expected.map((option) => option.id));
   for (const option of expected) assert.deepEqual(inventory.find((target) => target.optionId === option.id).option.providerOptions, option.providerOptions);
+  assert.deepEqual(inventory.filter((target) => target.capability === "image").map((target) => target.optionId), catalog.aiImageModelDefinitions.map((image) => image.key));
   const result = await canary.runModelCanary();
   assert.equal(result.checked, inventory.length);
   assert.equal(calls.length, expected.filter((option) => option.source !== "custom").length);
+  assert.ok((await rows()).filter((row) => row.capability === "image").every((row) => row.outcome === "skipped" && row.lastPassAt === null));
 });
 
 test("canary gateway probes use only the internal key, never the trials key", async () => {

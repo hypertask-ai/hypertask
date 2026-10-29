@@ -116,6 +116,21 @@ test("AI comment routes prove write access before paid generation or upload", ()
     "const result = await generateText",
     "HyperAI must reject read-only callers before model inference",
   );
+
+  const imageRoute = read("src/app/api/ai/generate-image/route.ts");
+  assert.ok(imageRoute.includes("project: taskWriteAccessWhere(cookieUser.id)"));
+  assertBefore(
+    imageRoute,
+    "teamContext.projectId !== body.projectId",
+    "const image =",
+    "image generation must reject read-only callers before model inference",
+  );
+  assertBefore(
+    imageRoute,
+    "teamContext.projectId !== body.projectId",
+    "uploadTaskAttachmentToS3(",
+    "image generation must reject read-only callers before uploading",
+  );
 });
 
 test("the legacy comment route cannot impersonate HyperAI or another user", () => {

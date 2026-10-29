@@ -1,4 +1,5 @@
 import {
+  aiImageModelDefinitions,
   aiModelOptions,
   defaultAiModelOption,
   defaultModelKeyFor,
@@ -8,6 +9,7 @@ import {
   pickAutoAiModelOption,
   isAiModelOptionVisible,
   resolveHaikuModelId,
+  type TAiImageModelDefinition,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import {
@@ -49,6 +51,7 @@ export const AI_FEATURES = {
   improveWriting: { label: "Improve writing", modelKind: "catalog" },
   askAi: { label: "Ask AI", modelKind: "catalog" },
   boardGeneration: { label: "Board generation", modelKind: "catalog" },
+  imageGeneration: { label: "Image generation", modelKind: "image" },
   hyperAi: { label: "@HyperAI", modelKind: "catalog" },
   summaries: { label: "Task summaries", modelKind: "fast" },
   questionSuggestions: { label: "Question suggestions", modelKind: "fast" },
@@ -67,6 +70,7 @@ export type UserFacingModelFeature =
   | "askAi"
   | "boardGeneration"
   | "hyperAi";
+export type ImageModelFeature = "imageGeneration";
 
 export const SYSTEM_FEATURES = {
   summaries: { role: "fast", label: AI_FEATURES.summaries.label },
@@ -159,6 +163,11 @@ export function isAiFeatureModelAllowed(
   if (kind === "fast") {
     return isSystemModelForFeature(feature as SystemFeature, model, haiku55Enabled);
   }
+  if (kind === "image") {
+    return aiImageModelDefinitions.some(
+      (definition) => definition.key === model,
+    );
+  }
   return Boolean(getAiModelOptionById(model));
 }
 
@@ -174,6 +183,15 @@ export function isAiFeatureModelEnabled(
   if (kind === "fast") {
     const definition = getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled).find(
       (entry) => entry.model === model,
+    );
+    return Boolean(
+      definition &&
+      resolveTeamProviderEnabled(aiProviderSettings, definition.provider),
+    );
+  }
+  if (kind === "image") {
+    const definition = aiImageModelDefinitions.find(
+      (entry) => entry.key === model,
     );
     return Boolean(
       definition &&
@@ -269,6 +287,25 @@ export function resolveUserFacingModelOption(
       haiku55Enabled,
       options,
     ) ?? null
+  );
+}
+
+export function resolveImageModel(
+  aiProviderSettings: unknown,
+): TAiImageModelDefinition | null {
+  if (!isAiFeatureEnabled("imageGeneration", aiProviderSettings)) return null;
+  const override = getAiFeatureModelOverride(
+    "imageGeneration",
+    aiProviderSettings,
+  );
+  const available = (definition: TAiImageModelDefinition) =>
+    resolveTeamProviderEnabled(aiProviderSettings, definition.provider);
+  return (
+    aiImageModelDefinitions.find(
+      (definition) => definition.key === override && available(definition),
+    ) ??
+    aiImageModelDefinitions.find(available) ??
+    null
   );
 }
 

@@ -35,6 +35,14 @@ interface IPostHyperMention {
   byokProviderFlags?: ITeamByokApiKey[];
 }
 
+interface IPostImageGeneration {
+  text: string;
+  projectId: number;
+  taskId: number;
+  modelKey: string;
+  previousText?: string;
+}
+
 export function useHyperMention() {
   const haikuDefaultEnabled = true;
   const haiku55Enabled = true;
@@ -135,6 +143,36 @@ export function useHyperMention() {
     }
   }
 
+  async function postImageGeneration(
+    mode: "Create" | "Update",
+    mentionProps: IPostImageGeneration
+  ) {
+    const { text, projectId, taskId, modelKey, previousText } = mentionProps;
+    if (!triggerHyperMention(mode, text, previousText)) return;
+    if (!(taskId > 0)) {
+      console.warn("[HyperAI] Missing task context for image request");
+      toast.error("HyperAI could not reply: missing task context");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/generate-image", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...mcpAuthorizationHeaders(token),
+        },
+        body: JSON.stringify({ projectId, taskId, text, modelKey }),
+      });
+      if (!response.ok) {
+        await showHyperAiResponseError(response);
+      }
+    } catch (error) {
+      console.warn("[HyperAI] Image request failed", error);
+      toast.error(DEFAULT_HYPERAI_ERROR);
+    }
+  }
+
   function triggerHyperMention(
     mode: "Create" | "Update",
     newText: string,
@@ -197,5 +235,5 @@ export function useHyperMention() {
     };
   }
 
-  return { postHyperMention };
+  return { postHyperMention, postImageGeneration };
 }

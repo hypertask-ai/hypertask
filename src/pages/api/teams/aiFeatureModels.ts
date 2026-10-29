@@ -10,6 +10,7 @@ import {
   isAiFeatureModelAllowed,
   isAiFeatureModelEnabled,
   resetAiFeatureSettings,
+  resolveImageModel,
   resolveSystemModel,
   resolveUserFacingModelOption,
   updateAiFeatureModelSettings,
@@ -54,6 +55,9 @@ function effectiveModel(
       resolveSystemModel(feature as SystemFeature, enabledSettings, haiku55Enabled, context)?.model ??
       null
     );
+  }
+  if (kind === "image") {
+    return resolveImageModel(enabledSettings)?.key ?? null;
   }
   const option = resolveUserFacingModelOption(
     feature as UserFacingModelFeature,

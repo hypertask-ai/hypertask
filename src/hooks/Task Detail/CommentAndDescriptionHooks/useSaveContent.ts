@@ -15,6 +15,7 @@ import {
   NavigateToNextTaskParams,
   RedirectAPIParams,
   THyperMention,
+  TImageMention,
   TPostFollowerBody,
 } from "@/models/model";
 import {
@@ -45,6 +46,7 @@ import {
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
+  resolveAiImageModelMention,
   resolveAiModelMention,
 } from "@/lib/aiModelOptions";
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
@@ -85,7 +87,7 @@ export default function useSaveContent() {
   const hyperAiId = process.env.NEXT_PUBLIC_HYPERAI_ID || "332";
   const { resetDescriptionQuery } = useProjectQuery();
   const { addRelations } = useTaskRelations();
-  const { postHyperMention } = useHyperMention();
+  const { postHyperMention, postImageGeneration } = useHyperMention();
   const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = true;
@@ -136,6 +138,7 @@ export default function useSaveContent() {
         const agentMentions: string[] = [];
         const relatedTasks: { uniqueIndex: string; projectId: string }[] = [];
         let hyperMention: THyperMention = undefined;
+        let imageMention: TImageMention = undefined;
 
         const addUrlIfUnique = (url: string, title: string) => {
           if (url && !urlsArray.includes(url)) {
@@ -238,8 +241,15 @@ export default function useSaveContent() {
                 hyperMentionSpans.forEach((span) => {
                   if (!span.closest("blockquote")) {
                     const displayName = span.getAttribute("data-id");
+                    const imageModelMention =
+                      resolveAiImageModelMention(displayName);
                     const modelMention = resolveAiModelMention(displayName, haiku55Enabled);
-                    if (modelMention) {
+                    if (imageModelMention) {
+                      imageMention = {
+                        ...mentionBody,
+                        modelKey: imageModelMention.key,
+                      };
+                    } else if (modelMention) {
                       hyperMention = {
                         ...mentionBody,
                         modelLabel: modelMention.definition.label,
@@ -402,6 +412,7 @@ export default function useSaveContent() {
               PostFollowerBody,
               agentMentions,
               hyperMention,
+              imageMention,
             };
 
             resolve(returnHtml);
@@ -519,6 +530,14 @@ export default function useSaveContent() {
               attachments,
               taskDescription: result.html,
               taskTitle: currentTask.title,
+              previousText: currentTask.description_.content,
+            });
+          else if (result.imageMention && currentTask)
+            postImageGeneration("Update", {
+              text: result.html,
+              projectId: currentProject?.id ?? -1,
+              taskId: currentTask.id,
+              modelKey: result.imageMention.modelKey,
               previousText: currentTask.description_.content,
             });
 
@@ -701,6 +720,14 @@ export default function useSaveContent() {
             previousText: comment.text,
             sourceCommentId: id,
           });
+        else if (result.imageMention)
+          postImageGeneration("Update", {
+            text: result.html,
+            projectId: currentProject?.id ?? -1,
+            taskId: currentTask.id,
+            modelKey: result.imageMention.modelKey,
+            previousText: comment.text,
+          });
 
         const data = await response.data;
         if (response.status === 200) {
@@ -821,6 +848,13 @@ export default function useSaveContent() {
             composedByokProviderFlags ??
             currentBoardBilling?.byokProviderFlags ??
             [],
+        });
+      else if (result.imageMention)
+        postImageGeneration("Create", {
+          text: result.html,
+          projectId: mentionProjectId ?? -1,
+          taskId: mentionTaskId ?? currentTask.id,
+          modelKey: result.imageMention.modelKey,
         });
 
       const { AttachmentObjectsToPush, AttachmentUrls } =

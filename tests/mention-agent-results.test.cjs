@@ -35,6 +35,7 @@ const expectedAgentIds = ["manager", "a-1", "a-2", "beta", "delta", "z"];
 const state = {
   accessibleProjectIds: [339],
   boardAgentCalls: 0,
+  removeImageGeneration: false,
 };
 
 const people = Array.from({ length: 7 }, (_, index) => ({
@@ -73,11 +74,11 @@ stubModule("src/lib/prisma.ts", {
   },
 });
 stubModule("src/lib/aiModelOptions.ts", {
-  aiImageModelDefinitions: [],
+  aiImageModelDefinitions: [{ key: "nano-banana", label: "Nano Banana" }],
   aiModelDefinitions: [],
 });
 stubModule("src/lib/flags.ts", {
-  isFeatureEnabled: async () => false,
+  isFeatureEnabled: async (key) => key === "htpr-7859-remove-image-generation" && state.removeImageGeneration,
 });
 stubModule("src/utils/controllers/agents/boardMembers.ts", {
   getBoardAgentMembers: async () => {
@@ -135,6 +136,7 @@ function mockResponse() {
 test.beforeEach(() => {
   state.accessibleProjectIds = [339];
   state.boardAgentCalls = 0;
+  state.removeImageGeneration = false;
 });
 
 test("task mentions return every matching board agent in stable name order", async () => {
@@ -185,4 +187,12 @@ test("AI chat mentions return every board agent in the same stable order", async
   assert.equal(group(result.body, "name").length, 5);
   assert.equal(group(result.body, "project").length, 5);
   assert.equal(group(result.body, "task").length, 5);
+});
+
+test("image model mentions disappear only when removal is enabled", async () => {
+  const allowed = await taskSearchByParam("nano", 6, 339);
+  assert.ok(group(allowed.json, "name").some((item) => item.name === "Nano Banana"));
+  state.removeImageGeneration = true;
+  const removed = await taskSearchByParam("nano", 6, 339);
+  assert.ok(!group(removed.json, "name").some((item) => item.name === "Nano Banana"));
 });

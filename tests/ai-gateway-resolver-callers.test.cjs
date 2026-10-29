@@ -32,7 +32,11 @@ function resolverCalls() {
       if (
         ts.isCallExpression(node) &&
         ts.isIdentifier(node.expression) &&
-        ["resolveAiModel", "resolveGatewayModel"].includes(node.expression.text)
+        [
+          "resolveAiModel",
+          "resolveGatewayModel",
+          "resolveGatewayImageModel",
+        ].includes(node.expression.text)
       ) {
         calls.push({
           file: relative,
@@ -66,4 +70,5 @@ test("every product model resolver caller passes an explicit credential", () => 
 
   assert.ok(calls.some(({ name }) => name === "resolveAiModel"));
   assert.ok(calls.some(({ name }) => name === "resolveGatewayModel"));
+  assert.ok(calls.some(({ name }) => name === "resolveGatewayImageModel"));
 });

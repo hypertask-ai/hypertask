@@ -1,5 +1,6 @@
 "use client";
 
+import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
@@ -15,6 +16,7 @@ import toast from "react-hot-toast";
 import { useTeamAiProviders } from "@/hooks/useTeamAiProviders";
 import { useTeamCustomEndpoint } from "@/hooks/useTeamCustomEndpoint";
 import {
+  aiImageModelDefinitions,
   aiModelDefinitions,
   aiModelOptions,
   getDefaultAiModelOptionForPlan,
@@ -26,6 +28,7 @@ import {
 import {
   AI_FEATURES,
   getSystemModelsForFeature,
+  resolveImageModel,
   resolveSystemModel,
   resolveUserFacingModelOption,
   type AiFeature,
@@ -82,6 +85,7 @@ const FEATURE_SECTIONS: FeatureSection[] = [
       { feature: "improveWriting", description: "Editor improvements and AI slash commands" },
       { feature: "askAi", description: "Answers questions from search" },
       { feature: "boardGeneration", description: "Creates a starter board during onboarding" },
+      { feature: "imageGeneration", description: "Generates images from task mentions" },
       { feature: "hyperAi", description: "Replies when people mention @HyperAI" },
     ],
   },
@@ -109,6 +113,8 @@ const modelDefinition = (model: string, haiku55Enabled = false) => {
 
 const modelLabel = (model: string, haiku55Enabled = false) =>
   getAiModelOptionById(model, haiku55Enabled)?.title ??
+  aiImageModelDefinitions.find((definition) => definition.key === model)
+    ?.label ??
   modelDefinition(model, haiku55Enabled)?.label ??
   model.split("/").pop() ??
   model;
@@ -308,6 +314,7 @@ function DictationProviderDropdown({
 }
 
 const AiFeaturesSection = () => {
+  const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const deepseekFlashFastEnabled = useFlag(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const flagModelOptions = deepseekFlashFastEnabled
@@ -389,6 +396,16 @@ const AiFeaturesSection = () => {
           priceTier: modelDefinition(model.model, haiku55Enabled)?.priceTier,
         }));
     }
+    if (kind === "image") {
+      return aiImageModelDefinitions
+        .filter((definition) => enabledProviders.has(definition.provider))
+        .map((definition) => ({
+          value: definition.key,
+          label: definition.label,
+          provider: definition.provider,
+          priceTier: 3,
+        }));
+    }
     return visibleModelOptions.flatMap((option) => {
       const definition = getAiModelDefinition(option.modelKey);
       if (
@@ -419,6 +436,12 @@ const AiFeaturesSection = () => {
       return (
         resolveSystemModel(feature as SystemFeature, providerSettings, haiku55Enabled, defaultContext)?.model ??
         getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled, defaultContext)[0].model
+      );
+    }
+    if (kind === "image") {
+      return (
+        resolveImageModel(providerSettings)?.key ??
+        aiImageModelDefinitions[0].key
       );
     }
     return (
@@ -557,7 +580,7 @@ const AiFeaturesSection = () => {
                 ) : null}
               </div>
               <div className="flex flex-col">
-                {section.rows.map(({ description, feature }) => {
+                {section.rows.filter(({ feature }) => !removeImageGeneration || feature !== "imageGeneration").map(({ description, feature }) => {
                   const choices = choicesForFeature(feature);
                   const rowModel = getAiModelOptionById(rows[feature].model, haiku55Enabled)?.id ?? rows[feature].model;
                   const selectedModel = choices.some(
@@ -567,7 +590,8 @@ const AiFeaturesSection = () => {
                     : null;
                   const hasModel = AI_FEATURES[feature].modelKind !== "none";
                   const userInitiated =
-                    AI_FEATURES[feature].modelKind === "catalog";
+                    AI_FEATURES[feature].modelKind === "catalog" ||
+                    AI_FEATURES[feature].modelKind === "image";
 
                   return (
                     <div

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { findSharedAiAllowanceError, SHARED_AI_ALLOWANCE_ERROR_NAME } from "@/app/api/ai/_lib/allowanceError";
-import type { LanguageModelMiddleware } from "ai";
+import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 
 import { getRedis } from "@/lib/redis";
 import { isFeatureEnabled } from "@/lib/flags";
@@ -1211,6 +1211,55 @@ export function createSharedAllowanceMiddleware(args: {
         };
       } catch (error) {
         await releaseIfUnavailable(error, false);
+        throw error;
+      }
+    },
+  };
+}
+
+export function createImageAllowanceMiddleware(args: {
+  allowanceUsd: number;
+  gatewayApiKey: string;
+  fundingSource?: AllowanceDriftContext["fundingSource"];
+  modelSlug: string;
+  resolvePolicy?: (teamId: string) => Promise<TeamAllowancePolicy>;
+}): ImageModelMiddleware {
+  return {
+    specificationVersion: "v4",
+    wrapGenerate: async ({ doGenerate, params }) => {
+      const teamId = teamTagFromProviderOptions(params.providerOptions);
+      if (!teamId) {
+        throw new Error(
+          "Platform-funded image requests require exactly one owning team tag.",
+        );
+      }
+      const reservation = await reserveSharedAllowance({
+        allowanceUsd: args.allowanceUsd,
+        resolvePolicy: args.resolvePolicy,
+        gatewayApiKey: args.gatewayApiKey,
+        fundingSource: args.fundingSource,
+        lane: allowanceLaneFromProviderOptions(params.providerOptions),
+        maxOutputTokens:
+          DEFAULT_MAX_OUTPUT_TOKENS * Math.max(1, Math.ceil(params.n)),
+        modelSlug: args.modelSlug,
+        prompt: params.prompt,
+        teamId,
+        userId: userIdFromProviderOptions(params.providerOptions),
+      });
+      try {
+        const result = await doGenerate();
+        await settleAfterInference(
+          reservation,
+          result.usage
+            ? {
+                inputTokens: { total: result.usage.inputTokens ?? undefined },
+                outputTokens: { total: result.usage.outputTokens ?? undefined },
+              }
+            : undefined,
+        );
+        return result;
+      } catch (error) {
+        await settleAfterInference(reservation, undefined, false, params.abortSignal?.aborted ? "stop" : "error");
         throw error;
       }
     },

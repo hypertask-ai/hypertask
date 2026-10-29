@@ -1,6 +1,6 @@
-import { IAttachment, ICreateTaskUrl, IUrl, modifiedHtml, THyperMention } from "@/models/model";
+import { IAttachment, ICreateTaskUrl, IUrl, modifiedHtml, THyperMention, TImageMention } from "@/models/model";
 import { measuredSizeNumber } from "@/lib/attachments/measuredSize";
-import { resolveAiModelMention } from "@/lib/aiModelOptions";
+import { resolveAiImageModelMention, resolveAiModelMention } from "@/lib/aiModelOptions";
 import { base64ToFile } from "@/utils/api/Task Detail";
 
 export function processHtmlForTaskId(
@@ -24,6 +24,7 @@ export function processHtmlForTaskId(
         );
         const anchorTags = doc.querySelectorAll("a");
         let hyperMention: THyperMention = undefined;
+        let imageMention: TImageMention = undefined;
         console.log("🚀 ~ returnnewPromise ~ anchorTags:", anchorTags)
 
         const spanElements = doc.querySelectorAll('span[data-label="task"]');
@@ -87,8 +88,14 @@ export function processHtmlForTaskId(
               hyperMentionSpans.forEach((span) => {
                 if (span.closest("blockquote")) return;
                 const displayName = span.getAttribute("data-id");
+                const imageModelMention = resolveAiImageModelMention(displayName);
                 const modelMention = resolveAiModelMention(displayName);
-                if (modelMention) {
+                if (imageModelMention) {
+                  imageMention = {
+                    ...body,
+                    modelKey: imageModelMention.key,
+                  };
+                } else if (modelMention) {
                   hyperMention = {
                     ...body,
                     modelLabel: modelMention.definition.label,
@@ -212,6 +219,7 @@ export function processHtmlForTaskId(
             agentMentions,
             relations: relatedTasks,
             hyperMention,
+            imageMention
           };
 
           resolve(returnHtml);

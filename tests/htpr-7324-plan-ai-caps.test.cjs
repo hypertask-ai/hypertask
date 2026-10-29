@@ -526,6 +526,10 @@ for (const backend of ["fake", "real Redis"]) {
     assert.ok(results.filter((result) => result.status === "rejected").every((result) => refusal("day")(result.reason)));
     assert.equal(calls, 1);
     await assert.rejects(reserve({ teamId: "unbounded", amountUsd: 0.97 }), refusal("day"));
+    const image = allowance.createImageAllowanceMiddleware({
+      allowanceUsd: 1, gatewayApiKey: process.env.AI_GATEWAY_API_KEY, modelSlug: "openai/gpt-6-luna", resolvePolicy: async () => free,
+    });
+    await assert.rejects(image.wrapGenerate({ params: { ...params(), n: 1 }, doGenerate: async () => { throw new Error("image inference must not run"); } }), (error) => refusal("day")(error) || refusal("month")(error));
   });
 
   test(`${backend}: expiry releases each original scope's hold and late settlement leaves no pending`, async (t) => {
@@ -571,12 +575,14 @@ test("free over cap is refused while paid under 5 x saved seats is admitted", as
   assert.equal(reservation.scopes.length, 1); assert.equal(paidPolicy.monthlyUsd, 15);
 });
 
-test("language middleware resolves policy for each call, before provider use", async () => {
+test("both language and image middleware resolve policy for each call, before provider use", async () => {
   monthSpend = 1.1;
-  const teams = [];
-  const middleware = allowance.createSharedAllowanceMiddleware({ allowanceUsd: 40, gatewayApiKey: "vck_test", modelSlug: "openai/test", resolvePolicy: async (teamId) => { teams.push(teamId); return free; } });
-  await assert.rejects(middleware.wrapGenerate({ params: { prompt: [], providerOptions: { gateway: { tags: ["team:team"] } } }, doGenerate: async () => { throw new Error("provider must not run"); } }), refusal("month"));
-  assert.deepEqual(teams, ["team"]);
+  for (const factory of [allowance.createSharedAllowanceMiddleware, allowance.createImageAllowanceMiddleware]) {
+    const teams = [];
+    const middleware = factory({ allowanceUsd: 40, gatewayApiKey: "vck_test", modelSlug: "openai/test", resolvePolicy: async (teamId) => { teams.push(teamId); return free; } });
+    await assert.rejects(middleware.wrapGenerate({ params: { prompt: [], n: 1, providerOptions: { gateway: { tags: ["team:team"] } } }, doGenerate: async () => { throw new Error("provider must not run"); } }), refusal("month"));
+    assert.deepEqual(teams, ["team"]);
+  }
 });
 
 test("plan batch admission is false; flag-off managed funding still uses batches", async () => {

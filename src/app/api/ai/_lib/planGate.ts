@@ -11,6 +11,7 @@ import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
   LUNA_FREE_MODEL_KEY,
+  type TAiImageModelDefinition,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 
@@ -169,5 +170,31 @@ export async function assertModelAllowedForPlan(
   }
   if (storePlanId === "BYOK") {
     throw new AiPlanAccessError("This model needs your own AI key.");
+  }
+}
+
+export async function assertImageModelAllowedForPlan(
+  projectId: number | null | undefined,
+  model: TAiImageModelDefinition,
+  credential?: unknown,
+) {
+  if (!model.premium) return;
+  const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+  const resolvedCredential =
+    typeof credential === "string" ? credential.trim() : credential;
+  if (
+    typeof resolvedCredential === "string" &&
+    resolvedCredential.length > 0 &&
+    resolvedCredential !== sharedKey
+  ) {
+    return;
+  }
+  if (!resolvedCredential) return;
+  const storePlanId = await storePlanIdForProject(projectId);
+  if (storePlanId === "Free") {
+    throw new Error("Image generation needs a paid plan.");
+  }
+  if (storePlanId === "BYOK") {
+    throw new Error("Image generation needs your own AI key.");
   }
 }

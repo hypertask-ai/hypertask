@@ -22,7 +22,10 @@ import {
   type TAiModelPreferences,
   type TAiModelPreferencesBySurface,
 } from "@/lib/aiModelPreferences";
-import { getAiModelOptionById } from "@/lib/aiModelOptions";
+import {
+  aiImageModelDefinitions,
+  getAiModelOptionById,
+} from "@/lib/aiModelOptions";
 import { sanitizeRichHtml } from "@/utils/helperFunctions/sanitizeRichHtml";
 import { isDictationLanguage } from "@/lib/dictationProvider";
 import {
@@ -306,7 +309,9 @@ export async function POST(request: NextRequest) {
         ([surface, optionId]) =>
           !isAiModelPreferenceSurface(surface) ||
           typeof optionId !== "string" ||
-          !getAiModelOptionById(optionId),
+          (surface === "imageGeneration"
+            ? !aiImageModelDefinitions.some((model) => model.key === optionId)
+            : !getAiModelOptionById(optionId)),
       );
 
       if (invalidPreference) {
