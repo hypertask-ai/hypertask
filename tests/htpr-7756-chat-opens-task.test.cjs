@@ -218,7 +218,7 @@ for (const mode of ["connected", "disconnected", "enqueue failure"]) {
       "@vercel/functions": {},
       "@/lib/ai/chatAlerts/service": {},
       "@/app/api/ai/_lib/chatSkillResolution": { resolveSkillsForAiRequest: async () => ({}) },
-      "@/lib/ai/chatStream/errors": { sseFrame: (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n` },
+      "@/lib/ai/chatStream/errors": { normalizeProviderAuthError: async (error) => error, sseFrame: (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n` },
       "./fleetTurn": { routeAgentMention: async () => false },
       "./modelTurn": { runModelTurn: async (state) => { emitted = state.send("open_task", { projectId: 15, uniqueIndex: 7755 }); } },
     });

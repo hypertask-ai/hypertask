@@ -8,5 +8,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7622 posts Apply, Cancel or Undo for one setting change to Hypertask's own /api/ai/settings route; no third-party paid API is called.",
     "source": "https://app.hypertask.ai/detail/project-15/7622"
+  },
+  "src/lib/ai/chatStream/modelReply.ts:942cd87065de1b8f3cd5835d7eeaed3c1ea91e97128acf509f6efde980565521": {
+    "maxUsdPerDay": 0,
+    "reason": "Zero additional spend: existing streamText call is unchanged except extracting its error callback. No new request, model, retry, token budget, or provider routing; this only normalizes rejected credentials before reporting.",
+    "source": "https://api-docs.deepseek.com/quick_start/pricing"
   }
 }

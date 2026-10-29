@@ -148,6 +148,7 @@ function streamHarness(f, text, projectId) {
     '@/lib/ai/chatAlerts/service': { recordAiChatAlertSample: async () => {} },
     '@/lib/ai/chatStream/errors': {
       includedAllowanceError: () => false,
+      normalizeProviderAuthError: async error => error,
       reportHandledChatError: async error => errors.push(error),
       userFacingErrorMessage: error => error.message,
       userFacingErrorDetails: () => ({}),

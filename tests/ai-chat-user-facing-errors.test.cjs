@@ -4,6 +4,7 @@ const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 const z = require("zod");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const routeSource = fs.readFileSync(
   path.join(__dirname, "../src/app/api/ai/chat/stream/route.ts"),
@@ -200,11 +201,21 @@ test("model-selection errors remain user-actionable and pass through unchanged",
   );
 });
 
-test("expected plan-access guidance is not reported as a product bug", () => {
-  assert.match(
-    routeSource,
-    /if \(\s*error instanceof Error &&\s*\(error\.name === "AiPlanAccessError" \|\|\s*error\.name === "AiGatewayKeyRequiredError"\)\s*\) \{\s*return;\s*\}/
-  );
+test("expected plan-access guidance is not reported as a product bug", async () => {
+  const reports = [];
+  const { reportHandledChatError } = loadModule("src/lib/ai/chatStream/errors.ts", {
+    "@/lib/api/errorMessage": { toErrorMessage: loadToErrorMessage() },
+    "@/lib/ai/tools/constants": { SSE_HEADERS: {} },
+    "@/lib/errors/reportError": { reportError: async report => reports.push(report) },
+  });
+
+  for (const name of ["AiPlanAccessError", "AiGatewayKeyRequiredError", "AiProviderAuthenticationError"]) {
+    await reportHandledChatError(Object.assign(new Error(name), { name }), "select-model");
+    assert.equal(reports.length, 0, `${name} must not be reported`);
+  }
+  await reportHandledChatError(Object.assign(new Error("unexpected"), { statusCode: 500 }), "model-stream");
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].extra.statusCode, 500);
 
   const planGateSource = fs.readFileSync(
     path.join(__dirname, "../src/app/api/ai/_lib/planGate.ts"),

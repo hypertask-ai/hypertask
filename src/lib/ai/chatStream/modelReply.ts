@@ -13,7 +13,7 @@ import { failHeartbeatExecution } from "@/app/api/ai/_lib/heartbeatExecution";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { hasVisibleCompletion, buildEmptyCompletionSummary } from "@/app/api/ai/chat/stream/bulkTools";
-import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion } from "@/lib/ai/chatStream/errors";
+import { reportHandledChatError, errorMessage, userFacingErrorMessage, userFacingErrorDetails, reportEmptyCompletion, normalizeProviderAuthError } from "@/lib/ai/chatStream/errors";
 
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 import { MAX_TOOL_STEPS } from "@/lib/ai/tools/constants";
@@ -40,6 +40,45 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const modelInstructions = deferredToolsEnabled
     ? `${instructions}\n\nOnly the listed tools are immediately available. For other actions, find the tool with hypertask_search_tools, then call hypertask_describe_tool with its exact name before calling it. Describing a tool does not execute the requested action.`
     : instructions;
+
+  const handleModelError = async (error: unknown) => {
+    error = await normalizeProviderAuthError(error, dbUser.id);
+    state.recordTurnOutcome(state.cancelled ? "cancelled" : "failed", error);
+    if (state.errorSent) return;
+    state.errorSent = true;
+    if (state.cancelled) {
+      if (heartbeatExecutionId) {
+        await failHeartbeatExecution(
+          heartbeatExecutionId,
+          "AI reply cancelled",
+        );
+        state.heartbeatExecutionTerminal = true;
+      }
+      state.finish("error", { cancelled: true, content: "Stream cancelled." });
+      return;
+    }
+    if (state.turnDeadlineHit) {
+      await state.endDeadlineTurn();
+      return;
+    }
+    state.send("error", {
+      content: userFacingErrorMessage(error, "model-stream"),
+      toolsExecuted: toolExecutions.length > 0,
+      ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
+    });
+    state.finish("error");
+    if (heartbeatExecutionId) {
+      await failHeartbeatExecution(
+        heartbeatExecutionId,
+        errorMessage(error)
+      );
+      state.heartbeatExecutionTerminal = true;
+    }
+    await reportHandledChatError(error, "model-stream", {
+      model: state.selected.resolvedModelId,
+      provider: state.selected.usageProvider,
+    });
+  };
 
   const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
   const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
@@ -99,41 +138,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           fallbackError = error;
           return;
         }
-        state.recordTurnOutcome(state.cancelled ? "cancelled" : "failed", error);
-        if (state.errorSent) return;
-        state.errorSent = true;
-        if (state.cancelled) {
-          if (heartbeatExecutionId) {
-            await failHeartbeatExecution(
-              heartbeatExecutionId,
-              "AI reply cancelled",
-            );
-            state.heartbeatExecutionTerminal = true;
-          }
-          state.finish("error", { cancelled: true, content: "Stream cancelled." });
-          return;
-        }
-        if (state.turnDeadlineHit) {
-          await state.endDeadlineTurn();
-          return;
-        }
-        state.send("error", {
-          content: userFacingErrorMessage(error, "model-stream"),
-          toolsExecuted: toolExecutions.length > 0,
-          ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
-        });
-        state.finish("error");
-        if (heartbeatExecutionId) {
-          await failHeartbeatExecution(
-            heartbeatExecutionId,
-            errorMessage(error)
-          );
-          state.heartbeatExecutionTerminal = true;
-        }
-        await reportHandledChatError(error, "model-stream", {
-          model: state.selected.resolvedModelId,
-          provider: state.selected.usageProvider,
-        });
+        await handleModelError(error);
       },
       providerOptions: state.selected.providerOptions,
       ...state.selected.settings,
@@ -229,6 +234,11 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           state.send("content", { content: retryText });
         }
       } catch (retryError) {
+        const normalized = await normalizeProviderAuthError(retryError, dbUser.id);
+        if (normalized instanceof Error && normalized.name === "AiProviderAuthenticationError") {
+          await handleModelError(normalized);
+          return;
+        }
         emptyCompletionError = retryError;
         emptyCompletionRetryFailed = true;
         console.error(
