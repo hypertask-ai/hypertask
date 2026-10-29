@@ -23,7 +23,7 @@ const flagPath = "src/lib/flags/definitions/htpr-8035-sidebar-new-task.ts";
 const flag = load(flagPath, {}).default;
 const { CommandMode } = load("src/models/enums.ts", {});
 
-function renderRail({ enabled = true, compose = true, wide = false, apple = false, settingsNamed = true, pathname = "/my-tasks" } = {}) {
+function renderRail({ enabled = true, compose = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
   const updates = [];
   const navigation = [];
   const icon = (props) => React.createElement("svg", props);
@@ -54,7 +54,7 @@ function renderRail({ enabled = true, compose = true, wide = false, apple = fals
     "@/components/Modals/Settings/settingsNavigation": { useSettingsNavigation: () => ({ openSettings: () => navigation.push("settings") }) },
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/store/currentPageActions": { currentPageActionsAtom: "page-actions" },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === "htpr-6929-compose-task-writer" ? compose : false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === "htpr-6929-compose-task-writer" ? compose : false },
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
@@ -97,6 +97,26 @@ for (const wide of [false, true]) {
     assert.deepEqual(rail.navigation, ["boards", "board", "table"]);
   });
 }
+
+test("rail keeps its existing glyphs until Graphite 2 replacements are enabled", () => {
+  for (const wide of [false, true]) for (const graphite2 of [false, true]) {
+    const rail = renderRail({ wide, graphite2 });
+    for (const label of [wide ? "Collapse sidebar" : "Expand sidebar", "New Task", "Agents"]) {
+      const control = rail.nodes.find(node => node.props["aria-label"] === label);
+      const glyphs = [];
+      function visit(node) {
+        if (!React.isValidElement(node)) return;
+        if (typeof node.type === "function") return visit(node.type(node.props));
+        if (node.type === "svg") glyphs.push(node);
+        React.Children.forEach(node.props.children, visit);
+      }
+      visit(control);
+      assert.equal(glyphs.length, 2, label);
+      assert.equal(glyphs[0].props.className, graphite2 ? "[.graphite-2_&]:hidden" : undefined, label);
+      assert.equal(glyphs[1].props.className, graphite2 ? "[html:not(.graphite-2)_&]:hidden" : "hidden", label);
+    }
+  }
+});
 
 test("feature off or compose unavailable leaves no new entry", () => {
   for (const options of [{ enabled: false }, { compose: false }]) {
