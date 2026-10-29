@@ -34,6 +34,7 @@ export type TFilter = "Labels" | "Assignees" | "BlockedByPerson" | "UpdatedBy" |
 export type TMatchFilters = "ALL"|"ANY";
 export interface IFilterRuntimeContext {
   runningTaskIds?: ReadonlySet<number>;
+  agentCreatorFilterEnabled?: boolean;
   legacyAgentAssigneeMatch?: boolean;
   legacyMissingPersonalViewFilters?: boolean;
 }

@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
 
 import { ISection, ITask } from '@/models/model'
@@ -44,6 +45,7 @@ interface IHandleKeyDownOperations {
 const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {initialSections , handleBoardChange, filteredSections} = props
     const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG)
+    const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const queryClient = useQueryClient();   
@@ -478,6 +480,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     ])
     const filterRuntimeContext = {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
+      agentCreatorFilterEnabled,
       legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }

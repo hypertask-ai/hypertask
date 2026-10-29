@@ -196,3 +196,15 @@ Flag `htpr-8149-archive-focus-order` defaults to Everyone. Off retains the
 old cached-card focus path; cover both paths in targeted tests without
 switching production flags. Collect desktop and phone theme captures and
 the archive-request/focus sequence. Remove only the fixtures created.
+
+## Agent creator filter
+
+With `htpr-7865-agent-creator-filter` enabled, open board filters, then
+**Created by**. The existing people picker also lists active agents.
+Choose an agent: only that agent's created tickets remain, not its owner's
+or another agent's. Choose the owner: agent-created tickets stay excluded.
+Save the view, reload its URL, and verify the same rows and view count.
+Combine Created by with Priority under ANY and ALL. Check archived rows
+and a ticket update still respect the selected creator. With the flag off,
+agent choices disappear and existing human filters restore owner matching.
+Calendar and My Tasks retain their existing creator picker.

@@ -1,3 +1,4 @@
+import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
@@ -144,6 +145,7 @@ export const Section = ({
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isMbl = useContext(MobileViewContext);
+  const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
   const revealAheadInColumn = useFlag(HTPR_7695_COLUMN_REVEAL_AHEAD_FLAG);
@@ -368,10 +370,10 @@ export const Section = ({
             archivedTasks,
             section.sectionId,
             currentProject,
-            { legacyAgentAssigneeMatch: !assigneeFixEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled },
+            { legacyAgentAssigneeMatch: !assigneeFixEnabled, agentCreatorFilterEnabled, legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled },
           )
         : [],
-    [archivedTasks, assigneeFixEnabled, defaultFiltersFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
+    [archivedTasks, agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, currentProject, section.sectionId, showArchivedOnBoard]
   );
   const archivedTasksPlayList = useMemo(
     () =>
