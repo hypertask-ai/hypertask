@@ -60,7 +60,7 @@ async function withChat(options, check) {
     "./useAiChatModelPreference": { useAiChatModelPreference: () => ({}) }, "./aiChatShared": { aiOptionsWithoutOpenRouter: [] },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ ...history, chatMounted: true, registerMessageListRef: element => { messageListElement = element; }, handleMessageListScroll() {}, scrollMessagesToBottom: () => { if (messageListElement) messageListElement.scrollTop = 1000; } }) },
     "./MessageItem": { MessageItem: ({ message }) => React.createElement("p", null, message.content) }, "./TypingIndicator": { TypingIndicator: () => null },
-    "./useAiChatOpenPreferences": { useSyncAiChatOpenPreferences() {}, useAiChatOpenPreferences: () => ({ enabled: true, ready: true, flagReady: true, values: { aiChatOpenBoards: options.boardAutoOpen !== false, aiChatOpenTickets: true } }) },
+    "./useAiChatOpenPreferences": { useSyncAiChatOpenPreferences() {}, useAiChatOpenPreferences: () => ({ enabled: true, ready: true, flagReady: true, values: { aiChatOpenBoards: options.boardAutoOpen !== false, aiChatOpenTickets: true, aiChatOpenNewTickets: options.newTicketAutoOpen !== false } }) },
   });
   const { useAiChatSessions } = source("src/hooks/MultiPages/AIChat/useAiChatSessions.ts");
   const { useAiChatState } = source("src/hooks/MultiPages/AIChat/useAiChatState.ts");
@@ -529,5 +529,28 @@ test("selecting a transcript after empty initialization waits without replacing 
     await React.act(async () => { finishTranscript(); await selection; }); await view.flush();
     assert.equal(view.history().currentSession.id, "older");
     assert.equal((await view.resolver().ensureSessionForCurrentBoard(0)).id, "older");
+  });
+});
+
+for (const enabled of [false, true]) test(`new-ticket preference ${enabled ? "opens" : "closes"} chat after Settings despite remembered panel state`, async () => {
+  await withChat({ panel: true, newTicketAutoOpen: enabled }, async view => {
+    await view.set(atoms.showAIChatInterfaceAtom, !enabled);
+    await view.visit("/settings/profile");
+    await view.set(atoms.aiChatNewTicketPathAtom, "/detail/project-15/43");
+    await view.visit("/detail/project-15/43");
+    assert.equal(view.values.get(atoms.showAIChatInterfaceAtom), enabled);
+    assert.equal(view.reserve(), enabled);
+  });
+});
+
+test("legacy Compose intent replaces an unrelated active session without ticket following", async () => {
+  await withChat({ paged: false, compose: true, rows: [row("older"), { ...row("compose-target"), taskId: 43 }] }, async view => {
+    await view.set(atoms.inViewObjectAtom, { taskId: 43 });
+    await view.visit("/detail/project-15/43");
+    await React.act(async () => { await view.history().selectSession("older"); }); await view.flush();
+    assert.equal(view.history().currentSession.id, "older");
+    await view.set(atoms.composeTaskChatIntroAtom, { taskId: 43, content: "Task intro" });
+    assert.equal(view.history().currentSession.id, "compose-target");
+    assert.equal(view.calls.filter(([type]) => type === "create").length, 0);
   });
 });

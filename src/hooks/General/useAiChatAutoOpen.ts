@@ -69,7 +69,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       attemptedRestore.current = null;
     } else if (previousPage.current !== pageKey) restoreVisit.current = null;
     const savedOpen = readChatNavigationState(navigationKey).open;
-    const restorePanel = navigationKey && page && !manualOpen && typeof savedOpen === "boolean" &&
+    const restorePanel = navigationKey && page && page !== "aiChatOpenNewTickets" && !manualOpen && typeof savedOpen === "boolean" &&
       restoreVisit.current === pageKey && attemptedRestore.current !== navigationPageKey;
     if (navigationKey && page && restoreVisit.current === pageKey) attemptedRestore.current = navigationPageKey;
     previousRoute.current = route;
@@ -123,7 +123,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const savedOpen = readChatNavigationState(navigationKey).open;
   const restorationPending = previousRoute.current === null || previousRoute.current.startsWith("/settings") ||
     (restoreVisit.current === pageKey && attemptedRestore.current !== navigationPageKey);
-  const restoringPanel = navigationKey && typeof savedOpen === "boolean" &&
+  const restoringPanel = navigationKey && page !== "aiChatOpenNewTickets" && typeof savedOpen === "boolean" &&
     (restoredPage.current === navigationPageKey || restorationPending);
   const rememberedOpen = restorationPending ? savedOpen === true : open;
   const reserve = active && !mobile && (restoringPanel ? rememberedOpen : allowed && !(suppressed && !pageChanged));

@@ -537,7 +537,7 @@ export const useSessionAndChatHistory = (
           return;
         }
 
-        if (navigationKey && sessions.some((session) => session.id === activeSession)) return;
+        if (navigationKey && sessions.some((session) => session.id === activeSession && (!hasExplicitTask || session.taskId === taskId))) return;
         const existingTaskSession = sessions.find(
           (session) => session.taskId === taskId
         );
