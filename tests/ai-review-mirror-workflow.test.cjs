@@ -49,9 +49,13 @@ async function runMirror({
 
   const savedFetch = globalThis.fetch;
   const savedToken = process.env.HYPERTASK_MCP_TOKEN;
+  const savedAuthor = process.env.REVIEW_COMMENT_AUTHOR;
   globalThis.fetch = fetchStub;
   if (token === null) delete process.env.HYPERTASK_MCP_TOKEN;
   else process.env.HYPERTASK_MCP_TOKEN = token;
+  // The step reads this from the workflow env; without it no comment is the
+  // reviewer's and every path here would skip.
+  process.env.REVIEW_COMMENT_AUTHOR = REVIEWER.login;
   try {
     await new AsyncFunction("github", "context", "core", await loadScript())(
       github,
@@ -62,6 +66,8 @@ async function runMirror({
     globalThis.fetch = savedFetch;
     if (savedToken === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
     else process.env.HYPERTASK_MCP_TOKEN = savedToken;
+    if (savedAuthor === undefined) delete process.env.REVIEW_COMMENT_AUTHOR;
+    else process.env.REVIEW_COMMENT_AUTHOR = savedAuthor;
   }
 
   return { calls, failures, infos, posts: calls.filter(call => call.method === "POST") };
@@ -72,7 +78,7 @@ function productionPr(overrides = {}) {
     number: 43,
     html_url: "https://github.com/hypertask-ai/hypertask/pull/43",
     base: { ref: "production", repo: { full_name: "hypertask-ai/hypertask" } },
-    head: { ref: "runner3/htpr-1234-something", repo: { full_name: "hypertask-ai/hypertask" } },
+    head: { sha: SHA, ref: "runner3/htpr-1234-something", repo: { full_name: "hypertask-ai/hypertask" } },
     ...overrides,
   };
 }
@@ -115,7 +121,7 @@ test("a comment on an issue that is not a pull request costs no API call", async
 
 test("a fork or foreign PR is never mirrored", async () => {
   const forked = await runMirror({
-    pr: productionPr({ head: { ref: "htpr-1234-fix", repo: { full_name: "fork/hypertask" } } }),
+    pr: productionPr({ head: { sha: SHA, ref: "htpr-1234-fix", repo: { full_name: "fork/hypertask" } } }),
   });
   assert.deepEqual(forked.posts, []);
   assert.deepEqual(forked.failures, []);
@@ -123,7 +129,7 @@ test("a fork or foreign PR is never mirrored", async () => {
 
 test("a branch that names no ticket is not mirrored", async () => {
   const { posts, failures } = await runMirror({
-    pr: productionPr({ head: { ref: "chore/cleanup", repo: { full_name: "hypertask-ai/hypertask" } } }),
+    pr: productionPr({ head: { sha: SHA, ref: "chore/cleanup", repo: { full_name: "hypertask-ai/hypertask" } } }),
   });
   assert.deepEqual(posts, []);
   assert.deepEqual(failures, []);
@@ -139,7 +145,7 @@ test("the same reviewed commit is not posted to the ticket twice", async () => {
 
 test("YPER4 branches keep their own ticket and a missing marker is not guessed", async () => {
   const yper = await runMirror({
-    pr: productionPr({ head: { ref: "runner3/yper4-675-ticket-mirror", repo: { full_name: "hypertask-ai/hypertask" } } }),
+    pr: productionPr({ head: { sha: SHA, ref: "runner3/yper4-675-ticket-mirror", repo: { full_name: "hypertask-ai/hypertask" } } }),
   });
   assert.equal(JSON.parse(yper.posts[0].init.body).ticket_number, "YPER4-675");
 
@@ -148,6 +154,20 @@ test("YPER4 branches keep their own ticket and a missing marker is not guessed",
   });
   assert.deepEqual(unmarked.posts, []);
   assert.deepEqual(unmarked.failures, []);
+});
+
+test("a verdict for an older head never reaches the ticket as the current one", async () => {
+  const older = "d".repeat(40);
+  const { posts, infos } = await runMirror({
+    pr: productionPr({
+      comments: [{
+        user: REVIEWER,
+        body: `APPROVE — reviewed by **gpt-6.1-sol**\n\n- ok\n<!-- reviewed-commit: ${older} -->`,
+      }],
+    }),
+  });
+  assert.deepEqual(posts, []);
+  assert.match(infos.join("\n"), /no verdict for head/);
 });
 
 test("a PR with no verdict comment yet posts nothing", async () => {
@@ -208,5 +228,8 @@ test("the workflow neither checks out nor executes candidate code", async () => 
   }
   assert.deepEqual(workflow.on.issue_comment.types, ["created", "edited"]);
   assert.equal(workflow.on.workflow_dispatch.inputs.pr.required, true);
+  // An ordinary comment must not cancel the reviewer's delivery.
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
+  assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
   assert.ok(workflow.jobs.mirror.steps[0].env.REVIEW_COMMENT_AUTHOR);
 });

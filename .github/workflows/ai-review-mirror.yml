@@ -21,9 +21,12 @@ permissions:
   contents: read
   pull-requests: read
 
+# The author is part of the group so an ordinary comment on the same pull
+# request cannot cancel the delivery the reviewer just woke, and cancelling is
+# off so a queued round re-reads the newest verdict instead of racing it.
 concurrency:
-  group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}
-  cancel-in-progress: true
+  group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}-${{ github.event.comment.user.login || 'dispatch' }}
+  cancel-in-progress: false
 
 jobs:
   mirror:
@@ -93,28 +96,30 @@ jobs:
               return;
             }
 
-            // The reviewer upserts one comment per head commit, so the newest
-            // verdict comment is the one that describes the current head.
-            const reviewComments = (await github.paginate(github.rest.issues.listComments, {
+            // The reviewer upserts one comment per pull request, so several
+            // verdicts can sit on it. Only the one that reviewed the current
+            // head describes what will merge; an older verdict must never reach
+            // the ticket as if it were the current one.
+            const verdicts = (await github.paginate(github.rest.issues.listComments, {
               ...context.repo,
               issue_number: prNumber,
               per_page: 100,
             })).filter(comment =>
               comment.user?.login === REVIEW_AUTHOR &&
               /^(APPROVE|CONCERNS)\b/.test(comment.body ?? ''));
-            const review = reviewComments.at(-1);
+            const headSha = pr.head?.sha;
+            const review = verdicts.findLast(comment =>
+              /reviewed-commit:\s*([0-9a-f]{40})/.exec(comment.body ?? '')?.[1] === headSha);
             if (!review) {
-              core.info(`PR #${prNumber} has no AI review verdict comment yet; nothing to mirror.`);
+              core.info(
+                `PR #${prNumber} has no verdict for head ${String(headSha).slice(0, 12)} yet ` +
+                `(${verdicts.length} older verdict comment(s)); nothing to mirror.`);
               return;
             }
 
             const body = review.body ?? '';
             const verdict = body.split('\n')[0].trim().slice(0, 300);
             const sha = /reviewed-commit:\s*([0-9a-f]{40})/.exec(body)?.[1];
-            if (!sha) {
-              core.info('Verdict comment carries no reviewed-commit marker; nothing to mirror.');
-              return;
-            }
 
             const escapeHtml = value => value
               .replace(/&/g, '&amp;')
