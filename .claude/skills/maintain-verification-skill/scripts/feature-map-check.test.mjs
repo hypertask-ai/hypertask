@@ -71,11 +71,11 @@ const path = require('node:path');
 const home = process.env.FIXTURE_HOME;
 const args = process.argv.slice(2);
 const prompt = args.at(-1);
-const page = prompt.match(/feature-map\\/(area-\\d+\\.md)/)?.[1];
+const page = prompt.match(/feature-map\\/((?:\\.\\.\\/ops-map\\/)?[a-z0-9-]+\\.md)/)?.[1];
 if (!page || !prompt.startsWith('Token ladder: CODEX mode.') || !prompt.includes('Use the unlazy skill') || !prompt.includes('Only read source.') || !args.includes('--provider=codex') || !args.includes('--no-session')) process.exit(9);
 fs.appendFileSync(path.join(home, 'helpers'), page + '\\n');
 fs.appendFileSync(path.join(home, 'events'), 'start ' + page + '\\n');
-const attemptFile = path.join(home, page + '.attempts');
+const attemptFile = path.join(home, page.replaceAll('/', '_') + '.attempts');
 const attempts = fs.existsSync(attemptFile) ? Number(fs.readFileSync(attemptFile)) : 0;
 fs.writeFileSync(attemptFile, String(attempts + 1));
 console.error('stderr must be discarded');
@@ -262,6 +262,29 @@ test('weekly first run caps eight helpers, max two concurrent, and drains backlo
   ok(f.run());
   assert.equal(readFileSync(path.join(f.home, 'helpers'), 'utf8'), before);
   for (const run of f.runs()) assert.equal(existsSync(path.join(run, 'checkout')), false);
+});
+
+test('weekly keeps moved ops recipes in incremental audits and pending retries without name collisions', t => {
+  const f = weeklyFixture(t);
+  f.put(`${opsPath}/INDEX.md`, '| Area | File |\n|---|---|\n| Ops | [ops](area-00.md) |\n');
+  f.put(`${opsPath}/area-00.md`, '`src/ops.ts`');
+  f.put('src/ops.ts', 'first');
+  f.git('add', '.'); f.git('commit', '-m', 'ops recipe');
+  ok(f.run());
+  assert.deepEqual(readFileSync(path.join(f.home, 'helpers'), 'utf8').trim().split('\n').sort(), ['../ops-map/area-00.md', 'area-00.md']);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.runs()[0], 'result.json'))).failures, []);
+  rmSync(path.join(f.home, 'helpers'));
+  f.put('src/ops.ts', 'second');
+  f.git('add', '.'); f.git('commit', '-m', 'ops source change');
+  f.env.HELPER_FAIL = 'always';
+  assert.notEqual(f.run().status, 0);
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.state, 'pending.json'))), ['../ops-map/area-00.md']);
+  delete f.env.HELPER_FAIL;
+  rmSync(path.join(f.home, 'helpers'));
+  ok(f.run());
+  assert.equal(readFileSync(path.join(f.home, 'helpers'), 'utf8').trim(), '../ops-map/area-00.md');
+  assert.deepEqual(JSON.parse(readFileSync(path.join(f.state, 'pending.json'))), []);
+  ok(f.run('--dry-run', '--pages', '../ops-map/area-00.md'));
 });
 
 test('load hold fetches but starts no helpers or tickets and leaves checkpoint unchanged', t => {

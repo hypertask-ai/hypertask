@@ -7,7 +7,7 @@ Source: pstack 0.15.9 by Lauren Tan, https://github.com/cursor/plugins/tree/main
 
 # Maintain the verification skill
 
-The fixed target is `.claude/skills/verify-qa/`, with area pages in `.claude/skills/verify-qa/reference/feature-map/`. No target discovery or generated inventory. The weekly timer reads source only; the ticket's runner owns live verification.
+The fixed target is `.claude/skills/verify-qa/`, with customer pages in `.claude/skills/verify-qa/reference/feature-map/` and internal recipes in `reference/ops-map/`. Both maps keep citation checks and weekly source coverage. No target discovery or generated inventory. The weekly timer reads source only; the ticket's runner owns live verification.
 
 ## Outcomes
 
@@ -44,7 +44,7 @@ node .claude/skills/maintain-verification-skill/scripts/feature-map-check.mjs
 
 The tests use temporary Git repositories, HOME, local remotes and fake hax/vcc/systemctl commands: no real helpers, network, board writes or installed services. The checker prints a Markdown list, appends the same report to `GITHUB_STEP_SUMMARY` when set and exits 1 on problems. An optional positional checkout path lets the timer check its detached production checkout.
 
-`--dry-run` still fetches and starts the selected read-only subscription helpers, builds the HTML report and updates the incremental queue, but never calls vcc or records a filed marker. It prints the description path. Drift remains queued for a later filing run. `--pages` forces existing area-page sibling names (comma-separated, no paths); the eight-helper limit still applies and other queued pages remain pending. `--repo PATH` selects the fetch checkout. A load status containing `hold` exits 0 after fetch, without helpers or advancing state; missing status fails closed. These commands are source-only, not a replacement for live QA.
+`--dry-run` still fetches and starts the selected read-only subscription helpers, builds the HTML report and updates the incremental queue, but never calls vcc or records a filed marker. It prints the description path. Drift remains queued for a later filing run. `--pages` forces existing recipe names (comma-separated): customer siblings such as `login.md`, or moved recipes such as `../ops-map/production-build.md`; the eight-helper limit still applies and other queued pages remain pending. `--repo PATH` selects the fetch checkout. A load status containing `hold` exits 0 after fetch, without helpers or advancing state; missing status fails closed. These commands are source-only, not a replacement for live QA.
 
 The non-required `feature-map-check` GitHub job runs the tiny tests then the checker on Mondays at 03:37 UTC, manual dispatch and scoped PRs to production. It uses free GitHub-hosted Ubuntu, pinned checkout/setup-node, Node 24, only `contents: read`, no installs or secrets. Real stale citations make it red; repair them in their own ticket, not by weakening checks. It is not a required merge check.
 
