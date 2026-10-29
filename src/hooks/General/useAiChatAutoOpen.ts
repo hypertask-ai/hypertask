@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG } from "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -18,6 +19,7 @@ function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | 
 }
 
 export function useAiChatAutoOpen(mobile: boolean) {
+  const preserveFullScreenReturn = useFlag(HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG);
   const stableDefaultView = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
   useSyncAiChatOpenPreferences();
   const { enabled, ready, flagReady, values } = useAiChatOpenPreferences();
@@ -46,7 +48,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       previousPage.current = null;
       return;
     }
-    const returningFromFullScreen = (previousPage.current ?? lastPage)?.startsWith(`${user.id}:/chat`);
+    const returningFromFullScreen = preserveFullScreenReturn && (previousPage.current ?? lastPage)?.startsWith(`${user.id}:/chat`);
     const changed = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
     if (lastPage !== pageKey) setLastPage(pageKey);
     previousPage.current = pageKey;
@@ -55,7 +57,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
       visitedNewTicket.current = false;
       setNewTicketPath(null);
     }
-    if (fullScreenReturnPage.current !== pageKey) fullScreenReturnPage.current = null;
+    if (!preserveFullScreenReturn || fullScreenReturnPage.current !== pageKey) fullScreenReturnPage.current = null;
     if (returningFromFullScreen) {
       autoOpenedPage.current = null;
       fullScreenReturnPage.current = pageKey;
@@ -71,7 +73,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
     autoOpenedPage.current = pageKey;
     setExplicitOpenAt(null);
     setOpen(true);
-  }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, stableDefaultView, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
+  }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   const active = enabled || !flagReady;
   const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);

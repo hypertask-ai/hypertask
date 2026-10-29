@@ -16,6 +16,7 @@ function load(file, mocks = {}) {
   } }).outputText;
   new Function("require", "module", "exports", "window", js)((name) => {
     if (Object.hasOwn(mocks, name)) return mocks[name];
+    if (name === "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return") return { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG: "htpr-8052-fullscreen-chat-return" };
     if (name === flagFile) return { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG: flag };
     if (name === "@/lib/flags/definitions/htpr-8038-chat-opener-ready") return { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" };
     if (name === policyFile) return policy;
@@ -76,7 +77,7 @@ function pageHarness(values = defaults, options = {}) {
   let pathname = "/detail/project-15/1", query = "", mobile = false, enabled = options.enabled ?? true;
   const { useAiChatAutoOpen } = load("src/hooks/General/useAiChatAutoOpen.ts", {
     react: h.react, "@/lib/state": s.state, "@/store": atoms,
-    "@/hooks/useFlag": { useFlag: () => options.stabilize !== false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8052-fullscreen-chat-return" ? options.fullscreenReturn !== false : options.stabilize !== false },
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(query) },
     "./useAiChatOpenPreferences": { useAiChatOpenPreferences: () => ({ enabled, ready: true, flagReady: true, values }), useSyncAiChatOpenPreferences() {} },
   });
@@ -526,5 +527,15 @@ test("preferences reader selects all switches and upgrades pre-release cached pr
     const response = await controller.fetchUserPreferenceController(7);
     assert.equal(response.status, 200);
     for (const key of policy.AI_CHAT_AUTO_OPEN_KEYS) assert.equal(response.res[key], cached ? null : defaults[key]);
+  }
+});
+
+test("fullscreen return flag Off retains the saved automatic-opening choice", () => {
+  for (const phone of [false, true]) {
+    const h = pageHarness(allOff, { fullscreenReturn: false });
+    h.navigate("/chat", phone);
+    h.manualOpen();
+    h.navigate("/my-tasks", phone);
+    assert.equal(h.values.showAIChatInterfaceAtom, false);
   }
 });
