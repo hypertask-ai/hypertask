@@ -1,4 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
 import { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG } from "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
@@ -29,13 +30,14 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
 
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
-  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
+  const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
   const skillRunsInSidebar = useFlag(HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG);
   const { editTicketWithAi, runCommentSkill } = useCommentToAiChat();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
-  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  if (mode === "read-edit-description" && !descriptionInlineDrafts && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
 
   useEffect(() => {
@@ -128,7 +130,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
         return;
       }
       setAiTriggerData({
-        autoTrigger: true,
+        autoTrigger: !(descriptionInlineDrafts && mode === "read-edit-description"),
         initialPrompt: event.detail.prompt
       });
       setShouldShowAITaskWriter(true);
@@ -158,7 +160,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   useLayoutEffect(() => {
     window.addEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
-  }, [id, newTaskWindow, setCommands, sidebarEditWithAi, editTicketWithAi, currentTask?.id, skillRunsInSidebar, runCommentSkill, mode, editor]);
+  }, [id, newTaskWindow, setCommands, sidebarEditWithAi, descriptionInlineDrafts, editTicketWithAi, currentTask?.id, skillRunsInSidebar, runCommentSkill, mode, editor]);
 
   useEffect(() => {
     if (mode !== "create-comment") return;

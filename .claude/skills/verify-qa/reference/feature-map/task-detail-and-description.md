@@ -85,3 +85,15 @@ live create/edit to confirm their background jobs did not emit allowance errors.
 If you created a test task, hard-delete it via the product UI. Never leave a
 task you created (the smoke prefix is `QA_TASK_PREFIX` in
 `e2e/smoke/lib/boardSetup.ts`) past the run.
+
+## Description AI draft review
+
+With `htpr-8173-description-inline-drafts` on, open a disposable task's
+**Edit with AI** button. Also check Ctrl+J / Cmd+J from the focused description
+and targeted description AI events. The existing inline writer opens without
+requesting a draft automatically. Submit only when authorized, review multiple
+versions, apply one, save, and reload to confirm the chosen description persists.
+Check mobile and desktop, empty descriptions, and existing comments. Confirm
+comment AI and New Task compose retain their own behavior. With the flag off,
+confirm the previous sidebar routing in an isolated test. Delete disposable QA
+tasks and drafts after verification. Never use Valentin's browser or login.

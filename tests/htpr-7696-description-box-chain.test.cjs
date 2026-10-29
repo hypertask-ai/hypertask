@@ -28,6 +28,7 @@ const mocks = {
   "@/lib/contexts/mobileContext": { MobileViewContext },
   "@/lib/contexts/TaskDetail/TiptapProvider": { default: ({ children }) => children, useTiptapGlobalContext: () => context },
   "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
   "@/lib/flags/keys": {},
   "@/lib/state": { useRecoilValue: () => false, useSetRecoilState: () => empty },
   "@/store": {},
