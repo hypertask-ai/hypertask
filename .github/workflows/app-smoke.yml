@@ -137,12 +137,20 @@ jobs:
             echo "pr=$REQUEST_PR"
             echo "base-sha=$(jq -r '.base.sha' <<<"$pr_json")"
           } >>"$GITHUB_OUTPUT"
-          if ! gh api --method POST "repos/$REPO/statuses/$head_sha" \
+          post_status() {
+            for attempt in $(seq 1 20); do
+              gh api --method POST "$@" && return 0
+              echo "::warning::Status publish failed (attempt $attempt of 20); GitHub API rate limit may be the cause. Retrying in 180s."
+              sleep 180
+            done
+            echo "### GitHub API rate limit, not a test failure" >>"$GITHUB_STEP_SUMMARY"
+            echo "The app-smoke status could not be published after 20 tries over 60 minutes." >>"$GITHUB_STEP_SUMMARY"
+            return 1
+          }
+          post_status "repos/$REPO/statuses/$head_sha" \
             -f state=pending \
             -f context=app-smoke \
-            -f description='Building and testing the real app'; then
-            echo "::warning::Could not publish the pending app-smoke status; continuing the build."
-          fi
+            -f description='Building and testing the real app'
 
       - name: Check out the trusted scope detector
         if: steps.request.outputs.superseded != 'true'
@@ -305,7 +313,7 @@ jobs:
     if: always() && !cancelled() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
     needs: [validate, app-smoke]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 65
     permissions:
       actions: write
       contents: read
@@ -346,20 +354,20 @@ jobs:
             description='docs-only change, skipped'
             echo "$description"
           fi
-          if ! gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" \
+          post_status() {
+            for attempt in $(seq 1 20); do
+              gh api --method POST "$@" && return 0
+              echo "::warning::Status publish failed (attempt $attempt of 20); GitHub API rate limit may be the cause. Retrying in 180s."
+              sleep 180
+            done
+            echo "### GitHub API rate limit, not a test failure" >>"$GITHUB_STEP_SUMMARY"
+            echo "The app-smoke status could not be published after 20 tries over 60 minutes." >>"$GITHUB_STEP_SUMMARY"
+            return 1
+          }
+          post_status "repos/$REPO/statuses/$HEAD_SHA" \
             -f state="$state" \
             -f context=app-smoke \
-            -f description="$description"; then
-            echo "::warning::app-smoke status publish failed; retrying once."
-            sleep 5
-            gh api --method POST "repos/$REPO/statuses/$HEAD_SHA" \
-              -f state="$state" \
-              -f context=app-smoke \
-              -f description="$description" || {
-              echo "::error::Could not publish the app-smoke status."
-              exit 1
-            }
-          fi
+            -f description="$description"
           if [ -n "$PR" ]; then
             # The status above is the result. Auto-merge is switched off by hand
             # on purpose, so a refused dispatch must not turn a green run red.

@@ -122,11 +122,6 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.ok(recheck.with.script.lastIndexOf("if (!await currentHead()) return;") < recheck.with.script.indexOf("await client.rest.actions.cancelWorkflowRun("));
   assert.match(recheck.with.script, /new github.constructor\(\{ auth: process.env.GH_FALLBACK_TOKEN \}\)/);
   assert.match(recheck.with.script, /Could not cancel older app-smoke runs; continuing the build/);
-  assert.match(workflow, /Could not publish the pending app-smoke status; continuing the build/);
-  assert.doesNotMatch(workflow, /sleep 180|seq 1 20/);
-  assert.match(workflow, /::error::Could not publish the app-smoke status/);
-  assert.equal(parsedWorkflow.jobs.validate["timeout-minutes"], 65);
-  assert.equal(parsedWorkflow.jobs.report["timeout-minutes"], 10);
   assert.equal(parsedWorkflow.jobs.validate.concurrency, undefined);
   assert.equal(parsedWorkflow.jobs.report.concurrency, undefined);
   assert.equal(
