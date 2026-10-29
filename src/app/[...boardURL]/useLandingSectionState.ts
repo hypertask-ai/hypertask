@@ -99,11 +99,10 @@ const filteredSectionsForActiveView = useMemo(() => {
     buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
     filterRuntimeContext,
   );
-  return getFilteredEmptySections(
-    getAppliedSubtaskSections(filtered, _currentProject),
-    _currentProject,
-    showEmptyViewColumns,
-  );
+  const subtaskSections = getAppliedSubtaskSections(filtered, _currentProject);
+  return showEmptyViewColumns
+    ? getFilteredEmptySections(subtaskSections, _currentProject, true)
+    : getFilteredEmptySections(subtaskSections, _currentProject);
 }, [
   _allProjects,
   _currentProject,

@@ -494,7 +494,9 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
       filterRuntimeContext,
     )
-    const filteredEmptySections = getFilteredEmptySections(filteredAppliedSections, _currentProject, showEmptyViewColumns)
+    const filteredEmptySections = showEmptyViewColumns
+      ? getFilteredEmptySections(filteredAppliedSections, _currentProject, true)
+      : getFilteredEmptySections(filteredAppliedSections, _currentProject)
     const filteredSubtaskSections = getAppliedSubtaskSections(filteredEmptySections,_currentProject) 
     setSectionsToDisplay(filteredSubtaskSections)
     const updatedTasks = newSections.flatMap((x)=>x.items)

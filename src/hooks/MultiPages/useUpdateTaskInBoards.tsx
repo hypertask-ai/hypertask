@@ -161,7 +161,6 @@ const applyProjectFilters = (
   builtinViewId?: BuiltinViewId,
   currentUser?: { id?: number; displayName?: string },
   runtimeContext?: IFilterRuntimeContext,
-  showEmptyViewColumns = false,
 ) => {
   let filteredSections = getAppliedSubtaskSections(project.sections, project);
   filteredSections = getFilteredSections(
@@ -176,7 +175,7 @@ const applyProjectFilters = (
     filteredSections = getAppliedSearchedTasks(filteredSections, searchKeyword);
   }
 
-  return getFilteredEmptySections(filteredSections, project, showEmptyViewColumns);
+  return filteredSections;
 };
 
 const UpdateKanban = () => {
@@ -270,16 +269,18 @@ const UpdateKanban = () => {
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),
     };
+    const sectionsForView = applyProjectFilters(
+      projectToUpdate,
+      searchKeyword,
+      isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
+      _currentUser,
+      filterRuntimeContext,
+    );
     const filteredSections = reconcileSections(
       previousProject.filteredSections,
-      applyProjectFilters(
-        projectToUpdate,
-        searchKeyword,
-        isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
-        _currentUser,
-        filterRuntimeContext,
-        showEmptyViewColumns,
-      )
+      showEmptyViewColumns
+        ? getFilteredEmptySections(sectionsForView, projectToUpdate, true)
+        : getFilteredEmptySections(sectionsForView, projectToUpdate),
     );
     projectToUpdate = {
       ...projectToUpdate,

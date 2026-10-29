@@ -160,7 +160,9 @@ export function useTableState(context: Context) {
             items: (section.items || []).filter((task) => !excludedTaskIds.has(task.id)),
           }));
     if (!_currentProject) return withoutExcluded;
-    const emptyFiltered = getFilteredEmptySections(withoutExcluded, _currentProject, showEmptyViewColumns);
+    const emptyFiltered = showEmptyViewColumns
+      ? getFilteredEmptySections(withoutExcluded, _currentProject, true)
+      : getFilteredEmptySections(withoutExcluded, _currentProject);
     return emptyFiltered.map((section) => ({
       ...section,
       items: returnSortedItems([...(section.items || [])], _currentProject),
