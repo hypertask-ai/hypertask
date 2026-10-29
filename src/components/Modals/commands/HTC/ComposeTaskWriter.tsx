@@ -18,7 +18,7 @@ import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 import { AiComposerTextarea } from "@/components/AI_CHAT/AiComposerTextarea";
 import FullScreenChatLoading from "@/components/AI_CHAT/FullScreenChatLoading";
 import Tooltip from "@/components/Common/Tooltip";
-import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/definitions/htpr-8141-board-shortcut-tooltip";
+import { HTPR_8141_BOARD_SHORTCUT_TOOLTIP_FLAG } from "@/lib/flags/keys";
 import { HintKey } from "@/components/Common/CommonModalComponents";
 import { extractPastedImageFiles } from "@/utils/aiChat/extractPastedImageFiles";
 import { composeTaskBoardId, composeTaskAssistantMessage, createComposedTask, requestComposeSkillFollowup, type ComposeTaskStage } from "@/lib/ai/composeTask";
