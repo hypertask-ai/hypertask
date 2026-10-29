@@ -62,13 +62,15 @@ eq "message is one line" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d4 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' failure 5 a1)" >/dev/null
 sleep 0.5; eq "second failure on the same commit does not wake again" "$(lines "$T/deliver.log")" 1
 replay_id=$(jq -r .run "$f")
-replay=$(jq -nc --argjson run "$replay_id" '{action:"completed", repository:{full_name:"hypertask-ai/hypertask"}, workflow_run:{id:$run, name:"CI Tests", head_branch:"runner7/yper4-1", conclusion:"failure", head_sha:"zz", pull_requests:[{number:99}]}}')
+replay=$(jq -nc --argjson run "$replay_id" '{action:"completed", repository:{full_name:"hypertask-ai/hypertask"}, workflow_run:{id:$run, name:"Lint", head_branch:"runner7/yper4-1", conclusion:"failure", head_sha:"zz", pull_requests:[{number:99}]}}')
 original=$(jq '.workflow_run.head_sha="a1" | .workflow_run.pull_requests[0].number=5' <<<"$replay")
 reads_before=$(lines "$T/readbacks")
 post 111 workflow_run d4original "$original" >/dev/null
 sleep 0.5; eq "verified duplicate consumes no read-back capacity" "$(lines "$T/readbacks")" "$reads_before"
 post 111 workflow_run d4b "$replay" >/dev/null
 sleep 0.5; eq "replayed run with a forged sha and PR does not wake again" "$(lines "$T/deliver.log")" 1
+eq "forged identity reaches GitHub read-back" "$(lines "$T/readbacks")" "$((reads_before + 1))"
+eq "matching replay passes workflow verification" "$(grep -c 'read-back did not match' "$T/server.log")" 0
 post 111 workflow_run d5 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' success 5 a2)" >/dev/null
 sleep 0.5; eq "a pass outside CI Tests does not wake" "$(lines "$T/deliver.log")" 1
 post 111 workflow_run d6 "$(run hypertask-ai/hypertask runner7/yper4-1 'Lint' cancelled 5 a3)" >/dev/null
@@ -100,6 +102,16 @@ kill $W 2>/dev/null; wait $W 2>/dev/null
 post 111 workflow_run d11 "$(run hypertask-ai/hypertask runner8/x 'CI Tests' failure 6 b2)" >/dev/null
 settle "$T/deliver.log" 4
 eq "a dead waiter file does not suppress it" "$(lines "$T/deliver.log")" 4
+
+for conclusion in timed_out startup_failure; do
+  before=$(lines "$T/deliver.log")
+  post 111 workflow_run "failure-$conclusion" "$(run hypertask-ai/hypertask runner7/yper4-1 'CI Tests' "$conclusion" 5 "$conclusion")" >/dev/null
+  settle "$T/deliver.log" "$((before + 1))"
+  eq "$conclusion wakes an idle owner" "$(lines "$T/deliver.log")" "$((before + 1))"
+  eq "$conclusion is preserved in branch state" "$(jq -r .conclusion "$f")" "$conclusion"
+  eq "$conclusion reaches the correct owner" "$(tail -1 "$T/deliver.log" | cut -d'|' -f1)" 7
+  tail -1 "$T/deliver.log" | grep -q 'CI Tests failed on PR #5' && ok "$conclusion names the verified PR" || bad "$conclusion message"
+done
 
 # ci-wait: blocks on the state file, reads checks only after a change.
 cat > "$T/gh" <<G
