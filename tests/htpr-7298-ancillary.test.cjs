@@ -274,7 +274,8 @@ for (const userId of [1, 2, 3]) {
       "@/utils/controllers/agents/boardMembers": { getBoardAgentMembers: async () => [] },
       "../search/document": { turbopufferFetchMentionTasks: async () => [] },
       "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
-      "@/lib/flags": { isFeatureEnabled: async () => true },
+      "@/lib/flags/definitions/htpr-7859-remove-image-generation": { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG: "htpr-7859-remove-image-generation" },
+      "@/lib/flags": { isFeatureEnabled: async () => false },
       "@/utils/helperFunctions/mentionSearch": { matchesMentionName: () => true, selectMentionAgents: () => [] },
     }).default;
     const result = await mentions("Page", userId, 10);

@@ -177,7 +177,7 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
     visit(parsed);
     assert.equal(statements.length, 4);
     const code = ts.transpileModule(statements.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "isMobile", "keepAiChatClosedKeywords", "aiChatAutoOpenCommandName", "blockerCommentEnabled", "shareKeyLabels", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, isMobile, "", "", false, false);
+    const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "isMobile", "keepAiChatClosedKeywords", "aiChatAutoOpenCommandName", "blockerCommentEnabled", "shareKeyLabels", "removeImageGeneration", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, isMobile, "", "", false, false, false);
     for (const options of [undefined, { context: "Others" }, { context: "Task", kanbanSelectAllEnabled: true }]) {
       assert.deepEqual(getCommands(options), getAllCommands(options, options?.kanbanSelectAllEnabled, enabled && !isMobile));
     }
