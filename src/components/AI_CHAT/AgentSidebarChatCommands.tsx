@@ -1,5 +1,6 @@
 "use client";
 
+import { Bot } from "lucide-react";
 import { useContext, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import CommandList from "@/components/Modals/commands/HTC/CommandList";
@@ -37,7 +38,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
   const visibleSessions = expanded ? personalSessions : personalSessions.slice(0, 5);
   const hiddenCount = personalSessions.length - visibleSessions.length;
   const commands = useMemo<ICommandList[]>(() => agentsOnly ? context.agents.flatMap((agent) => [
-    { key: agent.id, name: agent.displayName, commandMode: CommandMode.GoToAgentChat },
+    { key: agent.id, name: agent.displayName, leadingIcon: <Bot size={16} strokeWidth={1.75} className="shrink-0 text-icon-dark-gray" aria-hidden />, commandMode: CommandMode.GoToAgentChat },
     ...(expandedAgentId === agent.id ? [
       { key: `new:${agent.id}`, name: "Start a new session", commandMode: CommandMode.GoToAgentChat },
       ...(agent.sessions ?? []).map((session) => ({ key: `agent-session:${session.id}`, name: session.title, payload: agent.id, commandMode: CommandMode.GoToAgentChat })),
@@ -106,8 +107,9 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
     if (!host || !anchor) return;
     const place = () => {
       const box = anchor.getBoundingClientRect();
-      let maxHeight = window.innerHeight - box.bottom - 12;
-      if (isMobile && phoneChatList) {
+      const top = agentsOnly ? host.getBoundingClientRect().top : box.bottom;
+      let maxHeight = window.innerHeight - top - 12;
+      if (agentsOnly || (isMobile && phoneChatList)) {
         const composers = host.closest('[data-testid="ai-sidebar"]')?.querySelectorAll<HTMLElement>('[data-ai-chat-composer-root]:not([inert])');
         const composer = Array.from(composers ?? []).find((node) => {
           const rect = node.getBoundingClientRect();
@@ -116,7 +118,8 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
         if (composer) maxHeight = Math.min(window.innerHeight, composer.getBoundingClientRect().top) - host.getBoundingClientRect().top - 12;
       }
       host.style.maxHeight = `${Math.max(0, maxHeight)}px`;
-      host.style.maxWidth = `${Math.max(0, agentsOnly ? box.right - 8 : window.innerWidth - box.left - 8)}px`;
+      const right = agentsOnly ? Math.min(window.innerWidth, host.closest('[data-testid="ai-sidebar"]')?.getBoundingClientRect().right ?? window.innerWidth) : window.innerWidth;
+      host.style.maxWidth = `${Math.max(0, right - (agentsOnly ? host.getBoundingClientRect().left : box.left) - 8)}px`;
     };
     place();
     host.focus({ preventScroll: true });
@@ -133,7 +136,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
     document.addEventListener("pointerdown", outside);
     document.addEventListener("keydown", escape, true);
     window.addEventListener("resize", place);
-    const viewport = isMobile && phoneChatList ? window.visualViewport : null;
+    const viewport = agentsOnly || (isMobile && phoneChatList) ? window.visualViewport : null;
     viewport?.addEventListener("resize", place);
     viewport?.addEventListener("scroll", place);
     return () => {
@@ -163,7 +166,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
       aria-label={agentsOnly ? "Agent sessions" : "Sidebar conversations"}
       ref={hostRef}
       tabIndex={-1}
-      className={`absolute ${agentsOnly ? "right-0" : "left-0"} top-full z-[1200] mt-1 w-72 overflow-y-auto ${agentsOnly ? "rounded-[5px]" : "rounded-md"} bg-modalBackground py-1 text-white-black shadow-md outline-none`}
+      className={`absolute left-0 top-full z-[1200] mt-1 w-72 overflow-y-auto ${agentsOnly ? "rounded-[5px] font-normal" : "rounded-md"} bg-modalBackground py-1 text-white-black shadow-md outline-none`}
       onKeyDown={(event) => {
         if (event.key === "Tab") {
           event.stopPropagation();

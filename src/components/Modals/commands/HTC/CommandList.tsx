@@ -41,7 +41,7 @@ const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists,
                             onClick={() => onClickHandler(command)}
                             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                         >
-                            {isMobile ? <MobileCommandIcon command={command} /> : null}
+                            {command.leadingIcon ?? (isMobile ? <MobileCommandIcon command={command} /> : null)}
                             <HTC_Command
                                 name={command.name}
                                 keyboardCommands={command.keyboard}

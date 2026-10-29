@@ -1,5 +1,5 @@
 import { CommandMode } from "@/models/enums";
-import { RefObject } from "react";
+import { RefObject, ReactNode } from "react";
 
 export interface CommandListProps {
     groupIndex:number;
@@ -27,6 +27,7 @@ export interface ICommandList {
     keywords?: string;
     isNew?: boolean;
     isRunning?: boolean;
+    leadingIcon?: ReactNode;
    }
 export interface CommandGroup{
     group:string;

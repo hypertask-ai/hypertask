@@ -2,6 +2,7 @@ import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
 import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionData";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { SuggestionPluginKey } from "@tiptap/suggestion";
 import Placeholder from "@tiptap/extension-placeholder";
 import styles from "@/styles/tiptap.module.scss";
 import {
@@ -54,14 +55,14 @@ export function ControlledComposerEditor({
       ...(agentMentionProjectId ? [LinkableMention.configure({
         HTMLAttributes: { class: "mention" },
         renderText: ({ node }) => `@${node.attrs.text || node.attrs.id}`,
-        suggestion: createMentionData((item: { type: string; id: string | number }) => {
+        suggestion: { ...createMentionData((item: { type: string; id: string | number }) => {
           if (item.type === "agent" && activeEditor.current) {
             const sourceEditor = activeEditor.current;
             window.dispatchEvent(new CustomEvent("ht-sidebar-agent-selected", { detail: {
               agentId: item.id, getDraft: () => ({ html: sourceEditor.getHTML(), text: sourceEditor.getText() }),
             } }));
           }
-        }, () => projectIdRef.current),
+        }, () => projectIdRef.current), pluginKey: SuggestionPluginKey },
       })] : []),
       SafeSplitBlock,
       Placeholder.configure({
@@ -78,7 +79,8 @@ export function ControlledComposerEditor({
         role: "textbox",
         class: "outline-none py-2 text-dense",
       },
-      handleKeyDown: (_view, event) => {
+      handleKeyDown: (view, event) => {
+        if (SuggestionPluginKey.getState(view.state)?.active) return false;
         onKeyDownRef.current(
           event as unknown as ReactKeyboardEvent<HTMLTextAreaElement>,
         );

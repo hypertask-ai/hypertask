@@ -94,6 +94,7 @@ function picker({ agentsOnly = true, agents = [{ id: "agent", displayName: "Runn
   const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const mocks = {
     react, "react/jsx-runtime": require("react/jsx-runtime"),
+    "lucide-react": require("lucide-react"),
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/components/Modals/commands/HTC/CommandList": { default: "CommandList" },
     "@/components/Modals/commands/HTC/commandSelection": { findCommandPosition: noop },
@@ -353,5 +354,92 @@ for (const runtimeType of ["NATIVE", "EXTERNAL"]) {
         assert.deepEqual(writes.at(-1), [6, "agent", "Typed while invalidating"]);
       }
     } finally { view.close(); global.fetch = originalFetch; }
+  });
+}
+
+
+test("Enter selects the active agent mention before send; ordinary Enter still sends", async () => {
+  const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+  const { Editor } = require("@tiptap/core");
+  const { SuggestionPluginKey } = require("@tiptap/suggestion");
+  let options, selected = 0, sent = 0;
+  const source = loader({
+    "@tiptap/react": { useEditor: value => { options = value; return null; }, EditorContent: () => null },
+    "@/components/RTE/Components/AI_Chat/MentionData": { createMentionData: () => ({
+      items: () => [{ id: "agent", label: "Runner" }],
+      render: () => ({ onKeyDown: ({ event }) => {
+        if (event.key !== "Enter") return false;
+        selected++;
+        return true;
+      } }),
+    }) },
+  });
+  const ControlledComposerEditor = source("src/lib/controlledComposerEditor.tsx").ControlledComposerEditor;
+  const view = mount();
+  let editor;
+  try {
+    view.render(React.createElement(ControlledComposerEditor, { value: "", agentMentionProjectId: 15,
+      onChange() {}, onKeyDown(event) { if (event.key === "Enter") { sent++; event.preventDefault(); } },
+      onEditor() {}, placeholder: "Message", ariaLabel: "Message" }));
+    const element = document.createElement("div");
+    document.body.append(element);
+    editor = new Editor({ ...options, element, content: "<p></p>" });
+    editor.commands.insertContent("@Run");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(SuggestionPluginKey.getState(editor.state).active, true);
+    editor.view.dom.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+    assert.equal(selected, 1);
+    assert.equal(sent, 0);
+    assert.equal(editor.getText(), "@Run");
+    editor.commands.setContent("<p>Ordinary message</p>");
+    assert.equal(SuggestionPluginKey.getState(editor.state).active, false);
+    editor.view.dom.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", keyCode: 13, bubbles: true, cancelable: true }));
+    assert.equal(sent, 1);
+    assert.equal(selected, 1);
+  } finally { editor?.destroy(); view.close(); }
+});
+
+
+for (const mobile of [false, true]) for (const enabled of [false, true]) {
+  test(`${mobile ? "phone" : "desktop"} title toggles the existing conversation list with agent sessions ${enabled ? "On" : "Off"}`, () => {
+    const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+    const view = mount();
+    const noop = () => {};
+    const source = loader({
+      "next/navigation": { usePathname: () => "/project", useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: noop }) },
+      "@/hooks/useFlag": { useFlag: key => key === FLAG && enabled },
+      "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({
+        sessions: [], currentSession: { id: "saved", title: "Existing chat" }, runningSessionIds: [],
+      }) },
+      "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
+      "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
+      "@/lib/state": { useRecoilState: () => React.useState(false) },
+      "@/store": {},
+      "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+      "../Common/Tooltip": { default: () => null },
+      "@/lib/aiModelOptions": { getMobileAiChatModelLabel: () => "GPT" },
+      "@/lib/configs/aiTaskWriter.config": { aiTaskWriterConfig: { shortcutsAndTooltips: { ai_chat: {
+        new_chat_button: () => ({}), minimize_button: () => ({}),
+      } } } },
+      "./AgentSidebarChatCommands": { AgentSidebarChatCommands: ({ agentsOnly }) => React.createElement("ul", { "data-testid": agentsOnly ? "agents" : "conversations" }) },
+    });
+    const Header = source("src/components/AI_CHAT/ChatHeader.tsx").ChatHeader;
+    try {
+      view.render(React.createElement(Header, { sidebarChats: { projectId: 15, target: { kind: "ai" }, agents: [], onSelect: noop } }));
+      const title = view.container.querySelector('[aria-label="Switch conversation"]');
+      const agents = view.container.querySelector('[aria-label="Agent sessions"]');
+      assert.equal(Boolean(agents), enabled);
+      if (enabled) {
+        React.act(() => agents.click());
+        assert.equal(view.container.querySelector('[data-testid="agents"]').parentElement, title.parentElement);
+      }
+      React.act(() => title.click());
+      assert.equal(title.getAttribute("aria-expanded"), "true");
+      assert.equal(view.container.querySelector('[data-testid="conversations"]').parentElement, title.parentElement);
+      assert.equal(view.container.querySelector('[data-testid="agents"]'), null);
+      React.act(() => title.click());
+      assert.equal(title.getAttribute("aria-expanded"), "false");
+      assert.equal(view.container.querySelector('[data-testid="conversations"]'), null);
+    } finally { view.close(); }
   });
 }

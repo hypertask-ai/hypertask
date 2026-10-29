@@ -72,6 +72,7 @@ function menu({ enabled = true, paging = false, mobile = false } = {}) {
   const context = { target: { kind: "ai" }, agents, error: null, onSelectSession: id => selections.push(id), onSelect: target => targets.push(target), onRetry: noop };
   const { AgentSidebarChatCommands } = load("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
     react: { ...state.react, useContext: () => mobile },
+    "lucide-react": require("lucide-react"),
     "@/hooks/useFlag": { useFlag: key => {
       if (["htpr-7702-phone-chat-list", "htpr-7764-chat-running"].includes(key)) return false;
       assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;

@@ -416,3 +416,19 @@ Do not call those counts heartbeat-only rows or claim measured savings from
 a test-only change. Do not trigger the global cron or create paid model turns
 just for this check. Record an unavailable heartbeat-only daily baseline as
 UNREACHABLE, with the actual scoped usage response as closest evidence.
+
+## Agent session picker containment
+
+For the approved agent-session layout (`htpr-8048-agent-sessions`), open the
+existing Bot icon beside History. The picker starts beneath the title,
+inside the sidebar, matching the conversation list's position and width.
+Names use normal weight; each agent has one complete 16px Bot icon.
+The list scrolls and stops above the active composer on desktop and phone.
+Escape returns focus to the Bot button. Opening the title list dismisses
+the agent list. Expanding an agent keeps its new/saved session actions.
+
+The disposable browser-smoke case `agent sessions reuse the title anchor`
+checks geometry, computed weight, icon width and Escape. Live flag Off means
+the Bot trigger stays absent; record the enabled path UNREACHABLE without
+changing flags or intercepting production flag responses. Do not send paid
+agent/model messages solely for this visual check.

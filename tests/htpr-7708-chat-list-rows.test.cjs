@@ -34,7 +34,7 @@ const names = [
   "1792812226726848138aiChatOpenNewTickets".repeat(6),
 ];
 
-function rows({ mobile = false, inline, enabled = true } = {}) {
+function rows({ mobile = false, inline, enabled = true, leadingIcon } = {}) {
   const CommandList = load("src/components/Modals/commands/HTC/CommandList.tsx", {
     "lucide-react": require("lucide-react"),
     "@/store": { currentProjectAtom: {} },
@@ -45,7 +45,7 @@ function rows({ mobile = false, inline, enabled = true } = {}) {
     "@/hooks/useFlag": { useFlag: key => { assert.equal(key, FLAG); return enabled; } },
     "@/lib/flags/definitions/htpr-7708-chat-list-rows": flag,
   }).default;
-  const commandLists = names.map((name, index) => ({ key: `session:${index}`, name, commandMode: 1 }));
+  const commandLists = names.map((name, index) => ({ key: `session:${index}`, name, commandMode: 1, leadingIcon }));
   const html = renderToStaticMarkup(React.createElement("ul", null, React.createElement(CommandList, {
     commandLists, selectedCommand: commandLists[0], groupIndex: 0, inline, isMobile: mobile,
     handleMouseLeave: noop, handleMouseEnter: noop, commandRef: { current: null }, onClickHandler: noop,
@@ -120,3 +120,18 @@ test("row containment flag defaults to Everyone as a low-risk bugfix with Off ro
   assert.equal(flag.default.releaseRisk.risk, "small");
   assert.match(flag.default.releaseRisk.reason, /Off restores/);
 });
+
+for (const mobile of [false, true]) {
+  test(`${mobile ? "phone" : "desktop"} agent icon renders once, ahead of its full name`, () => {
+    const dom = rows({ mobile, inline: true, leadingIcon: React.createElement("svg", { "data-agent-icon": true, className: "shrink-0" }) });
+    try {
+      const rendered = [...dom.window.document.querySelectorAll("li")];
+      assert.equal(rendered.length, names.length);
+      for (const row of rendered) {
+        assert.equal(row.firstElementChild.getAttribute("data-agent-icon"), "true");
+        assert.equal(row.querySelectorAll("svg").length, 1);
+        assert.equal(row.querySelectorAll("[data-mobile-icon]").length, 0);
+      }
+    } finally { dom.window.close(); }
+  });
+}
