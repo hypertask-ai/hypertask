@@ -5,10 +5,8 @@ const { NextRequest, NextResponse } = require("next/server");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
+const { stubModule: stubShared } = require("./helpers/loadModule.cjs");
+const stubModule = (relativePath, exports) => stubShared(test, relativePath, exports);
 
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}

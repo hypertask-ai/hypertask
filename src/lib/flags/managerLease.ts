@@ -51,8 +51,7 @@ export async function applyManagerLeaseAction(
   input: { agentId: string; action: ManagerLeaseAction; session?: string; grantHash?: string; grant?: string; ttlMinutes?: number; now?: Date },
 ): Promise<{ expiresAt: Date | null }> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(CAST(${MANAGER_LEASE_LOCK_NAMESPACE} AS integer), 0)`;
-  // Sample time only after the lock: a request that queued before expiry must not revive a dead grant.
-  const now = input.now ?? new Date();
+  const nowAfterLock = input.now ?? new Date();
 
   if (input.action === "take") {
     const ttl = input.ttlMinutes;
@@ -61,15 +60,15 @@ export async function applyManagerLeaseAction(
       throw new ManagerLeaseError("take needs session, grantHash (64 hex) and ttlMinutes (1 to 240)", 400);
     }
     const live = await tx.managerLeaseGrant.findFirst({
-      where: { releasedAt: null, replacedAt: null, expiresAt: { gt: now } },
+      where: { releasedAt: null, replacedAt: null, expiresAt: { gt: nowAfterLock } },
       select: { session: true },
     });
     if (live) throw new ManagerLeaseError(`manager lease held by ${live.session}`, 409);
     await tx.managerLeaseGrant.updateMany({
       where: { releasedAt: null, replacedAt: null },
-      data: { replacedAt: now },
+      data: { replacedAt: nowAfterLock },
     });
-    const expiresAt = new Date(now.getTime() + (ttl as number) * 60_000);
+    const expiresAt = new Date(nowAfterLock.getTime() + (ttl as number) * 60_000);
     await tx.managerLeaseGrant.create({
       data: { agentId: input.agentId, session: input.session, tokenHash: input.grantHash, ttlMinutes: ttl as number, expiresAt },
     });
@@ -82,15 +81,15 @@ export async function applyManagerLeaseAction(
   const tokenHash = hashManagerGrant(input.grant);
   await tx.$queryRaw`SELECT id FROM "ManagerLeaseGrant" WHERE "tokenHash" = ${tokenHash} FOR UPDATE`;
   const row = await tx.managerLeaseGrant.findUnique({ where: { tokenHash } });
-  const at = input.now ?? new Date();
-  if (!row || row.agentId !== input.agentId || row.releasedAt || row.replacedAt || row.expiresAt.getTime() <= at.getTime()) {
+  const nowAfterGrantLock = input.now ?? new Date();
+  if (!row || row.agentId !== input.agentId || row.releasedAt || row.replacedAt || row.expiresAt.getTime() <= nowAfterGrantLock.getTime()) {
     throw new ManagerLeaseError("grant is unknown, replaced, released or expired", 403);
   }
   if (input.action === "renew") {
-    const expiresAt = new Date(at.getTime() + row.ttlMinutes * 60_000);
-    await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { expiresAt, renewedAt: at } });
+    const expiresAt = new Date(nowAfterGrantLock.getTime() + row.ttlMinutes * 60_000);
+    await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { expiresAt, renewedAt: nowAfterGrantLock } });
     return { expiresAt };
   }
-  await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { releasedAt: at, endedReason: input.action } });
+  await tx.managerLeaseGrant.update({ where: { tokenHash }, data: { releasedAt: nowAfterGrantLock, endedReason: input.action } });
   return { expiresAt: null };
 }
