@@ -3,6 +3,7 @@
 import { SettingsScopeTabs } from "./SettingsScopeTabs";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
+import { subscribeAiSettingsEvents } from "@/lib/ai/settings/client";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import dynamic from "next/dynamic";
@@ -320,28 +321,16 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
 
   useEffect(() => {
     if (!aiSettingsEnabled) return;
-    const open = (event: Event) => {
-      const scope = settingsScopeFromPath((event as CustomEvent<{ path: string }>).detail?.path);
-      if (scope) {
+    return subscribeAiSettingsEvents({
+      openSettings: (path) => {
+        const scope = settingsScopeFromPath(path);
+        if (!scope) return;
         setSettingsSection(scope.section);
         if (mbl) closeAiChat();
-      }
-    };
-    const shortcut = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() !== "j" || !(event.ctrlKey || event.metaKey) || event.shiftKey || event.altKey || event.isComposing) return;
-      event.preventDefault();
-      event.stopPropagation();
-      openAiChat();
-    };
-    const refresh = () => setSettingsRevision((revision) => revision + 1);
-    window.addEventListener("hypertask:open-settings", open);
-    window.addEventListener("hypertask:settings-changed", refresh);
-    window.addEventListener("keydown", shortcut, true);
-    return () => {
-      window.removeEventListener("hypertask:open-settings", open);
-      window.removeEventListener("hypertask:settings-changed", refresh);
-      window.removeEventListener("keydown", shortcut, true);
-    };
+      },
+      changed: () => setSettingsRevision((revision) => revision + 1),
+      shortcut: openAiChat,
+    });
   }, [aiSettingsEnabled, setSettingsSection, mbl, closeAiChat, openAiChat]);
 
   const hasSelectedSection = Boolean(section);

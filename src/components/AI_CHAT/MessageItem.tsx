@@ -1,7 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
-import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -46,7 +45,6 @@ export const MessageItem: FC<IMessageItemProps> = ({
   editMessage,
 }) => {
   const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
-  const settingCardsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
   const [carouselItems, setCarouselItems] = useState<TCarousalItems>(undefined);
   const attachments = message.attachments;
   const hasAttachments = Boolean(attachments?.length);
@@ -320,7 +318,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
           className={`content-html ${contentClass}`}
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
-        {settingCardsEnabled ? settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />) : null}
+        {settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />)}
         {message.role === "assistant" && message.isDelivered && ticketGroups?.length ? <AiChatTicketRows groups={ticketGroups} onNavigate={(url) => { router.push(url); revealNavigationTarget(); }} /> : null}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus
