@@ -166,7 +166,7 @@ export async function readModelCanaryStatus() {
   models.sort((a, b) => modelCanaryKey(a.optionId, a.lane).localeCompare(modelCanaryKey(b.optionId, b.lane)));
   const state: ModelCanaryStateRow = stateRow
     ? JSON.parse(stateRow) as ModelCanaryStateRow
-    : { state: "never_run", reason: null, checkedAt: null };
+    : { state: checkedAt ? "enabled" : "never_run", reason: null, checkedAt };
   const { key, reason } = modelCanaryGatewayKeyState();
   return {
     checkedAt,

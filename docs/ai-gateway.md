@@ -138,8 +138,10 @@ repurpose a team key for tooling:
   a disabled canary never reads as an empty-but-healthy list. `state:
   "never_run"` means the cron has not run at all, and `configured: false` (with
   `configuredReason`) shows a missing or invalid key before the next daily run.
-  After configuration, existing enabled direct-provider QA keys continue to be
-  probed separately.
+  Those extra fields sit behind the `htpr-7748-model-canary-state` flag; with it
+  off the route returns the older `checkedAt` and `models` pair. After
+  configuration, existing enabled direct-provider QA keys continue to be probed
+  separately.
   Check the `model-canary` gateway tag and key identity after a run;
   org-wide `/v1/credits` totals do not prove isolation.
 

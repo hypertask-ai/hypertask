@@ -12,7 +12,7 @@ const KEY = "vck_synthetic_canary_internal_credential";
 const TRIALS = "vck_synthetic_canary_trials_credential";
 const BYOK = "sk_synthetic_canary_direct_credential";
 const NativeDate = Date;
-let now, redis, alerts, calls, usage, keys, settings, behavior, authenticated, rateLimited, lookups;
+let now, redis, alerts, calls, usage, keys, settings, behavior, authenticated, rateLimited, lookups, flagEnabled;
 let forcedUsageProvider, replacementModel, selectedCredentials;
 
 stub("src/lib/redis.ts", { getRedis: async () => redis });
@@ -58,6 +58,13 @@ stub("node_modules/ai/dist/index.js", { streamText: (params) => {
   })() };
 } });
 stub("node_modules/next/server.js", { NextResponse: { json: (body, init) => Response.json(body, init) } });
+stub("src/lib/flags.ts", {
+  MODEL_CANARY_STATE_FLAG: "htpr-7748-model-canary-state",
+  isFeatureEnabled: async (key, userId) => {
+    assert.equal(key, "htpr-7748-model-canary-state");
+    return flagEnabled;
+  },
+});
 stub("src/lib/mcp/routeWrapper.ts", {
   wrapMcpRoute: (handler) => handler,
   validateMcpRouteAuth: async () => authenticated ? { user: { id: 123 }, agentId: "test-agent" } : null,
@@ -112,7 +119,7 @@ test.beforeEach(() => {
     static now() { return now; }
   };
   redis = fakeRedis(); alerts = []; calls = []; usage = []; keys = new Map(); settings = {};
-  lookups = []; behavior = async () => text(); authenticated = true; rateLimited = false;
+  lookups = []; behavior = async () => text(); authenticated = true; rateLimited = false; flagEnabled = true;
   forcedUsageProvider = undefined; replacementModel = undefined; selectedCredentials = [];
   process.env.AI_GATEWAY_API_KEY = TRIALS;
   process.env.MODEL_CANARY_AI_GATEWAY_API_KEY = ` ${KEY} `;
@@ -178,6 +185,16 @@ test("missing, malformed or trials-reused internal key disables the whole canary
   assert.ok(selectedCredentials.every((credential) => credential === KEY || credential === BYOK));
 });
 
+test("model status enhancement defaults to Everyone with small release risk", () => {
+  const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7748-model-canary-state.ts"));
+  const flag = definition.default ?? definition;
+  assert.equal(flag.key, "htpr-7748-model-canary-state");
+  assert.equal(flag.kind, "improvement");
+  assert.equal(flag.defaultMode, "EVERYONE");
+  assert.equal(flag.releaseRisk.risk, "small");
+  assert.equal(flag.releaseRisk.highRisk, undefined);
+});
+
 test("status separates never-run from disabled so an empty list never reads as healthy models", async () => {
   const empty = await canary.readModelCanaryStatus();
   assert.deepEqual([empty.state, empty.reason, empty.checkedAt, empty.configured, empty.models], ["never_run", null, null, true, []]);
@@ -191,6 +208,14 @@ test("status separates never-run from disabled so an empty list never reads as h
   const body = await response.json();
   assert.equal(body.success, true); assert.equal(body.state, "disabled"); assert.equal(body.reason, "missing_internal_gateway_key");
   assert.equal(body.configured, false); assert.equal(body.configuredReason, "missing_internal_gateway_key");
+  flagEnabled = false;
+  const gated = await (await status.GET(request("Bearer synthetic"))).json();
+  assert.deepEqual(Object.keys(gated).sort(), ["checkedAt", "models", "success"]);
+  flagEnabled = true;
+  redis = fakeRedis();
+  redis.values.set("ai-model-canary:v1:checkedAt", new Date(now).toISOString());
+  const legacy = await canary.readModelCanaryStatus();
+  assert.deepEqual([legacy.state, legacy.reason, legacy.checkedAt], ["enabled", null, new Date(now).toISOString()]);
 });
 
 test("probe keeps actual provider options and allowance team tags, one prompt, no tools/history/retries", async () => {
