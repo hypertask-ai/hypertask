@@ -48,3 +48,14 @@ brackets and line breaks. A failed or empty manual response must retain those
 new words in the saved description, or in the draft if persistence fails.
 Hold a form attachment upload until after fallback starts; release it and
 require the saved task to contain the completed file after reload.
+
+## New Task keyboard handoff
+
+On `/new?board=<QA board>`, enter a title and description without AI
+mentions, then press Ctrl+J (Cmd+J on Mac). Require exactly one task save,
+the saved task detail URL, and its AI sidebar. Reload and confirm the same
+title and description. Repeat on phone and with the board's C modal; the
+modal must close without leaving a temporary Back entry. Do not send an AI
+message for this navigation check. The ticket switch
+`htpr-8172-new-task-ai-navigation` preserves this handoff on the standalone
+New Task page; switch-off retains the previous board redirect there.
