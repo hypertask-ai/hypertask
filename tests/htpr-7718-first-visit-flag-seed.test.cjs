@@ -1,21 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const fs = require('node:fs');
-const path = require('node:path');
-const ts = require('typescript');
 const { definitions } = require('./helpers/flag-files.cjs');
-
-function loadFlags(featureFlagsForUser) {
-  const compiled = ts.transpileModule(fs.readFileSync(path.join(__dirname, '../src/lib/firstScreen/serverFlags.ts'), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const exports = {};
-  new Function('require', 'exports', compiled)(name => {
-    assert.equal(name, '@/lib/flags');
-    return { featureFlagsForUser };
-  }, exports);
-  return exports;
-}
+const { loadModule } = require('./helpers/loadModule.cjs');
 
 test('first-visit flag seed is a discovered Everyone bugfix with a small release risk', () => {
   const definition = definitions().find(item => item.key === 'htpr-7718-first-visit-flag-seed');
@@ -30,7 +16,9 @@ test('first-visit flag seed is a discovered Everyone bugfix with a small release
 test('first-visit seed preserves every evaluated flag and rejects invalid account scopes before lookup', async () => {
   const calls = [];
   const values = { 'visible-ticket-flag': true, 'disabled-flag': false };
-  const { getFirstVisitFlagSeed } = loadFlags(async accountId => { calls.push(accountId); return values; });
+  const { getFirstVisitFlagSeed } = loadModule('src/lib/firstScreen/serverFlags.ts', {
+    '@/lib/flags': { featureFlagsForUser: async accountId => { calls.push(accountId); return values; } },
+  });
   const before = Date.now();
   const seed = await getFirstVisitFlagSeed(985);
   assert.equal(seed.accountId, 985);
@@ -40,6 +28,8 @@ test('first-visit seed preserves every evaluated flag and rejects invalid accoun
     await assert.rejects(getFirstVisitFlagSeed(accountId), /Invalid first-screen flag scope/);
   }
   assert.deepEqual(calls, [985]);
-  const failing = loadFlags(async () => { throw Error('flags unavailable'); });
+  const failing = loadModule('src/lib/firstScreen/serverFlags.ts', {
+    '@/lib/flags': { featureFlagsForUser: async () => { throw Error('flags unavailable'); } },
+  });
   await assert.rejects(failing.getFirstVisitFlagSeed(985), /flags unavailable/);
 });
