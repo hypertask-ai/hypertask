@@ -42,9 +42,9 @@ function gatedValue(file, name, bindings, extraNames = [], flagName) {
   return evaluate(`(() => { ${statements.map((node) => node.getText(source)).join("\n")} return ${name}; })()`, bindings);
 }
 
-function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled) {
+function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled, removeImageGeneration = false) {
   const getCommands = gatedValue(palette, "getCommands", {
-    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "", blockerCommentEnabled: false, shareKeyLabels: false,
+    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "", blockerCommentEnabled: false, shareKeyLabels: false, removeImageGeneration,
   }, ["getRoundedCommands", "getLegacyCommands"], "roundedEnabled");
   return getCommands({ context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory, isKanban: false } });
 }
@@ -161,5 +161,15 @@ test("New Task shortcut label requires both task writer flags", () => {
     const titles = getKeyboardShortcuts(false, false, "Toggle history events", compose, compose && window)
       .flatMap((group) => group.sub).filter((item) => item.pressKey.join(" ") === "CTRL J").map((item) => item.shortTitle);
     assert.deepEqual(titles, compose ? [window ? "New Task" : "Compose task"] : ["Add task with AI Task Writer", "Write with AI"]);
+  }
+});
+
+test("image settings command follows removal in both palette modes", () => {
+  for (const roundedEnabled of [false, true]) {
+    for (const removeImageGeneration of [false, true]) {
+      const commands = groups(false, roundedEnabled, false, false, removeImageGeneration)
+        .flatMap((group) => group.commandLists);
+      assert.equal(commands.some((command) => command.key === "settingsAiFeaturesImageGeneration"), !removeImageGeneration);
+    }
   }
 });

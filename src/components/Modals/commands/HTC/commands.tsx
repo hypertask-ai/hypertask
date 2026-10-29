@@ -186,11 +186,11 @@ const Commands = (props: Props) => {
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels).map((group) => removeImageGeneration ? { ...group, commandLists: group.commandLists.filter((command) => command.key !== "settingsAiFeaturesImageGeneration") } : group),
     [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
   );
   const getLegacyCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels).map((group) => removeImageGeneration ? { ...group, commandLists: group.commandLists.filter((command) => command.key !== "settingsAiFeaturesImageGeneration") } : group),
     [keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
   );
   let getCommands = getLegacyCommands;
@@ -841,7 +841,7 @@ const Commands = (props: Props) => {
           !["myTasksInvolvement", "myTasksSort", "myTasksGroup"].includes(paletteRow.key) || onMyTasks
         ),
       }))}
-      selectedCommand={selectedCommand}
+      selectedCommand={removeImageGeneration && selectedCommand?.key === "settingsAiFeaturesImageGeneration" ? null : selectedCommand}
       handleMouseLeave={handleMouseLeave}
       handleMouseEnter={handleMouseEnter}
       commandRef={commandRef}

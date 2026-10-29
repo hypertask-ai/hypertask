@@ -546,6 +546,119 @@ const AiFeaturesSection = () => {
     customEndpoint.isLoading ||
     (Boolean(teamId) && featureModelsQuery.isLoading);
 
+  const renderFeatureSections = (featureRows: NonNullable<typeof rows>, removeImage: boolean) => (
+    <div className="flex flex-col gap-6">
+      {FEATURE_SECTIONS.map((section, sectionIndex) => (
+        <SettingsCard key={section.title}>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-meta font-semibold uppercase tracking-wide text-text-light-gray">
+              {section.title}
+            </h3>
+            {sectionIndex === 0 ? (
+              <button
+                type="button"
+                disabled={!canManage || savingFeature !== null}
+                className="rounded-[4px] px-2 py-1 text-dense font-medium text-text-light-gray transition hover:bg-hoverCardBackground hover:text-white-black focus-visible:bg-hoverCardBackground focus-visible:text-white-black focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={() => void resetToDefaults()}
+              >
+                Reset to defaults
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-col">
+            {section.rows.filter(({ feature }) => !removeImage || feature !== "imageGeneration").map(({ description, feature }) => {
+              const choices = choicesForFeature(feature);
+              const rowModel = getAiModelOptionById(featureRows[feature].model, haiku55Enabled)?.id ?? featureRows[feature].model;
+              const selectedModel = choices.some(
+                (choice) => choice.value === rowModel,
+              )
+                ? rowModel
+                : null;
+              const hasModel = AI_FEATURES[feature].modelKind !== "none";
+              const userInitiated =
+                AI_FEATURES[feature].modelKind === "catalog" ||
+                AI_FEATURES[feature].modelKind === "image";
+
+              return (
+                <div
+                  key={feature}
+                  className="flex flex-col gap-3 border-b border-border-light-gray-thin px-2 py-3 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
+                  title={
+                    canManage
+                      ? undefined
+                      : "Only the team owner can change AI features"
+                  }
+                >
+                  <div className="min-w-0 sm:pt-1">
+                    <p className="font-semibold text-white-black">
+                      {AI_FEATURES[feature].label}
+                    </p>
+                    <p className="text-text-light-gray">{description}</p>
+                    {userInitiated ? (
+                      <p className="mt-1 max-w-[520px] text-micro text-text-light-gray">
+                        People can pick their own model for this in Default
+                        models; your choice here is the team default.
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex w-full shrink-0 items-center gap-3 sm:w-[390px]">
+                    <div className="flex shrink-0 items-center gap-1">
+                      <span className="w-6 text-micro font-medium text-text-light-gray">
+                        {featureRows[feature].enabled ? "On" : "Off"}
+                      </span>
+                      <SettingsToggle
+                        checked={featureRows[feature].enabled}
+                        disabled={!canManage || savingFeature !== null}
+                        hideLabel
+                        inputId={`ai-feature-${feature}`}
+                        label={`${AI_FEATURES[feature].label} ${
+                          featureRows[feature].enabled ? "on" : "off"
+                        }`}
+                        onChange={() => updateFeatureToggle(feature)}
+                      />
+                    </div>
+                    {feature === "dictation" ? (
+                      <div className="min-w-0 flex-1">
+                        <DictationProviderDropdown
+                          disabled={
+                            !canManage ||
+                            !featureRows[feature].enabled ||
+                            savingFeature !== null
+                          }
+                          value={
+                            featureRows.dictation.provider ??
+                            DEFAULT_DICTATION_PROVIDER
+                          }
+                          onChange={updateDictationProvider}
+                        />
+                      </div>
+                    ) : hasModel ? (
+                      <div className="min-w-0 flex-1">
+                        <FeatureModelDropdown
+                          autoModel={autoModelForFeature(feature)}
+                          choices={choices}
+                          disabled={
+                            !canManage ||
+                            !featureRows[feature].enabled ||
+                            savingFeature !== null
+                          }
+                          value={selectedModel}
+                          onChange={(model) =>
+                            updateFeatureModel(feature, model)
+                          }
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </SettingsCard>
+      ))}
+    </div>
+  );
+
   return (
     <SettingsSectionShell title="AI features">
       {!teamId ? (
@@ -561,116 +674,7 @@ const AiFeaturesSection = () => {
           Could not load AI features.
         </p>
       ) : (
-        <div className="flex flex-col gap-6">
-          {FEATURE_SECTIONS.map((section, sectionIndex) => (
-            <SettingsCard key={section.title}>
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="text-meta font-semibold uppercase tracking-wide text-text-light-gray">
-                  {section.title}
-                </h3>
-                {sectionIndex === 0 ? (
-                  <button
-                    type="button"
-                    disabled={!canManage || savingFeature !== null}
-                    className="rounded-[4px] px-2 py-1 text-dense font-medium text-text-light-gray transition hover:bg-hoverCardBackground hover:text-white-black focus-visible:bg-hoverCardBackground focus-visible:text-white-black focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                    onClick={() => void resetToDefaults()}
-                  >
-                    Reset to defaults
-                  </button>
-                ) : null}
-              </div>
-              <div className="flex flex-col">
-                {section.rows.filter(({ feature }) => !removeImageGeneration || feature !== "imageGeneration").map(({ description, feature }) => {
-                  const choices = choicesForFeature(feature);
-                  const rowModel = getAiModelOptionById(rows[feature].model, haiku55Enabled)?.id ?? rows[feature].model;
-                  const selectedModel = choices.some(
-                    (choice) => choice.value === rowModel,
-                  )
-                    ? rowModel
-                    : null;
-                  const hasModel = AI_FEATURES[feature].modelKind !== "none";
-                  const userInitiated =
-                    AI_FEATURES[feature].modelKind === "catalog" ||
-                    AI_FEATURES[feature].modelKind === "image";
-
-                  return (
-                    <div
-                      key={feature}
-                      className="flex flex-col gap-3 border-b border-border-light-gray-thin px-2 py-3 last:border-b-0 sm:flex-row sm:items-start sm:justify-between"
-                      title={
-                        canManage
-                          ? undefined
-                          : "Only the team owner can change AI features"
-                      }
-                    >
-                      <div className="min-w-0 sm:pt-1">
-                        <p className="font-semibold text-white-black">
-                          {AI_FEATURES[feature].label}
-                        </p>
-                        <p className="text-text-light-gray">{description}</p>
-                        {userInitiated ? (
-                          <p className="mt-1 max-w-[520px] text-micro text-text-light-gray">
-                            People can pick their own model for this in Default
-                            models; your choice here is the team default.
-                          </p>
-                        ) : null}
-                      </div>
-                      <div className="flex w-full shrink-0 items-center gap-3 sm:w-[390px]">
-                        <div className="flex shrink-0 items-center gap-1">
-                          <span className="w-6 text-micro font-medium text-text-light-gray">
-                            {rows[feature].enabled ? "On" : "Off"}
-                          </span>
-                          <SettingsToggle
-                            checked={rows[feature].enabled}
-                            disabled={!canManage || savingFeature !== null}
-                            hideLabel
-                            inputId={`ai-feature-${feature}`}
-                            label={`${AI_FEATURES[feature].label} ${
-                              rows[feature].enabled ? "on" : "off"
-                            }`}
-                            onChange={() => updateFeatureToggle(feature)}
-                          />
-                        </div>
-                        {feature === "dictation" ? (
-                          <div className="min-w-0 flex-1">
-                            <DictationProviderDropdown
-                              disabled={
-                                !canManage ||
-                                !rows[feature].enabled ||
-                                savingFeature !== null
-                              }
-                              value={
-                                rows.dictation.provider ??
-                                DEFAULT_DICTATION_PROVIDER
-                              }
-                              onChange={updateDictationProvider}
-                            />
-                          </div>
-                        ) : hasModel ? (
-                          <div className="min-w-0 flex-1">
-                            <FeatureModelDropdown
-                              autoModel={autoModelForFeature(feature)}
-                              choices={choices}
-                              disabled={
-                                !canManage ||
-                                !rows[feature].enabled ||
-                                savingFeature !== null
-                              }
-                              value={selectedModel}
-                              onChange={(model) =>
-                                updateFeatureModel(feature, model)
-                              }
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </SettingsCard>
-          ))}
-        </div>
+        removeImageGeneration ? renderFeatureSections(rows, true) : renderFeatureSections(rows, false)
       )}
     </SettingsSectionShell>
   );
