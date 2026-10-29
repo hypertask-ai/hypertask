@@ -1,4 +1,5 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-7807-empty-view-columns";
 import { IFavorites, IProject, ISection } from "@/models/model";
 import { activeBuiltinViewsAtom, showBoardManagerAtom, currentProjectAtom, isXScrollOnKanbanAtom, appShellRailAtom, showQuickTipsAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -30,6 +31,7 @@ export function useLandingSectionState(context: Context) {
 
 
 const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
+const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
 const router = useRouter();
@@ -101,6 +103,7 @@ const filteredSectionsForActiveView = useMemo(() => {
   return getFilteredEmptySections(
     getAppliedSubtaskSections(filtered, _currentProject),
     _currentProject,
+    showEmptyViewColumns,
   );
 }, [
   _allProjects,
@@ -110,6 +113,7 @@ const filteredSectionsForActiveView = useMemo(() => {
   activeBuiltinViews,
   filterRuntimeContext,
   sections,
+  showEmptyViewColumns,
 ]);
 
 const [favorites, setFavorites] = useState<IFavorites[]>([]);

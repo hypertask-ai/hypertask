@@ -1,4 +1,5 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-7807-empty-view-columns";
 
 import { useRef } from "react";
 import { IAiCustomInstructions, IProject, IProjectsAll, IProjectView, ISection, ITask } from "@/models/model";
@@ -161,6 +162,7 @@ const applyProjectFilters = (
   builtinViewId?: BuiltinViewId,
   currentUser?: { id?: number; displayName?: string },
   runtimeContext?: IFilterRuntimeContext,
+  showEmptyViewColumns = false,
 ) => {
   let filteredSections = getAppliedSubtaskSections(project.sections, project);
   filteredSections = getFilteredSections(
@@ -175,10 +177,11 @@ const applyProjectFilters = (
     filteredSections = getAppliedSearchedTasks(filteredSections, searchKeyword);
   }
 
-  return getFilteredEmptySections(filteredSections, project);
+  return getFilteredEmptySections(filteredSections, project, showEmptyViewColumns);
 };
 
 const UpdateKanban = () => {
+  const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
   const archiveColumnBoundary = useFlag(HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
@@ -276,6 +279,7 @@ const UpdateKanban = () => {
         isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
         _currentUser,
         filterRuntimeContext,
+        showEmptyViewColumns,
       )
     );
     projectToUpdate = {

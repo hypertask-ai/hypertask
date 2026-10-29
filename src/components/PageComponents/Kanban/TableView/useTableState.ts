@@ -1,3 +1,4 @@
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-7807-empty-view-columns";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -35,6 +36,7 @@ export function useTableState(context: Context) {
   myTasksSort, myTasksSortKey, filteredSections, _sections,
   } = context;
 
+  const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
@@ -159,12 +161,12 @@ export function useTableState(context: Context) {
             items: (section.items || []).filter((task) => !excludedTaskIds.has(task.id)),
           }));
     if (!_currentProject) return withoutExcluded;
-    const emptyFiltered = getFilteredEmptySections(withoutExcluded, _currentProject);
+    const emptyFiltered = getFilteredEmptySections(withoutExcluded, _currentProject, showEmptyViewColumns);
     return emptyFiltered.map((section) => ({
       ...section,
       items: returnSortedItems([...(section.items || [])], _currentProject),
     }));
-  }, [filteredSections, _sections, _currentProject, excludedTaskIds]);
+  }, [filteredSections, _sections, _currentProject, excludedTaskIds, showEmptyViewColumns]);
 
   useEffect(() => {
     if (excludedTaskIds.size === 0) return;

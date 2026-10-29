@@ -1,5 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/definitions/htpr-7807-empty-view-columns";
 
 import { ISection, ITask } from '@/models/model'
 import  { useContext, useEffect, useRef, useState } from 'react'
@@ -46,6 +47,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {initialSections , handleBoardChange, filteredSections} = props
     const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG)
     const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
+    const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const queryClient = useQueryClient();   
@@ -493,7 +495,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
       filterRuntimeContext,
     )
-    const filteredEmptySections = getFilteredEmptySections(filteredAppliedSections, _currentProject)
+    const filteredEmptySections = getFilteredEmptySections(filteredAppliedSections, _currentProject, showEmptyViewColumns)
     const filteredSubtaskSections = getAppliedSubtaskSections(filteredEmptySections,_currentProject) 
     setSectionsToDisplay(filteredSubtaskSections)
     const updatedTasks = newSections.flatMap((x)=>x.items)
