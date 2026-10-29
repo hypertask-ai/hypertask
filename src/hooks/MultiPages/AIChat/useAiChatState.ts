@@ -51,6 +51,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const pathname = usePathname();
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG) && !isFullScreenChat && !(pathname?.startsWith("/demo") ?? false);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const ticketScopeSelected =
     ticketScopeEnabled && !isFullScreenChat && isDetailPage &&
@@ -226,7 +227,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, parallelChatsEnabled);
+  } = useSessionAndChatHistory(manualChat ? undefined : taskId, shouldLoadChatHistory, isDetailPage, manualChat || parallelChatsEnabled, manualChat);
   useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {
@@ -253,7 +254,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     scopedProjectId ?? "all",
     currentProject?.id ?? "no-board",
     currentUser?.id ?? "anonymous",
-    taskId ?? "no-task",
+    manualChat ? "manual" : taskId ?? "no-task",
     ...(ticketScopeSelected ? ["ticket-scope"] : []),
     ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
@@ -295,7 +296,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
-  editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
+  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG } from "@/lib/flags/definitions/htpr-8052-fullscreen-chat-return";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
+import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenPageAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatExplicitOpenAtAtom, aiChatEmbeddedTicketPathAtom, aiChatNewTicketPathAtom, currentUserAtom, showAIChatInterfaceAtom } from "@/store";
@@ -19,6 +20,7 @@ function pageChangedSinceLastVisit(previous: string | null, lastSaved: string | 
 }
 
 export function useAiChatAutoOpen(mobile: boolean) {
+  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
   const preserveFullScreenReturn = useFlag(HTPR_8052_FULLSCREEN_CHAT_RETURN_FLAG);
   const stableDefaultView = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
   useSyncAiChatOpenPreferences();
@@ -41,7 +43,9 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const autoOpenedPage = useRef<string | null>(null);
   const fullScreenReturnPage = useRef<string | null>(null);
   const manualOpen = !embeddedTicketPath && (search?.get("newTaskAi") === "1" || search?.get("welcome_ai") === "1" || search?.has("agentSidebar") === true);
-  const allowed = page !== null && (values[page] || (pinned && !mobile));
+  const allowed = page !== null && (manualChat
+    ? page === "aiChatOpenNewTickets" && values[page]
+    : values[page] || (pinned && !mobile));
 
   useEffect(() => {
     if (!enabled || !ready || !pathname || !user?.id) {
@@ -66,17 +70,17 @@ export function useAiChatAutoOpen(mobile: boolean) {
     if (changed) setSuppressed(false);
     if ((suppressed && !changed) || !allowed) {
       const savedOffAfterAutoOpen = !allowed && autoOpenedPage.current !== null && !pageChangedSinceLastVisit(autoOpenedPage.current, null, pageKey, stableDefaultView);
-      if (changed || savedOffAfterAutoOpen) setOpen(false);
+      if (!manualChat && (changed || savedOffAfterAutoOpen)) setOpen(false);
       autoOpenedPage.current = null;
       return;
     }
     autoOpenedPage.current = pageKey;
     setExplicitOpenAt(null);
     setOpen(true);
-  }, [enabled, ready, pathname, pageKey, page, newTicketPath, manualOpen, allowed, mobile, user?.id, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
+  }, [enabled, ready, pathname, pageKey, page, manualChat, newTicketPath, manualOpen, allowed, mobile, user?.id, stableDefaultView, preserveFullScreenReturn, suppressed, setSuppressed, setOpen, setExplicitOpenAt, setNewTicketPath, lastPage, setLastPage]);
 
   const active = enabled || !flagReady;
   const pageChanged = pageChangedSinceLastVisit(previousPage.current, lastPage, pageKey, stableDefaultView);
-  const reserve = active && !mobile && allowed && !(suppressed && !pageChanged);
+  const reserve = !manualChat && active && !mobile && allowed && !(suppressed && !pageChanged);
   return { reserve };
 }

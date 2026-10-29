@@ -59,7 +59,7 @@ export function useAiChat() {
   setContextList, agentStatus, setAgentStatus, showRenameChatModal, setShowRenameChatModal,
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
-  editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
+  editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
   currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
@@ -79,7 +79,7 @@ export function useAiChat() {
     parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
-    currentAiOption, pathname, currentUser, taskId, sessionsRef,
+    currentAiOption, pathname, currentUser, taskId, manualChat, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
     setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
   };
