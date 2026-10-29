@@ -13,6 +13,7 @@ import {
 } from "@/app/api/ai/_lib/skillAccess";
 import {
   MAX_SKILL_BODY_BYTES,
+  SkillMarkdownError,
   parseSkillMarkdown,
   slugifySkill,
 } from "@/app/api/ai/_lib/skillMarkdown";
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ skill }, { status: 201 });
   } catch (error) {
+    if (error instanceof SkillMarkdownError) return skillErrorResponse(error);
     if (error instanceof ProjectAccessError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }

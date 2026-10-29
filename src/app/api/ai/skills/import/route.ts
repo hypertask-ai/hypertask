@@ -8,6 +8,7 @@ import {
   skillErrorResponse,
 } from "@/app/api/ai/_lib/skillAccess";
 import { importSkillsFromGitHub } from "@/app/api/ai/_lib/skillImport";
+import { SkillMarkdownError } from "@/app/api/ai/_lib/skillMarkdown";
 import prisma from "@/lib/prisma";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
@@ -72,6 +73,7 @@ export async function POST(request: NextRequest) {
     );
     return NextResponse.json({ skills });
   } catch (error) {
+    if (error instanceof SkillMarkdownError) return skillErrorResponse(error);
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

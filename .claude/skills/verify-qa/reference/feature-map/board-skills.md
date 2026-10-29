@@ -57,6 +57,15 @@ status and the returned name and slug, reload and read the card text back
 (name, `/slug`, Enabled), then shoot the page on desktop and at 390x844.
 Delete the throwaway skill and reload to prove it is gone.
 
+## Invalid skill Markdown
+
+POST unclosed frontmatter to `/api/ai/skills` as QA 985. Expect HTTP 400
+with `SKILL.md frontmatter is not closed`, no saved skill, and no server
+incident. Repeat through PATCH on your own throwaway skill and confirm
+its saved content remains unchanged. Valid Markdown must still save and
+reload. Parser refusals during GitHub import use the same error handling;
+unexpected failures must remain reported.
+
 ## Cleanup
 
 Delete every skill you created through its **Delete** control and reload.

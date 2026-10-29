@@ -9,6 +9,7 @@ import {
 } from "@/app/api/ai/_lib/skillAccess";
 import {
   MAX_SKILL_BODY_BYTES,
+  SkillMarkdownError,
   parseSkillMarkdown,
   slugifySkill,
 } from "@/app/api/ai/_lib/skillMarkdown";
@@ -58,6 +59,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
     return NextResponse.json({ skill: updated });
   } catch (error) {
+    if (error instanceof SkillMarkdownError) return skillErrorResponse(error);
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

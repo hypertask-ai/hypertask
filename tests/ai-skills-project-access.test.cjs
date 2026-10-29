@@ -186,7 +186,7 @@ for (const [name, markdown, expectedError] of [
     }));
     assert.equal(response.status, 400);
     assert.deepEqual(await response.json(), { error: expectedError });
-    assert.deepEqual(h.calls.map(([kind]) => kind), ["access", "report"]);
+    assert.deepEqual(h.calls.map(([kind]) => kind), ["access"]);
   });
 }
 
