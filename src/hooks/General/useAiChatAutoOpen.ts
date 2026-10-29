@@ -123,7 +123,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const savedOpen = readChatNavigationState(navigationKey).open;
   const restorationPending = previousRoute.current === null || previousRoute.current.startsWith("/settings") ||
     (restoreVisit.current === pageKey && attemptedRestore.current !== navigationPageKey);
-  const restoringPanel = navigationKey && page !== "aiChatOpenNewTickets" && typeof savedOpen === "boolean" &&
+  const restoringPanel = navigationKey && page && page !== "aiChatOpenNewTickets" && typeof savedOpen === "boolean" &&
     (restoredPage.current === navigationPageKey || restorationPending);
   const rememberedOpen = restorationPending ? savedOpen === true : open;
   const reserve = active && !mobile && (restoringPanel ? rememberedOpen : allowed && !(suppressed && !pageChanged));

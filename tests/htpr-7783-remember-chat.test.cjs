@@ -24,6 +24,7 @@ async function withChat(options, check) {
   const state = { useRecoilValue: atom => React.useSyncExternalStore(fn => { listeners.add(fn); return () => listeners.delete(fn); }, () => values.get(atom) ?? null), useRecoilState: atom => [state.useRecoilValue(atom), setter(atom)], useSetRecoilState: setter };
   let nativeSidebar = null;
   let pathname = options.fullscreen ? "/chat" : "/project", visible = true, history, resolver, chatState, panelReserve, messageListElement;
+  const panelReserves = [];
   const rows = options.rows ?? [row("newest"), row("older"), row("other-board", 25), row("other-user", 15, 2343)];
   const calls = [];
   const api = {
@@ -81,7 +82,7 @@ async function withChat(options, check) {
     } };
   }
   function Probe() {
-    if (options.panel) { panelReserve = useAiChatAutoOpen(false).reserve; return null; }
+    if (options.panel) { panelReserve = useAiChatAutoOpen(false).reserve; panelReserves.push(panelReserve); return null; }
     useChatContext();
     return options.scroll ? React.createElement(MessageList, { sidebarKey: "ai" }) : React.createElement("div", null, chatState.currentSession?.messages.map(item => item.content).join(" "));
   }
@@ -89,7 +90,7 @@ async function withChat(options, check) {
   const render = async () => { await React.act(async () => root.render(React.createElement(query.QueryClientProvider, { client }, visible ? (options.runtime ? React.createElement(ChatRuntime, { onValue() {} }) : React.createElement(Probe)) : null))); await flush(); };
   try {
     await render();
-    await check({ reserve: () => panelReserve, history: () => history, chatState: () => chatState, resolver: () => resolver, calls, rows, dom, values, flush, render,
+    await check({ reserve: () => panelReserve, panelReserves, history: () => history, chatState: () => chatState, resolver: () => resolver, calls, rows, dom, values, flush, render,
       setNativeSidebar: value => { nativeSidebar = value; },
       set: async (atom, value) => { await React.act(async () => set(atom, value)); await flush(); },
       visit: async route => { pathname = route; await render(); },
@@ -221,6 +222,22 @@ for (const open of [false, true]) test(`Settings and reload restore a ${open ? "
     assert.equal(view.reserve(), open);
     await view.set(atoms.showAIChatInterfaceAtom, !open);
     assert.equal(view.reserve(), !open);
+  });
+});
+
+for (const open of [false, true]) for (const route of ["/chat", "/settings/profile"]) test(`saved ${open ? "open" : "closed"} panel never reserves space on ${route}`, async () => {
+  await withChat({ panel: true }, async view => {
+    await view.set(atoms.showAIChatInterfaceAtom, open);
+    await view.settings();
+    view.panelReserves.length = 0;
+    await view.returnToChat(route);
+    assert.ok(view.panelReserves.length > 0);
+    assert.ok(view.panelReserves.every(reserve => reserve === false));
+    assert.equal(navigation.readChatNavigationState(navigation.chatNavigationKey(985, 15)).open, open);
+    await view.settings();
+    await view.returnToChat("/project");
+    assert.equal(view.values.get(atoms.showAIChatInterfaceAtom), open);
+    assert.equal(view.reserve(), open);
   });
 });
 
