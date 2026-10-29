@@ -72,11 +72,12 @@ function menu({ enabled = true, paging = false, mobile = false } = {}) {
   const { AgentSidebarChatCommands } = load("src/components/AI_CHAT/AgentSidebarChatCommands.tsx", {
     react: { ...state.react, useContext: () => mobile },
     "@/hooks/useFlag": { useFlag: key => {
-      if (key === "htpr-7702-phone-chat-list") return false;
+      if (["htpr-7702-phone-chat-list", "htpr-7764-chat-running"].includes(key)) return false;
       assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;
     } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },
+    "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
     "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "htpr-7702-phone-chat-list" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => history },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },

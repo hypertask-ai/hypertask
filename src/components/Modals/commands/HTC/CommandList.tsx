@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { currentProjectAtom } from "@/store";
 import { parseCookies } from "nookies";
 import { useRecoilState } from "@/lib/state";
@@ -48,6 +49,7 @@ const CommandList: React.FC<CommandListProps> = ({ onClickHandler, commandLists,
                                 isMobile={isMobile}
                                 clampName={chatListRows}
                             />
+                            {command.isRunning && <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />}
                         </li>
                     );
                 }

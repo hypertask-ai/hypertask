@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Ellipsis,
   History,
+  Loader2,
   Maximize2,
   Minus,
   PanelRight,
@@ -25,6 +26,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7575_PHONE_CHAT_DELETE_FLAG } from "@/lib/flags/definitions/htpr-7575-phone-chat-delete";
 import { HTPR_7773_CHAT_HEADER_NAME_FLAG } from "@/lib/flags/definitions/htpr-7773-chat-header-name";
+import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import Tooltip from "../Common/Tooltip";
 import { format } from "date-fns";
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -71,11 +73,13 @@ function partitionSessionsByRecency(sessions: HistorySession[]): {
 function ChatSessionRow({
   chat,
   isActive,
+  isRunning,
   onSelect,
   children,
 }: {
   chat: HistorySession;
   isActive: boolean;
+  isRunning: boolean;
   onSelect: () => void;
   children?: ReactNode;
 }) {
@@ -91,6 +95,7 @@ function ChatSessionRow({
           {chat.title}
         </span>
         {chat.agentName && <span className="max-w-24 truncate text-micro text-icon-dark-gray">{chat.agentName}</span>}
+        {isRunning && <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />}
         {isActive && (
           <Check
             size={16}
@@ -129,6 +134,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
+  const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
   const quietTicketOpen = pathname?.startsWith("/detail/");
   const {
     togglePopover,
@@ -137,6 +143,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     isSidebarMode,
     sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions,
     currentSession,
+    runningSessionIds,
     isSessionPending,
     startNewSession,
     selectSession,
@@ -148,6 +155,9 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   const sidebarTitle = sidebarChats?.target.kind === "ai"
     ? (chatHeaderNameEnabled && currentSession?.title) || "AI chat"
     : sidebarChats?.target.agent.displayName;
+  const runningIndicator = chatRunningEnabled && sidebarChats?.target.kind !== "external-agent" && currentSession && runningSessionIds.includes(currentSession.id)
+    ? <Loader2 size={16} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />
+    : null;
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -253,6 +263,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
             key={chat.id}
             chat={chat}
             isActive={chat.id === resolvedSessionId}
+            isRunning={chatRunningEnabled && runningSessionIds.includes(chat.id)}
             onSelect={() => {
               setIsDropdownOpen(false);
               const agent = agentSessionsEnabled && chat.agentId ? sidebarChats?.agents.find((item) => item.id === chat.agentId) : undefined;
@@ -370,16 +381,17 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               <button ref={titleRef} type="button" aria-label="Switch conversation" aria-expanded={conversationsOpen}
                 aria-controls="agent-sidebar-conversations" onClick={() => { setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
                 className={cn(MOBILE_TARGET, "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
-                <span className="truncate">{sidebarTitle}</span><ChevronDown size={18} aria-hidden />
+                <span className="truncate">{sidebarTitle}</span>{runningIndicator}<ChevronDown size={18} aria-hidden />
               </button>
               {conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
             </div>
           ) : (
           <div
-            className="truncate px-2 text-modalSmall font-semibold leading-5"
+            className="flex items-center gap-1 truncate px-2 text-modalSmall font-semibold leading-5"
             title={currentSession?.title ?? undefined}
           >
-            {currentSession?.title ?? "AI Chat"}
+            <span className="truncate">{currentSession?.title ?? "AI Chat"}</span>
+            {runningIndicator}
           </div>
           )}
           {(!sidebarChats || sidebarChats.target.kind === "ai") && <div
@@ -433,6 +445,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
           <span className="min-w-0 truncate font-medium">
             {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
           </span>
+          {runningIndicator}
           <span
             style={{
               width: 18,

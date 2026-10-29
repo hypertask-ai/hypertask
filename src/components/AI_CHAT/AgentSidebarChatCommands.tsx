@@ -7,6 +7,7 @@ import { findCommandPosition } from "@/components/Modals/commands/HTC/commandSel
 import type { ICommandList } from "@/components/Modals/commands/HTC/HTCTypes";
 import { CommandMode } from "@/models/enums";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import { HTPR_7688_PAST_CHATS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-7688-past-chats-first";
 import { HTPR_7702_PHONE_CHAT_LIST_FLAG } from "@/lib/flags/definitions/htpr-7702-phone-chat-list";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -24,7 +25,8 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
   const [selectedKey, setSelectedKey] = useState(context.target.kind === "ai" ? "ai" : context.target.agent.id);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
   const phoneChatList = useFlag(HTPR_7702_PHONE_CHAT_LIST_FLAG);
-  const { sessions, historySessions, sessionPagingEnabled, hasMoreSessions, isLoadingMoreSessions, loadMoreSessions, refreshHistorySessions } = useAiChatContext();
+  const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
+  const { runningSessionIds, currentSession, sessions, historySessions, sessionPagingEnabled, hasMoreSessions, isLoadingMoreSessions, loadMoreSessions, refreshHistorySessions } = useAiChatContext();
   const [expanded, setExpanded] = useState(false);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const personalSessions = pastChatsFirst
@@ -42,9 +44,11 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
       ...(agent.hasMoreSessions ? [{ key: `more-agent:${agent.id}`, name: "Show more", payload: agent.id, commandMode: CommandMode.GoToAgentChat }] : []),
     ] : []),
   ]) : [
-    { key: "ai", name: "AI chat", commandMode: CommandMode.GoToAgentChat },
+    { key: "ai", name: "AI chat", commandMode: CommandMode.GoToAgentChat,
+      isRunning: chatRunningEnabled && context.target.kind === "ai" && !!currentSession && runningSessionIds.includes(currentSession.id) },
     ...visibleSessions.map((session) => ({
       key: `session:${session.id}`, name: session.title, payload: session.id, commandMode: CommandMode.GoToAgentChat,
+      isRunning: chatRunningEnabled && runningSessionIds.includes(session.id),
     })),
     ...(pastChatsFirst && (hiddenCount > 0 || hasMoreSessions) ? [{
       key: "more", name: hiddenCount > 0 ? `Show ${hiddenCount} more` : "Show more", commandMode: CommandMode.GoToAgentChat,
@@ -57,7 +61,7 @@ export function AgentSidebarChatCommands({ context, anchorRef, onClose, agentsOn
       commandMode: CommandMode.GoToAgentChat,
     })),
     ...(context.error ? [{ key: "retry", name: `${context.error}. Retry`, commandMode: CommandMode.GoToAgentChat }] : []),
-  ], [context.agents, context.error, pastChatsFirst, visibleSessions, hiddenCount, hasMoreSessions, agentsOnly, expandedAgentId]);
+  ], [context.agents, context.error, context.target.kind, pastChatsFirst, visibleSessions, hiddenCount, hasMoreSessions, agentsOnly, expandedAgentId, chatRunningEnabled, runningSessionIds, currentSession]);
   const groups = [{ group: "Conversations", commandLists: commands }];
   const selected = commands.find((command) => command.key === selectedKey) ?? commands[0];
   const choose = (command: ICommandList) => {

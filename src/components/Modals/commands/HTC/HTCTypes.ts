@@ -26,6 +26,7 @@ export interface ICommandList {
     keyboard?:(string | null)[]
     keywords?: string;
     isNew?: boolean;
+    isRunning?: boolean;
    }
 export interface CommandGroup{
     group:string;

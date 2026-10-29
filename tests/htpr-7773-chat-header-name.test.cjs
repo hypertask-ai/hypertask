@@ -49,6 +49,7 @@ for (const mobile of [false, true]) {
       "next/navigation": { usePathname: () => "/chat", useRouter: () => ({ push: noop }), useSearchParams: () => new URLSearchParams() },
       "@/hooks/useFlag": { useFlag: (key) => key === flag.HTPR_7773_CHAT_HEADER_NAME_FLAG && enabled },
       "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "htpr-6971-chat-history-paging" },
+      "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "htpr-7764-chat-running" },
       "@/lib/flags/definitions/htpr-7773-chat-header-name": flag,
       "@/lib/flags/definitions/htpr-8048-agent-sessions": { HTPR_8048_AGENT_SESSIONS_FLAG: "htpr-8048-agent-sessions" },
       "@/lib/flags/definitions/htpr-7575-phone-chat-delete": { HTPR_7575_PHONE_CHAT_DELETE_FLAG: "htpr-7575-phone-chat-delete" },

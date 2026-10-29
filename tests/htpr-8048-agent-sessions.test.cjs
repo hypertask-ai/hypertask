@@ -101,6 +101,7 @@ function picker({ agentsOnly = true, agents = [{ id: "agent", displayName: "Runn
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": { HTPR_7688_PAST_CHATS_FIRST_FLAG: "past" },
     "@/lib/flags/definitions/htpr-7702-phone-chat-list": { HTPR_7702_PHONE_CHAT_LIST_FLAG: "phone" },
+    "@/lib/flags/definitions/htpr-7764-chat-running": { HTPR_7764_CHAT_RUNNING_FLAG: "running" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], hasMoreSessions: false }) },
   };
   const loadedModule = { exports: {} };
