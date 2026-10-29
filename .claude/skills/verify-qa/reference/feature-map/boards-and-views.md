@@ -178,3 +178,21 @@ after: no view or board-default change is allowed. Existing labels still
 save their filter. Expected label refusals log warnings; unexpected storage
 failures must still log errors. Local behavior coverage:
 `node --test tests/htpr-7985-duplicate-view-logs.test.cjs`.
+
+## Visible archive focus order
+
+For https://app.hypertask.ai/detail/project-15/8149, use QA-owned fixtures
+in one column: fourteen matching cards, interleaved with cards hidden by
+**Find in view**, plus a matching card in another column. Press Ctrl+F,
+filter the titles, and press Enter to leave search without clearing it.
+Focus the first matching card and press Ctrl+E fourteen times. After each
+archive, focus must select the next visible card, never a hidden cached
+neighbor. Archiving the last visible card selects the visible card above;
+exhausting the column focuses its outer `.section-container`, not the body
+or another column. Held Ctrl+E must still archive only once. Undo restores
+the same card; reload must retain hidden cards and the neighboring column.
+
+Flag `htpr-8149-archive-focus-order` defaults to Everyone. Off retains the
+old cached-card focus path; cover both paths in targeted tests without
+switching production flags. Collect desktop and phone theme captures and
+the archive-request/focus sequence. Remove only the fixtures created.

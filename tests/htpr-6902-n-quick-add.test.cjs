@@ -57,6 +57,7 @@ function commonMocks(calls) {
       return false;
     }, useFlagLoaded: () => true },
     "@/lib/flags/keys": { HTPR_7047_SHARP_PLUS_SIGNS_FLAG: "htpr-7047-sharp-plus-signs" },
+    "@/lib/flags/definitions/htpr-8149-archive-focus-order": load("src/lib/flags/definitions/htpr-8149-archive-focus-order.ts"),
     "@/utils/helperFunctions/helperFunctions": {
       throttle: (handler) => handler,
       returnIfModalOrInputActive: () => Boolean(document.querySelector(".modal") || document.activeElement.matches("input,textarea,[contenteditable='true']")),

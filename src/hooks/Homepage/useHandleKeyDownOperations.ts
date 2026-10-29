@@ -1,3 +1,4 @@
+import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
 
 import { ISection, ITask } from '@/models/model'
 import  { useContext, useEffect, useRef, useState } from 'react'
@@ -42,6 +43,7 @@ interface IHandleKeyDownOperations {
 
 const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {initialSections , handleBoardChange, filteredSections} = props
+    const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const queryClient = useQueryClient();   
@@ -328,6 +330,8 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
             if (showBoardManager || showCommands.show || showSaveModal || returnIfModalOrInputActive() || showSearchTasks )return
         
             
+            if (archiveFocusOrder && document.activeElement?.classList.contains("section-container")) return
+
             const activeItem = getActiveItem();
             const elementToActivate = document.getElementById(`task-${activeItem}`)
             if (activeItem && elementToActivate && !showSearchTasks) {
@@ -344,7 +348,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
               parent&&setActiveSection(parseInt(parent))
               updateActiveItemAndItemInView(firstTask.id, _currentProject.id, getActiveSection())
             }
-          }, [showBoardManager,showCommands.show,showSaveModal,firstTask, showSearchTasks]);
+          }, [showBoardManager,showCommands.show,showSaveModal,firstTask, showSearchTasks, archiveFocusOrder]);
 
           useEffect(() => {
 
