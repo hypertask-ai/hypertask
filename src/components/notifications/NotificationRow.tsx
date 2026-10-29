@@ -491,7 +491,7 @@ export function AgentBoardAccessDecision() {
                 <CreatedAtDesktop />
                 <CreatedAtMobile />
             </div>
-            <article aria-label="Board access decision" className="rounded border border-comment-description-border shadow-md bg-comment-description text-white-black comment-container comment-separation-card my-[8px] p-4">
+            <article aria-label="Board access decision" className="rounded border border-comment-description-border shadow-md bg-comment-description text-white-black my-[8px] p-4">
                 <header className="mb-3 flex items-center justify-between gap-2 text-dense">
                     <span>{request.agentName}</span>
                     <CreatedAtDesktop />

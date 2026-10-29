@@ -457,12 +457,10 @@ export async function setFeatureFlagMode(
       : null;
 
     if (change) await recordChange?.(tx, change.id);
-    // Literal key: the registry fixture tests load this module with a stub definitions module only.
     if (key === "htpr-7582-agent-access-request" && mode === "OFF") {
       await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: actor?.userId ?? null, log: "agent_board_access_requests_disabled" } });
       const pending = await tx.agentBoardAccessRequest.findMany({ where: { status: "pending" } });
       for (const request of pending) {
-        // Conditional update: an approval that committed in between keeps its grant and its terminal state.
         const cancelled = await tx.agentBoardAccessRequest.updateMany({
           where: { id: request.id, status: "pending" },
           data: { status: "cancelled", resolvedAt: new Date(), resolutionReason: "feature_disabled" },

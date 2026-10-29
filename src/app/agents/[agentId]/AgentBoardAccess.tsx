@@ -51,8 +51,6 @@ export function AgentBoardAccess({
   const rawBoardId = Number(params?.get("boardAccess"));
   const requestedBoardId = Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
   const [openedRequestedBoard, setOpenedRequestedBoard] = useState<number | null>(null);
-  // Adjust this component's own state during render (React's documented pattern), then open the panel once
-  // from an effect so the parent is never updated while rendering.
   if (accessRequestsEnabled && requestedBoardId !== null && requestedBoardId !== openedRequestedBoard) {
     setOpenedRequestedBoard(requestedBoardId);
   }
