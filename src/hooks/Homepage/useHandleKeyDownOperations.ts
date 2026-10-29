@@ -31,6 +31,7 @@ import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builti
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
@@ -46,6 +47,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {initialSections , handleBoardChange, filteredSections} = props
     const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG)
     const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
+    const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
     const queryClient = useQueryClient();   
@@ -493,7 +495,9 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
       filterRuntimeContext,
     )
-    const filteredEmptySections = getFilteredEmptySections(filteredAppliedSections, _currentProject)
+    const filteredEmptySections = showEmptyViewColumns
+      ? getFilteredEmptySections(filteredAppliedSections, _currentProject, true)
+      : getFilteredEmptySections(filteredAppliedSections, _currentProject)
     const filteredSubtaskSections = getAppliedSubtaskSections(filteredEmptySections,_currentProject) 
     setSectionsToDisplay(filteredSubtaskSections)
     const updatedTasks = newSections.flatMap((x)=>x.items)

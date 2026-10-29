@@ -16,6 +16,7 @@ import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import type { SectionCompProps } from "./LandingPageSection";
@@ -30,6 +31,7 @@ export function useLandingSectionState(context: Context) {
 
 
 const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
+const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
 const router = useRouter();
@@ -86,7 +88,7 @@ useEffect(() => {
 }, [_allProjects, _projectIndex])
 
 const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
-const filteredSectionsForActiveView = useMemo(() => {
+const subtaskSectionsForActiveView = useMemo(() => {
   const persistedFilteredSections = _allProjects?.[_projectIndex]?.filteredSections ?? [];
   if (!_currentProject) return persistedFilteredSections;
 
@@ -98,10 +100,7 @@ const filteredSectionsForActiveView = useMemo(() => {
     buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
     filterRuntimeContext,
   );
-  return getFilteredEmptySections(
-    getAppliedSubtaskSections(filtered, _currentProject),
-    _currentProject,
-  );
+  return getAppliedSubtaskSections(filtered, _currentProject);
 }, [
   _allProjects,
   _currentProject,
@@ -111,6 +110,12 @@ const filteredSectionsForActiveView = useMemo(() => {
   filterRuntimeContext,
   sections,
 ]);
+let filteredSectionsForActiveView = subtaskSectionsForActiveView;
+if (showEmptyViewColumns) {
+  if (_currentProject) filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject, true);
+} else if (_currentProject) {
+  filteredSectionsForActiveView = getFilteredEmptySections(subtaskSectionsForActiveView, _currentProject);
+}
 
 const [favorites, setFavorites] = useState<IFavorites[]>([]);
 const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(isXScrollOnKanbanAtom);

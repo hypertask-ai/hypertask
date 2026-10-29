@@ -25,7 +25,7 @@ import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/c
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG } from "@/lib/flags/definitions/htpr-8039-archive-column-boundary";
@@ -175,10 +175,11 @@ const applyProjectFilters = (
     filteredSections = getAppliedSearchedTasks(filteredSections, searchKeyword);
   }
 
-  return getFilteredEmptySections(filteredSections, project);
+  return filteredSections;
 };
 
 const UpdateKanban = () => {
+  const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
   const archiveColumnBoundary = useFlag(HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
@@ -268,15 +269,18 @@ const UpdateKanban = () => {
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),
     };
+    const sectionsForView = applyProjectFilters(
+      projectToUpdate,
+      searchKeyword,
+      isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
+      _currentUser,
+      filterRuntimeContext,
+    );
     const filteredSections = reconcileSections(
       previousProject.filteredSections,
-      applyProjectFilters(
-        projectToUpdate,
-        searchKeyword,
-        isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
-        _currentUser,
-        filterRuntimeContext,
-      )
+      showEmptyViewColumns
+        ? getFilteredEmptySections(sectionsForView, projectToUpdate, true)
+        : getFilteredEmptySections(sectionsForView, projectToUpdate),
     );
     projectToUpdate = {
       ...projectToUpdate,

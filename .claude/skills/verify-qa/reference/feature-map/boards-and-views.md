@@ -208,3 +208,14 @@ Combine Created by with Priority under ANY and ALL. Check archived rows
 and a ticket update still respect the selected creator. With the flag off,
 agent choices disappear and existing human filters restore owner matching.
 Calendar and My Tasks retain their existing creator picker.
+## Empty views with hidden empty columns
+
+For https://app.hypertask.ai/detail/project-15/7807, use a QA-owned saved
+view with empty columns set to Hidden. With `htpr-7807-empty-view-columns`
+(Everyone), an empty view shows its existing visible columns rather than
+the empty-board help screen. Explicitly hidden columns remain hidden.
+Add a disposable task: other empty columns hide again. Remove the fixture:
+empty columns return. Reload and switch views away/back; the saved Hidden
+setting must remain unchanged. Check desktop and phone in all four themes.
+With the flag off, the original empty-state behavior remains. Builtin views
+that exclude every section and boards with no visible columns stay unchanged.
