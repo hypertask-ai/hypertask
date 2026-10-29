@@ -49,7 +49,7 @@ test("real authenticated cron totals saved usage for the UTC day without buying 
   assert.equal(queries.length, 2);
   assert.equal(queries[0].where.createdAt.gte.toISOString(), "2026-10-28T00:00:00.000Z");
   assert.deepEqual(queries[1], { where: {
-    createdAt: { gte: new NativeDate("2026-10-29T00:00:00Z"), lt: new NativeDate("2026-10-30T00:00:00Z") },
+    createdAt: { gte: new Date("2026-10-29T00:00:00Z"), lt: new Date("2026-10-30T00:00:00Z") },
     provider: { not: { startsWith: "byok:" } }, costUsd: { gte: 0 },
   }, _sum: { costUsd: true } });
   assert.equal(alerts.length, 0);
