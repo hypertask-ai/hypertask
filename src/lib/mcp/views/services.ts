@@ -3,7 +3,9 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from '@/lib/prisma';
 import { ValidationError } from '@/lib/mcp-server/utils/errors';
 import { getUniqueSlug, getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions';
-import { matchLabelIds, validateProjectAccess, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
+import { matchLabelIds, unresolvedLabelMessage, validateProjectAccess, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_8135_VIEW_LABEL_ERROR_FLAG } from '@/lib/flags/definitions/htpr-8135-view-label-error';
 import { broadcastBoardChange } from '@/lib/realtime/server';
 import { sanitizeBoardFilters } from '@/utils/helperFunctions/Views/BoardFilterSanitizer';
 import { EmptySections, Prisma, SortingMode, SortingOrder, SubtaskSetting, ViewVisibility } from '@prisma/client';
@@ -50,7 +52,8 @@ type BoardFilterEntry = { type: string; searchPayload: unknown[] };
 
 async function buildLabelsFilterEntry(
     projectId: number,
-    labelNames?: string[]
+    labelNames?: string[],
+    userId?: number
 ): Promise<BoardFilterEntry | undefined> {
     if (!labelNames?.length) return undefined;
 
@@ -60,6 +63,11 @@ async function buildLabelsFilterEntry(
     });
     const { ids, unresolved } = matchLabelIds(projectLabels, labelNames);
     if (unresolved.length) {
+        const clearMessage = userId !== undefined
+            && await isFeatureEnabled(HTPR_8135_VIEW_LABEL_ERROR_FLAG, userId);
+        if (clearMessage) {
+            throw new ValidationError(unresolvedLabelMessage(unresolved, projectLabels));
+        }
         throw new ValidationError(
             `Label(s) not found in project: ${unresolved.join(', ')}`
         );
@@ -150,10 +158,10 @@ async function buildValidatedNativeBoardFilters(projectId: number, value: unknow
     };
 }
 
-async function buildBoardFilters(projectId: number, filters?: CreateViewFilters) {
+async function buildBoardFilters(projectId: number, filters?: CreateViewFilters, userId?: number) {
     const addedFilters: BoardFilterEntry[] = [];
 
-    const labelsEntry = await buildLabelsFilterEntry(projectId, filters?.label_names);
+    const labelsEntry = await buildLabelsFilterEntry(projectId, filters?.label_names, userId);
     if (labelsEntry) addedFilters.push(labelsEntry);
 
     const assigneesEntry = await buildAssigneesFilterEntry(projectId, filters?.assignee_ids);
@@ -182,7 +190,7 @@ export async function createView(input: CreateViewInput) {
     }
 
     const board_filters = input.board_filters === undefined
-        ? sanitizeBoardFilters(await buildBoardFilters(projectId, input.filters))
+        ? sanitizeBoardFilters(await buildBoardFilters(projectId, input.filters, userId))
         : await buildValidatedNativeBoardFilters(projectId, input.board_filters);
     const boardColumns = input.visible_section_ids === undefined
         ? undefined
@@ -374,7 +382,7 @@ export async function updateView(input: UpdateViewInput) {
             input.filters.label_names === undefined
                 ? storedEntry('Labels')
                 : keepMatch(
-                      await buildLabelsFilterEntry(projectId, input.filters.label_names),
+                      await buildLabelsFilterEntry(projectId, input.filters.label_names, userId),
                       'Labels'
                   );
         const assigneesEntry =

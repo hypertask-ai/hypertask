@@ -219,6 +219,17 @@ export function matchLabelIds(
     return { ids, unresolved };
 }
 
+export function unresolvedLabelMessage(
+    unresolved: string[],
+    projectLabels: { value: string | null }[]
+): string {
+    const available = projectLabels
+        .map(label => label.value)
+        .filter(Boolean)
+        .join(', ');
+    return `Label(s) not found in project: ${unresolved.join(', ')}. Available labels: ${available || 'none'}`;
+}
+
 export async function resolveLabelIds(
     projectId: number,
     labels: (string | number)[]
@@ -232,13 +243,7 @@ export async function resolveLabelIds(
 
     const { ids, unresolved } = matchLabelIds(projectLabels, labels);
     if (unresolved.length > 0) {
-        const available = projectLabels
-            .map(label => label.value)
-            .filter(Boolean)
-            .join(', ');
-        throw new Error(
-            `Label(s) not found in project: ${unresolved.join(', ')}. Available labels: ${available || 'none'}`
-        );
+        throw new Error(unresolvedLabelMessage(unresolved, projectLabels));
     }
 
     return ids;
