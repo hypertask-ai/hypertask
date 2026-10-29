@@ -16,6 +16,8 @@ function fixture({ enabled = true, finishReason = "stop", output = "Saved summar
   let calls = 0;
   const writes = [];
   const summary = load("src/app/api/ai/_lib/commentSummaries.ts", {
+    "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
+    "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/net/downloadWithoutBrotli": {},
     "@/app/api/ai/_lib/modelProvider": {
       resolveAiModel: () => ({}), configureAiModelUsage() {}, providerOptionsForAiModel: () => ({}),

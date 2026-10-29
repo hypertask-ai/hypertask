@@ -1,4 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
+import { warnIfAllowanceRefused } from "@/app/api/ai/_lib/allowanceRefusal";
+import { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG } from "@/lib/flags/definitions/htpr-7716-allowance-fallbacks";
 import { taskWriterSkillsSchema, MAX_SKILL_INPUT_LENGTH } from "@/lib/ai/taskWriterSkills";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
@@ -82,6 +84,7 @@ async function taskQuestions(request: NextRequest) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
+  let allowanceFallbacksEnabled = false;
   try {
     const task = await prisma.task.findFirst({
       where: {
@@ -238,6 +241,7 @@ async function taskQuestions(request: NextRequest) {
           })
           .join("\n\n")
       : "(no comments)";
+    allowanceFallbacksEnabled = await isFeatureEnabled(HTPR_7716_ALLOWANCE_FALLBACKS_FLAG, viewer.id);
     const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: viewer.id }) : { haiku55Enabled: false, byok: undefined };
     const systemModel = resolveSystemModel(
       "questionSuggestions",
@@ -295,6 +299,9 @@ async function taskQuestions(request: NextRequest) {
       ? result.output.followup.trim() : undefined;
     return NextResponse.json({ questions, ...(followup ? { followup } : {}) });
   } catch (error) {
+    if (allowanceFallbacksEnabled && warnIfAllowanceRefused(error, "ai/task-questions")) {
+      return NextResponse.json({ questions: [] });
+    }
     if (NoOutputGeneratedError.isInstance(error) ||
       (NoObjectGeneratedError.isInstance(error) && !error.text?.trim())) {
       return NextResponse.json({ questions: [] });

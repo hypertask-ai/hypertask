@@ -37,6 +37,8 @@ function fixture({ error, enabled = true, failAt = "generate", flagError = false
   };
   const summary = load("src/app/api/ai/_lib/commentSummaries.ts", {
     "node:crypto": require("node:crypto"),
+    "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
+    "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/net/downloadWithoutBrotli": {},
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), configureAiModelUsage() {}, providerOptionsForAiModel: () => ({}) },
     "@/app/api/ai/_lib/byokKeys": { getAiDefaultModelContext: async () => ({ haiku55Enabled: false }),

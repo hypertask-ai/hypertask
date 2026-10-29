@@ -47,6 +47,10 @@ function isClientResponse(expression) {
       expression.arguments[0]?.getText().replace(/\s+/g, "") === "{questions:[]}" &&
       guard.expression.getText().replace(/\s+/g, "") ===
         "NoOutputGeneratedError.isInstance(error)||(NoObjectGeneratedError.isInstance(error)&&!error.text?.trim())") return true;
+    if (ts.isIfStatement(guard) && guard.thenStatement === expression.parent.parent &&
+      expression.arguments[0]?.getText().replace(/\s+/g, "") === "{questions:[]}" &&
+      guard.expression.getText().replace(/\s+/g, "") ===
+        'allowanceFallbacksEnabled&&warnIfAllowanceRefused(error,"ai/task-questions")') return true;
     const options = expression.arguments[1];
     if (options && ts.isObjectLiteralExpression(options)) {
       status = options.properties.find((property) =>
@@ -140,6 +144,19 @@ test("only the typed missing-output branch may skip empty-question incident repo
     `if (${condition}) {} else { ${response} } await reportError({ source: "handled" }); return [];`,
   ]) {
     assert.equal(missingReports(parse("fixture.ts", `try {} catch (error) { ${body} }`)).length, 1);
+  }
+});
+
+test("only the gated typed allowance refusal may skip empty-question incident reporting", () => {
+  const response = "return NextResponse.json({ questions: [] });";
+  const condition = 'allowanceFallbacksEnabled && warnIfAllowanceRefused(error, "ai/task-questions")';
+  assert.deepEqual(missingReports(parse("fixture.ts", `try {} catch (error) { if (${condition}) { ${response} } await reportError({ source: "handled" }); return []; }`)), []);
+  for (const condition of [
+    'warnIfAllowanceRefused(error, "ai/task-questions")',
+    'allowanceFallbacksEnabled',
+    'allowanceFallbacksEnabled && true',
+  ]) {
+    assert.equal(missingReports(parse("fixture.ts", `try {} catch (error) { if (${condition}) { ${response} } await reportError({ source: "handled" }); return []; }`)).length, 1);
   }
 });
 

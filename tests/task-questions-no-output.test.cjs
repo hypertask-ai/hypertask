@@ -23,6 +23,8 @@ function harness({ content = [], finishReason = "length", failure, viewer = { id
     },
   };
   const stubs = {
+    "@/app/api/ai/_lib/allowanceRefusal": { warnIfAllowanceRefused: () => null },
+    "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined },
     "@/lib/ai/taskWriterSkills": require("jiti")(__filename, { fsCache: false })(path.resolve(__dirname, "../src/lib/ai/taskWriterSkills.ts")),
     ai,
