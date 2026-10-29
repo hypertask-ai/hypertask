@@ -49,6 +49,10 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 
 Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
 
+## Helpers
+
+The runner itself runs Codex gpt-6.1-sol at medium effort and delegates by default, with helpers in the background. Code edits: `hax --provider=codex --model=gpt-6.1-terra --effort=medium --no-session -p "<task>"`. Lookups, logs and summaries: `hax --provider=codex --model=gpt-6-luna --effort=low --no-session -p "<task>"`. Sol high (`--model=gpt-6.1-sol --effort=high`) only for hard bugs, security and money.
+
 ## Release completion
 
 CI is the test gate. Push the branch; never run tests or builds on the VPS. A killed local check, SIGKILL, or exit 137 alone is not a blocker. An independent release error needs its own `Blocker:` line before moving the ticket.

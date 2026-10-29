@@ -5,7 +5,7 @@ description: Own a Hypertask ticket through board writes, review, merge, deploym
 
 # Own the ticket
 
-Start with [/ship](../ship/SKILL.md). It owns selection, claims, the proof ledger, exceptions, and cleanup. This skill covers board identity and the release routine. Follow [repository policy](../../../AGENTS.md), the current token ladder, and house rules. A runner handles one ticket end to end; helpers do not write to boards.
+Start with [/ship](../ship/SKILL.md). It owns selection, claims, the proof ledger, exceptions, and cleanup. This skill covers board identity and the release routine. Follow [repository policy](../../../AGENTS.md), the current token ladder, and house rules. A runner handles one ticket end to end; helpers do not write to boards. Helper models follow the Sol, Terra, Luna ladder in [/ship](../ship/SKILL.md).
 
 ## Board identity
 
