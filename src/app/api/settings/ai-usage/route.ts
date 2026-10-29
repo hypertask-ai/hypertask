@@ -18,11 +18,13 @@ import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { teamAiAllowanceUsd } from "@/lib/aiAllowancePolicy";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8008_GATEWAY_KEY_ERRORS_FLAG } from "@/lib/flags/definitions/htpr-8008-gateway-key-errors";
+import { HTPR_7743_AI_USAGE_AUTH_FLAG } from "@/lib/flags/definitions/htpr-7743-ai-usage-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const GATEWAY_BASE_URL = "https://ai-gateway.vercel.sh/v1";
+let gatewayReportAuthWarningLogged = false;
 
 type PercentageRow = { label: string; pct: number };
 
@@ -381,26 +383,51 @@ export async function GET(request: Request) {
         gatewayGet(`/report?${modelReportParams.toString()}`, funding.apiKey),
         gatewayGet(`/report?${tagReportParams.toString()}`, funding.apiKey),
       ]);
+    const reportStatuses = [dailyReportResponse, modelReportResponse, tagReportResponse]
+      .map((response) => response.status);
+    const reportAuthFailed = reportStatuses.some((status) => status === 401 || status === 403);
+    if (
+      funding.source === "customer" &&
+      reportAuthFailed &&
+      await isFeatureEnabled(HTPR_8008_GATEWAY_KEY_ERRORS_FLAG, user.id)
+    ) {
+      const usageMessage = reportStatuses.includes(401)
+        ? "Your team's AI Gateway key was rejected. Check it in Settings > Bring your own key."
+        : "Your team's AI Gateway key cannot read usage reports. Check its permissions with your provider.";
+      return NextResponse.json(
+        { message: "Could not load AI Gateway usage", usageMessage },
+        { status: 502 },
+      );
+    }
+    if (
+      reportAuthFailed &&
+      reportStatuses.every((status) => status < 400 || status === 401 || status === 403) &&
+      await isFeatureEnabled(HTPR_7743_AI_USAGE_AUTH_FLAG, user.id).catch(() => false)
+    ) {
+      if (!gatewayReportAuthWarningLogged) {
+        gatewayReportAuthWarningLogged = true;
+        console.warn("AI Gateway usage reporting configuration needs attention: report authorization was refused.");
+      }
+      const breakdown = await breakdownPromise;
+      return NextResponse.json({
+        configured: true,
+        fundingSource: funding.source,
+        period: { endDate, startDate },
+        allowance: null,
+        includedWithHypertask: null,
+        models: [],
+        features: breakdown?.features ?? [],
+        boards: breakdown?.boards ?? [],
+        tasks: breakdown?.tasks ?? [],
+        agents: breakdown?.agents ?? [],
+        usageMessage: "AI usage totals are unavailable because the AI service could not authorize usage reporting. Your AI settings may need attention.",
+      } satisfies AiUsageResponse);
+    }
     if (
       !dailyReportResponse.ok ||
       !modelReportResponse.ok ||
       !tagReportResponse.ok
     ) {
-      const reportStatuses = [dailyReportResponse, modelReportResponse, tagReportResponse]
-        .map((response) => response.status);
-      if (
-        funding.source === "customer" &&
-        reportStatuses.some((status) => status === 401 || status === 403) &&
-        await isFeatureEnabled(HTPR_8008_GATEWAY_KEY_ERRORS_FLAG, user.id)
-      ) {
-        const usageMessage = reportStatuses.includes(401)
-          ? "Your team's AI Gateway key was rejected. Check it in Settings > Bring your own key."
-          : "Your team's AI Gateway key cannot read usage reports. Check its permissions with your provider.";
-        return NextResponse.json(
-          { message: "Could not load AI Gateway usage", usageMessage },
-          { status: 502 },
-        );
-      }
       throw new Error(
         `AI Gateway report returned ${dailyReportResponse.status}/${modelReportResponse.status}/${tagReportResponse.status}`,
       );

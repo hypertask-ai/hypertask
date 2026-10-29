@@ -20,7 +20,8 @@ const { GET } = load("src/app/api/settings/ai-usage/route.ts", {
   "./gatewayUsage": usage,
   "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro" },
   "@/lib/aiAllowancePolicy": { teamAiAllowanceUsd: () => 5 },
-  "@/lib/flags": { isFeatureEnabled: async () => enabled },
+  "@/lib/flags": { isFeatureEnabled: async key => key === "htpr-8008-gateway-key-errors" && enabled },
+  "@/lib/flags/definitions/htpr-7743-ai-usage-auth": { HTPR_7743_AI_USAGE_AUTH_FLAG: "htpr-7743-ai-usage-auth" },
   "@/lib/flags/definitions/htpr-8008-gateway-key-errors": { HTPR_8008_GATEWAY_KEY_ERRORS_FLAG: "htpr-8008-gateway-key-errors" },
 });
 const originalFetch = global.fetch;
