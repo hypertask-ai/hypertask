@@ -301,6 +301,13 @@
     "expressionsHash": "f25482aca279220b626a7e98b3b496b4113853b09f608a5c80187135a0023824"
   },
   {
+    "file": "src/lib/ai/chatStream/prompt.ts",
+    "id": "product-answers-from-docs",
+    "version": "1",
+    "partsHash": "d6c22f42c3922528a8741a3939ee0c5300afadb3ec7b9c58e949614027e8fe9c",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
     "file": "src/lib/ai/chatStream/title.ts",
     "id": "title-instructions-1",
     "version": "1",

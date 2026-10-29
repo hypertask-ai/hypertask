@@ -66,3 +66,13 @@ test('prompt identification records only id and version, including composed chat
   assert.ok(identifyPrompt([{ role: 'system', content: composed }]).promptId.startsWith('editor-ai-prompts-'));
   assert.throws(() => renderPrompt('agent-system-prompt'), /interpolation count/);
 });
+
+test('gated docs prompt sends product questions to the docs and forbids undocumented claims', () => {
+  const { PRODUCT_ANSWERS_FROM_DOCS_PROMPT } = load(path.join(root, 'src/lib/ai/chatStream/prompt.ts'));
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /Call search_help_docs before answering any question about what Hypertask can or cannot do/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /Never answer these from memory/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /only when the returned articles state it/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /not documented and offer to file a ticket/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /failed docs search is not evidence that a feature does not exist/);
+  assert.match(PRODUCT_ANSWERS_FROM_DOCS_PROMPT, /https:\/\/docs\.hypertask\.ai\/features\/ai-chat-capabilities\//);
+});

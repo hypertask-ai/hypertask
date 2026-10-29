@@ -448,3 +448,19 @@ checks geometry, computed weight, icon width and Escape. Live flag Off means
 the Bot trigger stays absent; record the enabled path UNREACHABLE without
 changing flags or intercepting production flag responses. Do not send paid
 agent/model messages solely for this visual check.
+
+## Documentation-backed product answers
+
+Ask twenty product questions with known source articles, plus an own-work
+control. Capture the help-search status and the returned article links.
+Cover plans, limits, shortcuts, setup, supported features and invented features.
+An undocumented feature needs an explicit uncertainty statement, not a promise.
+A failed lookup is not proof a feature is absent. Own-ticket questions must
+still use board tools instead of help search. Compare cited-article and
+wrong-feature rates before and after deployment, with the same model and inputs.
+
+Ask “What can you do?” in the sidebar, `/chat`, floating chat and phone.
+The answer should link `https://docs.hypertask.ai/features/ai-chat-capabilities/`.
+Check MCP tool guidance through `tools/list` and describe-tool when deferred;
+check CLI help search against the same service. Connected clients decide
+whether to follow guidance; the server cannot guarantee external model choices.

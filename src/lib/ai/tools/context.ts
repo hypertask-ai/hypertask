@@ -28,6 +28,7 @@ export function createToolContext(
   bulkScopeConfirmationEnabled = false,
   skillDraftsEnabled = false,
   ticketRows: TicketRowsSink = { executions: [], setGroups: () => undefined },
+  docsRoutingEnabled = false,
 ) {
   if (actingAgentId && teamScope === undefined) throw new Error("Agent team scope is unavailable");
   const requestingUserId = user.id;
@@ -84,7 +85,7 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued, bulkScopeConfirmationEnabled, bulkScopePreviews });
-  return { ticketRows, skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { docsRoutingEnabled, ticketRows, skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type TicketRowsSink = { executions: ToolExecution[]; setGroups: (groups: ChatTicketGroupReferences) => void };

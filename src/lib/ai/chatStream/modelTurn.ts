@@ -25,7 +25,8 @@ import { resolveSkillsForAiRequest } from "@/app/api/ai/_lib/chatSkillResolution
 import { ChatRequest } from "@/lib/ai/chatStream/request";
 import { ToolExecution } from "@/lib/ai/chatStream/types";
 
-import { AGENT_SYSTEM_PROMPT, chatSurfacePrompt } from "@/lib/ai/chatStream/prompt";
+import { AGENT_SYSTEM_PROMPT, PRODUCT_ANSWERS_FROM_DOCS_PROMPT, chatSurfacePrompt } from "@/lib/ai/chatStream/prompt";
+import { HTPR_7780_DOCS_ROUTING_FLAG } from "@/lib/flags/definitions/htpr-7780-docs-routing";
 import { aiPromptCachingEnabled, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { createUserContent, createImageAwareUserContent } from "@/lib/ai/chatStream/content";
 import { writeToolNames } from "@/lib/ai/tools/metadata";
@@ -49,6 +50,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     (actingAgent.prompt ? ` Follow these instructions:\n${actingAgent.prompt}` : "")
     : null;
   const inlineAgentImagesEnabled = await isFeatureEnabled(HTPR_7514_INLINE_AGENT_IMAGES_FLAG, dbUser.id);
+  const docsRoutingEnabled = await isFeatureEnabled(HTPR_7780_DOCS_ROUTING_FLAG, dbUser.id);
   const settingsEnabled = !actingAgent && !!resolvedBody.settings_context && await isFeatureEnabled(HTPR_7622_AI_SETTINGS_FLAG, dbUser.id);
   const settingsScope = settingsEnabled ? resolvedBody.settings_context : undefined;
   const chatOpensTaskEnabled = await isFeatureEnabled(HTPR_7756_CHAT_OPENS_TASK_FLAG, dbUser.id);
@@ -58,6 +60,7 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
   let ticketGroups: ChatTicketGroupReferences | undefined;
   const instructions = [
     AGENT_SYSTEM_PROMPT,
+    docsRoutingEnabled ? PRODUCT_ANSWERS_FROM_DOCS_PROMPT : null,
     skillDraftsEnabled ? renderPrompt("chat-skill-drafts") : null,
     chatOpensTaskEnabled ? "When the user asks to open a task, including one from a previous list, call hypertask_get_tasks with open=true and exactly that task. This is navigation, not detail enrichment. Do not say Opened or claim navigation happened before the tool returns navigation_emitted=true. If it fails or no navigation was emitted, say you could not open the task." : null,
     settingsScope ? `The person is in Settings, section ${settingsScope.section}: ${settingsPages[settingsScope.section]}. Use hypertask_settings to read current values before proposing one change. You can propose theme, notification category/channel and board roles only on their open page. Every change requires the app's Apply/Cancel card; never apply through any other action or claim it is done. The app renders the real card; do not fabricate buttons or review links. For unsupported changes, explain the location and use open. The page catalog covers nearby settings, but other pages' values and actions require navigating there first. This Settings scope overrides unrelated board/task instructions.` : null,
@@ -139,9 +142,11 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     bulkScopeConfirmationEnabled,
     skillDraftsEnabled,
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
+    docsRoutingEnabled,
   );
+  const settingsToolNames = docsRoutingEnabled ? new Set(["hypertask_settings", "search_help_docs"]) : new Set(["hypertask_settings"]);
   const tools = settingsEnabled
-    ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name === "hypertask_settings"))
+    ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => settingsToolNames.has(name)))
     : ticketRowsEnabled ? catalogTools
       : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (

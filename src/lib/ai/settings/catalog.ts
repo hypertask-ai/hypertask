@@ -33,6 +33,7 @@ export const settingsPages = {
   "board-files": "Board files",
   "developer-access": "Developer access and tokens",
   slack: "Slack integration",
+  github: "GitHub repositories connected to a board",
   webhooks: "Webhooks",
   mcp: "MCP connections and tokens",
   "management-keys": "Team management keys",
