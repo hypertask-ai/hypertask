@@ -1,5 +1,6 @@
 import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
 import { isFeatureEnabled } from "@/lib/flags";
+import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
 import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
 import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
@@ -23,6 +24,7 @@ import {
   LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
   labelClassifierPrompt,
   parseMatchingLabelIds,
+  withholdBugFromErrorLog,
   type AiLabelDefinition,
 } from "@/lib/ai/labelClassifierOutput";
 import prisma from "@/lib/prisma";
@@ -177,7 +179,7 @@ export async function applyAiLabelVerdict({
       id: { in: definitions.map(({ labelId }) => labelId) },
       ai_prompt: { not: null },
     },
-    select: { id: true, ai_prompt: true },
+    select: { id: true, ai_prompt: true, value: true },
   });
   const currentPrompts = new Map(
     currentLabels.map(({ id, ai_prompt }) => [id, ai_prompt?.trim()])
@@ -188,6 +190,7 @@ export async function applyAiLabelVerdict({
   if (activeDefinitions.length === 0) return;
 
   const aiLabelIds = activeDefinitions.map(({ labelId }) => labelId);
+  const errorLogGuardEnabled = await isFeatureEnabled(YPER4_915_ERROR_LOG_NEVER_BUG_FLAG, actor.id).catch(() => true);
   const matchingIds = new Set(matchingLabelIds);
   const result = await prisma.$transaction(async (tx) => {
     const lockedTasks = contentHash
@@ -236,10 +239,20 @@ export async function applyAiLabelVerdict({
       include: { label: true },
     });
     const existingIds = new Set(existing.map(({ labelId }) => labelId));
-    const toAdd = aiLabelIds.filter(
+    const toRemove = existing.filter(({ labelId }) => !matchingIds.has(labelId));
+    const removedIds = new Set(toRemove.map(({ labelId }) => labelId));
+    const matchedToAdd = aiLabelIds.filter(
       (labelId) => matchingIds.has(labelId) && !existingIds.has(labelId)
     );
-    const toRemove = existing.filter(({ labelId }) => !matchingIds.has(labelId));
+    const toAdd = errorLogGuardEnabled
+      ? withholdBugFromErrorLog(
+          matchedToAdd,
+          new Map(currentLabels.map(({ id, value }) => [id, value])),
+          labelsBefore
+            .filter(({ labelId }) => !removedIds.has(labelId))
+            .map(({ label }) => label.value),
+        )
+      : matchedToAdd;
 
     for (const labelId of toAdd) {
       const taskLabel = await tx.taskLabel.upsert({

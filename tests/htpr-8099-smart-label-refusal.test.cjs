@@ -50,8 +50,9 @@ function fixture({ error, failAt = "generate", enabled = true, flagError = false
     "@/lib/realtime/server": { broadcastBoardChange: async (projectId) => broadcasts.push(projectId) },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskUpdatedWebhook: async () => [], publishAgentWebhookDeliveries: async () => {} },
     "@/utils/controllers/activities/createLabelActivity": { __esModule: true, default: async ({ status }) => activities.push(status) },
-    "@/lib/flags": { isFeatureEnabled: async (key) => { assert.equal(key, flag); if (flagError) throw new Error("Flag store unavailable"); return enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (key) => { if (key === "yper4-915-error-log-never-bug") return true; assert.equal(key, flag); if (flagError) throw new Error("Flag store unavailable"); return enabled; } },
     "@/lib/flags/definitions/htpr-8099-smart-label-refusal": { HTPR_8099_SMART_LABEL_REFUSAL_FLAG: flag },
+    "@/lib/flags/definitions/yper4-915-error-log-never-bug": { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG: "yper4-915-error-log-never-bug" },
     "@vercel/functions": { waitUntil: (promise) => pending.push(promise) },
     ai: { generateText: async () => { if (error) throw error; return { text: '["bug"]' }; } },
   };

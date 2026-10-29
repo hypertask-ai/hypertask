@@ -6,7 +6,7 @@ try {
   const value = JSON.parse(readFileSync(0, 'utf8'));
   const task = value.success === true && value.tasks?.[0];
   if (!task) throw new Error('missing ticket');
-  if (task.labels?.some(label => ['prod-error', 'ai-feedback'].includes(label.name))) {
+  if (task.labels?.some(label => ['Error Log', 'prod-error', 'ai-feedback'].includes(label.name))) {
     const incident = taskIncident(task);
     if (incident) {
       const found = findRelatedIncident({ board: 15, incident, firstSeen: incident.ts, claim: task }, process.env);

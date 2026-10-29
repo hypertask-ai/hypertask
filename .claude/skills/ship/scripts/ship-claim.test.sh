@@ -183,7 +183,7 @@ grep -q 'pass the resume command' "$D/err" && ok "clear error names the argument
 ./ship-claim bogus >/dev/null 2>&1; eq "bad ticket -> exit 2" "$?" 2
 
 
-jq -n '{success:true,tasks:[{id:8020,ticketNumber:"HTPR-8020",projectId:15,status:"Normal",labels:[{name:"prod-error"}],description:"<p>Routes: /api/mcp/projects</p><p>First seen: 2026-10-26T08:55:00Z</p><p>Error root: /api/mcp/projects | prisma-validation:project:unknown-argument:updatedAt</p>"}]}' > "$D/alert.json"
+jq -n '{success:true,tasks:[{id:8020,ticketNumber:"HTPR-8020",projectId:15,status:"Normal",labels:[{name:"Error Log"}],description:"<p>Routes: /api/mcp/projects</p><p>First seen: 2026-10-26T08:55:00Z</p><p>Error root: /api/mcp/projects | prisma-validation:project:unknown-argument:updatedAt</p>"}]}' > "$D/alert.json"
 jq '.tasks[0].id=8019 | .tasks[0].ticketNumber="HTPR-8019" | .total=1' "$D/alert.json" > "$D/related.json"
 : > "$D/log"
 FAKE_TASK="$D/alert.json" FAKE_RELATED="$D/related.json" ./ship-claim HTPR-8020 "codex resume argsess" > "$D/related-out"

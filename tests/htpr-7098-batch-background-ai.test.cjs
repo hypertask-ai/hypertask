@@ -264,6 +264,9 @@ test("label verdict reports only content mismatches as stale, including edits be
       exports: {},
       labelTaskContentHash: jobs.labelTaskContentHash,
       convertHtmlToText: (text) => text,
+      isFeatureEnabled: async () => true,
+      YPER4_915_ERROR_LOG_NEVER_BUG_FLAG: "yper4-915-error-log-never-bug",
+      withholdBugFromErrorLog: (ids) => ids,
       prisma: {
         task: { findFirst: async () => "current" in scenario ? scenario.current : task },
         label: { findMany: async () => scenario.labels ?? [{ id: "L1", ai_prompt: "Billing" }] },
