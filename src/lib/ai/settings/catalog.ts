@@ -10,6 +10,7 @@ export const settingsPages = {
   "task-page": "Collapse comments, play GIFs, suggest descriptions from titles, show task history, read receipts, scroll position, AI chat auto-open on new tickets, existing tickets and boards (manual-only)",
   "my-ai-usage": "Your personal AI usage",
   accounts: "Connected accounts",
+  github: "GitHub repositories connected to the selected board (manual-only)",
   members: "Team name, seats, auto-join email domains, invitations, board member roles and removing team members",
   "team-agents": "Team agents",
   skills: "Team skills",
