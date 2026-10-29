@@ -77,39 +77,44 @@ export function routeExists(route, patterns) {
 }
 
 export function checkFeatureMap(root) {
-  const directory = path.join(root, mapPath);
-  const problems = [];
-  const add = (page, kind, value) => problems.push({ page, kind, value });
-  if (!existsSync(directory)) return [{ page: 'INDEX.md', kind: 'missing directory', value: mapPath }];
-  const pages = readdirSync(directory).filter(name => name.endsWith('.md') && name !== 'INDEX.md').sort();
-  const index = path.join(directory, 'INDEX.md');
-  const rows = existsSync(index) ? readFileSync(index, 'utf8').split('\n').filter(line => /^\s*\|/.test(line)) : [];
-  if (!existsSync(index)) add('INDEX.md', 'missing index', 'INDEX.md');
-  const indexed = new Set();
-  const seenRows = new Set();
-  for (const row of rows) {
-    const normalized = row.trim().replace(/\s+/g, ' ');
-    if (seenRows.has(normalized)) add('INDEX.md', 'duplicate row', normalized);
-    seenRows.add(normalized);
-    for (const match of row.matchAll(/\[[^\]]*\]\((?:\.\/)?([^\s)#]+\.md)(?:#[^)]*)?\)/g)) {
-      const target = match[1];
-      if (/^[a-z][a-z+.-]*:|^\/\//i.test(target)) continue;
-      if (indexed.has(target)) add('INDEX.md', 'duplicate entry', target);
-      indexed.add(target);
-      if (!pages.includes(target)) add('INDEX.md', 'missing file', target);
-    }
-  }
-  for (const page of pages) if (!indexed.has(page)) add('INDEX.md', 'unindexed page', page);
   const patterns = routePatterns(root);
-  for (const page of pages) {
-    const markdown = readFileSync(path.join(directory, page), 'utf8');
-    for (const value of repoPaths(markdown)) {
-      const resolved = path.resolve(root, value);
-      if (!resolved.startsWith(path.resolve(root) + path.sep) || !existsSync(resolved)) add(page, 'missing path', value);
+  return [mapPath, '.claude/skills/verify-qa/reference/ops-map'].flatMap(directoryName => {
+    const directory = path.join(root, directoryName);
+    const problems = [];
+    const add = (page, kind, value) => problems.push({ page: path.relative(path.join(root, mapPath), path.join(directory, page)).split(path.sep).join('/'), kind, value });
+    if (!existsSync(directory)) {
+      add('INDEX.md', 'missing directory', directoryName);
+      return problems;
     }
-    for (const value of apiRoutes(markdown)) if (!routeExists(value, patterns)) add(page, 'missing API route', value);
-  }
-  return problems;
+    const pages = readdirSync(directory).filter(name => name.endsWith('.md') && name !== 'INDEX.md').sort();
+    const index = path.join(directory, 'INDEX.md');
+    const rows = existsSync(index) ? readFileSync(index, 'utf8').split('\n').filter(line => /^\s*\|/.test(line)) : [];
+    if (!existsSync(index)) add('INDEX.md', 'missing index', 'INDEX.md');
+    const indexed = new Set();
+    const seenRows = new Set();
+    for (const row of rows) {
+      const normalized = row.trim().replace(/\s+/g, ' ');
+      if (seenRows.has(normalized)) add('INDEX.md', 'duplicate row', normalized);
+      seenRows.add(normalized);
+      for (const match of row.matchAll(/\[[^\]]*\]\((?:\.\/)?([^\s)#]+\.md)(?:#[^)]*)?\)/g)) {
+        const target = match[1];
+        if (/^[a-z][a-z+.-]*:|^\/\//i.test(target)) continue;
+        if (indexed.has(target)) add('INDEX.md', 'duplicate entry', target);
+        indexed.add(target);
+        if (!pages.includes(target)) add('INDEX.md', 'missing file', target);
+      }
+    }
+    for (const page of pages) if (!indexed.has(page)) add('INDEX.md', 'unindexed page', page);
+    for (const page of pages) {
+      const markdown = readFileSync(path.join(directory, page), 'utf8');
+      for (const value of repoPaths(markdown)) {
+        const resolved = path.resolve(root, value);
+        if (!resolved.startsWith(path.resolve(root) + path.sep) || !existsSync(resolved)) add(page, 'missing path', value);
+      }
+      for (const value of apiRoutes(markdown)) if (!routeExists(value, patterns)) add(page, 'missing API route', value);
+    }
+    return problems;
+  });
 }
 
 export function formatProblems(problems) {

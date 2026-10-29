@@ -10,6 +10,8 @@ Pattern borrowed from
 a short reference file per feature area beats one long QA checklist, because
 each ticket only needs the one or two areas it touches.
 
+Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
+
 ## Areas
 
 | Area | File | e2e/smoke id |
@@ -17,14 +19,9 @@ each ticket only needs the one or two areas it touches.
 | CI runner placement | [ci-runner-policy.md](ci-runner-policy.md) | live repository visibility, trusted workflow rejection, title binding |
 | CI tests and parallel checks | [ci-tests.md](ci-tests.md) | hosted job overlap, fail-closed summary, shard execution proof |
 | Server feature-flag check | [ci-server-feature-flags.md](ci-server-feature-flags.md) | historical first/final CLI replay, server helper and owner-review routing |
-| CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
 | Required-check settings | [ci-settings.md](ci-settings.md) | hourly monitor, production dispatch, 48-hour failure census |
 | Feature-flag and UX sign-off gates | [feature-flag-and-ux-gates.md](feature-flag-and-ux-gates.md) | reconcile job logs of two consecutive production runs, no app writes |
-| Visual Regression check | [visual-regression.md](visual-regression.md) | dispatch on production one run at a time, 3 green on one commit, per-screen capture times, no app writes |
-| Production build and deploy | [production-build.md](production-build.md) | Vercel build log of the merge sha, no app writes |
-| Premerge evidence status | [premerge-evidence.md](premerge-evidence.md) | read-only status sweep of open PRs, no app writes |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
-| Runner dispatch | [runner-dispatch.md](runner-dispatch.md) | read-only plan from the live copy, no --go, no app writes |
 | Agent chat roster ordering | [agent-chat-roster.md](agent-chat-roster.md) | standalone roster, owned API recency, desktop/phone reload |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
 | Webhooks | [webhooks.md](webhooks.md) | no smoke id; QA 985 team-wide endpoint on team 9bca4a7c via /api/settings/webhooks, test delivery to a 2xx receiver, hint vs one-time key; delete fixtures |
@@ -32,10 +29,7 @@ each ticket only needs the one or two areas it touches.
 | Agent run lifecycle | [agent-runs.md](agent-runs.md) | read-only QA 985 lifecycle discovery, run reads and authentication refusals |
 | Desktop human CLI login | [desktop-login.md](desktop-login.md) | QA 985 bearer exchange, shared and legacy route checks, isolated task save, cookie/flag-off/permission controls |
 | Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
-| Secret scan workflow installer | [secret-scan-workflow.md](secret-scan-workflow.md) | temp checkouts from merged production, no app writes |
-| PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |
 | Automatic AI feedback tickets | [ai-feedback-reports.md](ai-feedback-reports.md) | live MCP call with an invented field, board count before and after, no ticket |
-| Signup check (hypertask.app) | [signup-check.md](signup-check.md) | Access service identity, read-only, daily counts snapshot |
 | Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags, core inbox; synthetic accounts excluded |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |

@@ -17,7 +17,7 @@ Push the candidate, then run `scripts/verify-qa <branch> inbox-cycle`. This uses
 
 ## Steps
 
-1. Read the ticket's acceptance criteria. Pick its [feature-map page](reference/feature-map/INDEX.md). Update missing or changed recipes in the PR. Write a checklist before testing. For tools, test the parse or dispatch entry point, not only helpers.
+1. Read the ticket's acceptance criteria. Pick the [customer](reference/feature-map/INDEX.md) or [ops](reference/ops-map/INDEX.md) recipe. Update missing or changed recipes in the PR. Write a checklist before testing. For tools, test the parse or dispatch entry point, not only helpers.
 2. Select the account with `.claude/skills/verify-qa/scripts/qa-login`: `flags` (default), `plain` (flag-off), `free`, `byok`, `pro`, `owner`, `member` or `guest`. It prints the user ID, state path and refresh route, never credentials. Use `.claude/skills/verify-qa/scripts/qa-login flags --state` for the path alone. Follow [login checks and refresh](reference/logins.md). Admin pages are not agent-testable.
 3. Run the doctor. Require Production deployment `success` for the latest merge SHA. Capture signed-in `/my-tasks` using [phone-shot.sh](../verify-on-phone/scripts/phone-shot.sh), passing `--state` explicitly. On login landings, run `.claude/skills/verify-qa/scripts/qa-identity <state> --expect <id>`: `identity ok` means fix state loading; only `identity expired` means refresh. Do not judge the feature before doctor passes.
 4. Every app deploy: run `node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <run-folder>/inbox-cycle`. Require `inbox-cycle ok`; include its evidence in Cases.
