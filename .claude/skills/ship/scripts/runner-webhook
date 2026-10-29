@@ -511,7 +511,11 @@ def gh_wake(ev, delivery):
 
 
 def gh_send(ev, owner, msg, key, delivery):
+    key = "gh|" + "|".join(str(ev.get(k) or "") for k in ("repo", "branch", "kind", "sha")) + ("|fail" if ev["conclusion"] in GH_FAIL else "|" + ev["workflow"])
     with GH_LOCK:
+        with Seen("gh-notify-seen") as seen:
+            if seen.has(key):
+                return
         now = time.time()
         GH_WAKES[:] = [t for t in GH_WAKES if now - t < 3600]
         if len(GH_WAKES) >= GH_WAKE_CAP:
