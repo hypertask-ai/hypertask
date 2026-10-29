@@ -20,13 +20,11 @@ export function useAgentChatState(props: IProp) {
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
   const activityRowsEnabled = !embedded;
-  const rosterStatusEnabled = useFlag("htpr-6287-agent-chat-roster-status");
   const [rosterNow, setRosterNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!rosterStatusEnabled) return;
     const tick = setInterval(() => setRosterNow(Date.now()), 30_000);
     return () => clearInterval(tick);
-  }, [rosterStatusEnabled]);
+  }, []);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const setMobileTopBarTitle = useSetRecoilState(mobileTopBarTitleAtom);
   const setAgentChatMobileFullscreen = useSetRecoilState(
