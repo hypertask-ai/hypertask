@@ -144,8 +144,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
     ticketRowsEnabled ? { executions: toolExecutions, setGroups: (groups) => { ticketGroups = groups; } } : undefined,
     docsRoutingEnabled,
   );
+  const settingsToolNames = docsRoutingEnabled ? new Set(["hypertask_settings", "search_help_docs"]) : new Set(["hypertask_settings"]);
   const tools = settingsEnabled
-    ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name === "hypertask_settings"))
+    ? Object.fromEntries(Object.entries(catalogTools).filter(([name]) => settingsToolNames.has(name)))
     : ticketRowsEnabled ? catalogTools
       : Object.fromEntries(Object.entries(catalogTools).filter(([name]) => name !== "hypertask_show_ticket_rows"));
   if (
