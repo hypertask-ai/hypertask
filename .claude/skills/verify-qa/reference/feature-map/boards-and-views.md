@@ -219,3 +219,17 @@ empty columns return. Reload and switch views away/back; the saved Hidden
 setting must remain unchanged. Check desktop and phone in all four themes.
 With the flag off, the original empty-state behavior remains. Builtin views
 that exclude every section and boards with no visible columns stay unchanged.
+
+## Agent status chips
+
+After https://app.hypertask.ai/detail/project-15/8161, agent status chips
+are permanent. `POST /api/projects/boardTasks` includes `agentStatus` for
+every authorized task (null when no recent active run exists). Board access
+checks must still happen before task or agent-run reads. On a board with an
+active run, reload and confirm one chip names the agent and its current step.
+Reports older than six hours stay hidden; an empty board shows no chips.
+Run activity refresh remains throttled per card; lifecycle start/stop bypass
+the throttle. Do not change flags or stop another agent's run for this check.
+If the QA board has no active run, record the positive chip as unreachable;
+use the null-status payload, empty chip rendering and CI's real component
+and controller tests as the closest checks.

@@ -40,7 +40,6 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: (key) => key === FLAG && flagOn },
-  "@/lib/flags/keys": { HTPR_7071_AGENT_STATUS_CHIP_FLAG: "htpr-7071-agent-status-chip" },
   "@/lib/flags/definitions/htpr-7677-board-card-data-once": { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG: FLAG },
   "@/lib/agentStatus/minuteClock": { useMinuteClock: () => 0 },
   "@/lib/agentStatus/chip": { agentStatusIsFresh: () => false, agentStatusText: () => "", agentStepFor: () => "" },

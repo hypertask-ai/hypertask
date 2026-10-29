@@ -21,9 +21,13 @@ function loadController(prisma, calls) {
 
   const stubs = {
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
-    "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
-    "@/lib/flags": { isFeatureEnabled: async () => false, HTPR_7071_AGENT_STATUS_CHIP_FLAG: "htpr-7071-agent-status-chip" },
-    "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async () => assert.fail("agent status must not be queried with the flag off") },
+    "@/lib/flags": { isFeatureEnabled: () => assert.fail("board status must not read a feature flag") },
+    "@/utils/controllers/tasks/attachAgentStatus": {
+      attachAgentStatus: async (tasks) => {
+        calls.push(["agent-status", tasks]);
+        return tasks.map((task) => ({ ...task, agentStatus: { agentName: "RUNNER 11", at: "2026-10-29T06:00:00.000Z" } }));
+      },
+    },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/ai/teamBillingSnapshotSelect": { teamBillingSnapshotSelect: {} },
     "./getAllIncludes": {
@@ -134,7 +138,7 @@ test("board payload checks access before querying task content", async () => {
         },
         sanitized: true,
       },
-      tasks: [{ id: 101, blockingTasks: [], waitingOnUser: null }],
+      tasks: [{ id: 101, blockingTasks: [], waitingOnUser: null, agentStatus: { agentName: "RUNNER 11", at: "2026-10-29T06:00:00.000Z" } }],
       allViews: ["my-view"],
     },
   });
@@ -169,7 +173,7 @@ test("denied board access never queries task content", async () => {
     status: 403,
     json: { message: "No access to this board" },
   });
-  assert.equal(calls.some(([name]) => name === "tasks"), false);
+  assert.equal(calls.some(([name]) => name === "tasks" || name === "agent-status"), false);
 });
 
 test("invalid identifiers stop before any database query", async () => {
