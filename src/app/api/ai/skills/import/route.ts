@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
       (error instanceof SkillValidationError || error instanceof z.ZodError) &&
       (await isFeatureEnabled(HTPR_7781_SKILL_VALIDATION_FLAG, user.id).catch(() => false))
     ) {
-      return skillErrorResponse(error);
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
