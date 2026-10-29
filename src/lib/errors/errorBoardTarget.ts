@@ -6,10 +6,15 @@ export type ErrorBoardSection = {
 };
 
 export function selectErrorBoardSection(
+  projectId: number,
   sections: ErrorBoardSection[],
   configuredTitle?: string,
 ): ErrorBoardSection {
-  const title = configuredTitle?.trim() || DEFAULT_ERROR_BOARD_SECTION_TITLE;
+  const title = configuredTitle?.trim() || (
+    projectId === 15 && sections.some((section) => section.section_title === "Backlog")
+      ? "Backlog"
+      : DEFAULT_ERROR_BOARD_SECTION_TITLE
+  );
   const matches = sections.filter((section) => section.section_title === title);
 
   if (matches.length !== 1) {

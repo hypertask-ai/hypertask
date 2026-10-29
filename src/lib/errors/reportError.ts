@@ -96,7 +96,7 @@ async function getBoardTarget(projectId: number, userId: number) {
       section_title: true,
     },
   });
-  const section = selectErrorBoardSection(sections, configuredSectionTitle);
+  const section = selectErrorBoardSection(projectId, sections, configuredSectionTitle);
 
   const projectUniqueIdentifier = projectResult.project.uniqueIdentifier;
   if (!projectUniqueIdentifier)

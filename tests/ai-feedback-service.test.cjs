@@ -33,7 +33,7 @@ stub('src/lib/flags.ts', { isFeatureEnabled: async (key) => { flagCalls++; if (f
 const db = {
   user: { findUnique: async (query) => { userQuery = query; return { displayName: 'Kamil <Admin> customer@example.test' } } },
   project: {
-    findFirst: async (query) => { assert.equal(query.select.ownerId, undefined); return configured ? { get ownerId() { throw new Error('Board owner must not author feedback') }, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] } : null },
+    findFirst: async (query) => { assert.equal(query.select.ownerId, undefined); assert.deepEqual(query.select.section.where, { deleted: false, visibility: true, id: 4389 }); return configured ? { get ownerId() { throw new Error('Board owner must not author feedback') }, uniqueIdentifier: 'HTPR', section: [{ id: 4389, section_title: 'Backlog' }] } : null },
   },
   section: { findMany: async () => [{ id: 222, section_title: 'Done' }, { id: 333, section_title: 'Shipped' }] },
   label: {
@@ -125,11 +125,11 @@ test.beforeEach(() => {
   delete process.env.AI_FEEDBACK_AGENT_USER_ID
 })
 
-test('creates scrubbed medium-priority report on board 15 Bugs through createTaskCore, authored by the reporter, not the board owner', async () => {
+test('creates scrubbed medium-priority report on board 15 renamed Backlog through createTaskCore, authored by the reporter, not the board owner', async () => {
   const result = await fileAiFeedback(input, 42)
   assert.deepEqual(result, { success: true, ticketNumber: 'HTPR-7196', url: 'https://app.hypertask.ai/detail/project-15/7196', deduped: false, count: 1 })
   const options = created[0]
-  assert.equal(options.projectId, 15); assert.equal(options.sectionTitle, 'Bugs'); assert.equal(options.priorityIndex, 3); assert.equal(options.userId, 42); assert.equal(options.createDrafts, false)
+  assert.equal(options.projectId, 15); assert.equal(options.sectionTitle, 'Backlog'); assert.equal(options.priorityIndex, 3); assert.equal(options.userId, 42); assert.equal(options.createDrafts, false)
   assert.deepEqual(options.labelIds, ['label-ai']); assert.equal(labelCreated, 1)
   assert.equal(options.title, 'AI feedback: mcp hypertask_tasks')
   assert.deepEqual(lockKeys, [BigInt.asIntN(64, BigInt(`0x${feedbackFingerprint(input).slice(0, 16)}`))])

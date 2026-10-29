@@ -119,7 +119,7 @@ lines = [s.split('\t') for s in r.stdout.splitlines()]
 assert [s[0] for s in lines[:2]] == ['PR','PR'], r.stdout
 # Recency decides (Valentin, 2026-10-01): any sign of life in the last 6 hours keeps a ticket off the list.
 assert [s[1] for s in lines] == ['HTPR-2','-','HTPR-2','HTPR-7','HTPR-8'], r.stdout
-assert lines[0][-1] == 'move back to Bugs'
+assert lines[0][-1] == 'move back to Backlog'
 assert lines[-1][-1] == 'ask Valentin'
 assert lines[2][2] == 'Full title 2 with spaces'
 assert lines[2][3] == 'https://app.hypertask.ai/detail/project-15/2'

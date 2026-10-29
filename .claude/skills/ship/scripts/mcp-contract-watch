@@ -379,7 +379,7 @@ def report(incident, dry_run, state, path):
     env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher')
     vcc = env.get('MCP_CONTRACT_WATCH_VCC', 'vcc')
     deliver = env.get('MCP_CONTRACT_WATCH_DELIVER', str(HOME / '.agents/skills/ship/scripts/runner-deliver'))
-    section = 'Bugs' if incident['bug_project'] == 15 else None
+    section = '4389' if incident['bug_project'] == 15 else None
     if dry_run:
         title, description, message = plans(incident)
         print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section=section, assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
@@ -397,7 +397,6 @@ def report(incident, dry_run, state, path):
                 title, description, _ = plans(incident)
                 incident['create_state'] = 'unknown'
                 save(state, path)
-                # Only board 15 has a Bugs column; a proof run on another board uses its default column.
                 section_args = ['--section', section] if section else []
                 code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section_args, '--json'], env)
                 ticket = receipt(output) if code == 0 else None

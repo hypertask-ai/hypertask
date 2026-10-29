@@ -61,7 +61,7 @@ bugs = json.loads(bugs_file.read_text()) if bugs_file.exists() else []
 if args[:2] == ['task', 'create']:
     assert args[args.index('--priority') + 1] == 'urgent'
     if args[args.index('--project') + 1] == '15':
-        assert args[args.index('--section') + 1] == 'Bugs'
+        assert args[args.index('--section') + 1] == '4389'
     else:
         assert '--section' not in args
     assert '--assignee' not in args

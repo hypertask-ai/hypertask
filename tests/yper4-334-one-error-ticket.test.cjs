@@ -9,11 +9,11 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const load = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false });
 
-function loadReporter({ posthogCaptured }) {
+function loadReporter({ posthogCaptured, sectionTitle = 'Bugs' }) {
   const calls = { posthog: 0, tickets: [] };
   const redis = { set: async () => 'OK', incr: async () => 1, expire: async () => 1 };
   const prisma = {
-    section: { findMany: async () => [{ id: 7, section_title: 'Bugs' }] },
+    section: { findMany: async () => [{ id: 4389, section_title: sectionTitle }] },
     label: { findFirst: async () => ({ id: 3 }) },
   };
   const stubs = {
@@ -61,4 +61,12 @@ test('an error PostHog missed still gets one ticket from the older reporter', as
   assert.equal(calls.posthog, 1);
   assert.equal(calls.tickets.length, 1);
   assert.equal(calls.tickets[0].projectId, 15);
+});
+
+test('an error PostHog missed reaches product intake after the Backlog rename', async () => {
+  const { reportError, calls } = loadReporter({ posthogCaptured: false, sectionTitle: 'Backlog' });
+  await reportError(report);
+  assert.equal(calls.tickets.length, 1);
+  assert.equal(calls.tickets[0].projectId, 15);
+  assert.equal(calls.tickets[0].sectionId, 4389);
 });

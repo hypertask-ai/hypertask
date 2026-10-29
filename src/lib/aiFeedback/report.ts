@@ -152,7 +152,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           prisma.project.findFirst({
             where: { id: PROJECT_ID, status: 'Normal' },
             select: { uniqueIdentifier: true, section: {
-              where: { deleted: false, visibility: true, section_title: 'Bugs' },
+              where: { deleted: false, visibility: true, id: 4389 },
               take: 1, select: { id: true, section_title: true },
             } },
           }),
