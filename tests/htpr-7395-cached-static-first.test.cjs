@@ -292,6 +292,7 @@ test("the editor's initial null-editor render retains the static geometry under 
   const Placeholder = React.createContext(null);
   let enabled = true;
   const panels = load("src/components/RTE/TaskDetailEditorPanels.tsx", {
+    "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: flag },
     "@/hooks/useFlag": { useFlag: key => (key === flag && enabled) },
     "@/lib/state": { useRecoilValue: () => false, useSetRecoilState: () => noop },

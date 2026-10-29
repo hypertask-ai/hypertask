@@ -66,6 +66,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
   });
   const { useTaskDetailEditorSave } = load("src/components/RTE/useTaskDetailEditorSave.tsx", {
+    "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/keys": {},
@@ -81,6 +82,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/inboxQueryKeys": load("src/lib/inboxQueryKeys.ts"),
   });
   const { useTaskDetailEditorState } = load("src/components/RTE/useTaskDetailEditorState.tsx", {
+    "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/lib/flags/keys": {},
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilState: () => [{ id: 2343 }, () => {}] },

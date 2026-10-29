@@ -15,7 +15,7 @@ function harness(enabled, commentInline = false) {
   const actions = [];
   let writer = false;
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === commentFlag ? commentInline : [oldFlag, "compose", "new-task"].includes(key) },
+    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === commentFlag ? commentInline : [oldFlag, "compose", "new-task"].includes(key), useFlagLoaded: () => true },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useSetRecoilState: () => value => actions.push(["commands", value]) },
     "@/store": { showCommandsAtom: "commands" },
