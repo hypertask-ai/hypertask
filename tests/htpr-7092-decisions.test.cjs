@@ -209,6 +209,7 @@ test("wrapper: flag off or no pending Question returns the original response unc
   const original = { status: 200, json: { notifications: [{ id: "1", taskId: 5 }], structuredData: { tabs: [], data: [] } } };
   const run = async (ids) => {
     const mod = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
+      "@/lib/agents/boardAccessRequests/service": { getOwnerBoardAccessNotifications: async () => [] },
       "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
       "@/lib/flags": { isFeatureEnabled: async () => false },
       "@/lib/flags/keys": { HTPR_7311_DECISION_COMMENT_LINK_FLAG: "htpr-7311-decision-comment-link" },

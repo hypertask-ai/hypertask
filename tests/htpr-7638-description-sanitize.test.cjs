@@ -245,7 +245,7 @@ test("inert plain-text helpers preserve normal HTML and entity output", t => {
 
 test("inert notification parsers preserve previews, quote removal and mention highlighting", t => {
   withDom(t);
-  const modules = ["@/utils/generateTime", "@/lib/firstScreen/SurfaceContext", "@/lib/firstScreen/display", "../Common/UserAvatar",
+  const modules = ["@/hooks/useFlag", "@/utils/generateTime", "@/lib/firstScreen/SurfaceContext", "@/lib/firstScreen/display", "../Common/UserAvatar",
     "@/lib/IconsLocal", "../Common/Tooltip", "@/lib/contexts/NotificationContext", "../Common/TaskRowComponents/TaskRowContainer",
     "../Common/TaskRowComponents/TaskTitle", "./inboxSplit/RemindMeInbox", "@/lib/configs/inbox.config",
     "@/lib/nativeAgent/agentMessageEnvelope"];

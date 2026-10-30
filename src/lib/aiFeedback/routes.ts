@@ -6,6 +6,8 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/admin/tokens',
   '/api/mcp/agents',
   '/api/mcp/agents/analytics',
+  '/api/mcp/agents/board-access-requests',
+  '/api/mcp/agents/board-access-requests/:requestId',
   '/api/mcp/agents/create',
   '/api/mcp/agents/presence',
   '/api/mcp/agents/revoke',

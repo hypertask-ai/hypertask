@@ -17,6 +17,11 @@ const originalLoad = Module._load;
 Module._load = function (id, ...args) { return id === 'server-only' ? {} : originalLoad.call(this, id, ...args); };
 mock('next/headers', { cookies: async () => ({ get: key => cookieValues[key] ? { value: cookieValues[key] } : undefined }),
   headers: async () => new Headers({ 'x-ht-board-document-route': '/project?id=15&view=default' }) });
+mock('src/lib/auth/getSessionUser.ts', { getSessionUser: async () => {
+  const user = await require('../src/lib/auth/serverUser.ts').getServerCookieUser();
+  return user ? { userId: user.id, source: 'better-auth' } : null;
+} });
+mock('src/lib/agents/boardAccessRequests/service.ts', { getOwnerBoardAccessNotifications: async () => [] });
 mock('src/lib/prisma.ts', { __esModule: true, default: { user: { findUnique: async ({ where }) => where.id === user.id ? user : null } } });
 mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true, 'htpr-7406-desktop-server-board': desktopChat, ...(assigneeFix === undefined ? {} : { 'htpr-7725-saved-view-assignee': assigneeFix }) }; } });
 mock('src/utils/controllers/projects/getBoardTasks.ts', { __esModule: true, default: async (...args) => {

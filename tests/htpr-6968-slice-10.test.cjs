@@ -68,6 +68,7 @@ function fixture(name, scenario = {}) {
   });
   const db = {
     notification: {
+      findMany: async args => structuredClone(rows.filter(row => matches(row, args.where))),
       findFirst: async args => {
         step("findFirst", args);
         const found = rows.filter(row => matches(row, args.where));
@@ -107,6 +108,7 @@ function fixture(name, scenario = {}) {
     broadcastInboxChange: (...args) => { step("inbox-realtime", ...args); },
   };
   const mocks = {
+    "./board-access": { boardAccessNotificationWrite: async () => null },
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");

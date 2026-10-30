@@ -36,6 +36,7 @@ export default async function notificationGetAllWithDecisions(
       : notification;
   });
   const requests = await getOwnerBoardAccessNotifications(principal?.userId === parsedUserId ? principal : undefined);
+  if (requests.length === 0 && decisionComments.size === 0) return response;
   const notifications = requests.length === 0 ? taskNotifications : [...taskNotifications, ...requests as unknown as INotification[]]
     .filter((row, index, rows) => rows.findIndex(other => String(other.id) === String(row.id)) === index)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime() || Number(b.id) - Number(a.id));

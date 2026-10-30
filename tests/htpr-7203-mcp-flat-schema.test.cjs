@@ -36,7 +36,7 @@ for (const Validator of [Ajv, Ajv2020]) {
       assert.deepEqual(schema.required, ['action'], tool.name)
       assert.equal(schema.additionalProperties, false)
       assert.deepEqual(Object.keys(schema.properties), ['action', 'input', 'response_format', 'limit', 'offset', 'page'])
-      const names = Object.keys(definitions.find((definition) => definition.name === tool.name).actions)
+      const names = Object.entries(definitions.find((definition) => definition.name === tool.name).actions).filter(([, action]) => action.permission !== 'agent_data').map(([name]) => name)
       assert.deepEqual(schema.properties.action.enum, names)
       assert.equal(schema.properties.input.type, 'object')
       assert.match(schema.properties.input.description, /Fields depend on action; use the variant whose title is the action\./)
@@ -50,7 +50,8 @@ for (const Validator of [Ajv, Ajv2020]) {
 }
 
 test('flag Off preserves the old schema exactly, including each action input schema', () => {
-  const previous = loader({ './config/consolidated-descriptions': { CONSOLIDATED_TOOL_DESCRIPTIONS: definitions } }, true)('src/lib/mcp-server/consolidated-tools.ts')
+  const humanDefinitions = definitions.map((definition) => ({ ...definition, actions: Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => action.permission !== 'agent_data')) }))
+  const previous = loader({ './config/consolidated-descriptions': { CONSOLIDATED_TOOL_DESCRIPTIONS: humanDefinitions } }, true)('src/lib/mcp-server/consolidated-tools.ts')
   const before = visible(previous.selectMcpTools(legacy, true, {}))
   const off = visible(selectMcpTools(legacy, true, {}, false))
   const on = visible(selectMcpTools(legacy, true, {}, true))

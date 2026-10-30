@@ -51,7 +51,7 @@ test('every tool with destructive schema or metadata actions is annotated conser
   const { TOOL_ANNOTATIONS, annotationsForActions } = load('src/lib/mcp-server/config/tool-annotations.ts')
   const destructiveAction = /(?:^|_)(?:update|delete|remove|replace|archive|revoke|restore|unlink)(?:_|$)/
   const connected = load('src/lib/mcp-server/deferred-tools.ts').toolsForConnect(selectMcpTools(legacy, true, {}), true)
-  const tools = [...selectMcpTools(legacy, false, {}), ...connected]
+  const tools = [...selectMcpTools(legacy, false, {}), ...selectMcpTools(legacy, false, { agent: true }), ...connected]
   assert.deepEqual(new Set(tools.map((tool) => tool.name).filter((name) => name in TOOL_ANNOTATIONS)), new Set(Object.keys(TOOL_ANNOTATIONS)))
   function verify(annotations) {
     for (const tool of tools) {
