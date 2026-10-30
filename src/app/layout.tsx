@@ -108,7 +108,7 @@ export default async function RootLayout(
     isFeatureEnabled(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, analyticsSession.id),
     isFeatureEnabled(HTPR_8088_MANUAL_CHAT_FLAG, analyticsSession.id),
   ]) : null;
-  const [keepAiChatClosed, manualChat] = sidebarFlags ?? [];
+  const [keepAiChatClosed = false, manualChat = false] = sidebarFlags ?? [];
   let autoOpenSwitchesUserId: number | null = null;
   if (analyticsSession && sidebarFlags && await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, analyticsSession.id)) {
     autoOpenSwitchesUserId = analyticsSession.id;
