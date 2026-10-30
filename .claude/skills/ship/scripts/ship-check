@@ -5,6 +5,9 @@
 #   ship-check branch <T> <b|none> record each branch this session created, or none
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
+#   ship-check elsewhere <T> [pr] the work landed elsewhere: the bound PR (or the given one) is merged in another repo or
+#                                closed as outdated, and the ticket carries a comment opening "Resolved without a change:" with a
+#                                link. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
 #                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
@@ -184,7 +187,7 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && echo "$REPO" > "$EVID/$1/repo" && echo "$BASE" > "$EVID/$1/base" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && echo "$REPO" > "$EVID/$1/repo" && echo "$BASE" > "$EVID/$1/base" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" "$EVID/$1/elsewhere" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -194,7 +197,7 @@ check_duplicate() {
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   # The fix is already merged, so a deleted original ticket does not block the duplicate path.
   ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" "$EVID/$1/nochange" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" "$EVID/$1/nochange" "$EVID/$1/elsewhere" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
 }
 
@@ -209,7 +212,7 @@ check_dropped() {
       (.text // "") | gsub("<[^>]*>"; "") | gsub("&quot;|&#x22;|&#34;"; "\"")
       | test("^\\s*Decided against:\\s*Valentin,\\s*20[0-9]{2}-[0-9]{2}-[0-9]{2}(,[^:\"“”]{0,40})?:\\s*[\"“][^\"“”]+[\"”]"))' >/dev/null \
     || fail "$1 has no comment opening with: Decided against: Valentin, <YYYY-MM-DD>: \"<his words>\""
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" "$EVID/$1/nochange" "$EVID/$1/elsewhere" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
     && echo "recorded $1 as dropped (PR $2 closed unmerged)"
 }
 
@@ -244,21 +247,32 @@ nochange_origin_branches() {
   awk '{print $2}' <<<"$heads" | sed 's#^refs/heads/##' | grep -E -- "${low}([^0-9]|\$)" || true
 }
 
-nochange_verify() {
-  local t=${1:-} cmts open b ahead
-  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
-  if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
-    echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
-  fi
-  cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || { echo "cannot read comments of $t"; return 1; }
-  # Visible text (tags removed, leading space dropped) must open with the phrase. The same comment must carry evidence:
-  # an https URL, or a <pre>/<code> block whose visible inner text is not blank.
+# The closing record: one comment whose visible text (tags removed, leading space dropped) opens with
+# "Resolved without a change:" and carries evidence in that same comment: an https URL, or a <pre>/<code>
+# block whose visible inner text is not blank. Returns 2 when the comments cannot be read.
+resolution_comment() {
+  local t=$1 cmts
+  cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || return 2
   jq -e '.comments | any(.[]; (.text // "") as $x
       | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
       and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
         or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
-             | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0)))' >/dev/null <<<"$cmts" \
-    || { echo "$t has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"; return 1; }
+             | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0)))' >/dev/null <<<"$cmts"
+}
+
+resolution_comment_reason() {
+  echo "$1 has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"
+}
+
+nochange_verify() {
+  local t=${1:-} open b ahead rc
+  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
+  if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
+    echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
+  fi
+  resolution_comment "$t"; rc=$?
+  [ "$rc" = 2 ] && { echo "cannot read comments of $t"; return 1; }
+  [ "$rc" = 0 ] || { resolution_comment_reason "$t"; return 1; }
   open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
     || { echo "cannot read open PRs of $REPO"; return 1; }
   if jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open"; then echo "$t has an open PR; use the normal path"; return 1; fi
@@ -283,6 +297,40 @@ nochange_ok() {
   local out; out=$(nochange_verify "$2") || fail "nochange for $2 no longer holds: $out"
   # The pr gate expects "title ok"; there is no PR title to check, so say why it passes.
   if [ "$1" = pr ]; then echo "title ok (nochange: resolved without a change, no PR)"; else echo "$1 ok (nochange: resolved without a change)"; fi
+}
+
+# A ticket finished elsewhere (YPER4-949): the work landed under another ticket or another repo, so its PR is merged
+# there, or it was closed as outdated. The record is the closing comment with a link, so the ticket closes without a
+# fresh release proof. Like dropped, the marker is only a record: every read re-checks the PR state.
+check_elsewhere() {
+  local t=${1:-} n state rc
+  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "elsewhere needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
+  n=${2:-$(bound_pr "$t")}
+  [[ $n =~ ^[0-9]+$ ]] || fail "$t has no bound PR; run ship-check elsewhere $t <pr number>"
+  state=$(gh pr view "$n" -R "$REPO" --json state --jq .state 2>/dev/null) || fail "PR $n not found in $REPO"
+  case $state in
+    MERGED|CLOSED) ;;
+    *) fail "PR $n is $state; elsewhere needs a merged or a closed PR" ;;
+  esac
+  resolution_comment "$t"; rc=$?
+  [ "$rc" = 2 ] && fail "cannot read comments of $t"
+  [ "$rc" = 0 ] || fail "$(resolution_comment_reason "$t")"
+  mkdir -p "$EVID/$t" && rm -f "$EVID/$t/branch" "$EVID/$t/dropped" "$EVID/$t/nochange" "$EVID/$t/duplicate-of" \
+    && echo "$n" > "$EVID/$t/pr" && echo "$n" > "$EVID/$t/elsewhere" \
+    && echo "recorded $t as finished elsewhere (PR $n $state)"
+}
+
+# Finished elsewhere: passes only while the recorded PR is still merged or closed.
+elsewhere_ok() {
+  [ -s "$EVID/$2/elsewhere" ] || return 1
+  local n state; n=$(tr -dc '0-9' < "$EVID/$2/elsewhere")
+  [ "$n" = "$(bound_pr "$2")" ] || fail "elsewhere PR $n is no longer the bound PR for $2"
+  state=$(gh pr view "$n" -R "$REPO" --json state --jq .state 2>/dev/null) || fail "cannot read PR $n for $2"
+  case $state in
+    MERGED|CLOSED) ;;
+    *) fail "elsewhere PR $n for $2 is $state, not merged or closed" ;;
+  esac
+  echo "$1 ok (elsewhere: PR $n $state)"
 }
 
 merge_sha() {
@@ -310,7 +358,7 @@ check_pr() {
   fi
 }
 
-check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
+check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && return 0; elsewhere_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
 
 docs_deploy_ok() {
   local sha=$1 runs id jobs
@@ -393,6 +441,7 @@ live_proof_ok() {
 
 check_deployed() {
   dropped_ok deployed "$1" && return 0
+  elsewhere_ok deployed "$1" && return 0
   nochange_ok deployed "$1" && return 0
   local sha id state
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
@@ -589,6 +638,7 @@ newest_successful_production_sha() {
 check_proof() {
   local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
   dropped_ok proof "$1" && return 0
+  elsewhere_ok proof "$1" && return 0
   nochange_ok proof "$1" && return 0
   [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
@@ -932,6 +982,7 @@ case "${1:-}" in
   branch) check_branch "$2" "${3:-}" ;;
   duplicate) check_duplicate "$2" "$3" "$4" ;;
   dropped) check_dropped "$2" "$3" ;;
+  elsewhere) check_elsewhere "$2" "${3:-}" ;;
   nochange) check_nochange "${2:-}" ;;
   premerge) check_title "$2"; check_premerge "$2" ;;
   premerge-status) check_premerge_status "$2" ;;

@@ -1109,6 +1109,50 @@ B 0 '' 'vcc task move YPER4-999 --section "Done"'
 unset -f B
 rm -rf "$E2"
 
+# Elsewhere path (YPER4-949): the work landed under another ticket or repo, so the ticket closes on a merged or
+# closed PR plus its closing comment. Fakes: PR state from a file, comments from a file.
+mkdir -p "$E/else-bin" "$E/else"
+cat > "$E/else-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == pr && $2 == view ]] || exit 1
+st=$(cat "$ELSE_DIR/state-$3") || exit 1
+case "$*" in
+  *'--json state --jq .state'*) echo "$st" ;;
+  *'--json title'*) echo "YPER4-778 [IMPROVE] Elsewhere fixture" ;;
+  *'--json number,title,state,mergeCommit,baseRefName'*)
+    sha=null; [ "$st" = MERGED ] && sha='{"oid":"abc123"}'
+    echo "{\"number\":$3,\"title\":\"YPER4-778 [IMPROVE] Elsewhere fixture\",\"state\":\"$st\",\"mergeCommit\":$sha,\"baseRefName\":\"production\"}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/else-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == comment && $2 == list ]] && cat "$ELSE_DIR/comments" || exit 1
+MOCK
+chmod +x "$E/else-bin/gh" "$E/else-bin/hypertask"
+export ELSE_DIR="$E/else"
+EL() { PATH="$E/else-bin:$PATH" ./ship-check "$@"; }
+jq -n '{success:true,comments:[{text:"<p>Agent note, no record yet.</p>"}]}' > "$ELSE_DIR/comments"
+echo MERGED > "$ELSE_DIR/state-901"; echo CLOSED > "$ELSE_DIR/state-902"; echo OPEN > "$ELSE_DIR/state-903"
+EL elsewhere YPER4-778 901 >/dev/null && bad "elsewhere accepted a ticket with no resolution comment" || ok "elsewhere refuses a ticket with no closing comment"
+jq -n '{success:true,comments:[{text:"<p><strong>Resolved without a change:</strong> landed under https://example.com/t/2 .</p>"}]}' > "$ELSE_DIR/comments"
+EL elsewhere YPER4-778 903 >/dev/null && bad "elsewhere accepted an open PR" || ok "elsewhere refuses an open PR"
+[ ! -e "$E/YPER4-778/elsewhere" ] && ok "refused elsewhere writes no record" || bad "refused elsewhere wrote a record"
+EL elsewhere FOO-778 >/dev/null && bad "elsewhere accepted a non-ticket id" || ok "elsewhere refuses a non-ticket id (FOO-778)"
+EL elsewhere YPER4-778 >/dev/null && bad "elsewhere accepted a ticket with no PR" || ok "elsewhere refuses a ticket with no bound PR"
+out=$(EL elsewhere YPER4-778 901); [ "$out" = 'recorded YPER4-778 as finished elsewhere (PR 901 MERGED)' ] && ok "elsewhere records a merged PR" || bad "elsewhere: $out"
+[ "$(cat "$E/YPER4-778/pr")" = 901 ] && [ "$(cat "$E/YPER4-778/elsewhere")" = 901 ] && ok "elsewhere binds the PR" || bad "elsewhere record"
+for x in merged:merged deployed:deployed proof:proof; do
+  EL ${x%%:*} YPER4-778 | grep -q "^${x#*:} ok (elsewhere: PR 901 MERGED)" && ok "elsewhere passes ${x%%:*}" || bad "elsewhere ${x%%:*}"
+done
+EL docs YPER4-778 >/dev/null && bad "elsewhere shortcut the docs rule" || ok "elsewhere leaves the docs gate to its own rule (a docs PR is still required)"
+out=$(EL elsewhere YPER4-778); [ "$out" = 'recorded YPER4-778 as finished elsewhere (PR 901 MERGED)' ] && ok "elsewhere reads the bound PR when no number is given" || bad "elsewhere bound PR: $out"
+EL elsewhere YPER4-778 902 | grep -q 'PR 902 CLOSED' && ok "elsewhere accepts a closed outdated PR" || bad "elsewhere closed PR"
+echo OPEN > "$ELSE_DIR/state-902"
+EL merged YPER4-778 >/dev/null && bad "elsewhere passed merged after the PR reopened" || ok "elsewhere merged gate fails once the PR reopens"
+echo CLOSED > "$ELSE_DIR/state-902"
+EL bind YPER4-778 902 >/dev/null && [ ! -e "$E/YPER4-778/elsewhere" ] && ok "bind clears elsewhere" || bad "bind did not clear elsewhere"
+
 if [ "${1:-}" = --premerge-only ]; then
   echo "$passes passed, $fails failed"
   [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
