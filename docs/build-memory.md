@@ -53,3 +53,13 @@ Ticket: https://app.hypertask.ai/detail/project-4060/650
 Production builds for d92ae07cf and 3f9488694 were killed with a Vercel Out of Memory event during "Creating an optimized production build". No build settings changed after the last good build (7c5de02bf); the added code was mostly server routes.
 
 Next passes `NODE_OPTIONS` to the webpack build worker unchanged (`isolatedMemory: false` in `next/dist/build/webpack-build`), so the 6 GB cap let the compiler heap reach 6 GB on an 8 GB machine, leaving too little for native memory and the parent process. The cap is now 5120 MB. If the heap ever needs more, the log says "Reached heap limit" instead of a silent kill, which gives the real heap size for the next step.
+
+## Heap cap 4 GB (2026-10-30)
+
+Ticket: https://app.hypertask.ai/detail/project-4060/957
+
+Every production deployment from 17:14 on died the same way as the two in the 5 GB note: "Next.js build worker exited with code: null and signal: SIGKILL" two to five minutes into "Creating an optimized production build", with Vercel reporting an Out of Memory event. The last green build was 4425ce73e (HTPR-8209); the first red one was 81e7eb735 (HTPR-7582), which added an MCP tool pair, one API route, one cron and a Prisma model. That release is the straw, not the weight: it added no heavy import, and the two releases after it that touched almost nothing (db7d7b63a, ad89e20cc) failed at the same place.
+
+The 5120 MB cap therefore no longer describes the build. Vercel's standard build machine has 8 GB, and the compiler heap is only one term in the process tree: the parent Next process, native webpack and minifier memory, and the single page worker share the rest. A silent SIGKILL rather than "JavaScript heap out of memory" says the container, not V8, hit the ceiling, so the heap was still inside its cap while the tree was not.
+
+The cap is now 4096 MB, half the machine, so native memory and the parent process keep the other half. `tests/build-memory-config.test.cjs` fails if the cap ever rises above half the build machine again. If this build reports "Reached heap limit", the compiler genuinely needs more than 4 GB, and the next step is the paid Enhanced Build Machine, which is Valentin's decision.
