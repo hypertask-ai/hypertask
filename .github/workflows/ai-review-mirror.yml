@@ -7,6 +7,13 @@ name: AI review verdict to ticket
 # board token that binds titles and files tickets today, and the ticket lives on
 # this board. No new secret, no new permission, no candidate code is checked
 # out or run - the PR number and the review comment text arrive as data.
+#
+# YPER4-925: the mirror died on a GitHub App installation rate limit
+# (403, x-ratelimit-remaining: 0) 82 seconds before the window reset, and the
+# verdict was lost. Both GitHub reads now use the shared reset-aware retry that
+# the other trusted workflows already import, bounded to this job's timeout, so
+# a full installation window fails with the rate limit named instead of a
+# missing verdict.
 on:
   issue_comment:
     types: [created, edited]
@@ -34,6 +41,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
+      # Only the shared retry helper from the production default branch, never
+      # candidate code: no credentials are persisted for it.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
@@ -81,10 +96,30 @@ jobs:
               }
             }
 
-            const { data: pr } = await github.rest.pulls.get({
+            // The installation shares one hourly GitHub budget with the whole
+            // fleet, so a 403 here usually means "later", not "failed". The
+            // waits stay inside this job's 10-minute timeout, and a wait past
+            // the budget fails with the rate limit named instead of silently
+            // dropping the verdict.
+            const { retryGithubRequest, createRateLimitBudget } =
+              await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
+            const budget = createRateLimitBudget({ maxWaitMs: 240_000, timeBudgetMs: 420_000 });
+            const readGithub = async (read) => {
+              try {
+                return await retryGithubRequest(read, { budget, log: core.warning });
+              } catch (error) {
+                if (!error.rateLimited) throw error;
+                core.setFailed(error.message);
+                return null;
+              }
+            };
+
+            const prResponse = await readGithub(() => github.rest.pulls.get({
               ...context.repo,
               pull_number: prNumber,
-            });
+            }));
+            if (!prResponse) return;
+            const pr = prResponse.data;
 
             if (pr.base.ref !== 'production') {
               core.info(`PR #${prNumber} targets ${pr.base.ref}, not production; nothing to mirror.`);
@@ -107,11 +142,13 @@ jobs:
             // verdicts can sit on it. Only the one that reviewed the current
             // head describes what will merge; an older verdict must never reach
             // the ticket as if it were the current one.
-            const verdicts = (await github.paginate(github.rest.issues.listComments, {
+            const prComments = await readGithub(() => github.paginate(github.rest.issues.listComments, {
               ...context.repo,
               issue_number: prNumber,
               per_page: 100,
-            })).filter(comment =>
+            }));
+            if (!prComments) return;
+            const verdicts = prComments.filter(comment =>
               isReviewer(comment.user?.login) &&
               /^(APPROVE|CONCERNS)\b/.test(comment.body ?? ''));
             const headSha = pr.head?.sha;
