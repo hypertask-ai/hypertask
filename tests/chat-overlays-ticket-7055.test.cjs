@@ -8,10 +8,10 @@ const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const KEY = "htpr-7055-chat-overlays-ticket";
+const RETIRED_KEY = "htpr-7055-chat-overlays-ticket";
 const noop = () => null;
 
-function frame(flags, pathname) {
+function frame(pathname) {
   const source = fs.readFileSync(path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");
   const js = ts.transpileModule(source, {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
@@ -23,12 +23,13 @@ function frame(flags, pathname) {
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => flags[key] ?? false, useFlagLoaded: () => true, useFlagReady: () => true },
+    "@/hooks/useFlag": {
+      useFlag: (key) => { assert.notEqual(key, RETIRED_KEY, "retired chat-overlays flag queried"); return false; },
+      useFlagLoaded: () => true,
+      useFlagReady: () => true,
+    },
     "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
-    "@/lib/flags/keys": {
-      HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: KEY,
-    },
   };
   const exports = {};
   new Function("require", "exports", js)((name) => {
@@ -60,11 +61,10 @@ async function overlays(Frame, viewport, sidebar = 420) {
   }
 }
 
-const on = { [KEY]: true };
 const detail = "/detail/project-15/7055";
 
 test("ticket page: chat overlays below sidebar + 944, pushes at or above it", async () => {
-  const Frame = frame(on, detail);
+  const Frame = frame(detail);
   assert.equal(await overlays(Frame, 1127, 340), true, "125% zoom, 340 chat: 1127 < 1284");
   assert.equal(await overlays(Frame, 1363, 420), true);
   assert.equal(await overlays(Frame, 1364, 420), false);
@@ -72,14 +72,7 @@ test("ticket page: chat overlays below sidebar + 944, pushes at or above it", as
 });
 
 test("other pages keep the 768 / sidebar + 340 rule", async () => {
-  const Frame = frame(on, "/board/15");
-  assert.equal(await overlays(Frame, 1127, 340), false);
-  assert.equal(await overlays(Frame, 767, 420), true);
-  assert.equal(await overlays(Frame, 768, 420), false);
-});
-
-test("flag off: ticket page keeps the old rule", async () => {
-  const Frame = frame({}, detail);
+  const Frame = frame("/board/15");
   assert.equal(await overlays(Frame, 1127, 340), false);
   assert.equal(await overlays(Frame, 767, 420), true);
   assert.equal(await overlays(Frame, 768, 420), false);

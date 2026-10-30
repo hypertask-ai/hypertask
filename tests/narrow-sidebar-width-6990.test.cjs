@@ -20,10 +20,9 @@ function frame(mobile = false, pathname = "/detail/project-15/6990") {
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-8038-chat-opener-ready" || key === "htpr-7622-ai-settings") return false; assert.equal(key, "htpr-7055-chat-overlays-ticket"); return false; }, useFlagReady: () => true },
+    "@/hooks/useFlag": { useFlag: (key) => { assert.ok(["htpr-8038-chat-opener-ready", "htpr-7622-ai-settings"].includes(key), `unexpected flag ${key}`); return false; }, useFlagReady: () => true },
     "@/lib/flags/definitions/htpr-8038-chat-opener-ready": { HTPR_8038_CHAT_OPENER_READY_FLAG: "htpr-8038-chat-opener-ready" },
     "@/lib/flags/definitions/htpr-7622-ai-settings": { HTPR_7622_AI_SETTINGS_FLAG: "htpr-7622-ai-settings" },
-    "@/lib/flags/keys": { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
   };
   const source = fs.readFileSync(path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");
   const js = ts.transpileModule(source, {
@@ -108,16 +107,16 @@ test("oversized persisted sidebars overlay instead of squeezing content and resi
   const Frame = frame();
   await React.act(async () => reactRoot.render(workspace(Frame, 600, React.createElement("aside", null, "Chat"))));
   const comments = container.querySelector("[data-comments]");
-  for (const [viewport, overlay] of [[800, true], [939, true], [940, false], [1440, false], [390, true]]) {
+  for (const [viewport, overlay] of [[800, true], [1543, true], [1544, false], [1920, false], [390, true]]) {
     await React.act(async () => {
       window.innerWidth = viewport;
       window.dispatchEvent(new window.Event("resize"));
     });
     const slot = container.querySelector("[data-ai-chat-slot]");
-    assert.equal(slot.classList.contains("fixed"), overlay, `${viewport}px leaves at least 340px or overlays`);
+    assert.equal(slot.classList.contains("fixed"), overlay, `${viewport}px leaves at least 944px for the ticket or overlays`);
     assert.equal(container.querySelector("[data-comments]"), comments);
   }
-  window.innerWidth = 800;
+  window.innerWidth = 1364;
   await React.act(async () => reactRoot.render(workspace(Frame, 420)));
   assert.equal(container.querySelector("[data-ai-chat-slot]").classList.contains("fixed"), false, "changing saved width recalculates reservation");
 });
