@@ -106,6 +106,7 @@ async function loadArchiveBulk() {
   const calls = { updateMany: [], transaction: null };
   const notification = {
     findFirst: async () => null,
+    findMany: async () => [],
     updateMany: async (args) => {
       calls.updateMany.push(args);
       return { count: 1 };

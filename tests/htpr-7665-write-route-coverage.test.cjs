@@ -65,6 +65,8 @@ const EXISTING_GUARD_IN_IMPORTED_MODULE = {
   [`PATCH ${OPS}/agents/[agentId]/operation.ts`]: "src/lib/mcp/agents/delegatedAccess.ts",
 };
 
+const BOARD_ACCESS_REQUEST_GUARD = `POST ${OPS}/agents/board-access-requests/operation.ts`;
+
 const ALLOWED_FOR_READ_AGENTS = {
   [`POST ${OPS}/hello/operation.ts`]: "reads the hello payload; POST only carries the body",
   [`POST ${OPS}/tasks/related/operation.ts`]: "related-task search, read through POST",
@@ -125,6 +127,7 @@ test("every non-GET MCP handler is guarded, allowlisted with a reason, or refuse
   const unclassified = handlers.filter((handler) => {
     if (GUARD_CALL.test(handler.text)) return false;
     if (handler.key in EXISTING_GUARD_IN_IMPORTED_MODULE) return false;
+    if (handler.key === BOARD_ACCESS_REQUEST_GUARD) return false;
     if (handler.key in ALLOWED_FOR_READ_AGENTS) return false;
     if (handler.key in AGENT_TOKENS_REFUSED_BEFORE_ANY_WRITE) return false;
     return true;
@@ -162,7 +165,7 @@ test("allowlist rows exist, carry a reason and are not also guarded by the new h
 });
 
 test("no row sits on two lists", () => {
-  const lists = [NEWLY_GUARDED, Object.keys(ALLOWED_FOR_READ_AGENTS), Object.keys(AGENT_TOKENS_REFUSED_BEFORE_ANY_WRITE), Object.keys(EXISTING_GUARD_IN_IMPORTED_MODULE)];
+  const lists = [NEWLY_GUARDED, Object.keys(ALLOWED_FOR_READ_AGENTS), Object.keys(AGENT_TOKENS_REFUSED_BEFORE_ANY_WRITE), Object.keys(EXISTING_GUARD_IN_IMPORTED_MODULE), [BOARD_ACCESS_REQUEST_GUARD]];
   const all = lists.flat();
   assert.deepEqual(all.filter((key, index) => all.indexOf(key) !== index), []);
 });
@@ -175,4 +178,13 @@ test("the guard is never applied to the unrelated GET handlers or the JSON-RPC e
   for (const file of ["src/app/mcp/route.ts", "src/app/sse/route.ts", "src/app/message/route.ts"]) {
     assert.ok(!/requireAgentWriteRole/.test(read(file)), file);
   }
+});
+
+test("board access requests require a live write-role agent", () => {
+  const handler = byKey.get(BOARD_ACCESS_REQUEST_GUARD);
+  assert.ok(handler);
+  assert.match(handler.text, /createBoardAccessRequest\(ctx, input\.data\)/);
+  const service = read("src/lib/agents/boardAccessRequests/service.ts");
+  assert.match(service, /const agent = await liveAgent\(db, ctx, true\)/);
+  assert.match(service, /if \(write && !\["write", "admin"\]\.includes\(role\)\) throw new BoardAccessError\(403, "write_role_required"\)/);
 });

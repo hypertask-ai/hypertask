@@ -1659,7 +1659,7 @@ model AgentBoardAccessRequest {
   member                      Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
   notification                Notification?
 
-  @@index([ownerUserIdAtRequest, status, expiresAt])
+  @@index([ownerUserIdAtRequest, status, expiresAt], map: "AgentBoardAccessRequest_ownerUserIdAtRequest_status_expiresAt_i")
   @@index([agentId, createdAt])
 }
 

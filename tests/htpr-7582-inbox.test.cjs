@@ -181,7 +181,7 @@ test('Option A card renders only approved question, explanation, link and two bu
   const html = card(summary()); assert.match(html, /Grok Bot asks to join Software Factory as a member/); assert.match(html, /Question: Investigate failing deployment/);
   assert.match(html, /Only you, this agent’s owner, can approve/); assert.match(html, /Board access →/); assert.match(html, /boardAccess=15/);
   assert.equal((html.match(/<button/g) ?? []).length, 2); assert.match(html, />Decline<\/button>/); assert.match(html, />Approve<\/button>/);
-  assert.match(html, /bg-comment-description border-comment-description-border/); assert.match(html, /bg-shadcn-primary/); assert.doesNotMatch(html, /<input|<textarea|<select|dialog|Send request|Option B/);
+  assert.match(html, /<article(?=[^>]*bg-comment-description)(?=[^>]*border-comment-description-border)[^>]*>/); assert.match(html, /bg-shadcn-primary/); assert.doesNotMatch(html, /<input|<textarea|<select|dialog|Send request|Option B/);
 });
 test('other-team card disables only Approve and renders reason as escaped plain text', () => {
   const html = card(summary({ sameTeam: false, canApprove: false, reason: '<img src=x onerror=attack>' }));
