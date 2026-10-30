@@ -54,6 +54,7 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     selectSession: (id) => { actions.push(`select:${id}`); context.currentSession = sessions.find((session) => session.id === id); },
     handleAttachmentClick: () => actions.push("attach"), handleAddContext: () => actions.push("mention"),
     handleCancelStream: () => actions.push("stop"), deleteSession: async (id) => actions.push(`delete:${id}`),
+    mentionFlag: false,
   };
   const { createAiChatKeyboard } = load("src/hooks/MultiPages/AIChat/aiChatKeyboard.ts", {
     "@/lib/constants/keyboard-handler": { KeyCodes: { ENTER: 13, ESCAPE: 27, Q: 81, U: 85, D: 68 } },
@@ -63,7 +64,7 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
   });
   context.tiptapKeydown = (event) => createAiChatKeyboard({
     isApple: false, editor: { isEmpty: false },
-    showMentionList: Boolean(document.getElementById("mentions")),
+    showMentionList: context.mentionFlag,
     handleSendMessage: () => actions.push("send"), fileUpload: {},
   }, { focusedShortcuts: true }).tiptapKeydown(event);
   for (const id of ["scope", "model"]) root.querySelector(`#${id}`).onclick = () => actions.push(id);
@@ -287,3 +288,23 @@ test("inactive external-agent headers cannot target retained native sessions", (
     assert.deepEqual(f.pins(), []);
   } finally { f.close(); }
 });
+
+for (const surface of ["fullscreen", "sidebar", "floating"]) {
+  test(`${surface}: send works as soon as the mention picker closes`, () => {
+    const f = fixture(surface);
+    const sends = () => f.actions.filter((action) => action === "send").length;
+    try {
+      f.context.mentionFlag = true;
+      assert.equal(f.press("Enter", { ctrlKey: true }).defaultPrevented, true);
+      assert.equal(sends(), 1);
+      const picker = document.createElement("div");
+      picker.id = "mentions";
+      f.root.querySelector("[data-ai-chat-composer]").appendChild(picker);
+      assert.equal(f.press("Enter", { ctrlKey: true }).defaultPrevented, false);
+      assert.equal(sends(), 1);
+      picker.remove();
+      assert.equal(f.press("Enter", { ctrlKey: true }).defaultPrevented, true);
+      assert.equal(sends(), 2);
+    } finally { f.close(); }
+  });
+}
