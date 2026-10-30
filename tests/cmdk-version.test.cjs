@@ -50,6 +50,7 @@ function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
     "@/lib/state": {
       useRecoilState: (atom) => React.useState(atom.default),
       useRecoilValue: (atom) => atom.default,
+      useSetRecoilState: () => noop,
     },
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },

@@ -1121,6 +1121,7 @@ export type HTCContext = "Task" | "Kanban" | "Inbox" | "Others";
 
 export interface IAllCommands {
   context: HTCContext;
+  triageInboxEnabled?: boolean;
   bulkSelectionCount?: number;
   kanbanSelectAllEnabled?: boolean;
   task?: {

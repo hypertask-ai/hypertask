@@ -1350,7 +1350,15 @@ export const getAllCommands = (
   const agentChat = getAgentChatCommands();
   const groups = [
     navigate,
-    inbox,
+    { ...inbox, commandLists: [
+      ...inbox.commandLists,
+      ...(commandOptions.triageInboxEnabled ? [{
+        key: "triageInbox",
+        name: "Triage inbox",
+        commandMode: CommandMode.Command,
+        keywords: "inbox triage ai archive noise decisions cleanup",
+      }] : []),
+    ] },
     time,
     ...(bulk ? [bulk] : []),
     ...(commandOptions.appShellRailOn ? [appShell] : []),

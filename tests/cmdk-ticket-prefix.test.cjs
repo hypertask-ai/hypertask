@@ -54,7 +54,7 @@ function paletteGroups(enabled, frequent = {}, contextOptions, githubEnabled = f
     useMemo: (callback) => callback(),
     boardLayout: "board", calendarSettings: { showWeekends: true },
     currentProject: { id: 15 }, frequentlyUsed: frequent, projects: [],
-    contextOptions, appShellRailOn: false, onAgentChat: false,
+    contextOptions, triageInboxEnabled: false, appShellRailOn: false, onAgentChat: false,
     onCalendar: false, onMyTasks: false, isMobile: false, showByokApiKeys: false,
     pinCommentActions: false, pageActions: null, selectedTasksFirst: false,
     pagesEnabled: false, standalonePages: false, pathname: "/project",
