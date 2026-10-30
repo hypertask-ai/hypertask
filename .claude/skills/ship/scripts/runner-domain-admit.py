@@ -157,7 +157,9 @@ def main():
         scopes = set(existing['held']) if existing else set()
         scopes.add(d)
         others = [(slot, key, lease) for slot, leases in owners.items() if slot != runner for key, lease in leases.items()]
-        cross = [(slot, key) for slot, key, lease in others if any(conflict(a, b) for a in scopes for b in lease['held'])]
+        cross = [(slot, key) for slot, key, lease in others if any(
+            conflict(a, b) for a in scopes
+            for b in (lease.get('acquired', []) if existing and not existing.get('admission') and lease['pending'] else lease['held']))]
         all_leases = [(slot, key, lease) for slot, leases in owners.items() for key, lease in leases.items()]
         conflicts = [(a, b) for i, a in enumerate(all_leases) for b in all_leases[i + 1:]
                      if a[0] != b[0] and any(conflict(x, y) for x in a[2]['held'] for y in b[2]['held'])]
@@ -180,7 +182,11 @@ def main():
             lease = mine.setdefault(ticket, {'held': [d], 'current': d, 'pending': False})
             if d not in lease['held']:
                 lease['held'].append(d)
-            lease.update(current=d, protected=True, admission=True)
+            lease.update(current=d, protected=True)
+            if any(name.casefold() == ('runner ' + runner).casefold() for name in assigned):
+                lease.pop('admission', None)
+            else:
+                lease['admission'] = True
         if not mine:
             owners.pop(runner, None)
         tmp = path.with_name(path.name + '.' + str(os.getpid()))

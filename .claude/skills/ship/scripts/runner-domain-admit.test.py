@@ -218,6 +218,48 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         self.assertEqual(resume.returncode, 0, resume.stderr)
         self.assertNotEqual(self.admit(1, 'YPER4-2').returncode, 0)
 
+    def test_pending_requests_allow_established_resume_but_block_new_work(self):
+        path = self.state / 'domain-ownership.json'
+        owner = self.task('YPER4-1', 'Search', 1, 'In Progress')
+        requester = self.task('YPER4-2', 'Search', 2, 'In Progress')
+        new = self.task('YPER4-3', 'Search')
+        self.set_tasks([owner, requester, new])
+        for acquired, expected in ((['Commands'], 0), (['Commands', 'Search'], 1)):
+            with self.subTest(acquired=acquired):
+                path.write_text(json.dumps({
+                    '1': {'YPER4-1': {'held': ['Search'], 'current': 'Search', 'pending': False}},
+                    '2': {'YPER4-2': {'held': ['Commands', 'Search'], 'current': 'Search',
+                                      'pending': True, 'acquired': acquired}}}))
+                result = self.admit(1, 'YPER4-1')
+                self.assertEqual(result.returncode, expected, result.stderr)
+                self.set_tasks([self.task('YPER4-1', 'Search', section='Done'), requester, new])
+                result = self.admit(3, 'YPER4-3')
+                self.set_tasks([owner, requester, new])
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_assigned_resume_releases_on_unassignment_without_reconciliation(self):
+        path = self.state / 'domain-ownership.json'
+        for reconcile in ('admit', 'pickup'):
+            with self.subTest(reconcile=reconcile):
+                path.unlink(missing_ok=True)
+                assigned = self.task('YPER4-1', 'Flags', 1, 'In Progress')
+                unassigned = self.task('YPER4-1', 'Flags', section='In Progress')
+                next_task = self.task('YPER4-2', 'Flags')
+                self.set_tasks([assigned, next_task])
+                result = self.admit(1, 'YPER4-1')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn('admission', json.loads(path.read_text())['1']['YPER4-1'])
+                self.set_tasks([unassigned, next_task])
+                if reconcile == 'pickup':
+                    result = subprocess.run(['python3', str(HERE / 'runner-domain-pickup.py'), str(self.state), '1'],
+                                            input=json.dumps({'tasks': [unassigned, next_task], 'previous': [], 'candidates': []}),
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertNotIn('1', json.loads(path.read_text()))
+                result = self.admit(2, 'YPER4-2')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertNotIn('1', json.loads(path.read_text()))
+
     def test_dispatch_withholds_after_admission_when_pane_changes(self):
         loader = importlib.machinery.SourceFileLoader('dispatch_wait', str(HERE / 'runner-dispatch'))
         spec = importlib.util.spec_from_loader(loader.name, loader)
