@@ -52,8 +52,9 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
     lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
   const originalNote = originalNoteState && originalNoteState.taskId === newTicketId ? originalNoteState.note : undefined;
+  const ticketQuestionsKey = actionChipsEnabled ? ["task-questions", "new-ticket", newTicketId, "action-chip"] : ["task-questions", "new-ticket", newTicketId];
   const ticketQuestions = useQuery({
-    queryKey: ["task-questions", "new-ticket", newTicketId, actionChipsEnabled],
+    queryKey: ticketQuestionsKey,
     queryFn: async (): Promise<{ questions: string[] }> => {
       const response = await fetch("/api/ai/task-questions", {
         method: "POST",

@@ -61,7 +61,7 @@ function harness({ chips, writing = false, rules }) {
     "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => ({ id: 985, displayName: "QA" }) },
     "@/app/api/ai/_lib/taskContent": { convertHtmlToText: (value) => value, isSessionNoise: () => false },
     "@/app/api/ai/_lib/systemModelLadder": { resolveSystemModel: () => ({ provider: "fixture", model: model.id }) },
-    "@/lib/prisma": { task: { findFirst: async () => task }, comment: { findMany: async () => [] } },
+    "@/lib/prisma": { default: { task: { findFirst: async () => task }, comment: { findMany: async () => [] } } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_id, args) => args.fixed },
   };
@@ -80,9 +80,9 @@ function harness({ chips, writing = false, rules }) {
   };
 }
 
-test("flag definition defaults to owner and QA with the writing flag as a related flag", () => {
+test("flag definition defaults to owner only with the writing flag as a related flag", () => {
   assert.equal(chipFlagModule.default.key, chipFlag);
-  assert.equal(chipFlagModule.default.defaultMode, "OWNER_AND_QA");
+  assert.equal(chipFlagModule.default.defaultMode, "OWNER_ONLY");
   assert.ok(chipFlagModule.default.related.includes(writingFlag));
 });
 
