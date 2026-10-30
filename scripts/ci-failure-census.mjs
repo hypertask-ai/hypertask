@@ -92,7 +92,7 @@ export function formatCensus(rows, runCount) {
   ].join('\n');
 }
 
-export function collectCensus({ workflow, limit, repo }, api) {
+export function collectCensus({ workflow, limit, repo }, api, loadLog = (run, job) => api(`/actions/jobs/${job}/logs`, true)) {
   const runs = [];
   const perPage = Math.min(100, limit);
   for (let page = 1; runs.length < limit; page++) {
@@ -122,7 +122,7 @@ export function collectCensus({ workflow, limit, repo }, api) {
     const logs = {};
     for (const job of jobs.filter(job => failed(job.conclusion))) {
       try {
-        logs[job.id] = execFileSync('gh', failedLogArgs(repo, run.id, job.id), { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'] });
+        logs[job.id] = loadLog(run.id, job.id);
       } catch {
         unavailableLogs++;
       }
@@ -132,37 +132,38 @@ export function collectCensus({ workflow, limit, repo }, api) {
   return `${repo}: ${workflow}\n${formatCensus(rows, runs.length)}\nUnavailable job logs: ${unavailableLogs}`;
 }
 
-export function redClass({ conclusion, kind, rerunPassed, prGreen }) {
+export function redClass({ conclusion, kind, rerunPassed, prGreen, prSeen }) {
   if (['startup_failure', 'action_required'].includes(conclusion) || kind === 'infra') return 'infra';
   if (rerunPassed) return 'flaky';
   if (prGreen) return 'production-only';
-  return 'break';
+  if (prSeen) return 'break';
+  return 'unattributed';
 }
 
 const HOUR = 3600000;
 const day = time => new Date(time).toISOString().slice(0, 10);
 
 export function redWindows(runs) {
-  const ordered = [...runs].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
-  const latest = ordered.reduce((last, run) => Math.max(last, Date.parse(run.updated_at ?? run.created_at)), 0);
+  const greens = runs.filter(run => run.conclusion === 'success');
+  const latest = runs.reduce((last, run) => Math.max(last, Date.parse(run.updated_at ?? run.created_at)), 0);
   const windows = [];
-  let open = null;
-  for (const run of ordered) {
+  for (const run of runs) {
     const start = Date.parse(run.created_at);
-    const end = Date.parse(run.updated_at ?? run.created_at);
     if (failed(run.conclusion)) {
-      if (!open) open = { class: run.class ?? 'break', start };
-    } else if (run.conclusion === 'success') {
-      const closing = open;
-      if (open) {
-        windows.push({ class: open.class, start: open.start, end });
-        open = null;
-      }
-      if (!closing && Number(run.run_attempt) > 1) windows.push({ class: 'flaky', start, end });
+      const end = greens.map(green => Date.parse(green.updated_at)).filter(time => time >= start).sort((a, b) => a - b)[0] ?? latest;
+      windows.push({ class: run.class ?? 'break', start, end });
+    } else if (run.conclusion === 'success' && Number(run.run_attempt) > 1) {
+      windows.push({ class: 'flaky', start, end: Date.parse(run.updated_at) });
     }
   }
-  if (open) windows.push({ class: open.class, start: open.start, end: latest });
-  return windows;
+  windows.sort((a, b) => a.start - b.start || a.end - b.end);
+  const merged = [];
+  for (const window of windows) {
+    const last = merged.at(-1);
+    if (last && window.start <= last.end) last.end = Math.max(last.end, window.end);
+    else merged.push({ ...window });
+  }
+  return merged;
 }
 
 export function hoursByWindow(windows) {
@@ -261,10 +262,14 @@ export async function collectClasses(options, api, logs) {
   }
   const evidence = await parallelMap(runs.filter(run => failed(run.conclusion)), 6, async run => {
     const jobs = [];
-    for (let page = 1; ; page++) {
-      const batch = (await api(`/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100&page=${page}`)).jobs;
-      jobs.push(...batch);
-      if (batch.length < 100) break;
+    try {
+      for (let page = 1; ; page++) {
+        const batch = (await api(`/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100&page=${page}`)).jobs;
+        jobs.push(...batch);
+        if (batch.length < 100) break;
+      }
+    } catch (error) {
+      return { run, job: '(jobs unavailable)', step: '(unknown)', evidenceLine: `GitHub refused this run: ${error.message}`, rerunPassed: false, prGreen: false, prSeen: false, class: 'unattributed' };
     }
     const failing = jobs.filter(job => failed(job.conclusion));
     const logged = [];
@@ -283,15 +288,18 @@ export async function collectClasses(options, api, logs) {
     const evidenceLine = (infra ?? logged.find(item => item.kind === 'test') ?? logged[0])?.evidenceLine ?? 'No error line found';
     const rerunPassed = runs.some(other => other.id !== run.id && other.head_sha === run.head_sha && other.conclusion === 'success' && Date.parse(other.created_at) > Date.parse(run.created_at));
     let prGreen = false;
+    let prSeen = false;
     if (!infra) {
       try {
         const pull = (await api(`/commits/${run.head_sha}/pulls`)).find(candidate => candidate.merged_at);
         if (pull) {
           const head = await api(`/actions/workflows/${workflow}/runs?head_sha=${pull.head.sha}&per_page=1`);
-          prGreen = head.workflow_runs.some(candidate => candidate.conclusion === 'success');
+          const latest = head.workflow_runs[0]?.conclusion;
+          prGreen = latest === 'success';
+          prSeen = failed(latest);
         }
       } catch {
-        prGreen = false;
+        prSeen = false;
       }
     }
     const evidenceItem = infra ?? logged.find(item => item.kind === 'test') ?? logged[0];
@@ -302,7 +310,7 @@ export async function collectClasses(options, api, logs) {
       evidenceLine,
       rerunPassed,
       prGreen,
-      class: redClass({ conclusion: run.conclusion, kind, rerunPassed, prGreen }),
+      class: redClass({ conclusion: run.conclusion, kind, rerunPassed, prGreen, prSeen }),
     };
   });
   return formatClasses({ workflow: options.workflow, branch: options.branch, since: options.since, runs, evidence });
@@ -356,7 +364,7 @@ function asyncApi(repo) {
     child.stderr.on('data', chunk => { error += chunk; });
     child.on('error', reject);
     child.on('close', code => {
-      if (code !== 0) return reject(new Error(error.trim() || `gh exited ${code}`));
+      if (code !== 0) return reject(new Error(`${error.trim() || `gh exited ${code}`} for ${path}`));
       return resolve(raw ? output : JSON.parse(output));
     });
   });
@@ -387,7 +395,9 @@ export async function main(args = process.argv.slice(2)) {
         encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'],
       });
       return raw ? result : JSON.parse(result);
-    });
+    }, (run, job) => execFileSync('gh', failedLogArgs(options.repo, run, job), {
+      encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, timeout: 60000, stdio: ['ignore', 'pipe', 'pipe'],
+    }));
   if (options.out) writeFileSync(options.out, `${text}\n`);
   console.log(text);
 }

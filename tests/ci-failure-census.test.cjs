@@ -189,7 +189,8 @@ test('a red is classed by the strongest evidence it has', async () => {
   assert.equal(redClass({ conclusion: 'failure', kind: 'infra', rerunPassed: true, prGreen: true }), 'infra');
   assert.equal(redClass({ conclusion: 'failure', kind: 'test', rerunPassed: true, prGreen: true }), 'flaky');
   assert.equal(redClass({ conclusion: 'failure', kind: 'test', rerunPassed: false, prGreen: true }), 'production-only');
-  assert.equal(redClass({ conclusion: 'failure', kind: 'test', rerunPassed: false, prGreen: false }), 'break');
+  assert.equal(redClass({ conclusion: 'failure', kind: 'test', rerunPassed: false, prGreen: false, prSeen: true }), 'break');
+  assert.equal(redClass({ conclusion: 'failure', kind: 'test', rerunPassed: false, prGreen: false }), 'unattributed');
 });
 
 test('red hours run from the first red until production goes green again', async () => {
@@ -205,6 +206,20 @@ test('red hours run from the first red until production goes green again', async
     byClass: [{ class: 'break', hours: 1.5 }],
     byDay: [{ day: '2026-10-20', hours: 1.5 }],
   });
+});
+
+test('overlapping red windows merge into one stretch', async () => {
+  const { redWindows, hoursByWindow } = await subject;
+  const runs = [
+    { ...run(1, 'failure', '2026-10-22T00:00:00Z', '2026-10-22T00:10:00Z'), class: 'production-only' },
+    run(2, 'success', '2026-10-22T01:00:00Z', '2026-10-22T03:00:00Z'),
+    { ...run(3, 'failure', '2026-10-22T02:00:00Z', '2026-10-22T02:10:00Z'), class: 'break' },
+    run(4, 'success', '2026-10-22T03:30:00Z', '2026-10-22T05:00:00Z'),
+  ];
+  assert.deepEqual(redWindows(runs), [
+    { class: 'production-only', start: Date.parse('2026-10-22T00:00:00Z'), end: Date.parse('2026-10-22T03:00:00Z') },
+  ]);
+  assert.deepEqual(hoursByWindow(redWindows(runs)).byClass, [{ class: 'production-only', hours: 3 }]);
 });
 
 test('a rerun that went green counts as flaky red time on its own', async () => {

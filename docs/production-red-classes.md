@@ -17,44 +17,47 @@ Each red run takes the strongest evidence it has, first match wins.
 | --- | --- |
 | `infra` | `startup_failure` or `action_required`, or the failing log matches a shared infra rule in `scripts/flaky-log.mjs` (rate limit, runner shutdown, disk, font fetch) |
 | `flaky` | the same commit was red and later green on a rerun |
-| `production-only` | the merged PR's own run was green and the production run was red |
-| `break` | the PR's own run was red too |
+| `production-only` | the merged PR's newest run was green and the production run was red |
+| `break` | the merged PR's own run was red too |
+| `unattributed` | the PR run, the PR itself or the run's jobs could not be read, so no claim is made |
 
 `production-only` holds what the PR never saw: a merge clash, or a check that only runs on
 `production`, such as browser smoke against live flags. GitHub records alone cannot separate those
 two, so the report names the failing job, step and test instead; that is what the next fix reads.
 
-Red hours run from a red run's start until a production run concludes green, counted per class and
-per UTC day. A run that went green on a retry is its own `flaky` window. Failed logs come from
-`gh run view --log-failed`, parsed by the same `classifyActionsLog` the flake report uses.
+Red hours run from a red run's start until the first production run completes green after it, then
+overlapping stretches merge into one, so concurrent runs are never counted twice. A run that went
+green on a retry is its own `flaky` stretch. Failed logs come from `gh run view --log-failed`,
+parsed by the same `classifyActionsLog` the flake report uses; `gh api .../logs` refuses escape
+sequences in gh 2.103.3 and returns nothing.
 
-ci-tests.yml on production, since 2026-10-17. 866 runs, 92 red, 14 red then green on rerun.
+ci-tests.yml on production, since 2026-10-17. 869 runs, 92 red, 15 red then green on rerun.
 
 ## Red hours lost per class
 
 | Class | Hours | Share |
 | --- | --- | --- |
-| production-only | 81.7 | 76% |
-| infra | 17.18 | 16% |
-| flaky | 9.06 | 8% |
+| production-only | 50.26 | 72% |
+| flaky | 11.64 | 17% |
+| infra | 8.2 | 12% |
 
 ## Red hours per day
 
 | Day | Hours |
 | --- | --- |
-| 2026-10-17 | 7.11 |
-| 2026-10-19 | 2.65 |
-| 2026-10-20 | 5.52 |
+| 2026-10-17 | 0.22 |
+| 2026-10-19 | 1.7 |
+| 2026-10-20 | 4.32 |
 | 2026-10-21 | 10.96 |
-| 2026-10-22 | 6.29 |
-| 2026-10-23 | 15.63 |
-| 2026-10-24 | 9.93 |
-| 2026-10-25 | 8.87 |
-| 2026-10-26 | 11.94 |
+| 2026-10-22 | 4.63 |
+| 2026-10-23 | 6.28 |
+| 2026-10-24 | 5.68 |
+| 2026-10-25 | 6.22 |
+| 2026-10-26 | 8.85 |
 | 2026-10-27 | 5.14 |
-| 2026-10-28 | 4.44 |
-| 2026-10-29 | 4.36 |
-| 2026-10-30 | 15.09 |
+| 2026-10-28 | 3.33 |
+| 2026-10-29 | 0.71 |
+| 2026-10-30 | 12.05 |
 
 ## Red hours per failing job
 
@@ -147,7 +150,7 @@ ci-tests.yml on production, since 2026-10-17. 866 runs, 92 red, 14 red then gree
 | 39893472082 | 2026-10-23T03:09:16Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/prod.spec.ts › My Tasks Tab keeps the chosen split without server navigation (board grouping) |
 | 39883550562 | 2026-10-23T01:21:44Z | infra | browser-smoke | Build the local app (no migrations) | An error occurred in `next/font`. |
 | 39792198835 | 2026-10-22T14:02:02Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
-| 39787853372 | 2026-10-22T13:33:16Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock |  |
+| 39787853372 | 2026-10-22T13:33:16Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
 | 39784077960 | 2026-10-22T13:07:15Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
 | 39770072034 | 2026-10-22T11:22:22Z | production-only | ci-tests | Test full suite | tests/htpr-7574-agent-onboarding.test.cjs › S4 refused: admin self-change gives owner guidance before checking role |
 | 39765957007 | 2026-10-22T10:49:20Z | production-only | ci-tests | Test full suite | tests/htpr-7574-agent-onboarding.test.cjs › S4 refused: admin self-change gives owner guidance before checking role |
@@ -158,7 +161,7 @@ ci-tests.yml on production, since 2026-10-17. 866 runs, 92 red, 14 red then gree
 | 39608518494 | 2026-10-21T13:29:59Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
 | 39580239278 | 2026-10-21T09:51:53Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
 | 39567066934 | 2026-10-21T08:08:43Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
-| 39466076362 | 2026-10-20T17:26:23Z | production-only | ci-tests | Test with coverage collection |  |
+| 39466076362 | 2026-10-20T17:26:23Z | production-only | ci-tests | Test with coverage collection | actual: [ 'Task 4060', 'Task 15' ], expected: [ 'Task 15', 'Task 4060' ] |
 | 39465257750 | 2026-10-20T17:20:45Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
 | 39405668595 | 2026-10-20T10:07:25Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
 | 39302143086 | 2026-10-19T18:23:51Z | production-only | browser-smoke | Serve and check logged-in pages and layout lock | e2e/smoke/layout-lock.spec.ts › layout lock: ticket page first load stays under the CLS budget |
@@ -169,6 +172,7 @@ ci-tests.yml on production, since 2026-10-17. 866 runs, 92 red, 14 red then gree
 
 | Run | Started | Branch | Attempts |
 | --- | --- | --- | --- |
+| 41105758690 | 2026-10-30T18:18:12Z | production | 2 |
 | 41099580673 | 2026-10-30T17:31:35Z | production | 2 |
 | 41086980579 | 2026-10-30T16:07:19Z | production | 2 |
 | 41081002156 | 2026-10-30T15:28:15Z | production | 2 |
