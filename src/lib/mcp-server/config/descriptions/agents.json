@@ -3,7 +3,7 @@
   "does": "List owned agent identities, inspect live team presence, or create, revoke, archive or permanently delete an owned agent.",
   "use_when": "Use for agent identity administration or to see which agents are active on a team.",
   "do_not_use_when": "Do not use for ticket assignees or webhook delivery; use hypertask_tasks assign or hypertask_webhooks instead.",
-  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Human or management credentials are required for administration; presence requires team_id (a positive integer number or non-empty UUID string). Creating returns a credential once; create with ensure true instead returns the existing or new agent id by display_name, with no credential, for use as as_agent. Delete is irreversible.",
+  "parameters_and_caveats": "action selects an operation; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Human or management credentials are required for administration; presence requires team_id (a positive integer number or non-empty UUID string). Creating returns a credential once; create with ensure true instead returns the existing or new agent id by display_name, with no credential, for use as as_agent. Delete is irreversible. request_board_access and get_board_access_request use the calling agent identity; the owner decides in Inbox Decisions and a grant never raises the agent role.",
   "actions": {
     "list": {
       "tool": "hypertask_list_agents",
@@ -34,6 +34,16 @@
       "tool": "hypertask_delete_agent",
       "read_only": false,
       "permission": "management_write"
+    },
+    "request_board_access": {
+      "tool": "hypertask_request_board_access",
+      "read_only": false,
+      "permission": "agent_data"
+    },
+    "get_board_access_request": {
+      "tool": "hypertask_get_board_access_request",
+      "read_only": true,
+      "permission": "agent_data"
     }
   },
   "input_examples": []

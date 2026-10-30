@@ -43,5 +43,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7622 reads one setting-change card from Hypertask's own /api/ai/settings route; no third-party paid API is called.",
     "source": "https://app.hypertask.ai/detail/project-15/7622"
+  },
+  "src/components/notifications/NotificationRow.tsx:39d331d72573ac105e7219b373950a623a2bb08ae3bb81889782c2311cb7d0a9": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7582 posts one approve or decline decision to Hypertask's own /api/agents/board-access-requests route; no third-party paid API is called.",
+    "source": "https://app.hypertask.ai/detail/project-15/7582"
   }
 }

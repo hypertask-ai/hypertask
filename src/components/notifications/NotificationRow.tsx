@@ -1,3 +1,9 @@
+import Link from "next/link";
+import { useQueryClient } from "@tanstack/react-query";
+import { INBOX_QUERY_KEY } from "@/lib/inboxQueryKeys";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
+import type { BoardAccessReceipt } from "@/lib/agents/boardAccessRequests/contracts";
 import { INotification, TRemoveFromInboxMode } from "@/models/model";
 import formatDateDifference from "@/utils/generateTime";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
@@ -12,7 +18,7 @@ import { convertToPlain } from "@/utils/helperFunctions/helperFunctions";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import Tooltip from "../Common/Tooltip";
 import { useNotificationContext } from "@/lib/contexts/NotificationContext";
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import TaskRowContainer from "../Common/TaskRowComponents/TaskRowContainer";
 import TitleContainer, { TaskMetaChips } from "../Common/TaskRowComponents/TaskTitle";
 import RemindMeInbox from "./inboxSplit/RemindMeInbox";
@@ -431,3 +437,84 @@ export function renderCommentMentionSimple(html: string, currentUserId: string |
     }
     return div.textContent?.trim() || fullText;
   }
+
+export function AgentBoardAccessDecision() {
+    const { notification } = useNotificationContext();
+    const enabled = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
+    const queryClient = useQueryClient();
+    const [result, setResult] = useState<BoardAccessReceipt | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const submitting = useRef(false);
+    const request = notification.boardAccessRequest;
+    const [clock, setClock] = useState(() => Date.now());
+    useEffect(() => { setResult(null); }, [request]);
+    useEffect(() => {
+        if (!request || request.status !== "pending") return;
+        const remaining = new Date(request.expiresAt).getTime() - Date.now();
+        const timer = setTimeout(() => setClock(Date.now()), Math.max(0, Math.min(remaining, 2_147_483_647)));
+        return () => clearTimeout(timer);
+    }, [request]);
+    const current = result ?? request;
+    if (!enabled || !request || !current) return null;
+
+
+    const decide = async (decision: "approve" | "decline") => {
+        if (submitting.current) return;
+        submitting.current = true;
+        setBusy(true);
+        setError(null);
+        try {
+            const response = await fetch(`/api/agents/board-access-requests/${request.id}/decision`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ decision }),
+            });
+            const body = await response.json();
+            if (!response.ok) throw new Error(body.error ?? "Could not save this decision. Try again.");
+            setResult(body.request);
+            void queryClient.invalidateQueries({ queryKey: INBOX_QUERY_KEY });
+        } catch (failure) {
+            setError(failure instanceof Error ? failure.message : "Could not save this decision. Try again.");
+        } finally {
+            submitting.current = false;
+            setBusy(false);
+        }
+    };
+    const expired = current.status === "pending" && new Date(current.expiresAt).getTime() <= clock;
+    const pending = current.status === "pending" && !expired;
+    return !enabled ? null : (
+        <div className="min-w-0 flex-1 py-2" data-inbox-decision-control="true" onClick={(event) => event.stopPropagation()}>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-dense">
+                <span>{request.agentName}</span>
+                <span className="text-text-light-gray">Board access · {request.boardName}</span>
+                <CreatedAtDesktop />
+                <CreatedAtMobile />
+            </div>
+            <article aria-label="Board access decision" className="rounded border border-comment-description-border shadow-md bg-comment-description text-white-black my-[8px] p-4">
+                <header className="mb-3 flex items-center justify-between gap-2 text-dense">
+                    <span>{request.agentName}</span>
+                    <CreatedAtDesktop />
+                    <CreatedAtMobile />
+                </header>
+                <div className="space-y-3 text-content">
+                    <p><strong>{request.agentName} asks to join {request.boardName} as a member</strong></p>
+                    <p className="whitespace-pre-wrap break-words">Question: {request.reason}</p>
+                    <p className="text-dense text-text-light-gray">
+                        {request.sameTeam
+                            ? `Only you, this agent’s owner, can approve. ${request.boardName} is in the same team. Adds a plain member, exactly like ticking Board access; no role changes.`
+                            : `Agent belongs to another team. ${request.boardName} is in a different team from this agent. This request cannot be approved.`}
+                    </p>
+                    {(!pending || error) && <p role="status" className="text-dense text-text-light-gray">{error ?? (expired ? "This request has expired. No access was added." : current.status === "approved" && current.accessPresent
+                        ? `Approved · ${request.agentName} added to ${request.boardName} as a member. No role changed.`
+                        : current.status === "declined" ? `Declined · No access added. ${request.agentName} has been told.` : current.nextStep)}</p>}
+                    <Link className="text-dense text-hypertasks-purple" href={`/agents/${request.agentId}?boardAccess=${request.projectId}`}>Board access →</Link>
+                </div>
+                {pending && <div className="mt-3 flex justify-end gap-2">
+                    <button type="button" disabled={busy} onClick={() => void decide("decline")} className="rounded-[4px] px-3 py-1.5 text-dense text-text-light-gray hover:bg-hoverCardBackground disabled:opacity-50">Decline</button>
+                    <button type="button" disabled={busy || !current.canApprove} onClick={() => void decide("approve")} className="rounded-[4px] bg-shadcn-primary px-3 py-1.5 text-dense font-medium text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50">Approve</button>
+                </div>}
+            </article>
+        </div>
+    );
+}

@@ -1,5 +1,8 @@
 "use client";
 
+import { AgentBoardAccessDecision } from "../NotificationRow";
+
+import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import { HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-8142-inbox-keyboard-focus";
 import { HTPR_8148_INBOX_TAB_SELECTION_FLAG } from "@/lib/flags/definitions/htpr-8148-inbox-tab-selection";
 import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-8083-inbox-boundaries";
@@ -200,6 +203,8 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const boardAccessDecisions = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
+  const boardAccessDecisionCard = boardAccessDecisions ? <AgentBoardAccessDecision /> : null;
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
   const tabScopedSelection = useFlag(HTPR_8148_INBOX_TAB_SELECTION_FLAG);
   const inboxBoundaryOrder = useFlag(HTPR_8083_INBOX_BOUNDARIES_FLAG);
@@ -277,7 +282,7 @@ const InboxSplit = ({
         notification,
         notificationIndex,
         date: new Date(notification.createdAt || 0),
-      })),
+      })).filter(item => boardAccessDecisions || item.notification.type !== "AgentBoardAccessRequest"),
       ...activeDrafts.map((draft) => ({
         kind: "draft" as const,
         draft,
@@ -290,7 +295,7 @@ const InboxSplit = ({
       selectedSplit === "Blocked by you",
       snapshot,
     );
-  }, [_notifications, activeDrafts, selectedSplit, snapshot]);
+  }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
   const keyboardRows = useMemo<InboxKeyboardTimelineRow[]>(
     () =>
@@ -450,6 +455,7 @@ const InboxSplit = ({
   };
 
   const toggleSubtaskLinking = () => {
+    if (selectedKeyboardRow?.item.kind !== "notification" || !selectedKeyboardRow.item.notification.task) return;
     setShowSubtaskLinkingModal((prev) => !prev);
   };
   const bulkActions: BulkAction<number>[] = [
@@ -485,7 +491,8 @@ const InboxSplit = ({
     if (value !== index) return;
     if (
       e.target instanceof Element &&
-      e.target.closest('[data-inbox-draft-control="true"]')
+      (e.target.closest('[data-inbox-draft-control="true"]') ||
+        e.target.closest('[data-inbox-decision-control="true"]'))
     ) {
       return;
     }
@@ -688,7 +695,7 @@ const InboxSplit = ({
       void eHandler(cmdControl, undefined, "keyboard");
     }
 
-    if (e.keyCode === KeyCodes.S && e.altKey) {
+    if (e.keyCode === KeyCodes.S && e.altKey && selectedNotification.task) {
       e.preventDefault();
       return starTaskUpdateInCache(selectedNotification);
     }
@@ -721,7 +728,7 @@ const InboxSplit = ({
           const result = await markAsDone(
             targetNotification,
             index,
-            cmdControl ? "Task" : "Notification",
+            cmdControl && targetNotification.task ? "Task" : "Notification",
           );
           succeeded = result !== false;
         } catch (error) {
@@ -833,7 +840,7 @@ const InboxSplit = ({
         ? selectedKeyboardRow.item.notification
         : undefined;
     const clickTarget = notification ?? selectedInbox;
-    if (!clickTarget) return;
+    if (!clickTarget || clickTarget.type === "AgentBoardAccessRequest") return;
 
     if (
       clickTarget.type === "Invited" &&
@@ -1075,7 +1082,7 @@ const InboxSplit = ({
                         displayAvatar={preferencesUpdatedAt === 0 && inboxDocument ? inboxDocument.data.displayAvatar : userPreferences?.displayAvatar}
                       >
                         <MaybeSwipeable
-                          enabled={isMbl && !isWaitingOnSynthetic}
+                          enabled={isMbl && !isWaitingOnSynthetic && notification.type !== "AgentBoardAccessRequest"}
                           onArchive={() =>
                             void eHandler(false, globalIndex, "swipe")
                           }
@@ -1162,7 +1169,9 @@ const InboxSplit = ({
                                 ))}
                               <Seen notification={notification} />
                             </div>
-                            {notification.type === "AgentMessage" ? (
+                            {notification.type === "AgentBoardAccessRequest" ? (
+                              <div id={`inbox-${notification.id}`} className="min-w-0 flex-1">{boardAccessDecisionCard}</div>
+                            ) : notification.type === "AgentMessage" ? (
                               <div
                                 className={
                                   appShellRail ? "min-w-0 flex-1" : "w-full"

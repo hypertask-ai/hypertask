@@ -169,26 +169,6 @@
           "^hypertask_request_board_access$",
           "^hypertask_get_board_access_request$"
         ]
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7582",
-          "expires": "2026-11-27",
-          "entries": [
-            "POST /api/mcp/agents/board-access-requests",
-            "GET /api/mcp/agents/board-access-requests/[requestId]"
-          ]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7582",
-          "expires": "2026-11-27",
-          "entries": ["hypertask_request_board_access", "hypertask_get_board_access_request"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7582",
-          "expires": "2026-11-27",
-          "entries": ["hypertask_request_board_access", "hypertask_get_board_access_request"]
-        }
       }
     },
     {

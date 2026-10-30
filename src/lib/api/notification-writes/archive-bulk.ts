@@ -1,3 +1,4 @@
+import { BoardAccessError, mutateBoardAccessNotification } from "@/lib/agents/boardAccessRequests/service";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
@@ -36,10 +37,39 @@ const route = taskWriteRoute({
       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
     }
 
+    const accessRows = await prisma.notification.findMany({
+      where: { id: { in: validEntries.map(({ notificationId }) => Number(notificationId)) }, type: "AgentBoardAccessRequest" },
+      select: { id: true },
+    });
+    const accessIds = new Set(accessRows.map(({ id }) => id));
+    for (const entry of validEntries) {
+      if (!accessIds.has(Number(entry.notificationId))) continue;
+      if (archiveStatus !== "Normal" && archiveStatus !== "Archive") return NextResponse.json({ message: "Invalid status" }, { status: 400 });
+      if (session.agentId || session.source === "cli-bearer" || entry.taskId != null) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+    const committedAccessIds: number[] = [];
+    for (const id of accessIds) {
+      try {
+        await mutateBoardAccessNotification(session, id, null, { status: archiveStatus as "Normal" | "Archive" });
+        committedAccessIds.push(id);
+      } catch (error) {
+        if (!(error instanceof BoardAccessError)) throw error;
+        if (committedAccessIds.length > 0) {
+          void broadcastInboxChange(session.userId, { originUserId: session.userId },
+            socketIdFromHeader(request.rawHeaders ? request.rawHeaders["x-socket-id"] : request.headers.get("x-socket-id")));
+        }
+        return NextResponse.json({
+          message: error.message,
+          archivedCount: committedAccessIds.length,
+          partial: committedAccessIds.length > 0,
+        }, { status: error.status });
+      }
+    }
     const restoreInbox = archiveStatus === "Normal";
 
-    const notificationIdList = validEntries.map(({ notificationId }) => notificationId);
-    const taskIds = [...new Set(validEntries.map(({ taskId }) => taskId).filter(Boolean))];
+    const taskEntries = validEntries.filter(({ notificationId }) => !accessIds.has(Number(notificationId)));
+    const notificationIdList = taskEntries.map(({ notificationId }) => notificationId);
+    const taskIds = [...new Set(taskEntries.map(({ taskId }) => taskId).filter(Boolean))];
     const archivedAt = restoreInbox ? null : new Date();
 
     const result = await prisma.$transaction(async (tx) => {
@@ -81,7 +111,7 @@ const route = taskWriteRoute({
 
     return NextResponse.json({
       message: "Notifications processed successfully",
-      archivedCount: result.totalArchived,
+      archivedCount: result.totalArchived + accessIds.size,
       deletedCount: result.totalDeleted,
     }, { status: 200 });
   },

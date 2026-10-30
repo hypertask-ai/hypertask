@@ -38,7 +38,7 @@ export function createInboxArchiveTool(context: ToolContext) {
             return { success: false, error: "List this exact batch again and supply its list_tokens. Nothing was archived." };
           }
           const result = await prisma.$transaction(async (tx) => {
-            const scope = { userId: user.id, agentId: context.actingAgentId, status: "Normal", archivedAt: null } satisfies Prisma.NotificationWhereInput;
+            const scope = { type: { not: "AgentBoardAccessRequest" }, userId: user.id, agentId: context.actingAgentId, status: "Normal", archivedAt: null } satisfies Prisma.NotificationWhereInput;
             const selected = await tx.notification.findMany({
               where: { ...scope, id: { in: ids } },
               select: { id: true, taskId: true },
@@ -98,7 +98,7 @@ export function createInboxArchiveTool(context: ToolContext) {
         }
         if (!input.notification_ids) return { success: false, error: "notification_ids are required." };
         const notifications = await prisma.notification.findMany({
-          where: { id: { in: input.notification_ids }, userId: user.id },
+          where: { id: { in: input.notification_ids }, userId: user.id, type: { not: "AgentBoardAccessRequest" } },
           select: { taskId: true },
         });
         const taskIds = notifications
@@ -113,6 +113,7 @@ export function createInboxArchiveTool(context: ToolContext) {
               taskId: { in: taskIds },
               userId: user.id,
               agentId: null,
+              type: { not: "AgentBoardAccessRequest" },
               status: "Normal",
             },
             data: { status: "Archive", archivedAt },
@@ -120,7 +121,7 @@ export function createInboxArchiveTool(context: ToolContext) {
         }
 
         const result = await prisma.notification.updateMany({
-          where: { id: { in: input.notification_ids }, userId: user.id },
+          where: { id: { in: input.notification_ids }, userId: user.id, type: { not: "AgentBoardAccessRequest" } },
           data: { status: "Archive", archivedAt },
         });
 

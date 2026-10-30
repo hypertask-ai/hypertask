@@ -2,14 +2,14 @@ import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import { notificationWriteJson } from "./response";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import notificationGetCount from "@/utils/controllers/notifications/getCount";
+import notificationGetCount from "@/utils/controllers/notifications/getCountWithBoardAccessRequests";
 
 const getRoute = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Invalid request",
   allowNullBody: true,
   operation: async (_body, session) => {
-    const response = await notificationGetCount(session.userId);
+    const response = await notificationGetCount(session.userId, session);
     return notificationWriteJson(response.json, response.status);
   },
 });

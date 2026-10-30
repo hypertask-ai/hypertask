@@ -15,7 +15,7 @@ Module._load = function (id, ...args) { return id === 'server-only' ? {} : origi
 let cookies = {}, requestHeaders, enabled, calls, response, delay, fail, drafts, access;
 const user = { id: 985, uid: 'qa', displayName: 'QA', email: 'qa@example.invalid', stripe_customer_id: 'billing-secret',
   UserSetting: { id: 1, onboardingTourStatus: true, snippets: 'private-settings' } };
-mock('next/headers', { cookies: async () => ({ get: key => cookies[key] ? { value: cookies[key] } : undefined }), headers: async () => requestHeaders });
+mock('next/headers', { cookies: async () => ({ get: key => cookies[key] ? { value: cookies[key] } : undefined }), headers: async () => { const headers = new Headers(requestHeaders); headers.set('cookie', Object.entries(cookies).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('; ')); return headers; } });
 mock('src/lib/prisma.ts', { __esModule: true, default: { user: { findUnique: async ({ where }) => where.id === 985 ? user : null } } });
 mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true }; } });
 mock('src/utils/controllers/notifications/getAll.ts', { __esModule: true, default: async id => {

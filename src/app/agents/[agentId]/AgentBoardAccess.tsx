@@ -1,5 +1,10 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
+
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import Link from "next/link";
@@ -41,6 +46,17 @@ export function AgentBoardAccess({
   saveVisibility, boardToRemove, manageOpen, setManageOpen, archiving, handleArchiveToggle,
   deleting, handleDelete,
 }: Props) {
+  const params = useSearchParams();
+  const accessRequestsEnabled = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
+  const rawBoardId = Number(params?.get("boardAccess"));
+  const requestedBoardId = accessRequestsEnabled && Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
+  const [openedRequestedBoard, setOpenedRequestedBoard] = useState<number | null>(null);
+  if (accessRequestsEnabled && requestedBoardId !== null && requestedBoardId !== openedRequestedBoard) {
+    setOpenedRequestedBoard(requestedBoardId);
+  }
+  useEffect(() => {
+    if (openedRequestedBoard !== null) setBoardAccessOpen(true);
+  }, [openedRequestedBoard, setBoardAccessOpen]);
   return (
     <>
             <div className="mt-6 bg-cardBackground rounded-[4px] shadow-md">
@@ -80,7 +96,7 @@ export function AgentBoardAccess({
                       return (
                         <div
                           key={board.id}
-                          className="flex items-start gap-3 border-t border-comment-description-border py-3 first:border-t-0"
+                          className={cn("flex items-start gap-3 border-t border-comment-description-border py-3 first:border-t-0", board.id === requestedBoardId && "bg-active-elementBg")}
                         >
                           <input
                             type="checkbox"

@@ -17,7 +17,7 @@ export const notificationBulkArchiveBodySchema = z.object({
 });
 export const notificationResponseSchema = z.looseObject({
   id,
-  type: z.enum(["Assigned", "Comment", "Invited", "Reacted", "TaskArchived", "TaskMoved", "TaskDueDate", "AddedToFollowerInTask", "TaskReminder", "TaskMovedToInbox", "TaskUpdateDescription", "TaskOverdue", "Mentioned", "AgentMessage"]),
+  type: z.enum(["Assigned", "Comment", "Invited", "Reacted", "TaskArchived", "TaskMoved", "TaskDueDate", "AddedToFollowerInTask", "TaskReminder", "TaskMovedToInbox", "TaskUpdateDescription", "TaskOverdue", "Mentioned", "AgentMessage", "AgentBoardAccessRequest"]),
   userId: id,
   taskId: id.nullable(),
   projectId: id.nullable(),

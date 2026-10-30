@@ -9,7 +9,7 @@ const getRoute = taskWriteRoute({
   validationMessage: "Invalid request",
   allowNullBody: true,
   operation: async (_body, session) => {
-    const response = await notificationGetAll(String(session.userId))
+    const response = await notificationGetAll(String(session.userId), session)
     return notificationWriteJson(response.json, response.status);
   },
 });

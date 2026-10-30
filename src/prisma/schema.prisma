@@ -138,6 +138,7 @@ enum NotificationType {
   TaskOverdue
   Mentioned
   AgentMessage
+  AgentBoardAccessRequest
 }
 
 enum SortingMode {
@@ -944,6 +945,8 @@ model Project {
   @@index([teamId, status])
   @@index([ownerId, teamId, status])
   
+  boardAccessRequests AgentBoardAccessRequest[]
+
 }
 
 model ProjectPrefixAlias {
@@ -1623,6 +1626,43 @@ model Drafts {
   @@unique([taskId, type, userId])
 }
 
+enum AgentBoardAccessRequestStatus {
+  pending
+  approved
+  declined
+  expired
+  cancelled
+}
+
+model AgentBoardAccessRequest {
+  id                          String @id @default(uuid())
+  agentId                     String?
+  agent                       Agent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  projectId                   Int?
+  project                     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  agentIdAtRequest            String
+  projectIdAtRequest          Int
+  ownerUserIdAtRequest        Int
+  targetTeamIdAtRequest       String
+  credentialTeamId            String?
+  credentialTeamAccessBinding String?
+  tokenGeneration             String?
+  runtimeGeneration           Int
+  reason                      String @db.VarChar(1000)
+  createdAt                   DateTime @default(now())
+  expiresAt                   DateTime
+  status                      AgentBoardAccessRequestStatus @default(pending)
+  resolvedAt                  DateTime?
+  decidedByUserId             Int?
+  resolutionReason            String?
+  memberId                    Int?
+  member                      Member? @relation(fields: [memberId], references: [id], onDelete: SetNull)
+  notification                Notification?
+
+  @@index([ownerUserIdAtRequest, status, expiresAt], map: "AgentBoardAccessRequest_ownerUserIdAtRequest_status_expiresAt_i")
+  @@index([agentId, createdAt])
+}
+
 model DecisionRequest {
   id           Int                   @id @default(autoincrement())
   taskId       Int
@@ -1722,6 +1762,8 @@ model Member {
 
   @@unique([projectId, agentId])
   @@index([userId, projectId]) // For finding user's projects
+  boardAccessRequests AgentBoardAccessRequest[]
+
 }
 
 model Member_Team {
@@ -2121,6 +2163,9 @@ model Notification {
   @@index([agentId, taskId, type, agentReplyConsumedAt])
   @@index([assignId])
   @@index([commentId])
+  boardAccessRequestId String? @unique
+  boardAccessRequest AgentBoardAccessRequest? @relation(fields: [boardAccessRequestId], references: [id], onDelete: Cascade)
+
 }
 
 model Reminder {
@@ -2736,6 +2781,8 @@ model Agent {
 
   @@index([userId])
   @@index([userId, revokedAt])
+  boardAccessRequests AgentBoardAccessRequest[]
+
 }
 
 model AgentRun {

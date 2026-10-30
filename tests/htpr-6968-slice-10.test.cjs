@@ -68,6 +68,7 @@ function fixture(name, scenario = {}) {
   });
   const db = {
     notification: {
+      findMany: async args => structuredClone(rows.filter(row => matches(row, args.where))),
       findFirst: async args => {
         step("findFirst", args);
         const found = rows.filter(row => matches(row, args.where));
@@ -107,6 +108,7 @@ function fixture(name, scenario = {}) {
     broadcastInboxChange: (...args) => { step("inbox-realtime", ...args); },
   };
   const mocks = {
+    "./board-access": { boardAccessNotificationWrite: async () => null },
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
@@ -349,5 +351,28 @@ for (const name of Object.keys(endpoints)) for (const scenario of [{}, { noAuth:
     const fx = fixture(name, scenario), actual = await quiet(() => wire(fx, name, scenario, "current"));
     assert.ok(actual.headers["content-type"].includes("application/json"));
     pin(`http ${name} ${JSON.stringify(scenario)}`, { actual, effects: fx.effects });
+  });
+}
+
+for (const [name, field] of [["markAsDone", "id"], ["markAsUnseen", "notificationId"]]) {
+  for (const value of ["20tail", "invalid", "0", ["20", "21"]]) {
+    test(`${name}: malformed notification ID ${JSON.stringify(value)} refuses before writes`, async () => {
+      const scenario = { query: { [field]: value, taskId: "42" } };
+      const fx = fixture(name, scenario);
+      const result = await invoke(fx, name, scenario, "current");
+      assert.equal(result.status, 400);
+      assert.deepEqual(result.body, { message: "Invalid notification id" });
+      assert.deepEqual(fx.effects, []);
+      assert.equal(fx.rows[0].status, "Normal");
+      assert.equal(fx.rows[0].seen, false);
+    });
+  }
+  test(`${name}: valid notification ID retains ordinary owner writes`, async () => {
+    const scenario = { query: { [field]: "20", ...(name === "markAsDone" ? { taskId: "42" } : {}), seen: "0" } };
+    const fx = fixture(name, scenario);
+    assert.equal((await invoke(fx, name, scenario, "current")).status, 200);
+    assert.equal(fx.rows[0][name === "markAsDone" ? "status" : "seen"], name === "markAsDone" ? "Archive" : true);
+    assert.equal(fx.rows.find(row => row.id === 23).status, "Normal");
+    assert.equal(fx.rows.find(row => row.id === 23).seen, false);
   });
 }

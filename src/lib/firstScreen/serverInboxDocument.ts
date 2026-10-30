@@ -1,3 +1,4 @@
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import "server-only";
 import { cache } from "react";
 import { randomUUID } from "node:crypto";
@@ -21,13 +22,15 @@ export async function readInboxDocument(route: string, displayCookie: string | u
   if (url.pathname !== "/inbox" || url.searchParams.has("tutorial")) return null;
   const user = await getServerCookieUser();
   if (!user || performance.now() > deadline) return null;
+  const principal = await getSessionUser(await headers());
+  if (!principal || principal.userId !== user.id) return null;
   const display = parseBoardDisplay(displayCookie, user.id);
   if (!display?.inbox || typeof display.inbox.nudgeDismissed !== "boolean" || typeof display.inbox.pushEnabled !== "boolean" ||
       !["default", "granted", "denied"].includes(display.inbox.pushPermission)) return null;
   const flags = await featureFlagsForUser(user.id);
   if (flags[BOARD_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
   const [response, projectIds, drafts, preferences] = await Promise.all([
-    notificationGetAll(String(user.id)), getInboxAccessibleProjectIds(user.id),
+    notificationGetAll(String(user.id), principal), getInboxAccessibleProjectIds(user.id),
     getUserDrafts(user.id), fetchUserPreferenceController(user.id),
   ]);
   if (performance.now() > deadline || response.status !== 200 || !("notifications" in response.json) ||
@@ -36,7 +39,8 @@ export async function readInboxDocument(route: string, displayCookie: string | u
   if (raw.notifications.some(row => row.userId === user.id && row.type === "AgentMessage" && !row.task && !row.projectId)) return null;
   const accessible = new Set(projectIds);
   const rows = raw.notifications.filter(row => row.userId === user.id &&
-    ((row.type === "Invited" && !row.task && !row.projectId) ||
+    ((!principal.agentId && row.type === "AgentBoardAccessRequest" && row.boardAccessRequest) ||
+      (row.type === "Invited" && !row.task && !row.projectId) ||
       (accessible.has(row.projectId) && (!row.task || accessible.has(row.task.projectId)))));
   for (const row of rows) {
     if (row.fromUser) delete row.fromUser.email;

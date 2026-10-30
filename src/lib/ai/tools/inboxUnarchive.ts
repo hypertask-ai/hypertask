@@ -22,6 +22,7 @@ export function createInboxUnarchiveTool(context: ToolContext) {
           where: {
             id: { in: input.notification_ids },
             userId: user.id,
+            type: { not: "AgentBoardAccessRequest" },
             status: "Archive",
           },
           data: {

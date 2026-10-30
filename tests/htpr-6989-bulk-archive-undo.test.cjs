@@ -44,6 +44,7 @@ function fixture(api, original = false) {
     return value instanceof Date ? row[key]?.getTime() === value.getTime() : row[key] === value;
   });
   const notification = {
+    findMany: async ({ where }) => structuredClone(rows.filter(row => matches(row, where))),
     findFirst: async ({ where }) => structuredClone(rows.find(row => matches(row, where)) ?? null),
     findUnique: async ({ where }) => structuredClone(rows.find(row => matches(row, where)) ?? null),
     updateMany: async ({ where, data }) => {

@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { actor, loadTs } = require("./slack-app-fixtures.cjs");
 
-function fixture() {
+function fixture(notificationType = "Comment") {
   const calls = [], scopes = [];
   const task = { id: 10, projectId: 15, uniqueIndex: 10, ticketNumber: "HTPR-10", title: "Task", userId: 11, sectionId: 1, section: "Todo", status: "Normal", project: { title: "Web" } };
   const record = (name) => async (...args) => { calls.push({ name, args }); return { status: 200, json: {}, body: {} }; };
@@ -18,7 +18,7 @@ function fixture() {
       task: { findFirst: scopedTask, count: async ({ where }) => { scopes.push(where); return 1; }, findMany: async ({ where }) => { scopes.push(where); return [task]; } },
       section: { findFirst: async () => ({ id: 2, section_title: "Done" }), findMany: async () => [{ id: 1, section_title: "Todo" }] },
       follower: { deleteMany: record("remove-follower") },
-      notification: { findFirst: async ({ where }) => { scopes.push(where); return { id: 8, taskId: 10 }; }, updateMany: record("notification-siblings"), update: record("archive-inbox") },
+      notification: { findFirst: async ({ where }) => { scopes.push(where); return where.type?.not === notificationType ? null : { id: 8, taskId: notificationType === "AgentBoardAccessRequest" ? null : 10 }; }, updateMany: record("notification-siblings"), update: record("archive-inbox") },
       priority: { findUnique: async () => null, upsert: record("priority"), deleteMany: record("priority-delete") },
     } },
     "@/lib/realtime/server": Object.fromEntries(["broadcastBoardChange", "broadcastInboxChange", "broadcastTaskChange", "broadcastTaskComment"].map((name) => [name, record(name)])),
@@ -89,4 +89,17 @@ test("required action parameters reject empty and malformed writes", async () =>
     ["move_task", { ticket: "HTPR-10" }], ["add_comment", { ticket: "HTPR-10" }],
     ["assign_user", { ticket: "HTPR-10" }], ["archive_inbox", { notificationId: "bad" }],
   ]) await assert.rejects(executeSlackAction(actor, { action, params }), /required|positive integer/);
+});
+
+test("Slack archive refuses board-access request notifications", async () => {
+  const { executeSlackAction, calls } = fixture("AgentBoardAccessRequest");
+  const result = await executeSlackAction(actor, { action: "archive_inbox", params: { notificationId: "8" } });
+  assert.match(JSON.stringify(result), /not found|access denied/i);
+  assert.ok(!calls.some(({ name }) => name === "archive-inbox" || name === "notification-siblings"));
+});
+test("Slack archive still archives ordinary notification and removes task siblings", async () => {
+  const { executeSlackAction, calls } = fixture();
+  await executeSlackAction(actor, { action: "archive_inbox", params: { notificationId: "8" } });
+  assert.ok(calls.some(({ name }) => name === "archive-inbox"));
+  assert.ok(calls.some(({ name }) => name === "notification-siblings"));
 });

@@ -92,6 +92,10 @@ test("inbox content remains identical, with parser code needed only by seeded se
   const noop = () => null;
   const mocks = {
     "next/dynamic": { default: () => Seeded },
+    "@tanstack/react-query": { useQueryClient: () => ({ invalidateQueries: () => Promise.resolve() }) },
+    "@/lib/inboxQueryKeys": { INBOX_QUERY_KEY: ["inbox"] },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-7582-agent-access-request": { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG: "htpr-7582-agent-access-request" },
     "next/link": { default: noop },
     "@/models/model": {},
     "@/utils/generateTime": { default: () => "today" },

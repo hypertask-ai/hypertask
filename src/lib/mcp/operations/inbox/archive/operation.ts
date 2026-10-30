@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: user.id,
+        type: { not: 'AgentBoardAccessRequest' },
         ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}),
         ...(remindAt ? { status: 'Normal' as const } : {}),
       },
@@ -121,7 +122,7 @@ export async function POST(request: NextRequest) {
           await lockTaskTeamScope(tx, candidateTaskId, user.id, ctx.agentId, ctx.teamScope)
         }
         const lockedNotifications = await tx.notification.findMany({
-          where: { id: { in: notificationIds }, userId: user.id, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
+          where: { id: { in: notificationIds }, userId: user.id, type: { not: 'AgentBoardAccessRequest' }, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
           select: { id: true, taskId: true, projectId: true },
         })
         if (
@@ -177,7 +178,7 @@ export async function POST(request: NextRequest) {
           }
         }
         await tx.notification.updateMany({
-          where: { userId: user.id, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
+          where: { userId: user.id, type: { not: 'AgentBoardAccessRequest' }, taskId: { in: tasks.map((item) => item.taskId!) }, status: 'Normal', ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}) },
           data: { status: 'Archive', archivedAt: new Date() },
         })
         return saved
@@ -214,6 +215,7 @@ export async function POST(request: NextRequest) {
         id:{notIn:notificationIds},
         taskId:{in:taskIds},
         userId:user.id,
+        type: { not: "AgentBoardAccessRequest" },
         ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}),
         status:{not:"Deleted"}
       },
@@ -226,6 +228,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: { in: notificationIds },
         userId: user.id,
+        type: { not: 'AgentBoardAccessRequest' },
         ...(ctx.agentId || ctx.teamScope != null ? { AND: [notificationBoardAccessWhere(user.id, ctx.agentId, ctx.teamScope)] } : {}),
       },
       data: {

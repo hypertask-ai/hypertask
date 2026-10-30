@@ -1,3 +1,4 @@
+import { boardAccessCatalog } from "./board-access-catalog";
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
 import { observeFeedbackTools, queueAiFeedback, queueMcpAuthFailure } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
@@ -147,7 +148,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       tool.name === presenceTool.name ? presenceTool : tool,
     )
     const actAsAgent = await actAsAgentAvailable(ctx)
-    const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+    const availableTools = await boardAccessCatalog(resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback'), ctx)
     const portableTools = observeFeedbackTools(selectMcpTools(
       availableTools,
       true,

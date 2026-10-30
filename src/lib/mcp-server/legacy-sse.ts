@@ -1,3 +1,4 @@
+import { boardAccessCatalog } from "./board-access-catalog";
 import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
 import { observeFeedbackTools } from '@/lib/aiFeedback/automatic'
 import { rememberFeedbackClient } from '@/lib/aiFeedback/clientInfo'
@@ -191,9 +192,9 @@ export async function handleLegacySseRequest(
               const feedbackEnabled = await aiFeedbackEnabled(userId)
               const presenceTool = await getAgentPresenceTool(userId)
               const actAsAgent = Boolean(ctx && await actAsAgentAvailable(ctx))
-              const available = tools
+              const available = await boardAccessCatalog(tools
                 .filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
-                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool)
+                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool), ctx)
               const catalog = observeFeedbackTools(selectMcpTools(available, true, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,

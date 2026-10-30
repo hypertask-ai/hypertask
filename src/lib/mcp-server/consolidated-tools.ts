@@ -23,6 +23,7 @@ const RENAMED_PARAMETERS: Record<string, string> = {
 }
 
 function canCall(action: Action, caller: ToolCaller): boolean {
+  if (action.permission === 'agent_data' && (!caller.agent || caller.managementPermissions)) return false
   if (action.permission === 'feedback') return true
   if (caller.agentRole === 'read' && !action.read_only) return false
   const permissions = caller.managementPermissions

@@ -120,6 +120,7 @@ function fixture(endpoint, scenario = {}) {
   };
   // HTPR-7092: all-read reads through the Decisions wrapper, a pass-through while its flag is off.
   mocks["@/utils/controllers/notifications/getAllWithDecisions"] = mocks["@/utils/controllers/notifications/getAll"];
+  mocks["@/utils/controllers/notifications/getCountWithBoardAccessRequests"] = mocks["@/utils/controllers/notifications/getCount"];
   mocks["@/lib/inboxSplitSettings"] = load("src/lib/inboxSplitSettings.ts", mocks);
   const web = load(`src/lib/api/notification-writes/${endpoint.module}.ts`, mocks)[endpoint.method];
   const routeModule = {};
