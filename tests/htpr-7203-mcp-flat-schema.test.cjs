@@ -52,7 +52,8 @@ for (const Validator of [Ajv, Ajv2020]) {
 test('flag Off preserves the old schema exactly, including each action input schema', () => {
   const humanDefinitions = definitions.map((definition) => ({ ...definition, actions: Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => action.permission !== 'agent_data')) }))
   const previous = loader({ './config/consolidated-descriptions': { CONSOLIDATED_TOOL_DESCRIPTIONS: humanDefinitions } }, true)('src/lib/mcp-server/consolidated-tools.ts')
-  const before = visible(previous.selectMcpTools(legacy, true, {}))
+  const humanTools = new Set(humanDefinitions.flatMap((definition) => Object.values(definition.actions).map((action) => action.tool)))
+  const before = visible(previous.selectMcpTools(legacy.filter((tool) => humanTools.has(tool.name)), true, {}))
   const off = visible(selectMcpTools(legacy, true, {}, false))
   const on = visible(selectMcpTools(legacy, true, {}, true))
   const withoutFeedback = (tools) => tools.filter((tool) => tool.name !== 'hypertask_report_feedback').map((tool) => tool.inputSchema)
