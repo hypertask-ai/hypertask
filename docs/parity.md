@@ -27,7 +27,7 @@ The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Revi
 | **Create, archive, invite to, and configure boards** | ✅ 7 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
 | **Manage labels, columns, and custom fields** | ✅ 10 | ✅ 5 (transition) | ✅ 15 (transition) | ✅ 5 (transition) | ✅ 5 (transition) |
 | **Read, add, edit, and delete task comments** | ✅ 5 | ✅ 4 | ✅ 7 | ✅ 4 | ✅ 4 |
-| **Read and triage inbox notifications** | ✅ 6 (transition) | ✅ 4 (transition) | ✅ 6 (transition) | ✅ 4 (transition) | ✅ 4 (transition) |
+| **Read and triage inbox notifications** | ✅ 6 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
 | **Create, read, search, update, archive, and restore pages** | ✅ 8 | ✅ 6 | ✅ 9 | ✅ 6 | ✅ 6 |
 | **Create, read, update, and delete saved reports** | ✅ 6 | ✅ 1 | ✅ 5 | ✅ 5 | ✅ 1 |
 | **Create, read, update, delete, and switch saved views** | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 |

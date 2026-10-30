@@ -397,38 +397,11 @@
       "id": "inbox.manage",
       "title": "Read and triage inbox notifications",
       "matches": {
-        "api": ["^(GET|POST) /api/mcp/inbox/(list|composition|archive|unarchive|seen|move)$", "^POST /api/mcp/tasks/follow$"],
-        "mcp": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$", "^hypertask_follow_task$"],
-        "cli": ["^(inbox (list|composition|archive|unarchive)|task move-to-inbox)$", "^messages poll$", "^task follow$"],
-        "ai_chat": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$", "^hypertask_follow_task$"],
-        "hyperai": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$", "^hypertask_follow_task$"]
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["POST /api/mcp/tasks/follow"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_follow_task"]
-        },
-        "cli": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["task follow"]
-        },
-        "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_follow_task"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_follow_task"]
-        }
+        "api": ["^(GET|POST) /api/mcp/inbox/(list|composition|archive|unarchive|seen|move)$"],
+        "mcp": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"],
+        "cli": ["^(inbox (list|composition|archive|unarchive)|task move-to-inbox)$", "^messages poll$"],
+        "ai_chat": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"],
+        "hyperai": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$"]
       }
     },
     {
