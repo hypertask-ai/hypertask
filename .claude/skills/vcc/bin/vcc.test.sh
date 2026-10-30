@@ -110,6 +110,14 @@ for option in --help -h --h --help=true -h=true --version -V --V --version=true 
   allowed bash "$vcc" activity add X-1 hi "$option"
   allowed bash "$vcc" task move X-1 --section Done "$option"
 done
+for option in -h -V; do
+  allowed bash "$vcc" comment add X-1 --kind qa --text 'Outputs: private' "$option"
+  [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <qa> <--text> <Outputs: private> <$option>" ]] || fail 'help changed refused content arguments'
+  refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --kind qa --text 'Outputs: private' "$option"
+  allowed bash "$vcc" task update X-1 --description 'Outputs: private' "$option"
+  [[ $(< "$T/out") == "stub: <task> <update> <X-1> <--description> <Outputs: private> <$option>" ]] || fail 'help changed refused description arguments'
+  refused env VCC_HELPER=1 bash "$vcc" task update X-1 --description 'Outputs: private' "$option"
+done
 for value in --help -h --version -V; do
   allowed bash "$vcc" comment add X-1 --kind qa --text "$value"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <qa> <--text> <$value>" ]] || fail 'option values changed'

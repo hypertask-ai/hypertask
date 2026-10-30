@@ -188,8 +188,8 @@ people_content() {
     exit 5
   fi
 }
-people_content "$@"
 if [ "$HELP_REQUESTED" != true ]; then
+  people_content "$@"
   question_comment "${CHECK_ARGS[@]}"
 fi
 # Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
