@@ -250,7 +250,7 @@ assert len([c for c in calls if c[:3] == ['hypertask','comment','list']]) == 2, 
 assert '\tHTPR-1\t' in r.stdout, r.stdout
 print('ok a busy ticket without a claim is reported instead of failing the scan')
 f = dict(tasks=[task(1),task(2)],comments={'HTPR-1':[],'HTPR-2':[]},
-         activities={'HTPR-1':iso(1)+'\tAgent One\n'},prs=[])
+         activities={'HTPR-1':iso(8)+'\tAgent One\n'},prs=[])
 r, calls = run(f)
 assert r.returncode == 0, r.stderr
 assert '\tHTPR-1\t' in r.stdout and '\tHTPR-2\t' in r.stdout, r.stdout
