@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 // Every saved incident reached its fixer after the automatic rerun, so replay it at attempt 2.
 const fixture = name => {
   const data = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${name}.json`), 'utf8'));
-  data.run.run_attempt = 2; data.firstRed.run_attempt = 2;
+  if (data.run && data.firstRed) { data.run.run_attempt = 2; data.firstRed.run_attempt = 2; }
   return data;
 };
 const tasks = fixture('tasks');
