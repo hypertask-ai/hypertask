@@ -45,7 +45,11 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   }, [favoritesTQ]);
 
   useEffect(() => {
-    setCurrentBoardBilling(deriveCurrentBoardBilling(_currentProject, savedPlanOnly));
+    setCurrentBoardBilling(
+      savedPlanOnly
+        ? deriveCurrentBoardBilling(_currentProject, true)
+        : deriveCurrentBoardBilling(_currentProject),
+    );
   }, [_currentProject, savedPlanOnly, setCurrentBoardBilling]);
 
   return {
