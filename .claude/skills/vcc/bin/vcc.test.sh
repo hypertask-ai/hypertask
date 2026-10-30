@@ -450,5 +450,14 @@ completion_refused env VCC_TEST_SECTIONS=broken bash "$vcc" task move YPER4-864 
 mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
 printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
 completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done
+cp "$HOME/.agents/skills/ship/scripts/ship-identity" "$T/identity-good"
+: > "$HOME/empty-token"
+printf '#!/usr/bin/env bash\nprintf "RUNNER 9\\t%%s/empty-token\\n" "$HOME"\n' > "$HOME/.agents/skills/ship/scripts/ship-identity"
+run bash "$vcc" comment add YPER4-864 --kind qa --text hi
+[ "$status" = 4 ] || fail "missing agent token must refuse, got $status"
+grep -q 'refusing to fall back to the owner login' "$T/err" || fail 'missing agent token refusal message'
+! grep -q '^hypertask ' "$VCC_TEST_TRACE" || fail 'missing agent token still reached the CLI'
+cp "$T/identity-good" "$HOME/.agents/skills/ship/scripts/ship-identity"
+allowed bash "$vcc" comment add YPER4-864 --kind qa --text hi
 printf 'ok real checker requires merged PR, successful deploy, and app QA proof\n'
 printf 'vcc helper guard tests passed\n'

@@ -195,7 +195,8 @@ IDENTITY="Valentins Claude Code"
 if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
   IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
 fi
-HT_TOKEN="$(cat "$TOKEN_FILE")"
+HT_TOKEN="$(cat "$TOKEN_FILE" 2>/dev/null)"
+[ -n "$HT_TOKEN" ] || { printf 'vcc: no agent token for %s; refusing to fall back to the owner login\n' "${IDENTITY:-unknown identity}" >&2; exit 4; }
 export HT_TOKEN
 completion_move "$@"
 review_refuse() {
