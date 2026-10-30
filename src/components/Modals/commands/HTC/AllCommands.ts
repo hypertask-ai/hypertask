@@ -1333,6 +1333,7 @@ export const getAllCommands = (
   aiChatAutoOpenCommandName = "",
   blockerCommentEnabled = false,
   shareKeyLabels = false,
+  removeImageGeneration = false,
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
@@ -1373,7 +1374,7 @@ export const getAllCommands = (
       { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
       ...appearance.commandLists.slice(5),
     ] } : appearance,
-    { ...settings, commandLists: settings.commandLists.map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
+    { ...settings, commandLists: settings.commandLists.filter((command) => !removeImageGeneration || command.key !== "settingsAiFeaturesImageGeneration").map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
       ? aiChatAutoOpenCommandName
         ? { ...command, name: aiChatAutoOpenCommandName, keywords: "settings open ai chat on newly created tickets when I open a ticket boards task page" }
         : { ...command, keywords: keepAiChatClosedKeywords ? "settings open ai chat by default keep ai chat closed always task page" : "settings open ai chat by default task page" } : command) },

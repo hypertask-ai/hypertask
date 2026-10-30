@@ -192,8 +192,11 @@ for (const status of [200, 401, null]) test(`BYOK test POST records a sanitized 
   if (status !== null) assert.equal(h.rows[0].totalTokens, 9);
 });
 
-for (const failed of [false, true]) test(`image POST preserves attachments, logs image models once; failure=${failed}`, async () => {
+for (const failed of [false, true]) test(`image POST creates comment and image attachment, logs image models once; failure=${failed}`, async () => {
   const h = harness();
+  const uploads = [], comments = [], attachments = [];
+  let removeImageGeneration = true;
+  h.stubs['@/lib/flags'] = { isFeatureEnabled: async (key, id) => { assert.equal(key, 'htpr-7859-remove-image-generation'); assert.equal(id, userId); return removeImageGeneration; } };
   h.stubs['@/app/api/ai/_lib/editorAi'] = { getCurrentUserFromCookies: async () => ({ id: userId }), errorMessage: String };
   h.stubs['@/app/api/ai/_lib/currentTaskContext'] = { htmlToText: (text) => text };
   h.stubs['@/app/api/ai/_lib/byokKeys'] = { getTeamGatewayApiKey: async () => 'vck_fixture' };
@@ -204,16 +207,44 @@ for (const failed of [false, true]) test(`image POST preserves attachments, logs
   h.stubs['@/lib/aiModelPreferences'] = { getAiModelPreferenceIds: () => ({}) };
   h.stubs['@/utils/controllers/users/fetch_preferences'] = { fetchUserPreferenceController: async () => ({ res: {} }) };
   h.stubs['@/app/api/ai/_lib/modelProvider'] = { resolveGatewayImageModel: () => ({}), gatewayProviderOptionsForModel: () => ({ gateway: { tags: ['generate-image'] } }) };
-  h.stubs['@/lib/storage/uploadTaskAttachmentToS3'] = { uploadTaskAttachmentToS3: async () => 'https://fixture.test/image.png' };
-  h.stubs['@/utils/controllers/urls/addIntoTask'] = { default: async () => {} };
+  h.stubs['@/lib/storage/uploadTaskAttachmentToS3'] = { uploadTaskAttachmentToS3: async (...args) => { uploads.push(args); return 'https://fixture.test/image.png'; } };
+  h.stubs['@/utils/controllers/comments/createCommentService'] = { createCommentService: async (...args) => { comments.push(args); return { id: 789 }; } };
+  h.stubs['@/utils/controllers/urls/addIntoTask'] = { default: async (...args) => { attachments.push(args); } };
   h.prisma.task = { findFirst: async () => ({ userId }) };
   h.prisma.user = { findUnique: async () => ({ id: 332 }) };
   h.stubs.ai = { generateImage: async (args) => { h.calls.push(args); if (failed) throw new Error('Provider unavailable'); return { image: { mediaType: 'image/png', base64: 'aQ==' }, usage: { inputTokens: 100, outputTokens: 200, totalTokens: 300 } }; } };
-  const response = await h.load('src/app/api/ai/generate-image/route.ts').POST(request({ projectId, taskId, text: 'private image prompt' }));
+  const route = h.load('src/app/api/ai/generate-image/route.ts');
+  const blocked = await route.POST(request({ projectId, taskId, text: 'private image prompt' }));
+  assert.equal(blocked.status, 404);
+  assert.equal(h.calls.length, 0);
+  assert.equal(h.rows.length, 0);
+  assert.deepEqual(uploads, []);
+  assert.deepEqual(comments, []);
+  assert.deepEqual(attachments, []);
+  removeImageGeneration = false;
+  const response = await route.POST(request({ projectId, taskId, text: 'private image prompt' }));
   assert.equal(response.status, 200);
   assert.equal((await response.json()).unavailable, failed);
   assert.equal(h.calls.length, 1);
   assert.equal(h.calls[0].maxRetries, 2);
+  const imageUrl = 'https://fixture.test/image.png';
+  const imageHtml = failed ? '<p>Image generation is unavailable on this plan.</p>' : `<p><img src="${imageUrl}" media-type="img" width="auto" height="320" dataalign="left" loading="lazy" style="height: 320px; width: auto"></p>`;
+  assert.deepEqual(comments, [[{
+    text: `<p><span data-type="mention" class="mention" data-id="User" data-label="name-${userId}" uniqueindex="" projectid="">User</span> said</p><blockquote>private image prompt</blockquote>${imageHtml}<p><em>— Image model</em></p>`,
+    creatorId: 332, taskId, ownerId: userId, currentUser: { id: 332 }, accessUserId: userId,
+  }]]);
+  if (failed) {
+    assert.deepEqual(uploads, []);
+    assert.deepEqual(attachments, []);
+  } else {
+    assert.equal(uploads.length, 1);
+    assert.deepEqual(uploads[0][0], Buffer.from('aQ==', 'base64'));
+    assert.match(uploads[0][1], /^hyperai-image-\d+\.png$/);
+    assert.equal(uploads[0][2], 'image/png');
+    assert.deepEqual(attachments, [[[{
+      TaskId: taskId, urlString: imageUrl, title: uploads[0][1], Attachment: true, attachmentType: 'image/png',
+    }], 789, 'POST']]);
+  }
   assertRow(h, { userId, teamId, projectId, taskId, feature: 'generate-image', provider: 'gateway', model: 'openai/gpt-image-1', outcome: failed ? 'failed' : 'ok' });
 });
 

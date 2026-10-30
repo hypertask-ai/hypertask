@@ -1,3 +1,5 @@
+import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
+import { isFeatureEnabled } from "@/lib/flags";
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from "next/server";
@@ -54,6 +56,9 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    if (await isFeatureEnabled(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG, cookieUser.id)) {
+      return NextResponse.json({ error: "Image generation is no longer available" }, { status: 404 });
+    }
     const body = generateImageRequestSchema.parse(await request.json());
     const [task, botUser, teamContext, userPreferences] = await Promise.all([
       prisma.task.findFirst({

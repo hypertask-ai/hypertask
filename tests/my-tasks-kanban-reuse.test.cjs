@@ -108,10 +108,10 @@ test("commands cached by search disappear when the route leaves My Tasks", () =>
   const js = ts.transpileModule(`const result = ${expression.getText(source)};`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
-  const evaluate = new Function("onMyTasks", "filterCommands", `${js}; return result;`);
+  const evaluate = new Function("onMyTasks", "filterCommands", "removeImageGeneration", `${js}; return result;`);
   const keys = ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup", "otherCommand"];
   const groups = [{ commandLists: keys.map((key) => ({ key })) }];
-  const result = (route) => evaluate(route, groups)[0].commandLists.map((row) => row.key);
+  const result = (route) => evaluate(route, groups, false)[0].commandLists.map((row) => row.key);
   assert.deepEqual(result(true), keys, "My Tasks keeps every picker command");
   assert.deepEqual(result(false), ["myTasksScope", "otherCommand"]);
 });

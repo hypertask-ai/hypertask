@@ -1,3 +1,5 @@
+import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
+import { isFeatureEnabled } from "@/lib/flags";
 import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
@@ -19,7 +21,7 @@ const taskSearchByParam = async (
 ) => {
   try {
     const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-    const [projectIds, owner_members, hyperAI, standaloneEnabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, standaloneEnabled, removeImageGeneration] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -43,6 +45,7 @@ const taskSearchByParam = async (
         },
       }),
       standalonePagesEnabled(userid),
+      isFeatureEnabled(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG, userid),
     ]);
 
     if (!projectIds.includes(projectId)) {
@@ -57,7 +60,7 @@ const taskSearchByParam = async (
     const modelMentionArray =
       param === "all" || !normalizedModelQuery
         ? []
-        : [...aiModelDefinitions, ...aiImageModelDefinitions]
+        : [...aiModelDefinitions, ...(removeImageGeneration ? [] : aiImageModelDefinitions)]
             .filter((model) =>
               [model.label, model.key].some((value) =>
                 normalizeModelMentionSearch(value).includes(

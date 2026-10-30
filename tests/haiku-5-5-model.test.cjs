@@ -182,7 +182,7 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   assert.equal(on.selectedModelId, input.storePlanId === "Free" ? "gpt-6-luna" : "claude-haiku-5-5");
   assert.equal(on.models.some((entry) => entry.id === "claude-haiku-4.5"), false);
   const mentions = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/taskSearchByParam.ts"), "utf8");
-  assert.match(mentions, /: \[\.\.\.aiModelDefinitions, \.\.\.aiImageModelDefinitions\]\s*\.filter\(\(model\) =>\s*\[model\.label, model\.key\]\.some/);
+  assert.match(mentions, /: \[\.\.\.aiModelDefinitions, \.\.\.\(removeImageGeneration \? \[\] : aiImageModelDefinitions\)\]\s*\.filter\(\(model\) =>\s*\[model\.label, model\.key\]\.some/);
   assert.doesNotMatch(mentions, /haiku55Enabled|haiku55ModelEnabled/);
 });
 

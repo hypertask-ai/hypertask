@@ -1,5 +1,7 @@
 "use client";
 
+import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
+import { useFlag } from "@/hooks/useFlag";
 import type { ChangeEvent } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
@@ -95,6 +97,7 @@ const DefaultModelRow = ({
 };
 
 const AiDefaultModelsSection = () => {
+  const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
   const { team, teamId } = useSettingsTeam();
   const teamTitle = team?.title;
   const queryClient = useQueryClient();
@@ -154,6 +157,44 @@ const AiDefaultModelsSection = () => {
       });
   };
 
+  const renderRows = (removeImage: boolean) => (
+    DEFAULT_MODEL_ROWS.filter((row) => !removeImage || row.surface !== "imageGeneration").map((row) =>
+    row.surface === "imageGeneration" ? (
+      <div
+        key={row.surface}
+        className="flex flex-col gap-3 border-b border-border-light-gray-thin px-2 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0">
+          <p className="font-semibold text-white-black">{row.label}</p>
+          <p className="text-text-light-gray">{row.description}</p>
+        </div>
+        <div className="relative w-full shrink-0 sm:w-[230px]">
+          <select
+            aria-label="Default image generation model"
+            className="w-full appearance-none rounded-[4px] bg-active-modal-element px-2 py-1 pr-8 text-dense leading-normal text-white-black shadow-[0_6px_20px_rgba(0,0,0,0.22)] outline-none transition-colors hover:bg-hoverCardBackground"
+            onChange={updateImageModel}
+            value={preferredImageModelKey}
+          >
+            {aiImageModelDefinitions.map((model) => (
+              <option key={model.key} value={model.key}>
+                {model.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            aria-hidden="true"
+            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-light-gray"
+            size={16}
+            strokeWidth={1.75}
+          />
+        </div>
+      </div>
+    ) : (
+      <DefaultModelRow key={row.surface} {...row} teamId={teamId} />
+    ),
+  )
+  );
+
   return (
     <SettingsSectionShell
       description={
@@ -165,41 +206,7 @@ const AiDefaultModelsSection = () => {
     >
       <SettingsCard title="AI functions">
         <div className="flex flex-col">
-          {DEFAULT_MODEL_ROWS.map((row) =>
-            row.surface === "imageGeneration" ? (
-              <div
-                key={row.surface}
-                className="flex flex-col gap-3 border-b border-border-light-gray-thin px-2 py-3 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <p className="font-semibold text-white-black">{row.label}</p>
-                  <p className="text-text-light-gray">{row.description}</p>
-                </div>
-                <div className="relative w-full shrink-0 sm:w-[230px]">
-                  <select
-                    aria-label="Default image generation model"
-                    className="w-full appearance-none rounded-[4px] bg-active-modal-element px-2 py-1 pr-8 text-dense leading-normal text-white-black shadow-[0_6px_20px_rgba(0,0,0,0.22)] outline-none transition-colors hover:bg-hoverCardBackground"
-                    onChange={updateImageModel}
-                    value={preferredImageModelKey}
-                  >
-                    {aiImageModelDefinitions.map((model) => (
-                      <option key={model.key} value={model.key}>
-                        {model.label}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown
-                    aria-hidden="true"
-                    className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-text-light-gray"
-                    size={16}
-                    strokeWidth={1.75}
-                  />
-                </div>
-              </div>
-            ) : (
-              <DefaultModelRow key={row.surface} {...row} teamId={teamId} />
-            ),
-          )}
+          {removeImageGeneration ? renderRows(true) : renderRows(false)}
         </div>
         <p className="px-2 text-dense font-medium text-text-light-gray">
           Choosing a model inside a feature also updates that feature&apos;s

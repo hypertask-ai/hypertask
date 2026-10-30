@@ -42,9 +42,9 @@ function gatedValue(file, name, bindings, extraNames = [], flagName) {
   return evaluate(`(() => { ${statements.map((node) => node.getText(source)).join("\n")} return ${name}; })()`, bindings);
 }
 
-function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled) {
+function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled, removeImageGeneration = false) {
   const getCommands = gatedValue(palette, "getCommands", {
-    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "", blockerCommentEnabled: false, shareKeyLabels: false,
+    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "", blockerCommentEnabled: false, shareKeyLabels: false, removeImageGeneration,
   }, ["getRoundedCommands", "getLegacyCommands"], "roundedEnabled");
   return getCommands({ context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory, isKanban: false } });
 }
@@ -161,5 +161,53 @@ test("New Task shortcut label requires both task writer flags", () => {
     const titles = getKeyboardShortcuts(false, false, "Toggle history events", compose, compose && window)
       .flatMap((group) => group.sub).filter((item) => item.pressKey.join(" ") === "CTRL J").map((item) => item.shortTitle);
     assert.deepEqual(titles, compose ? [window ? "New Task" : "Compose task"] : ["Add task with AI Task Writer", "Write with AI"]);
+  }
+});
+
+test("shared commands default to showing image settings", () => {
+  for (const removeImageGeneration of [undefined, false, true]) {
+    const commands = getAllCommands(undefined, undefined, false, "", "", false, false, removeImageGeneration)
+      .flatMap((group) => group.commandLists);
+    assert.equal(commands.some((command) => command.key === "settingsAiFeaturesImageGeneration"), !removeImageGeneration);
+  }
+});
+
+test("image settings command follows removal in both palette modes", () => {
+  for (const roundedEnabled of [false, true]) {
+    for (const removeImageGeneration of [false, true]) {
+      const commands = groups(false, roundedEnabled, false, false, removeImageGeneration)
+        .flatMap((group) => group.commandLists);
+      assert.equal(commands.some((command) => command.key === "settingsAiFeaturesImageGeneration"), !removeImageGeneration);
+    }
+  }
+});
+
+test("stale image results are hidden and cannot dispatch when removal turns on", () => {
+  const source = ts.createSourceFile(palette, read(palette), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let displayed, dispatch;
+  function visit(node) {
+    if (ts.isJsxAttribute(node) && node.name.getText(source) === "filterCommands") displayed = node.initializer.expression.getText(source);
+    if (ts.isFunctionDeclaration(node) && node.name?.text === "updateCommandFrequency") dispatch = node.getText(source);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.ok(displayed);
+  assert.ok(dispatch);
+  const image = { key: "settingsAiFeaturesImageGeneration" };
+  const other = { key: "other" };
+  const myTasks = { key: "myTasksSort" };
+  const filterCommands = [{ commandLists: [image, other, myTasks] }];
+  for (const removeImageGeneration of [false, true]) for (const onMyTasks of [false, true]) {
+    const visible = evaluate(displayed, { filterCommands, removeImageGeneration, onMyTasks })[0].commandLists;
+    assert.deepEqual(visible, [...(!removeImageGeneration ? [image] : []), other, ...(onMyTasks ? [myTasks] : [])]);
+    const called = [];
+    const run = evaluate(dispatch, {
+      writing: false, removeImageGeneration, filterCommands,
+      findCommandPosition: (groups, command) => groups.some((group) => group.commandLists.includes(command)),
+      isDemo: false, isInteractive: true, callback: (command) => called.push(command),
+    });
+    run(image);
+    run(other);
+    assert.deepEqual(called, [...(!removeImageGeneration ? [image] : []), other]);
   }
 });
