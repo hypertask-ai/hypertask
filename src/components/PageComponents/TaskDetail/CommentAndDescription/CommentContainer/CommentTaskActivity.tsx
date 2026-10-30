@@ -209,21 +209,28 @@ const TaskWaitingOnActivity = ({
   activity: ITaskWaitingOnActivity;
 }) => {
   const agentClearsBlocker = useFlag(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG);
-  const fromAgent = agentClearsBlocker ? activity.data.fromAgent : undefined;
-  const clearedWithReason = agentClearsBlocker && activity.data.blockerCleared;
+  if (agentClearsBlocker && activity.data.blockerCleared) {
+    const clearedBy = activity.data.fromAgent ?? activity.data.fromUser;
+    return (
+      <>
+        <BoldElement>
+          <CreatedByLocal name={clearedBy.displayName ?? ""} pfp={clearedBy.photoURL ?? ""} />
+        </BoldElement>{" "}
+        {`cleared the blocker${activity.data.reason ? `: ${activity.data.reason}` : ""}`}
+      </>
+    );
+  }
   return (
     <>
       <BoldElement>
         <CreatedByLocal
-          name={fromAgent?.displayName ?? activity.data.fromUser.displayName ?? ""}
-          pfp={fromAgent ? fromAgent.photoURL ?? "" : activity.data.fromUser.photoURL ?? ""}
+          name={activity.data.fromUser.displayName ?? ""}
+          pfp={activity.data.fromUser.photoURL ?? ""}
         />
       </BoldElement>{" "}
       {activity.data.waitingOnDisplayName
         ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
-        : clearedWithReason
-          ? `cleared the blocker${activity.data.reason ? `: ${activity.data.reason}` : ""}`
-          : "cleared blocked by"}
+        : "cleared blocked by"}
     </>
   );
 };
