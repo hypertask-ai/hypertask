@@ -495,7 +495,7 @@ test('a green retry that started after a newer red run still reports that red (Y
   const result = await live(run).collect();
   assert.equal(result.status, 'failure');
   assert.equal(result.run.id, red.id);
-  assert.equal(result.green.id, retried.id);
+  assert.equal(result.green.id, green.id);
 });
 test('a failed rerun without a green boundary retains the first red attempt and skips compare', async t => {
   const dir = tmp(t), d = second(); d.run.run_started_at = '2026-10-22T11:00:00Z';
