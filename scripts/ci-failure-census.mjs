@@ -150,27 +150,33 @@ export function redWindows(runs) {
   for (const run of runs) {
     const start = Date.parse(run.created_at);
     if (failed(run.conclusion)) {
-      const end = greens.map(green => Date.parse(green.updated_at)).filter(time => time >= start).sort((a, b) => a - b)[0] ?? latest;
+      const end = greens.map(green => Date.parse(green.updated_at)).filter(time => time > start).sort((a, b) => a - b)[0] ?? latest;
       windows.push({ class: run.class ?? 'break', start, end });
-    } else if (run.conclusion === 'success' && Number(run.run_attempt) > 1) {
+    } else if (run.conclusion === 'success' && Number(run.run_attempt) > 1 && run.previous_attempt_url) {
       windows.push({ class: 'flaky', start, end: Date.parse(run.updated_at) });
     }
   }
-  windows.sort((a, b) => a.start - b.start || a.end - b.end);
-  const merged = [];
-  for (const window of windows) {
-    const last = merged.at(-1);
-    if (last && window.start <= last.end) last.end = Math.max(last.end, window.end);
-    else merged.push({ ...window });
+  return windows.filter(window => window.end > window.start).sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+export function redSegments(windows) {
+  const points = [...new Set(windows.flatMap(window => [window.start, window.end]))].sort((a, b) => a - b);
+  const segments = [];
+  for (let index = 0; index < points.length - 1; index++) {
+    const start = points[index];
+    const end = points[index + 1];
+    const covering = windows.filter(window => window.start <= start && window.end >= end);
+    if (covering.length) segments.push({ class: covering.reduce((first, window) => (window.start < first.start ? window : first)).class, start, end });
   }
-  return merged;
+  return segments;
 }
 
 export function hoursByWindow(windows) {
+  const segments = redSegments(windows);
   const byClass = new Map();
   const byDay = new Map();
   const add = (map, key, hours) => map.set(key, (map.get(key) ?? 0) + hours);
-  for (const window of windows) {
+  for (const window of segments) {
     let cursor = window.start;
     while (cursor < window.end) {
       const nextDay = Date.parse(`${day(cursor)}T00:00:00Z`) + 24 * HOUR;
@@ -192,7 +198,7 @@ function round(hours) {
 
 export function formatClasses({ workflow, branch, since, runs, evidence }) {
   const reds = runs.filter(run => failed(run.conclusion));
-  const recovered = runs.filter(run => run.conclusion === 'success' && Number(run.run_attempt) > 1);
+  const recovered = runs.filter(run => run.conclusion === 'success' && Number(run.run_attempt) > 1 && run.previous_attempt_url);
   const { byClass, byDay } = hoursByWindow(redWindows(runs.map(run => ({
     ...run,
     class: evidence.find(item => item.run.id === run.id)?.class,
@@ -269,7 +275,7 @@ export async function collectClasses(options, api, logs) {
         if (batch.length < 100) break;
       }
     } catch (error) {
-      return { run, job: '(jobs unavailable)', step: '(unknown)', evidenceLine: `GitHub refused this run: ${error.message}`, rerunPassed: false, prGreen: false, prSeen: false, class: 'unattributed' };
+      return { run, job: '(jobs unavailable)', step: '(unknown)', evidenceLine: `GitHub refused this run: ${error.message}`, rerunPassed: false, prGreen: false, prSeen: false, class: redClass({ conclusion: run.conclusion }) };
     }
     const failing = jobs.filter(job => failed(job.conclusion));
     const logged = [];

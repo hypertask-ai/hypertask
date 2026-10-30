@@ -218,6 +218,7 @@ test('overlapping red windows merge into one stretch', async () => {
   ];
   assert.deepEqual(redWindows(runs), [
     { class: 'production-only', start: Date.parse('2026-10-22T00:00:00Z'), end: Date.parse('2026-10-22T03:00:00Z') },
+    { class: 'break', start: Date.parse('2026-10-22T02:00:00Z'), end: Date.parse('2026-10-22T03:00:00Z') },
   ]);
   assert.deepEqual(hoursByWindow(redWindows(runs)).byClass, [{ class: 'production-only', hours: 3 }]);
 });
@@ -226,7 +227,7 @@ test('a rerun that went green counts as flaky red time on its own', async () => 
   const { redWindows, hoursByWindow, formatClasses } = await subject;
   const runs = [
     { ...run(1, 'failure', '2026-10-21T02:00:00Z', '2026-10-21T02:20:00Z', 2), class: 'flaky' },
-    run(2, 'success', '2026-10-21T02:40:00Z', '2026-10-21T03:00:00Z', 2),
+    run(2, 'success', '2026-10-21T02:40:00Z', '2026-10-21T03:00:00Z', 2, { previous_attempt_url: 'https://github.com/example/repo/actions/runs/2/attempts/1' }),
   ];
   assert.deepEqual(redWindows(runs), [{ class: 'flaky', start: Date.parse('2026-10-21T02:00:00Z'), end: Date.parse('2026-10-21T03:00:00Z') }]);
   assert.deepEqual(hoursByWindow(redWindows(runs)).byClass, [{ class: 'flaky', hours: 1 }]);
@@ -249,4 +250,18 @@ test('class mode needs a since day and the census usage still documents itself',
   assert.match(missing.stderr, /--classes needs --since YYYY-MM-DD/);
   const help = spawnSync(process.execPath, [script, '--help'], { encoding: 'utf8' });
   assert.match(help.stdout, /--classes --since YYYY-MM-DD/);
+});
+
+test('touching outages keep their own class', async () => {
+  const { redWindows, hoursByWindow } = await subject;
+  const runs = [
+    { ...run(1, 'failure', '2026-10-23T00:00:00Z', '2026-10-23T00:10:00Z'), class: 'infra' },
+    run(2, 'success', '2026-10-23T00:10:00Z', '2026-10-23T01:00:00Z'),
+    { ...run(3, 'failure', '2026-10-23T01:00:00Z', '2026-10-23T01:10:00Z'), class: 'production-only' },
+    run(4, 'success', '2026-10-23T01:10:00Z', '2026-10-23T02:00:00Z'),
+  ];
+  assert.deepEqual(hoursByWindow(redWindows(runs)).byClass, [
+    { class: 'infra', hours: 1 },
+    { class: 'production-only', hours: 1 },
+  ]);
 });

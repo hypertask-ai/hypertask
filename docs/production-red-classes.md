@@ -25,11 +25,13 @@ Each red run takes the strongest evidence it has, first match wins.
 `production`, such as browser smoke against live flags. GitHub records alone cannot separate those
 two, so the report names the failing job, step and test instead; that is what the next fix reads.
 
-Red hours run from a red run's start until the first production run completes green after it, then
-overlapping stretches merge into one, so concurrent runs are never counted twice. A run that went
-green on a retry is its own `flaky` stretch. Failed logs come from `gh run view --log-failed`,
-parsed by the same `classifyActionsLog` the flake report uses; `gh api .../logs` refuses escape
-sequences in gh 2.103.3 and returns nothing.
+Red time is measured from a red run's start until the first production run completes green after
+it. Stretches are then cut at every boundary, and each piece belongs to the class that turned
+production red first, so concurrent runs are never counted twice and two touching outages keep
+their own class. A run that went green on a retry is its own `flaky` stretch.
+
+Failed logs come from `gh run view --log-failed`, parsed by the same `classifyActionsLog` the flake
+report uses; `gh api .../logs` refuses escape sequences in gh 2.103.3 and returns nothing.
 
 ci-tests.yml on production, since 2026-10-17. 869 runs, 92 red, 15 red then green on rerun.
 
@@ -37,8 +39,8 @@ ci-tests.yml on production, since 2026-10-17. 869 runs, 92 red, 15 red then gree
 
 | Class | Hours | Share |
 | --- | --- | --- |
-| production-only | 50.26 | 72% |
-| flaky | 11.64 | 17% |
+| production-only | 48.91 | 70% |
+| flaky | 12.99 | 19% |
 | infra | 8.2 | 12% |
 
 ## Red hours per day
