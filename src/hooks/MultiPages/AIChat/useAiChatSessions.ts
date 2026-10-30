@@ -397,7 +397,8 @@ export function useAiChatSessions(context: Context) {
   }, [currentProject?.id, setRecentChatBoardIds]);
 
   useEffect(() => {
-    if (!shouldLoadChatHistory || manualChat || navigationKey) return;
+    if (!shouldLoadChatHistory || manualChat) return;
+    if (navigationKey) return;
     if (sessionPagingEnabled) void ensureSessionForCurrentBoard().catch((error) => console.error("Error resolving chat session:", error));
     else void ensureSessionForCurrentBoard();
   }, [ensureSessionForCurrentBoard, shouldLoadChatHistory, sessionPagingEnabled, manualChat, navigationKey]);
