@@ -38,6 +38,7 @@ function fixture(actor = 'bound', skillContextEnabled = true) {
   f.prisma.task = f.model(f.tasks, 'task')
   f.mocks['@/utils/controllers/comments/createCommentService'] = { createCommentService: async () => assert.fail('Read must not create a comment') }
   f.mocks['@/utils/controllers/comments/processMentions'] = { convertPlainTextMentionsToHtml: text => text, resolveTextMentions: async text => text }
+  f.mocks['@/utils/helperFunctions/multiPages'] = { extractTipTapContent: () => ({ mentions: [] }) }
   f.tasks.forEach(task => { task.comments = [] })
   const helper = f.load('src/lib/mcp/skills/context.ts', {
     './skillAccess': { AccountSkillAccessError: class extends Error {} },
