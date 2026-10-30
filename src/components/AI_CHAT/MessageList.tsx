@@ -39,11 +39,12 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const lastMessageLooksLikeIntro = lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
   let introTaskId = composeIntroTaskId(lastMessage?.id);
   if (actionChipsEnabled && introTaskId === undefined && lastMessageLooksLikeIntro) introTaskId = originalNoteState?.taskId;
-  let newTicketId = currentSession?.taskId;
-  if (actionChipsEnabled && !newTicketId && introTaskId !== undefined) newTicketId = introTaskId;
-  const lastMessageIsIntro = actionChipsEnabled && introTaskId !== undefined;
   const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
+  let newTicketId = currentSession?.taskId;
+  const introIsViewedTicket = introTaskId !== undefined && introTaskId === viewedTaskId;
+  if (actionChipsEnabled && introTaskId !== undefined && (!newTicketId || introIsViewedTicket)) newTicketId = introTaskId;
+  const lastMessageIsIntro = actionChipsEnabled && introTaskId !== undefined;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);

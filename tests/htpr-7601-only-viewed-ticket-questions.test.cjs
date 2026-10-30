@@ -131,6 +131,28 @@ test("now refused: with the action chips flag off a saved intro with a remembere
   originalNote = null;
 });
 
+test("still allowed: a session still bound to the clicked older ticket shows the viewed new ticket's questions", async () => {
+  flags = new Set([questionsFlag, viewedFlag, chipsFlag]);
+  viewedTaskId = 83662;
+  originalNote = { taskId: 83662, note: "Search is slow on Safari" };
+  session = { id: "bound", taskId: 83600, messages: [savedIntro("server-1"), savedIntro("server-2")] };
+  const view = await renderList();
+  assert.deepEqual(view.requests, [{ taskId: 83662, kind: "new-ticket", originalNote: "Search is slow on Safari" }]);
+  assert.equal(view.chips, 2);
+  originalNote = null;
+});
+
+test("now refused: a session bound to the older ticket sends no request while a third ticket is in view", async () => {
+  flags = new Set([questionsFlag, viewedFlag, chipsFlag]);
+  viewedTaskId = 83700;
+  originalNote = { taskId: 83662, note: "Search is slow on Safari" };
+  session = { id: "bound", taskId: 83600, messages: [savedIntro("server-1"), savedIntro("server-2")] };
+  const view = await renderList();
+  assert.deepEqual(view.requests, []);
+  assert.equal(view.chips, 0);
+  originalNote = null;
+});
+
 test("flag ships as a bugfix on Everyone", () => {
   const definition = read("src/lib/flags/definitions/htpr-7601-only-viewed-ticket-questions.ts");
   assert.match(definition, /kind: "bugfix"/);
