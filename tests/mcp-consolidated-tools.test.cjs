@@ -134,7 +134,7 @@ test('authenticated users retain the consolidated catalog without a stored rollo
 test('scope filtering advertises only callable actions for management, agent and team credentials', async () => {
   for (const [permissions, expected] of [
     [{ management: ['read'] }, { hypertask_report_feedback: ['report'], hypertask_user_context: ['connections'], hypertask_agents: ['list'] }],
-    [{ management: ['write'] }, { hypertask_report_feedback: ['report'], hypertask_agents: ['create', 'ensure', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
+    [{ management: ['write'] }, { hypertask_report_feedback: ['report'], hypertask_agents: ['create', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
   ]) {
     const tools = selectMcpTools(legacy, true, { managementPermissions: permissions })
     const listed = (await rpc(tools, 'tools/list')).result.tools

@@ -3,7 +3,6 @@ import {
   ArchiveAgentInputSchema,
   CreateAgentInputSchema,
   DeleteAgentInputSchema,
-  EnsureAgentInputSchema,
   ListConnectionsInputSchema,
   MintTokenInputSchema,
   RevokeAgentInputSchema,
@@ -34,7 +33,7 @@ export class ManagementService {
   constructor(private readonly apiClient: IApiClient) {}
 
   async createAgent(params: unknown, options: { useBearerRoute?: boolean } = {}) {
-    const input = CreateAgentInputSchema.parse(params);
+    const { ensure: _ensure, ...input } = CreateAgentInputSchema.parse(params);
     return this.apiClient.makeRequest(
       options.useBearerRoute ? "/mcp/agents/create" : "/mcp/admin/agents",
       { method: "POST", body: JSON.stringify(input) },
@@ -43,7 +42,7 @@ export class ManagementService {
   }
 
   async ensureAgent(params: unknown, options: { useBearerRoute?: boolean } = {}) {
-    const input = EnsureAgentInputSchema.parse(params);
+    const { ensure: _ensure, ...input } = CreateAgentInputSchema.parse(params);
     const listed = await this.apiClient.makeRequest<ListAgentsResponse>(
       "/mcp/agents",
       { method: "GET" },

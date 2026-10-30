@@ -25,7 +25,7 @@ import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
 import { HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG } from '@/lib/flags/definitions/htpr-7220-legacy-sse-keepalive'
-import { actAsAgentAvailable, withoutActAsAgentTools } from './utils/actAsAgentCatalog'
+import { actAsAgentAvailable } from './utils/actAsAgentCatalog'
 
 export const LEGACY_SSE_LIFETIME_MS = 780 * 1000
 export const LEGACY_SSE_KEEPALIVE_MS = 60 * 1000
@@ -191,9 +191,9 @@ export async function handleLegacySseRequest(
               const feedbackEnabled = await aiFeedbackEnabled(userId)
               const presenceTool = await getAgentPresenceTool(userId)
               const actAsAgent = Boolean(ctx && await actAsAgentAvailable(ctx))
-              const available = withoutActAsAgentTools(tools
+              const available = tools
                 .filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
-                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool), actAsAgent)
+                .map((tool) => tool.name === presenceTool.name ? presenceTool : tool)
               const catalog = observeFeedbackTools(selectMcpTools(available, true, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,

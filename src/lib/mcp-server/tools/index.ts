@@ -6,7 +6,6 @@ import { agentPresenceTool } from './agent-presence.tool';
 import { listAgentsTool } from './list-agents.tool';
 import { agentWebhookTool } from './agent-webhook.tool';
 import { createAgentTool } from './create-agent.tool';
-import { ensureAgentTool } from './ensure-agent.tool';
 import { revokeAgentTool } from './revoke-agent.tool';
 import { archiveAgentTool } from './archive-agent.tool';
 import { deleteAgentTool } from './delete-agent.tool';
@@ -86,7 +85,6 @@ export const MCP_TOOLS = [
   listAgentsTool,
   agentWebhookTool,
   createAgentTool,
-  ensureAgentTool,
   revokeAgentTool,
   archiveAgentTool,
   deleteAgentTool,

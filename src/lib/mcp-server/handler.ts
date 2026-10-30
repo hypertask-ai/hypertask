@@ -26,7 +26,7 @@ import { HTPR_7914_TICKET_NUMBER_HINT_FLAG } from '@/lib/flags/definitions/htpr-
 import { HTPR_7934_NEAREST_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7934-nearest-field-hint'
 import { HTPR_7910_RENAMED_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7910-renamed-field-hint'
 import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
-import { actAsAgentAvailable, withoutActAsAgentTools } from './utils/actAsAgentCatalog'
+import { actAsAgentAvailable } from './utils/actAsAgentCatalog'
 import { HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7390-mcp-handshake-feedback'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
@@ -147,7 +147,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       tool.name === presenceTool.name ? presenceTool : tool,
     )
     const actAsAgent = await actAsAgentAvailable(ctx)
-    const availableTools = withoutActAsAgentTools(resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback'), actAsAgent)
+    const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
     const portableTools = observeFeedbackTools(selectMcpTools(
       availableTools,
       true,

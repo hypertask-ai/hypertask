@@ -137,6 +137,13 @@ test('agents ensure creates the agent when none is active and never returns its 
   assert.deepEqual(client.calls[1], { endpoint: '/mcp/admin/agents', method: 'POST', body: { display_name: 'Claude', project_ids: [15], role: 'write' } })
 })
 
+test('ensure is a flag on create, not a tool of its own, and plain create never forwards it', async () => {
+  assert.equal(MCP_TOOLS.some((tool) => tool.name === 'hypertask_ensure_agent'), false)
+  const client = apiClient([])
+  await new ManagementService(client).createAgent({ display_name: 'Claude', project_ids: [15], ensure: false })
+  assert.deepEqual(client.calls[0].body, { display_name: 'Claude', project_ids: [15], role: 'write' })
+})
+
 const legacy = resolvePortableTools(MCP_TOOLS).map((tool) => ({ ...tool, execute: async (args) => JSON.stringify({ name: tool.name, args }) }))
 const acted = []
 const load = loader({
