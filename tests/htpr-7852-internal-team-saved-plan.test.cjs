@@ -1,25 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-
-const root = path.resolve(__dirname, "..");
-let entryId = 0;
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const INTERNAL_TEAM_ID = "08f79efd-770e-4e32-9728-65e6d29ec893";
 const PRO_PRICE = "price_1QjJeDIhmcH60VcciHzZ3mTJ";
-
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
-
-function loadTs(relativePath) {
-  const jiti = require("jiti")(
-    path.join(root, `tests/htpr-7852-entry-${++entryId}.cjs`),
-    { interopDefault: true, alias: { "@": path.join(root, "src") } },
-  );
-  return jiti(path.join(root, relativePath));
-}
 
 function internalTeam(overrides = {}) {
   return {
@@ -39,20 +23,21 @@ const savedPro = {
   ],
 };
 
-function stubPrisma(teamRow) {
-  stubModule("src/lib/prisma.ts", {
-    default: {
-      project: { findUnique: async () => ({ team: teamRow }) },
-      team: { findUnique: async () => teamRow },
+function loadPlanGate(teamRow) {
+  return loadModule("src/app/api/ai/_lib/planGate.ts", {
+    "@/lib/prisma": {
+      default: {
+        project: { findUnique: async () => ({ team: teamRow }) },
+        team: { findUnique: async () => teamRow },
+      },
     },
   });
 }
 
 test("the internal team keeps Pro from its saved subscription", async () => {
   const team = internalTeam(savedPro);
-  stubPrisma(team);
-  const { storePlanIdForTeam, storePlanIdForProject } = loadTs("src/app/api/ai/_lib/planGate.ts");
-  const { deriveCurrentBoardBilling } = loadTs("src/lib/deriveCurrentBoardBilling.ts");
+  const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(team);
+  const { deriveCurrentBoardBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 
   assert.equal(storePlanIdForTeam(team), "Pro");
   assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Pro");
@@ -65,17 +50,15 @@ test("the internal team keeps Pro from its saved subscription", async () => {
 test("the internal team keeps Pro from a comp", async () => {
   const future = new Date(Date.now() + 86_400_000);
   const team = internalTeam({ compedUntil: future, compedPlan: "Pro" });
-  stubPrisma(team);
-  const { storePlanIdForTeam } = loadTs("src/app/api/ai/_lib/planGate.ts");
+  const { storePlanIdForTeam } = loadPlanGate(team);
 
   assert.equal(storePlanIdForTeam(team), "Pro");
 });
 
 test("the internal team id alone no longer grants Pro", async () => {
   const team = internalTeam();
-  stubPrisma(team);
-  const { storePlanIdForTeam, storePlanIdForProject } = loadTs("src/app/api/ai/_lib/planGate.ts");
-  const { deriveCurrentBoardBilling } = loadTs("src/lib/deriveCurrentBoardBilling.ts");
+  const { storePlanIdForTeam, storePlanIdForProject } = loadPlanGate(team);
+  const { deriveCurrentBoardBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
 
   assert.equal(storePlanIdForTeam(team), "Free");
   assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Free");
@@ -92,8 +75,7 @@ test("a canceled subscription on the internal team grants nothing", async () => 
       { subscriptionId: "sub_internal_pro", subscriptionStatus: "canceled", priceId: PRO_PRICE },
     ],
   });
-  stubPrisma(team);
-  const { storePlanIdForTeam } = loadTs("src/app/api/ai/_lib/planGate.ts");
+  const { storePlanIdForTeam } = loadPlanGate(team);
 
   assert.equal(storePlanIdForTeam(team), "Free");
 });
