@@ -384,6 +384,13 @@
         "cli": ["^(inbox (list|composition|archive|unarchive)|task move-to-inbox)$", "^messages poll$", "^task follow$"],
         "ai_chat": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$", "^hypertask_follow_task$"],
         "hyperai": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$", "^hypertask_follow_task$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/8217",
+          "expires": "2026-11-20",
+          "entries": ["task follow"]
+        }
       }
     },
     {
