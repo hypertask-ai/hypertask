@@ -31,12 +31,11 @@ test("the flag copy has exactly one entry file per flag it lists", async () => {
 });
 
 test("an entry file with an unexpected name fails loudly instead of being dropped from the list", async () => {
-  const { LISTS, build } = await load();
+  const { LISTS, entryFiles } = await load();
   const workspace = tempRoot();
   for (const list of LISTS) {
-    fs.mkdirSync(path.join(workspace, list.directory), { recursive: true });
     write(path.join(workspace, list.directory, "Not A Key.json"), "{}\n");
-    assert.throws(() => build(list, workspace), /is not an entry file name/);
+    assert.throws(() => entryFiles(list, workspace), /is not an entry file name/);
     fs.rmSync(path.join(workspace, list.directory, "Not A Key.json"));
   }
   fs.rmSync(workspace, { recursive: true, force: true });
