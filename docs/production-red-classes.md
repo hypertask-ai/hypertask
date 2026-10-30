@@ -28,19 +28,20 @@ two, so the report names the failing job, step and test instead; that is what th
 Red time is measured from a red run's start until the first production run completes green after
 it. Stretches are then cut at every boundary, and each piece belongs to the class that turned
 production red first, so concurrent runs are never counted twice and two touching outages keep
-their own class. A run that went green on a retry is its own `flaky` stretch.
+their own class. A run that went green on a retry counts as a `flaky` stretch only when its first attempt really had a
+failing job; a retry of a run that never failed is not counted.
 
 Failed logs come from `gh run view --log-failed`, parsed by the same `classifyActionsLog` the flake
 report uses; `gh api .../logs` refuses escape sequences in gh 2.103.3 and returns nothing.
 
-ci-tests.yml on production, since 2026-10-17. 869 runs, 92 red, 15 red then green on rerun.
+ci-tests.yml on production, since 2026-10-17. 871 runs, 92 red, 14 red then green on rerun.
 
 ## Red hours lost per class
 
 | Class | Hours | Share |
 | --- | --- | --- |
-| production-only | 48.91 | 70% |
-| flaky | 12.99 | 19% |
+| production-only | 48.91 | 71% |
+| flaky | 11.63 | 17% |
 | infra | 8.2 | 12% |
 
 ## Red hours per day
@@ -56,7 +57,7 @@ ci-tests.yml on production, since 2026-10-17. 869 runs, 92 red, 15 red then gree
 | 2026-10-24 | 5.68 |
 | 2026-10-25 | 6.22 |
 | 2026-10-26 | 8.85 |
-| 2026-10-27 | 5.14 |
+| 2026-10-27 | 3.77 |
 | 2026-10-28 | 3.33 |
 | 2026-10-29 | 0.71 |
 | 2026-10-30 | 12.05 |
@@ -181,7 +182,6 @@ ci-tests.yml on production, since 2026-10-17. 869 runs, 92 red, 15 red then gree
 | 41072486333 | 2026-10-30T14:32:43Z | production | 2 |
 | 41057124807 | 2026-10-30T12:40:32Z | production | 2 |
 | 41015205958 | 2026-10-30T06:37:54Z | production | 2 |
-| 40470727429 | 2026-10-27T08:01:39Z | production | 4 |
 | 40190462541 | 2026-10-25T11:49:15Z | production | 2 |
 | 40177193452 | 2026-10-25T08:35:01Z | production | 2 |
 | 40145720792 | 2026-10-25T00:11:23Z | production | 2 |

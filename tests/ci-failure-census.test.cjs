@@ -201,14 +201,16 @@ test('red hours run from the first red until production goes green again', async
     { ...run(3, 'failure', '2026-10-20T02:20:00Z', '2026-10-20T02:30:00Z'), class: 'infra' },
     run(4, 'success', '2026-10-20T03:00:00Z', '2026-10-20T03:30:00Z'),
   ];
-  assert.deepEqual(redWindows(runs), [{ class: 'break', start: Date.parse('2026-10-20T02:00:00Z'), end: Date.parse('2026-10-20T03:30:00Z') }]);
-  assert.deepEqual(hoursByWindow(redWindows(runs)), {
-    byClass: [{ class: 'break', hours: 1.5 }],
-    byDay: [{ day: '2026-10-20', hours: 1.5 }],
-  });
+  assert.deepEqual(redWindows(runs), [
+    { class: 'break', start: Date.parse('2026-10-20T02:00:00Z'), end: Date.parse('2026-10-20T03:30:00Z') },
+    { class: 'infra', start: Date.parse('2026-10-20T02:20:00Z'), end: Date.parse('2026-10-20T03:30:00Z') },
+  ]);
+  const hours = hoursByWindow(redWindows(runs));
+  assert.deepEqual(hours.byDay, [{ day: '2026-10-20', hours: 1.5 }]);
+  assert.deepEqual(hours.byClass.map(row => [row.class, Math.round(row.hours * 100) / 100]), [['infra', 1.17], ['break', 0.33]]);
 });
 
-test('overlapping red windows merge into one stretch', async () => {
+test('overlapping red windows are counted once', async () => {
   const { redWindows, hoursByWindow } = await subject;
   const runs = [
     { ...run(1, 'failure', '2026-10-22T00:00:00Z', '2026-10-22T00:10:00Z'), class: 'production-only' },
@@ -227,9 +229,12 @@ test('a rerun that went green counts as flaky red time on its own', async () => 
   const { redWindows, hoursByWindow, formatClasses } = await subject;
   const runs = [
     { ...run(1, 'failure', '2026-10-21T02:00:00Z', '2026-10-21T02:20:00Z', 2), class: 'flaky' },
-    run(2, 'success', '2026-10-21T02:40:00Z', '2026-10-21T03:00:00Z', 2, { previous_attempt_url: 'https://github.com/example/repo/actions/runs/2/attempts/1' }),
+    run(2, 'success', '2026-10-21T02:40:00Z', '2026-10-21T03:00:00Z', 2, { recovered: true }),
   ];
-  assert.deepEqual(redWindows(runs), [{ class: 'flaky', start: Date.parse('2026-10-21T02:00:00Z'), end: Date.parse('2026-10-21T03:00:00Z') }]);
+  assert.deepEqual(redWindows(runs), [
+    { class: 'flaky', start: Date.parse('2026-10-21T02:00:00Z'), end: Date.parse('2026-10-21T03:00:00Z') },
+    { class: 'flaky', start: Date.parse('2026-10-21T02:40:00Z'), end: Date.parse('2026-10-21T03:00:00Z') },
+  ]);
   assert.deepEqual(hoursByWindow(redWindows(runs)).byClass, [{ class: 'flaky', hours: 1 }]);
   const report = formatClasses({
     workflow: 'ci-tests.yml',

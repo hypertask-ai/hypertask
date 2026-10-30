@@ -152,7 +152,7 @@ export function redWindows(runs) {
     if (failed(run.conclusion)) {
       const end = greens.map(green => Date.parse(green.updated_at)).filter(time => time > start).sort((a, b) => a - b)[0] ?? latest;
       windows.push({ class: run.class ?? 'break', start, end });
-    } else if (run.conclusion === 'success' && Number(run.run_attempt) > 1 && run.previous_attempt_url) {
+    } else if (run.conclusion === 'success' && run.recovered) {
       windows.push({ class: 'flaky', start, end: Date.parse(run.updated_at) });
     }
   }
@@ -198,7 +198,7 @@ function round(hours) {
 
 export function formatClasses({ workflow, branch, since, runs, evidence }) {
   const reds = runs.filter(run => failed(run.conclusion));
-  const recovered = runs.filter(run => run.conclusion === 'success' && Number(run.run_attempt) > 1 && run.previous_attempt_url);
+  const recovered = runs.filter(run => run.conclusion === 'success' && run.recovered);
   const { byClass, byDay } = hoursByWindow(redWindows(runs.map(run => ({
     ...run,
     class: evidence.find(item => item.run.id === run.id)?.class,
@@ -266,6 +266,17 @@ export async function collectClasses(options, api, logs) {
     runs.push(...batch);
     if (batch.length < 100) break;
   }
+  await parallelMap(runs.filter(run => run.conclusion === 'success' && Number(run.run_attempt) > 1), 6, async run => {
+    run.recovered = false;
+    if (!run.previous_attempt_url) return run;
+    try {
+      const { jobs } = await api(`/actions/runs/${run.id}/attempts/1/jobs?per_page=100`);
+      run.recovered = jobs.some(job => failed(job.conclusion));
+    } catch {
+      run.recovered = Boolean(run.previous_attempt_url);
+    }
+    return run;
+  });
   const evidence = await parallelMap(runs.filter(run => failed(run.conclusion)), 6, async run => {
     const jobs = [];
     try {
