@@ -20,7 +20,9 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   const [currentProjectIndex, setCurrentProjectIndex] = useState<number>();
   const [currentUser, ___] = useRecoilState(currentUserAtom);
   const hydrated = useHydrated();
-  const savedPlanOnly = useFlag(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG);
+  const internalTeamSavedPlan = useFlag(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG);
+  let savedPlanOnly = false;
+  if (internalTeamSavedPlan) savedPlanOnly = true;
   const { data: favoritesTQ } = useGetAllFavorites(
     currentUser?.UserSettingId ?? null,
     { enabled: secondaryStartupEnabled },
