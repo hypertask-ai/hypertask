@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { signalAiChip } from "@/lib/ai/chipEvents";
+import { composeIntroTaskId } from "@/lib/ai/composeIntroTaskId";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -33,13 +34,16 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
-  const newTicketId = currentSession?.taskId;
+  const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
+  const introTaskId = composeIntroTaskId(lastMessage?.id);
+  let newTicketId = currentSession?.taskId;
+  if (actionChipsEnabled && !newTicketId && introTaskId !== undefined) newTicketId = introTaskId;
+  const lastMessageIsIntro = actionChipsEnabled && introTaskId !== undefined;
   const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
-  const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
   const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
   let chipSignal: typeof signalAiChip | undefined;
   if (chipEventsEnabled) chipSignal = signalAiChip;
@@ -48,7 +52,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
   const waitingForSkillFollowup = Boolean(pendingFollowup) &&
     pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
-  const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
+  const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && (messages.length === 1 || lastMessageIsIntro) &&
     lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
   let originalNote: string | undefined;
   if (actionChipsEnabled && originalNoteState?.taskId === newTicketId) originalNote = originalNoteState?.note;

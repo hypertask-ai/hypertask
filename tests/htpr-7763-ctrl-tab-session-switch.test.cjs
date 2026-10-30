@@ -112,6 +112,7 @@ function chat({ shared = false, enabled = flag.default.defaultMode === "EVERYONE
     "@/hooks/MultiPages/useGetAllTeamsMinimal": { useGetAllTeamsMinimal: () => ({ data: [] }) },
     "@/hooks/useFlag": { useFlag: key => key === FLAG ? enabled : paging },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
+    "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
     "@/lib/flags/keys": { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: "paging" },
     "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": flag,
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: "htpr-7762-chat-new-session-focus" },

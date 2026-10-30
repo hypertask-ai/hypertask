@@ -145,3 +145,11 @@ test("client wiring: note is stored with the new task, sent with the chips reque
   assert.match(list, /if \(actionChipsEnabled\) body\.chipType = "action-chip"/);
   assert.match(list, /if \(actionChipsEnabled && originalNoteState/);
 });
+
+test("compose intro message id yields the new ticket id and nothing else does", () => {
+  const { composeIntroTaskId } = load(path.join(root, "src/lib/ai/composeIntroTaskId.ts"));
+  assert.equal(composeIntroTaskId("compose-task-83541"), 83541);
+  for (const id of [undefined, "", "compose-task-", "compose-task-12x", "x-compose-task-12", "7f0c-compose-task-12", "assistant-12"]) {
+    assert.equal(composeIntroTaskId(id), undefined);
+  }
+});

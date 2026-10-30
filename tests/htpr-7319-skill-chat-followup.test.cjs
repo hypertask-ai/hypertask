@@ -39,6 +39,7 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
     if (id === "@/lib/ai/prompts/registry") return registry;
     if (id === "@/lib/ai/chipEvents") return { signalAiChip: () => {} };
+    if (id === "@/lib/ai/composeIntroTaskId") return { composeIntroTaskId: () => undefined };
     if (id.startsWith("@/") || id.startsWith(".")) throw new Error(`Unstubbed ${file}: ${id}`);
     return require(id);
   }, mod, mod.exports);
