@@ -98,7 +98,7 @@ test('key uses first red run ID and attempt plus green run ID, not SHAs or faili
   a.failures.push({ file: 'tests/a.test.cjs', error: 'Error: a' });
   b.failures = [...a.failures, { file: 'tests/new.test.cjs', error: 'new failure' }].reverse(); b.run.head_sha = 'f'.repeat(40);
   const pa = await plan(a, fake()), pb = await plan(b, fake());
-  assert.equal(pa.key, pb.key); assert.equal(pa.key, `${a.firstRed.id}:2:${a.green.id}`);
+  assert.equal(pa.key, pb.key); assert.equal(pa.key, `${a.firstRed.id}:1:${a.green.id}`);
   b.firstRed.head_sha = 'c'.repeat(40);
   assert.equal((await plan(b, fake())).key, pa.key);
   for (const change of [d => d.firstRed.id++, d => d.firstRed.run_attempt++, d => d.green.id++]) {
@@ -188,7 +188,11 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     const route = args[3];
     if (route.endsWith(`/actions/runs/${data.run.id}`)) return JSON.stringify(data.run);
     if (/\/attempts\/\d+$/.test(route)) {
-      const attempt = attempts.find(r => route.endsWith(`/runs/${r.id}/attempts/${r.run_attempt}`));
+      // The fixtures replay a red streak that was rerun, so every earlier attempt of the red run was red too.
+      const given = attempts.find(r => route.endsWith(`/runs/${r.id}/attempts/${r.run_attempt}`));
+      const number = Number(route.match(/\/attempts\/(\d+)$/)[1]);
+      const attempt = given || (route.includes(`/runs/${data.run.id}/attempts/`) && number >= 1
+        ? { ...data.run, run_attempt: number } : null);
       assert.ok(attempt, route); return JSON.stringify(attempt);
     }
     if (route.includes('/runs?')) {
@@ -359,7 +363,7 @@ test('unchanged red tick makes one API call and no second alert; new failures ap
   assert.equal(next.github() - before, 1); assert.equal(next.writes.length, 1);
   assert.equal(mock.writes.filter(a => a[1] === 'create').length + next.writes.filter(a => a[1] === 'create').length, 1);
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
-  assert.deepEqual(Object.keys(saved.alerts), [`${d.firstRed.id}:2:${d.green.id}`]);
+  assert.deepEqual(Object.keys(saved.alerts), [`${d.firstRed.id}:1:${d.green.id}`]);
   t.diagnostic(`new-streak gh calls: ${firstCalls}; unchanged-red gh calls: ${mock.github() - firstCalls}; later-red gh calls: ${before}; repeat-later-red gh calls: ${next.github() - before}; activity lines: ${next.writes.length}; tickets: ${Object.keys(saved.alerts).length}`);
 });
 test('a rerun attempt on the same run ID is not mistaken for an idle tick', async t => {
@@ -384,7 +388,7 @@ test('legacy file-set keys retain the existing ticket and append only genuinely 
   const dir = tmp(t), d = second(), api = fake(d);
   await tick({ dir, api });
   const stateFile = path.join(dir, 'state.json'), state = JSON.parse(fs.readFileSync(stateFile));
-  const key = `${d.firstRed.id}:2:${d.green.id}`, alert = state.alerts[key];
+  const key = `${d.firstRed.id}:1:${d.green.id}`, alert = state.alerts[key];
   delete state.alerts[key]; delete alert.files;
   state.alerts[`${d.firstRed.head_sha}:${d.failures.map(f => f.file).sort().join(',')}`] = alert;
   fs.writeFileSync(stateFile, JSON.stringify(state));
@@ -403,7 +407,7 @@ test('red at SHA X, green, then red rerun at SHA X creates a new alert and dedup
   const green = { ...d.green, id: d.run.id + 1, created_at: '2026-10-22T11:00:00Z' };
   await tick({ dir, api: fake({ status: 'success', run: green }) });
   d.green = green;
-  d.firstRed.run_attempt = 3; d.run.run_attempt = 3; d.run.created_at = '2026-10-22T12:00:00Z';
+  d.firstRed.run_attempt = 2; d.run.run_attempt = 2; d.run.created_at = '2026-10-22T12:00:00Z';
   await tick({ dir, api }); await tick({ dir, api });
   const state = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
   assert.equal(api.writes.filter(a => a[1] === 'create').length, 2);
@@ -462,21 +466,21 @@ test('live collection separates same-SHA reruns after a newer green run and keep
   await tick({ dir, api: firstMock.api });
   const green = { ...d.green, id: d.run.id + 1, run_started_at: '2026-10-22T11:30:00Z' };
   await tick({ dir, api: fake({ status: 'success', run: green }) });
-  d.green = green; d.run.run_attempt = 3; d.run.run_started_at = '2026-10-22T12:00:00Z';
+  d.green = green; d.run.run_attempt = 2; d.run.run_started_at = '2026-10-22T12:00:00Z';
   const rerun = counted(d, { cancelled: false, attempts: [prior] });
   assert.equal((await tick({ dir, api: rerun.api })).action, 'alert');
   assert.equal((await tick({ dir, api: rerun.api })).action, 'idle');
   assert.equal(firstMock.writes.filter(a => a[1] === 'create').length, 1);
   assert.equal(rerun.writes.filter(a => a[1] === 'create').length, 1);
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
-  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:2:${second().green.id}`, `${d.run.id}:3:${green.id}`]);
+  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:1:${green.id}`]);
   assert.ok(Object.values(saved.alerts)[0].closed);
 });
 test('a failed rerun without a green boundary retains the first red attempt and skips compare', async t => {
   const dir = tmp(t), d = second(); d.run.run_started_at = '2026-10-22T11:00:00Z';
   const prior = structuredClone(d.run), firstMock = counted(d, { cancelled: false });
   await tick({ dir, api: firstMock.api });
-  d.run.run_attempt = 3; d.run.run_started_at = '2026-10-22T12:00:00Z';
+  d.run.run_attempt = 2; d.run.run_started_at = '2026-10-22T12:00:00Z';
   const rerun = counted(d, { cancelled: false, attempts: [prior] });
   rerun.api.task = () => assert.fail('continuous rerun must retain its fixer');
   await tick({ dir, api: rerun.api });
@@ -490,7 +494,7 @@ test('red after green at the same SHA blames that commit and opens one new incid
   await tick({ dir, api: counted(d, { cancelled: false }).api });
   const green = { ...d.green, id: d.run.id + 1, head_sha: d.run.head_sha, run_started_at: '2026-10-22T11:30:00Z' };
   await tick({ dir, api: fake({ status: 'success', run: green }) });
-  d.green = green; d.run.run_attempt = 3; d.run.run_started_at = '2026-10-22T12:00:00Z';
+  d.green = green; d.run.run_attempt = 2; d.run.run_started_at = '2026-10-22T12:00:00Z';
   const pr = d.prs.at(-1), rerun = counted(d, { cancelled: false, attempts: [prior] });
   const run = (bin, args, opts) => bin === 'gh' && args[3].endsWith(`/commits/${d.run.head_sha}`)
     ? JSON.stringify({ sha: d.run.head_sha, commit: { message: `${pr.title} (#${pr.number})` } }) : rerun.run(bin, args, opts);
@@ -499,7 +503,7 @@ test('red after green at the same SHA blames that commit and opens one new incid
   assert.equal(rerun.writes.filter(a => a[1] === 'create').length, 1);
   assert.ok(!rerun.calls.some(([bin, args]) => bin === 'gh' && args[3].includes('/compare/')));
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
-  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:2:${second().green.id}`, `${d.run.id}:3:${green.id}`]);
+  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:1:${green.id}`]);
 });
 
 const SMOKE_LOG = [
