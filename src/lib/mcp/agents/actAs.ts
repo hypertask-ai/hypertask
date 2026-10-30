@@ -21,7 +21,7 @@ type ActAsAgentRow = {
 export type ActAsAgentDatabase = {
   agent: {
     findFirst(args: {
-      where: { id: string; userId: number; revokedAt: null; archivedAt: null }
+      where: { id: string; userId: number; revokedAt: null; archivedAt: null; credentialTeamId: null }
       select: {
         id: true
         runtimeGeneration: true
@@ -51,7 +51,7 @@ export async function actAsAgentContext(
     throw new ActAsAgentError('as_agent needs a signed-in person\'s connection, not a management key.')
   }
   const agent = await database.agent.findFirst({
-    where: { id: request.agentId, userId: auth.user.id, revokedAt: null, archivedAt: null },
+    where: { id: request.agentId, userId: auth.user.id, revokedAt: null, archivedAt: null, credentialTeamId: null },
     select: {
       id: true,
       runtimeGeneration: true,
@@ -75,6 +75,7 @@ export async function actAsAgentContext(
   }
   return {
     user: auth.user,
+    teamScope: null,
     agentId: agent.id,
     agentRuntimeGeneration: agent.runtimeGeneration,
   }

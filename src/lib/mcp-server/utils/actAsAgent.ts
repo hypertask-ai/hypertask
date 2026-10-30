@@ -1,8 +1,9 @@
 import prisma from '@/lib/prisma'
 import { HTPR_7529_MCP_ACT_AS_AGENT_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { ActAsAgentError, actAsAgentContext, type ActAsAgentDatabase } from '@/lib/mcp/agents/actAs'
-import { createInProcessMcpClient } from '@/lib/mcp/inProcessClient'
-import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
+import { NextRequest } from 'next/server'
+import { validateMcpAuth } from '@/lib/mcp/auth'
+import { getMcpExecutionContext, withMcpExecutionContext } from '@/lib/mcp/operationContext'
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { normalizeTaskInput } from './normalize-task-input'
@@ -62,7 +63,10 @@ export async function runAsAgent<T>(
   request: { agentId: string; input: ActAsInput; write: boolean; requireBoard: boolean },
   run: () => Promise<T>,
 ): Promise<T> {
-  const { auth } = await createInProcessMcpClient(token)
+  const auth = getMcpExecutionContext(token) ?? await validateMcpAuth(
+    new NextRequest('http://mcp.internal/mcp', { headers: { Authorization: `Bearer ${token}` } }),
+  )
+  if (!auth) throw new ActAsAgentError('Unauthorized. Invalid or missing authentication token.')
   if (!(await isFeatureEnabled(HTPR_7529_MCP_ACT_AS_AGENT_FLAG, auth.user.id))) {
     throw new ActAsAgentError('as_agent is not switched on for this account yet.')
   }

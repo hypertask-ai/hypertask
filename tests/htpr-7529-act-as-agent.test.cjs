@@ -1,23 +1,26 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { loadModule } = require('./helpers/loadModule.cjs')
 const { root, loader, sample } = require('./htpr-6927-fixtures.cjs')
 
-const stub = (file, exports) => {
-  const filename = path.join(root, file)
-  require.cache[filename] = { id: filename, filename, loaded: true, exports }
-}
-stub('src/lib/prisma.ts', { __esModule: true, default: {} })
-stub('src/lib/auth/getSessionUser.ts', { getSessionUser: async () => null })
-const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false })
-const { actAsAgentContext, ActAsAgentError } = jiti(path.join(root, 'src/lib/mcp/agents/actAs.ts'))
+const fixtures = path.join(__dirname, 'fixtures/htpr-7529')
+const jiti = require('jiti')(__filename, {
+  alias: {
+    '@/lib/prisma': path.join(fixtures, 'prisma-stub.cjs'),
+    '@/lib/auth/getSessionUser': path.join(fixtures, 'session-user-stub.cjs'),
+    '@': path.join(root, 'src'),
+  },
+  cache: false,
+})
+const { actAsAgentContext, ActAsAgentError } = loadModule('src/lib/mcp/agents/actAs.ts')
 const { ManagementService } = jiti(path.join(root, 'src/lib/mcp-server/lib/services/management.service.ts'))
 const { MCP_TOOLS } = jiti(path.join(root, 'src/lib/mcp-server/tools/index.ts'))
 const { resolvePortableTools } = jiti(path.join(root, 'src/lib/mcp-server/listQueryContract.ts'))
 
 const CLAUDE = '2f272c9b-a338-4a0b-95c9-1540ccbea957'
 const OTHER = '85b985ac-afe8-41a3-a1ac-d9549a9310c7'
-const valentin = { user: { id: 6, email: 'valentin.yeo@gmail.com' }, agentId: null }
+const valentin = { user: { id: 6, email: 'valentin.yeo@gmail.com' }, teamScope: null, agentId: null }
 
 function database(agents) {
   const seen = []
@@ -26,7 +29,7 @@ function database(agents) {
     agent: {
       async findFirst({ where }) {
         seen.push(where)
-        const agent = agents.find((row) => row.id === where.id && row.userId === where.userId && !row.revoked && !row.archived)
+        const agent = agents.find((row) => row.id === where.id && row.userId === where.userId && !row.revoked && !row.archived && (row.teamId ?? null) === where.credentialTeamId)
         return agent ? { id: agent.id, runtimeGeneration: 4, permissions: { role: agent.role ?? 'write' }, members: agent.boards.map((projectId) => ({ projectId })) } : null
       },
     },
@@ -41,8 +44,13 @@ const owned = () => database([
 test('a person acting as their own agent on its board gets the agent identity', async () => {
   const db = owned()
   const ctx = await actAsAgentContext(db, valentin, { agentId: CLAUDE, projectIds: [15], write: true, requireBoard: true })
-  assert.deepEqual(ctx, { user: valentin.user, agentId: CLAUDE, agentRuntimeGeneration: 4 })
-  assert.deepEqual(db.seen[0], { id: CLAUDE, userId: 6, revokedAt: null, archivedAt: null })
+  assert.deepEqual(ctx, { user: valentin.user, teamScope: null, agentId: CLAUDE, agentRuntimeGeneration: 4 })
+  assert.deepEqual(db.seen[0], { id: CLAUDE, userId: 6, revokedAt: null, archivedAt: null, credentialTeamId: null })
+})
+
+test('now refused: a team-scoped agent, whose token only works under its team scope', async () => {
+  const db = database([{ id: CLAUDE, userId: 6, boards: [15], teamId: 'team-1' }])
+  await assert.rejects(actAsAgentContext(db, valentin, { agentId: CLAUDE, projectIds: [15], write: true, requireBoard: true }), /not an active agent you own/)
 })
 
 test('still allowed: inbox reads need ownership but no board', async () => {
