@@ -192,7 +192,6 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
     aiKeyOnly: boolean;
     aiProviderSettings: unknown;
     googleAccount: { userId: number };
-    byokApiKeys: Array<{ provider: string; ciphertext: string | null }>;
   } | null;
   try {
     team = await prisma.team.findUnique({
@@ -201,10 +200,6 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
         aiKeyOnly: true,
         aiProviderSettings: true,
         googleAccount: { select: { userId: true } },
-        byokApiKeys: {
-          where: { enabled: true },
-          select: { provider: true, ciphertext: true },
-        },
       },
     });
   } catch {
@@ -224,8 +219,17 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
     throw new TeamKeyOnlyRefusal();
   }
   if (flagOn !== true) return { flagOn: false, aiKeyOnly: true, keys: {} };
+  let rows: Array<{ provider: string; ciphertext: string | null }>;
+  try {
+    rows = await prisma.teamByokApiKey.findMany({
+      where: { teamId, enabled: true },
+      select: { provider: true, ciphertext: true },
+    });
+  } catch {
+    throw new TeamKeyOnlyRefusal();
+  }
   const keys: Partial<Record<string, string>> = {};
-  for (const row of team.byokApiKeys) {
+  for (const row of rows) {
     const ciphertext = row.ciphertext?.trim();
     if (!ciphertext) continue;
     try {

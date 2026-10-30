@@ -42,17 +42,21 @@ function loadByok(flagOn, extraKeys = {}, options = {}) {
   stubModule("src/lib/prisma.ts", {
     default: {
       team: {
-        findUnique: async () => { if (options.teamError) throw new TypeError("team unavailable"); return ({
+        findUnique: async (args) => { if (args.select.aiKeyOnly) options.metadataReads?.push(args); if (options.teamError) throw new TypeError("team unavailable"); return ({
           aiKeyOnly: options.aiKeyOnly ?? true,
           googleAccount: { userId: 42 },
           aiProviderSettings: options.aiProviderSettings ?? null,
-          byokApiKeys: [
-            { provider: "claude", ciphertext: TEAM_KEY },
-            ...Object.entries(extraKeys).map(([provider, ciphertext]) => ({ provider, ciphertext })),
-          ],
         }); },
       },
       teamByokApiKey: {
+        findMany: async (args) => {
+          options.secretReads?.push(args);
+          if (options.keyError) throw new Error("keys unavailable");
+          return [
+            { provider: "claude", ciphertext: TEAM_KEY },
+            ...Object.entries(extraKeys).map(([provider, ciphertext]) => ({ provider, ciphertext })),
+          ];
+        },
         findUnique: async (args) => {
           const provider = args.where.teamId_provider.provider;
           if (provider === "claude") return { enabled: true, ciphertext: TEAM_KEY };
@@ -153,7 +157,7 @@ test("flag off pauses key-only teams, while other teams remain unrestricted", as
 
 
 test("funding failures refuse rather than falling back", async () => {
-  for (const options of [{ flagError: true }, { teamError: true }]) {
+  for (const options of [{ flagError: true }, { teamError: true }, { keyError: true }]) {
     const byok = loadByok(true, {}, options);
     await assert.rejects(() => byok.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID }), { name: "TeamKeyOnlyRefusal" });
   }
@@ -177,4 +181,22 @@ test("unrestricted teams do not depend on flag availability", async () => {
     const funding = await byok.getTeamGatewayFunding({ trustedTeamId: TEAM_ID });
     assert.equal(funding.apiKey, PLATFORM.AI_GATEWAY_API_KEY);
   });
+});
+
+test("funding reads secrets only for enabled key-only teams", async () => {
+  const secretReads = [];
+  const metadataReads = [];
+  const request = { trustedTeamId: TEAM_ID };
+  const unrestricted = loadByok(true, {}, { aiKeyOnly: false, secretReads, metadataReads });
+  await unrestricted.getTeamGatewayFunding(request);
+  assert.deepEqual(metadataReads, [{ where: { id: TEAM_ID }, select: { aiKeyOnly: true, aiProviderSettings: true, googleAccount: { select: { userId: true } } } }]);
+  const disabled = loadByok(false, {}, { secretReads });
+  await assert.rejects(() => disabled.getTeamGatewayApiKey(request), { name: "TeamKeyOnlyRefusal" });
+  assert.deepEqual(secretReads, []);
+  const restricted = loadByok(true, {}, { secretReads });
+  assert.equal(await restricted.getByokOrTeamGatewayApiKey("claude", undefined, request), TEAM_KEY);
+  assert.deepEqual(secretReads, [{
+    where: { teamId: TEAM_ID, enabled: true },
+    select: { provider: true, ciphertext: true },
+  }]);
 });

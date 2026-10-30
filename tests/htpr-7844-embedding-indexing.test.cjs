@@ -12,8 +12,7 @@ stub("src/lib/prisma.ts", { default: { team: { findUnique: async ({ where }) => 
   aiKeyOnly: where.id === "restricted",
   aiProviderSettings: null,
   googleAccount: { userId: 42 },
-  byokApiKeys: [],
-}) }, project: { findUnique: async ({ where }) => ({ teamId: where.id === 1 ? "allowed" : where.id === 2 ? "restricted" : null }) } } });
+}) }, teamByokApiKey: { findMany: async () => [] }, project: { findUnique: async ({ where }) => ({ teamId: where.id === 1 ? "allowed" : where.id === 2 ? "restricted" : null }) } } });
 stub("src/lib/flags.ts", { isFeatureEnabled: async (_key, userId) => { flagUsers.push(userId); return true; } });
 stub("src/lib/turbopuffer.ts", {
   default: { namespace: () => ({ write: async (body) => { writes.push(body); return body; }, query: async (body) => { queries.push(body); return { rows: [] }; } }) },
