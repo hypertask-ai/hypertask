@@ -224,7 +224,7 @@ else: sys.exit(9)
                 inbox.write_text(json.dumps(data))
                 changed['labels'] = [{'name': 'Domain: Search'}]
                 changed['title'] = 'Updated title'
-                changed['section'] = 'In Progress'
+                changed['section'] = 'Backlog'
                 changed['uniqueIndex'] = 1001
                 self.board(1, [changed]); self.tick(1); self.tick(1)
                 self.assertEqual(self.items(1), [])
@@ -232,7 +232,7 @@ else: sys.exit(9)
                 self.board(2, [winner]); self.tick(2); self.tick(1)
                 item = json.loads(inbox.read_text())['items'][0]
                 self.assertEqual(item['title'], 'Updated title')
-                self.assertEqual(item['section'], 'In Progress')
+                self.assertEqual(item['section'], 'Backlog')
                 self.assertEqual(item['url'], 'https://app.hypertask.ai/detail/project-15/1001')
                 self.assertEqual(item['delivered'], not changed_resume)
                 self.assertEqual(item['notified'], not changed_resume)
