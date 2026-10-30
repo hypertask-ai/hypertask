@@ -122,6 +122,12 @@ for value in --help -h --version -V; do
   allowed bash "$vcc" comment add X-1 --kind qa --text "$value"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <qa> <--text> <$value>" ]] || fail 'option values changed'
 done
+for option in --help=false --h= --version=no --V=0 -h=false -V=no; do
+  refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --text hi "$option"
+  run bash "$vcc" comment add X-1 --kind qa --text 'Outputs: private' "$option"
+  [ "$status" = 5 ] || fail "invalid help bypassed content guard: $option"
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'invalid help reached CLI'
+done
 printf 'ok help and version bypass mutation dispatch\n'
 
 allowed env HAX_PROVIDER=codex HAX_MODEL=gpt-6.1-sol HAX_EFFORT=high bash "$vcc" comment add X-1 --text hi
@@ -268,7 +274,8 @@ multiline_mention=${question/Question:/Question:$'\n'}
 hardbreak_question=${plain/Keep it?/Keep<br>it?}
 listed_question="<ul><li>$question</li></ul>"
 quoted_question="<blockquote>$question</blockquote>"
-for text in "$plain" "$inline_why" "$question" "$multiline_question" "$multiline_mention" "$hardbreak_question" "$listed_question" "$quoted_question"; do
+quoted_context="<blockquote>Context.</blockquote>$plain"
+for text in "$plain" "$inline_why" "$question" "$multiline_question" "$multiline_mention" "$hardbreak_question" "$listed_question" "$quoted_question" "$quoted_context"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
   fixture "$text"

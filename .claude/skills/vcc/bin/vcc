@@ -30,7 +30,7 @@ guard_args() {
     [[ $arg != -?* || $arg == --* ]] || arg="-$arg"
     case "$arg" in
       --) shift; positional+=("$@"); break ;;
-      --help|--h|--version|--V|--help=*|--h=*|--version=*|--V=*) HELP_REQUESTED=true ;;
+      --help|--h|--version|--V|--help=true|--h=true|--version=true|--V=true) HELP_REQUESTED=true ;;
       --*=*|--markdown|--dry-run) options+=("$arg") ;;
       --json|--human|--force|--all|--all-boards|--enabled|--disabled|--confirm|--clear|--restore|--stdin|--off|--has-due-date|--summary|--markdown|--clear-due|--clear-parent|--comment|--html|--canvas|--apply|--clear-description|--running|--default|--clear-labels|--clear-assignees|--add|--self) ;;
       -*) options+=("$arg" "${2:-}"); shift; [ "$#" -gt 0 ] || break ;;
@@ -67,7 +67,7 @@ question_check() {
        gsub("(?<opening>Question:\\s*<strong\\b[^>]*>)(?<question>.*?)</strong>";
          .opening + (.question | gsub("<br\\s*/?>"; " "; "i")) + "</strong>"; "is") |
        gsub("</?(?:ul|ol)\\b[^>]*>"; ""; "i") |
-       gsub("<br\\s*/?>|</(?:p|li|div|h[1-6])>"; "\n"; "i") | split("\n") |
+       gsub("<br\\s*/?>|</(?:p|li|div|blockquote|h[1-6])>"; "\n"; "i") | split("\n") |
        map(gsub("^\\s+|\\s+$"; "") | select((visible | length) > 0)) end) as $paragraphs |
     ($paragraphs | map(if $md then gsub("\\*\\*"; "") else unmention | visible end)) as $plain |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
@@ -134,7 +134,7 @@ people_content() {
   local mode='' kind='' text='' file='' description='' description_file='' mentioned=false arg status
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --help|--h|--version|--V|--help=*|--h=*|--version=*|--V=*) return 0 ;;
+      --help|--h|--version|--V|--help=true|--h=true|--version=true|--V=true) return 0 ;;
       --project|--team) [ "$#" -ge 2 ] || return 0; shift 2 ;;
       --json|--human|--project=*|--team=*) shift ;;
       *) break ;;
@@ -149,7 +149,7 @@ people_content() {
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
-      --help|--h|--version|--V|--help=*|--h=*|--version=*|--V=*) return 0 ;;
+      --help|--h|--version|--V|--help=true|--h=true|--version=true|--V=true) return 0 ;;
       --kind|--text|--body|--file|--description|--description-file|--mentions)
         [ "$#" -ge 2 ] || break
         case "$arg" in
