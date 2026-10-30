@@ -22,6 +22,19 @@ existing holder. Pending scopes block new work. Pending owners retain acquired s
 Reciprocal relabels may release reservations only for proven undelivered Todo work;
 runner-ID order resolves that cycle. Active reciprocal relabels cannot be preempted.
 Legacy pending leases use runner-ID order. Incomplete reads retain leases.
-Manual claims bypass pickup. Existing manual work is invisible until its runner's
-successful tick; imported active work may already conflict. Preview and fixture
-results do not prove fleet-wide exclusivity.
+Numeric runner manual claims and dispatch reserve ownership through
+`runner-domain-admit.py` under the same lock. Admission reads both boards and
+imports existing active assignments before reserving new work. Imported conflicts
+refuse overlapping starts; unrelated safe scopes remain usable. A same-ticket retry
+may retain multiple acquired scopes after a relabel, but cannot expand into other
+work. Reservations survive nonnumeric assignees until assignment or confirmed
+release. Archived details and completed release modes cannot requeue work.
+
+Hosted admission fixtures exercise the real claim, dispatcher and helper:
+`python3 .claude/skills/ship/scripts/runner-domain-admit.test.py`.
+They cover concurrent conflicting claims, distinct scopes, retained-scope retries,
+full-page pagination, archived readbacks and pane changes during slow admission.
+Never run a live admission as a read-only check: it reserves ownership.
+
+Speed-runner starts remain outside numeric admission. Preview and fixture results
+do not prove fleet-wide exclusivity or eliminate pre-existing manual overlaps.
