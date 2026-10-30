@@ -10,7 +10,7 @@ import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { HTPR_7534_WRITING_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7534_WRITING_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7979_ACTION_CHIPS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -34,10 +34,14 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_COMMENTS = 30;
+const MAX_ORIGINAL_NOTE = 2000;
+const MAX_BOARD_RULES = 2000;
+const MAX_ACTION_CHIPS = 3;
 
 const taskQuestionsRequestSchema = z.object({
   taskId: z.coerce.number().int().positive(),
   kind: z.enum(["next-move", "new-ticket"]).default("next-move"),
+  originalNote: z.string().transform((value) => value.slice(0, MAX_ORIGINAL_NOTE)).optional(),
   skillFollowup: z.object({
     skills: taskWriterSkillsSchema,
     originalInput: z.string().max(MAX_SKILL_INPUT_LENGTH),
@@ -47,6 +51,7 @@ const taskQuestionsRequestSchema = z.object({
 const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
 const NEW_TICKET_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-new-ticket-1");
 const WRITING_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-writing-1");
+const ACTION_CHIPS_INSTRUCTIONS = renderPrompt("task-questions-action-chips-1");
 const SKILL_FOLLOWUP_INSTRUCTIONS = renderPrompt("task-questions-skill-followup-1");
 const taskQuestionsOutputSchema = z.object({
   questions: z.array(z.string()),
@@ -106,6 +111,7 @@ async function taskQuestions(request: NextRequest) {
           select: {
             teamId: true,
             team: { select: { aiProviderSettings: true } },
+            ai_custom_instructions: { select: { customInstruction: true }, take: 1 },
           },
         },
         description_: { select: { content: true } },
@@ -271,13 +277,17 @@ async function taskQuestions(request: NextRequest) {
       reasoningFeature: "suggested-questions",
     });
     const newTicket = parsedBody.data.kind === "new-ticket";
-    const writingQuestions = newTicket && await isFeatureEnabled(HTPR_7534_WRITING_QUESTIONS_FLAG, viewer.id);
+    const actionChips = newTicket && !skillContext && await isFeatureEnabled(HTPR_7979_ACTION_CHIPS_FLAG, viewer.id);
+    const writingQuestions = newTicket && !actionChips && await isFeatureEnabled(HTPR_7534_WRITING_QUESTIONS_FLAG, viewer.id);
+    const boardRules = (task.project.ai_custom_instructions?.[0]?.customInstruction ?? "").trim().slice(0, MAX_BOARD_RULES);
     const result = await generateText({
       experimental_download: downloadWithoutBrotli,
       model,
-      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: skillContext ? SKILL_FOLLOWUP_INSTRUCTIONS : writingQuestions ? WRITING_QUESTIONS_INSTRUCTIONS : newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
+      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: skillContext ? SKILL_FOLLOWUP_INSTRUCTIONS : actionChips ? ACTION_CHIPS_INSTRUCTIONS : writingQuestions ? WRITING_QUESTIONS_INSTRUCTIONS : newTicket ? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS }),
       prompt: skillContext
         ? renderPrompt("task-questions-skill-followup-prompt-1", (skillContext))
+        : actionChips
+        ? renderPrompt("task-questions-action-chips-prompt-1", (task.title), (task.section), (description || "(empty)"), (parsedBody.data.originalNote?.trim() || "(not provided)"), (boardRules || "(none)"))
         : newTicket
         ? renderPrompt("task-questions-new-ticket-prompt-1", (task.title), (task.section), (description || "(empty)"))
         : renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
@@ -294,7 +304,7 @@ async function taskQuestions(request: NextRequest) {
     const questions = result.output.questions
       .map((question) => question.trim())
       .filter(Boolean)
-      .slice(0, newTicket ? 4 : 5);
+      .slice(0, actionChips ? MAX_ACTION_CHIPS : newTicket ? 4 : 5);
     const followup = skillContext && "followup" in result.output && typeof result.output.followup === "string"
       ? result.output.followup.trim() : undefined;
     return NextResponse.json({ questions, ...(followup ? { followup } : {}) });

@@ -1,7 +1,7 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, composeTaskOriginalNoteAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -126,6 +126,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const setPendingFollowup = useSetRecoilState(composeTaskSkillFollowupAtom);
   const setIntro = useSetRecoilState(composeTaskChatIntroAtom);
   const setQuestionsTaskId = useSetRecoilState(composeTaskQuestionsTaskIdAtom);
+  const setOriginalNote = useSetRecoilState(composeTaskOriginalNoteAtom);
   const setNewTicketPath = useSetRecoilState(aiChatNewTicketPathAtom);
   const setShowChat = useSetRecoilState(showAIChatInterfaceAtom);
   const setSidebar = useSetRecoilState(isAiChatSidebarModeAtom);
@@ -361,7 +362,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       } else if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       if (mobile && newTaskWindow) await onCreated();
       const content = composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason);
-      if (ticketQuestionsEnabled && / from your note\. Want me to refine it\?/.test(content)) setQuestionsTaskId(task.id);
+      if (ticketQuestionsEnabled && / from your note\. Want me to refine it\?/.test(content)) {
+        setOriginalNote({ taskId: task.id, note: text });
+        setQuestionsTaskId(task.id);
+      }
       if (skillFollowupEnabled && !writerFailed && skills?.length) {
         setPendingFollowup({ taskId: task.id });
         void (async () => {
