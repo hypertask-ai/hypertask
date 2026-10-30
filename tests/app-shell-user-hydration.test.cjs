@@ -23,6 +23,7 @@ for (const mobile of [false, true]) {
         useRecoilState: (atom) => [atom === atoms.currentUserAtom && typeof window !== "undefined" ? user : null, noop],
         useSetRecoilState: () => noop,
       }],
+      ["src/hooks/useFlag.tsx", { useFlag: () => false }],
       ["src/hooks/MultiPages/useGetAllFavorites.ts", { useGetAllFavorites: () => ({ data: emptyFavorites }) }],
     ]);
     const previousModules = [];
