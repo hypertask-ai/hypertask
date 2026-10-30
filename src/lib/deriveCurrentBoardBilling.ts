@@ -1,4 +1,5 @@
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
+import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { teamCompPlan, applyTeamComp } from "@/lib/teamComp";
 import {
   pickEntitlingSubscriptionRow,
@@ -10,7 +11,8 @@ import type { IProject, ITeam } from "@/models/model";
 export type TeamBillingSnapshot = Omit<CurrentBoardBilling, "projectId">;
 
 export function deriveTeamBilling(
-  team: ITeam | null | undefined
+  team: ITeam | null | undefined,
+  savedPlanOnly = false,
 ): TeamBillingSnapshot | null {
   if (!team?.id) return null;
 
@@ -24,9 +26,11 @@ export function deriveTeamBilling(
     ? planKindFromStripePriceId(stripePriceId)
     : { storePlanId: "Free" as const, billingInterval: null };
   const comp = teamCompPlan(team);
-  const storePlanId = applyTeamComp(team, paid.storePlanId);
+  const paidStorePlanId = applyTeamComp(team, paid.storePlanId);
   const billingInterval =
-    comp && storePlanId === comp ? null : paid.billingInterval;
+    comp && paidStorePlanId === comp ? null : paid.billingInterval;
+  const storePlanId =
+    !savedPlanOnly && isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
   const byokProviderFlags =
     team.byokApiKeys?.map(({ enabled, provider }) => ({
       enabled,
@@ -43,13 +47,14 @@ export function deriveTeamBilling(
 }
 
 export function deriveCurrentBoardBilling(
-  project: IProject | null
+  project: IProject | null,
+  savedPlanOnly = false,
 ): CurrentBoardBilling | null {
   if (!project?.id) return null;
 
   const team: ITeam | undefined = project.team;
   const teamId = project.teamId ?? team?.id ?? null;
-  const billing = deriveTeamBilling(team);
+  const billing = deriveTeamBilling(team, savedPlanOnly);
 
   if (!billing) return null;
 

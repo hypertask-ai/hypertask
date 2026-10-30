@@ -1,7 +1,9 @@
 import { Prisma, Status } from "@prisma/client";
 
+import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG } from "@/lib/flags/definitions/htpr-7852-internal-team-saved-plan";
 import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
 import { FREE_BOARD_LIMIT } from "@/lib/freePlanLimits";
 import { subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
@@ -38,15 +40,18 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
       OR: [{ googleAccount: { userId } }, { members: { some: { userId } } }],
     },
     select: {
+      id: true,
       compedUntil: true,
       subscriptionPlan: { select: { subscriptionStatus: true } },
     },
   });
 
   const cancelledFree = await isFeatureEnabled(HTPR_7982_CANCELLED_FREE_FLAG, userId);
+  const savedPlanOnly = await isFeatureEnabled(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
 
   return teams.some(
     (team) =>
+      (!savedPlanOnly && isInternalCompTeam(team.id)) ||
       isTeamComped(team) ||
       team.subscriptionPlan.some(
         (plan) => cancelledFree
