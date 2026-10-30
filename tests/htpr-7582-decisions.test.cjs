@@ -148,3 +148,45 @@ test('flag-off cutoff never misrepresents membership already granted before roll
   assert.equal((await f.service.getBoardAccessRequest(ctx(), id, NOW)).request.accessPresent, true);
   assert.equal(f.state.grants, 1);
 });
+
+test('durable foreign home blocks approval after foreign memberships disappear', async () => {
+  for (const home of [
+    { boardHomeTeamId: 'foreign' },
+    { crossTeamHomeTeamId: 'foreign', boardHomeTeamId: 'team-1', crossTeamAccessGranted: true },
+  ]) {
+    for (const members of [[], [{ project: { teamId: 'team-1' } }]]) {
+      const f = fixture(); const id = await create(f);
+      Object.assign(f.state.agent, home, { members });
+      assert.equal((await f.service.getBoardAccessRequest(ctx(), id, NOW)).request.canApprove, false);
+      const [card] = await f.service.getOwnerBoardAccessNotifications(session(), 'Normal', NOW);
+      assert.equal(card.boardAccessRequest.canApprove, false);
+      assert.equal(card.boardAccessRequest.sameTeam, false);
+      await assert.rejects(f.service.decideBoardAccessRequest(session(), id, 'approve', NOW), fail('other_team'));
+      assert.equal(f.state.grants, 0); assert.equal(f.state.members.length, 0);
+      assert.equal(f.state.requests[0].status, 'pending');
+      assert.equal((await f.service.decideBoardAccessRequest(session(), id, 'decline', NOW)).request.status, 'declined');
+    }
+  }
+});
+test('same durable home still requires compatible current memberships', async () => {
+  const f = fixture(); Object.assign(f.state.agent, { boardHomeTeamId: 'team-1', members: [{ project: { teamId: 'foreign' } }] });
+  const result = await f.create(); assert.equal(result.request.canApprove, false);
+  await assert.rejects(f.service.decideBoardAccessRequest(session(), result.request.id, 'approve', NOW), fail('other_team'));
+  assert.equal(f.state.grants, 0);
+});
+test('matching lifetime home or unattached no-home first board remains approvable', async () => {
+  for (const home of [
+    {},
+    { boardHomeTeamId: 'team-1' },
+    { crossTeamHomeTeamId: 'team-1', boardHomeTeamId: 'foreign', crossTeamAccessGranted: true },
+  ]) {
+    for (const members of [[], [{ project: { teamId: 'team-1' } }]]) {
+      const f = fixture(); Object.assign(f.state.agent, home, { members });
+      const result = await f.create(); assert.equal(result.request.canApprove, true);
+      assert.equal((await f.service.decideBoardAccessRequest(session(), result.request.id, 'approve', NOW)).request.status, 'approved');
+      assert.equal(f.state.grants, 1);
+      assert.equal(f.state.agent.crossTeamAccessGranted, home.crossTeamAccessGranted ?? false);
+      assert.equal(f.state.agent.boardHomeTeamId, home.boardHomeTeamId ?? home.crossTeamHomeTeamId ?? 'team-1');
+    }
+  }
+});

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentBoardAccessRequest, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_MODE_LOCK_NAMESPACE, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7582_AGENT_ACCESS_REQUEST_FLAG } from "@/lib/flags/definitions/htpr-7582-agent-access-request";
 import type { McpAuthContext } from "@/lib/mcp/auth/types";
 import type { SessionUser } from "@/lib/auth/getSessionUser";
@@ -37,7 +37,15 @@ export async function boardAccessAudit(db: Database, actor: Actor, operation: st
 export async function boardAccessTransaction<T>(run: (db: Database) => Promise<T>) {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await prisma.$transaction(run, { isolationLevel: "Serializable" });
+      return await prisma.$transaction(async (db) => {
+        await db.$executeRaw`
+          SELECT pg_advisory_xact_lock(
+            CAST(${FEATURE_FLAG_MODE_LOCK_NAMESPACE} AS integer),
+            hashtext(${HTPR_7582_AGENT_ACCESS_REQUEST_FLAG})
+          )
+        `;
+        return run(db);
+      }, { isolationLevel: "Serializable" });
     } catch (error) {
       if (attempt >= 3 || !(typeof error === "object" && error !== null && "code" in error && ["P2034", "P2002"].includes(String(error.code)))) throw error;
     }
@@ -92,7 +100,10 @@ async function currentState(db: Database, row: AgentBoardAccessRequest) {
   const disabled = row.status === "pending" && await db.logs.findFirst({ where: { log: "agent_board_access_requests_disabled", createdAt: { gte: row.createdAt } }, select: { id: true } });
   if (disabled) return { invalid: "feature_disabled" as const };
   const member = await db.member.findFirst({ where: { projectId: board.id, agentId: agent.id }, select: { id: true } });
-  return { agent, board, member, canApprove: canAttachAgentToTeam(agent.members.map(({ project }) => project.teamId), board.teamId) };
+  const homeTeamId = agent.crossTeamHomeTeamId ?? agent.boardHomeTeamId;
+  const canApprove = (homeTeamId == null || homeTeamId === board.teamId) &&
+    canAttachAgentToTeam(agent.members.map(({ project }) => project.teamId), board.teamId);
+  return { agent, board, member, canApprove };
 }
 
 async function resolve(db: Database, row: AgentBoardAccessRequest, actor: Actor, status: "approved" | "declined" | "expired" | "cancelled", reason: string, now: Date, memberId?: number) {

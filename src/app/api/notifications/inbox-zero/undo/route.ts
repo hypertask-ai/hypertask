@@ -46,6 +46,7 @@ export async function POST(request: Request) {
       where: {
         id: { in: notificationIds },
         userId: session.userId,
+        type: { not: "AgentBoardAccessRequest" },
         status: "Archive",
       },
       select: { id: true },
@@ -57,6 +58,7 @@ export async function POST(request: Request) {
       where: {
         id: { in: restorableIds },
         userId: session.userId,
+        type: { not: "AgentBoardAccessRequest" },
         status: "Archive",
       },
       data: {

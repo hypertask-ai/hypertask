@@ -563,6 +563,7 @@ async function archiveInbox(actor: SlackActor, notificationId: number): Promise<
     where: {
       id: notificationId,
       userId: actor.user.id,
+      type: { not: "AgentBoardAccessRequest" },
       project: accessibleProjectWhere(actor),
     },
     select: { id: true, taskId: true },
@@ -574,6 +575,7 @@ async function archiveInbox(actor: SlackActor, notificationId: number): Promise<
         id: { not: notification.id },
         taskId: notification.taskId,
         userId: actor.user.id,
+        type: { not: "AgentBoardAccessRequest" },
         status: { not: "Deleted" },
       },
       data: { status: "Deleted" },

@@ -19,6 +19,7 @@ function matches(row, where = {}) {
     if (value === null || typeof value !== 'object' || value instanceof Date) return value instanceof Date ? +item === +value : item === value;
     if ('not' in value && (typeof value.not !== 'object' || value.not === null)) return item !== value.not;
     if ('in' in value) return value.in.includes(item);
+    if ('notIn' in value) return !value.notIn.includes(item);
     if ('gt' in value) return item > value.gt;
     if ('gte' in value) return item >= value.gte;
     if ('lte' in value) return item <= value.lte;
@@ -30,9 +31,9 @@ function fixture(overrides = {}) {
   const state = {
     agent: { id: 'agent-1', userId: 6, displayName: 'Grok Bot', photoURL: null, revokedAt: null, archivedAt: null,
       credentialTeamId: null, credentialTeamAccessBinding: null, mcpTokenJti: 'generation-1', runtimeGeneration: 1,
-      permissions: { role: 'write' }, members: [] },
+      boardHomeTeamId: null, crossTeamHomeTeamId: null, crossTeamAccessGranted: false, permissions: { role: 'write' }, members: [] },
     board: { id: 15, ownerId: 6, teamId: 'team-1', name: 'project-15', title: 'Software Factory', status: 'Normal' },
-    requests: [], notifications: [], members: [], logs: [], flag: true, grants: 0, broadcasts: 0, locks: 0,
+    requests: [], notifications: [], members: [], logs: [], flag: true, grants: 0, broadcasts: 0, locks: 0, flagLocks: [], operations: [],
     ...overrides,
   };
   let tail = Promise.resolve();
@@ -49,10 +50,10 @@ function fixture(overrides = {}) {
     deleteMany: async ({ where }) => { const rows = state[name].filter(row => !matches(row, where)); const count = state[name].length - rows.length; state[name] = rows; return { count }; },
   });
   db.agentBoardAccessRequest = table('requests');
-  db.agent = { findUnique: async ({ where }) => state.agent?.id === where.id ? clone(state.agent) : null,
+  db.agent = { update: async ({ data }) => { Object.assign(state.agent, clone(data)); return clone(state.agent); }, findUnique: async ({ where }) => state.agent?.id === where.id ? clone(state.agent) : null,
     findFirst: async ({ where }) => state.agent && matches(state.agent, where) ? clone(state.agent) : null };
   db.project = { findFirst: async ({ where }) => {
-    if (!state.board || state.board.id !== where.id || state.board.status !== where.status) return null;
+    if (!state.board || state.board.id !== where.id || (where.status !== undefined && state.board.status !== where.status)) return null;
     if (state.noAccess && where.OR) return null;
     return clone(state.board);
   } };
@@ -65,7 +66,8 @@ function fixture(overrides = {}) {
   db.notification.findFirst = async ({ where }) => state.notifications.map(attach).find(row => matches(row, where)) ?? null;
   db.logs = { findFirst: async () => state.disabledSince ? { id: 7 } : null, create: async ({ data }) => { if (state.failAudit) throw Error('audit failed'); state.logs.push(data.log.startsWith('{') ? JSON.parse(data.log) : { marker: data.log }); return data; } };
   db.featureFlagChange = { findFirst: async () => state.disabledSince ? { id: 7 } : null };
-  db.$queryRaw = async () => { state.locks++; return [{ id: 6 }]; };
+  db.$executeRaw = async (sql, ...args) => { state.flagLocks.push({ sql: sql.join('?'), args }); state.operations.push('flag-lock'); return 0; };
+  db.$queryRaw = async () => { state.locks++; state.operations.push('owner-lock'); return [{ id: 6 }]; };
   db.$transaction = async (run, options) => {
     if (options) assert.equal(options.isolationLevel, 'Serializable');
     if (conflicts-- > 0) throw { code: 'P2034' };
@@ -76,7 +78,7 @@ function fixture(overrides = {}) {
   const stubs = {
     '@/lib/prisma': { __esModule: true, default: db },
     '@/lib/flags/keys': {},
-    '@/lib/flags': { isFeatureEnabled: async () => { if (state.flagFailure) throw Error('flag lookup failed'); return state.flag; } },
+    '@/lib/flags': { FEATURE_FLAG_MODE_LOCK_NAMESPACE: 6193, isFeatureEnabled: async () => { state.operations.push('flag-read'); if (state.flagFailure) throw Error('flag lookup failed'); return state.flag; } },
     '@/lib/realtime/server': { broadcastInboxChange: async () => { state.broadcasts++; if (state.broadcastFails) throw Error('realtime down'); }, socketIdFromHeader: () => undefined },
     '@/lib/mcp/managementKeyTeamScope': { getManagementKeyTeam: async () => state.bindingRevoked ? null : { id: state.agent?.credentialTeamId ?? 'team-1', accessBinding: state.agent?.credentialTeamAccessBinding ?? 'binding-1' } },
     '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}) },

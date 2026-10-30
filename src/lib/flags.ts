@@ -191,7 +191,7 @@ const FEATURE_FLAG_ROW_SELECT = {
 } as const;
 
 export const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
-const FEATURE_FLAG_MODE_LOCK_NAMESPACE = 6193;
+export const FEATURE_FLAG_MODE_LOCK_NAMESPACE = 6193;
 const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
 export const FEATURE_FLAG_ADMIN_URL = "https://app.hypertask.ai/admin/flags";
 const LEGACY_FEATURE_FLAG_DESCRIPTION =
@@ -433,7 +433,7 @@ export async function setFeatureFlagMode(
   }
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
 
-  const row = await withFlagModeInvalidation(() => prisma.$transaction(async (tx) => {
+  const write = () => prisma.$transaction(async (tx) => {
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(
         CAST(${FEATURE_FLAG_MODE_LOCK_NAMESPACE} AS integer),
@@ -492,7 +492,17 @@ export async function setFeatureFlagMode(
         actorName: actor?.agentName ?? change.user.displayName ?? change.user.email,
       } : null,
     };
-  }));
+  }, key === "htpr-7582-agent-access-request" ? { isolationLevel: "Serializable" } : undefined);
+  const row = await withFlagModeInvalidation(async () => {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await write();
+      } catch (error) {
+        if (key !== "htpr-7582-agent-access-request" || attempt >= 3 ||
+            !(typeof error === "object" && error !== null && "code" in error && error.code === "P2034")) throw error;
+      }
+    }
+  });
   return withFeatureFlagMetadata(row, await loadFeatureFlagTicketTitles([key], actor));
 }
 

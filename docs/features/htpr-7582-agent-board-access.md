@@ -11,7 +11,8 @@ access grant, in the same Serializable transaction as the request and audit.
 Decline, archive and seen changes never grant membership. An approved receipt
 never regrants membership after removal. Scoped credentials cannot request a
 foreign team; an unscoped agent can request an owner-visible other-team board,
-but Approve stays disabled until the existing team predicate allows it.
+but Approve requires compatible memberships and lifetime home.
+An unattached agent without home keeps first-board approval.
 
 Requests expire after seven days. New requests are limited to five per agent
 per hour, twenty per owner per day and twenty active per owner. Decline, expiry
