@@ -72,7 +72,9 @@ function live(run = command) {
       if (target && (target.name !== 'CI Tests' || target.head_branch !== 'production' || target.status !== 'completed')) {
         throw new Error('--run must be a completed production CI Tests run');
       }
-      let red, firstRed, green, latest;
+      let red, firstRed, green, latest, pendingGreen;
+      const eligible = q => q.name === 'CI Tests' && q.head_branch === 'production' && q.status === 'completed' &&
+        q.conclusion !== 'cancelled' && !(target && runOrder(q, target) < 0);
       for (let page = 1; !green; page++) {
         const route = target ? `actions/workflows/${target.workflow_id}/runs` : 'actions/workflows/ci-tests.yml/runs';
         const rows = api(`${route}?branch=production&status=completed&per_page=100&page=${page}${target ? `&created=<=${target.updated_at || target.created_at}` : ''}`).workflow_runs;
@@ -81,8 +83,7 @@ function live(run = command) {
         rows.sort(runOrder);
         while (rows.length) {
           const r = rows.shift();
-          if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
-              r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
+          if (!eligible(r)) continue;
           const replay = target && r.id === target.id && !r.previousAttempt && (r.run_attempt || 1) > 1;
           // An unchanged red tick stays one API call, so the idle check runs before any job read.
           if (!latest) {
@@ -103,7 +104,12 @@ function live(run = command) {
           const row = replay && job.conclusion === 'failure' ? { ...r, run_attempt: 1, replay: true } : r;
           if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
           if (!red) {
-            if (job.conclusion !== 'failure') return { status: job.conclusion, run: row };
+            if (job.conclusion !== 'failure') {
+              const hides = (r.run_attempt || 1) > 1 &&
+                rows.some(q => eligible(q) && Date.parse(q.created_at) > Date.parse(r.created_at));
+              if (hides) { pendingGreen = pendingGreen || row; continue; }
+              return { status: job.conclusion, run: row };
+            }
             red = { ...row, job, failedJobs: failedJobs.length ? failedJobs : [job] }; firstRed = row;
           } else if (job.conclusion === 'success') { green = row; break; }
           else if (job.conclusion === 'failure') firstRed = row;
@@ -114,6 +120,7 @@ function live(run = command) {
         }
       }
       if (!red) return { status: 'none' };
+      if (!green && pendingGreen) green = { ...pendingGreen, fallbackGreen: true };
       if (!green) throw new Error('No last green production run found; refusing an incomplete PR range');
       const failures = (red.failedJobs || [red.job]).flatMap(job => json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
         input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${job.id}/logs`,
@@ -247,7 +254,7 @@ async function apply(p, state, api, persist) {
   if (p.action === 'rerun') { api.rerun(p.run.id); return; }
   if (p.action === 'green') {
     for (const a of Object.values(state.alerts)) {
-      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
+      if (a.closed || p.run.fallbackGreen || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
       if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
       // Ambiguous activity writes are not retried: retain the intent for operator reconciliation.
       if (a.closing) throw new Error('Recovery note outcome unknown; reconcile saved closing intent manually');
