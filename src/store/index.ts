@@ -96,6 +96,11 @@ export const composeTaskQuestionsTaskIdAtom = atom<number | null>({
     default: null,
 });
 
+export const composeTaskOriginalNoteAtom = atom<{ taskId: number; note: string } | null>({
+    key: "composeTaskOriginalNote",
+    default: null,
+});
+
 export const aiChatPendingPromptAtom = atom<string | { query: string; fullScreen: true } | null>({
     key: "aiChatPendingPromptAtom",
     default: null,
