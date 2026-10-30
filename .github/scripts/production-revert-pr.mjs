@@ -5,9 +5,23 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const sha = /^[a-f0-9]{40}$/;
-const infrastructure = /(?:HTTP (?:429|503)|rate limit exceeded|API rate limit|testTimeoutFailure|ERR_TEST_TIMEOUT|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|service unavailable)/i;
+const infrastructure = /(?:HTTP (?:429|502|503|504)|rate limit exceeded|API rate limit|testTimeoutFailure|ERR_TEST_TIMEOUT|ECONNRESET|ETIMEDOUT|ENOTFOUND|socket hang up|service unavailable)/i;
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-const api = route => JSON.parse(execFileSync('gh', ['api', route], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }));
+const attempts = 5;
+const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+const ghOutput = error => `${error?.stdout || ''}${error?.stderr || ''}${error?.message || ''}`;
+const gh = (args, options) => {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return execFileSync('gh', args, options);
+    } catch (error) {
+      if (attempt >= attempts || !infrastructure.test(ghOutput(error))) throw error;
+      pause(2000 * 2 ** (attempt - 1));
+    }
+  }
+};
+export const api = route => JSON.parse(gh(['api', route], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 }));
+export const jobLogs = (repo, jobs) => jobs.filter(j => j.conclusion === 'failure').map(j => gh(['api', '--allow-escape-sequences', `repos/${repo}/actions/jobs/${j.id}/logs`], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })).join('\n');
 const infraFailure = output => infrastructure.test(output.split('\n').filter(line => !/(?:[✔✓✖]|(?:^|\s)(?:not )?ok \d+|# Subtest:)/.test(line)).join('\n'));
 
 export function testFiles(jobs, logs) {
@@ -121,7 +135,7 @@ async function main() {
   if (run.name !== 'CI Tests' || run.event !== 'push' || run.head_branch !== 'production' || run.conclusion !== 'failure' || run.head_repository?.full_name !== repo) return;
   const jobs = api(`repos/${repo}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`).jobs;
   if (!Array.isArray(jobs) || jobs.length === 100) throw new Error('Incomplete job inventory');
-  const logs = jobs.filter(j => j.conclusion === 'failure').map(j => execFileSync('gh', ['api', '--allow-escape-sequences', `repos/${repo}/actions/jobs/${j.id}/logs`], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 })).join('\n');
+  const logs = jobLogs(repo, jobs);
   const files = testFiles(jobs, logs);
   if (!files.length) { console.log('No supported deterministic failure'); return; }
   const runs = api(`repos/${repo}/actions/workflows/ci-tests.yml/runs?branch=production&event=push&status=success&created=%3C${run.created_at}&per_page=100`).workflow_runs;
@@ -134,4 +148,8 @@ async function main() {
   if (result && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `culprit=${result.culprit}\nhead=${result.head}\n`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(e => { console.error(e.message); process.exitCode = 1; });
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch(e => {
+  if (infrastructure.test(ghOutput(e))) { console.log(`::warning::GitHub API unavailable after ${attempts} attempts; no revert proposal this run`); return; }
+  console.error(e.message);
+  process.exitCode = 1;
+});
