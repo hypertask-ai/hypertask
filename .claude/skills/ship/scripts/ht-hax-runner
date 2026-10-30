@@ -105,6 +105,13 @@ case "${1:-}" in
         echo "$(date -u +%FT%TZ) gate: vps load hold" >> "$rlog"; sleep 300; continue
       fi
       admit || exit 1
+      # A runner writes as its own agent or not at all: an empty login would post as Valentin (YPER4-960).
+      IFS=$'\t' read -r ident token_file < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+      [ "$ident" = "RUNNER $n" ] && [ -s "$token_file" ] \
+        || { echo "identity check failed for RUNNER $n: no board login" >&2; log "RUNNER $n: no board login, not started"; exit 1; }
+      HT_TOKEN=$(cat "$token_file") || exit 1
+      [ -n "$HT_TOKEN" ] || { echo "identity check failed for RUNNER $n: empty board login" >&2; exit 1; }
+      export HT_TOKEN
       unset CLAUDE_CODE_SESSION_ID CODEX_THREAD_ID
       CODEX_SESSION_ID=$(cat /proc/sys/kernel/random/uuid) || exit 1
       export CODEX_SESSION_ID
