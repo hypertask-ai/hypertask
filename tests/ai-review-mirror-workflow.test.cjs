@@ -14,7 +14,8 @@ const REVIEW = `APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**
 <!-- reviewed-commit: ${SHA} -->
 <!-- ai-review-signature: ${"c".repeat(64)} -->`;
 
-const loadScript = async () => yaml.load(await readFile(WORKFLOW, "utf8")).jobs.mirror.steps[0].with.script;
+const loadScript = async () => yaml.load(await readFile(WORKFLOW, "utf8")).jobs.mirror.steps
+  .find(step => step.with?.script).with.script;
 
 async function runMirror({
   eventName = "issue_comment",
@@ -25,10 +26,30 @@ async function runMirror({
   ticketComments = [],
   postResponse = { status: 200, body: { success: true, url: "https://app.hypertask.ai/detail/project-15/1234" } },
   token = "test-token",
+  rateLimitReads = 0,
 } = {}) {
   const calls = [];
   const failures = [];
   const infos = [];
+  const warnings = [];
+  let refusedReads = rateLimitReads;
+  // The exact 403 a saturated App installation returns: no room left in the
+  // hourly window, resetting in a moment (YPER4-925).
+  const refuse = () => {
+    assert.ok(refusedReads > 0, "the reads must be refused only as often as the test asks");
+    refusedReads -= 1;
+    return Object.assign(new Error("API rate limit exceeded for installation."), {
+      status: 403,
+      response: {
+        url: "https://api.github.com/repos/hypertask-ai/hypertask/issues/43/comments?per_page=100",
+        headers: {
+          "x-ratelimit-limit": "5000",
+          "x-ratelimit-remaining": "0",
+          "x-ratelimit-reset": String(Math.floor(Date.now() / 1000)),
+        },
+      },
+    });
+  };
 
   const fetchStub = async (url, init = {}) => {
     const method = init.method ?? "GET";
@@ -41,16 +62,22 @@ async function runMirror({
 
   const github = {
     rest: {
-      pulls: { get: async () => ({ data: pr }) },
+      pulls: { get: async () => (refusedReads > 0 ? Promise.reject(refuse()) : { data: pr }) },
       issues: { listComments: async () => ({ data: [] }) },
     },
-    paginate: async () => pr.comments ?? [{ user: REVIEWER, body: REVIEW }],
+    paginate: async () => (refusedReads > 0
+      ? Promise.reject(refuse())
+      : pr.comments ?? [{ user: REVIEWER, body: REVIEW }]),
   };
 
   const savedFetch = globalThis.fetch;
   const savedToken = process.env.HYPERTASK_MCP_TOKEN;
   const savedAuthor = process.env.REVIEW_COMMENT_AUTHOR;
+  const savedWorkspace = process.env.GITHUB_WORKSPACE;
   globalThis.fetch = fetchStub;
+  // The step imports the shared retry helper from the checked-out production
+  // scripts, which in the runner is the workspace root.
+  process.env.GITHUB_WORKSPACE = process.cwd();
   if (token === null) delete process.env.HYPERTASK_MCP_TOKEN;
   else process.env.HYPERTASK_MCP_TOKEN = token;
   // The step reads this from the workflow env; without it no comment is the
@@ -60,17 +87,24 @@ async function runMirror({
     await new AsyncFunction("github", "context", "core", await loadScript())(
       github,
       { eventName, payload: { issue, comment, inputs }, repo: { owner: "hypertask-ai", repo: "hypertask" } },
-      { info(message) { infos.push(message); }, setFailed(message) { failures.push(message); } },
+      {
+        info(message) { infos.push(message); },
+        warning(message) { warnings.push(message); },
+        setFailed(message) { failures.push(message); },
+      },
     );
   } finally {
     globalThis.fetch = savedFetch;
+    if (savedWorkspace === undefined) delete process.env.GITHUB_WORKSPACE;
+    else process.env.GITHUB_WORKSPACE = savedWorkspace;
     if (savedToken === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
     else process.env.HYPERTASK_MCP_TOKEN = savedToken;
     if (savedAuthor === undefined) delete process.env.REVIEW_COMMENT_AUTHOR;
     else process.env.REVIEW_COMMENT_AUTHOR = savedAuthor;
   }
 
-  return { calls, failures, infos, posts: calls.filter(call => call.method === "POST") };
+  assert.equal(refusedReads, 0, "every refused read must have been retried");
+  return { calls, failures, infos, warnings, posts: calls.filter(call => call.method === "POST") };
 }
 
 function productionPr(overrides = {}) {
@@ -237,11 +271,18 @@ test("a missing board token fails the run, never a silent skip", async () => {
   assert.match(failures[0], /HYPERTASK_MCP_TOKEN is missing/);
 });
 
-test("the workflow neither checks out nor executes candidate code", async () => {
+test("the workflow mirrors no candidate code into the run", async () => {
   const workflow = yaml.load(await readFile(WORKFLOW, "utf8"));
+  const [checkout, script] = workflow.jobs.mirror.steps;
   assert.deepEqual(workflow.jobs.mirror.steps.map(step => step.uses), [
+    "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
     "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
   ]);
+  // The one checkout is the shared production scripts for the rate-limit
+  // retry, never the pull request under review.
+  assert.equal(checkout.with.ref, "production");
+  assert.equal(checkout.with["persist-credentials"], false);
+  assert.equal(checkout.with["sparse-checkout"], ".github/scripts");
   assert.deepEqual(workflow.permissions, { contents: "read", "pull-requests": "read" });
   for (const step of workflow.jobs.mirror.steps) {
     assert.equal(step.run, undefined, "no shell step may run candidate input");
@@ -251,5 +292,18 @@ test("the workflow neither checks out nor executes candidate code", async () => 
   // An ordinary comment must not cancel the reviewer's delivery.
   assert.equal(workflow.concurrency["cancel-in-progress"], false);
   assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
-  assert.ok(workflow.jobs.mirror.steps[0].env.REVIEW_COMMENT_AUTHOR);
+  assert.ok(script.env.REVIEW_COMMENT_AUTHOR);
+});
+
+test("a rate-limited read waits for the reset and still mirrors the verdict (YPER4-925)", async () => {
+  // The live run failed on the comment read with 403 and x-ratelimit-remaining
+  // 0, 82 seconds before the window reset; the verdict never reached the
+  // ticket. Both reads now wait instead of dropping it.
+  const { posts, failures, warnings } = await runMirror({ rateLimitReads: 2 });
+
+  assert.deepEqual(failures, []);
+  assert.equal(posts.length, 1);
+  assert.match(JSON.parse(posts[0].init.body).text, /APPROVE/);
+  assert.equal(warnings.length, 2);
+  assert.match(warnings.join("\n"), /rate limited; retrying after \d+s/);
 });

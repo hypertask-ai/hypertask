@@ -220,9 +220,18 @@ copy was rejected ("Unauthorized") and the failure was hidden by
   the comment.
 - A rejected read or post fails the run. A silent skip is exactly the failure
   this replaces.
-- Reads the PR number, branch name and comment text as data: no checkout, no
-  shell step, no candidate code, and `contents: read` plus `pull-requests: read`
-  only.
+- Both GitHub reads use the same reset-aware retry as the other trusted
+  workflows (`retryGithubRequest` in `.github/scripts/github-rate-limit.mjs`).
+  The installation shares one hourly budget with the whole fleet, and the live
+  failure was a `403` with `x-ratelimit-remaining: 0` resetting 82 seconds
+  later (YPER4-925). Waits are capped at 240 seconds and the budget at 420
+  seconds, inside the job's 10-minute timeout; a wait past the cap fails the run
+  with the GitHub rate limit named, so a lost verdict is never a silent one.
+- Reads the PR number, branch name and comment text as data. The only checkout
+  is the production default branch's `.github/scripts`, sparse, with
+  `persist-credentials: false`, for that retry helper; no candidate code is
+  fetched or run, there is no shell step, and the permissions stay
+  `contents: read` plus `pull-requests: read`.
 
 ## Ticket links from PR titles
 
