@@ -106,6 +106,55 @@ test('publisher opens a reviewable branch, never updates production, and rejects
   assert.equal(request.includes('--auto'), false);
 });
 
+function fakeGh(t, replies) {
+  const bin = mkdtempSync(join(tmpdir(), 'gh-bin-'));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  const counter = join(bin, 'calls');
+  writeFileSync(join(bin, 'gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const count = fs.existsSync(${JSON.stringify(counter)}) ? Number(fs.readFileSync(${JSON.stringify(counter)}, 'utf8')) : 0;
+fs.writeFileSync(${JSON.stringify(counter)}, String(count + 1));
+const reply = ${JSON.stringify(replies)}[Math.min(count, ${replies.length} - 1)];
+if (reply.status) { console.error(reply.body); process.exit(reply.status); }
+console.log(reply.body);
+`);
+  chmodSync(join(bin, 'gh'), 0o755);
+  const old = process.env.PATH;
+  process.env.PATH = `${bin}:${old}`;
+  t.after(() => { process.env.PATH = old; });
+  return () => Number(readFileSync(counter, 'utf8'));
+}
+
+test('transient GitHub API outages are retried instead of failing the run', async t => {
+  const { api, jobLogs } = await import(moduleUrl);
+  const calls = fakeGh(t, [{ status: 1, body: 'gh: HTTP 503' }, { body: '{"ok":true}' }, { body: 'healthy log line' }]);
+  assert.deepEqual(api('repos/hypertask-ai/hypertask/actions/runs/1'), { ok: true });
+  assert.equal(calls(), 2);
+  assert.equal(jobLogs('hypertask-ai/hypertask', [{ id: 7, conclusion: 'failure' }, { id: 8, conclusion: 'success' }]).trim(), 'healthy log line');
+  assert.equal(calls(), 3);
+});
+
+test('a real API error is not retried', async t => {
+  const { api } = await import(moduleUrl);
+  const calls = fakeGh(t, [{ status: 1, body: 'gh: Not Found (HTTP 404)' }]);
+  assert.throws(() => api('repos/hypertask-ai/hypertask/actions/runs/1'), /404/);
+  assert.equal(calls(), 1);
+});
+
+test('an outage that outlasts the retries warns and leaves the job green', async t => {
+  const { spawnSync } = require('node:child_process');
+  fakeGh(t, [{ status: 1, body: 'gh: HTTP 503' }]);
+  const script = join(__dirname, '../.github/scripts/production-revert-pr.mjs');
+  const run = spawnSync(process.execPath, [script], {
+    cwd: join(__dirname, '..'),
+    env: { ...process.env, GITHUB_REPOSITORY: 'hypertask-ai/hypertask', PROBE_IMAGE: 'production-revert-sandbox', FAILED_RUN_ID: '1' },
+    encoding: 'utf8',
+    timeout: 120_000,
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /::warning::GitHub API unavailable/);
+});
+
 test('isolated rejected replay cannot forge runner outputs', { skip: !process.env.PROBE_IMAGE }, async t => {
   const { findRegression } = await import(moduleUrl);
   const outside = mkdtempSync(join(tmpdir(), 'runner-control-'));
