@@ -425,5 +425,19 @@
     "version": "1",
     "partsHash": "5572ba2c19dd3d1ef10b6743aa544cdfec4d4c1d75e51f74803d9d233d2e9ea7",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-action-chips-1",
+    "version": "1",
+    "partsHash": "1f1177b4b8c727730c3f37c502e562c4bea24213aabe909babd55a46d1590fc1",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/task-questions/route.ts",
+    "id": "task-questions-action-chips-prompt-1",
+    "version": "1",
+    "partsHash": "4ea669a2a70c15a4afdf8618490359bfb4e959969bb4441a786a32a0af0207da",
+    "expressionsHash": "3ead76a9f1cfe988067596cc44cd63f40b9e17ecb740e65133eee88d31189d2b"
   }
 ]

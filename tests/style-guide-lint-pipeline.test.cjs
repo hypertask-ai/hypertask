@@ -45,7 +45,8 @@ function component(className) {
 test("the required CI lint step uses the baseline-aware npm command without regenerating it", () => {
   const workflow = readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8");
   const checks = yaml.load(workflow).jobs["ci-checks"];
-  assert.equal(checks.if, "needs.ci-prepare.outputs.run_tests == 'true'");
+  assert.equal(checks.if, "needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'");
+  assert.equal(checks.steps.find((step) => step.name === "Lint").if, "needs.ci-prepare.outputs.run_tests == 'true'");
   assert.equal(checks.steps.find((step) => step.name === "Lint").run,
     "npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache");
   assert.match(scripts.lint, /--suppressions-location eslint-local-rules\/style-guide-suppressions\.json/);

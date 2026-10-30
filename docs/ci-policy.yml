@@ -167,6 +167,9 @@ ship_scripts_tests:
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
     - python3 .claude/skills/ship/scripts/pr-drain-pick.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
+    - python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
+    - python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
+    - bash .claude/skills/ship/scripts/runner-pickup.test.sh
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
     - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
     - bash .claude/skills/ship/scripts/error-collector.test.sh
@@ -450,6 +453,18 @@ ci_tests:
     required_summary: ci-tests
     summary_needs: [ci-prepare, ci-checks, ci-test]
     docs_only: explicit_skipped_producers
+  board_registration_boundary:
+    job: ci-checks
+    dependency: dependency-cruiser@16.10.4
+    rule: .dependency-cruiser.cjs
+    scope: direct_imports_from_boardCommands_only
+    allowed_src_contracts: [HTCTypes, models/enums, models/model]
+    controls: tests/domain-boundary.test.cjs
+    control_cases: [allowed_contracts_and_assembly, forbidden_concrete_domains]
+    trigger: non_documentation_changes_or_unknown_diff
+    boundary_only: skip_existing_static_checks
+    required_summary: ci-tests
+    additional_required_context: false
   test_lanes:
     shards: 2
     shard_constant: CI_TEST_SHARDS

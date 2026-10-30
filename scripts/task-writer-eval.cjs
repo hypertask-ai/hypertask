@@ -123,7 +123,7 @@ async function runLive(corpus, api, persist) {
       await persist(recording);
       const saved = await api('GET', `/api/tasks/single?id=${task.id}`);
       assert.equal(saved.description_?.content, draft, 'Saved fixture differs from writer draft');
-      const chips = await api('POST', '/api/ai/task-questions', { taskId: task.id, kind: 'new-ticket' });
+      const chips = await api('POST', '/api/ai/task-questions', { taskId: task.id, kind: 'new-ticket', originalNote: fixture.notes });
       output = { id: fixture.id, rawHtml: rawDraft, html: draft, questions: chips.questions, taskId: task.id, writerStatus: 200, chipStatus: 200, cleaned: false };
       score(fixture, output, examples());
     } finally {

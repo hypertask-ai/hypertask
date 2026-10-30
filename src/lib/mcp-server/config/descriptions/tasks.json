@@ -63,17 +63,20 @@
     "create": {
       "tool": "hypertask_create_task",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "update": {
       "tool": "hypertask_update_task",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "move": {
       "tool": "hypertask_move_task_between_boards",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "waiting_on": {
       "tool": "hypertask_set_task_waiting_on",
@@ -83,7 +86,8 @@
     "assign": {
       "tool": "hypertask_assign_user",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     }
   },
   "input_examples": [

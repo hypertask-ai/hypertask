@@ -5,6 +5,7 @@ export const CreateAgentInputSchema = z
     display_name: z.string().trim().min(1).max(60),
     project_ids: z.array(z.number().int().positive()).max(100).default([]),
     role: z.enum(["read", "write", "admin"]).default("write"),
+    ensure: z.boolean().optional(),
   })
   .strict();
 

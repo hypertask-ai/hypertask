@@ -52,6 +52,7 @@ class CacheTests(unittest.TestCase):
         self.load = 1
         self.now = 1800000000
         self.snap = patch.object(m, "snapshots", side_effect=lambda: copy.deepcopy(self.rows)).start()
+        patch.object(m, "admit_domain", return_value=[]).start()
         patch.object(m, "command", side_effect=self.command).start()
         patch.object(m.os, "getloadavg", side_effect=lambda: (self.load, 1, 1)).start()
         patch.object(m.time, "time", side_effect=lambda: self.now).start()

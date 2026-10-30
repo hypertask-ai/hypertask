@@ -2,6 +2,7 @@ const { fixture, matches: matchWhere, hydrate } = require('./agent-board-scope.c
 function normalizeWhere(value) {
   if (Array.isArray(value)) return value.map(normalizeWhere);
   if (!value || typeof value !== 'object' || value instanceof Date) return value;
+  if (value.equals === require('@prisma/client').Prisma.DbNull) return null;
   return Object.fromEntries(Object.entries(value).map(([key, operand]) => {
     if (key === 'isEmpty') return [operand ? 'none' : 'some', {}];
     if (key === 'has') return ['some', { equals: operand }];

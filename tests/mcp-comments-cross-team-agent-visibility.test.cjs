@@ -30,6 +30,7 @@ function loadRoute(comments) {
     },
   };
   const stubs = {
+    "@/lib/mcp/skills/context": require("./helpers/mcp-skill-context.cjs"),
     "@/utils/controllers/projects/getAllIncludes": {},
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },

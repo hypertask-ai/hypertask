@@ -3,7 +3,7 @@ export const AI_CHIP_TEXT_LIMIT = 200;
 export const AI_CHIP_MAX_CHIPS = 12;
 
 export const AI_CHIP_SURFACES = ["welcome-board", "welcome-ticket", "welcome-edit", "welcome-demo", "welcome-board-build", "new-ticket-questions"] as const;
-export const AI_CHIP_TYPES = ["suggested", "ticket-prompt", "generated-question", "edit-prompt", "board-example", "demo-prompt", "ask-all", "summary-action"] as const;
+export const AI_CHIP_TYPES = ["suggested", "ticket-prompt", "generated-question", "edit-prompt", "board-example", "demo-prompt", "ask-all", "summary-action", "action-chip"] as const;
 export const AI_CHIP_EVENTS = ["shown", "clicked", "ignored", "next_typed"] as const;
 
 export type AiChipSurface = (typeof AI_CHIP_SURFACES)[number];

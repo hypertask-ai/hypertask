@@ -73,7 +73,14 @@ elif name == 'hypertask':
     elif args[:2] == ['tasks','get']:
         print(json.dumps(dict(success=True,tasks=[t for t in f['tasks'] if t['ticketNumber']==args[2]])))
     elif args[:2] == ['comment','list']:
-        print(json.dumps(dict(success=True,comments=f['comments'][args[2]])))
+        rows = f['comments'][args[2]]
+        size = int(args[args.index('--limit')+1]) if '--limit' in args else len(rows)
+        start = int(args[args.index('--cursor')+1]) if '--cursor' in args else 0
+        if f.get('repeat_cursor'): start = 0
+        page = rows[start:start+size]
+        more = start + size < len(rows)
+        print(json.dumps(dict(success=True,comments=page,total=len(rows),
+                              has_more=more,nextCursor=str(start+size) if more else None)))
     else: raise AssertionError('not a read: '+repr(args))
 elif name == 'vcc':
     assert args[:2] == ['activity','last']
@@ -172,9 +179,10 @@ repeated, _ = run(dict(split_history, repeat_log_page=True))
 assert repeated.returncode != 0 and 'repeated agent activity' in repeated.stderr
 split_history['comments']['HTPR-1'] *= 2
 split_history['logs']['HTPR-1'] = []
-checked, _ = run(split_history)
-assert checked.returncode != 0 and 'outside the bounded' in checked.stderr
-print('ok complete agent log pages preserve claims and comment completeness remains guarded')
+checked, calls = run(split_history)
+assert checked.returncode == 0, checked.stderr
+assert len([c for c in calls if c[:3] == ['hypertask','comment','list']]) == 1, calls
+print('ok a full page of claim-free comments no longer fails the scan')
 
 
 
@@ -229,10 +237,29 @@ reads = [c[3] for c in calls if c[:3] == ['hypertask','comment','list']]
 assert len(reads) == len(set(reads)) == 500, len(reads)
 assert '\tHTPR-500\t' in r.stdout and '\tHTPR-501\t' not in r.stdout
 print('ok bounded inspections retain the partial report and identify omitted coverage')
-f = dict(tasks=[task(1)],comments={'HTPR-1':[comment(agent=None)]*100},activities={},prs=[])
+f = dict(tasks=[task(1)],comments={'HTPR-1':[comment(agent=None)]*100+[comment(9)]},activities={},prs=[])
+r, calls = run(f)
+assert r.returncode == 0, r.stderr
+assert len([c for c in calls if c[:3] == ['hypertask','comment','list']]) == 2, calls
+assert any('--cursor' in c for c in calls if c[:3] == ['hypertask','comment','list']), calls
+print('ok older claims are found on later comment pages')
+f = dict(tasks=[task(1)],comments={'HTPR-1':[comment(agent=None)]*175},activities={},prs=[])
+r, calls = run(f)
+assert r.returncode == 0, r.stderr
+assert len([c for c in calls if c[:3] == ['hypertask','comment','list']]) == 2, calls
+assert '\tHTPR-1\t' in r.stdout, r.stdout
+print('ok a busy ticket without a claim is reported instead of failing the scan')
+f = dict(tasks=[task(1),task(2)],comments={'HTPR-1':[],'HTPR-2':[]},
+         activities={'HTPR-1':iso(8)+'\tAgent One\n'},prs=[])
+r, calls = run(f)
+assert r.returncode == 0, r.stderr
+assert '\tHTPR-1\t' in r.stdout and '\tHTPR-2\t' in r.stdout, r.stdout
+print('ok a ticket with no comments and no claim is inspected instead of failing the scan')
+f = dict(tasks=[task(1)],comments={'HTPR-1':[comment(agent=None)]*300},activities={},prs=[],
+         repeat_cursor=True)
 r, _ = run(f)
-assert r.returncode != 0 and 'outside the bounded comment read' in r.stderr
-print('ok potentially hidden older claims fail closed')
+assert r.returncode != 0 and 'comment paging made no progress' in r.stderr, r.stderr
+print('ok a cursor that stops moving fails the scan')
 f = dict(tasks=[task(1, 'Backlog'), task(2, 'Backlog')],
          comments={f'HTPR-{n}':[comment()] for n in [1,2]}, activities={},
          prs=[pr(n,f'HTPR-{n}',8) for n in [1,2]])

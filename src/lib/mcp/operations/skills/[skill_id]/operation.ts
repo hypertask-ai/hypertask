@@ -39,7 +39,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   try {
     const skill = await loadSkill(auth.userId, context, auth);
-    return NextResponse.json({ success: true, skill });
+    return NextResponse.json({ success: true, skill: { ...skill, status: skill.enabled ? "enabled" : "disabled" } });
   } catch (error) {
     return skillErrorResponse(error, auth);
   }

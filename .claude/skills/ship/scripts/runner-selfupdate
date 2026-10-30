@@ -76,6 +76,7 @@ run() {
   for source in "${shell_files[@]}" runner-webhook; do
     sources+=("$scripts/$source"); targets+=("$LIB/$source")
   done
+  sources+=("$scripts/runner-domain-pickup.py"); targets+=("$LIB/runner-domain-pickup.py")
   sources+=("$scripts/runner-dispatch"); targets+=("$DISPATCH")
   sources+=("$LIVE/.claude/hooks/runner-inbox-stop.sh"); targets+=("$LIB/runner-inbox-stop.sh")
   for source in "${unit_files[@]}"; do
@@ -92,7 +93,7 @@ run() {
     if ! bash -n "$scripts/$source"; then alert syntax 'Runner update contains invalid shell code'; return 1; fi
   done
   if ! bash -n "$LIVE/.claude/hooks/runner-inbox-stop.sh" ||
-    ! python3 - "$scripts/runner-webhook" "$scripts/runner-dispatch" <<'PY'
+    ! python3 - "$scripts/runner-webhook" "$scripts/runner-dispatch" "$scripts/runner-domain-pickup.py" <<'PY'
 import pathlib, sys
 for source in sys.argv[1:]:
     path = pathlib.Path(source)

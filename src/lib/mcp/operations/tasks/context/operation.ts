@@ -1,3 +1,4 @@
+import { getMcpSkillContext } from '@/lib/mcp/skills/context';
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
@@ -291,6 +292,9 @@ export async function GET(request: NextRequest) {
         dueDate: mappedTask.dueDate,
         savedContent: mappedTask.savedContent,
       },
+      skill_context: await getMcpSkillContext(ctx, projectId, [
+        mappedTask.title, mappedTask.description, ...comments.map(comment => comment.text),
+      ]),
       parent: mappedTask.parent_task ?? null,
       subtasks: mappedTask.sub_tasks,
       relatedTasks,

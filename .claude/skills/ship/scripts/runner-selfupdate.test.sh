@@ -27,7 +27,7 @@ setup() {
   mkdir -p "$TMPDIR"
   mkdir -p "$HOME" "$C/source/.claude/skills/ship/scripts" "$C/source/.claude/hooks" "$C/source/.claude/systemd" "$C/lib" "$C/units/agent-events.service.d"
   S=$C/source/.claude/skills/ship/scripts
-  cp "$HERE/runner-pickup" "$HERE/user-unit-check" "$SCRIPT" "$S/"
+  cp "$HERE/runner-pickup" "$HERE/runner-domain-pickup.py" "$HERE/user-unit-check" "$SCRIPT" "$S/"
   for file in runner-chat-reply ship-identity; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$file"; done
   printf '#!/usr/bin/env bash\nexit 0\n' > "$C/source/.claude/hooks/runner-inbox-stop.sh"
   for file in runner-webhook runner-dispatch; do printf '#!/usr/bin/env python3\nprint("fixture")\n' > "$S/$file"; done
@@ -117,6 +117,17 @@ eq 'successful install raises no event' "$(events)" 0
 : > "$FAKE_SYSTEMCTL_LOG"
 run_ok 'installed update is idempotent'
 eq 'second run performs no install' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+
+setup domain-helper-change
+merge runner-domain-pickup.py '# merged domain helper update'
+run_ok 'domain helper change installs'
+if cmp -s "$S/runner-domain-pickup.py" "$C/lib/runner-domain-pickup.py"; then ok 'domain helper equals production'; else bad 'domain helper differs'; fi
+
+setup domain-helper-syntax-error
+merge runner-domain-pickup.py 'def broken('
+run_bad 'invalid domain helper syntax rejected'
+restored domain-helper-syntax-error
+eq 'domain helper validation precedes installation' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
 
 setup dispatcher-change
 merge runner-dispatch '# merged dispatcher update'
