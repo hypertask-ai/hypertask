@@ -21,6 +21,8 @@ import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelCompone
 import CreatedBy from "../Common/CreatedBy";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { activityAgentId } from "@/lib/agents/activityAttribution";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
 import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
 
 const CommentTaskActivity = () => {
@@ -205,21 +207,26 @@ const TaskWaitingOnActivity = ({
   activity,
 }: {
   activity: ITaskWaitingOnActivity;
-}) => (
-  <>
-    <BoldElement>
-      <CreatedByLocal
-        name={activity.data.fromAgent?.displayName ?? activity.data.fromUser.displayName ?? ""}
-        pfp={activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser.photoURL ?? ""}
-      />
-    </BoldElement>{" "}
-    {activity.data.waitingOnDisplayName
-      ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
-      : activity.data.blockerCleared
-        ? `cleared the blocker${activity.data.reason ? `: ${activity.data.reason}` : ""}`
-        : "cleared blocked by"}
-  </>
-);
+}) => {
+  const agentClearsBlocker = useFlag(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG);
+  const fromAgent = agentClearsBlocker ? activity.data.fromAgent : undefined;
+  const clearedWithReason = agentClearsBlocker && activity.data.blockerCleared;
+  return (
+    <>
+      <BoldElement>
+        <CreatedByLocal
+          name={fromAgent?.displayName ?? activity.data.fromUser.displayName ?? ""}
+          pfp={fromAgent ? fromAgent.photoURL ?? "" : activity.data.fromUser.photoURL ?? ""}
+        />
+      </BoldElement>{" "}
+      {activity.data.waitingOnDisplayName
+        ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
+        : clearedWithReason
+          ? `cleared the blocker${activity.data.reason ? `: ${activity.data.reason}` : ""}`
+          : "cleared blocked by"}
+    </>
+  );
+};
 
 const TaskPullRequestActivity = ({
   activity,
