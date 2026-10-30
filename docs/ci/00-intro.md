@@ -7,4 +7,3 @@ _Last updated: 2026-10-27._
 Each section below is its own file in `docs/ci/`, one file per topic, so two CI changes never edit
 the same lines. This page is built from those files: edit the section file, then run
 `node scripts/shared-lists/build.mjs --write`.
-
