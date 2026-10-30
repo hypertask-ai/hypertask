@@ -72,8 +72,10 @@ type TaskComment = {
 
 export async function POST(request: NextRequest) {
   const flagViewer = await getCurrentUserFromCookies();
-  const actionChipsFlag = flagViewer?.id ? await isFeatureEnabled(HTPR_7979_ACTION_CHIPS_FLAG, flagViewer.id) : false;
-  return withAgentScopeRequest(request, () => taskQuestions(request, actionChipsFlag));
+  if (flagViewer?.id && await isFeatureEnabled(HTPR_7979_ACTION_CHIPS_FLAG, flagViewer.id)) {
+    return withAgentScopeRequest(request, () => taskQuestions(request, true));
+  }
+  return withAgentScopeRequest(request, () => taskQuestions(request, false));
 }
 
 async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
