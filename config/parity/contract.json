@@ -428,11 +428,18 @@
       "id": "reports.manage",
       "title": "Create, read, update, and delete saved reports",
       "matches": {
-        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/reports/(list|get|create|update|delete)$", "^GET /api/mcp/reports/velocity$"],
+        "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/reports/(list|get|create|update|delete)$", "^GET /api/mcp/reports/velocity$", "^POST /api/mcp/reports/status-update$"],
         "mcp": ["^hypertask_report$"],
         "cli": ["^report (list|get|create|update|delete)$"],
         "ai_chat": ["^hypertask_(list_reports|get_report|create_report|update_report|delete_report)$"],
         "hyperai": ["^hypertask_report$"]
+      },
+      "planned": {
+        "api": {
+          "issue": "https://app.hypertask.ai/detail/project-15/8219",
+          "expires": "2026-11-13",
+          "entries": ["POST /api/mcp/reports/status-update"]
+        }
       }
     },
     {
