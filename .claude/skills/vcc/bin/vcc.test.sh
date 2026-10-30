@@ -259,7 +259,8 @@ multiline_question=$'<p>Question: <strong>\nKeep it?\n</strong></p>\n<p>My recom
 multiline_mention=${question/Question:/Question:$'\n'}
 hardbreak_question=${plain/Keep it?/Keep<br>it?}
 listed_question="<ul><li>$question</li></ul>"
-for text in "$plain" "$inline_why" "$question" "$multiline_question" "$multiline_mention" "$hardbreak_question" "$listed_question"; do
+quoted_question="<blockquote>$question</blockquote>"
+for text in "$plain" "$inline_why" "$question" "$multiline_question" "$multiline_mention" "$hardbreak_question" "$listed_question" "$quoted_question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
   fixture "$text"

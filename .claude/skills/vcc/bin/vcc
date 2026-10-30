@@ -60,7 +60,7 @@ question_check() {
       gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
     def unmention:
-      sub("^\\s*(<(?:p|li|div)\\b[^>]*>\\s*)*<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
+      sub("^\\s*(<(?:p|li|div|blockquote)\\b[^>]*>\\s*)*<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
     ($markdown == "true") as $md |
     (if $md then $text | split("\n") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0))
      else $text | gsub("[\\r\\n]+"; " ") |
