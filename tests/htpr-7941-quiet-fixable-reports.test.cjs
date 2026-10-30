@@ -13,6 +13,25 @@ test('a refusal that names a field or lists values is one the caller can fix', (
   assert.equal(fixable.callerCanFix({ code: 'invalid_type', field: 'ticket_number' }), true)
 })
 
+test('a value the caller wrote in the wrong format is one the caller can fix (HTPR-8202)', () => {
+  assert.equal(fixable.callerCanFix({ code: 'invalid_format', field: 'input' }), true)
+  assert.equal(fixable.callerCanFix({ code: 'invalid_format' }), false)
+})
+
+test('a thrown refusal becomes the same refusal whether it arrived as zod issues or as structured details', () => {
+  assert.deepEqual(
+    fixable.refusalFromThrown({ issues: [{ code: 'invalid_format', path: ['input'] }] }, 400),
+    { code: 'invalid_format', field: 'input' },
+  )
+  assert.deepEqual(
+    fixable.refusalFromThrown({ details: { code: 'invalid_format', field: 'input' } }, 400),
+    { code: 'invalid_format', field: 'input' },
+  )
+  assert.deepEqual(fixable.refusalFromThrown({ details: { code: 'invalid_format', field: 'input' } }, 500), {})
+  assert.deepEqual(fixable.refusalFromThrown(new Error('storage failed'), 500), {})
+  assert.equal(fixable.callerCanFix(fixable.refusalFromThrown(new Error('storage failed'), 400)), false)
+})
+
 test('a refusal that names nothing the caller can fix still files', () => {
   assert.equal(fixable.callerCanFix({ code: 'custom' }), false)
   assert.equal(fixable.callerCanFix({ code: 'custom', field: 'input' }), false)

@@ -1,6 +1,6 @@
 export type FeedbackRefusal = { code?: string; field?: string; options?: readonly unknown[] };
 
-const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "too_small", "too_big"]);
+const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big"]);
 
 export function callerCanFix(refusal: FeedbackRefusal): boolean {
   if (!refusal.code) return false;
@@ -17,6 +17,17 @@ export function refusalFromZodIssues(issues: readonly { code: string; path?: rea
     code: issue.code,
     ...(field ? { field } : {}),
     ...(issue.options && issue.options.length ? { options: issue.options } : {}),
+  };
+}
+
+export function refusalFromThrown(error: unknown, status: number): FeedbackRefusal {
+  const issues = (error as { issues?: unknown } | null)?.issues;
+  if (Array.isArray(issues)) return refusalFromZodIssues(issues as Parameters<typeof refusalFromZodIssues>[0]);
+  if (status >= 500) return {};
+  const details = (error as { details?: Record<string, unknown> } | null)?.details;
+  return {
+    code: typeof details?.code === "string" ? details.code : undefined,
+    field: typeof details?.field === "string" ? details.field : undefined,
   };
 }
 
