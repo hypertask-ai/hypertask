@@ -15,7 +15,7 @@ stub("src/lib/prisma.ts", { default: { team: { findUnique: async ({ where }) => 
   aiKeyOnlyPlatformServices: where.id === "opted-in",
   aiProviderSettings: null,
   googleAccount: { userId: 42 },
-}) }, teamByokApiKey: { findMany: async () => [] }, project: { findUnique: async ({ where }) => ({ teamId: where.id === 1 ? "allowed" : where.id === 2 ? "restricted" : where.id === 4 ? "opted-in" : null }) } } });
+}) }, teamByokApiKey: { findMany: async () => [] }, project: { findUnique: async ({ where }) => ({ teamId: [1, 5].includes(where.id) ? (where.id === 1 ? "allowed" : "other-allowed") : where.id === 2 ? "restricted" : where.id === 4 ? "opted-in" : null }) } } });
 stub("src/lib/flags.ts", { isFeatureEnabled: async (_key, userId) => { flagUsers.push(userId); return flagOn; } });
 stub("src/lib/turbopuffer.ts", {
   default: { namespace: () => ({ write: async (body) => { writes.push(body); return body; }, query: async (body) => { queries.push(body); return { rows: [] }; } }) },
@@ -81,6 +81,36 @@ for (const search of [searchTasks, searchComments]) {
       else process.env.TURBOPUFFER_EMBEDDINGS_API_KEY = previousKey;
     }
   });
+}
+
+for (const search of [searchTasks, searchComments]) {
+  for (const enabled of [false, true]) {
+    test(`${search.name} preserves mixed unrestricted search with flag ${enabled}`, async () => {
+      const previousFetch = global.fetch;
+      const previousKey = process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+      const previousFlag = flagOn;
+      const requests = [];
+      process.env.TURBOPUFFER_EMBEDDINGS_API_KEY = "platform-test";
+      flagOn = enabled;
+      global.fetch = async (_url, options) => {
+        requests.push(JSON.parse(options.body));
+        return { ok: true, json: async () => ({ data: [{ index: 0, embedding: Array(1536).fill(1) }] }) };
+      };
+      try {
+        queries.length = 0;
+        await search({ searchQuery: `mixed-unrestricted-${search.name}-${enabled}`, projectIds: [1, 5] });
+        assert.equal(requests.length, 1);
+        assert.ok(queries.some((query) => JSON.stringify(query).includes("ANN")));
+        await search({ searchQuery: `mixed-refused-${search.name}-${enabled}`, projectIds: [1, 2] });
+        assert.equal(requests.length, 1);
+      } finally {
+        global.fetch = previousFetch;
+        flagOn = previousFlag;
+        if (previousKey === undefined) delete process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
+        else process.env.TURBOPUFFER_EMBEDDINGS_API_KEY = previousKey;
+      }
+    });
+  }
 }
 
 test("embedding ownership survives deduplication and identifies each team", async () => {

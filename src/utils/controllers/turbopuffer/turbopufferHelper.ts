@@ -1153,7 +1153,12 @@ async function embedQueryForSearch(
       if (!project?.teamId) return null;
       teams.add(project.teamId);
     }
-    if (teams.size !== 1) return null;
+    if (teams.size > 1) {
+      for (const teamId of teams) {
+        const decision = await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" });
+        if (decision.mode !== "unrestricted") return null;
+      }
+    }
     const [teamId] = teams;
     return await embedText(query, teamId);
   } catch (error) {
