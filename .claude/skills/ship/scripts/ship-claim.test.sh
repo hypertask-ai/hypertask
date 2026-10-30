@@ -23,6 +23,10 @@ eq "ours earliest -> proceed" "$(decide)" WIN
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")" "$(c 11 2026-10-11T10:05:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "same agent twice -> proceed" "$(decide)" WIN
 
+mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' '<p>Claimed. Session working it now. Claim id: [--resume]</p>')" \
+   "$(c 11 2026-10-11T10:05:00.000Z a2 'RUNNER 3' "<p>Claimed. Session working it now. Claim id: [$ME]</p>")"
+eq "earlier claim with a flag as its id -> proceed" "$(decide)" WIN
+
 mk "$(c 5 2026-10-10T08:00:00.000Z b1 'Product Bot' '<p>Blocked: waiting on a decision.</p>')" \
    "$(c 6 2026-10-10T08:01:00.000Z b1 'Product Bot' '<p>Plan and progress notes.</p>')" \
    "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"

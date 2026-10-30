@@ -17,7 +17,8 @@
 # with `hypertask tasks get`; skipped if that read fails, if no agent is assigned, or if the claim is within
 # 5 min of ours, because a claimer may not have assigned itself yet), or (b) the same agent later posted a
 # comment whose visible text starts with Handing over / Handed over / Stepping back / Released / Unclaimed.
-# Resume command: 2nd argument, else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
+# A claim whose claim id starts with "-" (a flag recorded as the id, e.g. "[--resume]") names no session and never counts.
+# Resume command: 2nd argument (or --resume <cmd>), else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
 set -uo pipefail
 
@@ -50,7 +51,7 @@ decide() {
     | [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(handover)] as $gone
     | ([$c[] | select(ours) | secs] | min // 0) as $mine
-    | [$c[] | select(txt | contains("Claimed."))
+    | [$c[] | select(txt | contains("Claimed.")) | select(sess | startswith("-") | not)
         | . as $k | select(([$back[] | select(retires($k; resume) and at > ($k | at))] | length) == 0)
         | select(([$gone[] | select(key == ($k | key) and ((legacy and resume == "") or retires($k; resume))
               and at > ($k | at))] | length) == 0)
@@ -200,7 +201,12 @@ T=${1:-}
 [[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN> [\"<resume command>\"]" >&2; exit 2; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}
 SID=${CLAUDE_CODE_SESSION_ID:-}
-RESUME=${2:-${SHIP_CLAIM_RESUME:-}}
+case "${2:-}" in
+  --resume) RESUME=${3:-} ;;
+  --resume=*) RESUME=${2#--resume=} ;;
+  *) RESUME=${2:-${SHIP_CLAIM_RESUME:-}} ;;
+esac
+[[ $RESUME != -* ]] || { echo "ship-claim: resume command '$RESUME' looks like a flag; pass it as: ship-claim $T \"<resume command>\"" >&2; exit 2; }
 [ -n "$RESUME" ] || { [ -n "$SID" ] && RESUME="claude --resume $SID"; }
 CSID=${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}
 [ -n "$RESUME" ] || { [ -n "$CSID" ] && RESUME="codex resume $CSID"; }
