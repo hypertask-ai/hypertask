@@ -19,7 +19,7 @@ export function createAiChatKeyboard(context: Context, options?: { focusedShortc
   const {
   setAiChatExplicitOpenAt, setIsSidebarMode, editor, setAiChatAutoOpenSuppressed, setAiChatPinned,
   setShowAIChat, setMinimized, setChatMounted, currentSession, handleSendMessage,
-  isApple, showMentionList, isByokBlocked, isTyping, handleCancelStream,
+  isApple, isByokBlocked, isTyping, handleCancelStream,
   isFullScreenChat, showAiChatInterface, isSidebarMode, lastWorkspaceFocusRef, fileUpload,
   chatMounted, startNewSession,
   } = context;
@@ -70,10 +70,7 @@ export function createAiChatKeyboard(context: Context, options?: { focusedShortc
       : e.keyCode === KeyCodes.ENTER && !e.shiftKey;
     if (sendShortcut) {
       if (sharedShortcutsEnabled && (!(e.target instanceof HTMLElement) || !e.target.closest(".ProseMirror[contenteditable='true']") || e.target.closest("[data-agent-chat-ai-composer]"))) return;
-      const mentionListElement = document.getElementById(
-        DIV_ID_CONSTANTS.aiMentionList
-      );
-      if (showMentionList || editor?.isEmpty) {
+      if (document.getElementById(DIV_ID_CONSTANTS.aiMentionList) || editor?.isEmpty) {
         return;
       }
       if (document.getElementById(SLASH_MENU_DOM_ID)) {
