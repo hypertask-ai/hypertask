@@ -103,6 +103,16 @@
       "read_only": false,
       "permission": "data",
       "as_agent": "board"
+    },
+    "share": {
+      "tool": "hypertask_share_task",
+      "read_only": false,
+      "permission": "data"
+    },
+    "share_state": {
+      "tool": "hypertask_get_task_share",
+      "read_only": true,
+      "permission": "data"
     }
   },
   "input_examples": [
