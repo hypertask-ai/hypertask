@@ -14,9 +14,9 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 
 ## Areas
 
+<!-- shared-list rows: one file per row in rows/, rebuilt by node scripts/shared-lists/build.mjs --write -->
 | Area | File | e2e/smoke id |
 |---|---|---|
-<!-- shared-list rows: one file per row in rows/, rebuilt by node scripts/shared-lists/build.mjs --write -->
 | Activation analytics | [activation-analytics.md](activation-analytics.md) | read-only flags, core inbox; synthetic accounts excluded |
 | Agent chat roster ordering | [agent-chat-roster.md](agent-chat-roster.md) | standalone roster, owned API recency, desktop/phone reload |
 | Board agent rooms | [agent-rooms.md](agent-rooms.md) | read-only room listing, authentication, desktop/phone reload |

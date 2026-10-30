@@ -154,7 +154,7 @@ async function main(argv, root) {
     writeEntries(root, buildSnapshot(defaults, await readLive()));
     console.log(`Wrote ${SNAPSHOT_PATH} (${Object.keys(defaults).length} flags)`);
   } else if (mode === "--add-defaults") {
-    writeEntries(root, addMissingDefaults(read(), defaults));
+    writeEntries(root, addMissingDefaults(JSON.parse(build(listById("flag-modes"), root)), defaults));
     console.log(`Updated ${SNAPSHOT_PATH}`);
   } else if (mode === "--check" || mode === "--check-live") {
     const snapshot = read();

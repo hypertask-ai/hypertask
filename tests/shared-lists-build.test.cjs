@@ -68,12 +68,12 @@ test("one new row file changes only the row block of the index", async () => {
   const list = listById("feature-map-index");
   const workspace = tempRoot();
   const target = path.join(workspace, list.target);
-  write(target, `# Index\n\n| Area | File |\n|---|---|\n${list.start}\n${list.end}\n\n## After\n`);
+  write(target, `# Index\n\n## Areas\n\n${list.start}\n${list.end}\n\n## After\n`);
   write(path.join(workspace, list.directory, "b.md"), "| B | [b.md](b.md) |\n");
   write(path.join(workspace, list.directory, "a.md"), "| A | [a.md](a.md) |\n");
   const built = build(list, workspace);
   assert.match(built, /\| A \| \[a\.md\]\(a\.md\) \|\n\| B \| \[b\.md\]\(b\.md\) \|/);
-  assert.ok(built.startsWith("# Index\n\n| Area | File |\n|---|---|\n"));
+  assert.ok(built.startsWith(`# Index\n\n## Areas\n\n${list.start}\n| Area | File | e2e/smoke id |\n|---|---|---|\n`), "the table header is generated inside the marked block");
   assert.ok(built.endsWith("\n\n## After\n"));
   write(target, built);
   assert.equal(build(list, workspace), built, "rebuilding an unchanged index changes nothing");

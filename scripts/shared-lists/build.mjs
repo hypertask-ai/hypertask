@@ -42,6 +42,7 @@ export const LISTS = [
     directory: ".claude/skills/verify-qa/reference/feature-map/rows",
     target: ".claude/skills/verify-qa/reference/feature-map/INDEX.md",
     entryPattern: ROW_FILE,
+    header: ["| Area | File | e2e/smoke id |", "|---|---|---|"],
     start: ROW_START,
     end: ROW_END,
   },
@@ -89,7 +90,7 @@ function buildRegion(list, root) {
   const start = target.indexOf(list.start);
   const end = target.indexOf(list.end);
   if (start < 0 || end < start) throw new Error(`${list.target} is missing the shared-list markers`);
-  const rows = entryFiles(list, root).map((file) => read(path.join(list.directory, file), root).trim()).filter(Boolean);
+  const rows = [...(list.header ?? []), ...entryFiles(list, root).map((file) => read(path.join(list.directory, file), root).trim()).filter(Boolean)];
   return `${target.slice(0, start + list.start.length)}\n${rows.join("\n")}\n${target.slice(end)}`;
 }
 
