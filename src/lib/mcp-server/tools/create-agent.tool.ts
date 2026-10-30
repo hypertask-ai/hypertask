@@ -17,7 +17,7 @@ export const createAgentTool = {
       const enabled = (flag: string) =>
         userId ? isFeatureEnabled(flag, userId).catch(() => false) : Promise.resolve(false);
       const useBearerRoute = await enabled(HTPR_7118_MCP_AGENT_CREATE_FLAG);
-      if (!input.ensure) return service.createAgent(input, { useBearerRoute });
+      if (!CreateAgentInputSchema.parse(input).ensure) return service.createAgent(input, { useBearerRoute });
       if (!(await enabled(HTPR_7529_MCP_ACT_AS_AGENT_FLAG))) {
         throw new Error("agents ensure is not switched on for this account yet; use agents list and create.");
       }
