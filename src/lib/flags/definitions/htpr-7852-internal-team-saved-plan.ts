@@ -5,7 +5,7 @@ export const HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG = "htpr-7852-internal-team-
 export default {
   key: HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG,
   kind: "improvement",
-  defaultMode: "OFF",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-30",
   releaseRisk: {
     risk: "small",

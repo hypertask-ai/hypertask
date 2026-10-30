@@ -174,3 +174,9 @@ test("a flag read that fails keeps the forced Pro", async () => {
 
   assert.equal(await storePlanIdForProject(null, INTERNAL_TEAM_ID), "Pro");
 });
+
+test("the access-risk flag defaults to Owner + QA", () => {
+  const flag = loadModule("src/lib/flags/definitions/htpr-7852-internal-team-saved-plan.ts");
+  assert.equal(flag.default.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.default.releaseRisk.highRisk, "access");
+});
