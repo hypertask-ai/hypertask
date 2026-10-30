@@ -67,7 +67,7 @@ test("real command eligibility requires both flags and excludes demo/tutorial", 
   }
 });
 
-test("choosing triage closes palette and hands the exact preset to a fresh full-screen chat", () => {
+for (const removeImageGeneration of [false, true]) test(`choosing triage closes palette and hands the exact preset to a fresh full-screen chat (image removal ${removeImageGeneration})`, () => {
   const handler = productionNode(node => ts.isFunctionDeclaration(node) && node.name?.text === "updateCommandFrequency");
   const calls = [];
   const command = rows(true).find(row => row.key === "triageInbox");
@@ -76,7 +76,7 @@ test("choosing triage closes palette and hands the exact preset to a fresh full-
   let freshChatHandoff = true;
   let groups = [{ group: "Inbox", commandLists: [command] }];
   const choose = () => evaluate(handler, {
-    writing: false, findCommandPosition, filterCommands: groups, INBOX_TRIAGE_PROMPT,
+    writing: false, removeImageGeneration, findCommandPosition, filterCommands: groups, INBOX_TRIAGE_PROMPT,
     isDemo: false, isInteractive: false,
     setFrequentlyUsed: () => {}, recordHTCCommandUsage: () => {},
     document: { activeElement: { blur() {} } },
