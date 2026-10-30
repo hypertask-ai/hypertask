@@ -388,7 +388,6 @@ test('review comment-only authors appear only in bounded accessible commenter re
       const full = await parser('commenter:@Comment Only', [7], [7])
       assert.equal(full.filters.commenter[0].value, '@Comment Only')
       assert.equal(full.text, '')
-      // Resolver must match before limiting, so it never caps the people pool (review on PR 977).
       assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take === undefined))
       const pickerStart = state.peopleQueries.length
       for (const operator of ['commenter', 'from', 'assignee']) {
@@ -501,7 +500,6 @@ test('API and CLI comments with only HTML text match words and supply the snippe
     const res = await search('claimed commenter:1')
     assert.equal(res.code, 200)
     assert.deepEqual(res.body.processedData.All.map((row: any) => [row.taskId, row.commentId]), [[105, 11]])
-    // searchPreviewText is mocked as identity; the real one strips the tags.
     assert.equal(res.body.processedData.All[0].commentText, htmlOnly.text)
   } finally {
     comments.pop()

@@ -557,13 +557,6 @@ test("late async marks cannot enter a newer same-board route trace", () => {
   }
 });
 
-// HTPR-6072: the board tree no longer remounts on a switch (SectionComp
-// dropped its key={readinessRouteEntryId}), so this generation-based reset
-// is now the only thing keeping readiness "once per project-route entry" -
-// the guarantee PR #2765 / HTPR-5432 introduced the remount for in the first
-// place. Pin that a switch still gets a fresh trace and a same-entry
-// re-publication (focus regaining the board, a realtime reconnect) still
-// only emits once.
 test("HTPR-6072: readiness emits once per entry across a switch and a same-entry re-publication", () => {
   const runtime = installRuntime();
   try {
@@ -582,8 +575,6 @@ test("HTPR-6072: readiness emits once per entry across a switch and a same-entry
     );
     assert.equal(runtime.fakeWindow.__hypertaskProductPerformanceQueue.length, 1);
 
-    // A focus/reconnect event re-publishes for the SAME entry: no fresh
-    // trace, no second emit.
     prepareBoardReadinessTrace({ accountId: 6, projectId: 15, routeEntryId: 1 });
     completeBoardReadinessTrace(
       {
@@ -602,7 +593,6 @@ test("HTPR-6072: readiness emits once per entry across a switch and a same-entry
       "a same-entry re-publication must not emit a second event",
     );
 
-    // A real switch: new routeEntryId, fresh trace, its own emit.
     prepareBoardReadinessTrace({ accountId: 6, projectId: 16, routeEntryId: 2 });
     runtime.entries.set(BOARD_READINESS_MARKS.networkQueryPublished, 200);
     completeBoardReadinessTrace(

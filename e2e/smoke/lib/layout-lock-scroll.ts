@@ -17,8 +17,6 @@ export async function scrollToBaselinePosition(page: Page, layout: BaselineScrol
   await page.evaluate(waitForStableScroll, { baselineLayout: layout })
 }
 
-// YPER4-958: a person hovercard opens under the pointer that is left resting after navigation, and its
-// safe-polygon blocker swallows the next click. Park the pointer away from the thread and wait for it to close.
 export async function parkPointerOffCommentThread(page: Page) {
   await page.mouse.move(0, 0)
   await page.waitForFunction(() =>

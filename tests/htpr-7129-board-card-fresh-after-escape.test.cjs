@@ -1,8 +1,3 @@
-// HTPR-7129: after editing priority, size or tags in a ticket and pressing
-// Escape, the board card must show the new values at once.
-// Part 1: priority, size and tag edits patch the board cache like assignee.
-// Part 2: returning to the board loads it once; it is no longer mounted twice,
-// which aborted its own load and could discard the fresh response.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -39,7 +34,6 @@ test("flag is a bugfix, default Everyone, with release risk", () => {
   assert.ok(def.default.releaseRisk?.reason);
 });
 
-// ---------------------------------------------------------------- part 1
 const inView = { taskId: 77, taskProjectId: 5, sectionId: 9 };
 const pickerFixture = (rel, writeName, axiosPath, flagOn, responseData) => {
   const patches = [], refetches = [], posts = [];
@@ -113,7 +107,6 @@ for (const flagOn of [true, false]) {
       "@/lib/constants/TaskDetail": {},
       "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
     });
-    // The page seed says column 9; the task was moved to column 12 in the ticket.
     const currentTask = { id: 77, projectId: 5, sectionId: 12 };
     const ctx = {
       currentTask, _parsedTask: { id: 77, projectId: 5, sectionId: 9 }, currentProject: { id: 5 },
@@ -150,7 +143,6 @@ test("the saved-snapshot hook reads the flag through a ref, so a late flag load 
   assert.match(source, /\[prepareLocalRead, queryClient\],/);
 });
 
-// ---------------------------------------------------------------- part 2
 const recoveryHarness = () => {
   const { recoverAbortedProjectsAll, PROJECTS_ALL_QUERY_KEY } = jiti(path.join(root, "src/hooks/Homepage/useGetBoards.ts"));
   const client = new rq.QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -169,7 +161,6 @@ const recoveryHarness = () => {
 
 test("a board load aborted by a remount is reloaded once, never on top of a newer load", async () => {
   const h = recoveryHarness();
-  // Fresh data: mounting does not load. The reverted result after an abort looks just like this.
   assert.equal(h.counter.loads, 0);
   h.recoverAbortedProjectsAll(h.client, h.schedule, () => 0);
   await h.step();
@@ -270,7 +261,6 @@ async function boardReturn(t, flagOn) {
   const client = new rq.QueryClient({ defaultOptions: { queries: { retry: false } } });
   let loads = 0, aborts = 0, boardMounts = 0;
   const Board = () => {
-    // Mirrors useGetBoards: an abortable board load that refetches on mount.
     const { data } = rq.useQuery({
       queryKey: ["projectsAll"], staleTime: 0, refetchOnMount: true,
       queryFn: ({ signal }) => {
@@ -306,12 +296,10 @@ async function boardReturn(t, flagOn) {
   await React.act(async () => render());
   await wait(80);
   assert.equal(loads, 1);
-  // Open the ticket from the board, then the background refresh leaves the ticket route in the board slot.
   await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: child.projectId, uniqueIndex: child.uniqueIndex, href: href(child), task: child }));
   await React.act(async () => { children = React.createElement(Detail, { initialTask: child }); render(); });
   assert.equal(document.getElementById("kanban-page-container"), null, "the board is unmounted while the ticket is open");
   const before = { loads, aborts, boardMounts };
-  // Escape goes Back to the board; the board route then arrives.
   await React.act(() => new Promise((resolve) => { settleTraversal = resolve; window.history.back(); }));
   assert.equal(window.location.pathname, "/project");
   await React.act(async () => { children = React.createElement(Board); render(); });

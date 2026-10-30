@@ -13,8 +13,6 @@ const { twMerge } = require("tailwind-merge");
 const root = path.resolve(__dirname, "..");
 const rowPath = "src/components/notifications/NotificationRow.tsx";
 
-// Render production row, title, chips, controls and context without app/network
-// dependencies. Only non-layout services, tooltips and unused avatar are stubbed.
 function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8")) {
   const cache = new Map();
   const { window } = new JSDOM("");

@@ -1,6 +1,3 @@
-// HTPR-6517: ESLint 10 crashes unless Next's Babel parser and ESLint 9-era
-// plugins are replaced. This test lints one JS file and one TS file through
-// the real config so a future dep bump cannot hide the same TypeError.
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { ESLint } = require("eslint");

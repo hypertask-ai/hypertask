@@ -1,8 +1,3 @@
-// HTPR-7094: a normal signup reaches the last onboarding step (invite teammates) with no ?id= team.
-// The screen still asked the server for the team's invite link with an undefined team id, and
-// prisma.team.findUnique threw on it ("Invalid prisma.team.findUnique() invocation"), so every such
-// user produced a server error. These tests pin both guards: the server answers "Error" before the
-// lookup, and the screen does not ask at all without a team.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

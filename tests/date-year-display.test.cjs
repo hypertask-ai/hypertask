@@ -15,18 +15,13 @@ const { default: formatDateDifference } = jiti(
 const now = new Date();
 const daysAgo = (n) => new Date(now.getTime() - n * 86_400_000);
 
-// The bug this replaces: the year appeared only after 365 days elapsed, so a
-// comment from last September read "12 Sep" in August and looked five weeks
-// old instead of eleven months.
 test("a date in a previous calendar year shows its year even when under a year old", () => {
-  const lastYear = new Date(now.getFullYear() - 1, 11, 20); // 20 Dec last year
+  const lastYear = new Date(now.getFullYear() - 1, 11, 20);
   const formatted = formatDateDifference(lastYear);
   assert.match(formatted, new RegExp(String(now.getFullYear() - 1)));
 });
 
 test("a date earlier this year shows no year", () => {
-  // Two weeks back stays inside this calendar year except in the first fortnight
-  // of January, where the previous test already covers the year-carrying case.
   const recent = daysAgo(14);
   const formatted = formatDateDifference(recent);
   if (recent.getFullYear() === now.getFullYear()) {

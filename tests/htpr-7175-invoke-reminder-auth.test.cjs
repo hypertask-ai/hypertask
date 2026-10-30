@@ -1,5 +1,3 @@
-// HTPR-7175: the manual reminder route must not let a stranger fire someone
-// else's reminder, with or without a login.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

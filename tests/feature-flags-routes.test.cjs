@@ -213,11 +213,8 @@ test("the owner can pause removal with Keep without touching the mode", async ()
 test("a Keep write must say exactly one thing", async () => {
   userId = 6;
   const bodies = [
-    // Both fields: which change was meant is ambiguous, so neither is applied.
     { key: "htpr-3533-google-calendar", mode: "EVERYONE", keep: true },
-    // Neither field: nothing to change.
     { key: "htpr-3533-google-calendar" },
-    // Keep must be a boolean, not a truthy string.
     { key: "htpr-3533-google-calendar", keep: "yes" },
   ];
   for (const body of bodies) {

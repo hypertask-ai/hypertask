@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import flow from './flows/signed-in-reminder.mjs';
 
-// Exercise the runner's actual step without launching its browser entry point.
 const source = readFileSync(new URL('./runner.mjs', import.meta.url), 'utf8');
 const runStep = vm.runInNewContext(`(${source.slice(source.indexOf('async function runStep('), source.indexOf('\nasync function runFlow('))})`, { URL });
 const step = flow.steps.find((step) => step.action === 'saveReminder');

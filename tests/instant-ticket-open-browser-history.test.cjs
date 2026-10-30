@@ -91,8 +91,6 @@ test("real history Back hides the stale ticket without refresh; Forward restores
     "@/components/RTE/Extensions/lazyEmojiData": { ensureEmojiData: async () => {} },
   }).default;
   function render() { renderer.render(React.createElement(Navigation, { accountId: 985 }, serverChildren)); }
-  // These are Next's actual history keys. Its bubble listener otherwise restores
-  // the source URL with detail children, the failure reproduced in Chromium.
   const sourceState = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: ["board"], renderedSearch: "?id=7049" } };
   window.history.replaceState(sourceState, "", window.location.href);
   window.addEventListener("popstate", () => {
@@ -110,7 +108,6 @@ test("real history Back hides the stale ticket without refresh; Forward restores
     nextPath = "/detail/project-7049/31";
     render();
   });
-  // Simulate the background Next RSC commit, which removes custom history state.
   await React.act(async () => {
     window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: { tree: ["detail"], renderedSearch: "" } }, "", window.location.href);
     serverChildren = detail;

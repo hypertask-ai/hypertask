@@ -29,9 +29,6 @@ const knownProjects = new Set([
   FOREIGN_PROJECT,
 ]);
 
-// The project helper's identity matrix is exercised against its real query in
-// project-delegate-access.test.cjs. These controller fakes prove each caller
-// consumes that decision before mutating anything.
 const taskWriteAccessWhere = (userId, agentId) => ({
   testAccess: { userId, agentId: agentId ?? null },
 });

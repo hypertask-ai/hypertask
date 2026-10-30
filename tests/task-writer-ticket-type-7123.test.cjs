@@ -208,14 +208,12 @@ test("the draft keeps streaming chunk by chunk and only the trailing marker is h
   const body = '<h1 id="ai-generated-task-title">A fairly long title for streaming</h1><p>' + "Body words. ".repeat(20) + "</p>";
   const typedRun = await harness({ enabled: true, output: body + typeSpan("Improvement"), requestKind: "compose-task" }).post("app");
   const plain = await harness({ enabled: false, output: body, requestKind: "compose-task" }).post("app");
-  // Streams in many pieces, the first one arrives long before the end, and no piece carries the raw marker.
   assert.ok(typedRun.chunks.length > 10);
   assert.equal(typedRun.chunks[0], plain.chunks[0]);
   assert.equal(typedRun.chunks.slice(0, 5).join(""), plain.chunks.slice(0, 5).join(""));
   assert.equal(typedRun.chunks.filter((c) => c.includes("ai-generated-task-type")).length, 1);
   assert.ok(typedRun.chunks[typedRun.chunks.length - 1].includes("ai-generated-task-type"));
   assert.equal(typedRun.content, body + typeSpan("improvement"));
-  // The body is on the wire before the final piece, so progress labels move on as today.
   assert.ok(typedRun.chunks.slice(0, -1).join("").length >= body.length - 8);
 });
 

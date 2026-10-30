@@ -37,7 +37,6 @@ function loadPost({ flagOn, knownLabelIds }) {
       validateParentTask: async () => ({}),
       validateProjectMemberIds: async () => ({}),
       createTask: async (data) => { created += 1; createdLabels = data.labels; return { id: 1 }; },
-      // Same contract as the real matcher: label ids or names (case-insensitive).
       matchLabelIds: (projectLabels, labels) => {
         const find = (entry) => projectLabels.find(
           (label) => label.id === entry || label.value?.trim().toLowerCase() === entry.trim().toLowerCase(),

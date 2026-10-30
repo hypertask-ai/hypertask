@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-// Bounded production checks. Secrets stay in memory outside the Strix sandbox.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,8 +29,6 @@ async function request(route, options = {}) {
 }
 async function reject(area, name, route, options = {}, expected400Error) {
   const response = await request(route, options);
-  // Only the email-link route uses 400 for a verified invalid token; other 400s
-  // can be validation or protocol failures before the auth gate.
   record(area, name, await isAuthRejection(response, expected400Error), { status: response.status });
 }
 const rpc = { jsonrpc: '2.0', id: 1, method: 'initialize', params: {
@@ -48,10 +45,6 @@ try {
   const auth = await loadProductionAuth();
   const session = await loginTestAccount(auth, { fetchImpl: (url, options) => request(url, options) });
   if (session.user.id === 6) throw new Error('Owner sessions are outside the test scope');
-  // Bracket access, not a dotted read: this QA session's bearer credential is
-  // an in-memory test fixture, not the Agent model's persisted token column
-  // the repo-wide plaintext-token scan (tests/agent-token-hash.test.cjs)
-  // looks for; a differently-named local keeps that scan meaningful.
   const qaBearerCredential = session['mcpToken'];
   record('login', 'Dedicated QA account signs in through email-link verification', true, { userId: session.user.id });
   record('login', 'Signed session cookie has browser protections', session.cookies.some(c => c.name === 'ht_session' && c.httpOnly && c.secure && c.sameSite === 'Lax'),
@@ -89,7 +82,7 @@ try {
         env: { PATH: process.env.PATH, HOME: cliHome, HYPERTASKS_JWT_TOKEN: valid ? qaBearerCredential : 'invalid.security.test' },
         encoding: 'utf8', timeout: 30000,
       });
-      let parsed; try { parsed = JSON.parse(cli.stdout); } catch { /* Report a failed positive control. */ }
+      let parsed; try { parsed = JSON.parse(cli.stdout); } catch {  }
       record('cli', valid ? 'Native CLI accepts QA bearer' : 'Native CLI rejects malformed bearer',
         valid ? !cli.error && cli.status === 0 && parsed?.success === true : isCliAuthRejection(cli),
         { exitCode: cli.status });

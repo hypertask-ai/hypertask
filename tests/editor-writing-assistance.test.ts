@@ -307,11 +307,9 @@ test("HTPR-6906: Backspace right after an auto-capital restores lowercase and it
   assert.equal(pressKey(editor, { key: "Backspace" }), true);
   assert.equal(editor.getText(), "hello. w");
   assert.equal(underlined(editor), 0);
-  // Typing on keeps the lowercase letter and nothing re-capitalizes it.
   assert.equal(dispatchTextInput(editor, "o"), false);
   editor.commands.insertContent("o");
   assert.equal(editor.getText(), "hello. wo");
-  // Backspace now deletes normally.
   assert.equal(pressKey(editor, { key: "Backspace" }), false);
 });
 
@@ -360,7 +358,6 @@ test("HTPR-6906: with the undo flag off nothing changes", (t) => {
   assert.equal(editor.getText(), "hello. W");
   assert.equal(underlined(editor), 0);
   assert.equal(pressKey(editor, { key: "Backspace" }), false);
-  // Ctrl+Z is plain history undo again: it removes the letter, no lowercase restore.
   pressKey(editor, { key: "z", ctrlKey: true });
   assert.equal(editor.getText(), "hello.");
 });

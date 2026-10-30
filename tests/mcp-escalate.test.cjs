@@ -17,7 +17,6 @@ test('builds a flagged escalation comment with reason and attempts', () => {
   assert.ok(html.includes('stuck on auth'))
   assert.ok(html.includes('Already tried'))
   assert.ok(html.includes('tried A, B'))
-  // wrapped in block tags, not bare text
   assert.ok(html.startsWith('<p>'))
 })
 
@@ -32,7 +31,6 @@ test('escapes hostile reason/summary text (untrusted agent input)', () => {
     reason: '<script>alert(1)</script>',
     attemptsSummary: '"><img src=x onerror=bad()>',
   })
-  // no live tags survive; hostile markup is neutralized to escaped text
   assert.ok(!html.includes('<script>'))
   assert.ok(!html.includes('<img'))
   assert.ok(html.includes('&lt;script&gt;'))

@@ -183,7 +183,6 @@ test(`a rename of another column saved while delete is queued survives a failed 
   await new Promise(setImmediate);
   assertRenamed(h);
   assertRemovedBeforePost(h);
-  // Latest unrelated data must also survive rollback, not just the queued rename.
   h.state.project = { ...h.state.project, project_title: "Latest board title" };
   for (const key of h.keys.slice(0, 3)) {
     h.queryClient.setQueryData(key, (cached) => Array.isArray(cached)

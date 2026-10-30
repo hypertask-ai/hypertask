@@ -141,7 +141,6 @@ test("label tooltips size to their text in both legacy and top-layer placements"
           const surface = enabled
             ? document.querySelector("[data-hover-tooltip-portal]").firstElementChild
             : portal ? document.body.querySelector(".fixed") : container.firstElementChild.firstElementChild;
-          // One line sized to the text; wrapping only past the viewport cap.
           const singleLine = surface.classList.contains("whitespace-nowrap")
             || (surface.classList.contains("w-max") && surface.classList.contains("max-w-[calc(100vw-16px)]"));
           assert.ok(singleLine, `flag=${enabled}, portal=${portal}: ${text}`);

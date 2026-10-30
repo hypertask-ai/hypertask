@@ -170,7 +170,6 @@ for (const [surface, key, shiftKey, shortcut] of [
     assert.equal(Boolean(document.querySelector("[data-quick]")), true);
     assert.equal(calls.length, 0, "quick add never opens the full editor");
     calls.length = 0;
-    // Remount closes quick entry without changing the keyboard code under test.
     await React.act(async () => reactRoot.render(null));
     await render();
     await press("c");
@@ -186,7 +185,6 @@ for (const [surface, key, shiftKey, shortcut] of [
     calls.length = 0;
     await React.act(async () => reactRoot.render(null));
     await render();
-    // Isolate the new listener from existing Ctrl/Alt+C column shortcuts.
     activeColumn = -1;
     await render();
     for (const overrides of [{ ctrlKey: true }, { metaKey: true }, { altKey: true }, ...(!shiftKey ? [{ shiftKey: true }] : []), { repeat: true }, { isComposing: true }]) {

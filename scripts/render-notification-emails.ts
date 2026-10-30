@@ -1,5 +1,3 @@
-// Renders every notification email variant to /tmp for visual review.
-// Run: npx tsx scripts/render-notification-emails.mjs
 import { writeFileSync, mkdirSync } from "node:fs";
 import {
   renderNotificationEmail,

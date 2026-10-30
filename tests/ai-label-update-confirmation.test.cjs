@@ -1,5 +1,3 @@
-// HTPR-5536: AI Chat asked the user to confirm a plain tag change, and the
-// confirmation round-trip then failed to apply it. Retagging must never gate.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

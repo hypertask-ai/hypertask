@@ -5,8 +5,6 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
 
-// shouldNotify itself must be evicted too: it binds prisma at module scope, so
-// a cached copy would keep the previous test's stub.
 const stubbedModulePaths = [
   "src/lib/prisma.ts",
   "src/utils/controllers/notifications/shouldNotify.ts",
@@ -28,8 +26,6 @@ function stubModule(relativePath, exports) {
   };
 }
 
-// cache/requireCache off: each test re-loads shouldNotify against a different
-// prisma stub, and a cached module would keep the first stub's binding.
 function loadTs(relativePath) {
   const jiti = require("jiti")(
     path.join(root, `tests/jiti-entry-${++jitiEntryId}.cjs`),
@@ -42,7 +38,6 @@ function loadTs(relativePath) {
   return jiti(path.join(root, relativePath));
 }
 
-// Loads shouldNotify with a prisma stub returning the given UserSetting row.
 function loadWithSetting(setting) {
   resetModules();
   stubModule("src/lib/prisma.ts", {
@@ -95,8 +90,6 @@ test("categories the matrix omits fall back to the legacy preference", async () 
   assert.equal(await shouldNotify(1, "Comment", "email"), false);
 });
 
-// The bug that started this work: users on "Only @mentions" were still getting
-// an email for every card move.
 test("'direct' blocks task-move email, 'all' allows it", async () => {
   const direct = loadWithSetting(setting({ notificationPreference: "direct" }));
   assert.equal(await direct(1, "TaskMoved", "email"), false);
@@ -105,8 +98,6 @@ test("'direct' blocks task-move email, 'all' allows it", async () => {
   assert.equal(await all(1, "TaskMoved", "email"), true);
 });
 
-// "direct" means aimed at you personally: a real @mention or an assignment.
-// Being added as a follower is neither, so it must not email.
 test("'direct' allows mentions and assignments, not follower adds or comments", async () => {
   const shouldNotify = loadWithSetting(
     setting({ notificationPreference: "direct" }),

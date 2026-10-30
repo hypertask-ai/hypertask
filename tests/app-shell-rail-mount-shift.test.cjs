@@ -4,11 +4,6 @@ const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 
-// HTPR-5725: returning to a page painted content too far left, then slid it
-// into place over a second. Root cause: the --app-shell-rail-w CSS var (which
-// every rail-padded container reads) was only set in a useEffect, which
-// commits AFTER the browser's first paint — so that first paint used the
-// var's 48px fallback regardless of the real (possibly 130px) rail width.
 
 const railSource = readRefactoredSource(
   path.resolve(
@@ -48,12 +43,6 @@ test("the rail-padded Inbox containers no longer carry a 1s mount animation", ()
   assert.match(railPaddedBottomContainer, /duration-200/);
 });
 
-// Cold loads (no React mounted yet) still painted SSR HTML at the CSS
-// fallback (48px, rail on) until AppShellRail's own effect corrected it,
-// regardless of the visitor's actual persisted rail state. A blocking
-// <head> script seeds --app-shell-rail-w from the same localStorage blob the
-// atoms persist to, before the browser's first paint — for both the
-// expanded (130px) and fully-off (0px) cases.
 const layoutSource = readRefactoredSource(
   path.resolve(__dirname, "../src/app/layout.tsx"),
   "utf8",
@@ -65,9 +54,6 @@ test("layout seeds --app-shell-rail-w from localStorage before first paint, for 
   assert.match(layoutSource, /appShellRail===false.*0px/);
 });
 
-// The layout boot script above sets one shared CSS var on <html>. Every page
-// that pads/offsets by the rail must read that var (not a hardcoded 48px or
-// 130px) or it won't benefit from the pre-paint fix at all.
 const RAIL_CONSUMER_FILES = [
   "../src/app/inbox/Inbox.tsx",
   "../src/app/all-tasks/AllTasks.tsx",

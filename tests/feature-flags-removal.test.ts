@@ -50,7 +50,6 @@ test("a flag switched to Everyone today has the full window left", () => {
 test("the countdown reads whole days and switches to due only after the deadline passes", () => {
   assert.equal(featureFlagRemovalState(row({ releasedAt: daysBefore(5) }), NOW)?.label, "removed in 9 days");
   assert.equal(featureFlagRemovalState(row({ releasedAt: daysBefore(13) }), NOW)?.label, "removed in 1 day");
-  // One second before the deadline is still counting, not due.
   const nearlyDue = new Date(NOW.getTime() - FEATURE_FLAG_REMOVAL_DAYS * DAY_MS + 1000);
   assert.equal(featureFlagRemovalState(row({ releasedAt: nearlyDue }), NOW)?.kind, "counting");
   assert.deepEqual(featureFlagRemovalState(row({ releasedAt: daysBefore(FEATURE_FLAG_REMOVAL_DAYS) }), NOW), {
@@ -69,8 +68,6 @@ test("Keep replaces the countdown and resumes it from the original date when tur
 });
 
 test("the sweep's in-flight claim still shows the countdown, not a filed ticket", () => {
-  // The sweep writes 0 to claim a flag for the seconds it takes to create the ticket. Reading
-  // that as "filed" would tell the owner a ticket exists before one does.
   const claimed = row({ releasedAt: daysBefore(30), removalTaskId: 0 });
   assert.deepEqual(featureFlagRemovalState(claimed, NOW), { kind: "due", label: "due for removal" });
 });

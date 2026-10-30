@@ -30,7 +30,6 @@ function loadTypeScript(relativePath, stubs = {}) {
     loadedModule,
     loadedModule.exports,
     (request) => {
-      // An Error stub simulates a module that throws while loading.
       if (stubs[request] instanceof Error) throw stubs[request];
       return stubs[request] ?? require(request);
     },

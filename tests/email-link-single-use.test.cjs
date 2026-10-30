@@ -105,7 +105,6 @@ function makeHarness(redis = makeRedis()) {
     '@/lib/auth/safeReturnTo': loadTs('src/lib/auth/safeReturnTo.ts'),
     '@/lib/email/sendEmail': { sendEmail: async (args) => { calls.emails.push(args) } },
   }
-  // The pre-fix route does not import the consumer; the same harness runs on both revisions.
   if (fs.existsSync(path.join(root, 'src/lib/auth/emailLinkToken.ts'))) {
     aliases['@/lib/auth/emailLinkToken'] = loadTs('src/lib/auth/emailLinkToken.ts', {
       '@/lib/redis': { getRedis: async () => redis },
@@ -300,7 +299,6 @@ test('verification page redeems only once across effect reruns and still verifie
   const harness = makeHarness()
   const token = await harness.issue('signup-existing')
   const aliases = makeClientAliases(harness, token)
-  // Deliberately unstable state setter: callback changes must not consume again.
   const Page = loadTs('src/app/verify-email/page.tsx', aliases).default
   const mounted = createRoot(dom.window.document.getElementById('root'))
   try {

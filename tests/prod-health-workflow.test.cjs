@@ -1,10 +1,3 @@
-// HTPR-5467 — behavioral tests for the prod-health workflow's challenge/alert
-// decision. Follows the same pattern as tests/automerge-workflow.test.cjs: the
-// health job's `run: |` block is extracted from the workflow YAML, de-indented,
-// and executed as a bash script with stub `curl`/`sleep` binaries on the PATH so
-// the shell decision logic is exercised for real rather than asserted as source
-// text. `jq`/`seq`/`grep`/`awk` are the real system tools.
-
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -12,9 +5,6 @@ const { chmod, mkdir, mkdtemp, readFile, rm, writeFile } = require("node:fs/prom
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 
-// Extract the FIRST `run: |` block (the `health` job). The block scalar ends at
-// the first non-empty line indented no deeper than the `run:` key (8 spaces),
-// which is where the `drift` job begins.
 async function workflowScript() {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
   const marker = "        run: |\n";
@@ -28,13 +18,11 @@ async function workflowScript() {
       continue;
     }
     const indent = (line.match(/^ */) || [""])[0].length;
-    if (indent <= 8) break; // next top-level key (drift:)
+    if (indent <= 8) break;
     block.push(line.slice(10));
   }
   return block
     .join("\n")
-    // The runner substitutes ${{ github.repository }} before bash parses the
-    // script; it only survives in notify text, so pin it to a fixed string.
     .replaceAll("${{ github.repository }}", "test/repo");
 }
 
@@ -43,7 +31,6 @@ test("only the guarded rollback job has deployment mutation authority", async ()
   const forbidden = /emergency-rollback|\/promote\/|ROLLBACK_GITHUB_TOKEN|MERGE_FREEZE|git (?:push|revert)/;
   const monitors = workflow.slice(0, workflow.indexOf("\n  rollback:"));
   assert.doesNotMatch(monitors, forbidden);
-  // Prove the absence assertion rejects a workflow with a rollback call.
   assert.throws(() => assert.doesNotMatch(
     `${monitors}\nrun: node .github/scripts/emergency-rollback.mjs`,
     forbidden,
@@ -55,10 +42,6 @@ test("only the guarded rollback job has deployment mutation authority", async ()
 
 test("health and drift jobs cannot overlap", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
-  // All triggers share one workflow-level "prod-health" lock. Drift needs no
-  // job-level lock of its own: one named group cannot be held by a workflow
-  // run and one of its own jobs at the same time, so a job-level "prod-health"
-  // on drift would leave the job pending behind its parent run forever.
   assert.match(
     workflow,
     /^concurrency:\n(?:  #[^\n]*\n)*  group: prod-health\n  cancel-in-progress: false\n/m,
@@ -69,8 +52,6 @@ test("health and drift jobs cannot overlap", async () => {
   assert.doesNotMatch(workflow.slice(driftStart, nextJob), /concurrency:/);
 });
 
-// A stateful curl stub. Probe calls to app.hypertask.ai consume one token each
-// from HC_SEQUENCE; version/Vercel/Telegram calls are served deterministically.
 const CURL_STUB = `#!/usr/bin/env bash
 set -u
 out=""
@@ -191,14 +172,12 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
   assert.equal(realGit.status, 0, realGit.stderr);
   await writeFile(join(bin, "curl"), CURL_STUB);
   await writeFile(join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n");
-  // Replay health logic without fetching or changing shared remote-tracking refs.
   await writeFile(join(bin, "git"), '#!/usr/bin/env bash\nif [ "$1" = "fetch" ]; then exit 0; fi\nexec "$HC_REAL_GIT" "$@"\n');
   await chmod(join(bin, "curl"), 0o755);
   await chmod(join(bin, "sleep"), 0o755);
   await chmod(join(bin, "git"), 0o755);
 
   try {
-    // An unspecified GitHub run-step shell is `bash -e {0}`.
     const result = spawnSync("bash", ["-e", "-c", await workflowScript()], {
       cwd: process.cwd(),
       encoding: "utf8",
@@ -230,9 +209,6 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
   }
 }
 
-// The bug (HTPR-5467): attempt 1 is Vercel-challenged, but attempt 3 returns an
-// unchallenged broken verdict. A sticky `challenged` flag would exit 0 here; the
-// failure must still be reported without changing production.
 test("an unchallenged final broken response requests guarded rollback after an earlier challenge", async () => {
   const { result, promoted } = await runHealthCheck(
     "challenge challenge challenge ok ok broken ok ok broken",
@@ -244,8 +220,6 @@ test("an unchallenged final broken response requests guarded rollback after an e
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
-// The guarantee that must not be weakened: when every failed response was
-// Vercel-challenged, the run never rolls back.
 test("a genuinely challenged-only run never rolls back", async () => {
   const { result, promoted } = await runHealthCheck(
     "challenge challenge challenge challenge challenge challenge challenge challenge challenge",
@@ -256,27 +230,17 @@ test("a genuinely challenged-only run never rolls back", async () => {
   assert.equal(promoted, null, "a challenged-only run must not promote");
 });
 
-// An unproven probe (reads pass, probe inconclusive) must also never roll back.
 test("a read-passing inconclusive probe fails the job but never rolls back", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok inconclusive ok ok inconclusive ok ok inconclusive",
   );
 
-  // Not healthy: the write path was never proven, so the gate must not go green.
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.doesNotMatch(result.stdout, /Production healthy/);
   assert.match(result.stdout, /Task-write probe inconclusive/);
   assert.equal(promoted, null, "an inconclusive probe must not promote");
 });
 
-// The bug (HTPR-5467, stale body): attempt 1's probe is healthy but the reads
-// are challenged, so the loop continues. On attempt 2 the probe request fails to
-// connect (curl prints 000) and — like real curl — leaves the previous -o file
-// untouched. The stale healthy body must NOT count as healthy; the run must fail
-// on the definitive connection failure instead of exiting 0.
-// An unprovisioned probe fixture must not warn forever: the write gate is not
-// running, so the job fails loudly. It must still never roll back, because no
-// rollback creates a fixture.
 test("an unprovisioned probe fixture fails the job without rolling back", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok misconfigured ok ok misconfigured ok ok misconfigured",
@@ -288,9 +252,6 @@ test("an unprovisioned probe fixture fails the job without rolling back", async 
   assert.equal(promoted, null, "a missing fixture must not promote");
 });
 
-// A setup problem must never mask a proven outage: an early misconfigured probe
-// plus an unchallenged definitive failure standing on the final attempt still
-// reports the failure.
 test("a missing fixture does not suppress the alert for a real final-attempt failure", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok misconfigured ok ok misconfigured ok 500 broken",
@@ -301,9 +262,6 @@ test("a missing fixture does not suppress the alert for a real final-attempt fai
   assert.equal(promoted, null, "a standing definitive failure must not promote");
 });
 
-// A challenge on an earlier attempt parses as http-403. A sticky run-wide
-// "broken" flag would swallow the final attempt's inconclusive verdict and let
-// the gate exit 0 with the write path unproven.
 test("an earlier challenged probe does not let a final inconclusive probe pass", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok challenge ok ok inconclusive ok ok inconclusive",
@@ -315,7 +273,6 @@ test("an earlier challenged probe does not let a final inconclusive probe pass",
   assert.equal(promoted, null, "an inconclusive probe must not promote");
 });
 
-// The positive path: everything green exits 0, says so, and never promotes.
 test("a fully healthy run exits clean and never rolls back", async () => {
   const { result, promoted } = await runHealthCheck("ok ok healthy");
 
@@ -324,8 +281,6 @@ test("a fully healthy run exits clean and never rolls back", async () => {
   assert.equal(promoted, null, "a healthy run must not promote");
 });
 
-// YPER4-306: a failed build plus a retry gives one commit two deployments. Picking one
-// must not kill the pipe under pipefail, and the READY retry wins over the failed build.
 test("two deployments for one commit pick the READY one without a broken pipe", async () => {
   const failed = (n) => `{"uid":"deploy-oom-${n}","state":"ERROR","meta":{"githubCommitSha":"__SHA__"},"pad":"${"x".repeat(40000)}"}`;
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
@@ -339,8 +294,6 @@ test("two deployments for one commit pick the READY one without a broken pipe", 
   assert.equal(promoted, null);
 });
 
-// YPER4-307: a commit with no deployment (ignored build step) must be reported as such
-// after the 4-minute window, not polled for 20 minutes and then health-checked.
 test("a commit with no deployment exits clean as an ignored build", async () => {
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
     HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-other","state":"READY","meta":{"githubCommitSha":"other"}}]}',
@@ -381,8 +334,6 @@ test("a stale healthy probe body from an earlier attempt is not healthy", async 
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
-// The bug (HTPR-5467, non-200 verdict): a probe that answers HTTP 500 but whose
-// body still carries probe.status=healthy must never count as healthy.
 test("a non-200 probe response with a healthy-looking body is not healthy", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok healthy500 ok ok healthy500 ok ok healthy500",
@@ -394,10 +345,6 @@ test("a non-200 probe response with a healthy-looking body is not healthy", asyn
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
-// The bug (HTPR-5467, per-endpoint masking): a challenged homepage in the SAME
-// attempt must not mask an unchallenged broken probe verdict. The old code
-// grepped all three header files in one call, so a challenge on ANY endpoint
-// excused the whole attempt and discarded the probe's broken verdict.
 test("a challenged homepage does not mask an unchallenged broken probe in the same attempt", async () => {
   const { result, promoted } = await runHealthCheck(
     "challenge ok broken challenge ok broken challenge ok broken",
@@ -409,8 +356,6 @@ test("a challenged homepage does not mask an unchallenged broken probe in the sa
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
-// Mirror case (HTPR-5467): a challenged probe must not mask an unchallenged
-// non-200 API response in the same attempt.
 test("a challenged probe does not mask an unchallenged non-200 API response in the same attempt", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok broken challenge ok broken challenge ok broken challenge",
@@ -422,10 +367,6 @@ test("a challenged probe does not mask an unchallenged non-200 API response in t
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
-// HTPR-5467 round-5: `unchallenged_failure` must be evaluated on the FINAL
-// attempt, not sticky across attempts. Attempt 1 sees a transient unchallenged
-// probe 500; attempts 2-3 are Vercel-challenged. The transient blip must NOT
-// roll back the previous deployment, but the run must NOT report healthy either.
 test("an unchallenged failure on an earlier attempt does not roll back when the final attempt is challenged", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok broken challenge challenge challenge challenge challenge challenge",
@@ -438,8 +379,6 @@ test("an unchallenged failure on an earlier attempt does not roll back when the 
   assert.equal(promoted, null, "a transient earlier failure must not promote");
 });
 
-// The fix must not over-correct: a persistent unchallenged broken probe on every
-// attempt (including the final one) still fails loudly.
 test("a persistent unchallenged broken probe requests guarded rollback", async () => {
   const { result, promoted } = await runHealthCheck(
     "ok ok broken ok ok broken ok ok broken",
@@ -451,9 +390,6 @@ test("a persistent unchallenged broken probe requests guarded rollback", async (
   assert.equal(promoted, null, "a failed health check must not promote");
 });
 
-// HTPR-6511: a READY production deploy can miss the alias. /api/version keeps
-// serving the previous commit. The health job used to error and stop; it must
-// report that deployment drift without changing the alias.
 test("a READY deploy that missed the alias fails without promotion", async () => {
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
     HC_VERSION_SHA: "a".repeat(40),
@@ -715,9 +651,6 @@ async function runDriftCheck({
   }
 }
 
-// HTPR-6511: Vercel already had a READY deploy for 95f3471, and the newest
-// READY SHA matched the production tip, but /api/version still served 058a6cf.
-// Drift must report the discrepancy without changing deployments.
 test("drift alerts without promotion when /api/version lags a READY production tip", async () => {
   const { result, promoted } = await runDriftCheck();
 
@@ -966,7 +899,6 @@ test("every failed inbox step is reported and leaves production health red", asy
   const script = await readFile(".github/scripts/core-actions-smoke.mjs", "utf8");
   assert.match(script, /if \(!result.ok\) process.exitCode = 1/);
   assert.match(script, /!String\(result\?\.action\).startsWith\("inbox "\)/);
-  // Positive control: a hidden final failure would turn the same shell gate green.
   const green = spawnSync("bash", ["-c", "exit 0"], { encoding: "utf8" });
   assert.notEqual(green.status, result.status);
 });

@@ -1,8 +1,3 @@
-/**
- * Behavioural tests for the shared agent lifecycle used by the web dashboard,
- * MCP, the CLI and AI chat (HTPR-5418). The module takes its database and its
- * token/runtime dependencies as arguments, so these run against fakes.
- */
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -20,11 +15,9 @@ type FakeState = {
   updateManyCount: number;
   mintCalls: number;
   clearCalls: number;
-  /** Simulates another tab winning the enable race. */
   loseTransition?: boolean;
 };
 
-/** Stands in for agentTokenCredentialFields: these fakes are not real JWTs. */
 function fakeCredentialFields(token: string | null) {
   return token
     ? { mcpTokenHash: `hash:${token}`, mcpTokenJti: `jti:${token}` }
@@ -82,7 +75,6 @@ function fakeSetup(state: FakeState) {
     clearRuntime: async () => {
       state.clearCalls += 1;
     },
-    // HTPR-4671: the row keeps a digest and a generation, never the token.
     credentialFields: fakeCredentialFields,
   };
 
@@ -106,8 +98,6 @@ test("launching a disabled external agent switches it on and reveals one token",
   assert.equal(result.alreadyRunning, false);
   assert.equal(result.agent.revokedAt, null);
   assert.equal(result.token, "token-6-valentin@example.com-agent-1");
-  // The destroyed token cannot be reused, so a fresh one is stored, and the
-  // stale runtime snapshot is dropped before the agent comes back.
   assert.deepEqual(state.row && {
     mcpTokenHash: state.row.mcpTokenHash,
     mcpTokenJti: state.row.mcpTokenJti,
@@ -213,8 +203,6 @@ test("a runtime snapshot failure leaves the agent off and mints nothing", async 
 
   const result = await launchOwnedAgent(database, deps, 6, "agent-1");
 
-  // Failing closed: a stale snapshot must never outlive the switch-on, so the
-  // agent stays revoked, no credential is minted, and a retry is the way back.
   assert.equal(result.status, "runtime_invalidation_failed");
   assert.equal(state.mintCalls, 0);
   assert.equal(state.updateManyCount, 0);

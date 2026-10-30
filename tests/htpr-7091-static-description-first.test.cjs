@@ -1,4 +1,3 @@
-// HTPR-7091: a cold ticket shows its description before the editor chunk loads.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -40,7 +39,6 @@ test("flag is a bugfix, default Everyone, with release risk", () => {
   assert.ok(def.default.releaseRisk);
 });
 
-// Expected values are what the read-only editor itself produced for the same input.
 const EDITOR = {
   plain: ["<p>This seeded ticket must open from its board card.</p>", "<p>This seeded ticket must open from its board card.</p>"],
   lists: [
@@ -180,7 +178,6 @@ test("the editor panels show the static placeholder only when one is provided", 
   assert.match(panels, /\(legacyStaticFirst \|\| cachedStaticFirst\) && staticPlaceholder \? staticPlaceholder : <InnerHTMLDescription/);
 });
 
-// HTPR-7110: descriptions saved through the app carry a bare document wrapper.
 const wrap = (inner) => `<html><head></head><body>${inner}</body></html>`;
 
 test("without the HTPR-7110 flag the app's saved format keeps the editor-first path", () => {

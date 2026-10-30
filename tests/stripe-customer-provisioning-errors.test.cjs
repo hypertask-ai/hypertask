@@ -1,7 +1,3 @@
-// HTPR-4358: a prisma or Stripe failure inside createCustomerIfNull used to be
-// swallowed, so /api/stripe/ensure-customer answered 200 with a null customer
-// and the user saw only a vague "No billing account" toast. These tests encode
-// why that matters: on the money path a failure must be visible as a failure.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -43,8 +39,6 @@ prisma.team.updateMany = async (args) => {
 const subscription = loadTs("src/lib/subscription.ts");
 const { createCustomerIfNull } = subscription;
 
-// The Stripe client is constructed at module load, so patch the instance the
-// module actually calls rather than trying to intercept the constructor.
 subscription.stripe.customers.create = async (input, options) => {
   stripeCustomers.push({ input, options });
   if (stripeCreateError) throw stripeCreateError;
@@ -173,8 +167,6 @@ test("a lost provisioning race returns the customer that is actually stored", as
   const originalFindFirst = prisma.team.findFirst;
   prisma.team.findFirst = async () => {
     call += 1;
-    // First read sees no customer; after the race is lost the stored row has
-    // the winner's customer.
     return call === 1
       ? { id: "team-1", stripe_customer_id: null }
       : { stripe_customer_id: "cus_winner" };
@@ -200,7 +192,6 @@ test("ensure-customer answers 500, not 200-with-null, when provisioning fails", 
   const originalHasAccess = accessModule.default;
   accessModule.default = async () => true;
   const originalFindFirst = prisma.team.findFirst;
-  // The route's own team lookup succeeds; provisioning is what fails.
   let call = 0;
   prisma.team.findFirst = async () => {
     call += 1;

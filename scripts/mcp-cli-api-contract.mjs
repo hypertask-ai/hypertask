@@ -16,7 +16,6 @@ function requireThat(condition, message) {
 
 export function loopbackUrl(value, base) {
   const url = new URL(value, base);
-  // Next uses localhost in request-derived OAuth redirects; never resolve that alias over DNS.
   if (url.hostname === "localhost") url.hostname = "127.0.0.1";
   requireThat(url.protocol === "http:" && ["127.0.0.1", "[::1]"].includes(url.hostname) && !url.username && !url.password, "Refused non-loopback URL");
   if (base) requireThat(url.origin === new URL(base).origin, "Refused different loopback origin");
@@ -165,7 +164,6 @@ async function cliContract(base, binary, token, board, rest) {
         let stdout = "";
         let helperRefusal = false;
         child.stdout.on("data", chunk => { stdout += chunk; });
-        // Never echo CLI output or diagnostics: either may contain a credential.
         child.stderr.on("data", chunk => {
           helperRefusal ||= chunk.toString().includes("helpers never write to the board");
         });
@@ -173,8 +171,6 @@ async function cliContract(base, binary, token, board, rest) {
         child.on("error", () => { clearTimeout(timer); reject(new Error("CLI: launch failed")); });
         child.on("close", code => { clearTimeout(timer); resolve({ code, stdout, helperRefusal }); });
       });
-      // v0.2.15 forbids helper mutations by inspecting hax -p ancestry, even on a disposable app.
-      // Keep this fail-closed; hosted CI (or the runner shell) must prove the CLI writes.
       requireThat(!result.helperRefusal, `CLI ${args[0]} ${args[1]}: pinned release refuses helper writes; rerun from the runner shell or hosted CI`);
       try { assertCliTrace(await readFile(traceFile, "utf8"), base); }
       catch (error) { requireThat(false, `CLI ${args[0]} ${args[1]}: ${error.message}`); }
@@ -216,7 +212,6 @@ export async function runContract() {
   requireThat(board?.columns?.length === 2 && fixture.callers?.unaccepted, "Missing opt-in contract fixtures");
   const descriptions = {};
   for (const family of ["projects", "tasks", "search", "comments", "labels", "pages"]) {
-    // This is the same action/name source imported by the server's catalog selector.
     descriptions[family] = JSON.parse(await readFile(path.join(root, `src/lib/mcp-server/config/descriptions/${family}.json`), "utf8"));
   }
   const operations = [["projects", "list"], ["tasks", "get"], ["search", "tasks"], ["tasks", "create"], ["comments", "add"],
@@ -260,7 +255,6 @@ export async function runContract() {
     const id = created.task.id;
     taskRow(await rest(`/tasks?task_id=${id}`, token), id, title);
     const text = `${role} comment ${randomUUID()}`;
-    // HTPR-7341 sends an agent comment without a kind to the agent log, so the agent posts a QA comment.
     const added = await call(token, "comments", "add", { task_id: id, text, ...(role === "write-agent" ? { kind: "qa" } : {}) });
     requireThat(Number.isInteger(added.comment?.id), `${role}: invalid comment receipt`);
     requireThat(added.routedTo === "comments" && added.visibleToPeople === true, `${role}: comment visibility receipt missing`);
@@ -305,7 +299,6 @@ export async function runContract() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   runContract().catch(error => {
-    // Errors contain only fixed assertion labels, never response bodies or credentials.
     console.error(`MCP CLI API contract failed: ${error.contractAssertion ? error.message : "unexpected runner failure (details withheld)"}`);
     process.exitCode = 1;
   });

@@ -126,7 +126,6 @@ export function activationHarness() {
     },
   };
   prisma.user.update = async () => ({});
-  // Serialized callbacks model the user advisory lock, including parallel claims.
   let transactionTail = Promise.resolve();
   prisma.$transaction = (callback: any) => {
     const transaction = transactionTail.then(() => callback(prisma));

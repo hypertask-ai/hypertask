@@ -11,10 +11,6 @@ const { createKanbanSystemPrompt } = jiti(
   path.join(root, "src/app/api/ai/_lib/editorAi.ts"),
 );
 
-// HTPR-5606: a demo run regenerated INNE-1576 and invented eight headline
-// lines the brief never contained (95 words, 73% of the length growth). The
-// task writer AUTHORS rather than rewrites, so it needs the fidelity rules
-// the Improve button does not.
 for (const mode of ["task_writer", "write_with_ai"]) {
   test(`${mode} runs the two skills verbatim`, () => {
     const prompt = createKanbanSystemPrompt(mode);

@@ -50,8 +50,6 @@ const prisma = {
   },
 };
 
-// setFeatureFlagMode decides the release date under an advisory lock, so the stub has to run the
-// callback the same way Prisma would: against itself, in order.
 prisma.$transaction = async (callback) => callback(prisma);
 prisma.$executeRaw = async () => 0;
 
@@ -459,8 +457,6 @@ test("feature flag modes enforce owner, QA, everyone, and off access", () => {
 });
 
 test("declared flags default to Owner + QA, except Everyone-default bugfix flags", async () => {
-  // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
-  // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
   for (const definition of definitions) {
     const mode = declaredDefault(definition);
@@ -604,8 +600,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
     assert.ok(description.length > 20, `${key} needs a useful description`);
-    // The flags admin page clusters on this day, so a typo would silently create a
-    // one-flag heading instead of failing.
     assert.match(shippedOn, /^\d{4}-\d{2}-\d{2}$/, `${key} needs a shippedOn day`);
     const ticketNumber = key.match(/^htpr-(\d+)-/)?.[1];
     assert.equal(
@@ -624,17 +618,14 @@ test("declared flags remain listed with ticket details and can be changed", asyn
 test("switching to Everyone starts a fresh removal countdown", async () => {
   const before = Date.now();
   const released = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
-  // The countdown has to start from the switch, not from whenever the row was last written.
   assert.ok(released.releasedAt.getTime() >= before);
 
-  // Re-pressing Everyone must not extend the deadline of a flag already released.
   row.releasedAt = new Date("2026-01-01T00:00:00.000Z");
   row.removalTaskId = 4242;
   const again = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.equal(again.releasedAt.toISOString(), "2026-01-01T00:00:00.000Z");
   assert.equal(again.removalTaskId, 4242);
 
-  // Leaving Everyone and coming back is a new release, so it earns its own countdown and ticket.
   await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OWNER_ONLY");
   const rereleased = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.ok(rereleased.releasedAt.getTime() >= before);
@@ -936,7 +927,6 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
-  // Classify one real definition only in this module fixture, not in the production registry.
   fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6950-tooltip-top-layer" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
     .replaceAll("@/lib/flags/definitions", "./definitions.ts"));

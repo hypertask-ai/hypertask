@@ -1,11 +1,4 @@
 const { withStubs } = require("./helpers/stub-map.cjs")
-/**
- * HTPR-6376: soft-delete handler must resolve the actor from the signed
- * session claim, same as (un)archive. Omitting body.agentId must not bypass
- * the Done tree guard.
- *
- * Run: npm run test:file -- tests/agent-actor-soft-delete.test.cjs
- */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const Module = require("node:module");
@@ -262,7 +255,6 @@ test("signed agent soft-delete omitting body agentId still hits the Done tree gu
   });
   const result = await callDelete(handler, {
     sessionAgentId: AGENT_ID,
-    // body.agentId intentionally omitted
   });
 
   assert.equal(result.status, 403);

@@ -1,5 +1,3 @@
-// HTPR-5163: bearer-token callers could start and stop timers, but the pause
-// and resume routes only existed on the cookie-authenticated web surface.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

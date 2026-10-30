@@ -36,15 +36,13 @@ test("flat rows keep section ids on boards and board ids on My Tasks", () => {
 });
 
 test("priority sort interleaves tasks from different boards by priority level", () => {
-  const taskFromBoardA = { id: 1, sectionId: 100, priority: { priority_index: 3 } }; // Medium
-  const taskFromBoardB = { id: 2, sectionId: 200, priority: { priority_index: 1 } }; // Urgent
-  const otherTaskFromBoardA = { id: 3, sectionId: 100, priority: { priority_index: 2 } }; // High
+  const taskFromBoardA = { id: 1, sectionId: 100, priority: { priority_index: 3 } };
+  const taskFromBoardB = { id: 2, sectionId: 200, priority: { priority_index: 1 } };
+  const otherTaskFromBoardA = { id: 3, sectionId: 100, priority: { priority_index: 2 } };
 
   const acrossBoards = [taskFromBoardA, taskFromBoardB, otherTaskFromBoardA];
   const sorted = [...acrossBoards].sort(sortByPriorityAndRankingOrder("Descending"));
 
-  // Descending by priority_index: Urgent(1) < High(2) < Medium(3), regardless
-  // of which board each task came from.
   assert.deepEqual(
     sorted.map((task) => task.id),
     [taskFromBoardB.id, otherTaskFromBoardA.id, taskFromBoardA.id]

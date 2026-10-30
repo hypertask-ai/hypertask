@@ -11,9 +11,6 @@ const source = fs.readFileSync(
   "utf8",
 );
 
-// HTPR-5684 retired IOSend: Send is now the filled primary and uses the shared
-// SendArrow. The behaviour this test guards is unchanged — Send must fire on a
-// completed click, never on onTouchEnd, which posted before the tap finished.
 const saveButtonStart = source.indexOf("const SaveButtonMobile");
 const sendIconStart = source.indexOf("<SendArrow", saveButtonStart);
 const saveButtonSource = source.slice(saveButtonStart);

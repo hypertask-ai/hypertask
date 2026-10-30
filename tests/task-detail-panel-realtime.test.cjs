@@ -1,6 +1,3 @@
-// HTPR-6281: after a remote task:changed, the open detail side panel must not
-// keep mount-time priority/estimate/labels, and the getTask refetch must not
-// reuse a cached GET.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

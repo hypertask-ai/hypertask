@@ -232,8 +232,6 @@ test("memory isolates users, merges board picks, remembers All, and tolerates in
   assert.doesNotThrow(() => rememberMyTasksView(985, { viewId: 7, defaultViewId: 5 }));
 });
 
-// Execute the production restore effect, including its guard against the older
-// URL synchronization effect overwriting a restored choice in the same render.
 function restoreEffect() {
   const source = ts.createSourceFile(tasksFile, read(tasksFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let effect;

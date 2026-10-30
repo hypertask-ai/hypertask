@@ -18,8 +18,6 @@ test("Android native update manifest stays compatible and trusted", () => {
   assert.equal(Number.isInteger(manifest.minimumSupportedVersionCode), true);
   assert.equal(manifest.minimumSupportedVersionCode > 0, true);
   assert.equal(apkUrl.protocol, "https:");
-  // Owner policy HTPR-5532: APK binaries live in the public
-  // hypertask-app-releases GitHub releases, never in this repo.
   assert.equal(
     apkUrl.hostname === "files.hypertask.app" ||
       (apkUrl.hostname === "github.com" &&

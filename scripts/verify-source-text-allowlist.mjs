@@ -1,15 +1,4 @@
 #!/usr/bin/env node
-/**
- * Verifies the source-text regex test allowlist by sampling files and
- * classifying them as true or false positives.
- * 
- * A TRUE POSITIVE is a test that:
- * 1. Reads source files (not just fixtures, package.json, or test helpers)
- * 2. Applies regex operations to that source content
- * 3. Asserts based on those regex matches
- * 
- * Usage: node scripts/verify-source-text-allowlist.mjs [--sample-size N]
- */
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

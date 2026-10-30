@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-/**
- * Generates an allowlist of test files that read source files as text and regex-match them.
- * These tests assert implementation, not behavior, so they break on harmless refactors.
- * The allowlist may only shrink - adding new entries is blocked by the CI check.
- */
 import { writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { findOffenders } from "./lib/source-text-regex-detector.cjs";

@@ -26,8 +26,6 @@ function compile(source, mocks) {
   return exports;
 }
 
-// Execute the hook's actual state initializer and every description synchronization
-// effect, isolating them from unrelated notification and keyboard subscriptions.
 const source = ts.createSourceFile("hook.ts", fs.readFileSync(path.join(root, "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts"), "utf8"), ts.ScriptTarget.Latest, true);
 const declaration = source.statements.find((node) => ts.isVariableStatement(node) && node.declarationList.declarations.some((item) => item.name.getText(source) === "useDescriptionAndCommentsStates"));
 const statements = declaration.declarationList.declarations[0].initializer.body.statements;
@@ -37,7 +35,6 @@ const relevant = statements.filter((node) => {
     (text.startsWith("useEffect(") && /\}, \[(currentTask|_parsedTask)\?\.description_/.test(text));
 });
 assert.equal(relevant.length, 5, "the initializer, preservation guard and all three sync effects must be exercised");
-// The preserved predicate comes from the real module, not a test reimplementation.
 const syncJs = ts.transpileModule(`
   export function useSync(context) {
     const { currentTask, _parsedTask, setDescription, hasDraft, hasDraftInit, editMode, uploadingDescription } = context;

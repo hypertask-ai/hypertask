@@ -19,11 +19,9 @@ test('accepts a well-formed playbook and trims/normalizes it', () => {
     ignored_key: 'dropped',
   })
   assert.equal(r.ok, true)
-  // empty checklist item filtered, others trimmed
   assert.deepEqual(r.value.definition_of_done, ['tests pass', 'screenshot attached'])
   assert.equal(r.value.working_rules, 'branch off staging')
   assert.equal(r.value.notes, 'be terse')
-  // unknown keys are not persisted
   assert.equal('ignored_key' in r.value, false)
 })
 

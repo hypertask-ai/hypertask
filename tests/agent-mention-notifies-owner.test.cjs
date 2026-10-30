@@ -1,11 +1,3 @@
-// HTPR-4229: a comment posted through an agent's MCP token is attributed to the
-// token's OWNER, so `mentionedBy` is the human who owns the bot rather than the
-// author. The mention loop skipped `userId === mentionedBy` as a self-mention,
-// which meant an agent could never notify its own owner.
-//
-// That is the case that matters. Agents almost always mention the person who
-// runs them, so every such comment was silent unless the human happened to open
-// the ticket.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -32,7 +24,6 @@ const HYPERAI = 332;
 const AGENT = "2a66c548-ef2c-4d06-8728-407c5e8ec938";
 
 test("an agent mentioning its own owner notifies them", () => {
-  // The reported bug, and the whole point of agent comments.
   assert.equal(
     shouldSkipMentionRecipient({
       userId: OWNER,
@@ -45,7 +36,6 @@ test("an agent mentioning its own owner notifies them", () => {
 });
 
 test("a human still does not notify themselves", () => {
-  // Without an agent, mentioning yourself in your own comment is noise.
   assert.equal(
     shouldSkipMentionRecipient({
       userId: OWNER,
@@ -82,7 +72,6 @@ test("mentioning someone else always notifies them", () => {
 });
 
 test("HyperAI is never notified, agent or not", () => {
-  // It is not a person with an inbox; notifying it is how agents loop.
   for (const fromAgentId of [null, AGENT]) {
     assert.equal(
       shouldSkipMentionRecipient({

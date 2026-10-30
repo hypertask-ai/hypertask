@@ -25,9 +25,6 @@ test("extracts multiple GitHub pull request URLs", () => {
 });
 
 test("does not glue two URLs when the anchor text repeats the href (Tiptap HTML)", () => {
-  // Real prod shape: <a href="URL">URL</a> with no space between the closing
-  // quote/bracket and the repeated URL. A greedy class that only stops at spaces
-  // swallows the `">` and returns one mangled URL — this pins that it does not.
   assert.deepEqual(
     extractPrLinks(
       '<a href="https://github.com/valentinyeo/hypertasks/pull/1703">https://github.com/valentinyeo/hypertasks/pull/1703</a>'

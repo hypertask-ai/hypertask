@@ -2,7 +2,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { fixture } = require('./helpers/htpr-7166-fixture.cjs');
 
-// HTPR-7188: an open invite still loads the board, but never its shared views.
 for (const [name, options, expected] of [
   ['Invited member', { member: 'Invited' }, []],
   ['Accepted member', { member: 'Accepted' }, ['view', 'default']],

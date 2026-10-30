@@ -61,9 +61,7 @@ const makeTasks = (projectTitle, count, startMinutesAgo) =>
 
 test("a quiet board keeps its own split even when a busy board fills the All tab", () => {
   const buckets = [
-    // Busy board: 50 updates, all newer than anything on the quiet board.
     { title: "Hypertask", tasks: makeTasks("Hypertask", 50, 1) },
-    // Quiet board: older, so a single global take(50) would drop it entirely.
     { title: "Inner", tasks: makeTasks("Inner", 3, 200) },
   ];
 
@@ -87,7 +85,6 @@ test("the All tab holds the globally most recent tasks across boards", () => {
     tasksByProject.All.map((task) => task.id),
     ["Inner-0", "Inner-1", "Hypertask-0", "Hypertask-1"]
   );
-  // Most recently touched board leads the splits.
   assert.deepEqual(tabs, ["All", "Inner", "Hypertask"]);
 });
 
@@ -148,7 +145,6 @@ test("due-date grouping keeps every board split and adds the personal tab", () =
   assert.ok(tabs.includes("Inner"));
   assert.equal(tasksByDueDate.Inner.length, 1);
   assert.equal(tasksByDueDate["All Due Dates"].length, 50);
-  // "All" is replaced by "All Due Dates" and must not linger as a stray split.
   assert.equal(tasksByDueDate.All, undefined);
   assert.equal(tabs.filter((tab) => tab === "All").length, 0);
 });
@@ -279,7 +275,6 @@ test("the personal due-date tab keeps a task that falls outside the global top 5
   const withDueDate = (tasks) =>
     tasks.map((task) => ({ ...task, dueDate: task.updatedAt }));
   const buckets = [
-    // 50 newer tasks on a busy board fill the global limit entirely.
     { title: "Hypertask", tasks: withDueDate(makeTasks("Hypertask", 50, 1)) },
     {
       title: "Inner",

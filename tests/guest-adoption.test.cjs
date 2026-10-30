@@ -1,12 +1,3 @@
-// HTPR-4893: adoptGuestBoards runs on every auth chokepoint, including ones that
-// fire for users who were never guests. Two mistakes would be expensive:
-//   - adopting from a NON-guest previous session hands one real user's boards to
-//     another real user (the previous ht_session is only proof of who WAS signed
-//     in, not that they consented to a handover);
-//   - adopting when guest === target, which really happens: the demo route mints a
-//     Better Auth session for the guest itself, running the same hook with both
-//     ids equal, and a self-adoption would re-prefix a live guest's uid and strand
-//     their session.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

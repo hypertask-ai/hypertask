@@ -133,7 +133,6 @@ function fixture({ enabled = true, last = false, empty = false, denied = false, 
 test(`Ctrl+K/header shared delete preserves cards after reload through the Web route`, async () => {
   const f = fixture();
   const beforeOthers = structuredClone(f.tasks.slice(2));
-  // The client row is stale and contains an untrusted project ID: use the authorized server row.
   await f.client()({ ...f.sections[0], projectId: 16, section_title: "Stale title" }, "DELETE");
   assert.equal(f.sections[0].deleted, true);
   assert.deepEqual(f.tasks.slice(0, 2).map(({ sectionId, section, status }) => ({ sectionId, section, status })), [

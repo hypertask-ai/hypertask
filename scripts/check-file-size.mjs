@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-// Fails when a tracked source file under src/ is over MAX_LINES lines.
-// Static data files are exempt. HTPR-6506.
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 export const MAX_LINES = 1500;
 
-// Static data only. Logic never goes on this list: split the file instead.
 export const STATIC_DATA = new Set(["src/lib/constants/emojiData.ts"]);
 
 const SOURCE = /\.(ts|tsx|js|jsx|mjs|cjs)$/;

@@ -36,7 +36,6 @@ async function post({ enabled = true, validate = true, output = "", error } = {}
   const checks = [];
   const stubs = {
     ai: { streamText: (args) => {
-      // The real package reports stream errors to onError and drops them from textStream.
       if (error) args.onError?.({ error });
       return { textStream: (async function* () { if (output) yield output; })() };
     } },
@@ -77,7 +76,6 @@ async function main() {
       assert.ok(on.content.includes("task-writer-stream-error"));
       assert.equal(on.content.includes(genericMessage), false);
       assert.deepEqual(on.checks.find(([flag]) => flag === flagName), [flagName, 985]);
-      // The client shows this frame's text instead of the raw event stream.
       assert.equal(failure.describeTaskWriterStreamFailure(on.content), expected);
     }
     const off = await post({ error, enabled: false });

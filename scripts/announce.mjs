@@ -1,26 +1,4 @@
 #!/usr/bin/env node
-// Owner CLI for in-app announcements. Wraps the secured admin endpoints so the
-// owner can manage announcements without any in-app UI.
-//
-// Auth : ANNOUNCEMENTS_SECRET_KEY env var, sent as `Authorization: Bearer <secret>`.
-//        (Must match ANNOUNCEMENTS_SECRET_KEY set in the app's Vercel env.)
-// Base : ANNOUNCE_BASE_URL env var, default https://app.hypertask.ai
-//
-// Usage:
-//   ANNOUNCEMENTS_SECRET_KEY=… node scripts/announce.mjs list
-//   ANNOUNCEMENTS_SECRET_KEY=… node scripts/announce.mjs create --title "Title" --content "Body text" [--blog-url https://…] [--new-users]
-//   ANNOUNCEMENTS_SECRET_KEY=… node scripts/announce.mjs slides --file body.json
-//   ANNOUNCEMENTS_SECRET_KEY=… node scripts/announce.mjs edit --id 42 --file body.json
-//   ANNOUNCEMENTS_SECRET_KEY=… node scripts/announce.mjs delete --id 42
-//
-// --new-users marks the announcement as a welcome/new-user one (isWelcome);
-//   the backend currently targets its internal allowlist for those.
-// Add --dry-run to any write to print the request instead of sending it.
-//
-// `body.json` for slides/edit is the announcement body, e.g.:
-//   { "title": "…", "content": "…", "blogURL": "…", "newUserMark": false,
-//     "slides": [ { "headline": "…", "content": "<p>…</p>", "mediaURL": "…",
-//                   "articleURL": "…", "primaryCTA": "Learn more" } ] }
 
 import { readFileSync } from "node:fs";
 import assert from "node:assert";
@@ -30,7 +8,6 @@ const POST_URL = "/api/admin/postAnnouncement";
 const UPDATE_URL = "/api/admin/announcements/updateAnnouncement";
 const LIST_URL = "/api/admin/announcements/getAnnouncements";
 
-// selftest flips this so a rejected input can be asserted instead of exiting the process.
 let throwOnFail = false;
 
 function fail(msg) {
@@ -54,14 +31,10 @@ function parseArgs(argv) {
 }
 
 function parseId(v, cmd) {
-  // Strict: reject "12oops" / "1e3" so a typo can't target the wrong announcement.
   if (!/^\d+$/.test(String(v))) fail(`${cmd} requires --id <positive integer>`);
   return parseInt(v, 10);
 }
 
-// The announcement ladder. Every level lands in the rocket sidebar; the level only
-// decides how loudly it interrupts on top of that. Mirrors resolveLevel() in
-// src/models/Announcements/model.ts.
 const LEVELS = ["note", "link", "video", "banner", "takeover"];
 
 function str(a, flag) {
@@ -72,7 +45,6 @@ function str(a, flag) {
 }
 
 function buildCreateBody(a) {
-  // A flag with no value parses to boolean true; require real string values.
   if (typeof a.title !== "string" || typeof a.content !== "string")
     fail("create requires --title and --content, each with a value");
   const jsonBody = { title: a.title, content: a.content };
@@ -88,7 +60,6 @@ function buildCreateBody(a) {
       fail(`--level must be one of: ${LEVELS.join(", ")}`);
     if (level === "takeover")
       fail("--level takeover needs slides: use `slides --file body.json` instead");
-    // Publish nothing that renders empty: each rung needs its own payload.
     if (level === "link" && !blogURL)
       fail("--level link requires --blog-url (the sidebar row is the link)");
     if ((level === "video" || level === "banner") && !mediaURL)
@@ -119,7 +90,6 @@ function readBodyFile(a, { forEdit } = {}) {
     fail(`${a.file} must be a JSON object with at least a "title"`);
   if (parsed.level !== undefined && !LEVELS.includes(parsed.level))
     fail(`${a.file}: "level" must be one of: ${LEVELS.join(", ")}`);
-  // edit replaces the WHOLE stored body; a title-only file would wipe the rest.
   const hasSlides = Array.isArray(parsed.slides) && parsed.slides.length > 0;
   if (forEdit && !parsed.content && !hasSlides)
     fail(
@@ -199,7 +169,6 @@ async function main() {
       return;
     }
     case "selftest": {
-      // ponytail: single runnable check for the non-trivial bits (arg parse + body build).
       assert.deepStrictEqual(
         parseArgs(["create", "--title", "Hi", "--new-users"]),
         { _: ["create"], title: "Hi", "new-users": true }
@@ -212,7 +181,6 @@ async function main() {
         buildCreateBody({ title: "T", content: "C" }),
         { jsonBody: { title: "T", content: "C" } }
       );
-      // ladder: a valid banner carries its media and CTA
       assert.deepStrictEqual(
         buildCreateBody({
           title: "T",
@@ -233,7 +201,6 @@ async function main() {
           },
         }
       );
-      // ladder: every rung that would render empty is refused
       throwOnFail = true;
       for (const bad of [
         { title: "T", content: "C", level: "nope" },

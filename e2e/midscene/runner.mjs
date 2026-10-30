@@ -1,19 +1,3 @@
-// HTPR-5720: generic runner for the declarative flow pack in flows/.
-// Extends the HTPR-5715 scaffold (run.mjs) -- same puppeteer setup, dedicated
-// user-data-dir, proxy env handling, and browser close in finally -- but
-// loads flow modules and executes their `steps` data instead of hardcoding
-// one flow.
-//
-// Usage (always through guarded-run.sh, see README):
-//   node runner.mjs --flow <id>   run one flow
-//   node runner.mjs --all         run every flow sequentially, continue on failure
-//
-// Writes midscene_run/results-latest.json: { startedAt, results: [...] }
-// where each result is { flow, ok, error, durationMs, reportPath,
-// screenshotPath, resolvedUrl }. startedAt lets nightly.sh's postprocessor
-// detect a stale (previous run's) results file if this run crashes or times
-// out before writing. Exits non-zero if any flow failed.
-
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import puppeteer from 'puppeteer';
@@ -27,9 +11,6 @@ const SCREENSHOT_DIR = path.join(RESULTS_DIR, 'screenshots');
 
 const USER_DATA_DIR = process.env.MIDSCENE_PROFILE_DIR || `/tmp/midscene-profile-${process.pid}`;
 
-// See run.mjs (HTPR-5715): Midscene's own SOCKS proxy config only affects its
-// AI gateway calls. Strip generic proxy vars from the browser subprocess so
-// Chrome doesn't try to route page navigation through the same tunnel.
 const browserEnv = { ...process.env };
 delete browserEnv.ALL_PROXY;
 delete browserEnv.HTTP_PROXY;
@@ -45,19 +26,11 @@ function parseArgs(argv) {
   };
 }
 
-// A fallback URL only stands in for the primary when the primary domain
-// itself is unreachable (DNS or connection refused) -- e.g. hypertask.ai not
-// resolving. Any other failure (a real 404/500 page, a timeout, an assertion
-// failure) must fail the flow, not silently swap in a different page.
 const DNS_OR_CONNECTION_ERROR = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED/;
-// YPER4-266: a page open that hits a short network blip is tried again, twice at most.
 const TRANSIENT_NETWORK_ERROR = /\bnet::(ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_TIMED_OUT)\b/;
 const GOTO_EXTRA_TRIES = 2;
 const GOTO_RETRY_WAIT_MS = 2_000;
 
-// HTPR-7063: Midscene's aiInput sometimes loses the start of the text when the chat
-// composer re-renders while typing. Type with the keyboard instead, read the
-// text back, and type again until it matches.
 const normalizeText = (text) => String(text || '').replace(/\s+/g, ' ').trim();
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -65,7 +38,6 @@ async function fillVerified(page, selector, value) {
   let lastSeen = '';
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     const handle = await page.waitForSelector(selector, { visible: true, timeout: 30_000 });
-    // Settle: the same DOM node must survive a short pause (no re-mount).
     await handle.evaluate((el) => { el.dataset.fillMarker = 'settle'; });
     await pause(750);
     const stable = await handle.evaluate((el) => el.isConnected && el.dataset.fillMarker === 'settle');
@@ -98,7 +70,6 @@ async function runStep(page, agent, step, fixture) {
       return createFixtureTask(page, fixture);
     case 'saveTask': {
       const saved = page.waitForResponse((res) => {
-        // Quick add posts to createGlobally when the open view has filters (HTPR-6993).
         if (!['/api/tasks/create', '/api/tasks/createGlobally'].includes(new URL(res.url()).pathname) || res.request().method() !== 'POST') return false;
         const body = JSON.parse(res.request().postData() || '{}');
         return body.title === step.value && (!fixture || body.projectId === fixture.project.id);
@@ -111,7 +82,6 @@ async function runStep(page, agent, step, fixture) {
       return;
     }
     case 'waitForTaskCard':
-      // Persisted data and network idle do not imply that React has rendered the card.
       await page.waitForFunction((title) => [...document.querySelectorAll('.kanban-task-card')].some((card) =>
         card.getClientRects().length > 0 && [...card.querySelectorAll('p')].some((text) => text.textContent.trim() === title)),
       { timeout: 30_000 }, step.arg);
@@ -242,7 +212,6 @@ async function runFlow(browser, flow) {
     for (const [index, template] of flow.steps.entries()) {
       const step = resolveStep(template, fixture?.values || {});
       result.failedStep = `${index + 1}. ${step.action}: ${step.arg}`;
-      // Retain real browser evidence if a failed step closes the page or breaks screenshots.
       beforeStepScreenshot = await page.screenshot().catch(() => beforeStepScreenshot);
       const output = await runStep(page, agent, step, fixture);
       if (process.argv.includes('--force-failure') && process.argv[process.argv.indexOf('--force-failure') + 1] === flow.id) {
@@ -280,7 +249,6 @@ async function runFlow(browser, flow) {
       });
       result.screenshotPath = screenshotPath;
     } catch {
-      // best effort -- a screenshot failure must not mask the real error
     }
   } finally {
     if (fixture) {

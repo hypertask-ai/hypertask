@@ -4,12 +4,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-// HTPR-6047 lever two: non-essential task-detail requests (AI chat
-// suggestions, the share-link prefetch, the move-task sections prefetch)
-// used to fire in the same burst as the requests the ready markers actually
-// depend on. This pins the deferral so a future edit can't silently drop the
-// gate: each hook must still take an `enabled` input, and the task-detail
-// call sites must still pass the readiness flag through.
 
 test("HTPR-6047: task-detail readiness effect flips the non-essential gate", () => {
   const src = readRefactoredSource(
@@ -64,10 +58,6 @@ test("HTPR-6047: the non-essential gate fails open on a short timer, independent
     path.join(__dirname, "..", "src/app/detail/[...slug]/TaskDetailComp.tsx"),
     "utf8",
   );
-  // A share view, a task with no description editor, a permission-limited
-  // view, or an error state never satisfies taskDetailUsableDomPresent, so
-  // without this the gate would only flip on the 30s readiness timeout -
-  // stalling AI suggestions, the share link and move-task sections that long.
   assert.ok(
     /setTimeout\(\s*\(\)\s*=>\s*setNonEssentialReady\(true\),\s*3000,?\s*\)/.test(
       src,

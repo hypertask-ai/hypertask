@@ -15,7 +15,6 @@ const palette = "src/components/Modals/commands/HTC/commands.tsx";
 const prefixKey = "settingsBoardTicketPrefix";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-// Execute production memo/hook boundaries, not a duplicate search implementation.
 function initializer(file, name) {
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let found;

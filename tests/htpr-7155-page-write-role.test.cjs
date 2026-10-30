@@ -1,4 +1,3 @@
-// HTPR-7155: read-only agents must not create, update, archive or restore task pages.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -58,7 +57,6 @@ function harness({ agentId, role }) {
         },
       };
     }
-    // Every other dependency (page service, helpers, idempotency) records any call.
     return new Proxy({}, { get: (_t, name) => record(`${request}#${String(name)}`, undefined) });
   };
   return { calls, mockRequire };

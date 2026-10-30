@@ -1,4 +1,3 @@
-// HTPR-6862: Stripe customer names are shown to customers, so they must be readable.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

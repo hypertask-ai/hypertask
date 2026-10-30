@@ -39,7 +39,6 @@ notifyManager.setScheduler(queueMicrotask);
 async function withFlags({ Provider, initialFlags, saved, children, userId = 985 }, run) {
   const names = ["window", "document", "fetch", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = names.map(name => [name, Object.getOwnPropertyDescriptor(global, name)]);
-  // Fresh equal query objects exercise provider equality rather than React Query's structural sharing.
   const options = { defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity, structuralSharing: false } } };
   const serverClient = new QueryClient(options);
   const client = new QueryClient(options);

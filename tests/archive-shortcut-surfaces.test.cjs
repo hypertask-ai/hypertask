@@ -3,10 +3,6 @@ const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
-// Ctrl/Cmd+E archives and then advances the selection, so every surface that
-// binds it must block held keys through the same shared key state.
-// Guarding only the board leaves the sibling lists able to wipe a run of tasks
-// from a single long press.
 const SURFACES = [
   "src/components/PageComponents/Starred/StarredRowComp.tsx",
   "src/app/all-tasks/AllTasks.tsx",

@@ -10,7 +10,6 @@ const bottom = button.slice(button.indexOf('else if (buttonPosition ==="bottom"'
 
 function assertGhostClasses(source) {
   assert.doesNotMatch(source, /\bbg-opacity-\d+\b|\bbg-slate-500\b/);
-  // HTPR-6875: a fill class (even bg-transparent) beats the hover color in the live CSS.
   assert.doesNotMatch(source, /(^|\s)bg-(transparent|[a-z]+-\d+)\b/);
   assert.match(source, /\bhover:bg-hover-active\b/);
 }

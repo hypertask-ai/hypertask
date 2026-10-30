@@ -44,8 +44,6 @@ test("timeframe buttons remain draggable interactive elements", () => {
 });
 
 test("calendar interval membership uses half-open visible boundaries", () => {
-  // New York's 2026 spring DST week has a 167-hour UTC range. The server still
-  // receives exact local-midnight boundaries from the client.
   const start = new Date("2026-03-08T05:00:00.000Z");
   const endExclusive = new Date("2026-03-15T04:00:00.000Z");
 

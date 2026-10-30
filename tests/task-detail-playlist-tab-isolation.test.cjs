@@ -1,5 +1,3 @@
-// HTPR-5584: a task-detail playlist must stay inside the browser tab that wrote it,
-// so archiving in one tab cannot navigate into another tab's stale playlist.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
@@ -7,8 +5,6 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const { createJiti } = require("jiti");
 
-// A stand-in for one browser tab's sessionStorage. Two instances share no state,
-// which is exactly the isolation sessionStorage gives real tabs.
 function createTabStorage() {
   const data = new Map();
   return {
@@ -21,9 +17,6 @@ function createTabStorage() {
   };
 }
 
-// Runs `body` with `window` bound to one tab's storage, giving it a freshly loaded
-// copy of the real tasksPlayListAtom. Loading the module again models a page load in
-// that tab: the atom is re-created and must read its value back from that tab's storage.
 function withTab(windowValue, body) {
   const previousWindow = global.window;
   global.window = windowValue;
@@ -46,8 +39,6 @@ function withTab(windowValue, body) {
       read: () => store.get(tasksPlayListAtom),
       write: (value) => store.set(tasksPlayListAtom, value),
       reset: () => store.set(tasksPlayListAtom, RESET),
-      // Subscribing mounts the atom, which makes Jotai re-read storage. This is what
-      // task detail does when it renders, so the mount-time value is what it sees.
       readAfterMount: () => {
         const unsubscribe = store.sub(tasksPlayListAtom, () => {});
         try {
@@ -77,8 +68,6 @@ test("a playlist written in one tab is invisible to another tab", () => {
     assert.deepEqual(inboxTab.read(), PLAYLIST_A);
   });
 
-  // The second tab must start empty. Before this fix both tabs shared localStorage,
-  // so archiving in the inbox tab could open a task from this unrelated playlist.
   withTab({ sessionStorage: tabB }, (otherTab) => {
     assert.equal(otherTab.read(), null);
   });
@@ -101,8 +90,6 @@ test("a reload in the same tab restores the playlist once task detail mounts it"
 
   withTab({ sessionStorage: tabA }, (tab) => tab.write(PLAYLIST_A));
 
-  // HTPR-7377: the first read must match the server (no playlist) so the reloaded
-  // page hydrates; the stored playlist arrives when task detail mounts the atom.
   withTab({ sessionStorage: tabA }, (afterReload) => {
     assert.equal(afterReload.read(), null);
     assert.deepEqual(afterReload.readAfterMount(), PLAYLIST_A);
@@ -116,15 +103,11 @@ test("the playlist still works when session storage is unavailable", () => {
     },
   };
 
-  // Blocked storage must not throw on module load or first read; navigation then
-  // falls back to an in-memory playlist for that tab.
   withTab(blockedWindow, (tab) => {
     assert.equal(tab.read(), null);
     tab.write(PLAYLIST_A);
     assert.deepEqual(tab.read(), PLAYLIST_A);
 
-    // Jotai re-reads storage when the atom mounts, so a fallback that dropped writes
-    // would hand navigation an empty playlist right after one was set.
     assert.deepEqual(tab.readAfterMount(), PLAYLIST_A);
   });
 });
@@ -142,8 +125,6 @@ test("the playlist falls back when session storage methods throw", () => {
     },
   };
 
-  // Some browsers expose sessionStorage but throw only when its methods run.
-  // Reads and writes must use the same in-memory fallback in that case.
   withTab({ sessionStorage: blockedStorage }, (tab) => {
     assert.equal(tab.read(), null);
     tab.write(PLAYLIST_A);

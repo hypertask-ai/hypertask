@@ -9,7 +9,6 @@ export function fetchGithubRuns() {
   const identity = process.env.SPEED_AGE_IDENTITY;
   if (!identity?.trim()) throw new Error('Missing speed age identity');
   fs.mkdirSync(STATE, { recursive: true, mode: 0o700 });
-  // Share the measurement lock so a legacy/manual VPS run cannot lose imported history.
   const lock = path.join(STATE, 'measure.lock');
   const handle = fs.openSync(lock, 'wx', 0o600);
   let temporary;
@@ -32,7 +31,6 @@ export function fetchGithubRuns() {
       if (!Number.isSafeInteger(entry.databaseId) || entry.databaseId < 1 || !Number.isFinite(Date.parse(entry.createdAt))) throw new Error('Invalid GitHub run');
       if (known.has(String(entry.databaseId))) continue;
       const download = path.join(temporary, String(entry.databaseId));
-      // A green setup-skip has no artifact. Distinguish it from a failed download, which must be retried.
       const artifacts = JSON.parse(command('gh', ['api', `repos/hypertask-ai/hypertask/actions/runs/${entry.databaseId}/artifacts`, '--paginate', '--slurp']));
       if (!Array.isArray(artifacts) || artifacts.some(page => !Array.isArray(page.artifacts))) throw new Error('Invalid artifacts');
       const name = `speed-run-${entry.databaseId}`;
@@ -48,7 +46,6 @@ export function fetchGithubRuns() {
       added++;
     }
     if (added) {
-      // Keep --latest chronological even when recovering a previously missed artifact.
       history.sort((a, b) => Date.parse(a.started) - Date.parse(b.started));
       fs.writeFileSync(pending, JSON.stringify(history, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
       fs.renameSync(pending, historyFile);
@@ -67,7 +64,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     fetchGithubRuns();
     console.log('Speed import complete');
   } catch {
-    // gh, age and JSON exceptions can contain private response data or identity material.
     console.error('Speed import failed; inspect setup and private history locally.');
     process.exitCode = 1;
   }

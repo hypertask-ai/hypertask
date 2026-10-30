@@ -235,17 +235,13 @@ test("the agent page reads and writes the key through the owner-only route", () 
   );
   const detail = readAgentDetailSource();
 
-  // Every handler resolves the agent through the owner's own agent list.
   assert.equal(route.match(/requireOwnedAgent\(/g).length, 4);
   assert.match(route, /resolveOwnedAgent\(userId, ref\)/);
   assert.match(route, /where: \{ id: resolved\.id, userId \}/);
-  // nookies_user is client-writable, so the id is a claim. Identity has to be
-  // the signed session agreeing with it, or a Better Auth session.
   assert.match(route, /verifyCookieIdentity\(/);
   assert.match(route, /identity\.status === "verified"/);
   assert.match(route, /identity\.status === "forged"/);
   assert.doesNotMatch(route, /JSON\.parse\(userCookie\.value\)/);
-  // Secrets are stored encrypted and only ever returned masked.
   assert.match(route, /ciphertext: encryptByokSecret\(apiKey\)/);
   assert.doesNotMatch(route, /apiKey: decryptByokSecret/);
   assert.match(route, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
@@ -348,13 +344,11 @@ test("agent identity reaches every AI key lookup, not just task writing", () => 
     "utf8",
   );
 
-  // Tiptap turns run as the agent too, so they must not silently bill the team.
   const tiptap = editor.indexOf("export async function selectTiptapModel(");
   const selector = editor.indexOf("selectTaskWriterModel({", tiptap);
   const passedAgentId = editor.indexOf("agentId: args?.agentId ?? null", selector);
   assert.ok(passedAgentId > selector && passedAgentId < selector + 400);
 
-  // The chat stream resolves the acting agent before it resolves a key.
   const acting = stream.indexOf("actingAgent = await loadActingAgent(");
   const stamped = stream.indexOf(
     "keyLookupContext = { ...keyLookupContext, agentId: actingAgent?.id ?? null }",

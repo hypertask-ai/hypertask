@@ -17,13 +17,6 @@ const { createInboxRemovalMutation, applyInboxReadModelMutation } = jiti(
   path.join(root, "src/lib/inboxSync/mutation.ts"),
 );
 
-// HTPR-5745: removing one reaction row from the REACTIONS split left sibling
-// rows (other reactors, same task) painted until refresh, even though the
-// server had already archived them. Root cause: markAsDone and
-// (un)archiveBulk both archive every OTHER notification sharing the removed
-// row's taskId (HTPR-5640 sibling cleanup), but the client's optimistic
-// removal only matched the clicked row's own id -- it never mirrored the
-// server's taskId-scoped sibling cleanup.
 const reactionRow = (over) => ({
   id: over.id,
   taskId: 900,
@@ -44,8 +37,6 @@ test("removing one reactor's row also removes sibling reaction rows for the same
   const bob = reactionRow({ id: 102, fromUserId: 2 });
   const payload = buildInboxQueryCache([alice, bob]);
 
-  // The UI hands removeElementFromState the exact row object it rendered --
-  // here, the row for Alice's reaction.
   const clickedRow = payload.notifications.find((n) => n.id === 101);
   const mutation = createInboxRemovalMutation([clickedRow]);
   const result = applyInboxReadModelMutation(payload, mutation);
@@ -71,11 +62,6 @@ test("removing one reactor's row also removes sibling reaction rows for the same
 });
 
 test("removing a real row for a task leaves that task's blocked-by-you synthetic row alone", () => {
-  // Synthetic "waiting on you" rows (id "-<taskId>") are recomputed fresh from
-  // the task on every fetch, not archived server-side. A taskId-scoped
-  // removal must not strip them optimistically -- the next refetch would just
-  // bring the row back (a "late response restoring old content" per the
-  // speed-optimization contract).
   const real = reactionRow({ id: 301, taskId: 900 });
   const synthetic = reactionRow({
     id: "-900",

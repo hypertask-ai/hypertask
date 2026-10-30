@@ -40,7 +40,6 @@ test("re-enabling an agent rotates its credential and reveals it once", () => {
 
   const listRoute = read("src/app/api/agents/route.ts");
   assert.match(listRoute, /hasMcpToken:[\s\S]*?Boolean\(mcpTokenJti\)/);
-  // HTPR-4671: no plaintext credential exists to leak into the list response.
   assert.doesNotMatch(listRoute, /\bmcpToken\b\s*:/);
 });
 

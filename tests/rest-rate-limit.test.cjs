@@ -9,7 +9,6 @@ function harness(options = {}) {
     eval: async (script, numberOfKeys, key, ttl) => {
       claims.push({ script, numberOfKeys, key, ttl });
       assert.equal(numberOfKeys, 1);
-      // The server-side claim must remain one atomic script, including expiry validation.
       assert.match(script, /redis\.call\('INCR', KEYS\[1\]\)/);
       assert.match(script, /if count == 1 then[\s\S]*redis\.call\('EXPIRE', KEYS\[1\], ARGV\[1\]\)/);
       assert.match(script, /expires ~= 1 then return -1/);
@@ -68,7 +67,6 @@ test('users and read/write buckets have independent counters and no cookies, bod
 
 test('concurrent requests share one atomic budget; first use sets expiry and later claims do not extend it', async () => {
   const h = harness();
-  // Hold the clock for the whole concurrent batch; do not patch globals per call.
   const now = Date.now;
   Date.now = () => 121000;
   try {

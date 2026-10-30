@@ -31,7 +31,6 @@ function responseRecorder() {
 
 process.env.SESSION_SECRET = "get-first-project-test-secret";
 
-// The shared handler authorizes from the signed cookie only; no Better Auth lookup.
 stubModule("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => null,
 });

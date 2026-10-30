@@ -15,8 +15,6 @@ const { bufferMatchesDeclaredMime } = jiti(
   path.join(root, "src/lib/mcp/attachments/magicBytes.ts")
 );
 
-// Build artifacts have to be attachable from the CLI/MCP, the way the web UI
-// already allows them (HTPR-4577).
 test("binary build artifacts are accepted", () => {
   const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00]);
   for (const mime of [
@@ -46,8 +44,6 @@ test("a zip declared as one is still checked against its header", () => {
   );
 });
 
-// The reason the whitelist exists: these render in the browser instead of
-// downloading, so they stay out.
 test("browser-renderable types remain rejected", () => {
   assert.equal(isAllowedMime("text/html"), false);
   assert.equal(isAllowedMime("image/svg+xml"), false);

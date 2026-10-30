@@ -3,9 +3,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-// The revocation rule moved out of the individual routes into one shared
-// module (HTPR-6002), so this asserts the rule where it now lives and that
-// every chat route still goes through it.
 const access = fs.readFileSync(
   path.join(__dirname, "../src/lib/agents/chatAccess.ts"),
   "utf8",
@@ -35,10 +32,6 @@ test("message sends require the linked agent to remain active", () => {
 
 test("the user rule keeps a thread inside the team it belongs to", () => {
   const rule = userSessionRule();
-  // HTPR-6002: the thread is shared with everyone the agent is shared with, so
-  // the requester no longer has to own it. What still bounds it is the
-  // conversation's own recorded team, which is what stops an agent that later
-  // moved teams handing its old team's transcript to the new one.
   assert.match(
     rule,
     /OR:\s*\[[\s\S]*\{\s*userId\s*\}/,

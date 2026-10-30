@@ -207,7 +207,6 @@ test("seeded persisted atoms and late selectors neither leak storage into hydrat
   dom.window.localStorage.setItem("recoil-persist", saved);
   let late;
   function LateReader() {
-    // Evaluated after StateRoot has constructed its request snapshot.
     late ??= atom({ key: "late-persisted", default: "default", effects_UNSTABLE: [require("../src/lib/state.tsx").recoilPersist().persistAtom] });
     const label = selectorFamily({ key: "late-label", get: () => ({ get }) => get(late) })(0);
     return React.createElement("output", null, useRecoilValue(label));

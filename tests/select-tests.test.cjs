@@ -1,5 +1,3 @@
-// The PR lane runs only the tests this script picks. If it silently returns a
-// narrow set for a wide change, a regression ships with a green PR check.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -27,7 +25,6 @@ test("a wide fan-out across shared lib code runs the whole suite", async () => {
 });
 
 test("a change no test references falls back to the whole suite", async () => {
-  // Built at runtime so this file's own text cannot match the needle.
   const unreferenced = `src/components/${"Unref"}${"erencedWidgetQqz"}.tsx`;
   assert.equal(await select([unreferenced]), "ALL");
 });
@@ -39,8 +36,6 @@ test("a referenced source file selects the tests naming it", async () => {
 });
 
 test("a test importing a changed file by relative path is selected (YPER4-238)", async () => {
-  // ai-chat-cancellation.test.ts imports "../src/app/api/ai/chat/stream/streamLease"
-  // with no extension, so the repo-relative path never appears in its text.
   const selected = await select(["src/app/api/ai/chat/stream/streamLease.ts"]);
   assert.notEqual(selected, "ALL");
   assert.ok(selected.includes("tests/ai-chat-cancellation.test.ts"));
@@ -98,7 +93,6 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
   const relReq = 'const { loadRel } = require("./helpers/loadRel.cjs");\n';
   put("tests/shimRel.test.cjs", relReq + 'loadRel("./relTarget.ts");\n');
   put("tests/shimRelMissing.test.cjs", relReq + 'loadRel("./nope.ts");\n');
-  // Round 3: a deleted helper-relative target, a late loader dir, a non-first parameter.
   put("tests/gone.ts", "export const gone = 1;\n");
   put("tests/shimGone.test.cjs", relReq + 'loadRel("./gone.ts");\n');
   const loadA = "exports.loadA = function loadA(f) { return (r) => require(r); };\n";
@@ -127,8 +121,6 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
     assert.ok(leaf.includes("tests/mixed.test.cjs"), "static helper plus dynamic require");
     assert.ok(leaf.includes("tests/viaLoader.test.cjs"), "dynamic require reached in src");
     assert.ok(!leaf.includes("tests/join.test.cjs"), "unrelated test is skipped");
-    // YPER4-267: a test loader shim forwards specifiers, so a literal path at
-    // the call site is a plain edge and the test is not always-selected.
     const viaShim = pick("src/lib/shimTarget.ts");
     assert.ok(viaShim.includes("tests/shimLiteral.test.cjs"), "literal loader path is traced");
     assert.ok(viaShim.includes("tests/shimHelper.test.cjs"), "loader in a test helper is traced");
@@ -167,14 +159,11 @@ test("nested suites are discoverable, not just the flat tests dir", async () => 
 });
 
 test("a file referenced only by name, not by path, runs the full suite", async () => {
-  // A test mentioning the word is not evidence it covers the file. Built at
-  // runtime so this file's own text is not the reference.
   const named = `src/lib/${"task-write"}${"-lock.ts"}`;
   assert.equal(await select([named]), "ALL");
 });
 
 test("a deleted test path never reaches the runner", async () => {
-  // git diff lists deletions; run-tests.mjs rejects anything off the inventory.
   const selected = await select([
     "tests/deleted-suite-qqz.test.cjs",
     "src/lib/mcp/auth.ts",
@@ -256,8 +245,6 @@ test("importing a barrel does not select every file under that directory", () =>
 });
 
 test("a test added by the same PR does not count as coverage", async () => {
-  // A PR could otherwise add a test naming its source file and buy its way
-  // out of the full suite.
   const selected = await select([
     "tests/select-tests.test.cjs",
     "src/lib/select-tests-fixture-qqz.ts",

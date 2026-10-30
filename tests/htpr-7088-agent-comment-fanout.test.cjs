@@ -1,7 +1,3 @@
-// HTPR-7088: agents following a ticket get comment inbox rows, live inbox
-// updates and comment.created webhooks like assigned agents, and an agent never
-// gets an inbox row or webhook for a comment it wrote itself. Flag off keeps
-// today's behaviour.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

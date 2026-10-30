@@ -19,10 +19,6 @@ const {
   TASK_DETAIL_USABLE_MARK,
 } = jiti(path.join(root, "src/lib/analytics/taskDetailPhaseTimings.ts"));
 
-// HTPR-6047: field attribution for the task-detail readiness gap, since we
-// have no way to CPU-profile a real user's browser. Every phase must report
-// null (never a fake number) when unmeasurable, and a stale mark from an
-// earlier mount in the same tab must never leak into a later reading.
 
 const clearMarks = () => {
   performance.clearMarks();
@@ -52,7 +48,7 @@ test("reads real timings once all phases have marked", () => {
   assert.equal(typeof timings.phase_comp_mount_ms, "number");
   assert.equal(typeof timings.phase_comments_request_ms, "number");
   assert.equal(typeof timings.phase_usable_ms, "number");
-  assert.equal(timings.phase_dynamic_imports, null); // none instrumented in this test
+  assert.equal(timings.phase_dynamic_imports, null);
 });
 
 test("a dynamic import mark shows up by name once its loader resolves", async () => {
@@ -76,16 +72,11 @@ test("a dynamic import mark shows up by name once its loader resolves", async ()
 
 test("a mark left over from an earlier mount is discarded as stale, not reported", async () => {
   clearMarks();
-  // Simulate a chunk resolved during a PREVIOUS task-detail mount (its mark
-  // predates this mount's own suspense-commit mark, which is what actually
-  // happens: a dynamic() loader only runs once per session, so a later
-  // mount's read would otherwise see a timestamp from the wrong page).
   const loader = instrumentedDynamicImport("NewCommentComponent", () =>
     Promise.resolve({ default: () => null }),
   );
   await loader();
 
-  // This mount's own suspense-commit mark happens AFTER the stale import mark.
   await new Promise((resolve) => setTimeout(resolve, 5));
   markTaskDetailPhase(TASK_DETAIL_SUSPENSE_COMMIT_MARK);
 
@@ -99,7 +90,6 @@ test("a mark left over from an earlier mount is discarded as stale, not reported
 
 test("nothing throws when the Performance API is unavailable", () => {
   const realPerformance = global.performance;
-  // eslint-disable-next-line no-global-assign
   global.performance = undefined;
   try {
     assert.doesNotThrow(() => markTaskDetailPhase(TASK_DETAIL_USABLE_MARK));

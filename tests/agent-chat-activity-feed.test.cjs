@@ -472,8 +472,6 @@ test("server projection derives durable task milestones after agent involvement"
     { id: "desc" },
   ]);
   assert.deepEqual(queries.timeline.where.task.project, projectWhere);
-  // The database filter must be a superset of what the projection accepts, or
-  // milestones are dropped before they are ever parsed.
   const prefixes = queries.timeline.where.OR.flatMap((branch) =>
     (branch.OR ?? []).map(
       (clause) => (clause.text ?? clause.commentText).startsWith,
@@ -488,7 +486,6 @@ test("server projection derives durable task milestones after agent involvement"
   assert.ok(
     prefixes.includes("<p><strong>🚨 Agent escalation — needs a human."),
   );
-  // QA agents do not all shout their verdict, so the fetch must ignore case.
   const qaClauses = queries.timeline.where.OR.at(-1).OR;
   for (const clause of qaClauses) {
     assert.equal((clause.text ?? clause.commentText).mode, "insensitive");

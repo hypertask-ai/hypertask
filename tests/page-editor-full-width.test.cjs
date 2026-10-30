@@ -12,9 +12,6 @@ const source = fs.readFileSync(
   "utf8",
 );
 
-// HTPR-5484: Pages are where agents render designs, so the editor has to give
-// them the whole width after the app rail. A re-introduced max-width or card
-// surface silently takes that space back.
 test("the editor is not constrained to a centred document column", () => {
   assert.doesNotMatch(source, /max-w-\[900px\]/);
   assert.doesNotMatch(source, /mx-auto w-full/);

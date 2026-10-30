@@ -266,7 +266,6 @@ function saveHarness(enabled) {
     assert.equal(h.writes[0].dueDate.toISOString(), "2026-10-16T16:00:00.000Z");
     assert.equal(h.writes[0].dueDateNotifiedAt, null);
     assert.equal(h.jobs[0].schedule[1].toISOString(), h.writes[0].dueDate.toISOString());
-    // An unreadable writer date never blocks creation; the ticket saves without it.
     assert.equal((await h.post({ writerDueDate: "2026-02-30" })).status, 200);
     assert.equal(h.writes.length, 2);
     assert.equal(h.writes[1].dueDate ?? null, null);

@@ -51,24 +51,10 @@ test.afterEach(({ page }, testInfo) => {
   } else if (testInfo.status === 'timedOut' || (testInfo.error && isUnrunnableError(testInfo.error))) {
     markUnrunnable(`browser runner failed during ${testInfo.title}`)
   } else if (testInfo.status === 'failed' && testInfo.retry === testInfo.project.retries && preflightAllowsRollback()) {
-    // Only a final failed retry writes this marker. A first-attempt flake that
-    // passes its retry cannot authorize rollback.
     writeFileSync(APPLICATION_FAILURE_FILE, JSON.stringify({ view: testInfo.title }))
   }
 })
 
-// HTPR-6199 — one check per main view, desktop + mobile (via the two
-// projects in playwright.config.smoke.ts = 16 checks total). Read-only: no
-// view here submits a form or creates data, per the ticket's explicit ask.
-//
-// Board/task paths point at the dedicated smoke account's seeded fixtures
-// (see e2e/smoke/README.md) so "board with cards" and "task detail" have
-// something real to open, instead of an empty state.
-// Each view also asserts its document title: exact for static routes, a
-// pattern for routes whose title is built from live data (board/task titles
-// come from generateMetadata, so a data-less or wrong-route render falls back
-// to a generic title and fails here). Together with the content checks below,
-// this proves the right route rendered server-side AND client-side.
 const VIEWS: Array<{
   name: string
   path: string | undefined
@@ -76,42 +62,17 @@ const VIEWS: Array<{
   title?: string
   titlePattern?: RegExp
   notTitle?: RegExp
-  // A route-specific DOM selector that only exists once the real view has
-  // rendered (not just an app shell). Verified against the actual component
-  // source, see e2e/smoke/README.md#selectors — a shell that stalls before
-  // reaching this element fails here even with a correct title/status.
   selector: string
-  // Assert presence (toBeAttached) instead of visibility for selectors that
-  // are hidden by design or can be zero-height in a valid empty state.
   attachedOnly?: boolean
 }> = [
-  // <ul id="users-list"> — src/app/all-tasks/AllTasks.tsx. A fresh user has no
-  // matching tasks, so the rendered list is intentionally empty and zero-height.
   { name: 'board list', path: '/all-tasks', title: 'All tasks', selector: '#users-list', attachedOnly: Boolean(process.env.BROWSER_SMOKE_PR) },
-  // buildBoardRouteTitle: "<board> • Hypertask", bare "Hypertask" = no board data.
-  // .kanban-column-title — src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx
   { name: 'kanban board', path: process.env.SMOKE_BOARD_PATH, requiresFixture: true, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' },
-  // /demo itself provisions a guest (a write); use a pre-seeded demo board in PR CI.
   ...(process.env.BROWSER_SMOKE_PR ? [{ name: 'demo board', path: process.env.SMOKE_DEMO_BOARD_PATH, titlePattern: /• Hypertask$/, notTitle: /^Hypertask$/, selector: '.kanban-column-title' }] : []),
-  // Task detail: "<ticket> <title> - Hypertask"; a missing task renders
-  // "undefined undefined - Hypertask".
-  // <textarea id="title-input"> — src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx
   { name: 'task detail', path: process.env.SMOKE_TASK_PATH, requiresFixture: true, titlePattern: / - Hypertask$/, notTitle: /undefined/, selector: '#title-input' },
-  // Hidden (display:none, aria-hidden) span the inbox flips to "true" once
-  // its notifications query resolves — present regardless of empty/non-empty
-  // state or viewport, so assert presence, not visibility.
-  // src/app/inbox/Inbox.tsx
   { name: 'inbox', path: '/inbox', titlePattern: /^Inbox/, selector: '[data-tutorial-inbox-loaded="true"]', attachedOnly: true },
-  // Desktop calendar toggle button, or the mobile calendar's root class —
-  // src/components/PageComponents/Calendar/{calendar,MobileCalendar}.tsx
   { name: 'calendar', path: '/calendar', title: 'Calender', selector: '[aria-label="Toggle boards and filters panel"], .mobile-calendar' },
-  // <input id="search-input"> — src/app/search/SearchComp.tsx
   { name: 'AI search', path: '/search', title: 'Search', selector: '#search-input' },
-  // The sidebar's own search box, present whether or not a section is
-  // selected and on both viewports — src/components/Modals/Settings/SettingsShell.tsx
   { name: 'settings', path: '/settings', title: 'Settings', selector: 'input[placeholder="Search settings"]' },
-  // Target the fixture board instead of a stale previousBoard login cookie.
-  // <div id="createTaskModal"> — src/components/Modals/CreateTaskGloballyModal/index.tsx
   { name: 'new-task modal', path: process.env.SMOKE_POSTDEPLOY === '1' ? `/new?board=${process.env.SMOKE_TASK_PATH?.match(/^\/detail\/project-(\d+)\//)?.[1]}` : '/new', title: 'New', selector: '#createTaskModal' },
 ]
 
@@ -132,7 +93,6 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   const sections = boards.map((board) => ({
     id: board.id, projectId: board.id, section_title: board.title, items: [],
   }))
-  // Exercise unreleased flags without changing the seed's production-mode snapshot.
   await page.route('**/api/flags', (route) => route.fulfill({ json: { flags: {
     'htpr-6455-my-tasks-time-group': true,
   } } }))
@@ -143,7 +103,6 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   await page.goto('/my-tasks?view=all', { waitUntil: 'load' })
   await listResponse
   if (groupBy === 'board') {
-    // Phones reach Group by through Commands, which dispatches this event; desktop uses the toolbar control.
     if (testInfo.project.name === 'Mobile') await page.evaluate(() => window.dispatchEvent(new Event('my-tasks-group-picker')))
     else await page.getByRole('button', { name: 'Group My Tasks', exact: true }).click()
     await page.locator('[id^="option-picker-"]', { hasText: /^Board$/ }).click()
@@ -159,7 +118,6 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   let serverNavigations = 0
   let releaseNavigation!: () => void
   const navigationHeld = new Promise<void>((resolve) => { releaseNavigation = resolve })
-  // A slow RSC response exposes a stale split immediately, rather than relying on network timing.
   await page.route('**/my-tasks?*', async (route) => {
     if (route.request().headers().rsc !== '1') return route.continue()
     serverNavigations++
@@ -171,7 +129,6 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
     await expect(selected, 'Tab must keep the chosen split').toHaveText(title)
     await expect(page.locator('body'), 'Tab must not move focus into an unrelated control').toBeFocused()
     await expect(page).toHaveURL((url) => url.searchParams.get('board') === (index === 0 ? null : String(boards[index - 1].id)))
-    // Keep observing after React effects and any delayed navigation have had time to run.
     expect(await page.evaluate(async () => {
       const samples: string[] = []
       const until = performance.now() + 250
@@ -197,7 +154,6 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
           await page.waitForTimeout(80)
           index = (index + direction + boards.length + 1) % (boards.length + 1)
           const title = index === 0 ? 'All' : boards[index - 1].title
-          // Read immediately, not with a polling assertion that could slow the burst.
           expect(await selected.textContent(), `rapid press ${press + 1} must select ${title}`).toBe(title)
           expect(new URL(page.url()).searchParams.get('board')).toBe(index === 0 ? null : String(boards[index - 1].id))
         }
@@ -245,7 +201,6 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   const assertScope = async (title: string) => {
     await expect(page.locator('.kanban-column-title').first()).toBeVisible()
     await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
-    // htpr-8088-manual-chat: the docked chat opens only when the user opens it.
     await openChat()
     await expect(sidebar).toBeVisible()
     await expect(chip).toBeVisible()
@@ -351,9 +306,7 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   await page.setViewportSize(testInfo.project.name === 'Mobile'
     ? { width: 390, height: 844 }
     : { width: 1440, height: 900 })
-  // Optional pages must never gate the title or description, even if their request never settles.
   await page.route('**/api/pages/list?*', () => {})
-  // Wait for the app's own flag read, not a separate API request that could race hydration.
   const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
@@ -363,7 +316,6 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   const card = page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`)
   await expect(card).toContainText(fixture.title)
   await expect(card).toBeVisible()
-  // A full navigation could conceal a failed instant-open attempt. Observe from before the click.
   let documentRequests = 0
   page.on('request', (request) => {
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests++
@@ -457,14 +409,10 @@ test('chat opener waits for hydration before accepting its first click', { tag: 
   }
 })
 
-// Positive and negative controls for the error-screen check every view below relies on (YPER4-304).
 test('error-screen check catches real error pages and ignores quoted error text', { tag: ['@id:error-page-detector'] }, async ({ page }) => {
   const screens = [
-    // Next's built-in 500 page.
     '<h1>500</h1><h2>Internal Server Error.</h2>',
-    // Next's client-side crash screen.
     '<h2>Application error: a client-side exception has occurred (see the browser console for more information).</h2>',
-    // src/app/error.tsx and src/app/global-error.tsx.
     '<h1>Something went wrong</h1><p>Try again</p>',
   ]
   for (const html of screens) {
@@ -472,23 +420,15 @@ test('error-screen check catches real error pages and ignores quoted error text'
     expect(await errorPageHeading(page), html).toBeDefined()
   }
 
-  // A ticket on All Tasks quoting an error (the 2026-10-11 false alarm).
   await page.setContent('<h1>All Tasks</h1><h2>Fix the Get announcements 500</h2><p>Last error came back as an HTML page titled "500: Internal Server Error" instead of data.</p>')
   expect(await errorPageHeading(page)).toBeUndefined()
 })
 
-// A Vercel bot challenge on the runner's IP is not a broken view — the health
-// job in prod-health.yml treats the same signal as unrunnable, never a
-// failure. Mirrored here so a challenge can't read as 16 real failures.
 function isBotChallenge(response: import('@playwright/test').Response | null): boolean {
   return response?.headers()['x-vercel-mitigated'] === 'challenge'
 }
 
 for (const view of VIEWS) {
-  // HTPR-6636 phase 2: hypertask-qa-runner now runs this suite once per
-  // tier account, so the same view check needs a tier-scoped dedup id (or
-  // two tiers failing the same view would share one ticket) , see
-  // lib/process-report.mjs in the runner repo, which reads this tag.
   const idTag = `@id:${tieredId(`view-${view.name.replace(/\s+/g, '-')}`)}`
   test(`${view.name} loads`, { tag: [idTag] }, async ({ page }, testInfo) => {
     test.skip(view.requiresFixture === true && !view.path, `no seeded fixture (${view.name} not opened)`)
@@ -506,7 +446,6 @@ for (const view of VIEWS) {
               realtimeSubscriptions.add(frame.channel)
             }
           } catch {
-            // Ignore non-JSON protocol frames; Pusher subscription frames are JSON.
           }
         })
       })
@@ -551,9 +490,6 @@ for (const view of VIEWS) {
     expect(response, `no response for ${view.path}`).toBeTruthy()
     expect(response!.status(), `${view.path} returned ${response!.status()}`).toBeLessThan(400)
 
-    // A 2xx response alone doesn't prove the view rendered — a blank or
-    // loading-only shell must fail too (PR #366 review). Wait until the body
-    // carries real content and the "Loading..." Suspense fallback is gone.
     await expect
       .poll(
         async () => (await page.locator('body').innerText()).trim().length,
@@ -562,10 +498,6 @@ for (const view of VIEWS) {
       .toBeGreaterThan(30)
     await expect(page.locator('text=/^loading/i')).toHaveCount(0, { timeout: 15_000 })
 
-    // The route-specific element from VIEWS: a shell that renders 30+ chars
-    // of chrome (nav, header) without the actual view still needs to fail
-    // here (round-4 review). Each selector is a real, verified element from
-    // the view's own component, not a generic wrapper.
     const target = page.locator(view.selector).first()
     if (view.attachedOnly) {
       await expect(target, `${view.path} missing "${view.selector}"`).toBeAttached({ timeout: 15_000 })
@@ -584,11 +516,8 @@ for (const view of VIEWS) {
         .toBe(true)
     }
 
-    // An auth redirect on one view means the session broke mid-run or the
-    // route is misbehaving; either way this is not a passing check.
     expect(page.url(), `${view.path} redirected to ${page.url()}`).not.toContain(LOGIN_PATH)
 
-    // Metadata can settle after the view's content; assert the live page, not a snapshot.
     if (view.title) {
       await expect(page, `${view.path} has the expected title`).toHaveTitle(view.title, { timeout: 15_000 })
     }
@@ -604,9 +533,6 @@ for (const view of VIEWS) {
     if (process.env.BROWSER_SMOKE_PR) {
       if (view.name === 'kanban board' || view.name === 'demo board') {
         const columns = page.locator('.kanban-column-title')
-        // The initial route data and the first confirmed realtime subscription
-        // can each trigger one legitimate catch-up fetch. Start loop detection
-        // only after that bootstrap traffic has been quiet for a full second.
         await expect
           .poll(
             () => lastBoardFetchAt === 0 ? 1_000 : Date.now() - lastBoardFetchAt,
@@ -643,8 +569,6 @@ for (const view of VIEWS) {
       await expect(titleInput).toBeVisible({ timeout: 15_000 })
       await expect(titleInput).toHaveValue(cardTitle)
       await expect(page.locator('#description-input')).toBeAttached({ timeout: 15_000 })
-      // The missed regression briefly opened the ticket, then dismissed it.
-      // Observe continuously, not just once after a delay, and never reload.
       const deadline = Date.now() + 10_000
       while (Date.now() < deadline) {
         expect(new URL(page.url()).pathname, 'card opened the wrong ticket or returned to the board').toBe(taskPath)

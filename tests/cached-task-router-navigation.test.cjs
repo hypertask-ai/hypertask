@@ -70,7 +70,6 @@ function fixture(t, sourcePath = "/inbox") {
   }, exports);
   const Navigation = exports.default;
   function RouterCommit() {
-    // Next's HistoryUpdater writes the URL in insertion effect, after rendering.
     React.useInsertionEffect(() => { commit?.(); }, [nextPath]);
     return React.createElement(Navigation, { accountId: 2343 }, children);
   }

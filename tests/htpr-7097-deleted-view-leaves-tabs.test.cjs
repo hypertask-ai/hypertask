@@ -8,8 +8,6 @@ const Module = require("node:module");
 const root = path.resolve(__dirname, "..");
 const FLAG = "htpr-7097-deleted-view-leaves-tabs";
 
-// Loads useKanbanViews.ts with every import mocked; the hook only calls mocked hooks,
-// so it can be invoked outside a React render.
 function loadHook({ flagOn, calls }) {
   const file = "src/hooks/Homepage/Views/useKanbanViews.ts";
   const filename = path.join(root, file);
@@ -42,7 +40,6 @@ function loadHook({ flagOn, calls }) {
       }),
     },
     "@/lib/boardSync/reconcileActiveBoardQuery": {
-      // Same order as the real helper: expire boardTasks for this project, then refetch projectsAll.
       reconcileActiveBoardQuery: async (client, projectId) => {
         await client.invalidateQueries({
           predicate: (query) => query.queryKey[0] === "boardTasks" && query.queryKey[2] === projectId,

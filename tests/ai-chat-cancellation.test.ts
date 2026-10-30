@@ -43,7 +43,6 @@ function fakeRedis() {
           return next;
         }
         if (script.includes('redis.call("exists", KEYS[i])')) {
-          // ARGV[3]: leading keys that must be free; ARGV[4]: keys to set; the rest are guards.
           const activeKeyCount = Number(argv[2]);
           const setCount = Number(argv[3]);
           if (keys.slice(0, activeKeyCount).some((key) => values.has(key))) return 0;

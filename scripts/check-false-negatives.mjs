@@ -1,11 +1,4 @@
 #!/usr/bin/env node
-/**
- * Checks for false negatives: files that were on the old allowlist but
- * are no longer detected by the tightened heuristic.
- * 
- * Samples dropped files to verify they were correctly removed (true negatives)
- * and not incorrectly dropped (false negatives = real offenders we now miss).
- */
 
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";

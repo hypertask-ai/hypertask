@@ -1,10 +1,3 @@
-// HTPR-4903: Ctrl/Cmd+J on the kanban board did nothing.
-//
-// The branch that creates a task with the AI Task Writer already open existed in
-// useSections.ts but was commented out, so the board never bound the key at all
-// — while the create-task modal and the interactive tutorial both teach Ctrl+J
-// as THE AI writer key. Chrome and Edge use Ctrl+J for their Downloads panel, so
-// an unbound key is not merely inert: it opens browser chrome over the app.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
@@ -17,9 +10,6 @@ const sections = read("src/hooks/Homepage/useSections.ts");
 const boardKeys = read("src/hooks/Homepage/useHandleKeyDownOperations.ts");
 const shortcuts = read("src/lib/constants/shortcuts.ts");
 
-// The whole point of the shortcut is the AI writer, not just another task.
-// Creating the task without asking for "Description-ai" would look like the
-// shortcut works while silently delivering plain [C] behaviour.
 test("ctrl/cmd+J opens the new task straight into the AI Task Writer", () => {
   const branch = sections.slice(sections.indexOf("e.keyCode === KeyCodes.J"));
   assert.ok(
@@ -41,8 +31,6 @@ test("ctrl/cmd+J opens the new task straight into the AI Task Writer", () => {
   );
 });
 
-// Ctrl+J is a browser shortcut. Without preventDefault the Downloads panel opens
-// over the modal we just created, which is how the bug was reported.
 test("the binding preventDefaults so the browser Downloads panel stays shut", () => {
   const branch = sections.slice(sections.indexOf("e.keyCode === KeyCodes.J"));
   const body = branch.slice(branch.indexOf("{"), branch.indexOf("createTaskAt("));
@@ -52,8 +40,6 @@ test("the binding preventDefaults so the browser Downloads panel stays shut", ()
   );
 });
 
-// Shift+Cmd+J already toggles the AI chat interface (GloablProviders). Firing
-// both would open a task modal behind the chat panel.
 test("the binding is modifier-exact", () => {
   const branch = sections.slice(sections.indexOf("e.keyCode === KeyCodes.J"));
   const condition = branch.slice(0, branch.indexOf("{"));
@@ -67,8 +53,6 @@ test("the binding is modifier-exact", () => {
   );
 });
 
-// [j] moves focus down. It never excluded cmd/ctrl, unlike its [k] twin, so
-// Ctrl+J would move the selection as a side effect of opening the writer.
 test("plain [j] focus movement ignores cmd/ctrl", () => {
   const line = boardKeys
     .split("\n")
@@ -80,8 +64,6 @@ test("plain [j] focus movement ignores cmd/ctrl", () => {
   );
 });
 
-// CLAUDE.md: a new binding ships with all four registrations in the same PR, or
-// it is undiscoverable and counts as unfinished. These four tests are that rule.
 test("registration 1 of 4: the ? cheatsheet and Settings list it under Board", () => {
   const board = shortcuts.slice(shortcuts.indexOf('title: "Board"'));
   const group = board.slice(0, board.indexOf('title: "Saving new task"'));
@@ -104,7 +86,6 @@ test("registration 2 of 4: the ctrl+K palette can find it by name", () => {
     "the palette row must show the shortcut so the two surfaces teach the same key",
   );
 
-  // A palette entry with no case in the switch is a dead menu item.
   const dispatch = read("src/components/commandDispatcher.ts").split("function dispatchCommandGroup1")[1];
   const branch = dispatch.slice(
     dispatch.indexOf("case CommandMode.CreateTaskWithAiWriter:"),
@@ -129,8 +110,6 @@ test("registration 3 of 4: the canonical registry records the binding", () => {
   );
 });
 
-// CommandMode is a numeric enum persisted to localStorage (frequentlyUsedHTCAton),
-// so a mid-enum insert silently remaps every saved shortcut past it.
 test("the new CommandMode is appended, never inserted", () => {
   const enums = read("src/models/enums.ts");
   const block = enums.slice(
@@ -141,8 +120,6 @@ test("the new CommandMode is appended, never inserted", () => {
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => /^[A-Za-z]\w*,$/.test(l));
-  // Later features append after it; what must never change is its position
-  // relative to the members that shipped before it.
   assert.equal(
     members[members.indexOf("CreateTaskWithAiWriter,") - 1],
     "ToggleFilterValueMatch,",

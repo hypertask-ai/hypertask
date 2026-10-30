@@ -39,7 +39,6 @@ const next = task(6027, "HTPR-6027", "2026-09-07T10:00:00.000Z");
 const ranked = combineTaskSearchResults(
   [exact],
   [newer],
-  // The exact task is deliberately absent, as if it fell beyond take: 40.
   [newer, next],
 );
 assert.deepEqual(

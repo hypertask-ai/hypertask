@@ -31,7 +31,6 @@ function loadTs(relativePath) {
     },
   );
   const loaded = jiti(path.join(root, relativePath));
-  // Single default-export routes come back wrapped as { default: fn }.
   return typeof loaded === "function" ? loaded : loaded.default ?? loaded;
 }
 
@@ -61,8 +60,6 @@ function makeReq({ method = "GET", query = {}, body = {} } = {}) {
   };
 }
 
-// A prisma.notification stub that records every updateMany/update and serves
-// a scripted row for findUnique.
 function makeNotificationStub(row) {
   const calls = { updateMany: [], update: [] };
   const notification = {
@@ -151,7 +148,6 @@ test("archiving an inbox notification archives siblings instead of deleting them
       archivedAt: null,
     },
   });
-  // Freeze Date so both writes share one batch timestamp.
   const realNow = Date.now;
   Date.now = () => batchTime.getTime();
   try {

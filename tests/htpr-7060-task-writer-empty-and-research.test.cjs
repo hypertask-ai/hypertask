@@ -184,7 +184,6 @@ async function main() {
     }
   }
   assert.deepEqual(await clientError(normal), { response: normal, hasError: false });
-  // Existing error handling is unchanged for streams from the flag-off server.
   const oldError = 'event: error\ndata: {"type":"error","content":"Old error"}\n\n';
   assert.deepEqual(await clientError(oldError), { response: oldError, hasError: false });
   console.log("HTPR-7060 tests passed");

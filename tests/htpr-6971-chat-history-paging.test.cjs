@@ -1148,7 +1148,6 @@ test('thirty titles load per page and messages load only for the displayed conve
 test('board lookup never picks a ticket conversation from a map, scoped lookup or empty reuse', async () => {
   const rows = [session(9, { taskId: 91, projectId: 4, messages: [] }), session(1, { projectId: 4 })];
   await withHistory({ rows, boardMap: { 4: id(9) }, page: (options) => {
-    // Deliberately include the ticket in a board response to prove client validation too.
     const visible = options.projectId ? [rows[0], rows[1]] : rows.slice(0, 1);
     return response({ success: true, sessions: visible.map(({ messages, ...row }) => ({ ...row, hasMessages: messages.length > 0 })), nextCursor: null });
   } }, async ({ resolver, history, requests, flush, mapChanges }) => {

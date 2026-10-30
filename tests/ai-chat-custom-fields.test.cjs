@@ -1,8 +1,3 @@
-// HTPR-3805: the in-app AI chat needs custom-field tools so a user can say
-// "set ICE to 21 on THID-5" or "list this board's custom fields". No DB test
-// harness exists in this repo (see custom-field-owner-access.test.cjs for the
-// same source-inspection convention), so this guards the wiring at the source
-// level rather than exercising the route against a live database.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");
@@ -24,8 +19,6 @@ test("hypertask_list_custom_fields scopes to boards the user can access", () => 
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_list_custom_fields");
 
-  // Same owner-OR-member predicate as every sibling project-scoped tool
-  // (e.g. hypertask_list_project_members), not a bare Member lookup.
   assert.match(
     body,
     /validateProjectAccess\(input\.project_id, user\.id\)/,
@@ -42,18 +35,12 @@ test("hypertask_set_custom_field_value resolves task refs and reuses the shared 
   const source = fs.readFileSync(ROUTE, "utf8");
   const body = toolBody(source, "hypertask_set_custom_field_value");
 
-  // Task ref resolution (task_id/ticket_number/unique_index+project_id) goes
-  // through the same resolver every sibling task-mutating tool uses, which
-  // scopes to accessible projects via getProjectWhere internally.
   assert.match(
     body,
     /resolveTaskForTool\(user, \{/,
     "must resolve task refs via resolveTaskForTool, not a bespoke lookup",
   );
 
-  // Auto-create + upsert must go through the same controllers the MCP route
-  // uses (src/lib/mcp/operations/custom-fields/value/operation.ts), so validation and
-  // auto-create-on-missing-name behavior can't drift between clients.
   assert.match(body, /createCustomField\(/, "must reuse createCustomField for auto-create");
   assert.match(
     body,
@@ -61,10 +48,6 @@ test("hypertask_set_custom_field_value resolves task refs and reuses the shared 
     "must reuse upsertCustomFieldValue, not a bespoke prisma write",
   );
 
-  // Validation errors (e.g. "Number custom field value must be a valid
-  // number") must reach the model, not be swallowed. withToolErrors catches
-  // the thrown CustomFieldValidationError and returns { success: false,
-  // error: error.message } (see errorMessage()).
   assert.match(
     body,
     /execute: withToolErrors\(async \(input\) => \{/,

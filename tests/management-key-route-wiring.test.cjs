@@ -1,5 +1,3 @@
-// Unit-style route/auth wiring coverage. Better Auth and Prisma are deliberately
-// stubbed here; provider-specific behavior belongs in the adapter test suite.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");

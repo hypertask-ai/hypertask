@@ -72,14 +72,11 @@ exit 20
     assert.equal(flagged.status, 1);
     assert.match(flagged.stderr, /Refusing \.env/);
 
-    // Positive control: retaining any inherited variable makes the Docker probe fail.
     const control = spawnSync(path.join(root, 'bin/docker'), ['info'], {
       encoding: 'utf8', env: { ...process.env, DATABASE_URL: 'unsafe' },
     });
     assert.equal(control.status, 19);
 
-    // Down still works with env files present and no previous up.
-    // Use the fake daemon, not a developer's real Docker.
     const fakeDown = spawnSync('bash', [candidate, 'down'], {
       encoding: 'utf8', env: { ...process.env, PATH: `${path.join(root, 'bin')}:${process.env.PATH}` },
     });
@@ -161,7 +158,6 @@ test('background server closes captured output descriptors, with a retained-stde
       }
     }
   } finally {
-    // Backstop: stand-in servers launched from this copy must not outlive the test (YPER4-280: 160 leaked for days).
     spawnSync('pkill', ['-KILL', '-f', root]);
     rmSync(root, { recursive: true, force: true });
   }

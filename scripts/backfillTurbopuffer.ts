@@ -1,11 +1,5 @@
 #!/usr/bin/env tsx
 
-/**
- * One-time Turbopuffer backfill for task and comment search namespaces.
- *
- * Usage:
- *   npx tsx scripts/backfillTurbopuffer.ts
- */
 import prisma from "@/lib/prisma";
 import type { TurbopufferCommentRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import {

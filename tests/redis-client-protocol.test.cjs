@@ -1,7 +1,3 @@
-// HTPR-6518: ioredis 6 opens every connection with HELLO 3 (RESP3) unless the
-// client pins protocol: 2. Nothing else in the suite watches the wire, and the
-// tests that talk to a real redis-server skip themselves on a runner without
-// one, so the protocol our production client actually speaks was untested.
 const assert = require("node:assert/strict");
 const net = require("node:net");
 const path = require("node:path");
@@ -10,8 +6,6 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 
-// A RESP2-only Redis: it records every command it is asked for and answers
-// HELLO the way an old server or a proxy without RESP3 does.
 function startRecordingRedis() {
   const commands = [];
   const store = new Map();

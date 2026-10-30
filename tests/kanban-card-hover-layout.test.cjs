@@ -18,7 +18,6 @@ function loadComponent(relativePath, stubs) {
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     fileName: filename,
-    // CommonJS emit keeps import locations; preserve ESM import hoisting.
     transformers: { before: [() => (source) => ts.factory.updateSourceFile(source, [
       ...source.statements.filter(ts.isImportDeclaration),
       ...source.statements.filter((statement) => !ts.isImportDeclaration(statement)),

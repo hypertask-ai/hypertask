@@ -1,6 +1,3 @@
-// Behavioural coverage for REST API key (htk_) expiry, rotation inputs, and
-// the auth boundary that decides whether a key still authenticates.
-// Run: npm run test:file -- tests/api-key-lifecycle.test.ts
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -107,7 +104,6 @@ test("a lookup by key hash is treated as authentication", () => {
 });
 
 test("management listings and other models are left alone", () => {
-  // Settings must keep showing expired keys, so a userId listing is untouched.
   assert.equal(
     isApiKeyAuthLookup("ApiKey", "findMany", { where: { userId: 6 } }),
     false,
@@ -138,8 +134,6 @@ test("the expiry guard preserves the caller's own filters", () => {
 });
 
 test("the expiry guard never widens a caller's existing OR", () => {
-  // Merged into a top-level OR, an expired key could satisfy the clause via the
-  // caller's branch. AND keeps the guard mandatory.
   const guarded = withApiKeyExpiryGuard(
     { keyHash: "abc", OR: [{ revokedAt: null }] },
     NOW,
@@ -167,8 +161,6 @@ test("the expiry guard appends to an existing AND rather than replacing it", () 
 });
 
 test("the active-key limit counts usable keys, not merely unrevoked ones", () => {
-  // Expired keys cannot authenticate, so counting them would let ten lapsed
-  // keys permanently block creating a working one.
   const route = readFileSync("src/app/api/users/api-keys/route.ts", "utf8");
   assert.match(route, /\.\.\.activeApiKeyWhere\(\)/);
   assert.doesNotMatch(
@@ -210,8 +202,6 @@ test("rotation revokes the old secret and issues the new one atomically", () => 
   assert.match(route, /Revoked keys cannot be rotated/);
 });
 
-// A rotation store whose revoke only succeeds while the key is still active,
-// which is what the conditional updateMany relies on in Postgres.
 const rotationStore = () => {
   const state = { revoked: false, created: [] as string[] };
   const tx = {
@@ -250,8 +240,6 @@ test("concurrent rotations mint exactly one replacement key", async () => {
     rotateApiKeyInTransaction(tx, rotationInput("hash-b")),
   ]);
 
-  // One request claims the key, the other is told to retry rather than being
-  // handed a second simultaneously valid full-account secret.
   assert.equal(state.created.length, 1);
   assert.equal([first, second].filter(Boolean).length, 1);
 });
@@ -267,8 +255,6 @@ test("a rotation that loses the race creates nothing", async () => {
 });
 
 test("expiry enforcement survives a composed authentication query", () => {
-  // A lookup that buries the hash under AND/OR must still be guarded, or an
-  // expired key would authenticate through the composed path.
   assert.equal(
     isApiKeyAuthLookup("ApiKey", "findFirst", {
       where: { AND: [{ userId: 6 }, { OR: [{ keyHash: "hash" }] }] },

@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// YPER4-629 live inbox cycle as QA 985 on app.hypertask.ai: open by click and by Enter, J, send a comment, E.
-// Usage: node .claude/skills/verify-qa/scripts/inbox-cycle-live.mjs <evidence dir> [--phone]
-// Prints "inbox-cycle ok" or "inbox-cycle FAIL: <reason>" and writes result.json plus screenshots.
 import { createRequire } from 'node:module';
 import fs from 'node:fs/promises';
 import os from 'node:os';

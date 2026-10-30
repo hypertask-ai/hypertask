@@ -27,7 +27,6 @@ let gatewayKeys = [];
 const model = new MockLanguageModelV3({
   doGenerate: async (options) => {
     calls.push(options);
-    // Simulate a completion that spends 650 tokens reasoning before emitting JSON.
     const json = JSON.stringify(board);
     const reasoningTokens = 650;
     const textTokens = Math.ceil(json.length / 4);

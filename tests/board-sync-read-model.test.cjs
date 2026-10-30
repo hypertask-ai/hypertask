@@ -23,8 +23,6 @@ const {
   isBoardReadModelSnapshotV1,
   materializeBoardReadModelSnapshot,
 } = jiti(path.join(root, "src/lib/boardSync/contract.ts"));
-// moduleCache on: these two share one revocationTombstone instance, the way a
-// browser bundle does. The default jiti above re-evaluates per import.
 const jitiShared = createJiti(__filename, {
   interopDefault: true,
   jsx: true,
@@ -35,8 +33,6 @@ const { revokeBoardAccess: revokeBoardAccessShared } = jitiShared(
 );
 const { publishPreparedLocalBoard: publishPreparedLocalBoardShared } =
   jitiShared(path.join(root, "src/hooks/Homepage/useSyncedBoardReadModel.ts"));
-// Loading clear.ts here would pull in indexedDbReadModel's BroadcastChannel and
-// keep the test process alive, so clear the quarantine the same way it does.
 const { clearBoardRevocationTombstone: clearSharedRevocation } = jitiShared(
   path.join(root, "src/lib/boardSync/revocationTombstone.ts"),
 );
@@ -98,7 +94,6 @@ const useFakeLocalStorage = () => {
     },
   };
 };
-// A fresh instance has an empty quarantine set, like the page after a reload.
 const reloadedRevocationTombstone = () =>
   createJiti(__filename, {
     interopDefault: true,
@@ -1430,11 +1425,8 @@ test("a revocation that lost the route touches nothing", async () => {
     isCurrent: () => false,
   });
 
-  // Reopening a genuinely denied board 403s again and revokes it for real, so
-  // a stale denial may skip every destructive step.
   assert.deepEqual(events, []);
   const projectsAll = queryClient.getQueryData(["projectsAll"]);
-  // The board the user switched to must keep rendering.
   assert.equal(projectsAll.index, 0);
   assert.deepEqual(
     projectsAll.updatedProjects.map((project) => project.id),
@@ -1486,8 +1478,6 @@ test("a board revoked in this session can never publish again", async () => {
     router: { replace: () => {} },
   });
 
-  // One retry covers a transient IndexedDB failure before the stub is given up
-  // on; the in-session quarantine fails closed either way.
   assert.equal(markerAttempts, 2);
 
   const queryClient = createQueryClient();
@@ -1532,7 +1522,6 @@ test("a revocation landing during the local read blocks that publication", async
     clearLocalBoard: async () => true,
     router: { replace: () => {} },
   });
-  // The read started before the revocation, so it still resolves a payload.
   localRead.resolve(fixtureLocalPayload);
 
   assert.equal(await publication, false);
@@ -1546,13 +1535,9 @@ test("a revoked board stays blocked after a reload", async () => {
   const projectId = fixture.projectId;
   const stub = createBoardReadModelRevocation(accountId, projectId);
 
-  // The stub occupies the snapshot's own key, so revoking overwrites the data.
   assert.equal(stub.key, boardReadModelKey(accountId, projectId));
-  // Every read path validates the record it finds. The stub is not a snapshot,
-  // so readBoardReadModel returns null with no in-memory state involved.
   assert.equal(isBoardReadModelSnapshotV1(stub, accountId, projectId), false);
 
-  // A reload keeps the store and drops the session quarantine.
   const queryClient = createQueryClient();
   assert.equal(
     await publishPreparedLocalBoard(
@@ -1579,7 +1564,6 @@ test("a revocation only cancels and redirects while it is the rendered board", (
     }),
     true,
   );
-  // The user switched boards while the denial was being processed.
   assert.equal(
     isRevocationStillActiveBoard({
       proofIsCurrent: () => true,
@@ -1588,7 +1572,6 @@ test("a revocation only cancels and redirects while it is the rendered board", (
     }),
     false,
   );
-  // A superseded request never speaks for the rendered board either.
   assert.equal(
     isRevocationStillActiveBoard({
       proofIsCurrent: () => false,
@@ -1600,8 +1583,6 @@ test("a revocation only cancels and redirects while it is the rendered board", (
 });
 
 test("route re-entry publishes again after its claim is reset", async () => {
-  // Mirrors the hook's claim: publishedLocalKeyRef plus the reset the route
-  // effect performs when activeKey changes.
   const publishedLocalKey = { current: null };
   const claimPublication = (publicationKey) => {
     if (publishedLocalKey.current === publicationKey) return false;
@@ -1615,7 +1596,6 @@ test("route re-entry publishes again after its claim is reset", async () => {
   assert.equal(await publishPreparedLocalBoard(input()), true);
   assert.ok(queryClient.getQueryData(projectsAllKey));
 
-  // Leaving the route drops the published payload.
   queryClient.removeQueries({ queryKey: projectsAllKey, exact: true });
   assert.equal(
     await publishPreparedLocalBoard(input()),
@@ -1653,7 +1633,6 @@ test("a revocation stub is told apart from a snapshot and from junk", () => {
     false,
   );
   assert.equal(isBoardReadModelRevocationV1(snapshot), false);
-  // A corrupt record must stay overwritable, so it must not read as a stub.
   assert.equal(isBoardReadModelRevocationV1({ ...stub, key: "junk" }), false);
   assert.equal(isBoardReadModelRevocationV1({ ...stub, revokedAt: 1 }), false);
   assert.equal(isBoardReadModelRevocationV1(null), false);
@@ -1680,7 +1659,6 @@ test("a stub that could not be written falls back to a durable flag", async () =
       "one key per board, written whole, so two tabs cannot lose an entry",
     );
 
-    // Simulated reload: new module state, empty quarantine, flag still there.
     const reloaded = reloadedRevocationTombstone();
     assert.equal(
       reloaded.isBoardRevocationTombstoned(accountId, projectId),

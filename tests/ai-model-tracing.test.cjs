@@ -184,7 +184,7 @@ test('stream errors, rejected readers, early closure, start failure and user can
     try {
       const result = await middleware.wrapStream({ params, doStream });
       if (scenario === 'cancel') await result.stream.cancel();
-      else for await (const _chunk of result.stream) { /* Drain the isolated stream. */ }
+      else for await (const _chunk of result.stream) {  }
     } catch (actual) { assert.equal(actual, error); }
     await h.flush();
     assert.equal(h.rows.length, 1, scenario);
@@ -198,7 +198,7 @@ test('an error followed by finish retains billed tokens and never becomes a succ
   const middleware = h.api.createUsageTracingMiddleware({ provider: 'claude' }, 'claude-sonnet-5.5');
   const chunks = [{ type: 'error', error: new Error('private reply') }, { type: 'finish', usage: h.usage, finishReason: { unified: 'stop' } }];
   const result = await middleware.wrapStream({ params, doStream: async () => ({ stream: new ReadableStream({ start(controller) { chunks.forEach((chunk) => controller.enqueue(chunk)); controller.close(); } }) }) });
-  for await (const _chunk of result.stream) { /* Drain the isolated stream. */ }
+  for await (const _chunk of result.stream) {  }
   await h.flush();
   assert.equal(h.rows.length, 1);
   assert.equal(h.rows[0].outcome, 'failed');

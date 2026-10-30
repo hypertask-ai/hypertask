@@ -50,8 +50,6 @@ function installBrowserGlobals(window: Window & typeof globalThis) {
   };
 }
 
-// Tests 1 and 2 must run before any test awaits ensureEmojiData(): they cover
-// the zero-dataset editor state that ships in the task-open chunk.
 test("stored emoji HTML round-trips unchanged with zero dataset loaded", (t) => {
   assert.equal(getEmojiItems().length, 0);
   const dom = new JSDOM('<div id="editor"></div>');
@@ -72,10 +70,8 @@ test("stored emoji HTML round-trips unchanged with zero dataset loaded", (t) => 
   const html = editor.getHTML();
   assert.match(html, /<span [^>]*data-name="grinning"/);
   assert.match(html, /data-type="emoji"/);
-  // The stored glyph is preserved, not degraded to a ":name:" fallback.
   assert.ok(html.includes("😀"), html);
   assert.ok(!html.includes(":grinning:"), html);
-  // getText reports the glyph, not the shortcode.
   assert.equal(editor.getText(), "Hi 😀");
 });
 
@@ -136,15 +132,11 @@ test("dataset install activates lookup, storage, and the emoticon rule", async (
       '<p><span data-type="emoji" data-name="grinning">:grinning:</span></p>',
   });
 
-  // The autocomplete storage is the shared dataset.
   assert.ok((editor.storage.emoji as { emojis: unknown[] }).emojis.length > 0);
-  // A ":name:" fallback span now renders the canonical item (jsdom lacks
-  // canvas support, so the CDN fallback image path is the expected output).
   const html = editor.getHTML();
   assert.match(html, /data-name="grinning"/);
   assert.ok(!html.includes(":grinning:"), html);
 
-  // The emoticon input rule comes alive after the data install.
   const emoticonItem = getEmojiItems().find(
     (item) => (item.emoticons ?? []).length > 0,
   );
@@ -205,8 +197,6 @@ test("no source file statically imports the emoji package data", () => {
     path.join(root, "src/components/RTE/Extensions/LazyEmoji.ts"),
     "utf8",
   );
-  // Only type imports are allowed; a value import would drag the dataset
-  // back into the editor chunk.
   const valueImports = lazyEmoji
     .split("\n")
     .filter(
@@ -215,7 +205,6 @@ test("no source file statically imports the emoji package data", () => {
         !line.trimStart().startsWith("import type") &&
         line.includes("@tiptap/extension-emoji"),
     );
-  // The dynamic import in lazyEmojiData.ts is the one sanctioned value edge.
   const dataFile = fs.readFileSync(
     path.join(root, "src/components/RTE/Extensions/lazyEmojiData.ts"),
     "utf8",

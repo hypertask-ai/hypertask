@@ -12,7 +12,6 @@ export function parseRun(run, jobs, repo = 'hypertask-ai/hypertask') {
 
 export async function fetch({ since, until, env }) {
   const runs = new Map();
-  // GitHub caps workflow lifetime at 35 days; include older runs that finished in this window.
   for (const [repo, branch] of repos) {
     for (const scope of [['--branch', branch], ['--event', 'schedule']]) {
       for (const status of ['failure', 'timed_out']) {

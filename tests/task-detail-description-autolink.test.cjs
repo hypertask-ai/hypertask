@@ -5,8 +5,6 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 
-// HTPR-6802: CLI/API descriptions with bare URLs rendered as plain text in the
-// task detail editor, because only typed or pasted URLs get the Link mark.
 test("task detail description editor receives linkified content", () => {
   const body = fs.readFileSync(
     path.join(

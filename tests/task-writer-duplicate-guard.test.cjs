@@ -1,8 +1,3 @@
-// HTPR-6721: the AI Task Writer answered "ab test new woman on hero against ai
-// image" with a "Possible duplicate" note instead of a task, and Accept ALL (or
-// the CLI) saved it as a ticket titled "Possible duplicate". These tests pin
-// the guard: the writer writes the requested task like normal, and a similar
-// earlier ticket (an earlier test) only appears under "Related tickets".
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -30,7 +25,6 @@ const RELATED_SECTION = () =>
   `<h2>Related tickets</h2><ul><li><p>${INNE_944_LINK}: similar earlier ticket.</p></li></ul>`;
 const INNE_944_LINK =
   '<a href="https://app.hypertask.ai/detail/project-339/944">INNE-944, [HOME] [E] Hero model image swap test</a>';
-// The exact shape from the screenshot on HTPR-6721.
 const DUPLICATE_NOTE = [
   '<h1 id="ai-generated-task-title">Possible duplicate</h1>',
   `<p>This may match ${INNE_944_LINK}.</p>`,
@@ -106,7 +100,6 @@ test("browser Accept ALL and Accept title never take the duplicate note as title
     assert.equal(all.description.trim(), RELATED_SECTION());
     assert.doesNotMatch(all.description, /Not provided|duplicate/i);
 
-    // Even unrepaired output cannot hand "Possible duplicate" to the title field.
     assert.equal(extractTaskProperties(DUPLICATE_NOTE).title, null);
     assert.equal(extractTitleAndDescription(DUPLICATE_NOTE).title, null);
   }));

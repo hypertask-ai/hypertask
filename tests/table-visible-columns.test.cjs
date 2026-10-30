@@ -18,11 +18,6 @@ const {
   setTableStalenessColumns,
 } = jiti(path.join(root, "src/utils/helperFunctions/Views/TableColumnsHelperFunctions.ts"));
 
-// HTPR-3805: custom-field table columns were appended after "updated" with no
-// width/alignment convention of their own, reading as glued to it. Fixed by
-// folding custom fields into the same visible-columns array + reorder/toggle
-// mechanism the built-in columns already use (presence = visible, same as
-// any built-in column).
 
 test("a stored custom-field key round-trips through normalize like a built-in", () => {
   const stored = ["ticket", "title", customFieldColumnKey("ice-field"), "assignee"];
@@ -42,7 +37,6 @@ test("garbage stored value falls back to the default columns", () => {
 test("unchecking a custom field removes it, same as any built-in column", () => {
   const withField = ["ticket", "title", "assignee", customFieldColumnKey("ice-field")];
   const withoutField = withField.filter((key) => key !== customFieldColumnKey("ice-field"));
-  // normalize must not resurrect a key the user explicitly removed
   assert.equal(normalizeTableVisibleColumns(withoutField).includes(customFieldColumnKey("ice-field")), false);
 });
 
@@ -53,7 +47,7 @@ test("seedMissingCustomFieldColumns appends only fields not already present", ()
 });
 
 test("seedMissingCustomFieldColumns is a no-op once a field is already seeded (won't undo a hide)", () => {
-  const visible = ["ticket", "title", "assignee"]; // user already unchecked the custom field
+  const visible = ["ticket", "title", "assignee"];
   const seeded = seedMissingCustomFieldColumns(visible, []);
   assert.deepEqual(seeded, visible);
 });
@@ -63,8 +57,6 @@ test("isCustomFieldColumnKey distinguishes custom fields from built-ins", () => 
   assert.equal(isCustomFieldColumnKey("updated"), false);
 });
 
-// HTPR-4987: the header's drag-to-reorder must never move ticket/title — they
-// share this lock with the picker's drag-disabled rows, so both surfaces agree.
 test("LOCKED_TABLE_COLUMNS locks exactly ticket and title", () => {
   assert.equal(LOCKED_TABLE_COLUMNS.has("ticket"), true);
   assert.equal(LOCKED_TABLE_COLUMNS.has("title"), true);

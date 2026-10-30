@@ -1,4 +1,3 @@
-// HTPR-7111: inbox shows "N selected" next to the header buttons, like My Tasks.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

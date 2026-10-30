@@ -1,6 +1,3 @@
-// HTPR-6555. The closed mobile comment bar must show the existing AudioButton
-// so dictation is one tap. A mic that only appears after the editor mounts is
-// the QA fail this ticket already had.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

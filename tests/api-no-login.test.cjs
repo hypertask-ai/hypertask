@@ -11,10 +11,6 @@ const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE']
 const BEFORE_AUTH = new Set([400, 404, 405, 422])
 const HANDLER_TIMEOUT_MS = 800
 
-// Explicit import stubs. Each one exists because loading the real module
-// either opens a database connection or throws outside a Next request.
-// '@/lib/prisma' (src/lib/prisma.ts) is the only module that constructs
-// PrismaClient. Routes import it as the default export.
 const stubDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ht-6801-no-login-'))
 const prismaStubPath = path.join(stubDir, 'prisma-stub.cjs')
 const headersStubPath = path.join(stubDir, 'headers-stub.cjs')
@@ -53,9 +49,6 @@ module.exports = {
 }
 `)
 
-// next/headers reads the Next.js request store. A direct handler call has
-// no store, so cookies() would throw before the route's own auth check.
-// The stub matches the request we send: no cookies and no authorization.
 fs.writeFileSync(headersStubPath, `
 function store() {
   return {
@@ -86,7 +79,6 @@ module.exports = { cookies, headers, draftMode }
 `)
 
 const REQUEST_STUBS = {
-  // Empty Next request-store cookies. See the comment above the stub file.
   'next/headers': headersStubPath,
 }
 
@@ -104,9 +96,6 @@ function isHeadersRequest(value) {
   return normalized === 'next/headers' || normalized.endsWith('/next/headers.js')
 }
 
-// jiti compiles a route by reading the TypeScript source, then evaluates
-// require("@/lib/prisma"). Rewriting that specifier to the stub file stops
-// src/lib/prisma.ts from constructing a real PrismaClient.
 function rewriteLoadedSource(file, data, options) {
   if (typeof file !== 'string' || !file.includes('/src/')) return data
   if (!/\.(?:ts|tsx|js|mjs|cjs)$/.test(file)) return data
@@ -146,7 +135,6 @@ const prismaStub = require(prismaStubPath)
 const { NextRequest } = require('next/server')
 const jiti = require('jiti')(path.join(root, 'tests/api-no-login.test.cjs'), {
   interopDefault: true,
-  // A filesystem cache would replay transforms from before the specifier rewrite.
   fsCache: false,
   alias: { '@': path.join(root, 'src') },
 })
@@ -543,9 +531,6 @@ test('every write route refuses a request that has no session', { timeout: 17000
         }
         continue
       }
-      // prisma.default is jiti reading the stub's default export while Better
-      // Auth's module builds its adapter. It is not a query. A model call
-      // records a longer touch name, and apply() still fails the import.
       if (prismaStub.__touches.some((touch) => touch !== 'prisma.default')) {
         failures.push(
           'NO_LOGIN_FAIL IMPORT ' + route.url + ' status=loaded prismaTouched=true detail=prisma was touched while loading the module',

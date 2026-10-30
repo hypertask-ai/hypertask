@@ -24,7 +24,6 @@ const stubModule = (relativePath, exports) => {
 
 const load = (relativePath, stubs) => {
   delete require.cache[path.join(root, relativePath)];
-  // The Pages file lazily imports the shared handler, which must see fresh stubs.
   for (const filename of Object.keys(require.cache)) {
     if (filename.startsWith(path.join(root, "src/lib/api/"))) {
       delete require.cache[filename];

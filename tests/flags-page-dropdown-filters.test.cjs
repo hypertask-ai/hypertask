@@ -20,7 +20,6 @@ stub("src/hooks/useFlag.tsx", {
   useFlag: key => key === "htpr-7069-flags-dropdown-filters" ? enabled : oldEnabled,
 });
 stub("src/styles/linksModal.module.scss", { __esModule: true, default: {} });
-// reactstrap portals do not mount in this jsdom setup, so the modal shell is stubbed with plain elements (same approach as my-tasks-scope-picker.test.cjs).
 const box = ({ children }) => React.createElement("div", null, children);
 const reactstrapPath = require.resolve("reactstrap");
 require.cache[reactstrapPath] = { id: reactstrapPath, filename: reactstrapPath, loaded: true, exports: { ModalBody: box } };

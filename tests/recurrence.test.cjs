@@ -1,6 +1,3 @@
-// HTPR-4885: recurrence date math for repeating tasks. The sweep that spawns
-// the next occurrence relies on nextOccurrence never returning a date in the
-// past and never drifting the time-of-day.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -31,7 +28,6 @@ test("daily steps one day and keeps time-of-day", () => {
 });
 
 test("weekdays skips the weekend", () => {
-  // 2026-08-07 is a Friday → next weekday is Monday the 10th.
   const next = nextOccurrence(
     "Weekdays",
     at("2026-08-07T12:00:00Z"),
@@ -73,7 +69,6 @@ test("monthly clamp does not stick: Jan 31 → Feb 28 → Mar 28", () => {
 });
 
 test("completing late rolls forward past now — never spawns an overdue copy", () => {
-  // Weekly task anchored months ago, completed today.
   const next = nextOccurrence(
     "Weekly",
     at("2026-05-04T09:00:00Z"),

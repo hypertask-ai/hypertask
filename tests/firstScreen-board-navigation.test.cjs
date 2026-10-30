@@ -56,7 +56,6 @@ for (const seeded of [true, false]) {
       await React.act(async () => root.render(await request("table")));
       assert.match(document.body.textContent, /Loading table view/);
 
-      // RSC requests intentionally have no document seed and add the early bootstrap sibling.
       firstScreen = null;
       await React.act(async () => root.render(await request("table")));
       assert.ok(document.querySelector("[data-client-board]") === boardOwner, "RSC must not replace the adopted board's client owner");

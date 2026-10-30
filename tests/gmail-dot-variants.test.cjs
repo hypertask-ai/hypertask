@@ -1,10 +1,3 @@
-// HTPR-4156: Gmail ignores dots and +suffixes, so valentinyeo@gmail.com and
-// valentin.yeo+work@gmail.com are one inbox. Comparing raw strings meant a user
-// who typed their own address a different way got the magic link (same inbox),
-// clicked it, and landed in a brand new empty account instead of their own.
-//
-// Normalisation is for LOOKUP only. What the user typed is still what we store,
-// mail and display.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -46,8 +39,6 @@ test("gmail dot and +suffix variants collapse to one inbox", () => {
 });
 
 test("non-gmail addresses are left alone", () => {
-  // Dots are significant almost everywhere else. Stripping them would merge two
-  // genuinely different people, which is far worse than the bug being fixed.
   assert.equal(canonicalizeEmail("first.last@hypertask.ai"), "first.last@hypertask.ai");
   assert.equal(canonicalizeEmail("a.b+tag@outlook.com"), "a.b+tag@outlook.com");
   assert.equal(isGmailAddress("first.last@hypertask.ai"), false);
@@ -55,8 +46,6 @@ test("non-gmail addresses are left alone", () => {
 });
 
 test("an exact match always wins over a dot-variant", async () => {
-  // A duplicate created before this fix must still sign in to itself rather than
-  // being silently merged into the other account.
   const exact = { id: 2, email: "valentin.yeo@gmail.com" };
   const variant = { id: 1, email: "valentinyeo@gmail.com" };
   prisma.user.findFirst = async ({ where }) =>
@@ -69,7 +58,7 @@ test("an exact match always wins over a dot-variant", async () => {
 
 test("a dot-variant signs in to the existing account instead of creating one", async () => {
   const existing = { id: 1, email: "valentin.yeo@gmail.com" };
-  prisma.user.findFirst = async () => null; // no exact row for the typed form
+  prisma.user.findFirst = async () => null;
   prisma.user.findMany = async () => [existing];
 
   const found = await findUserByEmail("valentinyeo@gmail.com");

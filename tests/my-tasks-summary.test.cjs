@@ -16,8 +16,6 @@ const NOW = new Date("2026-08-06T00:00:00.000Z");
 const PAST = new Date("2026-08-01T00:00:00.000Z");
 const FUTURE = new Date("2026-09-01T00:00:00.000Z");
 
-// Two boards, 160 + 3 assigned tasks, but only 2 rows ever returned. The point
-// of the tool is that the counts stay true while the rows are capped.
 function fakeDb({ rows = [], totals = [], overdue = [] } = {}) {
   return {
     project: {
@@ -86,7 +84,6 @@ test("totals stay exact when the returned rows are capped", async () => {
   assert.equal(result.returned, 2);
   assert.equal(result.truncated, true, "a capped page must announce itself");
 
-  // Overdue board leads, and a board with no title falls back to its slug.
   assert.deepEqual(
     result.boards.map((board) => [board.board, board.total, board.overdue]),
     [
@@ -105,10 +102,7 @@ test("the workload counts every task, but overdue drops Done columns", async () 
   );
 
   const [workload, overdue] = capturedWhere;
-  // total must match /my-tasks, which shows finished-but-unarchived tasks too.
   assert.equal(workload.NOT, undefined);
-  // Overdue must not: a task parked in Done is finished, not late. The stored
-  // title is matched with its real casing, since Task.section is not lowercased.
   assert.deepEqual(overdue.NOT, {
     OR: [{ projectId: 42, section: { in: ["Done"] } }],
   });

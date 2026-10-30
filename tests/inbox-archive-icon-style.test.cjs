@@ -12,9 +12,6 @@ const source = fs.readFileSync(
 );
 const archiveIcon = source.match(/<Archive\s+size=\{20\}[\s\S]*?\/>/)?.[0] ?? "";
 
-// The icon sits in a row of task-header actions. Any styling that singles it
-// out reads as a state the user cannot explain, which is what HTPR-5481
-// reported: it was permanently blue because `selected` was hard-coded true.
 test("the remove-notification icon carries no accent colour", () => {
   assert.doesNotMatch(archiveIcon, /text-hypertasks-header-blue/);
 });

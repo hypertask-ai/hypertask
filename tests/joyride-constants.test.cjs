@@ -1,15 +1,6 @@
 const test = require("node:test")
 const assert = require("node:assert")
 
-// src/lib/tours/hooks/useTour.tsx inlines these string constants instead of
-// importing STATUS/ACTIONS/EVENTS from react-joyride, because a value import
-// would pull the library's 102 KB runtime back into the board's initial chunk
-// and undo the dynamic import (HTPR-4508).
-//
-// The cost of inlining is that a react-joyride upgrade could change a string and
-// silently break the tour callback: `status === 'finished'` would just stop
-// matching and tours would never mark themselves complete. This test is the
-// tripwire. If it fails, update BOTH this file and the constants in useTour.tsx.
 const INLINED = {
   STATUS: { FINISHED: "finished", SKIPPED: "skipped" },
   ACTIONS: { PREV: "prev" },

@@ -2,10 +2,6 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { access, readFile } = require('node:fs/promises')
 
-// The review engine itself lives in hypertask-ai/reviewer. What stays
-// here is the runner host contract: who may invoke the subscription wrappers,
-// how the dispatch timer reaches the broker, and how auto-merge treats the
-// review gate.
 
 test('only the review-runner identity can invoke subscription wrappers', async () => {
   const sudoers = await readFile('.github/scripts/subscription-review/sudoers', 'utf8')
@@ -80,7 +76,6 @@ test('hax review wrapper reads the prompt from stdin and never as an argument (H
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hax-review-'))
   try {
-    // The wrapper pins its own environment; neutralize those two lines in a copy only.
     const copy = path.join(tmp, 'wrapper')
     fs.writeFileSync(copy, wrapper.replace(/^export (HOME|PATH)=.*$/gm, ''), { mode: 0o755 })
     const bin = path.join(tmp, 'bin')

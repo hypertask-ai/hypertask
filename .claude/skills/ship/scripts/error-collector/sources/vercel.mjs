@@ -5,13 +5,12 @@ const realtimeFailure = row => /^\[[\w/-]+\] (?:[\w-]+ )*broadcast failed(?:\s|$
 const infra = [
   event => event.message.includes('Vercel Runtime Timeout Error'),
   event => event.route === '/sse',
-  // Outgoing board and agent webhooks that used up every retry (YPER4-358).
   event => /^\[(board|agent)-webhook\] delivery failed/.test(event.message),
 ];
 
 export function messageParts(message) {
   if (typeof message === 'string') {
-    try { message = JSON.parse(message); } catch { /* Plain runtime messages are common. */ }
+    try { message = JSON.parse(message); } catch {  }
   }
   if (message && typeof message === 'object') {
     message = 'message' in message ? `${message.message}${message.error ? ` | ${typeof message.error === 'string' ? message.error : JSON.stringify(message.error)}` : ''}` : JSON.stringify(message);
@@ -31,16 +30,13 @@ export function parseEvents(rows, service = name) {
   return rows.filter(row => service === 'realtime' ? realtimeFailure(row) : service === name ? !realtimeFailure(row) : Number(row.httpStatus) >= 500).map(row => {
     const event = {
       service, board: service === 'realtime' ? 4060 : 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
-      // 5xx responses repeat failures the error log already holds: count them, never ticket them.
       ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
     };
     if (service === name && infra.some(rule => rule(event))) event.board = 4060;
-    // Resend bounces and failed sends (YPER4-359).
     if (service === name && event.message.startsWith('[email-event]')) {
       event.service = 'email';
       event.board = 4060;
     }
-    // CLI metadata stays out of the fingerprint so failures group across releases and OSes.
     if (service === name && event.message.startsWith('[cli-error]')) {
       event.service = 'cli';
       event.board = 15;

@@ -1,8 +1,3 @@
-/**
- * HTPR-6362: agent creator attribution on MCP task create / get.
- *
- * Run: npm run test:file -- tests/agent-actor-create-attribution.test.cjs
- */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

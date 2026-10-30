@@ -175,8 +175,6 @@ for (const mobile of [false, true]) {
     const card = document.createElement("div");
     card.tabIndex = 0;
     s.columns[0].append(card);
-    // Browsers scroll a newly focused card before delivering queued scroll events;
-    // JSDOM delivers focusin but does not implement the focus-induced scrolling.
     s.columns[0].scrollTop = 0;
     card.focus();
     s.strip.dispatchEvent(new window.Event("scroll"));
@@ -202,7 +200,6 @@ for (const mobile of [false, true]) {
     card.addEventListener("focusin", () => focusEvents++);
     card.focus({ preventScroll: true });
     assert.equal(focusEvents, 0, "refocusing the active card emits no focusin");
-    // focusKanbanCard adjusts scrollTop explicitly even when focus does not change.
     f.scroll(column, "scrollTop", 0);
     assert.equal(JSON.parse(window.sessionStorage.getItem("htpr-6998-board-scroll:/project?id=15"))["droppable-section-container-10"], 283);
     await f.flush();

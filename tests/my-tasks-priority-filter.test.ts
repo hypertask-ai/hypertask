@@ -1,8 +1,3 @@
-// HTPR-6312. My Tasks had no filters; the board filter system is entirely
-// project-scoped (every mutating function bails without a current project and
-// persists to one board's saved view), so My Tasks needs its own selection
-// that resets on reload. The matching itself must stay the shared
-// priorityFilterCondition so "No Priority" behaves exactly like on a board.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -36,7 +31,6 @@ test("selecting Urgent + High keeps only those tasks across boards", () => {
     filtered.map((section) => section.items.map((item) => item.id)),
     [[1], [3]]
   );
-  // Tabs stay even when a board has nothing left, so navigation is stable.
   assert.deepEqual(
     filtered.map((section) => section.id),
     [100, 200]

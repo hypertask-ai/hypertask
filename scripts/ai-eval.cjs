@@ -82,7 +82,6 @@ function mcpTools() {
     LIST_LABELS: project.getListLabelsBaseSchema(),
     ASSIGN_USER: task.getAssignUserBaseSchema(),
   };
-  // Load metadata only, not its report-service import or any production database code.
   const filename = path.join(root, 'src/lib/mcp-server/config/tool-metadata.ts');
   const source = ts.createSourceFile(filename, fs.readFileSync(filename, 'utf8'), ts.ScriptTarget.Latest, true);
   const scope = {
@@ -225,7 +224,6 @@ if (require.main === module) {
     live: process.env.AI_EVAL_LIVE === '1',
     threshold: Number(process.env.AI_EVAL_WRONG_TOOL_THRESHOLD ?? 0),
   }).then((report) => {
-    // The report contains only fixture tool calls and metrics, never model text.
     console.log(JSON.stringify({ ...report, results: report.results.map((task) => ({ ...task, calls: task.calls.map(({ id, name }) => ({ id, name })) })) }, null, 2));
     console.log('AI evals passed');
   }).catch((error) => { console.error(error.message); process.exitCode = 1; });

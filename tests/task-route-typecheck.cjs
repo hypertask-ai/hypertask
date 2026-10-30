@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
 
-// Recorded before this slice at commit 33c5a4ad1a05b375185b42a6c1bd7b7115d63514.
 const baseline = [
   "src/components/Modals/Sheets/AppSheet.tsx(2,17): error TS2305: Module '\"react-modal-sheet\"' has no exported member 'useScrollPosition'.",
   "src/components/Modals/Sheets/AppSheet.tsx(147,7): error TS2322: Type 'SheetDetent' is not assignable to type 'SheetDetent | undefined'.",
@@ -21,7 +20,6 @@ const baseline = [
 ];
 const result = spawnSync("npx", ["tsc", "--noEmit", "-p", "."], { encoding: "utf8", timeout: 180000 });
 if (result.error) throw result.error;
-// TypeScript 6 uses exit 1 for diagnostics; the native compiler uses exit 2.
 assert.ok([0, 1, 2].includes(result.status), `Unexpected TypeScript exit: ${result.status}`);
 assert.equal(result.stderr.trim(), "", "Unexpected compiler stderr is not a baseline diagnostic");
 const diagnostics = result.stdout.split(/\r?\n/).filter((line) => line.includes("error TS"));

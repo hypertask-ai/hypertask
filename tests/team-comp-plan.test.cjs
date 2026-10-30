@@ -1,5 +1,3 @@
-// HTPR-6653: a comp grants the plan it names. A BYOK comp must behave exactly
-// like a paying BYOK team: shared allowance key, never the managed Pro key.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -32,7 +30,6 @@ function loadTs(relativePath) {
 const future = () => new Date(Date.now() + 86_400_000);
 const past = () => new Date(Date.now() - 86_400_000);
 
-// Canonical monthly Pro seat price (planFromStripePriceId.ts).
 const PRO_PRICE = "price_1QjJeDIhmcH60VcciHzZ3mTJ";
 
 function team(overrides = {}) {
@@ -87,7 +84,6 @@ test("plan resolution: comp null, Pro, BYOK, expired, and alongside a paid plan"
   const { storePlanIdForTeam } = loadTs("src/app/api/ai/_lib/planGate.ts");
 
   assert.equal(storePlanIdForTeam(team()), "Free", "no comp, no subscription");
-  // Comps made before HTPR-6653 have no plan and must stay Pro.
   assert.equal(storePlanIdForTeam(team({ compedUntil: future() })), "Pro");
   assert.equal(
     storePlanIdForTeam(team({ compedUntil: future(), compedPlan: "Pro" })),
@@ -112,7 +108,6 @@ test("plan resolution: comp null, Pro, BYOK, expired, and alongside a paid plan"
     "Pro",
     "an expired comp falls back to the paid plan",
   );
-  // A BYOK comp must never downgrade a team that pays for Pro.
   assert.equal(
     storePlanIdForTeam(team({ compedUntil: future(), compedPlan: "BYOK", ...payingPro })),
     "Pro",

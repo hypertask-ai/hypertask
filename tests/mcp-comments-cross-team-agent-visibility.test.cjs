@@ -3,10 +3,6 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const Module = require("node:module");
 
-// HTPR-6080: /api/mcp/comments must only name an agent when it belongs to the
-// task's own project, not merely to any project the requester can see. This
-// loads the real route plus the real visibility helpers (only prisma/auth are
-// stubbed), so two fixture users/projects stand in for a live second account.
 const root = path.resolve(__dirname, "..");
 const routePath = path.join(root, "src/lib/mcp/operations/comments/operation.ts");
 
@@ -63,9 +59,6 @@ function loadRoute(comments) {
       AgentInvocationNotPendingError: class extends Error {},
     },
     "@/lib/mcp/tasks/resolveTask": {
-      // The requester (user 6, project 15) is asking about a task that lives
-      // in their own project. That task's projectId is what must gate agent
-      // attribution, not the requester's broader project access.
       findTaskByIdentifier: async () => ({ id: 100, projectId: 15 }),
       validateTaskIdentifier: () => ({ valid: true }),
     },
@@ -151,11 +144,8 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
     id: "outsider-agent",
     displayName: "Outsider Team Agent",
     photoURL: null,
-    userId: 42, // owned by a different user entirely
+    userId: 42,
     visibility: "TEAM",
-    // Real DB rows scope `members` to the query's `where` (project 15, see
-    // assertion below), so an agent whose only membership is project 77
-    // comes back with an empty array here, exactly like production.
     members: [],
   };
   const insiderAgent = {
@@ -199,7 +189,5 @@ test("comments GET keeps a same-team agent visible but hides a different team's 
   assert.equal(insiderComment.agent?.id, "insider-agent");
   assert.equal(insiderComment.agent_display_name, "Insider Team Agent");
 
-  // The visibility select and the response mapper must both be scoped to the
-  // viewed task's own project (15), not the requester's user id alone.
   assert.equal(route.getQuery().include.agent.select.members.where.project.id, 15);
 });

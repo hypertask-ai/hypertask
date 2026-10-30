@@ -1,4 +1,3 @@
-// HTPR-5173: pre/code blocks must not be mangled by sanitizeRichHtml
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

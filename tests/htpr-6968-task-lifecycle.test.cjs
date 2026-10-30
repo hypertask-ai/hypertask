@@ -1,10 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
-// Responses and effects are pinned by digest from the pre-retirement handlers (HTPR-6992).
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const pin = pins("a1-lifecycle");
-// Assignee narrowing loop of the pre-retirement global creator, whitespace stripped.
 const globalAssigneeLoop = "for(constassigneeofassigneesas(IUser|IAgent)[]){if(isAgentAssignee(assignee)){agentAssigneeIds.push(assignee.id);constagentOwnerId=awaitgetActiveAgentOwnerId(assignee.id);if(agentOwnerId!=null){assigneeUserIds.push(agentOwnerId);normalizedAssignees.push({userId:agentOwnerId,agentId:assignee.id,});}else{hasInvalidAssignee=true;}}elseif(typeofassignee.id===\"number\"){assigneeUserIds.push(assignee.id);normalizedAssignees.push({userId:assignee.id});}else{hasInvalidAssignee=true;}}";
 const ts = require("typescript");
 const paths = { create: "create", global: "createGlobally", archive: "(un)archive" };
@@ -68,7 +66,6 @@ function fixture(kind, scenario) {
     project: {
       findFirst: record("project", scenario.denied ? null : { id: 15 }),
       findUnique: async (args) => {
-        // Assert the added enrollment projection separately; keep every old query field byte-pinned.
         const { firstTaskPointerTaskId, ...select } = args.select;
         assert.equal(firstTaskPointerTaskId, true);
         return record("project-index", { uniqueIdentifier: "HTPR", firstTaskPointerTaskId: null })({ ...args, select });
@@ -290,7 +287,6 @@ for (const [kind, cases] of Object.entries(scenarios)) {
 }
 test("non-migrated methods answer 405 without running the write", async () => {
   for (const kind of Object.keys(paths)) for (const method of ["GET", "PUT", "DELETE", "PATCH"]) {
-    // createGlobally keeps its own GET (section and rank defaults); pinned below.
     if (kind === "global" && method === "GET") continue;
     const after = fixture(kind, {});
     const oldPerformance = global.performance;

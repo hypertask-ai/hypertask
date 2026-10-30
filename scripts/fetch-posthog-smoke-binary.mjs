@@ -1,10 +1,3 @@
-// Fetch the @posthog/cli vendor binary for the isolated app smoke.
-//
-// @posthog/cli's postinstall downloads its binary from github.com, which the
-// isolated smoke network blocks, and candidate-controlled install scripts must
-// never run with egress. This trusted script (like fetch-prisma-smoke-engine.mjs)
-// performs the download instead, constrained to the official PostHog release
-// host, so `npm rebuild` finds the binary already installed and skips it.
 import { existsSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, chmod, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -16,8 +9,6 @@ const cliPackagePath = 'node_modules/@posthog/cli/package.json'
 const installDirectory = 'node_modules/@posthog/cli/node_modules/.bin_real'
 
 const cliPackage = JSON.parse(await readFile(cliPackagePath, 'utf8'))
-// package.json is candidate-controlled: parse the URL and pin it to the
-// official PostHog release path on github.com after normalization.
 const isOfficialPosthogReleaseBase = (value) => {
   if (typeof value !== 'string' || value.includes('\\') || value.includes('..')) return false
   try {
@@ -41,13 +32,10 @@ if (!baseUrl) {
 }
 
 const platform = cliPackage?.supportedPlatforms?.['x86_64-unknown-linux-gnu']
-// ponytail: runners are x86_64 glibc; extend when the smoke needs arm runners.
 if (!platform?.artifactName || !platform?.bins) {
   throw new Error('x86_64-unknown-linux-gnu platform missing from @posthog/cli package')
 }
 
-// package.json fields are candidate-controlled; only accept plain filenames so
-// they can never traverse out of the scratch dir or the install directory.
 const isPlainFilename = (value) =>
   typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(value) && !value.includes('..')
 if (!isPlainFilename(platform.artifactName)) {

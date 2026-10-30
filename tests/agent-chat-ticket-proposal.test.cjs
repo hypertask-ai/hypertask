@@ -1,6 +1,3 @@
-// HTPR-6006: the confirmation boundary. Each test maps to one promise the
-// ticket makes: chat cannot act without confirmation, cannot widen permissions,
-// cannot create a second ticket, and cannot reach another user's conversation.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -21,7 +18,6 @@ function load(relativePath) {
   )(path.join(root, relativePath));
 }
 
-// --- mutable test state -----------------------------------------------------
 let agentRole = "write";
 let projectAccess = {
   project: { id: 15, title: "Product", uniqueIdentifier: "HTPR", teamId: "t1" },
@@ -57,7 +53,6 @@ function baseProposal(overrides = {}) {
   };
 }
 
-/** Enough of Prisma's `where` to make updateMany a real conditional write. */
 function matches(row, where) {
   for (const [key, value] of Object.entries(where)) {
     if (key === "OR") {
@@ -94,7 +89,6 @@ const prisma = {
   },
   chatTicketProposal: {
     findFirst: async () => proposalRow,
-    // The relation Prisma would join once taskId is attached.
     findUnique: async () =>
       proposalRow && proposalRow.taskId
         ? {
@@ -132,8 +126,6 @@ const prisma = {
       chatMessage: prisma.chatMessage,
       chatTicketProposal: prisma.chatTicketProposal,
       chatSession: { update: async () => null },
-      // HTPR-6154: a reply is only accepted while a live run is bound to the
-      // exact human message it answers.
       agentRun: { findFirst: async () => ({ id: "run-1" }) },
     }),
 };
@@ -247,7 +239,6 @@ test("a proposal never creates the ticket by itself", async () => {
   const body = await res.json();
   assert.equal(body.message.proposal.status, "PENDING");
   assert.equal(createdProposals.length, 1);
-  // The whole point: writing the proposal must not touch the board.
   assert.equal(createTaskCalls.length, 0);
 });
 
@@ -258,7 +249,6 @@ test("an agent cannot propose onto a board the chat user cannot reach", async ()
   };
   const res = await mcpPost(proposalBody);
   assert.equal(res.status, 403);
-  // Nothing is stored, so a rejected proposal cannot resurface later.
   assert.equal(createdProposals.length, 0);
   assert.equal(createdMessages.length, 0);
 });
@@ -288,7 +278,6 @@ test("confirming after board access is revoked fails recoverably", async () => {
   assert.equal(res.status, 403);
   assert.equal(createTaskCalls.length, 0);
   assert.equal(proposalRow.status, "FAILED");
-  // FAILED is claimable again, so the user can retry once access returns.
   projectAccess = {
     project: { id: 15, title: "Product", uniqueIdentifier: "HTPR", teamId: "t1" },
     error: null,
@@ -304,7 +293,6 @@ test("the confirmed ticket links back to the conversation", async () => {
   const created = createTaskCalls[0];
   assert.equal(created.title, "Rename the login button");
   assert.match(created.description, /Rename the login button/);
-  // The other half of the two-way link; the card carries the ticket number.
   assert.match(created.description, /\/agents\/chat\?agent=agent-1/);
   const body = await res.json();
   assert.equal(body.proposal.task.ticketNumber, "HTPR-9001");

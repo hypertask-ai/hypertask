@@ -1,6 +1,3 @@
-// HTPR-5465: assignees rendered at 13px while every other property row rendered
-// at the rail's 14px, so the Assignees value looked like a different font.
-// The rail owns the font size; desktop property values must not re-declare one.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -47,7 +44,6 @@ test("the properties rail declares exactly one font size", () => {
 test("the desktop assignee card inherits the rail font size", () => {
   const block = assigneeCardSource();
 
-  // The mobile chip keeps its own 12px scale; nothing else may set a size.
   const sizes = sizesIn(block).filter((size) => size !== "text-meta");
   assert.deepEqual(
     sizes,

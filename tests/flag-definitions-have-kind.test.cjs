@@ -6,8 +6,6 @@ const test = require("node:test");
 const folder = path.join(__dirname, "..", "src", "lib", "flags", "definitions");
 const files = fs.readdirSync(folder).filter((name) => name.endsWith(".ts") && !name.startsWith("index"));
 
-// HTPR-7084 changed display-only kinds into real kinds without releasing missing rows.
-// Derive surviving legacy flags from an immutable registry snapshot; removals never edit it.
 const { defaultModes } = require("./fixtures/legacy-flag-defaults.json");
 
 function assertLegacyDefaults(definitions) {

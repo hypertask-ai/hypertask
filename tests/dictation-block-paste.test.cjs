@@ -1,4 +1,3 @@
-// HTPR-5691: dictated text should land as one block, not stream word-by-word.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

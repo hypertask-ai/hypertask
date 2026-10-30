@@ -16,7 +16,6 @@ const forbidden = new RegExp(
 );
 
 function assertSources(file, text) {
-  // The mirror must read upstream registries, but consumers must never do so.
   if (file === ".github/ci-images.json") {
     text = JSON.stringify(JSON.parse(text).map(({ source, ...image }) => image));
   }
@@ -43,7 +42,6 @@ function filesIn(directory) {
 
 test("all CI directories and CI Compose files use our GHCR images", () => {
   const files = ["tests", "e2e", "scripts", ".github"].flatMap(filesIn);
-  // The root docker-compose.yml is a local-only PostgreSQL 14 stack, not used by CI.
   const compose = readdirSync(root).filter((file) => /^(?:docker-)?compose.*\.ya?ml$/.test(file) && file !== "docker-compose.yml");
   files.push(...compose);
   for (const directory of ["tests/", "e2e/", "scripts/", ".github/"]) {

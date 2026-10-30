@@ -55,8 +55,6 @@ const db = {
     findUnique: async () => current,
   },
 };
-// Mock the database boundary before loading production modules; these tests
-// never connect to a database or mutate real tickets.
 const prismaPath = path.join(root, "src/lib/prisma.ts");
 require.cache[prismaPath] = {
   id: prismaPath,

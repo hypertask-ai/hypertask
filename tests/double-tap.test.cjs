@@ -120,7 +120,6 @@ test("a native double-click still edits when two taps exceed the custom timer", 
 
 test("the native fallback does not double-fire a fast custom double tap", async (t) => {
   const harness = await renderHarness();
-  // Keep simulated fast taps within the threshold even on a busy test runner.
   t.mock.timers.enable({ apis: ["Date"], now: 1000 });
   try {
     await React.act(async () => {

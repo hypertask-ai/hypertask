@@ -1,4 +1,3 @@
-// HTPR-6197: the proposal card heading follows the ticket, not the confirm click.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("path");

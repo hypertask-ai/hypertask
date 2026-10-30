@@ -16,7 +16,6 @@ const jiti = createJiti(__filename, {
   jsx: true,
   moduleCache: false,
 });
-// Share the native ESM Jotai context with the Provider used by these tests.
 require("tsx/cjs");
 const state = require(path.join(root, "src/lib/state.tsx"));
 
@@ -59,7 +58,6 @@ test("persisted user, rail and team atoms use server defaults on their first cli
   const serverAtoms = atomsFor(defaults);
   const html = renderToString(React.createElement(Provider, null, React.createElement(StateView, { atoms: serverAtoms, snapshots: [] })));
   await withBrowser(html, saved, async (container) => {
-    // Atom definitions are evaluated separately in the browser bundle, after storage exists.
     const clientAtoms = atomsFor(defaults);
     const snapshots = [];
     const errors = [];

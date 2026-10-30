@@ -2,8 +2,6 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { load } = require("./task-route-loader.cjs");
 
-// HTPR-7169: /api/labels/getByProject listed labels and labeled task titles of
-// any board to anyone, even logged out.
 const projects = [
   { id: 15, ownerId: 42, members: [] },
   { id: 16, ownerId: 99, members: [{ userId: 42, agentId: null }] },

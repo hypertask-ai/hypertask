@@ -157,7 +157,6 @@ test('initial and resent links allow only campaign attribution and auth/invite f
     },
     returnTo: '/cli-auth/callback?code=fixture',
   }
-  // Prove the absence checker rejects the former leaky link shape.
   assert.throws(() => assertSafeLink(new URL('https://app.hypertask.ai/login?token=fixture&ip=203.0.113.3')), /Unexpected link parameter/)
   for (let send = 0; send < 2; send++) {
     assert.equal((await h.send(body)).status, 200)

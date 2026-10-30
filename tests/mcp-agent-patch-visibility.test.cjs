@@ -8,7 +8,6 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 
-// Per-test state read by the stubbed modules below at request time.
 const state = {
   user: null,
   visibilityResult: null,
@@ -73,15 +72,10 @@ function loadHandler({ user, visibilityResult, agentRow } = {}) {
   loaded.filename = filePath;
   loaded.require = (request) => {
     if (request === "@/lib/agents/visibility") {
-      // The real helper's ownership/provider-key behavior has its own
-      // dedicated coverage in tests/agent-visibility.test.ts; here the
-      // lifecycle routing and status mapping are what is under test.
       return {
         __esModule: true,
         AGENT_VISIBILITIES: ["PRIVATE", "TEAM"],
         isAgentVisibility: (value) => value === "PRIVATE" || value === "TEAM",
-        // Mirror the real composition in src/lib/agents/visibility.ts so the
-        // enum rule is not silently duplicated or dropped here.
         isVisibilityOnlyBody: (body) =>
           Object.values(body).filter((value) => value !== undefined).length ===
             1 && (body.visibility === "PRIVATE" || body.visibility === "TEAM"),

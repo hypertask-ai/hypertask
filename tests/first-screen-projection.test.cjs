@@ -42,7 +42,6 @@ test('date projections match existing formatting across timezones, locales and y
       assert.equal(daysSince('2027-12-01T00:30:00.000Z', OriginalDate.parse(now)), 0);
       assert.equal(daysSince(null, OriginalDate.parse(now)), null);
     }
-    // Runtime timezone changes cannot influence an explicitly scoped display.
     const clock = { now, display: { timeZone: 'America/Los_Angeles', locale: 'en-US' } };
     const result = projectDisplayDate(now, clock, 'due');
     process.env.TZ = 'Asia/Kathmandu';

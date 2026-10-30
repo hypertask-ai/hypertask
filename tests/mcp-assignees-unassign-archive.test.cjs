@@ -18,7 +18,6 @@ const compile = (file) =>
 
 test("assignee lookup status filter: unassign allows any status, assign stays Normal (HTPR-6428)", () => {
   const mod = { exports: {} };
-  // Same load pattern as other controller unit tests in this suite.
   new Function("module", "exports", "require", compile("src/lib/mcp/tasks/activeTaskMutation.ts"))(
     mod,
     mod.exports,

@@ -66,7 +66,6 @@ test("global task creation refuses a foreign project before its transaction", ()
 
 test("task recovery refuses a foreign task before cancelling or writing", () => {
   const source = read("src/lib/api/task-writes/recover.ts");
-  // The shared route resolves the caller's identity before this operation runs.
   assert.ok(read("src/lib/api/task-writes/route.ts").includes("getSessionUser("));
   assert.ok(!source.includes("JSON.parse(req.cookies.nookies_user"));
   assert.ok(source.includes("project: taskWriteAccessWhere(session.userId, actingAgentId)"));

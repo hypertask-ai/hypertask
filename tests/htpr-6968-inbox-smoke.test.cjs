@@ -30,8 +30,6 @@ function inboxCheck() {
   return checks.get("inbox loads");
 }
 
-// Exercise the real smoke callback and Playwright matchers without requiring
-// Chromium in the unit-test job. Only the browser protocol boundary is doubled.
 class Locator {
   _apiName = "Locator";
   first() { return this; }

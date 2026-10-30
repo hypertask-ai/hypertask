@@ -8,7 +8,6 @@ const source = fs.readFileSync(path.join(root, "scripts/seed-browser-smoke.mjs")
 const start = source.indexOf("  if (allFlagsOn) {", source.indexOf("try {"));
 const end = source.indexOf("  const flags =", start);
 
-// Execute the real seed branch without starting a browser or touching a database.
 test("local browser smoke persists per-flag defaults and respects flag overrides", async () => {
   assert.ok(start >= 0 && end > start);
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");

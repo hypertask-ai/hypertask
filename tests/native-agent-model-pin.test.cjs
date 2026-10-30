@@ -17,8 +17,6 @@ const fs = require("node:fs");
 const PIN = "gpt-5.6-luna";
 
 test("an agent's pinned model runs its turns", () => {
-  // The whole point of pinning: a heartbeat turn names no model, so the agent's
-  // own choice has to be what the turn runs on, not the team default.
   assert.equal(
     resolveAgentModelPin({ agentModelOptionId: PIN }),
     PIN,
@@ -26,7 +24,6 @@ test("an agent's pinned model runs its turns", () => {
 });
 
 test("a model named in the request beats the pin", () => {
-  // Switching model inside the agent's chat must keep working.
   assert.equal(
     resolveAgentModelPin({
       requestedModelOptionId: "claude-opus-5-5-thinking",
@@ -34,7 +31,6 @@ test("a model named in the request beats the pin", () => {
     }),
     "claude-opus-5-5-thinking",
   );
-  // Naming a raw model is just as explicit as naming an option.
   assert.equal(
     resolveAgentModelPin({
       requestedModel: "gpt-5.6",
@@ -45,10 +41,6 @@ test("a model named in the request beats the pin", () => {
 });
 
 test("an empty model choice is no choice, so the pin still applies", () => {
-  // The request schema allows an empty string, and a select whose placeholder
-  // is "Team default" sends exactly that. Treated as a real choice it out-ranks
-  // the pin and then resolves to nothing, silently billing the team default
-  // while the agent's page still shows the pinned model.
   for (const requestedModelOptionId of ["", "   ", null, undefined]) {
     assert.equal(
       resolveAgentModelPin({ requestedModelOptionId, agentModelOptionId: PIN }),
@@ -65,12 +57,7 @@ test("an empty model choice is no choice, so the pin still applies", () => {
 });
 
 test("an agent cannot be pinned to the custom endpoint option", () => {
-  // "custom" means "whatever endpoint you configured", and an agent has nowhere
-  // to configure one, so a pin to it fails every turn while the agent still
-  // reads as pinned and healthy.
   assert.equal(canPinModelOption("custom"), false);
-  // Every other shipped option stays pinnable, so this guard cannot quietly
-  // grow into a denylist that empties the picker.
   const pinnable = aiModelOptions.filter((option) =>
     canPinModelOption(option.id),
   );
@@ -78,7 +65,6 @@ test("an agent cannot be pinned to the custom endpoint option", () => {
 });
 
 test("the write API enforces the pin guard, not just the picker", () => {
-  // A picker-only filter is not a rule: the owner can PATCH the API directly.
   const route = fs.readFileSync(
     "src/app/api/agents/[agentId]/route.ts",
     "utf8",

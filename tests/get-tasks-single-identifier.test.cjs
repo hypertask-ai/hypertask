@@ -14,7 +14,6 @@ const {
   getGetTasksBaseSchema,
 } = jiti(path.join(root, "src/lib/mcp-server/validations/task.validation.ts"));
 
-// HTPR-7206: AI clients send one ticket number as a plain string.
 test("get_tasks accepts a single ticket number as a string", () => {
   assert.ok(getGetTasksBaseSchema().safeParse({ ticket_number: "INNE-1814" }).success);
   assert.deepStrictEqual(GetTaskInputSchema.parse({ ticket_number: "INNE-1814" }).ticket_number, ["INNE-1814"]);

@@ -12,10 +12,6 @@ const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
 });
 
-// boardRetentionEvictionKeys lives in its own side-effect-free module.
-// Loading indexedDbReadModel.ts directly opens a BroadcastChannel and hangs
-// a plain Node process (see the existing board-sync-read-model.test.cjs
-// comment on the same trap).
 const { boardRetentionEvictionKeys } = jiti(
   path.join(root, "src/lib/boardSync/retention.ts"),
 );
@@ -26,15 +22,11 @@ test("HTPR-5753: keeps the 3 most-recently-written records, oldest evicted first
     { key: "1:1:B", recency: "2026-08-25T00:00:00.000Z" },
     { key: "1:1:C", recency: "2026-08-28T00:00:00.000Z" },
   ];
-  // "1:1:D" is the board just written -- always kept, takes one of the 3 slots.
   const evicted = boardRetentionEvictionKeys(others, "1:1:D", 3);
   assert.deepEqual(evicted, ["1:1:A"]);
 });
 
 test("HTPR-5753: a revoked board is evicted like any other record once it ages out of the top 3", () => {
-  // Revoke A (old revokedAt), then write B, C, D on later days -- team-lead's
-  // scenario: A's record must fall out of retention exactly like a snapshot
-  // would, never lingering as a stale entry.
   const revokedA = { key: "1:1:A", recency: "2026-08-01T00:00:00.000Z" };
   const boardB = { key: "1:1:B", recency: "2026-08-20T00:00:00.000Z" };
   const boardC = { key: "1:1:C", recency: "2026-08-25T00:00:00.000Z" };

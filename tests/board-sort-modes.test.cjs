@@ -56,8 +56,6 @@ test("Assignee sorts alphabetically while unassigned tasks stay last", () => {
 });
 
 test("Assignee keys on the agent, not the owner behind it", () => {
-  // An agent assignment also carries its owner in `user`, and the card renders the agent. Keying
-  // on the user would sort "Alpha Agent" by its owner "Zoe" and bury it below a human "Beta".
   const alphaAgent = {
     id: "alphaAgent",
     assignees: [{ agent: { displayName: "Alpha" }, user: { displayName: "Zoe" } }],

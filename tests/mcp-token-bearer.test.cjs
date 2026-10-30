@@ -5,7 +5,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-// Keep this in sync with src/lib/mcp/bearerAuth.ts (CI runs Node 20; no strip-types).
 const MCP_TOKEN_MASK = "***";
 function isUsableMcpBearerToken(token) {
   return Boolean(token) && token !== MCP_TOKEN_MASK;

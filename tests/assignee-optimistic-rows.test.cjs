@@ -6,10 +6,6 @@ const { assigneeIntentForOption, toAssigneeRows } = load(
   { "@/hooks/useFlag": {}, "@/lib/api/typedClient": {}, "@/lib/constants": {} },
 );
 
-// The assign menu paints a toggle before the server answers, so it has to hand
-// the task the same row shape /api/assignees/assign returns. Every consumer
-// (task detail, board card, Ctrl+K) reads `row.agent ?? row.user`; a row that
-// carries neither renders a blank avatar instead of the person.
 test("assigned people become rows the task panel can read", () => {
   const rows = toAssigneeRows(
     [
@@ -44,9 +40,6 @@ test("picker sends the intended assignment state instead of a server toggle", ()
   assert.equal(assigneeIntentForOption({ ...agent, assigned: true }), "unassign");
 });
 
-// Removing the last assignee must produce an empty list rather than nothing:
-// the consumers only repaint on an actual array, so anything else leaves the
-// removed person on screen until a reload.
 test("unassigning everyone yields an empty list", () => {
   const rows = toAssigneeRows(
     [{ id: 6, displayName: "Valentin", assigned: false }],

@@ -228,7 +228,6 @@ test("background history refreshes preserve the mounted cached detail, but route
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilValue: () => ({ id: currentAccountId }) },
     "@/store": { currentUserAtom: {} },
-  // useState is stubbed to one value here, so the HTPR-7129 board shell stays off.
   "@/hooks/useFlag": { useFlag: (key) => key === "htpr-7129-board-card-fresh-after-escape" ? false : flagEnabled },
   "@/lib/flags/keys": { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },

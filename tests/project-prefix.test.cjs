@@ -39,7 +39,6 @@ function load(file, stubs = {}) {
   mod._compile(javascript, filename);
   return mod.exports;
 }
-// Pages-style handler: the real task-write adapter around the shared project route.
 function loadPagesRoute(sharedFile, stubs) {
   const shared = load(sharedFile, stubs);
   return loadSharedRoute(stubs["@/lib/auth/getSessionUser"].getSessionUser).taskWriteHandler({ POST: async () => shared.POST });

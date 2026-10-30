@@ -53,19 +53,28 @@ test("allows every tool directive and pragma, including directive reasons", asyn
   assert.deepEqual(await lint("#!/usr/bin/env node\nconst value = 1;", "src/cli.js"), []);
 });
 
-test("allows whole JSDoc blocks only when a tool reads their tags", async () => {
+test("allows JSDoc blocks only when every line is a tag a tool reads", async () => {
   for (const tag of ["deprecated", "type", "typedef", "template", "satisfies", "overload"]) {
-    assert.deepEqual(await lint(`/** Prose remains.\n * @${tag} {string} value\n */\nconst value = 1;`), [], tag);
+    assert.deepEqual(await lint(`/**\n * @${tag} {string} value\n */\nconst value = 1;`), [], tag);
     assert.equal((await lint(`/* @${tag} {string} value */\nconst value = 1;`)).length, 1, tag);
   }
   for (const extension of ["js", "mjs", "cjs"]) {
     for (const tag of ["param", "returns", "property", "callback"]) {
-      assert.deepEqual(await lint(`/** Description. @${tag} {string} value */\nconst value = 1;`, `src/Test.${extension}`), [], `${extension}:${tag}`);
+      assert.deepEqual(await lint(`/**\n * @${tag} {string} value\n */\nconst value = 1;`, `src/Test.${extension}`), [], `${extension}:${tag}`);
     }
   }
   for (const extension of ["ts", "tsx", "jsx"]) {
     assert.equal((await lint("/** @returns {string} value */\nconst value = 1;", `src/Test.${extension}`)).length, 1);
   }
+});
+
+test("rejects JSDoc prose even when an allowed tag sits in the same block", async () => {
+  for (const code of [
+    "/** Prose remains.\n * @deprecated {string} value\n */\nconst value = 1;",
+    "/**\n * @deprecated {string} value\n * Prose after the tag.\n */\nconst value = 1;",
+    "/**\n * @param {string} value\n * Explains the value.\n */\nconst value = 1;",
+    "/** @see otherCode */\nconst value = 1;",
+  ]) assert.equal((await lint(code)).length, 1, code);
 });
 
 test("rejects ts-ignore and expect-error without a reason", async () => {
@@ -87,16 +96,15 @@ test("ignores generated filenames and first-comment markers, not a later marker"
   }
 });
 
-test("real config enables enforcement and unused directives only in source files", async () => {
+test("real config enables enforcement and unused directives in app code, e2e, scripts, repo tests and skill scripts", async () => {
   const eslint = new ESLint({ cwd: root });
-  for (const extension of ["ts", "tsx", "js", "jsx", "mjs", "cjs"]) {
-    const config = await eslint.calculateConfigForFile(`src/Test.${extension}`);
-    assert.equal(config.rules["local/no-comments"][0], 2);
-    assert.equal(config.linterOptions.reportUnusedDisableDirectives, 2);
+  for (const folder of ["src", "e2e", "scripts", "tests", ".claude/skills/ship/scripts"]) {
+    for (const extension of ["ts", "tsx", "js", "jsx", "mjs", "cjs"]) {
+      const config = await eslint.calculateConfigForFile(`${folder}/Test.${extension}`);
+      assert.equal(config.rules["local/no-comments"][0], 2, `${folder}:${extension}`);
+      assert.equal(config.linterOptions.reportUnusedDisableDirectives, 2, `${folder}:${extension}`);
+    }
   }
-  for (const filename of ["tests/Test.test.cjs", "scripts/Test.mjs", "src/Test.generated.ts"]) {
-    const config = await eslint.calculateConfigForFile(filename);
-    assert.equal(config.rules["local/no-comments"], undefined);
-    assert.equal(config.linterOptions.reportUnusedDisableDirectives, 0);
-  }
+  const generated = await eslint.calculateConfigForFile("src/Test.generated.ts");
+  assert.equal(generated.rules["local/no-comments"], undefined);
 });

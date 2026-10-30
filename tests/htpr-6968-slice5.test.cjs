@@ -5,7 +5,6 @@ const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-// Responses, effects and HTTP bytes are pinned by digest from the pre-retirement handlers (HTPR-6992).
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const pin = pins("a1-slice5");
 const slice5Routes = {

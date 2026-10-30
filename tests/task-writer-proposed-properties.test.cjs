@@ -8,9 +8,6 @@ const jiti = require("jiti")(__filename, {
   alias: { "@": path.join(root, "src") },
 });
 
-// HTPR-5606: "Priority: Medium" / "Size: S" lines used to print near the TOP
-// of the description, disturbing to read. They now land as a single
-// "Proposed properties: ..." paragraph at the END of the output.
 const { createTaskWriterSystemPromptTemplate } = jiti(
   path.join(root, "src/app/api/ai/_lib/taskWriterPrompt.ts"),
 );

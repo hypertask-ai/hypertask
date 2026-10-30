@@ -1,11 +1,3 @@
-// Compact regression pins for the HTPR-6968 route tests (HTPR-6992).
-// Each test records the full value it observed (response, effects, state) under a
-// group, usually the route. After the file's tests finish, every group's values are
-// hashed and compared with tests/fixtures/htpr-6992-pins/<name>.json, which holds one
-// short digest per group. The digests were taken from the values the retired handlers
-// produced, so a mismatch means the shared handler's behaviour changed.
-// Re-record after an intended change: UPDATE_HTPR_6992_PINS=1 node --test <file>
-// Debug a mismatch: HTPR_6992_PINS_DUMP=<dir> writes the observed values per group.
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");

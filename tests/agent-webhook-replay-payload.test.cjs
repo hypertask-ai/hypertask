@@ -5,8 +5,6 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 
-// One shared record of what the fakes should answer, so the module graph is
-// loaded once and each test only changes the answers.
 const state = {
   enabledFlags: new Set(),
   delivery: {

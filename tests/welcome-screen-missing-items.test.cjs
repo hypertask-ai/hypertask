@@ -1,5 +1,3 @@
-// HTPR-6947: the AI chat welcome screen crashed with "Cannot read properties
-// of undefined (reading 'filter')" when a board column had no items list yet.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

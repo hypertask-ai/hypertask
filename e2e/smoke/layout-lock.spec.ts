@@ -1,11 +1,3 @@
-// Rewrite only for a ticket-requested layout change, quoting Valentin in the PR:
-// LAYOUT_LOCK_UPDATE=1 LAYOUT_LOCK_SOURCE_COMMIT=$(git rev-parse origin/production) \
-//   npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts --workers=1 --retries=0
-// Run the origin/production build with the CI live-like seed, never --all-flags-on.
-// After scripts/premerge-local.sh up, restore those modes in its disposable DB:
-// node scripts/seed-browser-smoke.mjs --live-like-control (using its local env/state).
-// Desktop: 1440x900. Phone: 390x844. Positions: 24px; sizes: max(24px, 10%).
-// Content-dependent heights lock their top/left/right edges and vertical order instead.
 import { test, expect, type Page } from '@playwright/test'
 import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -127,14 +119,9 @@ for (const name of [...screens, 'ticket from board card']) {
     if (screen === 'ticket') {
       await expect(page.locator('#title-input')).toHaveValue('Browser smoke board fixture')
       await expect(page.getByTestId('ticket-comment')).toHaveCount(2)
-      // HTPR-7074: the comment box appears once the thread has settled; measure after it is there.
       await expect(page.getByTestId('comment-composer')).toBeVisible()
-      // Seen-state can collapse old comments between visits; compare the expanded thread.
       if (!phone) {
-        // YPER4-939: wait for the server-to-live row handoff before clicking a row it replaces.
         await waitForTicketInitialScroll(page)
-        // YPER4-953: the board-card click parks the pointer on an author avatar, whose open hovercard blocks every other click.
-        // YPER4-958: moving the pointer alone races the close, so wait for the hovercard to be gone before clicking.
         await parkPointerOffCommentThread(page)
         await page.getByTestId('ticket-comment').first().click({ timeout: 15_000 })
         await page.getByTestId('ticket-comment').last().click({ timeout: 15_000 })
@@ -157,7 +144,6 @@ for (const name of [...screens, 'ticket from board card']) {
       await waitForTicketInitialScroll(page)
       await scrollToBaselinePosition(page, phone ? 'phone' : 'desktop')
     }
-    // Measure one settled viewport, never scroll individual landmarks into view.
     let previous = ''
     let actual: Record<string, Box | null> = {}
     await expect.poll(async () => {
@@ -224,7 +210,6 @@ test('layout lock: comment composer is the end of the ticket thread', async ({ p
       const comments = page.getByTestId('ticket-comment')
       await expect(composer).toBeVisible()
       await waitForTicketInitialScroll(page)
-      // Bring the last virtualized rows into view, without moving a fixed phone composer.
       await composer.scrollIntoViewIfNeeded()
       await expect(comments).toHaveCount(2)
       await expect(comments.last()).toContainText('Last layout lock comment')
@@ -281,7 +266,6 @@ test('layout lock: phone New Task title has a real height and accepts a tap', as
   const expand = page.getByRole('button', { name: /^Title:/ })
   if (await expand.count()) await expand.tap()
   const title = page.locator('#title-input-modal')
-  // Assert the field itself, outside the htpr-6556 landmark allowance.
   await expect.poll(async () => (await title.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(24)
   expect(await title.evaluate(field => {
     const box = field.getBoundingClientRect()
@@ -392,12 +376,10 @@ test('layout lock: an agent-written description keeps its height from first pain
   }
 })
 
-// HTPR-7074: a cold ticket open must not shove the comment box (or anything else) down the page.
 const CLS_BUDGET = 0.05
 type ShiftSource = { node: string; previous: number[]; current: number[] }
 type ShiftEntry = { value: number; startTime: number; sources: ShiftSource[] }
 
-// Largest session window: shifts less than 1s apart, a window at most 5s long.
 function largestSessionWindow(shifts: ShiftEntry[]) {
   let best = { value: 0, shifts: [] as ShiftEntry[] }
   let current = { value: 0, shifts: [] as ShiftEntry[] }
@@ -439,13 +421,11 @@ test('layout lock: ticket page first load stays under the CLS budget', async ({ 
   await expect(page.getByTestId('ticket-comment').first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByTestId('comment-composer')).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => page.getByTestId('ticket-comment').count(), { message: 'the long thread must render its comments', timeout: 30_000 }).toBeGreaterThanOrEqual(6)
-  // Sample the box's own place for a while once it is visible: it may not move more than 24px (phone and desktop).
   const tops: number[] = []
   const positions: unknown[] = []
   for (let sample = 0; sample < 15; sample += 1) {
     const position = await page.getByTestId('comment-composer').evaluate((el) => ({ time: performance.now(), top: el.getBoundingClientRect().top, scrollY: window.scrollY, position: getComputedStyle(el).position, comments: document.querySelectorAll('[data-testid="ticket-comment"]').length }))
     positions.push(position)
-    // A fixed phone box stays in viewport coordinates while the thread scrolls underneath it.
     tops.push(Math.round(position.top + (position.position === 'fixed' ? 0 : position.scrollY)))
     await page.waitForTimeout(100)
   }
@@ -455,29 +435,21 @@ test('layout lock: ticket page first load stays under the CLS budget', async ({ 
   await testInfo.attach('cls-shifts', { body: JSON.stringify(shifts, null, 2), contentType: 'application/json' })
   await testInfo.attach('composer-positions', { body: JSON.stringify(positions, null, 2), contentType: 'application/json' })
   expect(Math.max(...tops) - Math.min(...tops), `layout lock: the comment box moved after it was visible (${testInfo.project.name}), tops ${tops.join(',')}`).toBeLessThanOrEqual(24)
-  // The score alone is small for a short comment box in a tall window, so also pin the box itself:
-  // once visible it may not move more than the 24px layout lock tolerance.
   const composerJumps = shifts.flatMap((shift) => shift.sources.filter((s) => s.node.includes('[data-testid=comment-composer]') && Math.abs(s.current[1] - s.previous[1]) > 24).map((s) => `top ${s.previous[1]} -> ${s.current[1]}`))
   expect(composerJumps, `layout lock: the comment box moved after it was visible (${testInfo.project.name}). Shifts:\n${detail}`).toEqual([])
   expect(worst.value, `layout lock: ticket first load CLS ${worst.value.toFixed(4)} exceeds ${CLS_BUDGET} (${testInfo.project.name}). Shifts:\n${detail}`).toBeLessThanOrEqual(CLS_BUDGET)
 })
 
-// HTPR-7116: on a phone the ticket opened from a board card vanished again a moment after it
-// showed, because the description editor chunk loaded after the reveal suspended the
-// HTPR-6991 Back boundary. Hold the comments and that chunk back so the race happens every run.
 test('layout lock: phone ticket opened from a board card stays on screen while the editor loads', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'Mobile', 'phone ticket open')
   test.setTimeout(60_000)
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean> }
-  // The seeded description is plain, so it would take HTPR-7091's static path. Rich descriptions
-  // (images, mentions, code) mount the editor directly: take that path here.
   await page.route('**/api/flags*', async (route) => {
     const response = await route.fetch()
     const json = await response.json() as { flags?: Record<string, boolean> }
     if (json.flags) json.flags['htpr-7091-static-description-first'] = false
     await route.fulfill({ response, json })
   })
-  // Comments that arrive after the reveal (a phone network) make the editor mount late.
   await page.route('**/api/comments/getByTask*', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500))
     await route.continue()
@@ -504,7 +476,6 @@ test('layout lock: phone ticket opened from a board card stays on screen while t
   await expect(card).toBeVisible()
   await card.click()
   await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
-  // Long enough for the held editor chunk to arrive and the panels to mount.
   await page.waitForTimeout(4000)
   const { shownAt, hiddenAt } = await page.evaluate(() => (window as unknown as { __ticketOpen: { shownAt: number; hiddenAt: number } }).__ticketOpen)
   expect(hiddenAt, `layout lock: the ticket vanished ${Math.round(hiddenAt - shownAt)}ms after it showed`).toBe(0)

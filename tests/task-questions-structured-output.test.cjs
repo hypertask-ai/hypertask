@@ -1,6 +1,3 @@
-// HTPR-6953: task question suggestions crashed on model text with a stray
-// quote ("Expected ',' or ']' after array element in JSON"). The route must
-// ask for structured output instead of parsing model text by hand.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

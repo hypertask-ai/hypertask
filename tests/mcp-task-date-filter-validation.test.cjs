@@ -1,5 +1,3 @@
-// HTPR-7198: GET /api/mcp/tasks?updated_since=not-a-date crashed Prisma with a 500.
-// Bad date filters must answer 400 before the query is built.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

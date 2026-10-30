@@ -12,7 +12,6 @@ export function parseJournal(text, { since, until } = {}) {
     const message = `${unit}: ${Array.isArray(row.MESSAGE) ? Buffer.from(row.MESSAGE).toString('utf8') : row.MESSAGE}`;
     const ts = new Date(Number(row.__REALTIME_TIMESTAMP) / 1000).toISOString();
     if ((since && ts <= since) || (until && ts > until)) continue;
-    // Keep raw status codes for noise rules and separate noise from real errors sharing a normalized key.
     const id = `${ts.slice(0, 10)}|${unit}|${normalize(message)}|${isNoise({ service: name, message, route: unit })}`;
     const group = groups.get(id);
     if (group) { group.count++; if (ts > group.ts) group.ts = ts; }
@@ -27,7 +26,6 @@ export async function fetch({ since, until, env }) {
   let system = '';
   try { system = command('journalctl', ['--system', ...args], env); }
   catch { console.error('error-collector: source vps-journal system journal unavailable'); }
-  // A system journal may also expose user entries; do not count them twice.
   const seen = new Set();
   const text = `${user}\n${system}`.split('\n').filter(line => {
     if (!line) return false;

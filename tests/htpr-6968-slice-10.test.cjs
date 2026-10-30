@@ -9,11 +9,9 @@ const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-slice-10");
 const GROUPS = ["(un)archiveBulk","getByTask","markAsDone","markAsUnseen","moveTaskToInbox","sendEmailToFollower","unArchiveNotificationById","updateSeen"];
 const SPECIAL = { "bulk archive success": "(un)archiveBulk", "bulk archive undo": "(un)archiveBulk", "archive undo": "markAsDone", "tutorial archive": "markAsDone", "task-seen success": "getByTask", "comments seen failure": "updateSeen", "inbox creation": "moveTaskToInbox", "inbox existing": "moveTaskToInbox", "follower email": "sendEmailToFollower" };
-// Pins group by route so the fixture holds one digest per route.
 const groupOf = key => SPECIAL[key] ?? key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? key;
 const pin = (key, value) => rawPin(groupOf(key), key, value);
 const root = path.resolve(__dirname, "..");
-// Route map: shared module, method and Pages file per endpoint; anyMethod endpoints answer every HTTP method.
 const notificationRoutes = {
   "(un)archiveBulk": { module: "archive-bulk", method: "POST", path: "src/pages/api/notifications/(un)archiveBulk.ts" },
   getByTask: { module: "task-seen", method: "POST", path: "src/pages/api/notifications/getByTask.ts" },
@@ -177,7 +175,6 @@ async function invoke(fx, name, scenario = {}, target = "current") {
     return result;
   });
 }
-// Runs the Pages adapter, pins wire, effects and stored rows, then checks the shared Web handler agrees.
 async function parity(name, scenario = {}, key = `${name}: ${JSON.stringify(scenario)}`) {
   const old = fixture(name, scenario), expected = await invoke(old, name, scenario, "current");
   const pinned = { expected, effects: clean(old.effects), rows: clean(old.rows) };
@@ -191,7 +188,6 @@ async function parity(name, scenario = {}, key = `${name}: ${JSON.stringify(scen
         pinned.rows.find(entry => entry.id === row.id).archivedAt = timestamp;
       }
     }
-    // Keep historical pins for unchanged fields after asserting the permanent undo behavior.
     for (const [label, args] of pinned.effects) if (label === "updateMany") args.data.archivedAt = timestamp;
   }
   pin(key, pinned);

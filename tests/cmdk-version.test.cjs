@@ -19,7 +19,6 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const noop = () => {};
 const defaultExport = (value) => ({ __esModule: true, default: value });
 
-// Exercise the real palette and shared UI, isolating only unrelated data/hooks and modal portals.
 function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
   const atoms = {
     calendarSettingsAtom: { default: { showWeekends: true } },

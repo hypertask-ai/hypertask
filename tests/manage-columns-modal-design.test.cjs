@@ -1,5 +1,3 @@
-// HTPR-5196: Manage Columns had 8px edit-view gutters and two Bootstrap
-// switches whose chrome drifted from Hypertask's themed settings controls.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

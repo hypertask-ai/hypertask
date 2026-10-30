@@ -12,13 +12,6 @@ const SIDEBAR = "src/components/AI_CHAT/AI_Chat_Sidebar.tsx";
 const COMMAND_LIST = "src/components/Modals/commands/HTC/CommandList.tsx";
 const SUMMARIZE = "src/hooks/MultiPages/AIChat/useCommentToAiChat.ts";
 
-// WHY: Ctrl+K "Summarize ticket" appeared to do nothing. The cleanup that cancels an
-// in-flight stream lived on an effect keyed on [chatRoute, currentStreamingSession, token].
-// A cleanup runs on every dependency change, not only on unmount, and `token` starts null
-// and resolves asynchronously. Summarize opens the chat and sends in the same breath, so
-// the token routinely landed mid-stream, the cleanup fired, and the stream the user was
-// waiting on was cancelled. Confirmed on production: every send logged
-// /api/ai/chat/stream 200 immediately followed by /api/ai/chat/cancel 200.
 
 test("page unload leaves the stream running while cleanup remains unmount-only", () => {
   const source = read(CHAT_HOOK);
@@ -135,8 +128,6 @@ test("the command palette centres on the space left by the AI chat panel", () =>
   );
 });
 
-// Measured 1.11:1 against the selected row in dark theme, where WCAG asks for 4.5:1.
-// A solid fill does not depend on what is behind it, so one rule covers both themes.
 test("the New badge does not rely on a translucent tint for contrast", () => {
   const source = read(COMMAND_LIST);
   const badge = source.slice(source.indexOf("{isNew && ("), source.indexOf("New\n"));

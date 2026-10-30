@@ -1,9 +1,3 @@
-// HTPR-6279 — the losing side of a concurrent assign must come back as an
-// idempotent "already-assigned" outcome, and only violations of the assignee
-// uniqueness indexes may be treated that way. The controller is loaded with a
-// scripted Prisma stub (tests/prisma-stub-htpr6279.cjs) so
-// tx.assignees.create can be forced to reject with a chosen P2002 — a race the
-// per-task mutation fence otherwise serializes away in a real database.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -11,9 +5,6 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 const stub = require(path.join(__dirname, "prisma-stub-htpr6279.cjs")).__htpr6279;
 
-// The assign controller initializes the Firebase Admin SDK at import time; a
-// runtime-generated throwaway key satisfies the parser without committing any
-// credential material (same approach as the postgres suite).
 const { generateKeyPairSync } = require("node:crypto");
 const pem = generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey
   .export({ type: "pkcs8", format: "pem" })
@@ -29,7 +20,6 @@ process.env.FIREBASE_SERVICE_ACCOUNT_B64 = Buffer.from(
 const jiti = require("jiti")(path.join(root, "tests/assignees-p2002-idempotent.test.cjs"), {
   interopDefault: true,
   alias: {
-    // Must shadow the real Prisma singleton before the "@" prefix rule.
     "@/lib/prisma": path.join(__dirname, "prisma-stub-htpr6279.cjs"),
     "@": path.join(root, "src"),
   },
@@ -54,9 +44,6 @@ const owner = {
 };
 
 function driverAdapterP2002(constraintName) {
-  // Shape observed from the real client against the partial unique indexes
-  // (see tests/assignees-unique-index-postgres.test.cjs): the constraint name
-  // rides in the driver adapter's original message.
   return new stub.PrismaClientKnownRequestError("P2002", {
     modelName: "Assignees",
     driverAdapterError: {
@@ -88,8 +75,6 @@ function seedHappyPath() {
       status: "Normal",
     },
     project: { ownerId: owner.id, members: [] },
-    // Pre-check sees nothing (the race window); the post-rollback re-read sees
-    // the winner's row.
     outerAssignee: null,
     reAssignee: { id: 99 },
     createdRow: { id: 1, user: { displayName: "Owner" }, agent: null, agentAssigner: null },
@@ -123,15 +108,13 @@ test("an unrelated P2002 is not swallowed", async () => {
   const result = await assigneesAssign(owner, owner.id, 42, undefined, undefined, {
     intent: "assign",
   });
-  // assigneesAssign's catch-all reports the failure instead of pretending the
-  // assignment succeeded.
   assert.equal(result.status, 500);
   assert.equal(result.json.assignmentOutcome, undefined);
 });
 
 test("a unique loss without a surviving row is not reported as assigned", async () => {
   seedHappyPath();
-  stub.state.reAssignee = null; // re-read finds nothing: nobody won
+  stub.state.reAssignee = null;
   stub.state.createError = driverAdapterP2002("Assignees_taskId_agentId_key");
 
   const result = await assigneesAssign(owner, owner.id, 42, undefined, undefined, {

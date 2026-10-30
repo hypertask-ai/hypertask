@@ -174,7 +174,6 @@ test("phone close control is flag-gated and closes once without triggering outsi
   }
 });
 
-// The unit CI job has no browser; DOM assertions above still run there.
 const browserInstalled = fs.existsSync(chromium.executablePath());
 
 test("real component and Tailwind CSS fit phone in all themes and preserve desktop geometry", { skip: !browserInstalled && "Playwright browser not installed" }, async (t) => {

@@ -1,21 +1,6 @@
 import type { Page } from '@playwright/test'
 import { expect } from '@playwright/test'
 
-// Same counting approach as HTPR-6620's browser-smoke check (open PR #744,
-// hypertask-ai/hypertask, not merged as of this writing, ported here
-// directly rather than depending on that PR landing first, since the app
-// repo's ci-tests.yml isn't touched by this change).
-//
-// - Count main-frame `load` events, not `framenavigated` (which also fires
-//   for history/hash changes that aren't a real reload).
-// - After the first load, count requests to each of the two board-data
-//   endpoints; more than one refetch of either means something is looping.
-//   The live app refetches getAll and boardTasks once each right after
-//   hydration (checked on the first real run, HTPR-6636), which is one
-//   refetch, not a loop.
-// - Sample the kanban column titles every 250ms for a window to catch
-//   columns disappearing and reappearing (a symptom of a refetch loop even
-//   when the final DOM state looks fine).
 export type LoopGuard = {
   loads: number
   boardFetches: number
@@ -55,9 +40,6 @@ export function watchForLoops(page: Page): LoopGuard {
   return guard
 }
 
-// Samples a selector's count/visibility every 250ms for `durationMs`,
-// failing fast the moment a board that had columns loses them. Used for
-// journeys that open a real kanban board (open-board, switch-boards).
 export async function assertColumnsStayVisible(
   page: Page,
   columnSelector: string,
@@ -85,8 +67,6 @@ export async function assertColumnsStayVisible(
     },
   ).toBe(true)
 
-  // The empty-state heading may briefly coexist with attached columns.
-  // Treat it as valid only when there are no columns to hide.
   if (isIntentionalEmptyBoard) {
     const emptyStateDeadline = Date.now() + durationMs
     while (Date.now() < emptyStateDeadline) {

@@ -1,23 +1,3 @@
-// HTPR-5467 — real-PostgreSQL behavioral tests for the task-write probe.
-//
-// The probe must catch PR #2789's exact failure mode (a broken advisory-lock
-// helper taking down every task write) without ever persisting anything, and it
-// must be behind the MCP bearer-token auth. These tests run the REAL modules
-// (src/lib/taskCardActions/writeProbe.ts + writeLocks.ts, src/lib/prisma.ts)
-// against a throwaway PostgreSQL 16 Alpine container — no mocked Prisma client,
-// no stubbed $executeRaw, no source-text assertions for the DB behavior.
-//
-// Coverage (all against real PostgreSQL):
-//   1. healthy when the write path works
-//   2. broken when the advisory-lock helper errors (PR #2789 reproduced with the
-//      (bigint, bigint) overload PostgreSQL rejects)
-//   3. no new or modified rows after a successful probe (rollback proven)
-//   4. unauthenticated calls rejected at the HTTP boundary
-//
-// If docker/postgres is unavailable the DB tests SKIP cleanly (matching
-// tests/task-write-lock-postgres.test.cjs); HT_REQUIRE_PG_TESTS=1 turns that
-// skip into a hard failure so CI cannot silently green out.
-
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -75,8 +55,6 @@ const prismaCli = () =>
   path.join(root, "node_modules", "prisma", "build", "index.js");
 
 function loadProbeHandler() {
-  // The handler imports only next/server + a type — no database, no auth module —
-  // so it loads without a configured DATABASE_URL and without a running DB.
   const jiti = require("jiti")(
     path.join(root, "tests", "task-write-probe-handler.cjs"),
     { interopDefault: true, alias: { "@": path.join(root, "src") } },
@@ -105,7 +83,6 @@ async function provision() {
     try {
       run("docker", ["rm", "-f", container]);
     } catch {
-      /* best effort */
     }
   };
 
@@ -241,7 +218,6 @@ after(async () => {
     try {
       await state.prisma.$disconnect();
     } catch {
-      /* already disconnected */
     }
   }
   if (state?.cleanup) {
@@ -251,9 +227,6 @@ after(async () => {
 
 let seedCounter = 0;
 
-// A task belonging to somebody who is NOT the probe caller. Seeded in every
-// probe test so a regression back to "lock the lowest-id task" is caught: this
-// row is always older (lower id) than the caller's probe task.
 async function seedTask({ updatedAt } = {}) {
   seedCounter += 1;
   const stamp = `${process.pid}-${Date.now()}-${seedCounter}`;
@@ -277,8 +250,6 @@ async function seedTask({ updatedAt } = {}) {
   return { user, project, task };
 }
 
-// The health identity the probe authenticates as. It owns no data until the
-// probe creates its own probe board.
 async function seedCaller() {
   seedCounter += 1;
   const stamp = `${process.pid}-${Date.now()}-caller-${seedCounter}`;
@@ -296,11 +267,6 @@ const probeTaskOf = (userId) =>
     },
   });
 
-// A faithful reproduction of PR #2789 running REAL SQL against the real server:
-// the two-argument advisory-lock call selects the (bigint, bigint) overload and
-// PostgreSQL rejects it. The current writeLocks.ts casts to ::int and works;
-// this broken variant proves the probe detects the historical failure instead of
-// reporting healthy.
 function brokenLock(taskId, operation) {
   return state.prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(1::int8, ${taskId}::int8)`;
@@ -308,7 +274,6 @@ function brokenLock(taskId, operation) {
   });
 }
 
-// 1. Healthy: the real lock helper + real writes succeed and roll back.
 test("the probe reports healthy when the task-write path works", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const foreign = await seedTask({ updatedAt: new Date("2024-01-01T00:00:00Z") });
@@ -329,19 +294,15 @@ test("the probe reports healthy when the task-write path works", async (t) => {
   assert.equal(typeof result.probeRowId, "string");
   assert.ok(result.probeRowId.length > 0, "probe row id must be set");
 
-  // The throwaway row must not have survived the rollback.
   const leftover = await state.prisma.savedContent.findUnique({
     where: { id: result.probeRowId },
   });
   assert.equal(leftover, null, "throwaway SavedContent row must be rolled back");
 
-  // The foreign row must be byte-identical: not locked, not touched.
   const foreignAfter = await state.prisma.task.findUnique({ where: { id: foreign.task.id } });
   assert.deepEqual(foreignAfter, foreign.task, "another tenant's task must be untouched");
 });
 
-// 1b. The health endpoint creates nothing: without a provisioned fixture it
-// reports inconclusive and leaves the database exactly as it found it.
 test("the probe creates no records and reports misconfigured without a fixture", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   await seedTask();
@@ -359,8 +320,6 @@ test("the probe creates no records and reports misconfigured without a fixture",
   assert.equal(await state.prisma.project.count(), before.projects, "no Project may be created");
 });
 
-// 1c. Cross-tenant guard: a probe board that belongs to somebody else never
-// matches, so the probe can neither read nor write through it.
 test("a probe board owned by another account is never used", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -368,8 +327,6 @@ test("a probe board owned by another account is never used", async (t) => {
   const project = await state.prisma.project.create({
     data: { name: state.writeProbe.probeProjectName(caller.id), ownerId: squatter.id },
   });
-  // Even a task carrying the probe title, on that board, under the caller's own
-  // userId must not qualify: the board is not theirs.
   await state.prisma.task.create({
     data: {
       uniqueIndex: 1,
@@ -392,9 +349,6 @@ test("a probe board owned by another account is never used", async (t) => {
   );
 });
 
-// 1d. Ownership is revalidated inside the transaction: a fixture that changes
-// hands mid-probe is inconclusive, never written to, and never `broken` (which
-// would roll the deployment back over a fixture problem).
 test("a fixture that changes hands mid-probe is never written to", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -402,7 +356,6 @@ test("a fixture that changes hands mid-probe is never written to", async (t) => 
   const fixture = await state.writeProbe.ensureTaskWriteProbeFixture(caller.id);
   const before = await state.prisma.task.findUnique({ where: { id: fixture.id } });
 
-  // Hand the board over between the lookup and the transactional re-read.
   const stealBoard = async (taskId, operation) => {
     await state.prisma.project.update({
       where: { name: state.writeProbe.probeProjectName(caller.id) },
@@ -422,8 +375,6 @@ test("a fixture that changes hands mid-probe is never written to", async (t) => 
   );
 });
 
-// 1f. Provisioning is one transaction: a board that changed hands leaves no
-// orphan project behind when the bootstrap aborts.
 test("a failed bootstrap leaves no orphan probe board", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -439,9 +390,6 @@ test("a failed bootstrap leaves no orphan probe board", async (t) => {
   assert.equal(await state.prisma.task.count({ where: { userId: caller.id } }), 0);
 });
 
-// 1g. A soft-deleted fixture must be restorable. @@unique([projectId,
-// uniqueIndex]) means a replacement alongside it would fail forever, so the
-// probe would stay misconfigured with no way back.
 test("provisioning restores a soft-deleted fixture", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -462,8 +410,6 @@ test("provisioning restores a soft-deleted fixture", async (t) => {
   assert.equal(await state.prisma.task.count({ where: { userId: caller.id } }), 1);
 });
 
-// 1h. The board's lifecycle counts too: a soft-deleted board must stop serving
-// targets, and provisioning must bring it back.
 test("a soft-deleted probe board is not a valid target and is restored on provisioning", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -482,9 +428,6 @@ test("a soft-deleted probe board is not a valid target and is restored on provis
   assert.equal(result.status, "healthy", result.reason ?? result.error);
 });
 
-// 1i. A live board or task carrying the reserved name is somebody's real work,
-// not a fixture. Provisioning must refuse it rather than archive it, and the
-// probe must never write to it.
 test("provisioning refuses a live board carrying the reserved name", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -515,7 +458,6 @@ test("provisioning refuses a live board carrying the reserved name", async (t) =
   );
 });
 
-// 1e. Provisioning is idempotent, so re-running the setup script is safe.
 test("provisioning the fixture twice reuses the same rows", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const caller = await seedCaller();
@@ -528,14 +470,12 @@ test("provisioning the fixture twice reuses the same rows", async (t) => {
   assert.equal(await state.prisma.project.count(), projects);
 });
 
-// 2. Broken: the probe must FAIL (not report healthy) when the lock helper errors.
 test("the probe reports broken when the advisory-lock helper errors (PR #2789)", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   const { task } = await seedTask();
   const caller = await seedCaller();
   await state.writeProbe.ensureTaskWriteProbeFixture(caller.id);
 
-  // Confirm the broken lock simulation is actually broken against real PG.
   await assert.rejects(
     brokenLock(task.id, async () => "unused"),
     /pg_advisory_xact_lock\(bigint, bigint\) does not exist/i,
@@ -543,13 +483,10 @@ test("the probe reports broken when the advisory-lock helper errors (PR #2789)",
 
   const result = await state.writeProbe.runTaskWriteProbe(caller.id, { lock: brokenLock });
   assert.equal(result.status, "broken");
-  // The caller gets a fixed string: raw Prisma/PostgreSQL text names tables,
-  // constraints and SQL, and this endpoint answers any authenticated caller.
   assert.equal(result.error, "task-write probe failed");
   assert.doesNotMatch(result.error, /pg_advisory_xact_lock|prisma|postgres/i);
 });
 
-// 3. Rollback: a successful probe leaves the database untouched.
 test("a successful probe leaves no new or modified rows", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   await seedTask({ updatedAt: new Date("2024-02-02T00:00:00Z") });
@@ -563,8 +500,6 @@ test("a successful probe leaves no new or modified rows", async (t) => {
     savedContentCount: await state.prisma.savedContent.count(),
   });
 
-  // Provision out of band, exactly as the setup script does; from here on the
-  // probe itself must change nothing at all, including its own probe task.
   const fixture = await state.writeProbe.ensureTaskWriteProbeFixture(caller.id);
 
   const before = await snapshot();
@@ -586,11 +521,6 @@ test("a successful probe leaves no new or modified rows", async (t) => {
   );
 });
 
-// 3b. Verification failure: a post-rollback verification read error must never
-// be reported as healthy (the false-green class HTPR-5467 removes). The
-// write/lock path itself succeeded here; only the confirmation read failed, so
-// the correct verdict is `inconclusive` (warn, never roll back) — not `broken`
-// (which the workflow would roll back on) and never `healthy`.
 test("the probe reports inconclusive (never healthy) when rollback verification fails", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   await seedTask();
@@ -605,21 +535,14 @@ test("the probe reports inconclusive (never healthy) when rollback verification 
 
   assert.equal(result.status, "inconclusive");
   assert.equal(result.reason, "post-rollback verification query failed");
-  // The underlying database message stays in the server log, never in the body.
   assert.doesNotMatch(result.reason, /simulated verification outage|relation/i);
 });
 
-// 3c. False-positive pin: SavedContent declares only @@index([taskId, userId,
-// commentId]) and @@index([commentId, taskId, userId, type]) — no @@unique — so
-// a duplicate (userId, taskId, commentId) tuple is legal and the probe's INSERT
-// cannot collide with an existing row. (The probe inserts commentId: null.)
 test("the probe's SavedContent insert succeeds alongside an existing (userId, taskId, commentId) tuple", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
   await seedTask();
   const caller = await seedCaller();
 
-  // Pin the duplicate tuple to the fixture row so the probe's throwaway INSERT
-  // shares (userId, taskId, commentId) with an existing row.
   await state.writeProbe.ensureTaskWriteProbeFixture(caller.id);
   const target = await probeTaskOf(caller.id);
   await state.prisma.savedContent.create({
@@ -636,7 +559,6 @@ test("the probe's SavedContent insert succeeds alongside an existing (userId, ta
   assert.equal(result.status, "healthy", result.reason ?? result.error);
 });
 
-// 4. Auth: unauthenticated calls are rejected before any probe work happens.
 test("unauthenticated calls are rejected with 401 and never run the probe", async () => {
   let probeCalls = 0;
   const GET = state.probeHandler.createTaskWriteProbeHandler({
@@ -664,8 +586,6 @@ test("unauthenticated calls are rejected with 401 and never run the probe", asyn
   assert.equal((await response.json()).success, false);
 });
 
-// 4b. The probe runs as the authenticated principal, so it can only ever reach
-// that principal's own probe task.
 test("the probe runs as the authenticated principal", async () => {
   const seen = [];
   const GET = state.probeHandler.createTaskWriteProbeHandler({
@@ -685,8 +605,6 @@ test("the probe runs as the authenticated principal", async () => {
   assert.deepEqual(seen, [4242]);
 });
 
-// Bonus: the HTTP boundary distinguishes the three verdicts for the workflow —
-// healthy 200, inconclusive 200 (but never `success: true`), broken 500.
 test("the handler maps healthy/inconclusive/misconfigured/broken to distinct responses", async () => {
   const ctx = { teamScope: null, user: { id: 6, email: "owner@example.test" }, agentId: null };
   const make = (runProbe) =>
@@ -719,8 +637,6 @@ test("the handler maps healthy/inconclusive/misconfigured/broken to distinct res
   assert.equal(inconclusiveBody.success, false);
   assert.equal(inconclusiveBody.probe.status, "inconclusive");
 
-  // 503, distinct from both: the gate is unusable, but nothing is broken and no
-  // rollback should follow.
   const misconfigured = await make(async () => ({
     status: "misconfigured",
     reason: "probe fixture missing",

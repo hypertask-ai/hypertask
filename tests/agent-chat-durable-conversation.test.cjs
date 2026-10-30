@@ -1,6 +1,3 @@
-// HTPR-6002: the durable side of an agent conversation. Who wrote each
-// message, one authorization rule for every chat route, and history that can
-// be read in order and in pages.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -22,11 +19,6 @@ function load(relativePath) {
   )(path.join(root, relativePath));
 }
 
-// ---------------------------------------------------------------------------
-// A small stand-in database. Sessions and agents are matched against the real
-// `where` the code builds, so the authorization rule is exercised rather than
-// read.
-// ---------------------------------------------------------------------------
 const AGENTS = {
   "agent-live": {
     id: "agent-live",
@@ -46,8 +38,6 @@ const AGENTS = {
     ownerId: 6,
     sharedWith: [6],
   },
-  // The create-session route validates the id as a uuid, so the open path
-  // needs one that looks real.
   "11111111-1111-4111-8111-111111111111": {
     id: "11111111-1111-4111-8111-111111111111",
     revokedAt: null,
@@ -67,18 +57,12 @@ const SESSIONS = [
     runtimeType: "EXTERNAL",
   },
   { id: "session-revoked", userId: 6, agentId: "agent-revoked", teamId: "team-a" },
-  // Same agent, but the conversation was scoped to a team 6 is not in: this is
-  // the shape an agent that moved teams leaves behind.
   { id: "session-other-team", userId: 9, agentId: "agent-live", teamId: "team-z" },
-  // No team of its own, so it never got past the person who opened it.
   { id: "session-teamless", userId: 9, agentId: "agent-live", teamId: null },
   { id: "session-plain", userId: 6, agentId: null, teamId: null },
-  // Owned by 7, but agent-private is shared only with 6: the sharing clause is
-  // the only thing that can deny this one.
   { id: "session-unshared", userId: 7, agentId: "agent-private", teamId: "team-a" },
 ];
 
-// Which teams each person is an accepted member of.
 const TEAMS = { 6: ["team-a"], 7: ["team-a"], 9: ["team-a", "team-z"] };
 
 let messages = [];
@@ -106,16 +90,9 @@ function sessionMatches(session, where) {
     } else if (where.teamId.in) {
       if (!where.teamId.in.includes(session.teamId)) return false;
     } else if (session.teamId !== where.teamId) {
-      // A shape this stub does not model must still narrow, or the DENIED
-      // table below would pass without the rule doing anything.
       return false;
     }
   }
-  // The scope clause: the conversation's own team, or its creator when it has
-  // none. A person's rule must carry it -- fail closed, so dropping it from the
-  // real rule fails here instead of quietly handing an old team's transcript to
-  // a new one. An agent's own token is the other side of the conversation and
-  // is scoped by its identity instead, so it has no agent clause and no scope.
   if (where.agent?.revokedAt === null) {
     assert.notEqual(where.agent.__visibleTo, undefined, "the rule must keep agent visibility checks");
     assert.ok(where.OR, "the rule must still scope a thread to its own team");
@@ -182,8 +159,6 @@ const prisma = {
       }));
     },
     count: async ({ where }) => {
-      // An agent's reply has no author user, and those are exactly the rows
-      // that should count as unread, so the clause has to name the null case.
       const mine = where.OR?.find((branch) => branch.authorUserId?.not)
         ?.authorUserId.not;
       assert.ok(
@@ -234,9 +209,6 @@ const prisma = {
         ) ?? null
       );
     },
-    // The read marker is written through updateMany because it carries a
-    // "only if this is newer" guard that a keyed update cannot express. The
-    // stub honours that guard, so a test can prove the marker never goes back.
     updateMany: async ({ where, data }) => {
       assert.ok(
         Array.isArray(where.OR),
@@ -318,7 +290,6 @@ function message(index, sessionId = "session-1") {
     sessionId,
     role: index % 2 === 0 ? "assistant" : "human",
     content: `message ${index}`,
-    // Every row shares one timestamp: the ordering must survive it.
     createdAt: new Date(Date.UTC(2026, 8, 4, 12, 0, 0)),
   };
 }
@@ -333,9 +304,6 @@ function routeContext(sessionId = "session-1") {
   return { params: Promise.resolve({ sessionId }) };
 }
 
-// ---------------------------------------------------------------------------
-// Authorization boundaries, one rule, both callers
-// ---------------------------------------------------------------------------
 test("a person reaches their own live agent thread", async () => {
   const access = await chatAccess.loadUserAgentChatSession({
     sessionId: "session-1",
@@ -403,9 +371,6 @@ test("the history route refuses a revoked agent's thread", async () => {
   assert.equal(response.status, 404);
 });
 
-// ---------------------------------------------------------------------------
-// Ordering and pagination
-// ---------------------------------------------------------------------------
 test("history returns one page oldest first and reports more above it", async () => {
   messages = Array.from({ length: 5 }, (_, index) => message(index + 1));
 
@@ -526,13 +491,9 @@ test("limit is capped so one request cannot pull the whole transcript", async ()
   } finally {
     prisma.chatMessage.findMany = realFindMany;
   }
-  // 200 rows plus the one has-more probe.
   assert.equal(requestedTake, 201);
 });
 
-// ---------------------------------------------------------------------------
-// One shared conversation, with private state inside it
-// ---------------------------------------------------------------------------
 test("everyone the agent is shared with reads the same thread", async () => {
   const opener = await chatAccess.loadUserAgentChatSession({
     sessionId: "session-1",
@@ -704,7 +665,6 @@ test("unread counts what arrived after you caught up, and never your own", async
     createdAt: new Date(Date.UTC(2026, 8, 4, 12, minutes, 0)),
     authorUserId,
   });
-  // One before the marker, two from a teammate, one from the agent, one of mine.
   messages = [
     { ...message(9), authorUserId: 7 },
     later(1, 7),
@@ -759,8 +719,6 @@ test("a draft is private to the person who typed it", async () => {
 });
 
 test("a slow catch-up cannot drag the read marker back", async () => {
-  // Two tabs catch up at once. The one that started first can commit last, and
-  // an unconditional write would then resurrect messages already read.
   const ahead = new Date(Date.now() + 60_000);
   participants = [
     { sessionId: "session-1", userId: 6, joinedAt: new Date(0), lastReadAt: ahead, draft: null },
@@ -788,7 +746,6 @@ test("the read marker is stamped by the server, so it cannot move backwards", as
   const response = await participantRoute.PATCH(
     new Request("https://app.hypertask.ai/api/agent-chat/session-1/participant", {
       method: "PATCH",
-      // A client-supplied time is not part of the contract; it must be ignored.
       body: JSON.stringify({ read: true, lastReadAt: "1999-01-01T00:00:00.000Z" }),
     }),
     routeContext(),
@@ -863,8 +820,6 @@ test("its owner still gets the thread when the agent has no team", async () => {
 });
 
 test("seeing an agent across a board is not enough to open its team's thread", async () => {
-  // 8 can see the agent (it is shared with them) but belongs to no team, which
-  // is the shape a board member who was never added to the team leaves behind.
   agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
   AGENTS[OPENABLE_AGENT].sharedWith.push(8);
   createdSessions = [];
@@ -917,9 +872,6 @@ test("the agent is told who actually sent the message", () => {
   assert.match(source, /displayName: senderName/);
 });
 
-// Every write to a shared thread has to wake every tab on it. The one that
-// matters most is the agent's reply, which arrives through the MCP route and
-// used to reach only the person whose name is on the session row.
 const CHAT_BROADCASTERS = [
   "src/app/api/agent-chat/[sessionId]/messages/route.ts",
   "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
@@ -947,15 +899,9 @@ test("the authorized fan-out list is resolved before the response, not after it"
     path.join(root, "src/lib/agents/chatBroadcast.ts"),
     "utf8",
   );
-  // A serverless runtime can freeze once the response is flushed, so the
-  // participant lookup has to be awaited rather than started and abandoned.
   assert.match(source, /await chatParticipantUserIds\(sessionId, alsoUserIds\)/);
 });
 
-// ---------------------------------------------------------------------------
-// Attribution: every stored message says who wrote it, or says nothing on
-// purpose. A new write path that forgets this fails here.
-// ---------------------------------------------------------------------------
 const MESSAGE_WRITERS = [
   ["src/app/api/agent-chat/[sessionId]/messages/route.ts", "authorUserId: userId"],
   [
@@ -1004,9 +950,6 @@ test("the scheduled heartbeat prompt stays unattributed on purpose", () => {
   );
 });
 
-// ---------------------------------------------------------------------------
-// Schema and migration
-// ---------------------------------------------------------------------------
 const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
 function migration(name) {
   return fs.readFileSync(
@@ -1015,7 +958,6 @@ function migration(name) {
   );
 }
 
-/** Statement keywords only: comments and clauses like ON UPDATE do not count. */
 function statements(sql) {
   return sql
     .split("\n")
@@ -1043,9 +985,6 @@ test("the migration adds attribution without touching stored history", () => {
 });
 
 test("the column, the backfill and the indexes hold separate locks", () => {
-  // ADD COLUMN holds ACCESS EXCLUSIVE to the end of its transaction, so a
-  // bundled backfill and index build would block every chat read for the
-  // whole deploy.
   assert.doesNotMatch(
     statements(authorMigration),
     /^\s*(UPDATE|CREATE INDEX)\b/im,
@@ -1063,8 +1002,6 @@ test("the column, the backfill and the indexes hold separate locks", () => {
 });
 
 test("constraints are added unvalidated and validated on their own", () => {
-  // A validated foreign key scans ChatMessage and locks User and Agent against
-  // writes; NOT VALID plus a later VALIDATE keeps both tables usable.
   for (const constraint of [
     "ChatMessage_author_check",
     "ChatMessage_authorUserId_fkey",

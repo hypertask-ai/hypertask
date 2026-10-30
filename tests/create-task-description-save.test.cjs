@@ -72,9 +72,6 @@ test("the create route persists the request description atomically", () => {
   );
 });
 
-// A discard during title generation must not create a task from the dead
-// draft: the epoch bumps on every composer reset and the save re-checks it
-// after the await (claude-review MAJOR on #2756).
 test("discard during title generation cancels the pending save", () => {
   const modal = fs.readFileSync(
     path.join(root, "src/components/RTE/TiptapCreateTaskModal.tsx"),
@@ -126,9 +123,6 @@ test("discard checks the latest create-task fields before React renders", () => 
 });
 
 
-// Title generation is async and the description stays editable during it, so
-// the save must re-read the editor afterwards instead of persisting the
-// pre-generation snapshot (claude-review MAJOR on #2756).
 test("edits made while a title generates are still saved", () => {
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   assert.match(
@@ -137,8 +131,6 @@ test("edits made while a title generates are still saved", () => {
   );
 });
 
-// A save invoked without a mode matches none of the branches, so it must not
-// start generation or leave uploadInProgress stuck on (claude-review on #2756).
 test("a save without a mode exits before any work starts", () => {
   const modal = read("src/components/RTE/TiptapCreateTaskModal.tsx");
   assert.match(modal, /if \(!param\) return;/);
@@ -152,8 +144,6 @@ test("save-time title generation admits only one concurrent attempt", () => {
   );
 });
 
-// Switching boards mid-generation invalidates the request: it was scoped to
-// the previous board's AI configuration (claude-review MINOR on #2756).
 test("switching boards cancels an in-flight title request", () => {
   const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
   assert.match(

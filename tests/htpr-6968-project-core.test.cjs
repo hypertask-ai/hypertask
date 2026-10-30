@@ -7,11 +7,9 @@ const { load } = require("./task-route-loader.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-project-core");
 const GROUPS = ["create","update","archive","delete","leave","removeMember","setMemberRole","boardTasks","getAll","getAllMinimal","getFirst","getArchived","getFavorites","lastActivity"];
-// Pins group by route so the fixture holds one digest per route.
 const groupOf = key => key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? (key.startsWith('leave') ? 'leave' : key);
 const pin = (key, value) => rawPin(groupOf(key), key, value);
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-// Route map: shared module and method per Pages endpoint; "signed" ones verify the cookie-signed session.
 const projectCoreRoutes = {
   create: { module: "create", method: "POST", signed: false },
   update: { module: "update", method: "POST", signed: false },
@@ -103,7 +101,6 @@ async function invoke(fx, name, scenario, target) {
       if (target === "web") {
         const params = new URLSearchParams();
         for (const [key, value] of Object.entries(req.query)) for (const item of Array.isArray(value) ? value : [value]) params.append(key, item);
-        // GET uses a real bodyless Web Request, not a synthetic successful json().
         const request = req.method === "GET" ? new Request(`https://example.invalid/api/projects/${name}?${params}`, { headers: req.headers }) : { headers: new Headers(req.headers), json: async () => req.body };
         if (scenario.webQuery) request.query = req.query;
         if (scenario.cookies) request.cookies = scenario.cookies;
@@ -121,7 +118,6 @@ async function invoke(fx, name, scenario, target) {
     return result;
   });
 }
-// Runs the Pages adapter, pins its response plus effects, then checks the shared Web handler agrees.
 async function check(key, name, scenario, controllerFactory, { skipWeb = false } = {}) {
   const fx = fixture(name, scenario, controllerFactory);
   const result = await invoke(fx, name, scenario, "current");
@@ -157,7 +153,6 @@ for (const name of Object.keys(endpoints)) {
     ["unknown mode unchanged", { query: { mode: "unknown" } }],
   );
   for (const [label, scenario] of [...cases, ...extra]) test(`${name}: ${label} matches pinned response, effects and Web handler`, async () => {
-    // Direct signed-cookie handlers intentionally don't consult Better Auth.
     const { fx } = await check(`${name}: ${label}`, name, scenario, undefined, { skipWeb: scenario.authThrows && projectCoreRoutes[name].signed });
     assert.equal(fx.loads.length, 1, "listed method always loads the shared route");
   });

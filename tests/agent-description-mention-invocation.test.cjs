@@ -92,7 +92,6 @@ function loadCreateFollowerService() {
   };
 }
 
-// --- correlation selector ------------------------------------------------
 
 test("a description mention correlates by its notification id", () => {
   assert.deepEqual(buildAgentInvocationSelector({ invocationId: 8821 }), {
@@ -286,7 +285,6 @@ test("a routine agent comment never queries or consumes an invocation", async ()
   assert.equal(calls.updateMany.length, 0);
 });
 
-// --- MCP surface ---------------------------------------------------------
 
 const addCommentBase = {
   task_id: 27744,
@@ -357,7 +355,6 @@ test("add_comment CRUD rejects both reply pointers at once", () => {
   );
 });
 
-// --- API route boundary --------------------------------------------------
 
 test("the API route gates reply_to_invocation_id to authenticated agents", () => {
   assert.match(

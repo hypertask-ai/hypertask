@@ -1,7 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Lives outside src/pages/api/ because Next's Pages Router treats every file
-// under pages/api/ as a route, and would try to compile this test as one.
-// Run after installing dependencies: npx tsx tests/security/getCount.test.ts
 import assert from 'node:assert/strict'
 
 function makeResponse() {
@@ -86,8 +82,6 @@ async function demo() {
         999,
         'notification count ignores the spoofed query user'
       )
-      // HTPR-5683: a reminder returned onto an archived task must still be
-      // counted, mirroring visibleUserInboxWhere's archive exception.
       assert.deepEqual(
         args.where.AND[0].OR,
         [

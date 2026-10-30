@@ -1,9 +1,3 @@
-// HTPR-5898. A page picked from the @ menu has to survive three hops before it
-// is a working link: the picker builds the mention node's attributes, the
-// comment/description save rewrites the mention span into an <a href>, and the
-// href itself is built from those attributes. Get the id/label pair wrong and
-// buildRichTextMentionHref simply returns null: the chip still renders, just as
-// unlinked text, and nothing throws. These assertions are what fails instead.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -28,10 +22,6 @@ const pageRow = {
   ticketNumber: "HTPR-5898",
 };
 
-// The span the editor serialises for those attrs: `id` -> data-id, `label` ->
-// data-label, and custom attributes render under their own lowercased name.
-// ProseMirror escapes attribute values and text on serialisation, so the input
-// this function builds mirrors what actually reaches the save path.
 const escape = (value: string) =>
   value.replace(/[&<>"]/g, (char) =>
     char === "&" ? "&amp;" : char === "<" ? "&lt;" : char === ">" ? "&gt;" : "&quot;",
@@ -64,17 +54,10 @@ test("a picked page becomes a /page/<publicId> link showing its title", () => {
     rendered.includes(pageRow.name),
     `link text should stay the page title, got: ${rendered}`,
   );
-  // The chip's readable label lives in `text`, and LinkableMention falls back to
-  // the raw publicId without it. normalizeRichTextStructure rebuilds the node as
-  // an anchor from an attribute allow-list, so dropping `text` from that list
-  // would silently turn every posted page mention into a cuid.
   assert.match(rendered, /text="Wireframe: @ mention dropdown with Pages group"/);
 });
 
 test("the mention node still declares the text attribute the chip reads from", () => {
-  // Without it the editor discards mentionAttrsForItem's `text` on insert and
-  // every page chip renders its raw cuid. The allow-list assertion above cannot
-  // see that: it starts from a span that already has the attribute.
   const declared = LinkableMention.config.addAttributes?.call({
     parent: () => ({}),
     name: "mention",

@@ -723,10 +723,6 @@ test("an invited membership is atomically promoted and becomes billable once", a
   assert.deepEqual(result, { created: true, member });
 });
 
-// HTPR-5571: two abandoned 2023 test teams pointed at Stripe items that no longer
-// exist. Every night the reconcile cron threw on them and the error reporter filed
-// a fresh "[auto] Seat billing failed" ticket, 11 of them before anyone noticed.
-// A team Stripe cannot bill and cannot repair is a team to skip, not to page about.
 test("reconciliation skips an item Stripe lost with no replacement", async () => {
   const reports = [];
   const team = activeTeam(6);
@@ -738,8 +734,6 @@ test("reconciliation skips an item Stripe lost with no replacement", async () =>
     retrieveSubscriptionItem: async () => {
       throw invalidItemIdError("si_orphan");
     },
-    // The subscription survives but carries nothing at the active price, so there
-    // is no quantity anywhere left to correct.
     listSubscriptionItems: async () => [],
     repairSubscriptionItemId: async () => {
       throw new Error("nothing to repair to");
@@ -758,7 +752,6 @@ test("reconciliation skips an item Stripe lost with no replacement", async () =>
   assert.deepEqual(reports, []);
 });
 
-// Same shape one level up: the whole subscription is gone, not just the item.
 test("reconciliation skips a team whose subscription Stripe no longer has", async () => {
   const reports = [];
   const team = activeTeam(6);
@@ -791,8 +784,6 @@ test("reconciliation skips a team whose subscription Stripe no longer has", asyn
   assert.deepEqual(reports, []);
 });
 
-// The quiet path must stay narrow. A live item sitting on the wrong plan is real
-// money going to the wrong price, and still has to raise a ticket.
 test("reconciliation still reports a live item that is not on the active plan", async () => {
   const reports = [];
   const team = activeTeam(6);
@@ -821,13 +812,8 @@ test("reconciliation still reports a live item that is not on the active plan", 
   ]);
 });
 
-// HTPR-5621: the two teams that kept refiling hit exactly this Stripe shape, and
-// the retrieve error has to route into the same repair and skip paths as the
-// `resource_missing` wording. These cover the three outcomes downstream of it.
 const invalidItemIdError = (itemId) => {
   const error = new Error(`Invalid subscription_item id: ${itemId}`);
-  // This mirrors Stripe Node's StripeInvalidRequestError. The API error type
-  // stays in `rawType`; the SDK replaces top-level `type` with the class name.
   error.type = "StripeInvalidRequestError";
   error.rawType = "invalid_request_error";
   return error;
@@ -894,8 +880,6 @@ test("a malformed-id retrieve error with nothing to repair to is skipped", async
   assert.deepEqual(reports, []);
 });
 
-// The quiet path stays narrow. A subscription still holding items at another
-// price is real money on the wrong price, so it keeps raising a ticket.
 test("a malformed-id retrieve error with items at another price is still reported", async () => {
   const reports = [];
   const team = activeTeam(6);

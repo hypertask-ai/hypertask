@@ -7,10 +7,8 @@ const { savedViewBoardAccessWhere, matches } = require("./helpers/htpr-7166-fixt
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-section-writes");
 const GROUPS = ["create","update","rename","resetRanks","getAll","getByTaskId","getProjectSections"];
-// Pins group by route so the fixture holds one digest per route.
 const groupOf = key => key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? key;
 const pin = (key, value) => rawPin(groupOf(key), key, value);
-// Route map: shared module per Pages endpoint.
 const sectionRoutes = {
   create: { module: "create" },
   update: { module: "update" },
@@ -129,7 +127,6 @@ async function invoke(fx, name, scenario, target) {
     return result;
   });
 }
-// Runs the Pages adapter, pins response plus effects, then checks the shared Web handler agrees.
 async function run(key, name, scenario, controllerFactory, { skipWeb = false } = {}) {
   const fx = fixture(name, scenario, controllerFactory), expected = await invoke(fx, name, scenario, "current");
   pin(key, { expected, effects: fx.effects });
@@ -252,7 +249,6 @@ for (const [name, label, scenario, options] of [
   const writes = old.effects.filter(([label]) => label === "write-section");
   {
     const gate = old.effects.find(([label]) => label === (name === "update" ? "last-or-access" : "board-access"));
-    // HTPR-7166 requires Accepted human membership and allows teamless owners and active owned-agent delegation.
     assert.deepEqual(gate[1].where, name === "create"
       ? { id: 15, status: "Normal", ...savedViewBoardAccessWhere(985) }
       : name === "update"

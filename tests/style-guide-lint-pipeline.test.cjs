@@ -17,8 +17,6 @@ const rules = [
 ];
 
 function lint(code, filename = "src/components/StyleGuidePipelineProbe.tsx") {
-  // ESLint does not apply bulk suppressions to stdin. Use an isolated fixture
-  // with the production config and baseline instead of changing source files.
   const fixture = mkdtempSync(path.join(root, ".style-lint-test-"));
   try {
     mkdirSync(path.dirname(path.join(fixture, filename)), { recursive: true });

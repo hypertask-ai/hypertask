@@ -6,7 +6,6 @@ export const name = 'neon';
 const counters = ['xact_commit', 'xact_rollback', 'deadlocks', 'conflicts', 'temp_files', 'temp_bytes'];
 
 export async function fetch({ until, env, cursor }) {
-  // Neither native fetch errors nor SQL response bodies are safe to expose.
   try {
     const threshold = Number(env.NEON_SLOW_QUERY_MS ?? 1000);
     const rollbackAlert = Number(env.NEON_ROLLBACK_ALERT ?? 500);
@@ -40,7 +39,6 @@ export async function fetch({ until, env, cursor }) {
     const next = Object.fromEntries(counters.map(field => [field, BigInt(reading[field]).toString()]));
     next.stats_reset = reading.stats_reset == null ? null : new Date(reading.stats_reset).toISOString();
     next.read_at = new Date(reading.read_at).toISOString();
-    // A reset of any counter invalidates the entire baseline, including unalerted counters.
     if (cursor && cursor.stats_reset === next.stats_reset && counters.every(field => /^\d+$/.test(String(cursor[field])) && BigInt(next[field]) >= BigInt(cursor[field]))) {
       for (const field of ['deadlocks', 'conflicts', 'xact_rollback']) {
         const delta = BigInt(next[field]) - BigInt(cursor[field]);

@@ -15,10 +15,6 @@ const { extractTitleAndDescription } = jiti(
   path.join(root, "src/utils/aiWriterUtils.ts")
 );
 
-// The CLI writes these fields onto the task itself. If the markers leaked into
-// the description instead, a CLI-written ticket would show "Priority: High" as
-// body text while the priority field stayed empty - the exact mismatch with the
-// UI's Accept that this extraction exists to prevent.
 test("splits title, priority and size out of the description", () => {
   const html = [
     '<h1 id="ai-generated-task-title">Fix the nightly sync</h1>',
@@ -53,9 +49,6 @@ test("description-only takeover removes the proposed-properties line and hidden 
     const result = extractTitleAndDescription(html);
 
     assert.equal(result.title, "Verify automatic planning draft");
-    // The takeover writes straight into the user's description, so the
-    // proposed-properties preview line must not survive it: nothing applies
-    // those values, and it would read as body text the user never wrote.
     assert.match(result.description, /Verify the automatic planning draft/);
     assert.doesNotMatch(result.description, /Proposed properties|Priority|Size/);
     assert.doesNotMatch(result.description, /ai-generated-task|>1<|>3</);
@@ -74,9 +67,6 @@ test("leaves plain output untouched and reports no properties", () => {
   assert.equal(result.description, html);
 });
 
-// The CLI writes whatever comes back straight onto the task. An index outside the
-// real Priority/Estimate sets would be rejected by the update API and take the
-// whole --apply down with it, so it must not escape the extractor.
 test("drops priority and size indexes outside the real ranges", () => {
   const html = [
     '<h1 id="ai-generated-task-title">Bogus indexes</h1>',
@@ -92,8 +82,6 @@ test("drops priority and size indexes outside the real ranges", () => {
   assert.doesNotMatch(result.description, /ai-generated-task/);
 });
 
-// A model that answers with a whole document would otherwise leave the shell in
-// the description and hide the property lines from the leading-child scan.
 test("unwraps a full HTML document before extracting", () => {
   const html = [
     "<!doctype html><html><head><title>x</title></head><body>",
@@ -111,8 +99,6 @@ test("unwraps a full HTML document before extracting", () => {
   assert.doesNotMatch(result.description, /<body|<html|Priority:/);
 });
 
-// Only leading property lines are chrome. A "Priority:" sentence further down is
-// the user's own content and must survive.
 test("keeps property-looking text that appears inside the body", () => {
   const html = [
     '<h1 id="ai-generated-task-title">Triage rules</h1>',

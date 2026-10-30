@@ -1,11 +1,3 @@
-// HTPR-5047. The board renders columns from the view's stored board_columns_view
-// array, but the order a user drags is written to Section.ranking. When one of
-// those two writes fails they disagree, the stored array wins, and the column
-// snaps back to its old position on reload. getActiveColumnsViewFromProject now
-// orders by the canonical ranking so the divergence cannot reach the screen.
-//
-// This mirrors the ordering step of that helper. It fails if someone restores
-// the stored array as the source of truth for order.
 const test = require("node:test");
 const assert = require("node:assert");
 
@@ -23,9 +15,6 @@ const orderByRanking = (columnsView, sections) => {
   });
 };
 
-// Board 15 as it actually stood when this was reported: the ranking had
-// Valentin Review between Waiting for QA and AI Review, the stored view array
-// had it pinned first, and the board showed the stored array.
 const sections = [
   { id: 4389, title: "Bugs", ranking: "A0290.875496315565158" },
   { id: 4307, title: "Backlog", ranking: "A1289.999300061311487" },

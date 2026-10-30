@@ -20,14 +20,11 @@ export function redact(text, urls) {
         text = text.replaceAll(decodeURIComponent(password), "[PASSWORD]");
       }
     } catch {
-      // Invalid configuration must still be reportable without exposing it.
     }
   }
   return text.replace(/postgres(?:ql)?:\/\/[^\s"'<>]+/gi, "[DATABASE_URL]");
 }
 
-// information_schema (used by Prisma) hides columns from a catalog-only role.
-// Reconstruct only schema in a disposable local DB; never grant board SELECT.
 export async function catalogSchema(client, { includeLegacy = false, log = console.log } = {}) {
   const { rows: relations } = await client.query(`
     SELECT c.oid, c.relname, c.relkind, c.relispartition
@@ -71,9 +68,6 @@ export async function catalogSchema(client, { includeLegacy = false, log = conso
     WHERE n.nspname='public' AND NOT EXISTS
       (SELECT FROM pg_catalog.pg_constraint con WHERE con.conindid=i.indexrelid AND con.contype IN ('p','u','x'))
     ORDER BY i.indexrelid`);
-  // Unused additive legacy objects, absent from both schema.prisma and migration
-  // history; retain their data, but do not mistake them for missing app schema.
-  // Full unfiltered audit: SCHEMA_DRIFT_INCLUDE_LEGACY=1 (see the ticket report).
   const ignoredTable = (name) => !includeLegacy && name === "AI_Knowledge_Source";
   const ignoredColumn = (c) => !includeLegacy && (
     (c.relname === "AiUsage" && c.attname === "cacheReadInputTokens") ||

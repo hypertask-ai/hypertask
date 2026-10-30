@@ -238,7 +238,6 @@ test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty sh
   await assert.rejects(check('search', '<ul id="tasks-list"><li>Ask AI</li></ul>'));
   assert.ok(await check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"><div class="table-view-header">Title</div></div>') > 0);
   await assert.rejects(check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"></div>'));
-  // 2026-10-20: g then b opened board 8778, or 6859 under another session's saved view without task 43.
   assert.ok(await check('page-navigation', '<a href="/detail/project-8778/2">Card</a>', '8778') > 0);
   assert.ok(await check('page-navigation', '<a href="/detail/project-6859/51">Card</a>', '6859') > 0);
   await assert.rejects(check('page-navigation', '<a href="/detail/project-6859/43">Card</a>', '8778'));
@@ -297,7 +296,6 @@ test('phone profile is a real phone: mobile user agent and device scale factor 3
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /shared\.setup\(mobile \? withPhoneProfile\(browser\) : browser, mobile\)/);
   assert.match(source, /Phone layout is \$\{row\.innerWidth\} wide, expected 390/);
-  // Old-profile history must not count as the same conditions in seven-day comparisons.
   const { PHONE_PROFILE_KEY } = await analyst;
   assert.notEqual(PHONE_PROFILE_KEY, 'phone-4g-4x-390x844');
   assert.match(source, /profiles: \['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY\]/);
@@ -317,7 +315,6 @@ test('opened-before waits until the cold ticket code finishes downloading, and g
   }, async () => 0, options);
   assert.deepEqual(result, { settleMs: 2250, pendingScripts: 0 });
 
-  // 2026-10-20 phone: network quiet mid-hydration, then the lazy ticket chunks start once the main thread frees up.
   const hydrating = new Map([['route', { ...chunk, durationMs: 100 }]]);
   let idleCalls = 0;
   const lazy = await settleScripts(hydrating, async ms => {

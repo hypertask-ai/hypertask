@@ -130,9 +130,6 @@ test("archived tasks from other columns never leak into this one", () => {
   );
 });
 
-// A saved view pins the old value until the async write lands, so without a
-// pending value the second of two quick toggles re-sends the first result and
-// the board never returns to where the user started (HTPR-5540 review).
 test("a pending toggle outranks the saved view override until the write lands", () => {
   const project = buildProject({ appliedView: view({ board_show_archived: false }) });
 
@@ -159,8 +156,6 @@ test("with no view override the browser preference still decides", () => {
   assert.equal(resolveShowArchivedForBoard(null, null, true), true);
 });
 
-// A filter-only save from an older bundle never mentions board_show_archived.
-// Coalescing that silence to null used to wipe the pinned choice (HTPR-5540).
 test("an omitted board_show_archived keeps the inherited value", () => {
   assert.equal(resolveShowArchivedRequest({ board_filters: {} }, true), true);
   assert.equal(resolveShowArchivedRequest({ board_filters: {} }, false), false);
@@ -173,8 +168,6 @@ test("an explicit board_show_archived wins over the inherited value", () => {
   assert.equal(resolveShowArchivedRequest({ board_show_archived: null }, true), null);
 });
 
-// The route has no schema validation, so a stray non-boolean must not reach
-// the Prisma boolean column.
 test("a non-boolean board_show_archived is rejected, not forwarded", () => {
   assert.equal(resolveShowArchivedRequest({ board_show_archived: "true" }, true), null);
   assert.equal(resolveShowArchivedRequest({ board_show_archived: 1 }, false), null);

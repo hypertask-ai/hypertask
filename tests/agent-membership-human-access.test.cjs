@@ -53,7 +53,6 @@ function harness(viewerId = userId) {
       calls.push(["comments-sql"]);
       const query = Prisma.sql(strings, ...values);
       if (query.text.includes("WITH authorized_task AS")) {
-        // Execute the production authorization CTE, not a reimplementation of its predicate.
         const prefix = query.text.split(",\n    task_row AS")[0];
         const count = Math.max(...[...prefix.matchAll(/\$(\d+)/g)].map(match => Number(match[1])));
         const result = await sql.query(`${prefix} SELECT id FROM authorized_task`, query.values.slice(0, count));

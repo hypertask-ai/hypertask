@@ -1,6 +1,3 @@
-// HTPR-5115/HTPR-5116: AI chat mirrors the MCP project_admin route directly. This repo
-// has no database-backed node:test harness, so these assertions guard the tool
-// registration, archive confirmation, authorization split, and invite dispatch.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

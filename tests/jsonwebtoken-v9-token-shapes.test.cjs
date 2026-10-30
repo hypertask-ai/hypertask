@@ -1,9 +1,3 @@
-// HTPR-6519: jsonwebtoken 8.5.1 -> 9.0.3. 8.5.1 carries the advisories fixed in
-// 9.0.0, and every session, MCP token, OAuth credential, calendar feed URL and
-// email login link in this app is an HMAC JWT minted by this one library. The
-// upgrade needed no call-site change, which is exactly why it needs a test: the
-// next `npm install` must not quietly resolve 8.x again, and the token shapes
-// production already handed out must keep verifying.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -34,8 +28,6 @@ const VERIFICATION_AUDIENCE = sourceConstant(
   "const JWT_VERIFICATION_AUDIENCE",
 );
 
-// One entry per kind of token this app actually hands out, with the sign
-// options copied from the route that mints it.
 const TOKEN_SHAPES = [
   {
     name: "MCP token (createMcpToken, 30 day default)",
@@ -84,8 +76,6 @@ test("the installed jsonwebtoken is 9.x, and nothing pulls 8.x back in", () => {
     `package.json asks for jsonwebtoken "${declared}"; a range that still admits 8.x defeats the upgrade.`,
   );
 
-  // firebase-admin used to vendor its own nested copy, so "the top-level
-  // version is fine" was never the whole answer.
   const lock = require(path.join(root, "package-lock.json"));
   const stale = Object.entries(lock.packages || {})
     .filter(([name, meta]) => /(^|\/)jsonwebtoken$/.test(name) && String(meta.version).startsWith("8."))
@@ -106,16 +96,11 @@ for (const shape of TOKEN_SHAPES) {
     }
     assert.equal(decoded.iss, shape.options.issuer);
     assert.equal(decoded.aud, shape.options.audience);
-    // A managed agent token is deliberately non-expiring; every other shape
-    // must carry an exp or it never goes stale.
     assert.equal("exp" in decoded, shape.options.expiresIn !== undefined);
   });
 }
 
 test("the audience-free fallback in validateJwtToken still accepts an issuer list", () => {
-  // src/lib/mcp/auth.ts falls back to verifying against a list of issuers with
-  // no audience check at all. If 9.x had tightened that, every older token in
-  // the wild would have stopped working on deploy.
   const token = jwt.sign({ jti: "fallback" }, SECRET, {
     issuer: ISSUER,
     audience: MCP_AUDIENCE,

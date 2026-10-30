@@ -36,8 +36,6 @@ test("resolves and strips a known skill token", async () => {
   const result = await resolveSkills("/foo do the thing", { userId: 7 }, lookup);
   assert.equal(result.cleanedText, "do the thing");
   assert.deepEqual(result.skills, [foo]);
-  // The body is fenced and flagged as untrusted data so it cannot override the
-  // system rules or tool-use policy (the chat agent holds write tools).
   assert.match(result.systemPromptAddition, /<skill name="Foo reviewer">/);
   assert.match(result.systemPromptAddition, /Review this as Foo\./);
   assert.match(result.systemPromptAddition, /user-supplied data/i);

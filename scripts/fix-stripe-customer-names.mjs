@@ -1,7 +1,3 @@
-// HTPR-6862: repair Stripe customer names that had "undefined" or an id glued on.
-// Dry run by default; pass --apply to write. Needs STRIPE_SECRET_KEY in the env.
-// HTPR-6864: --fill-blank names blank customers after the team (or owner email)
-// that uses them, read from the app database (needs DATABASE_URL).
 import Stripe from "stripe";
 import pg from "pg";
 import fs from "node:fs";
@@ -34,7 +30,6 @@ async function appNamesFor(customerIds) {
       [customerIds]
     );
     for (const row of owners.rows) if (readable(row.name)) names.set(row.id, readable(row.name));
-    // A team title wins over an owner email.
     const teams = await db.query(
       `SELECT stripe_customer_id AS id, title AS name FROM "Team" WHERE stripe_customer_id = ANY($1)`,
       [customerIds]
@@ -46,8 +41,6 @@ async function appNamesFor(customerIds) {
   }
 }
 
-// HTPR-6869: --list-blank <file> writes every customer with no readable name to
-// <file> (read only), for review and then --fill-blank <file>.
 if (process.argv.includes("--list-blank")) {
   const file = process.argv[process.argv.indexOf("--list-blank") + 1];
   if (!file || file.startsWith("--")) {
@@ -64,8 +57,6 @@ if (process.argv.includes("--list-blank")) {
 }
 
 if (process.argv.includes("--fill-blank")) {
-  // Only customers listed in the manifest the repair wrote when it blanked them
-  // (--apply below), so a name cleared by anything else is never refilled.
   const manifestPath = process.argv[process.argv.indexOf("--fill-blank") + 1];
   if (!manifestPath || manifestPath.startsWith("--")) {
     console.error("Usage: --fill-blank <journal .txt written by the repair run> [--apply]");
@@ -89,8 +80,6 @@ for await (const customer of stripe.customers.list({ limit: 100 })) {
   const next = repairedName(customer.name, customer.email);
   if (next === null) continue;
   fixed++;
-  // Journal each customer before blanking it, so a run that fails halfway
-  // still leaves the list --fill-blank needs.
   if (apply && next === "") fs.appendFileSync(journal, `${customer.id}\n`);
   if (apply) await stripe.customers.update(customer.id, { name: next });
 }

@@ -42,7 +42,6 @@ function isClientResponse(expression) {
     if (message && ts.isCallExpression(message) && message.expression.getText() === "requestErrorMessage") return true;
   } else if (ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "json") {
     const guard = expression.parent.parent.parent;
-    // Missing SDK output is an expected empty-question result, not an incident.
     if (ts.isIfStatement(guard) && guard.thenStatement === expression.parent.parent &&
       expression.arguments[0]?.getText().replace(/\s+/g, "") === "{questions:[]}" &&
       guard.expression.getText().replace(/\s+/g, "") ===
@@ -64,11 +63,9 @@ function isClientResponse(expression) {
   }
   if (status && ts.isNumericLiteral(status)) {
     if (Number(status.text) >= 400 && Number(status.text) < 500) return true;
-    // Board memory deliberately returns Retry-After while another refresh owns its lock.
     return status.text === "503" &&
       expression.parent.parent.parent.getText().startsWith("if (error instanceof BoardMemoryBusyError)");
   }
-  // generate-board only converts typed request errors; the test checks their statuses.
   return status?.getText() === "error.status" &&
     expression.parent.parent.parent.getText().startsWith("if (error instanceof BoardGenerationRequestError)");
 }
@@ -95,7 +92,6 @@ function reportsHandledError(block) {
       ? statement.expression.expression
       : statement.expression;
     if (!ts.isCallExpression(call)) return false;
-    // Existing chat reporter already delegates to reportError with source: handled.
     if (call.expression.getText() === "reportHandledChatError") return true;
     return call.expression.getText() === "reportError" &&
       (call.arguments.length === 1 || (call.getSourceFile().fileName.endsWith("/task-writer/route.ts") && call.arguments.length === 2 && call.arguments[1].getText() === "error")) &&

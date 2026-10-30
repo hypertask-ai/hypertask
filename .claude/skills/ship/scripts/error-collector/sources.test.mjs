@@ -39,7 +39,6 @@ function fakeCommand(name, source) {
   writeFileSync(join(home, 'bin', name), `#!${process.execPath}\n${source}`, { mode: 0o700 });
 }
 
-// The guard deliberately fails on unmocked requests, including regression runs.
 globalThis.fetch = async () => { throw new Error('NETWORK FORBIDDEN'); };
 
 test('default sources are explicit and fixture stays opt-in', async () => {
@@ -193,7 +192,6 @@ test('every h1 group replays through core: REAL/INFRA pending, noise stays noise
     assert.equal(matched.length > 0, group.classification === 'NOISE', `research group ${group.id}`);
     if (group.classification === 'NOISE') noiseCount += group.count;
   }
-  // This classification replay spans a full day; keep all groups inside its filing window.
   await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0', ERROR_COLLECTOR_STALE_HOURS: '24' }, now: Date.parse(until), sources: [{ name: 'research', fetch: async () => groups }] });
   const state = JSON.parse(readFileSync(join(root, 'state.json')));
   const expected = [...new Set(groups.filter(group => group.classification !== 'NOISE').map(group => fingerprint(group.service, group.message, group.route)))].sort();
@@ -210,7 +208,6 @@ test('every h1 group replays through core: REAL/INFRA pending, noise stays noise
   assert.deepEqual(Object.keys(state.pending).filter(fp => state.pending[fp].noiseRule).sort(), expectedAlerts);
   assert.equal(Object.values(state.days).reduce((sum, day) => sum + day.vercel.errors, 0), groups.filter(group => group.classification !== 'NOISE').reduce((sum, group) => sum + group.count, 0));
   assert.equal(Object.values(state.days).reduce((sum, day) => sum + day.vercel.noise, 0), noiseCount);
-  // Positive control ensures the noise assertion rejects a real error.
   assert.ok(!rules.some(rule => new RegExp(rule.match, 'i').test('guest cleanup failed Foreign key constraint violated')));
 });
 
@@ -260,7 +257,6 @@ test('R3: PostHog production filter excludes preview and development before aggr
   const sql = calls[0].body.query.query;
   const production = "(properties.ht_environment = 'production' OR (properties.ht_environment IS NULL AND properties.$current_url LIKE 'https://app.hypertask.ai/%'))";
   assert.ok(sql.includes('AND ' + production));
-  // Independent evaluation of the exact pipeline predicate, including explicit preview on a production URL.
   const samples = [['production', '', true], ['preview', 'https://app.hypertask.ai/x', false], ['development', '', false], [null, 'https://app.hypertask.ai/x', true], [null, 'https://preview.invalid/x', false]];
   for (const [environment, url, expected] of samples) assert.equal(environment === 'production' || (environment === null && url.startsWith('https://app.hypertask.ai/')), expected);
 });
@@ -468,7 +464,6 @@ test('Neon first reading is a baseline; exact bigint deltas and rollback thresho
   counters.rows[0].xact_rollback = '101';
   neonHTTP({ slow: { rows: [] }, counters });
   assert.equal((await neon.fetch({ ...context, cursor: first.cursor, env: { ...env, NEON_ROLLBACK_ALERT: '0' } })).events.at(-1).count, 1);
-  // Precision is retained even when the cumulative value is above Number.MAX_SAFE_INTEGER.
   const huge = { ...first.cursor, deadlocks: '9007199254740993' };
   counters.rows[0].deadlocks = '9007199254740994';
   neonHTTP({ slow: { rows: [] }, counters });
@@ -513,7 +508,6 @@ test('YPER4-360: realtime reads production warning/error logs, pages and dedupes
   assert.equal(events[0].ts, realtimeFixture.page.events[0].timestamp);
   assert.match(events[0].stack, /^at trigger/);
   assert.equal(fingerprint('realtime', events[0].message), fingerprint('realtime', events[1].message));
-  // Error-level copies belong only to realtime, never both runtime sources.
   assert.deepEqual(vercel.parseEvents([realtimeFixture.page.events[1]]), []);
   mockHTTP([[200, realtimeFixture.empty]]);
   assert.deepEqual(await realtime.fetch(context), []);

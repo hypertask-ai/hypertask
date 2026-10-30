@@ -107,7 +107,6 @@ test("real board query trims unused team and billing columns without changing en
     subscriptionId: true,
     subscriptionStatus: true,
   });
-  // Entitlement recovery scans older rows when the active pointer is stale.
   assert.equal(team.subscriptionPlan.take, undefined);
   assert.equal(team.subscriptionPlan.where, undefined);
   assert.deepEqual(team.subscriptionPlan.orderBy, { subscriptionStaretdAt: "desc" });

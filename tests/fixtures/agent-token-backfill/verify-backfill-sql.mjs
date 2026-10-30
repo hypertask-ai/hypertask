@@ -1,5 +1,3 @@
-// HTPR-4671 gate 1: the migration's jti and sha256 extraction reproduces exactly
-// what Node computes, on a real Postgres, across every base64url padding class.
 import assert from "node:assert/strict";
 import { ensurePostgres, psql, sampleTokens, loadTokens } from "./lib.mjs";
 
@@ -39,7 +37,6 @@ for (const row of rows) {
   assert.equal(actual.hash, row.hash, `hash mismatch at row ${row.i}`);
 }
 
-// Positive control: a deliberately corrupted expectation must fail this oracle.
 assert.throws(() => assert.equal(got.get(0).jti, rows[0].jti + "x"));
 
 console.log(`${rows.length} tokens, padding classes ${[...pads].sort()}, jti and sha256 match Node exactly`);

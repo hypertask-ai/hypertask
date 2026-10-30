@@ -18,11 +18,6 @@ const javascript = ts.transpileModule(source, {
 }).outputText;
 
 function loadMessageLinksModule() {
-  // Same load mechanism as the repo's other colocated-TS tests (see
-  // tests/accounts.test.cjs): run the transpiled output in this realm via
-  // `new Function`, not a vm sandbox, so the arrays it returns are ordinary
-  // Arrays as far as assert.deepEqual is concerned. messageLinks.ts has no
-  // imports of its own, so no mock require is needed.
   const messageLinksModule = { exports: {} };
   new Function("module", "exports", "require", javascript)(
     messageLinksModule,

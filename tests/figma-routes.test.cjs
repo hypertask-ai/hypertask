@@ -117,16 +117,12 @@ test("OAuth start with no Figma keys names the reason on screen and in the log",
     const location = new URL(response.headers.get("location"));
     assert.equal(location.pathname, figmaPaths.FIGMA_SETTINGS_PATH);
     assert.equal(location.searchParams.get("figma_error"), "not_configured");
-    // The bounce back to settings is invisible on its own, so the code has to
-    // resolve to a message that says retrying cannot work.
     assert.match(
       figmaPaths.figmaConnectErrorMessage(
         location.searchParams.get("figma_error"),
       ),
       /not set up on this server yet/,
     );
-    // The log has to name the variable that is missing, not just the failure,
-    // so whoever reads it knows which one to set.
     assert.equal(logged.length, 1);
     assert.match(logged[0], /FIGMA_CLIENT_ID/);
     assert.doesNotMatch(logged[0], /FIGMA_CLIENT_SECRET/);
@@ -146,8 +142,6 @@ test("unknown Figma error codes keep the generic retry message", () => {
     figmaPaths.figmaConnectErrorMessage(null),
     figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,
   );
-  // The code arrives from the query string, so a prototype key has to come
-  // back as the plain message and not as something React cannot render.
   assert.equal(
     figmaPaths.figmaConnectErrorMessage("__proto__"),
     figmaPaths.FIGMA_CONNECT_GENERIC_ERROR,

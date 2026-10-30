@@ -105,8 +105,6 @@ test("rapid description preference toggles preserve the latest value and persist
     ),
     { ToggleSwitch: () => null },
   );
-  // HTPR-6177 gates the toggle. Keep it on for the queue assertions below, then
-  // flip it off at the end to prove the control disappears.
   stubModule(path.join(root, "src/hooks/useFlag.tsx"), {
     useFlag: () => autoTaskDescriptionsEnabled,
   });
@@ -169,7 +167,6 @@ test("rapid description preference toggles preserve the latest value and persist
     ]);
     assert.equal(cachedPreferences.autoDescriptionSuggestions, true);
 
-    // HTPR-6177: with the flag off the control is not rendered at all.
     autoTaskDescriptionsEnabled = false;
     preferenceToggle = undefined;
     const gated = renderToStaticMarkup(

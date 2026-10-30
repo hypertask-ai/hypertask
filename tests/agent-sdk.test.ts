@@ -2815,7 +2815,6 @@ test("the memory scheduler dispatches once per delivery and retries a failure", 
     }),
     "enqueued",
   );
-  // A redelivery of the same webhook must not start a second dispatch.
   assert.equal(
     await scheduler.enqueue({
       deliveryId: "delivery-1",
@@ -2859,7 +2858,6 @@ test("a throwing error reporter cannot take the memory scheduler down", async ()
       throw new Error("permanent");
     },
   });
-  // An unhandled rejection here would kill the host process on Node 15+.
   await scheduler.idle();
 
   let ran = false;
@@ -2881,8 +2879,6 @@ test("the memory scheduler stays open once its dedupe map is full", async () => 
 
   assert.equal(await accept("old"), "enqueued");
   assert.equal(await accept("newer"), "enqueued");
-  // A full map must evict rather than refuse; refusing would fail every
-  // webhook until the retention window aged out.
   assert.equal(await accept("newest"), "enqueued");
   assert.equal(await accept("newest"), "duplicate");
   assert.equal(await accept("old"), "enqueued");
@@ -2903,8 +2899,6 @@ test("the memory scheduler frees a delivery that exhausted its retries", async (
   await scheduler.idle();
   assert.deepEqual(errors, ["delivery-2"]);
 
-  // Given up on, so a later Hypertask redelivery gets a real attempt rather
-  // than a duplicate answer that silently drops the work.
   let retried = false;
   assert.equal(
     await scheduler.enqueue({
@@ -2925,7 +2919,6 @@ test("the README hello world runs the code it tells a new developer to copy", as
     new URL("../packages/agent-sdk/README.md", import.meta.url),
     "utf8",
   );
-  // Every identifier the quickstart snippet uses must be one it also imports.
   assert.match(readme, /import \{ createAgent, MemoryDeliveryScheduler \}/);
   assert.match(readme, /scheduler: new MemoryDeliveryScheduler\(\)/);
   assert.doesNotMatch(readme, /publicly available on npm/);
@@ -2946,8 +2939,6 @@ test("the README hello world runs the code it tells a new developer to copy", as
     replied = true;
   });
 
-  // No BackgroundContext: the scheduler passed to createAgent is the only one,
-  // exactly as in the README.
   assert.equal((await agent.handler(webhookRequest(payload()))).status, 202);
   await scheduler.idle();
   assert.equal(replied, true);

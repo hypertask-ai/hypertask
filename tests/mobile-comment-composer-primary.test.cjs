@@ -1,11 +1,3 @@
-// The mobile comment composer has one right-bound primary slot. Dictation owns
-// it while empty, then Send owns it as soon as text exists. The same mounted mic
-// becomes a ghost immediately left of Send so recording state is never lost.
-//
-// The mic must MOVE BY `order`, never by conditional re-parenting: rendering it
-// under a different parent unmounts it and throws away an in-flight
-// MediaRecorder (#2666), so a dictation started before the first word would die
-// as soon as transcription inserted text.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
@@ -101,8 +93,6 @@ test("the mic loses its fill as soon as there is text", () => {
 });
 
 test("the mic is never re-parented between states", () => {
-  // Exactly one AudioButton in the create-comment branch. Two would mean the
-  // element is conditionally rendered in two places, which is the remount bug.
   const commentBranch = composer.slice(
     composer.indexOf('{mode === "create-comment" ? ('),
     composer.indexOf("<DesktopAttachment\n            mode={"),
@@ -112,10 +102,6 @@ test("the mic is never re-parented between states", () => {
 });
 
 test("transcribing keeps the mic in the primary slot", () => {
-  // Streamed transcript populates the editor before onProcessingChange(false),
-  // so hasText is true while the spinner is still up. Send is gated behind
-  // !audioProcessing, so demoting the mic here would leave the primary slot
-  // empty and slide the spinner into the middle of the row.
   const cls = mobileCommentMicWrapperClass({ hasText: true, isProcessing: true });
   assert.match(cls, /ml-auto/);
   assert.equal(cls.includes("order-3"), false);
@@ -135,9 +121,6 @@ test("the comment AI action uses the purple PencilSparkles icon", () => {
 });
 
 test("every child of the flattened row carries an order", () => {
-  // A flat flex row sorts unordered children as order 0, ahead of everything.
-  // Description and existing-comment editing share this row, so their Save
-  // button needs the trailing slot explicitly.
   const row = composer.slice(
     composer.indexOf('<div className="attachment-button p-0 flex flex-row'),
     composer.indexOf('_mbl && mode === "create-task-modal"'),

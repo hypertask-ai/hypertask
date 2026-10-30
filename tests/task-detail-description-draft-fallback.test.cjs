@@ -25,9 +25,6 @@ test("task detail ignores empty description drafts when choosing displayed conte
 });
 
 test("task detail starts loading its always-mounted description editor right after hydration", () => {
-  // HTPR-6047 put the editor in the route graph so it never waterfalls; HTPR-7091
-  // keeps that promise (the slot imports it as soon as it mounts, and again on any
-  // edit intent) while the static description paints first.
   const body = read(
     "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
   );

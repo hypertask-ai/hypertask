@@ -29,8 +29,6 @@ function loadModule(relativePath, stubs) {
   return loaded.exports;
 }
 
-// No network or realtime: exercise the real hooks, toast, API wrappers, and
-// React Query caches against an isolated task store.
 test("archive Undo restores Todo after detail unmounts despite a warm archived board snapshot", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", {
     url: "https://app.hypertask.ai/project?id=6646",
@@ -119,8 +117,6 @@ test("archive Undo restores Todo after detail unmounts despite a warm archived b
     assert.equal(document.getElementById("todo").textContent, task.title);
     await React.act(async () => {
       await archive(task.sectionId, task.projectId, task.id, "Archive", undefined, { undoRedirectPath: `/detail/project-${project.id}/1` });
-      // The archive event/poll completes before Undo. This is a fresh, empty
-      // side cache, not an expired snapshot that a normal refetch would repair.
       await queryClient.fetchQuery({ queryKey: homepage.BOARD_TASKS_KEY(project.id, user.id), queryFn: () => homepage.fetchBoardTasks(project.id, user.id), staleTime: 0 });
       render(false);
     });

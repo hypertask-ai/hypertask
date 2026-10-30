@@ -4,7 +4,6 @@ const path = require('node:path');
 const { test: nodeTest } = require('node:test');
 const { Worker } = require('node:worker_threads');
 const test = (name, check) => nodeTest(name, { timeout: 30_000 }, check);
-// A separate thread can stop synchronous loops and leaked handles even under plain node.
 const watchdog = new Worker(`
   setTimeout(() => {
     require('node:fs').writeSync(2, 'compose-task-palette exceeded its 120 second deadline\\n');
@@ -17,8 +16,6 @@ const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
 const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
-// Own disk cache: other tests write classic-JSX builds of the same files to the shared jiti cache,
-// which fail here with "React is not defined" (YPER4-279).
 const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
@@ -109,8 +106,6 @@ async function withPalette(t, config, check) {
       jiti(path.join(root, 'src/lib/taskDetailReads.ts')).refreshTaskDetailReadAfterWrite(queryClient, 985, args[1], args[0]);
       cacheUpdates.push(args);
     } }) });
-    // Exercise the real greeting/board resolution, but defer the network workflow
-    // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
     source('src/lib/createTaskAttachmentUploads.ts', { discardUnboundCreateTaskUploads() {} });
     source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', {});
@@ -138,7 +133,6 @@ async function withPalette(t, config, check) {
       shells.push(props);
       return React.createElement('section', { 'data-shell': true, className: props.contentClassName }, props.aboveSlot, children, props.bottomSlot);
     };
-    // Keep the real common input/footer and replace only the portal shell.
     const common = jiti(path.join(root, 'src/components/Common/CommonModalComponents/index.tsx'));
     source('src/components/Common/CommonModalComponents/index.tsx', { ...common, ModalContainerCustom: shell });
     source('src/components/Modals/Sheets/index.ts', { MobileBottomSheet: shell });
@@ -180,8 +174,6 @@ async function withPalette(t, config, check) {
     const baseline = async (directory) => {
       const current = document.getElementById('root').innerHTML;
       await React.act(async () => reactRoot.unmount());
-      // Relative imports in the archived palette need the same controlled
-      // dependencies as the current palette, not the archive's real app shell.
       for (const [filename, module] of Object.entries(require.cache)) {
         if (filename.startsWith(`${root}/src/`) && !cached.has(filename)) {
           stub(path.join(directory, path.relative(root, filename)), module.exports);
@@ -207,7 +199,6 @@ async function withPalette(t, config, check) {
       if (reactRoot) await React.act(async () => reactRoot.unmount());
     } finally {
       queryClient.clear();
-      // Source modules capture per-test stubs; keep compiled dependencies cached.
       for (const key of Object.keys(require.cache)) if (!cached.has(key) && (stubbed.has(key) || !key.includes(`${path.sep}node_modules${path.sep}`))) delete require.cache[key];
       for (const [key, value] of cached) require.cache[key] = value;
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
@@ -771,8 +762,6 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
         await press('Escape');
         assert.equal(values.get('showCommandsAtom').show, false);
         assert.deepEqual(closes, [], 'dismissing either tab leaves the original form open');
-        // Remove the form listener and reopen independently. A cancelled
-        // handoff must not close the old form after unrelated creation.
         await mountProbe(() => null);
         await press('j', { ctrlKey: true }, document.body);
         await type('An unrelated task');
@@ -899,8 +888,6 @@ test('same-task fill preserves an assignee selected while the writer response is
 });
 
 test('board quick-add same-task fill updates the mounted header, description editor and properties, with either flag off unchanged', async (t) => {
-  // Quick-add cards have no description_ payload, so instant open falls back
-  // to the regular detail provider, which does not subscribe to the query cache.
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description: '' };
   for (const enabled of [false, true]) for (const newWindow of [false, true]) {
     await withPalette(t, { enabled, newWindow, headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
@@ -925,7 +912,6 @@ test('board quick-add same-task fill updates the mounted header, description edi
       const { useTaskDetailEditorFocus } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorFocus.tsx'));
       const syncs = [];
       const EditorStub = (props) => {
-        // Keep a separate mounted editor document and exercise its real idle sync hook.
         const [html, setHtml] = React.useState(props.defaultContent ?? '');
         const htmlRef = React.useRef(html);
         htmlRef.current = html;
@@ -942,7 +928,6 @@ test('board quick-add same-task fill updates the mounted header, description edi
         return React.createElement('div', { id: 'description-input', dangerouslySetInnerHTML: { __html: html } });
       };
       source('src/components/RTE/TipTapTaskDetail.tsx', { default: EditorStub });
-      // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
       source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionEditorSlot.tsx', { default: EditorStub });
       const Body = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx')).default;
       let labels = [];

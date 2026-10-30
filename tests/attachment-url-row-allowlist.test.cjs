@@ -1,7 +1,3 @@
-// IUrl is the transport shape the editor posts. It carries fields the Url model
-// does not have, because the attachment row consumes them. Spreading it into a
-// Prisma write throws "Unknown argument" and silently breaks attachment sync on
-// comment edits, so every URL write must go through the allowlist.
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const test = require('node:test')
@@ -14,7 +10,6 @@ const jiti = require('jiti')(__filename, {
 })
 const { urlRowData } = jiti(path.join(root, 'src/lib/attachments/urlRowData.ts'))
 
-// Every column on the Prisma Url model, id aside.
 const URL_COLUMNS = ['urlString', 'title', 'commentId', 'TaskId', 'Attachment']
 
 const transportPayload = {
@@ -23,7 +18,6 @@ const transportPayload = {
   commentId: 77,
   TaskId: 42,
   Attachment: true,
-  // None of these are Url columns.
   attachmentType: 'application/pdf',
   fileSize: 204800,
   projectId: 15,
@@ -59,8 +53,6 @@ test('overrides win so a new comment row is linked to the comment being saved', 
 })
 
 test('a null commentId override is honoured rather than falling back to the payload', () => {
-  // Description URLs are stored with no comment. Treating null as "unset" would
-  // reattach them to whatever comment the payload happened to carry.
   assert.equal(urlRowData(transportPayload, { commentId: null }).commentId, null)
 })
 
@@ -69,8 +61,6 @@ test('a missing url string becomes empty rather than undefined', () => {
 })
 
 test('an omitted Attachment stays undefined so an update never clears the flag', () => {
-  // Prisma treats undefined as "leave this column alone". Coercing it to false
-  // would un-mark an existing attachment row on every comment edit.
   assert.equal(urlRowData({ urlString: 'x', TaskId: 42 }).Attachment, undefined)
 })
 
@@ -85,8 +75,6 @@ test('a supplied Attachment is normalised to a real boolean', () => {
 })
 
 test('both URL write sites in the comment path go through the allowlist', () => {
-  // A future edit that spreads the raw transport object again would reintroduce
-  // the unknown-argument failure, and no unit test of this helper would notice.
   const source = require('node:fs').readFileSync(
     path.join(root, 'src/utils/controllers/urls/addIntoTask.ts'),
     'utf8'
@@ -98,9 +86,6 @@ test('both URL write sites in the comment path go through the allowlist', () => 
 })
 
 test('the description URL writes go through the allowlist too', () => {
-  // The description controller has its own create paths. Without this guard a
-  // raw spread there would reintroduce the unknown-argument failure while every
-  // test of addIntoTask.ts still passed.
   const source = require('node:fs').readFileSync(
     path.join(root, 'src/utils/controllers/urls/addIntoTaskDesc.ts'),
     'utf8'

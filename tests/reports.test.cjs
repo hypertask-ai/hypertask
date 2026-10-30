@@ -75,8 +75,6 @@ if (typeof DOMParser !== "undefined") {
 
 test("reserved built-in slugs are rejected", () => {
   for (const reserved of RESERVED_REPORT_SLUGS) {
-    // The static /report/project-N/velocity route shadows [reportSlug], so a
-    // report saved under that slug could never render at its own URL.
     assert.throws(
       () => validateSlug(reserved),
       (error) =>

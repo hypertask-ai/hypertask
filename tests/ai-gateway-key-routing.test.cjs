@@ -5,7 +5,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const ai = require("ai");
-// Constructor checks inspect routing config, which the production wrapper hides.
 require.cache[require.resolve("ai")].exports = {
   ...ai,
   wrapLanguageModel: (options) => Object.assign(ai.wrapLanguageModel(options), {

@@ -97,7 +97,7 @@ async function startServer(root, env, log) {
         const response = await fetch(`${env.BASE_URL}/login`, { signal: AbortSignal.timeout(2000) });
         const searchResponse = await fetch(`${env.TURBOPUFFER_BASE_URL}/health`, { signal: AbortSignal.timeout(2000) });
         if (response.ok && searchResponse.ok) return stop;
-      } catch { /* The next readiness probe is bounded by the loop. */ }
+      } catch {  }
       await delay(2000);
     }
     throw new Error("Local app did not become ready at /login");

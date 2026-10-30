@@ -10,12 +10,6 @@ const stubModule = (relativePath, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 
-/**
- * Load deliverBoardWebhook against a fake database.
- *
- * `reclaimed` simulates a sweep taking the lease away while the POST is in
- * flight: the fenced delivery update then matches zero rows.
- */
 const load = ({ reclaimed, ok = true }) => {
   const writes = [];
   const prisma = {
@@ -26,7 +20,6 @@ const load = ({ reclaimed, ok = true }) => {
         return { count: reclaimed ? 0 : 1 };
       },
       findFirst: async ({ where }) => {
-        // The re-read must carry the lease token, not just the id.
         assert.ok(
           where.processingAt instanceof Date,
           "delivery re-read must revalidate the lease",
@@ -92,9 +85,6 @@ const load = ({ reclaimed, ok = true }) => {
   };
 };
 
-// Subscription health is what an integrator reads to decide whether their
-// endpoint is working. A worker whose lease was reclaimed no longer knows the
-// outcome of the attempt that owns the row, so it must not report one.
 test("a reclaimed worker does not write subscription health", async () => {
   const success = load({ reclaimed: true, ok: true });
   await success.module.deliverBoardWebhook("d1");

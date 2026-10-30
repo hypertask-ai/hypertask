@@ -11,9 +11,7 @@ const changed = [...new Set([
   ...git(["diff", "--name-only", "-z", "--diff-filter=ACMR", base, "--"]).split("\0"),
   ...git(["ls-files", "--others", "--exclude-standard", "-z"]).split("\0"),
 ].filter(Boolean))];
-// Include deleted config files: those can also change lint outside the PR.
 const configurationChanges = [...changed, ...git(["diff", "--name-only", "-z", base, "--"]).split("\0")];
-// Config, rules and dependency changes can affect files outside the PR.
 const full = configurationChanges.some(file => /^(eslint[^/]*\.[^/]+|\.eslint[^/]*|eslint-local-rules\/|package(?:-lock)?\.json$|tsconfig[^/]*\.json$)/.test(file));
 const files = full ? ["."] : changed.filter(file => /\.(?:[cm]?[jt]s|[jt]sx)$/.test(file));
 if (!files.length) {

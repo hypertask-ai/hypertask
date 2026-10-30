@@ -1,14 +1,8 @@
 import type { APIRequestContext } from '@playwright/test'
 import { createProject, deleteTask, fetchBoardTasks, fetchBootstrapWithTeams, getProjectMembers } from './api'
 
-// The owner's approval (HTPR-6636) covers writes ONLY on a private board
-// named exactly this, owned by the test account, with no other members.
-// Never rename this without updating the ticket approval.
 export const QA_RUNNER_BOARD_TITLE = 'QA runner board'
 
-// Every task this suite creates carries this prefix so the cleanup sweep
-// can find and remove leftovers without touching anything a human put on
-// the board by mistake.
 export const QA_TASK_PREFIX = '[qa-runner]'
 
 export class BoardNotOwnedSolelyError extends Error {}
@@ -21,12 +15,8 @@ export type QaRunnerBoard = {
   sectionTitle: string
 }
 
-// Find "QA runner board" for the logged-in account, creating it if it
-// doesn't exist yet. Refuses (throws) if the board has any member besides
-// the account itself, the owner's approval doesn't cover a shared board.
 export async function ensureQaRunnerBoard(request: APIRequestContext): Promise<QaRunnerBoard> {
   const bootstrap = await fetchBootstrapWithTeams(request)
-  // The user slice can time out too; accountId is always present.
   const userId = bootstrap.slices.user?.ok ? bootstrap.slices.user.data.id : bootstrap.accountId
   if (!userId) throw new Error('bootstrap did not return a logged-in user, is the session valid?')
 
@@ -43,8 +33,6 @@ export async function ensureQaRunnerBoard(request: APIRequestContext): Promise<Q
   }
 
   if (!projectId) {
-    // src/utils/controllers/projects/create.ts 400s without a non-null
-    // googleAccountId on the team, pick the first team that has one.
     const team = teams.find((t) => t.googleAccountId != null)
     if (!team) {
       throw new Error(
@@ -69,15 +57,9 @@ export async function ensureQaRunnerBoard(request: APIRequestContext): Promise<Q
   const section = project.section?.[0]
   if (!section) throw new Error(`"${QA_RUNNER_BOARD_TITLE}" (project ${projectId}) has no sections to create tasks in`)
 
-  // /project?id=N is the board's own URL. /detail/project-N (no ticket
-  // number) is only a server redirect to it (src/app/detail/[...slug]/page.tsx),
-  // which costs a second page load and drops the ?realtime=on param.
   return { userId, projectId, boardPath: `/project?id=${projectId}`, sectionId: section.id, sectionTitle: section.section_title }
 }
 
-// Deletes any [qa-runner] task on the board older than an hour, a
-// best-effort sweep for leftovers from a run that crashed before its own
-// afterEach cleanup ran. Never touches a task without the prefix.
 export async function sweepStaleQaTasks(request: APIRequestContext, projectId: number): Promise<number> {
   const { tasks } = await fetchBoardTasks(request, projectId)
   const oneHourAgo = Date.now() - 60 * 60 * 1000

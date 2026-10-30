@@ -269,16 +269,12 @@ test("notification delivery is idempotent after an insert/acknowledgement crash"
   };
 
   assert.equal(await deliverAgentMessageNotification(args), "created");
-  // Simulates a retry after the process died before acknowledging delivery.
   assert.equal(await deliverAgentMessageNotification(args), "existing");
   assert.equal(creates, 1);
   assert.equal(decodeAgentMessage(storedMessage), "<p>Finished.</p>");
 });
 
 test("a spent team allowance notifies the owner once a month, not once a tick", async () => {
-  // The cron retries this agent every tick until the allowance resets, so the
-  // notice id must collapse every one of those attempts onto a single inbox
-  // item, while still allowing a fresh notice next month.
   const august = heartbeatAllowanceNoticeId("agent-1", "2026-08");
   const september = heartbeatAllowanceNoticeId("agent-1", "2026-09");
   const otherAgent = heartbeatAllowanceNoticeId("agent-2", "2026-08");
@@ -286,8 +282,6 @@ test("a spent team allowance notifies the owner once a month, not once a tick", 
   assert.equal(heartbeatAllowanceNoticeId("agent-1", "2026-08"), august);
   assert.notEqual(august, september);
   assert.notEqual(august, otherAgent);
-  // decodeAgentMessage slices the marker at a fixed 36 characters, so a
-  // non-UUID id would leak the raw envelope into the inbox row.
   assert.match(
     august,
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
@@ -325,8 +319,6 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
   const frame = (event, data) =>
     `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 
-  // The engine's own period rides along, so the notice is deduplicated against
-  // the month that actually rejected rather than any local clock.
   assert.deepEqual(
     streamStoppedOnSpentAllowance(
       frame("error", {
@@ -337,8 +329,6 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
     ),
     { periodKey: "2026-09", teamId: null },
   );
-  // A stop streamed by a deployment without the field still registers, and the
-  // caller falls back to its claim period.
   assert.deepEqual(
     streamStoppedOnSpentAllowance(
       frame("error", { content: SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE }),
@@ -346,9 +336,6 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
     { periodKey: null, teamId: null },
   );
 
-  // An inbox item can ask the agent to explain why it stopped, so the model can
-  // stream this sentence verbatim as ordinary content. Treating that as a real
-  // stop would forge a "your agent is paused" notice while it works fine.
   assert.equal(
     streamStoppedOnSpentAllowance(
       frame("content", { content: SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE }) +
@@ -357,7 +344,6 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
     null,
   );
 
-  // Content is JSON-escaped, so a model cannot forge the event line above it.
   assert.equal(
     streamStoppedOnSpentAllowance(
       frame("content", {
@@ -367,7 +353,6 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
     null,
   );
 
-  // Any other failure is a normal retry, not an allowance stop.
   assert.equal(
     streamStoppedOnSpentAllowance(
       frame("error", { content: "Sorry, something went wrong." }),
@@ -382,10 +367,6 @@ test("only a real allowance stop counts, not an agent quoting one", () => {
 });
 
 test("the allowance notice is keyed to the month that actually rejected", () => {
-  // A turn can be claimed before UTC rollover and rejected after it. Keying the
-  // notice off either local clock then picks the wrong month, which both
-  // duplicates the notice and consumes an id the other month still needs. The
-  // engine's own period is the only key that survives the boundary.
   const claimedAt = new Date("2026-08-31T23:59:59.000Z");
   assert.equal(aiAllowancePeriod(claimedAt).key, "2026-08");
 
@@ -400,13 +381,10 @@ test("the allowance notice is keyed to the month that actually rejected", () => 
   );
 
   const heartbeat = read("src/app/api/cron/native-agent-heartbeat/route.ts");
-  // The engine's period wins; the claim period is only the legacy fallback.
   assert.match(
     heartbeat,
     /allowanceStop\.periodKey \?\? aiAllowancePeriod\(claimedAt\)\.key/,
   );
-  // A courtesy notice must never cost the turn: if delivery throws, the claim
-  // restore below it still has to run.
   assert.match(heartbeat, /\)\.catch\(\(error\) => \{/);
   const noticeIndex = heartbeat.indexOf("streamStoppedOnSpentAllowance(streamBody)");
   const restoreIndex = heartbeat.indexOf("safe stream failure restored for retry");
@@ -417,15 +395,10 @@ test("the allowance error carries the period it was rejected against", () => {
   const allowance = read("src/app/api/ai/_lib/sharedAllowance.ts");
   const stream = read("src/app/api/ai/chat/stream/route.ts");
 
-  // Without this the cron has nothing authoritative to deduplicate on.
   assert.match(allowance, /new SharedAiAllowanceExceededError\(month\.key\)/);
   assert.match(allowance, /readonly periodKey: string;/);
   assert.match(stream, /allowancePeriod: periodKey,/);
-  // The charged team rides with it, so a stop can be attributed to exactly
-  // one team instead of guessed from the agent's board memberships.
   assert.match(stream, /allowanceTeamId: teamId/);
-  // Both streamed error exits must carry it, or the stop that happens to take
-  // the other path silently loses its period.
   assert.equal(
     (
       stream.match(/\.\.\.userFacingErrorDetails\(error, gatewayTags\.teamId \?\? null\)/g) ?? []
@@ -436,16 +409,12 @@ test("the allowance error carries the period it was rejected against", () => {
 
 test("agent chat turns bill the team under the agent's own name", () => {
   const stream = read("src/app/api/ai/chat/stream/route.ts");
-  // Main generation and its empty-completion retry share the configured
-  // traced model. The separate title model receives its own usage context.
   const reply = read("src/lib/ai/chatStream/modelReply.ts");
   assert.match(reply, /configureAiModelUsage\(state\.selected\.model, \{[\s\S]*?agentId: actingAgent\?\.id \?\? null,/);
   assert.match(reply, /streamText\(\{\s*model: state\.selected\.model,/);
   assert.match(reply, /generateText\(\{\s*model: state\.selected\.model,/);
   assert.match(stream, /generateConversationTitle\([\s\S]*?agentId: actingAgent\?\.id \?\? null,/);
   assert.match(read("src/lib/ai/chatStream/title.ts"), /configureAiModelUsage\(model, \{\s*\.\.\.usageContext,/);
-  // The title call receives its attribution through usageContext, so the type
-  // has to carry the field or the value is silently dropped.
   assert.match(read("src/app/api/ai/chat/stream/route.ts"), /agentId\?: string \| null;/);
 });
 

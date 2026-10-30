@@ -17,8 +17,6 @@ const javascript = ts.transpileModule(source, {
   },
 }).outputText;
 
-// isGuestBoardBuild decides whether what a user types in the AI chat builds a
-// board or starts a chat, so a wrong `true` hijacks somebody's message.
 function loadModule({ isGuest, innerWidth }) {
   const previousWindow = global.window;
   global.window = { innerWidth };
@@ -74,8 +72,6 @@ test("a board that already has tasks chats instead of rebuilding", (t) => {
 test("an unhydrated board never counts as empty", (t) => {
   const mod = loadModule({ isGuest: true, innerWidth: 1440 });
   t.after(mod.restore);
-  // `tasks` is only an array once the board payload has loaded; treating the
-  // undefined state as empty would build a board over the user's real one.
   assert.equal(mod.isGuestBoardBuild({}), false);
   assert.equal(mod.isGuestBoardBuild(null), false);
 });

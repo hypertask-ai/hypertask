@@ -1,16 +1,8 @@
-// HTPR-5563: an agent moving a task via /mcp/tasks/update failed with
-// "Failed to update 1 task(s). [object Object]". The update route performs the
-// section change through an internal HTTP request to /api/tasks/moveTask, and
-// the one-shot lease adoption granted at the outer request boundary lives in
-// AsyncLocalStorage, which a new request cannot see. Unless the outer request
-// materializes a real lease row first, the internal request fences itself out.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-// One registry for both modules: a second jiti instance would give the fence a
-// different AsyncLocalStorage instance from the adoption boundary.
 const jiti = require('jiti')(
   path.join(root, 'tests/agent-lease-adoption-internal-jiti-entry.cjs'),
   { interopDefault: true, alias: { '@': path.join(root, 'src') } }
@@ -25,7 +17,6 @@ const { withAgentMutationLeaseAdoption } = loadTs(
   'src/lib/mcp/tasks/agentMutationLeaseAdoption.ts'
 );
 
-// A tx that persists an adopted lease, so a later transaction sees it.
 function leaseStoreTx(store) {
   return {
     $executeRaw: async () => 1,
@@ -70,7 +61,6 @@ test('a lease adopted in the request survives into a later internal request', as
 
   assert.ok(store.lease, 'adoption must write a real lease row, not just a grant');
 
-  // The internal /api/tasks/moveTask request runs outside the adoption storage.
   await assertAgentAssignmentChangeAllowed(leaseStoreTx(store), 42, 'agent-a', 7);
 });
 

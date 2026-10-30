@@ -49,7 +49,6 @@ function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSel
   return getCommands({ context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory, isKanban: false } });
 }
 
-// Run the real search hook with inert React/state dependencies.
 function searchCommands(commandGroups, query) {
   let result;
   const js = ts.transpileModule(read("src/hooks/MultiPages/HTC/useHTC.tsx"), {

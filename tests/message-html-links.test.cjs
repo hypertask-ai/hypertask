@@ -1,7 +1,3 @@
-// Behavioral coverage for src/utils/helperFunctions/messageHtmlLinks.ts, the
-// module Agent Chat's reply rendering (HTPR-6038) and AI Chat's MessageItem
-// both now share for table-scroll wrapping and internal-link/task-mention
-// click interception.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -22,8 +18,6 @@ const javascript = ts.transpileModule(source, {
 }).outputText;
 
 function loadModule() {
-  // `MouseEvent` is imported type-only, so it's erased by transpileModule
-  // and no mock require is needed here (same as tests/message-links.test.cjs).
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(
     mod,
@@ -35,8 +29,6 @@ function loadModule() {
 
 const { wrapTablesInMessageHtml, interceptMessageLinkClick } = loadModule();
 
-// interceptMessageLinkClick resolves hrefs against window.location.origin
-// (a browser global); stub the minimum it reads/writes for a Node test run.
 global.window = { location: { origin: "http://localhost", href: "" } };
 
 test("wrapTablesInMessageHtml wraps a top-level table in a scroll container", () => {
@@ -106,7 +98,6 @@ test("interceptMessageLinkClick calls the optional onNavigate hook only on a rou
     () => navigated++,
   );
   assert.equal(navigated, 1);
-  // A plain click (no anchor/mention target) never fires it.
   interceptMessageLinkClick(fakeEvent({ tagName: "SPAN", getAttribute: () => null }), router, () => navigated++);
   assert.equal(navigated, 1);
 });

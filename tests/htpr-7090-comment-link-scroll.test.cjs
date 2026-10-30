@@ -29,7 +29,6 @@ const config = (() => {
   return exports.default;
 })();
 
-// Renders the hook like React would: refs persist, effects re-run when deps change.
 function createHarness(flagOn, element = null) {
   const refs = [];
   const frames = [];
@@ -93,7 +92,6 @@ test("a direct load scrolls to the linked comment once the comments arrive", () 
   const staleScroll = (...args) => calls.push(["stale", ...args]);
   harness.render({ ...makeContext([{ id: "1" }, { id: "270430" }], calls), scrollVirtualize: staleScroll });
   assert.equal(harness.timers.length, 3, "three passes re-assert the scroll while rows measure in");
-  // A later render brings a fresh scrollVirtualize; the timers must call that one.
   harness.render(makeContext([{ id: "1" }, { id: "270430" }], calls));
   assert.equal(harness.timers.length, 3, "re-rendering with the same comments does not reschedule");
   for (const timer of harness.timers) timer.callback();

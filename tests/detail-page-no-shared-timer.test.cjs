@@ -1,6 +1,3 @@
-// HTPR-7231: console.time labels are process-wide. The ticket page labelled its
-// timer with the ticket slug, so two requests for the same ticket ended each
-// other's timer and Vercel logged "No such label ... for console.timeEnd()".
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

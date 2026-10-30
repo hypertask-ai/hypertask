@@ -10,7 +10,6 @@ const jiti = require('jiti')(__filename, {
 })
 const { parseSortOrderParam, findParamWithNulByte, findIdParamOutOfRange } = jiti(path.join(root, 'src/lib/mcp/listParams.ts'))
 
-// HTPR-7344: sort_order=DESC reached Prisma unchecked and the task list answered 500.
 test('sort_order accepts asc and desc in any case', () => {
   assert.equal(parseSortOrderParam('desc', 'desc'), 'desc')
   assert.equal(parseSortOrderParam('asc', 'desc'), 'asc')
@@ -29,7 +28,6 @@ test('unknown sort_order values are rejected', () => {
   assert.equal(parseSortOrderParam('ascending', 'desc'), null)
 })
 
-// HTPR-7344: Postgres refuses NUL bytes in text, so search=%00 answered 500.
 test('a NUL byte in any value or key is found and named', () => {
   assert.equal(findParamWithNulByte(new URLSearchParams('project_id=15&search=%00')), 'search')
   assert.equal(findParamWithNulByte(new URLSearchParams('section=Bu%00gs')), 'section')

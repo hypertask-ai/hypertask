@@ -56,7 +56,6 @@ test("typed mobile comments hand the inverted primary slot to Send", () => {
   assert.match(send[1], /text-white-black-inverted/);
   assert.doesNotMatch(send[1], /bg-hypertasks-ai-purple/);
 
-  // And the mic renders before Send in the row rather than after it.
   assert.match(
     attachments,
     /<AudioButton[\s\S]*?id=\{mode \+ "-audio-button"\}[\s\S]*?<SaveButtonMobile/,

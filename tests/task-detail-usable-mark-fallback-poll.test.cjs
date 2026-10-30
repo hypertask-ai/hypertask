@@ -4,13 +4,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-// HTPR-6047: the readiness effect's rAF+MutationObserver path can silently
-// lose its scheduled check across a tab freeze/resume (backgrounding,
-// sleep/wake, OS-level suspension) - reproduced live via CDP
-// Page.setWebLifecycleState. A plain setInterval poll keeps firing across
-// that gap and catches usability even when the primary path drops its
-// pending check, so the mark - and the app_task_detail_readiness event -
-// still fires instead of hitting the 30s usable_state_timeout.
 const source = readRefactoredSource(
   path.join(__dirname, "../src/app/detail/[...slug]/TaskDetailComp.tsx"),
   "utf8",

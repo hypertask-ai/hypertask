@@ -1,12 +1,3 @@
-// HTPR-5201. Saving a view moved the keyboard focus to the last card of the
-// active column instead of leaving it on the card the user was on.
-//
-// Two things caused it. The board's "restore focus after a modal closes" effect
-// did not know about the save-view modal, so closing it left DOM focus on
-// <body>. And horizontal navigation then read the focused row number off
-// whatever element happened to hold focus; from <body> that produced a junk
-// index, and moveFocusToSection's "column is shorter than that row" fallback
-// selects the LAST item in the column.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
@@ -17,7 +8,6 @@ import { resolveFocusedCardIndex } from "../src/utils/helperFunctions/Kanban/col
 const read = (relativePath: string) =>
   readFileSync(path.join(process.cwd(), relativePath), "utf8");
 
-// What moveFocusToSection does with the row number it is handed.
 const pickItem = (items: string[], itemIndex: number | undefined) => {
   if (items.length === 0) return null;
   if (items.length < (itemIndex as number) + 1) return items[items.length - 1];
@@ -75,8 +65,6 @@ test("no resolved row navigates to the top of the column, never the bottom", () 
     indexInParent: 5,
   });
   assert.equal(pickItem(column, strayIndex), "first");
-  // The old behaviour, kept here so the regression is visible: a junk row
-  // number longer than the column selected its last card.
   assert.equal(pickItem(column, 5), "second");
 });
 

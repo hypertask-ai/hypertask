@@ -13,8 +13,6 @@ let sql;
 let now;
 let transactionTail = Promise.resolve();
 
-// Real isolated Postgres semantics, with the database clock controlled so a
-// full recovery window and backoff can be tested without sleeping.
 async function query(client, strings, ...values) {
   let text = strings.reduce((result, part, index) => result + (index ? `$${index}` : "") + part, "");
   text = text.replaceAll("clock_timestamp()", `'${now.toISOString()}'::timestamptz`);
@@ -76,7 +74,6 @@ test("strict thresholds require 20 requests and use nearest-rank rolling p95", a
   for (let index = 0; index < 19; index++) await sample(200, 20_000);
   assert.equal((await rows("AiChatAlertIncident")).length, 0);
   await sample(500, 20_001);
-  // Exactly 5% errors and p95 exactly 20s do not breach.
   assert.equal((await rows("AiChatAlertIncident")).length, 0);
   await sample(200, 20_001);
   const incident = (await rows("AiChatAlertIncident"))[0];
@@ -177,8 +174,6 @@ for (const kind of ["error_rate", "latency"]) {
       assert.equal(initial.healthySince.toISOString(), now.toISOString());
       await deliverNext();
 
-      // At minute 15 the older successes expire, leaving 3 bad out of 22.
-      // At minute 16 everything expires, hiding that intervening breach.
       advance(16 * 60_000);
       await store.evaluateAlerts(db, "production", recordSample ? { statusCode: 200, latencyMs: 1000 } : undefined);
       let incident = (await rows("AiChatAlertIncident"))[0];

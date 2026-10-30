@@ -1,6 +1,3 @@
-// HTPR-4856: project validation is awaited after the board page has begun
-// streaming. Redirecting an unauthorized user from there serialises the
-// redirect as a flight error, so the existing unauthorized UI must render inline.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

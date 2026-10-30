@@ -8,7 +8,6 @@ for (const source of ['task', 'description', 'comment']) {
   for (const canvas of [false, true]) {
     test(`soft unlink secondary ${source} image ${canvas ? 'canvas' : 'html'}: page reader still allowed / unrelated paste refused`, async () => {
       const h = harness({ userId: 3 });
-      // The page origin is T1; the image belongs to secondary T2 on a private board.
       h.state.tasks[1].projectId = 2;
       h.state.projects[2].ownerId = 4;
       const key = 'tasks/attachments/secondary.png';
@@ -34,7 +33,6 @@ for (const source of ['task', 'description', 'comment']) {
       assert.equal(await images.getAccessibleAttachmentKey(url, 1), key);
       assert.equal(await images.getAccessibleAttachmentKey(url, 4), null);
       assert.equal(await images.getAccessibleAttachmentKey(url, 2), key);
-      // Without any historical association, even the same page/content cannot grant access.
       h.state.links = h.state.links.filter((row) => row.taskId !== 11);
       assert.equal(await images.getAccessibleAttachmentKey(url, 1), null);
     });

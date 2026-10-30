@@ -1,8 +1,3 @@
-// HTPR-5937. "Show in all views" / "Hide in all views" in the column editor.
-//
-// Column order and new-column visibility already follow the board (HTPR-5047,
-// HTPR-5527). What was missing was switching one existing column on or off
-// across every saved view at once, instead of opening each view and toggling.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -45,7 +40,6 @@ test("showing a column a view never had appends it", () => {
       [991, true],
     ],
   );
-  // Neither the caller's array nor the objects inside it are touched.
   assert.deepEqual(columns, [
     { id: 1, section_title: "Todo", visibility: true },
     { id: 2, section_title: "Done", visibility: true },
@@ -60,7 +54,6 @@ test("showing a column the view hid flips it back on and adds nothing", () => {
   const updated = applyColumnVisibility(columns, qa, true);
   assert.equal(updated.length, 2);
   assert.equal(updated[1].visibility, true);
-  // The stored entry the caller passed in is left as it was.
   assert.equal(columns[1].visibility, false);
 });
 
@@ -73,14 +66,10 @@ test("hiding a column keeps its entry so rename and reorder still find it", () =
   assert.equal(updated.length, 2);
   assert.equal(updated[1].visibility, false);
   assert.equal(updated[1].ranking, "A1650");
-  // Sibling columns are untouched: a view that deliberately hides something
-  // else keeps hiding it.
   assert.equal(updated[0].visibility, true);
 });
 
 test("a legacy entry keyed as sectionId is flipped, never duplicated", () => {
-  // Older stored rows key the column as sectionId. Appending a second entry for
-  // the same column would write a duplicate into every view's JSON document.
   const columns = [{ sectionId: 991, section_title: "QA", visibility: false }];
   const shown = applyColumnVisibility(columns, qa, true);
   assert.equal(shown.length, 1);
@@ -94,8 +83,6 @@ test("hiding a column a view never had changes nothing", () => {
   const columns = [{ id: 1, section_title: "Todo", visibility: true }];
   const before = structuredClone(columns);
   assert.deepEqual(applyColumnVisibility(columns, qa, false), before);
-  // Compared against the snapshot, not against itself: an implementation that
-  // mutated in place and returned the same reference would pass that.
   assert.deepEqual(columns, before);
 });
 
@@ -104,12 +91,10 @@ test("a column with no entry counts as hidden, matching how the board reads it",
   assert.equal(isColumnVisibleInView([{ id: 991, visibility: false }], 991), false);
   assert.equal(isColumnVisibleInView([{ id: 991, visibility: true }], 991), true);
   assert.equal(isColumnVisibleInView(undefined, 991), false);
-  // Legacy view rows key the column as sectionId.
   assert.equal(isColumnVisibleInView([{ sectionId: 991, visibility: true }], 991), true);
 });
 
 test("the ticket's acceptance case: one action, every view of the board", () => {
-  // A board with three saved views. One of them deliberately hides Todo.
   const board = [
     { id: "default", columns: [{ id: 1, section_title: "Todo", visibility: true }] },
     {
@@ -133,7 +118,6 @@ test("the ticket's acceptance case: one action, every view of the board", () => 
     [true, true, true],
     "Show in all views reaches a view that never had the column",
   );
-  // The view that hides Todo keeps hiding Todo.
   assert.equal(isColumnVisibleInView(shown[1].columns, 1), false);
   assert.equal(isColumnVisibleInView(shown[0].columns, 1), true);
 
@@ -155,7 +139,6 @@ test("the count covers saved views only, never the live unsaved working copy", (
         { id: "default", board_columns_view: [{ id: 991, visibility: true }] },
         { id: "bugs", board_columns_view: [{ id: 991, visibility: false }] },
         { id: "triage", board_columns_view: [{ id: 1, visibility: true }] },
-        // The user's in-flight overlay is a working copy, not a saved view.
         { id: "unsaved", board_columns_view: [{ id: 991, visibility: true }] },
       ],
       user_project_views: [{ unsavedView: { id: "unsaved" } }],
@@ -259,8 +242,6 @@ test("every board_columns_view write is locked and read inside its transaction",
       .map((needle) => helpers.indexOf(needle, start + 1))
       .filter((at) => at !== -1);
     const text = helpers.slice(start, ends.length ? Math.min(...ends) : undefined);
-    // A truncated slice would make every doesNotMatch below pass on a stub, so
-    // the slice must reach the function's own closing brace.
     assert.ok(
       text.includes("\n}") && text.length > 100,
       `${name} slice looks truncated: ${text.length} chars`,
@@ -268,13 +249,8 @@ test("every board_columns_view write is locked and read inside its transaction",
     return text;
   };
 
-  // One writer, so a rename and a visibility switch on the same board cannot
-  // each read a stale copy of the same JSON document and overwrite each other.
   const writer = slice("async function updateBoardViewColumns");
   assert.match(writer, /prisma\.\$transaction\(async \(tx\)/);
-  // On the transaction client: the same query on the base client would take
-  // the lock on another connection and release it immediately, which is the
-  // lost update this test is named after.
   assert.match(writer, /tx\.\$queryRaw[\s\S]*FOR UPDATE OF v/);
   assert.match(writer, /await tx\.view\.findMany/);
   assert.match(writer, /await tx\.view\.update/);
@@ -290,8 +266,6 @@ test("every board_columns_view write is locked and read inside its transaction",
     assert.doesNotMatch(helper, /prisma\.view\./, `${name} must not read or write views directly`);
   }
 
-  // Other people's in-flight working copies are private; only the caller's own
-  // is swept along so the action is visible without switching views.
   const visibility = slice("export async function setSectionVisibilityInAllViews");
   assert.match(visibility, /unsaved_User_Project_View: \{ none: \{\} \}/);
   assert.match(visibility, /unsaved_User_Project_View: \{ some: \{ userId: actingUserId \} \}/);

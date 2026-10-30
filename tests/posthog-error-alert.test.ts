@@ -124,8 +124,6 @@ test("rejects stale events and non-commit releases", () => {
 });
 
 test("redacts multiline secrets with no key marker after the first line", () => {
-  // The markers are assembled at runtime so this source file never contains a
-  // contiguous PEM header for gitleaks to flag.
   const begin = ["-----BEGIN", "PRIVATE KEY-----"].join(" ");
   const end = ["-----END", "PRIVATE KEY-----"].join(" ");
   const pem = [

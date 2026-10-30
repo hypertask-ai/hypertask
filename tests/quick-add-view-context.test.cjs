@@ -183,7 +183,6 @@ test("sentinel values never reach the create API and do not resolve me placehold
   assert.equal(onlySentinels.posts[0].url, "/api/tasks/create");
   assert.deepEqual(onlySentinels.posts[0].body.assignees, []);
   assert.equal(Object.hasOwn(onlySentinels.posts[0].body, "tags"), false);
-  // AssignedToMe passes the actual currentUser object, and the condition only compares IDs.
   const me = { id: 6, uid: "human-6", displayName: "Me" };
   const assignedToMe = await create({ activeFilters: filters({ Assignees: [me] }) });
   assert.deepEqual(assignedToMe.posts[0].body.assignees, [me]);

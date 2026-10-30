@@ -72,7 +72,6 @@ const { useAiChatModelPreference } = jiti(
 const { aiModelOptions, getAiModelOptionById } = jiti(
   path.join(root, "src/lib/aiModelOptions.ts"),
 );
-// The pre-fix chat called this hook without a team or billing override.
 const { useAiModelPreference } = jiti(
   path.join(root, "src/hooks/General/useAiModelPreference.ts"),
 );
@@ -130,7 +129,6 @@ async function withChat(run) {
       reactRoot.render(React.createElement(QueryClientProvider, { client },
         React.createElement(Harness)));
     });
-    // React Query batches asynchronous query results onto its notification timer.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 30));
     });

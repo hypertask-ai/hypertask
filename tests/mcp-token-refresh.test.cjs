@@ -105,7 +105,6 @@ test('a superseded agent token returns agent_token_superseded', async () => {
   const storedToken = signedAgentToken('stored-jti')
   const deps = dependencies({
     authContext: null,
-    // HTPR-4671: the row keeps the credential's generation, not the token.
     agent: { revokedAt: null, mcpTokenJti: 'stored-jti' },
   })
 

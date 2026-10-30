@@ -1,7 +1,4 @@
 const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
-// HTPR-6005 QA regressions: unsent composer text used to vanish when the user
-// switched agents or reloaded, the mobile "Agent details" sheet trapped
-// neither focus nor Escape, and a message showed no time until hovered.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -10,8 +7,6 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const chat = readAgentChatSource();
 
-// The helper is plain TypeScript with no imports, so stripping the type
-// annotations is enough to exercise the real logic here.
 function loadDrafts(store) {
   const src = fs
     .readFileSync(path.join(root, "src/lib/agents/chatDrafts.ts"), "utf8")
@@ -19,7 +14,6 @@ function loadDrafts(store) {
     .replace(/: (string|number|void|Storage \| null)\b/g, "")
     .replace(/\bwindow\b/g, "fakeWindow");
   const fakeWindow = store === null ? undefined : { localStorage: store };
-  // eslint-disable-next-line no-new-func
   return new Function(
     "fakeWindow",
     `${src}; return { readDraft, writeDraft };`,
@@ -43,9 +37,7 @@ test("a draft survives a round trip and is scoped to one user and one agent", ()
   writeDraft(6, "agent-a", "half typed question");
   assert.equal(readDraft(6, "agent-a"), "half typed question");
 
-  // Switching agents must never surface another agent's unsent text...
   assert.equal(readDraft(6, "agent-b"), "");
-  // ...and a second account on the same browser must never see it either.
   assert.equal(readDraft(7, "agent-a"), "");
 });
 
@@ -85,8 +77,6 @@ test("switching agents saves the outgoing draft before restoring the incoming on
     chat.indexOf("const selectAgent = useCallback("),
     chat.indexOf("const agentParam = searchParams?."),
   );
-  // The outgoing id has to be read before selectedIdRef is reassigned, or the
-  // draft is filed under the agent being switched to.
   const leavingAt = selectAgent.indexOf("const leaving = selectedIdRef.current");
   const reassignAt = selectAgent.indexOf("selectedIdRef.current = agent.id");
   assert.ok(leavingAt > -1 && reassignAt > leavingAt);
@@ -100,8 +90,6 @@ test("switching agents saves the outgoing draft before restoring the incoming on
   );
   assert.match(selectAgent, /setDraft\(restored\)/);
   assert.doesNotMatch(selectAgent, /setDraft\(""\)/);
-  // The same callback is the reload path (the ?agent= effect calls it), so it
-  // must not be re-created on every keystroke by depending on `draft`.
   assert.match(selectAgent, /\[router, openAgentSession, isMbl, currentUser\.id, embedded\?\.projectId\]/);
 });
 
@@ -112,13 +100,9 @@ test("the mobile details sheet is a native modal dialog, so Escape and focus wor
   );
   assert.match(sheet, /<dialog/);
   assert.match(sheet, /el\.showModal\(\)/);
-  // close() is what fires onClose, which restores focus to the trigger and
-  // syncs the open state back; unmounting the element instead would skip it.
   assert.match(sheet, /onClose=\{\(\) => setDetailsSheetOpen\(false\)\}/);
   assert.match(sheet, /detailsDialogRef\.current\?\.close\(\)/);
   assert.match(sheet, /aria-label="Agent details"/);
-  // The UA stylesheet centres and borders a dialog; without these it renders
-  // as a small framed box instead of a full-height right-edge sheet.
   assert.match(sheet, /max-h-none/);
   assert.match(sheet, /max-w-none/);
   assert.match(sheet, /border-0/);
@@ -141,9 +125,6 @@ test("every message shows its time, and one still in flight says so", () => {
 });
 
 test("the draft mirror ref is set synchronously, so two fast switches cannot cross", () => {
-  // selectAgent saves draftRef.current for the agent being left. If that ref
-  // only ever caught up in a passive effect, holding Ctrl+Tab would write one
-  // agent's text under another's key.
   const selectAgent = chat.slice(
     chat.indexOf("const selectAgent = useCallback("),
     chat.indexOf("const agentParam = searchParams?."),
@@ -157,9 +138,6 @@ test("the draft mirror ref is set synchronously, so two fast switches cannot cro
 });
 
 test("a restored draft does not disable the agent-cycle shortcut", () => {
-  // The guard exists to protect text the user is typing. Drafts now survive a
-  // switch, so text that was merely restored on selection must not latch the
-  // shortcut off for as long as it sits in the composer.
   const selectAgent = chat.slice(
     chat.indexOf("const selectAgent = useCallback("),
     chat.indexOf("const agentParam = searchParams?."),

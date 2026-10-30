@@ -8,8 +8,6 @@ const routeSource = fs.readFileSync(
   "utf8"
 );
 
-// A draft is unpublished private text. Listing them by task alone handed every
-// board member someone else's half-written comment (HTPR-4946).
 test("listing drafts is scoped to the calling user", () => {
   const listQuery = routeSource.slice(routeSource.indexOf("prisma.drafts.findMany"));
   const where = listQuery.slice(listQuery.indexOf("where:"), listQuery.indexOf("include:"));
@@ -17,8 +15,6 @@ test("listing drafts is scoped to the calling user", () => {
   assert.match(where, /userId: user\.id/);
 });
 
-// The other three routes refuse to act on a draft the caller does not own.
-// If any of those checks disappears, the list scope above is not enough.
 test("update, delete and publish still refuse another user's draft", () => {
   const draftIdRoute = fs.readFileSync(
     path.join(__dirname, "..", "src/lib/mcp/operations/drafts/[draft_id]/operation.ts"),

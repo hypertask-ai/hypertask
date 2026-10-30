@@ -3,11 +3,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-// HTPR-5954: the Prisma driver adapter must keep the client's connection to
-// the Neon pooler open past node-postgres's 10s default, so a low-traffic
-// instance doesn't re-pay a TLS/auth handshake on every request. Source
-// pattern check -- constructing a real pg.Pool against production Neon isn't
-// practical in a unit test.
 test("HTPR-5954: prisma.ts configures a 5-minute idle timeout and keepAlive on the pg pool", () => {
   const source = fs.readFileSync(
     path.join(__dirname, "..", "src/lib/prisma.ts"),

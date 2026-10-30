@@ -560,7 +560,6 @@ for (const backend of ["fake", "real Redis"]) {
       await plan(); assert.equal(await settingsUsed(), decisions().at(-1).billed);
       assert.equal(await settingsUsed(), 100_000);
       await redis.del(BILLED);
-      // Fail only the bounded billed fetch, not the pre-existing Settings display reports.
       reportHook = (_url, options) => { if (options.signal) throw new Error("fixture bounded report failure"); };
       await plan(); assert.equal(decisions().at(-1).mode, "v1");
       assert.equal(await settingsUsed(), decisions().at(-1).billed); assert.equal(await settingsUsed(), 900_000);
@@ -621,7 +620,6 @@ for (const backend of ["fake", "real Redis"]) {
     test("T10/V8: disconnect continues inference with hold; explicit stop before doStream resolves releases immediately and once", { timeout: 5000 }, async () => {
       let source;
       const result = await middleware().wrapStream({ params: params(), model: {}, doStream: async () => ({ stream: new ReadableStream({ start(controller) { source = controller; } }) }) });
-      // runStream keeps consuming the provider after the client send path disconnects.
       const reader = result.stream.getReader();
       source.enqueue({ type: "text-delta", delta: "fixture" }); await reader.read();
       assert.equal((await redis.zrange(`${PREFIX}:reservations`, 0, -1)).length, 1);

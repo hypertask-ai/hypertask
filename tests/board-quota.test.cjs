@@ -1,8 +1,3 @@
-// HTPR-4894: the free tier allows 3 owned boards. The cap has to hold for the
-// board the user is ABOUT to create, so the predicate compares with >=, not >:
-// at 3 owned boards the next create is the one that must fail. A paid (or comped)
-// plan lifts it entirely — a regression here silently bills nobody but locks
-// paying teams out of their own workspace.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

@@ -14,7 +14,6 @@ const composeFlag = 'htpr-6929-compose-task-writer';
 const searchFlag = 'htpr-7547-search-lazy-closed';
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
-// Mount Inbox's actual loader, focus effects, proxy and command boundary without its unrelated notification providers.
 function inboxCommandHost() {
   const filename = 'src/app/inbox/Inbox.tsx';
   const source = read(filename);

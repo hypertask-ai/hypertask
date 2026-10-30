@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
 
-// HTPR-7164: creating a board must not attach it to a team the caller does not belong to.
 const teams = [
   { id: "own", googleAccountId: "acct-own", ownerUserId: 6, members: [] },
   { id: "joined", googleAccountId: "acct-joined", ownerUserId: 7, members: [{ userId: 6, status: "Accepted" }] },

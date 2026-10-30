@@ -1,5 +1,3 @@
-// HTPR-7163: setting, clearing or changing a task's priority or estimate needs
-// write access to that task's board.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -11,8 +9,6 @@ const { load } = require('./task-route-loader.cjs');
 
 const WRITE_ACCESS = { writeAccessFor: 7 };
 
-// Task 10 is on the user's board; task 20 is on another team's board. Both
-// already have a priority and an estimate.
 function loadSetter(file, field) {
   const writes = [];
   const accessArgs = [];
@@ -30,7 +26,6 @@ function loadSetter(file, field) {
         if (!task || where.project !== WRITE_ACCESS || task.projectId !== 1) return null;
         return { ...task, [field]: existing };
       },
-      // The old code looked tasks up without any access check.
       findUnique: async ({ where }) => (tasks[where.id] ? { ...tasks[where.id], [field]: existing } : null),
     },
     agent: { findUnique: async () => null },

@@ -224,7 +224,6 @@ test('all REST handlers adopt the shared failure boundary or are constant 404/no
   const walk = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => entry.isDirectory() ? walk(path.join(dir, entry.name)) : [path.join(dir, entry.name)])
   for (const file of walk(path.join(root, 'src/app/api/mcp')).filter((file) => file.endsWith('route.ts'))) {
     const source = fs.readFileSync(file, 'utf8')
-    // Reporting endpoints must not report their own failures through AI feedback.
     if (file.includes('/feedback/') || file.includes('/cli-error/') || file.includes('/factory/')) continue
     if (source.includes('wrapMcpRoute')) continue
     const match = source.match(/from ['"](@\/lib\/mcp\/operations\/[^'"]+)['"]/) ?? source.match(/export \{ [^}]+ \} from ['"](@\/lib\/mcp\/[^'"]+)['"]/)
@@ -363,7 +362,6 @@ test('automatic reports drop credential-shaped fields, retain safe fields and st
 
 test('MCP input schema documents free-text non-storage and the optional category contract', async () => {
   const result = await (await mcpHandler(rpcRequest('tools/list'))).json()
-  // Full schema is exposed by discovery even when the initial catalog is deferred.
   const described = await (await mcpHandler(rpcRequest('tools/call', { name: 'hypertask_describe_tool', arguments: { name: 'hypertask_report_feedback' } }))).json()
   const text = JSON.stringify(described)
   assert.ok(result.result.tools.some((tool) => tool.name === 'hypertask_report_feedback'))

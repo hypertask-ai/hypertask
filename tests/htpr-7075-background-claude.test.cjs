@@ -1,5 +1,3 @@
-// HTPR-7075: every background AI job runs on Claude 5.5 behind
-// htpr-7075-background-claude. User picks (including non-Claude) stay honoured.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -60,7 +58,6 @@ test("every system feature resolves to Haiku 5.5 on Anthropic for every team, wi
     {},
     { providers: { google: true, openai: true, deepseek: true, moonshot: true } },
     { providers: { google: false, openai: false } },
-    // A stale saved override naming Haiku 4.5 or a retired slug never beats the 5.5 rule.
     { featureModels: { summaries: "anthropic/claude-haiku-4.5", questionSuggestions: "anthropic/claude-haiku-4.5" } },
   ];
   for (const feature of SYSTEM_FEATURES) {
@@ -106,7 +103,6 @@ test("every default with no user choice is Haiku 5.5 when the flag is on", () =>
       );
     }
   }
-  // Flag off keeps Luna as the production default for the same inputs.
   assert.equal(catalog.defaultModelKeyFor({ plan: "Pro", hasByok: true }, "gpt-6-luna"), "gpt-6-luna");
 });
 
@@ -161,7 +157,6 @@ test("a user's explicit non-Claude pick is honoured for user-pick features", () 
     });
     assert.equal(option.id, id);
   }
-  // With no pick, the default is Haiku 5.5.
   const noPick = ladder.resolveUserFacingModelOption("aiChat", ALL_PROVIDERS_ON, null, {
     haiku55Enabled: true,
     backgroundClaudeEnabled: true,
@@ -184,12 +179,10 @@ test("a failed Claude 5.5 model retries on the same model, never an older versio
       const retry = fallback.previousModelForFailedStream(model, error, false, false, true, true);
       assert.equal(retry?.model, model, model);
     }
-    // No retry once output streamed or a tool ran, and not on other errors.
     assert.equal(fallback.previousModelForFailedStream(model, { status: 404 }, true, false, true, true), null);
     assert.equal(fallback.previousModelForFailedStream(model, { status: 404 }, false, true, true, true), null);
     assert.equal(fallback.previousModelForFailedStream(model, { status: 500 }, false, false, true, true), null);
   }
-  // Flag off: the old chain is unchanged.
   assert.equal(fallback.previousModelForFailedStream("claude-sonnet-5-5", { status: 404 }, false, false)?.model, "claude-sonnet-5");
   assert.equal(fallback.previousModelForFailedStream("claude-haiku-5-5", { status: 404 }, false, false, true)?.model, "gpt-6-luna");
 });
@@ -233,8 +226,6 @@ test("getAiDefaultModelContext reports Claude 5.5 mode for the no-user and user 
   }
 });
 
-// Every background entry point. Each one must take its model from the shared
-// Claude 5.5 gates, so none of them can keep a hard-coded Gemini, Luna or GPT.
 const ENTRY_POINTS = [
   ["task and comment summaries", "src/app/api/ai/_lib/taskSummaries.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
   ["comment summaries", "src/app/api/ai/_lib/commentSummaries.ts", /resolveSystemModel\([\s\S]*?defaultContext/],

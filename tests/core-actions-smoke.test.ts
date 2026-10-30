@@ -508,8 +508,6 @@ function fakeApp(
           activityCommentIds: [activityId],
         });
       }
-      // HTPR-6428: userId unassign clears human + owned-agent rows and emits
-      // one Unassigned activity per removed row.
       const removed = state.assignees.filter(
         (row) => row.userId === fixture.userId,
       );
@@ -730,8 +728,6 @@ test("reports an empty move-to-column list as the columns action", async () => {
 });
 
 test("a move-to-column list missing the move target fails the columns action", async () => {
-  // HTPR-6262: the move step targets Alternate, so a dialog that never offers
-  // Alternate means move-to-column is broken even though the list is non-empty.
   const app = fakeApp({ columnsWithoutTarget: true });
   const result = await runCoreActionsSmoke({
     baseUrl: "https://app.hypertask.ai",

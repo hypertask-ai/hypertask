@@ -1,4 +1,3 @@
-// HTPR-5720: port of the HTPR-5715 smoke flow into the declarative flow format.
 export default {
   id: 'board-demo',
   area: 'board',

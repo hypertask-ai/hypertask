@@ -1,4 +1,3 @@
-// HTPR-7157: a Slack connect link only finishes in the browser and session that started it.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

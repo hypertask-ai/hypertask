@@ -97,11 +97,6 @@ test("concurrent readers share a slice and later refetches cannot replay it", as
 });
 
 test("waitForEarlyAppShellBootstrap only reports the bridge as done when bridge-session ran", async () => {
-  // HTPR-6065: the early script picks its endpoint from the server-only
-  // BETTER_AUTH_ENABLED, while useAuth gates on the client-side
-  // NEXT_PUBLIC_BETTER_AUTH_ENABLED. If those two ever disagree, a script
-  // that hit /api/app-shell/bootstrap must not be read as "the bridge
-  // session already ran" -- otherwise useAuth skips its own POST forever.
   const bridged = runBootstrap({
     betterAuthEnabled: true,
     body: { ok: true, bootstrap: successfulPayload },
@@ -187,7 +182,6 @@ test("server bootstrap derives every private slice from the verified account", a
   assert.match(favoritesController, /owner: \{ select: favoriteUserSelect \}/);
   assert.match(favoritesController, /user: \{ select: favoriteUserSelect \}/);
   assert.doesNotMatch(favoritesController, /\b(owner|user): true\b/);
-  // The minimal projects read moved into the shared handler.
   assert.match(projectsRoute, /await legacyTaskWriteSession\(request\)/);
   assert.match(projectsRoute, /getAllMinimal\(session\.userId, mode\)/);
   const sharedRoute = read("src/lib/api/task-writes/route.ts");

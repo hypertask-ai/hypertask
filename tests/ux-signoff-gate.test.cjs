@@ -1935,7 +1935,6 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
   const { run } = await gate;
   for (const pages of [1, 13]) {
     const total = 650;
-    // Zero padding keeps every head SHA unique (the shared fixture pads with 1s, so PR 1 and PR 17 collide).
     const prs = Array.from({ length: total }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI`, head: { sha: (i + 1).toString(16).padStart(40, '0') } }));
     const store = new Map();
     let clock = Date.parse('2026-10-12T00:00:00Z');
@@ -1963,11 +1962,9 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
       await run(['--reconcile'], { env, github, fetchImpl, log: () => {}, now: () => clock });
       clock += 600000;
     };
-    // Each failed ticket also needs one parent lookup; interrupted reads are retried first next sweep.
     const sweeps = Math.ceil(total / Math.floor(120 / (pages + 1)));
     for (let index = 0; index < sweeps; index++) await sweep();
     assert.equal(read.size, total, `${pages} page(s): every PR read within ${sweeps} sweeps`);
-    // A further day of sweeps: about one heartbeat per head per hour, never one per sweep.
     for (let index = 0; index < 144; index++) await sweep();
     const perHead = Math.max(...[...store.values()].map((list) => list.length));
     assert.ok(perHead <= 2 + 24 + 1, `${pages} page(s): ${perHead} statuses on one head`);

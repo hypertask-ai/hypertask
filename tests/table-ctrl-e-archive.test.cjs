@@ -52,8 +52,6 @@ test("Table archive supports both board rows and cross-board My Tasks rows", () 
   assert.match(archiveHelper, /removeFromListWithStatus\(/);
   assert.match(archiveHelper, /globalAPIHandlers\.archiveTask\(task\.id, "Archive"\)/);
   assert.match(archiveHelper, /router\.refresh\(\)/);
-  // My Tasks has no board cache: hide the row immediately so Ctrl+E is visible
-  // before the server refresh returns (HTPR-6445).
   assert.match(archiveHelper, /setExcludedTaskIds/);
   assert.match(tableView, /excludedTaskIds/);
   assert.match(

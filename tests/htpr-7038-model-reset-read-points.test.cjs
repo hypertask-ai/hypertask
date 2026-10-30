@@ -53,7 +53,6 @@ test("preferences controller runs reset before a cache hit, bypasses stale cache
     assert.equal(events.includes("database"), result === "reset");
   }
 
-  // Exercise real fail-open behavior, not a reset stub that already hides errors.
   const reset = load("src/lib/ai/htpr7038ModelReset.ts", {
     "@/lib/prisma": defaultExport({ htpr7038ModelChoiceResetDone: {
       findUnique: async () => { throw new Error("synthetic lookup failure"); },

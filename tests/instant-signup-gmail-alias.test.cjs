@@ -1,11 +1,3 @@
-// HTPR-7159: /api/auth/instant-signup is unauthenticated. Its existing-account
-// guard matched the address exactly, but updateUsers() behind it resolves Gmail
-// dot, +suffix and googlemail.com spellings to the same account. So POSTing
-// "first.last+x@googlemail.com" for the stored "firstlast@gmail.com" skipped the
-// guard and let a stranger rename that user and mark their tutorial complete.
-//
-// This drives the real route with a stubbed database and asserts that no
-// spelling of an existing Gmail address writes anything.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -23,7 +15,6 @@ function loadTs(relativePath) {
 
 process.env.DATABASE_URL = "postgresql://unused:unused@localhost:5432/unused";
 process.env.JWT_SECRET = "test-only-secret";
-// The route really sends mail when a Resend key is set; never from a test.
 process.env.RESEND_API_KEY = "";
 
 const prismaModule = loadTs("src/lib/prisma.ts");
@@ -32,8 +23,6 @@ const { POST } = loadTs("src/app/api/auth/instant-signup/route.ts");
 
 const STORED = { id: 1, uid: "uid_owner", email: "firstlast@gmail.com", displayName: "Owner" };
 
-// Any write to the tables signup touches is a failure: the owner's row, picture and settings
-// must stay exactly as they were.
 const WRITE_OPS = ["create", "createMany", "update", "updateMany", "upsert", "delete", "deleteMany"];
 const MODELS = ["user", "userSetting", "profilePicture", "googleAccount", "team", "project"];
 

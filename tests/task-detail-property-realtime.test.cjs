@@ -1,6 +1,3 @@
-// HTPR-6281: routes that change task-visible properties (assignees, labels,
-// due date, start date) must also broadcast task:changed, because an open task
-// detail view listens only on its task channel — board events never reach it.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -28,9 +25,6 @@ function transpileHandler(relativePath) {
 
 function loadHandler(relativePath, stubs) {
   const javascript = transpileHandler(relativePath);
-  // Write the transpiled CommonJS to a unique temp file and require() it with
-  // Module._load patched, so stubs intercept the handler's own requires
-  // without dynamic code execution.
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "htpr-6281-"));
   const file = path.join(tmpDir, "handler.js");
   fs.writeFileSync(file, javascript);
@@ -158,7 +152,6 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
   const tx = {
     $queryRaw: async () => {
       queryRawCall += 1;
-      // Task lock, TaskLabel lock, Label lock.
       return queryRawCall === 2 ? [] : [{ projectId: PROJECT_ID }];
     },
     taskLabel: {

@@ -1,6 +1,3 @@
-// HTPR-7366, HTPR-7365: the shared Redis client had no "error" listener, so a
-// dropped or timed-out connection printed "[ioredis] Unhandled error event" at
-// error level on Vercel, even though ioredis reconnects on its own.
 const assert = require("node:assert/strict");
 const net = require("node:net");
 const path = require("node:path");

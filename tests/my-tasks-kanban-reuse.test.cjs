@@ -153,8 +153,6 @@ test("Check icons use the bare house mark and Columns retains locks, drag handle
   assert.match(columns, /\{isChecked && checkedIcon\}/);
 });
 
-// Render the production components with inert service boundaries. Board writes
-// throw so a controlled Save path cannot accidentally pass by using board state.
 let boardHookCalls = 0;
 let changeName;
 const noop = () => {};

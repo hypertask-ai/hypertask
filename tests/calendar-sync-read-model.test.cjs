@@ -492,8 +492,6 @@ test("materialized tasks with an absent start date remain persistable", () => {
 });
 
 test("server freshness orders cross-tab and skewed-client optimistic writes", () => {
-  // These represent fresh server responses, so keep them within the cache TTL
-  // regardless of when the test suite happens to run.
   const staleRetrievedAt = new Date(Date.now() - 2 * 60 * 1_000).toISOString();
   const freshRetrievedAt = new Date(Date.now() - 60 * 1_000).toISOString();
   const range = buildCalendarVisibleRange({
@@ -537,8 +535,6 @@ test("server freshness orders cross-tab and skewed-client optimistic writes", ()
   assert.equal(shouldReplaceCalendarReadModelSnapshot(fresh, fresh), false);
   assert.equal(shouldReplaceCalendarReadModelSnapshot(stale, optimistic), false);
 
-  // Optimistic projections stay in memory; only the later server response is
-  // eligible to replace the authoritative IndexedDB snapshot.
   let stored = stale;
   if (shouldReplaceCalendarReadModelSnapshot(stored, fresh)) stored = fresh;
   assert.equal(stored.tasksById["100"].title, "Authoritative update");

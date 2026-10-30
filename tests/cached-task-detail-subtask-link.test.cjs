@@ -43,7 +43,6 @@ function fixture(t, { direct = false } = {}) {
   window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, "", window.location.href);
   for (const method of ["pushState", "replaceState"]) {
     const original = window.history[method].bind(window.history);
-    // Next restores its internal marker after handling native history writes.
     window.history[method] = (state, title, url) => original({ ...state, __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, title, url);
   }
   window.scrollTo = () => {};
@@ -59,7 +58,6 @@ function fixture(t, { direct = false } = {}) {
     if (settleTraversal) { const resolve = settleTraversal; settleTraversal = null; setImmediate(resolve); }
   }, true);
   new Function("window", "CustomEvent", historyBootScript)(window, window.CustomEvent);
-  // Native Window popstate runs in registration order, unlike jsdom's synthetic capture ordering.
   window.addEventListener("popstate", () => { nextTraversals++; restoreNextRoute(); }, true);
   const renderer = createRoot(document.getElementById("root"));
   t.after(async () => {
@@ -139,7 +137,6 @@ function fixture(t, { direct = false } = {}) {
     server(task) { serverTask = task; children = React.createElement(ServerDetail); nextPath = href(task); render(); },
     remount() { navigationKey++; render(); },
     nativeNext() {
-      // Native dispatch flushes microtasks before invoking the next listener.
       nativeCheckpoints = true;
       restoreNextRoute = () => flushSync(() => {
         window.history.replaceState({}, "", window.location.href);
@@ -183,7 +180,6 @@ for (const direct of [false, true]) {
     await React.act(async () => f.next(child)); f.assertContent(child);
     await f.click(parent); f.assertContent(parent);
     assert.equal(window.location.search, "?inboxFlow=true");
-    // Next may remove custom state during a same-address refresh.
     await React.act(async () => window.history.replaceState({}, "", window.location.href));
   });
 }
@@ -277,7 +273,6 @@ test("links preserve modified clicks and fallback for missing descriptions and m
   const compactChild = { id: child.id, projectId: child.projectId, uniqueIndex: child.uniqueIndex, title: child.title };
   await React.act(async () => f.server({ ...parent, subTasks: [compactChild] }));
   await dispatch(link());
-  // Parent link uses the same fallback rules when the parent relation is compact.
   await React.act(async () => f.server({ ...child, parentTask: { ...compactChild, id: parent.id, uniqueIndex: parent.uniqueIndex, title: parent.title } }));
   await dispatch(document.querySelector(`a[href="${href(parent)}?inboxFlow=true"]`));
   await React.act(async () => f.server({ ...parent, subTasks: [compactChild] }));

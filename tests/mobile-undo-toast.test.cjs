@@ -31,7 +31,6 @@ test("the five-second toast keeps the longer desktop and mobile undo windows", (
   assert.match(undoToastSource, /removeDelay: 200/);
 });
 
-// The existing viewport argument remains accepted by every caller.
 test("every UndoToaster call site keeps its compatible viewport argument", () => {
   const callers = [
     "src/hooks/General/useUndo.tsx",
@@ -50,9 +49,6 @@ test("every UndoToaster call site keeps its compatible viewport argument", () =>
   }
 });
 
-// useUndo reads MobileViewContext; if the provider tree ever nests
-// UndoProvider outside MobileViewProvider again, the context default (false)
-// silently pins every mobile undo toast to the desktop position.
 test("UndoProvider sits inside MobileViewProvider", () => {
   const providers = read("src/utils/Providers.tsx");
   const mobileIdx = providers.indexOf("<MobileViewProvider");

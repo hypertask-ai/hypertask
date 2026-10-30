@@ -124,7 +124,6 @@ async function allowed(h, area) {
 }
 
 for (const area of ["demo", "learn", "slack", "pusher"]) {
-  // These are direct internal calls, not externally reachable agent-cookie HTTP paths.
   test(`${area}: ungranted internal agent cannot reuse/read the existing board in ENFORCE`, async () => {
     const h = harness({ area });
     const result = await h.request();

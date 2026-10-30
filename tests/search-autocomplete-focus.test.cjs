@@ -62,7 +62,6 @@ test('suggestions retain writing focus; result arrows leave it so Enter opens th
       state = useSearch('')
       return React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, boardId: null, inputRef: state.tasksInputRef })
     }
-    // The app-shell listener runs first and prevents body arrows from scrolling.
     const preventArrowScroll = (event) => {
       if (document.activeElement.tagName !== 'INPUT' && ['ArrowDown', 'ArrowUp'].includes(event.key)) event.preventDefault()
     }

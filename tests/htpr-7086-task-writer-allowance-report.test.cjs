@@ -72,7 +72,6 @@ async function main() {
   assert.ok(limit.content.includes("task-writer-stream-error"));
   assert.equal(limit.reports.length, 0);
 
-  // With the flag off the old reporting stays.
   const limitFlagOff = await post({ error: allowanceError(), skipEnabled: false });
   assert.ok(limitFlagOff.content.includes(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE));
   assert.equal(limitFlagOff.reports.length, 1);

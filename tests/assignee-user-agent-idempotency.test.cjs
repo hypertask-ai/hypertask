@@ -85,8 +85,6 @@ test("a human assignment coexists with an agent owned by the same user", async (
   const findAssignment = (where) => rows.find((row) => matches(row, where)) ?? null;
   const findAssignments = (where) => {
     if (!where) return [...rows];
-    // Board visibility listing uses nested agent filters we do not model; when
-    // the OR is only the authorized userId unassign policy, filter precisely.
     const authorizedUnassign =
       Array.isArray(where.OR) &&
       where.OR.length === 2 &&
@@ -249,8 +247,6 @@ test("a human assignment coexists with an agent owned by the same user", async (
   });
   assert.equal(unassigned.status, 200);
   assert.equal(unassigned.json.assignStatus, "Unassigned");
-  // HTPR-6428: userId unassign clears every row for that user, including the
-  // agent self-assign that shares the same userId.
   assert.deepEqual(unassigned.json.body, []);
   assert.equal(rows.length, 0);
   assert.equal(calls.transactions, 2);

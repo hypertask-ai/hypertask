@@ -7,7 +7,6 @@ const Module = require("node:module");
 
 const root = path.resolve(__dirname, "..");
 
-// Loads a TS source file with the "@/..." aliases resolved back to src/.
 function loadTsModule(relativePath, stubs = {}) {
   const filename = path.join(root, relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -91,7 +90,6 @@ test("Decisions split lists only marked rows and sits right after Important", ()
   assert.deepEqual(result.data[decisionsTab.idx], [0]);
   assert.equal(names(result)[0], "Important");
   assert.equal(names(result)[1], "Decisions");
-  // The row also stays in its normal split (Important).
   const important = result.tabs.find((tab) => tab.project === "Important");
   assert.ok(result.data[important.idx].includes(0));
 });
@@ -133,7 +131,6 @@ test("Decisions view shows the owner's Review column on a board where the owner 
   const sections = [section("Valentin Review", [task(1, "Valentin Review")]), section("Abdul Review", [task(2, "Abdul Review")])];
   const out = getFilteredSections(sections, project, builtin.BUILTIN_VIEW_IDS.decisions, context);
   assert.deepEqual(out.map((s) => s.section_title), ["Valentin Review"]);
-  // without the signed-in name it falls back to the members row (member boards still work)
   const member = { members: [{ userId: 6, user: { displayName: "Valentin Yeo" } }], sections: [] };
   assert.deepEqual(builtin.buildBuiltinViewContext(member, 6).currentUserNames, ["Valentin Yeo", "Valentin"]);
 });
@@ -272,10 +269,8 @@ test("Decisions board view sits right after the home tab for viewers who never r
   const ids = (list) => list.map((v) => v.id);
   const none = ids(sortViewsByOrder(views, undefined, "home"));
   assert.deepEqual(none.slice(0, 4), ["home", "builtin:decisions", "bugs", "stale"]);
-  // A saved order that predates the view (does not list it) still puts it after home.
   const older = ids(sortViewsByOrder(views, ["home", "stale", "bugs"], "home"));
   assert.deepEqual(older.slice(0, 4), ["home", "builtin:decisions", "stale", "bugs"]);
-  // A user who placed it explicitly keeps their placement.
   const placed = ids(sortViewsByOrder(views, ["home", "bugs", "builtin:decisions"], "home"));
   assert.deepEqual(placed.slice(0, 3), ["home", "bugs", "builtin:decisions"]);
 });

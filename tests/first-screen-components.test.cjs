@@ -56,8 +56,6 @@ const mocks = {
   '@/lib/contexts/Inbox/BulkSelectionContext': { useBulkSelectionContext: () => ({ selectedNotifications: [] }) },
   '@/hooks/General/useGetUserDrafts': { USER_DRAFTS_QUERY_KEY: id => ['userDrafts', id] },
 };
-// Load the production markup. Only network/lifecycle services and closed overlays
-// are replaced; the card, row, chips, avatars, links and DnD are real components.
 function load(file) {
   if (cache.has(file)) return cache.get(file).exports;
   const loadedModule = { exports: {} }; cache.set(file, loadedModule);
@@ -186,8 +184,6 @@ function serverFixture(name) {
   }));
 }
 
-// Server and browser are separate runtimes in production. Keep their React
-// renderer ownership separate here too, rather than muting context warnings.
 if (process.env.FIRST_SCREEN_SSR_FIXTURE) {
   const fixture = process.env.FIRST_SCREEN_SSR_FIXTURE;
   pathname = fixture.includes('inbox') || fixture.startsWith('row:') || fixture === 'draft' ? '/inbox' : '/project';

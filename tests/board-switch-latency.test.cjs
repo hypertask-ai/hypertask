@@ -86,15 +86,13 @@ test("no pending intent (plain route load) emits nothing", () => {
 test("an abandoned intent (overwritten by a second switch) is dropped, never emitted", () => {
   const runtime = installRuntime({ nowValues: [0, 10, 20, 400] });
   try {
-    markBoardSwitchIntent({ surface: "sidebar", projectId: 1 }); // consumes 0
-    markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: 2 }); // consumes 10, overwrites board 1's intent
+    markBoardSwitchIntent({ surface: "sidebar", projectId: 1 });
+    markBoardSwitchIntent({ surface: "keyboard_shortcut", projectId: 2 });
 
-    // A late completion for the abandoned board (1) must not emit, and must
-    // not consume the still-pending intent for board 2.
-    resolveBoardSwitchIntent(baseCompletion({ projectId: 1 })); // consumes 20
+    resolveBoardSwitchIntent(baseCompletion({ projectId: 1 }));
     assert.equal(emittedEvents(runtime.fakeWindow).length, 0);
 
-    resolveBoardSwitchIntent(baseCompletion({ projectId: 2 })); // consumes 400
+    resolveBoardSwitchIntent(baseCompletion({ projectId: 2 }));
     const events = emittedEvents(runtime.fakeWindow);
     assert.equal(events.length, 1);
     assert.equal(events[0].properties.switch_surface, "keyboard_shortcut");

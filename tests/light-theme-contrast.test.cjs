@@ -1,10 +1,3 @@
-// HTPR-4376: secondary text in the light themes was too pale to read. Ticket IDs
-// and dates sat around 3:1 against the surfaces they render on, under the 4.5:1
-// WCAG AA needs for normal-size text.
-//
-// The trap is that a colour can pass on the page background and still fail on a
-// card, a sidebar, or a selected row. So this asserts against the WORST surface
-// each theme actually paints these tokens on, not against white.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -37,8 +30,6 @@ const tokenValue = (css, name) => {
   return m[1];
 };
 
-// The surfaces each light theme paints secondary text on. The last entry in each
-// list is the darkest, and therefore the one that decides whether we pass.
 const SURFACES = {
   "light.css": ["#f9f9f9", "#f3f3f3", "#ececec"],
   "dia.css": ["#ffffff", "#f6f4ef", "#f1eee7", "#e9e4da"],
@@ -64,8 +55,6 @@ for (const [file, surfaces] of Object.entries(SURFACES)) {
   });
 
   test(`${file}: secondary text stays visibly secondary`, () => {
-    // Passing AA by making it the same colour as primary text would defeat the
-    // point: these tokens exist to de-emphasise IDs, dates and labels.
     const css = fs.readFileSync(path.join(themes, file), "utf8");
     const primary = tokenValue(css, "--color-white-black");
     for (const token of SECONDARY_TOKENS) {

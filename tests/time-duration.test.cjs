@@ -13,8 +13,6 @@ test("adds hours and minutes fields into total minutes", () => {
   assert.equal(hoursMinutesToMinutes("1", "30"), 90);
   assert.equal(hoursMinutesToMinutes("", "45"), 45);
   assert.equal(hoursMinutesToMinutes("2", ""), 120);
-  // Minutes above 59 belong in the hours field; accepting them would log a
-  // different duration than the one read back off the row.
   assert.equal(Number.isNaN(hoursMinutesToMinutes("0", "60")), true);
   assert.equal(Number.isNaN(hoursMinutesToMinutes("1", "-5")), true);
   assert.equal(Number.isNaN(hoursMinutesToMinutes("1.5", "0")), true);

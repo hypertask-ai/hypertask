@@ -25,8 +25,6 @@ function returnedArrow(file, factory) {
   return statement.expression.getText(parsed);
 }
 
-// Existing source-level tests inspect and evaluate closures without loading the
-// providers. Follow the extracted catalog and expose the same lexical source.
 function chatStreamSource() {
   const catalog = source(path.join(tools, "index.ts"));
   const imports = new Map(catalog.statements.filter(ts.isImportDeclaration)

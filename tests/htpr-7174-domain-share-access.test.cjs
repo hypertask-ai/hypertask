@@ -1,4 +1,3 @@
-// HTPR-7174: a Domain share link shows nothing to people outside the board, and dead links stop working.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

@@ -1,26 +1,3 @@
-// HTPR-5467 — real-PostgreSQL regression test for the task advisory-write lock.
-//
-// PR #2789 shipped a production-wide task-write outage: it called the
-// two-argument `pg_advisory_xact_lock` overload with Prisma-bound bigint
-// values. PostgreSQL only accepts `pg_advisory_xact_lock(bigint)` or
-// `pg_advisory_xact_lock(int, int)`, so the real database rejected every call
-// and every task write failed. CI missed it because the tests mocked Prisma's
-// `$queryRaw`/`$executeRaw` and only asserted that a lock call existed and
-// appeared in the right order — no test ever executed the SQL.
-//
-// This file runs the ACTUAL helpers from src/lib/taskCardActions/writeLocks.ts
-// (withTaskStarWriteLock / withTaskInboxWriteLock) against a real throwaway
-// PostgreSQL server (docker). It does not stub Prisma and does not assert on
-// the helper's source text. If docker or PostgreSQL is unavailable the tests
-// SKIP (node:test skip) rather than failing or silently passing.
-//
-// Why the ::int casts matter (verified by hand against this PostgreSQL build):
-//   `SELECT pg_advisory_xact_lock($1::int, $2::int)`  -> resolves to (int, int) -> OK
-//   `SELECT pg_advisory_xact_lock($1::int8, $2::int8)` -> no such overload -> ERROR
-// The helper narrows its arguments to int4 so a bigint-bound parameter can
-// never select the missing (bigint, bigint) overload. The "::int" test below
-// pins that cast by asserting on the SQL the helper actually executes.
-
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -36,14 +13,8 @@ const PG_USER = "ht";
 const PG_PASSWORD = "ht";
 const PG_DB = "ht_test";
 
-// Set HT_REQUIRE_PG_TESTS=1 (CI does) to turn "docker unavailable" from a clean
-// skip into a hard failure. Locally a missing docker daemon should not block a
-// developer; in CI a silent skip would be exactly the false green that let
-// PR #2789 through, so there the suite must fail loudly instead.
 const REQUIRE_PG = process.env.HT_REQUIRE_PG_TESTS === "1";
 
-// State populated by the `before` hook. `skipReason` is set when docker /
-// PostgreSQL provisioning is not possible; every test then skips cleanly.
 let state = {
   prisma: null,
   writeLocks: null,
@@ -68,9 +39,6 @@ function run(cmd, args, opts = {}) {
 }
 
 function dockerLogs(container) {
-  // `docker logs` forwards the container's stdout to this process's stdout and
-  // the container's stderr (where the postgres server writes its log) to this
-  // process's stderr — concatenate both in a fixed order.
   const res = run("docker", ["logs", container]);
   return `${res.stdout ?? ""}${res.stderr ?? ""}`;
 }
@@ -118,7 +86,6 @@ async function provision() {
     try {
       run("docker", ["rm", "-f", container]);
     } catch {
-      /* best effort */
     }
   };
 
@@ -136,9 +103,6 @@ async function provision() {
     "-p",
     `${host}:${port}:5432`,
     PG_IMAGE,
-    // Statement logging is on from startup so the ::int test can observe the
-    // SQL the helper actually executes (see the test below). The image's
-    // entrypoint forwards these args to the postgres server.
     "-c",
     "log_statement=all",
   ]);
@@ -153,7 +117,6 @@ async function provision() {
   }
 
   try {
-    // Wait for the server to accept connections.
     let ready = false;
     for (let i = 0; i < 60; i += 1) {
       const check = run("docker", [
@@ -178,10 +141,6 @@ async function provision() {
       };
     }
 
-    // Materialise the Prisma schema as SQL, then apply it with the container's
-    // own psql. `prisma migrate diff` is read-only, so it works without any
-    // destructive-action consent and cannot touch anything outside the
-    // throwaway container.
     const schemaSql = path.join(
       os.tmpdir(),
       `htpr5467-schema-${process.pid}-${Date.now()}.sql`,
@@ -237,8 +196,6 @@ async function provision() {
       };
     }
 
-    // Point the real Prisma singleton at the throwaway database, then load the
-    // real helpers. The `@` alias resolves the helpers' own imports.
     process.env.DATABASE_URL = url;
     const jiti = require("jiti")(
       path.join(root, "tests", path.basename(__filename)),
@@ -276,7 +233,6 @@ after(async () => {
     try {
       await state.prisma.$disconnect();
     } catch {
-      /* already disconnected */
     }
   }
   if (state?.cleanup) {
@@ -286,9 +242,6 @@ after(async () => {
 
 let seedCounter = 0;
 
-// Create a fresh, isolated user/project/task triple for one test. Everything
-// is written through the real Prisma client so the tests exercise the same
-// model/enum/default handling as production.
 async function seedTask() {
   seedCounter += 1;
   const stamp = `${process.pid}-${Date.now()}-${seedCounter}`;
@@ -375,21 +328,12 @@ test("withTaskInboxWriteLock runs a real section move on PostgreSQL and commits 
   assert.equal(persisted.section, "Doing");
 });
 
-// The behavioral proof that the helper selected the two-int overload, read from
-// PostgreSQL's own lock table rather than from any SQL string. For an advisory
-// lock pg_locks reports objsubid = 2 when the lock was taken with
-// `pg_advisory_xact_lock(int, int)` and objsubid = 1 for the single-bigint form,
-// with classid/objid holding the two int32 arguments. PR #2789 aimed at the
-// two-int overload and missed it entirely; this asserts we actually hold the
-// lock identity we intended, on the exact key we intended.
 test("the helper holds a real two-int advisory lock on the task's own key", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
 
   const { writeLocks } = state;
   const { task } = await seedTask();
 
-  // A bigint-bound task id reproduces PR #2789's binding shape; the lock the
-  // server ends up holding must still be the (int, int) one on this task's key.
   const held = await writeLocks.withTaskInboxWriteLock(
     BigInt(task.id),
     async (tx) => tx.$queryRaw`
@@ -409,28 +353,11 @@ test("the helper holds a real two-int advisory lock on the task's own key", asyn
   assert.equal(Number(lock.objid), task.id);
 });
 
-// The `::int` casts are a semantic no-op under @prisma/adapter-pg: the driver
-// text-binds parameters (OID 0), so PostgreSQL infers `int` from the unknown
-// literals either way and the helper succeeds with or without the cast. The
-// casts only matter on a stack that binds bigint values with a declared int8
-// type (the Rust query engine PR #2789 ran on), where the two-arg call would
-// select the missing (bigint, bigint) overload and every write would fail.
-//
-// This one is a canary, not a behavioral test, and is deliberately kept as one:
-// on this stack no observable behavior changes when the cast is removed, so the
-// only way to keep the defense from being deleted as dead weight is to assert it
-// is still on the wire. It reads the SQL the helper ACTUALLY executed against the
-// real server (PostgreSQL's statement log, enabled on the container at startup)
-// rather than grepping the helper's source. If the driver ever goes back to
-// declaring int8 parameter types, the cast becomes load-bearing again and the
-// overload test above starts failing first.
 test("canary: the SQL the helper executes still narrows both args with ::int", async (t) => {
   if (state.skipReason) return t.skip(state.skipReason);
 
   const { writeLocks, container } = state;
 
-  // `log_statement=all` was enabled on the container at startup, so the lines
-  // appended while this test runs contain the exact SQL the helper sent.
   const before = dockerLogs(container);
 
   const { task } = await seedTask();
@@ -450,9 +377,6 @@ test("two writers on the SAME task serialize on the advisory lock", async (t) =>
   const { prisma, writeLocks } = state;
   const { task } = await seedTask();
 
-  // Hold the star lock open from inside the transaction. `entered` resolves
-  // once the first writer has actually acquired the lock (and is inside the
-  // transaction), `release` commits the first transaction and drops the lock.
   let release;
   const gate = new Promise((resolve) => {
     release = resolve;
@@ -475,8 +399,6 @@ test("two writers on the SAME task serialize on the advisory lock", async (t) =>
     return "second";
   });
 
-  // Give the second writer a real chance to run while the first still holds
-  // the lock. If the lock were a no-op the second writer would run here.
   await sleep(600);
   assert.equal(
     secondRan,
@@ -512,8 +434,6 @@ test("two writers on DIFFERENT tasks do not block each other", async (t) => {
   });
   await withTimeout(entered, 5000, "first lock acquisition");
 
-  // A different task id maps to a different advisory-lock key, so this must
-  // complete promptly even while the first lock is still held.
   const other = await withTimeout(
     writeLocks.withTaskStarWriteLock(b.task.id, async () => "other"),
     2000,

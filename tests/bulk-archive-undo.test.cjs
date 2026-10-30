@@ -11,7 +11,6 @@ const boardFile = "src/hooks/MultiPages/useUpdateTaskInBoards.tsx";
 const bulkFile = "src/lib/contexts/Kanban/BulkSelectionContext.tsx";
 const homepageFile = "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx";
 
-// Execute the production declarations with only their external boundaries stubbed.
 function load(file, names, env) {
   const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const declarations = new Map();

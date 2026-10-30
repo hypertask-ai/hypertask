@@ -5,7 +5,6 @@ import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
 import * as flagKeys from "../src/lib/flags/keys";
 
-// Production versions saved when HTPR-7034 shipped, so CI (shallow clone) and later commits compare against the same baseline.
 const productionSource = (file: string) =>
   fs.readFileSync(`tests/fixtures/htpr-7034-production/${file.replaceAll("/", "_")}.txt`, "utf8");
 
@@ -91,7 +90,6 @@ test("CLI code exchange is consumed atomically and emits once, not on credential
   save(h);
 });
 
-// Compare against this commit's production parent, not a remote ref that can advance mid-run.
 for (const [scenario, userId, enabled] of [["other-flags-off", 123, false], ["QA", 985, true], ["other-flags-on", 123, true]] as const) {
   test(`${scenario}: CLI exchange writes exactly the production status rows before returning`, async (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: 1700000000000 });
@@ -394,7 +392,6 @@ for (const native of [false, true]) {
     const h = activationHarness();
     h.tasks.set(10, { ...h.tasks.get(9), id: 10, sectionId: null });
     h.tasks.set(11, { ...h.tasks.get(9), id: 11, sectionId: 3 });
-    // A later historic activity must not disqualify the actual first completion.
     h.history.push({ createdAt: new Date(Date.now() + 60000), activity: { type: "TaskArchive", data: { fromAgent: { id: "managed" }, newStatus: "Archive" } } });
     h.prisma.comment.findMany = async ({ where }: any) => h.history.filter((row) => row.createdAt < where.createdAt.lt);
     const bulk = bulkSectionController(h);

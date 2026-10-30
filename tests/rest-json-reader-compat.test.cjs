@@ -4,7 +4,6 @@ const { run, contract } = require('./rest-route-entry-compat.test.cjs');
 const preferenceOperations = new Set(['preferences', 'patchPreferences']);
 const operations = ['preferences', 'patchPreferences', 'bindAgent', 'createSession', 'updateSession', 'addMessage', 'revoke', 'createField', 'patchField', 'reorder', 'fieldValue'];
 const inputs = ['', '{', 'null', 'true', 'false', '1', '"text"', '[]', '[{}]', '{}'];
-// Frozen pre-PR-2 handler results, including legacy errors and create-session fallback.
 const baseline = {
   "preferences": {
     "1": {
@@ -1929,10 +1928,7 @@ for (const operation of operations) {
     }
   });
   test(`${operation}: unauthorized body is not parsed and reader cannot run`, async () => {
-    // HTPR-7073: with the flag ON a signed session no longer needs the profile cookie, so only OFF stays unauthorized.
     for (const mode of ['OFF']) {
-      // create-session is signed-session-only, unlike the profile-required routes.
-      // HTPR-7068: preferences accept the signed session alone when the flag is on.
       const signedSessionOnly = operation === 'createSession' || (mode === 'ON' && preferenceOperations.has(operation));
       const result = await run(operation, signedSessionOnly ? 'NO_SESSION' : mode, { raw: '{', noProfile: true });
       assert.equal(result.status, 401);

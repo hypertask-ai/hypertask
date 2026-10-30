@@ -5,7 +5,6 @@ const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
 const { graph, getProjectWhere, projectRow, relationFields, visibility } = require("./legacy-task-relations-fixture.cjs");
-// Responses, effects and HTTP bytes are pinned by digest from the pre-retirement handler (HTPR-6992).
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const pin = pins("a1-slice5c");
 const pinKey = (kind, label) => [kind, `${kind}|${label}`];

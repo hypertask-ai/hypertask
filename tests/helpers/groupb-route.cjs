@@ -1,6 +1,3 @@
-// HTPR-6992: loads the real src/lib/api/task-writes/route.ts (taskWriteRoute and
-// taskWriteHandler) with a stubbed session lookup, so tests can run a shared
-// task-write handler through the real Pages adapter.
 const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
@@ -22,7 +19,6 @@ function loadSharedRoute(getSessionUser = async () => null) {
   return mod.exports;
 }
 
-// Pages-style (req, res) handler for shared routes, e.g. pagesHandler({ POST: shared.POST }).
 function pagesHandler(routes, getSessionUser) {
   const { taskWriteHandler } = loadSharedRoute(getSessionUser);
   return taskWriteHandler(

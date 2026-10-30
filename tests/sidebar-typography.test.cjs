@@ -1,4 +1,3 @@
-// HTPR-5487: sidebar text must use the existing 14px content token.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -75,8 +74,6 @@ const unwrapExpression = (node) =>
     ? unwrapExpression(node.expression)
     : node;
 
-// Scan only rendered class/style attributes, then fail closed for computed
-// values and non-contract JSX spreads that could hide a compact typography token.
 const scanSidebarTypography = (source) => {
   const sourceFile = parsedSourceFor(source);
   const compact = [];
@@ -163,8 +160,6 @@ const scanSidebarTypography = (source) => {
       });
       return;
     }
-    // Identifiers, member reads, and unsupported expressions can be imported
-    // class/style values, so interpolation and direct expressions fail closed.
     unknown(node);
   };
 

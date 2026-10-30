@@ -5,7 +5,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-// Keep this in sync with src/lib/ai/hyperMentionComposition.ts (CI runs Node 20).
 function resolveHyperMentionComposition(input) {
   const useComposed = input.composedForTaskId != null;
   const taskId = useComposed ? input.composedForTaskId : input.currentTaskId;

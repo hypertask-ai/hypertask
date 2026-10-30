@@ -5,9 +5,6 @@ const { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } = require('nod
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
-// Shared with tests that need to build a `comments` fixture referencing the
-// PR head before calling runWorkflow, so it can never drift from the value
-// baked into the gh stub.
 const HEAD = 'a'.repeat(40)
 
 async function workflowScript() {
@@ -23,7 +20,6 @@ async function workflowScript() {
 }
 
 async function runWorkflow({ failTemp = false, failList = false, failView = false, malformedView = false, failLabels = false, failMerge = false, failMergeability = false, failFeatureGate = false, featureGated = false, exemptUi = false, invalidGateDecision = false, forkHead = false, sharedHead = false, unknownMergeability = false, omitAppSmoke = false, speed = false, speedQa = true, speedQaCreator = 'owner', title, previousSpeedTitle = false, changedFile = 'src/safe.ts', comments, reviewChecks, productionReason = '', existingFreezeComment = '' } = {}) {
-  // Read off the raw call-site object.
   const omitBrowserSmoke = Boolean(arguments[0] && arguments[0].omitBrowserSmoke)
   const directory = await mkdtemp(join(tmpdir(), 'automerge-workflow-'))
   const bin = join(directory, 'bin')
@@ -321,12 +317,6 @@ test('auto-merge refuses a PR without the browser smoke result', async () => {
   assert.deepEqual(scratchEntries, [])
 })
 
-
-
-
-
-// HTPR-6194: schema and migration changes are the manager's call and rollback is the
-// safety net, so they no longer park. Auth, billing, CI, lockfile and env paths still do.
 test('a Prisma migration auto-merges like any other change', async () => {
   const changedFile = 'src/prisma/migrations/20260901110000_example/migration.sql'
   const { result, scratchEntries } = await runWorkflow({ changedFile })
@@ -464,11 +454,6 @@ test('auto-merge refuses to merge when GitHub never resolves UNKNOWN', async () 
   assert.deepEqual(scratchEntries, [])
 })
 
-// HTPR-6149: PR 267 merged after an EARLIER commit's review flagged a MAJOR
-// finding and a LATER commit's review came back APPROVE with only a MINOR --
-// the major concern was never actually fixed, it just stopped being the
-// current-commit review. A major/blocker finding on any review for the PR
-// must park it for a human, even once a newer commit reviews clean.
 test('a MAJOR finding on an older commit still parks the PR after a clean re-review', async () => {
   const comments = [
     { body: 'CONCERNS (1) - reviewed by gpt-5.6-sol\n\n- **MAJOR - Strict gate remounts SectionComp on every switch**\n\n<!-- reviewed-commit: 2acfbc8bd27898e80b45b284d034673b87f64e65 -->' },
@@ -506,11 +491,6 @@ test('a bare-word BLOCKER without markdown bold still parks the PR', async () =>
   assert.deepEqual(scratchEntries, [])
 })
 
-// A null comment body (GitHub sends this for some system-generated comments)
-// must never crash the jq pipeline: this whole step runs under bash -e, so an
-// uncaught jq error here would kill the sweep for every PR in the batch, not
-// just this one. The null-body comment is simply ignored; the real review
-// next to it still gets read and the PR merges normally.
 test('a malformed (null-body) review comment does not crash the sweep', async () => {
   const comments = [
     { body: null },

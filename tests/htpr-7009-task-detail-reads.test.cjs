@@ -32,7 +32,6 @@ async function mount(t, { enabled = true, ready = true, userId = 985, serverTask
   const dom = new JSDOM("<div id='root'></div>");
   const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT, fetch: global.fetch };
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
-  // Let act drain query notifications before teardown restores the DOM globals.
   notifyManager.setScheduler(queueMicrotask);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const flags = { enabled, ready }, auth = { userId };

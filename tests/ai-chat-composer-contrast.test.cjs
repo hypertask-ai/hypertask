@@ -1,13 +1,3 @@
-// HTPR-5684: on AMOLED the AI chat composer was #0c0c0c on a #000000 page,
-// a 1.07:1 separation. The composer is borderless (AI_Tiptap_Container renders
-// it with `border-0`), so that fill is the ONLY thing telling you where the
-// text field is, and at 1.07:1 there is visibly no field at all.
-//
-// The floor is not a fixed number: light themes legitimately sit near 1.05
-// because they lean on other cues. What matters is that the two pure-dark
-// themes stay comparable, so AMOLED is measured against `dark`, the theme it
-// is a variant of. Hard-coding a threshold instead would silently drift the
-// moment someone retunes `dark`.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

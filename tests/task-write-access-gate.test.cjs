@@ -3,18 +3,15 @@ const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// The opt-out exists for callers whose trust is established elsewhere (a cron,
-// a signature-checked webhook). Anything reached by a browser request must not
-// use it, so the list stays short and reviewed.
 test("only server-internal callers opt out of the membership check", () => {
   const allowed = new Set([
-    "src/utils/controllers/tasks/single.ts", // where the option is defined
-    "src/utils/controllers/tasks/sweepAutoArchive.ts", // cron
-    "src/app/api/webhooks/github/route.ts", // signature-checked webhook
-    "src/app/api/cron/slack-thread-summaries/route.ts", // authenticated cron
-    "src/lib/aiFeedback/report.ts", // fixed internal board and server-resolved task/author, never caller-supplied IDs
-    "src/lib/ai/batch/collectBatches.ts", // HTPR-7098: posts the Slack summary as the HyperAI bot, same as the cron
-    "src/utils/controllers/comments/createCommentService.ts", // where the option is propagated
+    "src/utils/controllers/tasks/single.ts",
+    "src/utils/controllers/tasks/sweepAutoArchive.ts",
+    "src/app/api/webhooks/github/route.ts",
+    "src/app/api/cron/slack-thread-summaries/route.ts",
+    "src/lib/aiFeedback/report.ts",
+    "src/lib/ai/batch/collectBatches.ts",
+    "src/utils/controllers/comments/createCommentService.ts",
     "src/utils/controllers/comments/persistComment.ts",
     "src/utils/controllers/comments/commentCreationTypes.ts",
   ]);

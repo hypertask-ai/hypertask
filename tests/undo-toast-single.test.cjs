@@ -36,7 +36,6 @@ const undo = load("src/components/undoToast/index.tsx", {
   "@/lib/constants/appShellRail": { APP_SHELL_RAIL_OFFSET: "calc(var(--app-shell-rail-w, 48px) + 8px)" },
 });
 const { useMobileToastAutoDismiss } = load("src/components/undoToast/useMobileToastAutoDismiss.ts");
-// Exercise the production Toaster JSX, including isolation and rail/phone offsets.
 const globalSource = read("src/components/ProviderGlobal/GloablProviders.tsx");
 const toasterMarkup = globalSource.slice(globalSource.indexOf("      <Toaster"), globalSource.indexOf("      <ShortcutArchiveNudge"));
 const { Toasts } = load("src/components/ProviderGlobal/GloablProviders.tsx", {
@@ -96,7 +95,6 @@ for (const mobile of [false, true]) {
     await React.act(async () => hotToast.toast.success("Other notification", { duration: Infinity }));
     const first = await f.show("First action");
     assert.deepEqual(f.namedToasts().map((toast) => toast.id), [first]);
-    // A matching ID in another store must survive scoped removal/dismissal.
     await React.act(async () => hotToast.toast.success("Default toaster twin", { id: first, toasterId: "default", duration: Infinity }));
     const undone = [];
     const second = await f.show("Marked as Done.", { id: 2 }, async (data, id) => undone.push([data, id]));
@@ -139,7 +137,6 @@ for (const mobile of [false, true]) {
     const undone = [];
     const id = await f.show("Undo action", { id: 3 }, async (data, toastId) => {
       undone.push([data, toastId]);
-      // Existing undo handlers call dismiss with just the action ID.
       hotToast.toast.dismiss(toastId);
     });
     await f.event(f.card().querySelector('[aria-label="Undo"]'), "click");

@@ -23,7 +23,6 @@ test("opens above when below cannot fit height plus gap and padding", () => {
     {
       height: 370,
       width: 300,
-      // 800 - 720 = 80 below; needed = 370 + 4 + 8 = 382
       viewportHeight: 800,
       viewportWidth: 1200,
     },

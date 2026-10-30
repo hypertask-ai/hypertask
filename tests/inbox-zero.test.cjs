@@ -195,7 +195,6 @@ test("done titles load once and stay scoped to each blocker project", async () =
   );
 });
 
-// WHY: Boards without explicit flags must not have new reminders cleared by Inbox Zero.
 test("Inbox Zero's null-flag fallback still matches only exactly Done", async () => {
   const db = {
     section: {
@@ -350,8 +349,6 @@ test("Inbox Zero uses the exact visible All-tab server scope", () => {
   assert.equal(where.status, "Normal");
   assert.equal(where.archivedAt, null);
   assert.equal(where.agentId, null);
-  // HTPR-5683: a live task, or an archived task whose reminder just returned
-  // the row, both count as visible.
   assert.deepEqual(where.AND[0].OR, [
     { task: { status: "Normal" } },
     { task: { status: "Archive" }, returnedFromReminders: true },
@@ -449,22 +446,14 @@ test("Inbox Zero and archived inbox live in Ctrl+K, not the inbox header", () =>
   );
 });
 
-// HTPR-5613: "Clear inbox to zero" in Ctrl+K archived the inbox on the spot.
-// Inbox Zero is a two-step feature — preview, then confirm that exact preview —
-// but the palette called executeInboxZero with rules only, and the hook filled in
-// the missing previewVersion by fetching a preview and confirming it itself. The
-// person never saw what was about to disappear. The confirm sheet still existed;
-// nothing rendered it.
 test("the command palette confirms before archiving the inbox", () => {
   const readSource = (rel) =>
     require("./refactored-module-source.cjs").readFileSync(path.join(root, rel), "utf8");
   const palette = readSource("src/components/commands.tsx");
 
-  // The palette opens the sheet and lets it do the archiving.
   assert.match(palette, /<InboxZeroSheet/);
   assert.doesNotMatch(palette, /executeInboxZero/);
 
-  // Every Inbox Zero command routes to that sheet, not to a direct archive.
   for (const mode of [
     "ClearInboxToZero",
     "ArchiveAllReadNotifications",
@@ -474,9 +463,6 @@ test("the command palette confirms before archiving the inbox", () => {
   }
 });
 
-// The type is the guarantee: an optional previewVersion is what let a caller
-// archive without one. Anything that reintroduces a self-fetched preview here
-// puts the instant-archive bug straight back.
 test("executing Inbox Zero cannot self-confirm its own preview", () => {
   const hook = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/hooks/Inbox/useInboxZeroActions.ts"),
@@ -488,8 +474,6 @@ test("executing Inbox Zero cannot self-confirm its own preview", () => {
   assert.doesNotMatch(hook, /inbox-zero\/preview/);
 });
 
-// The sheet opens on whichever preset the command chose, so "Archive reactions"
-// does not silently present the default rules.
 test("the confirm sheet opens on the preset its command chose", () => {
   const sheet = require("./refactored-module-source.cjs").readFileSync(
     path.join(root, "src/components/notifications/InboxZeroSheet.tsx"),

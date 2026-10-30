@@ -179,7 +179,6 @@ test('stable cached phone opens allow the intentional unscrolled viewport only w
   const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.flag-changes.json'), 'utf8'));
   const expected = committed.viewports.Mobile.screens.ticket;
   const stable = 'htpr-6899-stable-layout';
-  // PR 1074 browser-smoke failure: the old baseline had already scrolled past properties.
   const measured = {
     title: { x: 18, y: 64, width: 274, height: 37 },
     description: { x: 10, y: 534, width: 370, height: 274 },

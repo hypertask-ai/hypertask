@@ -72,10 +72,6 @@ test("rejects and removes malformed Calendar session state", () => {
   assert.equal(session.values.size, 0);
 });
 
-// HTPR-5391 follow-up: the URL-sync effect writes view/date into the address
-// bar on every render, so treating their presence as prior user interaction
-// skipped the draft restore on exactly the return path the ticket is about.
-// The deep link must be re-applied after hydration instead of suppressing it.
 {
   const fs = require("node:fs");
   const path = require("node:path");
@@ -105,14 +101,7 @@ test("rejects and removes malformed Calendar session state", () => {
     );
   });
 
-  // The mount effect calls setCurrentView for a deep link. Without a
-  // re-baseline that render differs from the captured initial state, which the
-  // comparison effect reads as "the user already changed something" and uses to
-  // skip hydration entirely.
   test("only a URL view change arms the re-baseline", () => {
-    // The baseline JSON contains currentView but not currentDate, so a
-    // date-only link never fires the comparison effect. Arming the flag for it
-    // would leave it set and swallow the user's next real change.
     assert.match(hookSource, /viewChangeQueued = true;/);
     assert.match(
       hookSource,

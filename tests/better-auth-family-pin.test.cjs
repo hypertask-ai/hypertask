@@ -17,10 +17,6 @@ function readJson(relativePath) {
 }
 
 test("Better Auth 1.x stays on 1.6 so sign-in does not hit the 1.7 table check", () => {
-  // HTPR-6395 / HTPR-6390: Better Auth 1.7.3 looks for default Prisma table
-  // names and throws "Prisma schema mismatch / Missing tables User,
-  // BetterAuthSession, ..." on /api/auth/bridge-session. Our models are
-  // remapped. A 1.6 patch is fine; a 1.7 minor is not.
   const pkg = readJson("package.json");
   const deps = { ...pkg.dependencies, ...pkg.devDependencies };
 

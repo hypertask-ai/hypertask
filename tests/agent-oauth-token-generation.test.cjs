@@ -32,8 +32,6 @@ test('OAuth agent tokens retain the managed token generation across restarts', (
     process.env.JWT_SECRET,
     { issuer: 'hypertask', audience: 'mcp-api' }
   )
-  // HTPR-4671: the generation is written to the row when the token is minted
-  // and read straight back, instead of being re-derived from a stored JWT.
   const generation = storedAgentTokenGeneration(
     agentTokenCredentialFields(managedToken)
   )
@@ -99,9 +97,6 @@ test('OAuth refuses to mint an unrevocable agent token without a generation', ()
 })
 
 test('a row with no credential yields no generation to donate', () => {
-  // HTPR-4671. The route used to re-verify a stored JWT before copying its jti
-  // into an OAuth token. There is no stored JWT any more, so the equivalent
-  // failure is a row that carries nothing.
   assert.equal(storedAgentTokenGeneration(null), null)
   assert.equal(storedAgentTokenGeneration(undefined), null)
   assert.equal(storedAgentTokenGeneration({ mcpTokenJti: null }), null)
@@ -122,7 +117,6 @@ test('the stored generation is the minted credential jti and nothing else', () =
   assert.notEqual(stored.mcpTokenHash, managedToken)
   assert.equal(storedAgentTokenGeneration(stored), 'generation-7')
 
-  // A credential with no jti is refused rather than stored unrevokable.
   const noJti = jwt.sign({ agentId, userId: 6 }, process.env.JWT_SECRET, {
     issuer: 'hypertask',
     audience: 'mcp-api',

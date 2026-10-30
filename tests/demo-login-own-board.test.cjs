@@ -184,7 +184,6 @@ async function login(method, options = {}) {
       }
       await plugin.hooks.after[0].handler(ctx)
       if (method === 'passkey') {
-        // The explicit bridge sees the cookies from the completed passkey sign-in.
         h.incomingCookies = new Map(h.cookies)
         await plugin.endpoints.bridgeLegacySession(ctx)
       }

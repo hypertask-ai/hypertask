@@ -15,7 +15,6 @@ const s3 = new S3({
   signatureVersion: 'v4',
 });
 await s3.createBucket({ Bucket: R2_UPLOAD_BUCKET }).promise();
-// The app renders public attachment URLs, but uploads still require a signed request.
 await s3.putBucketPolicy({
   Bucket: R2_UPLOAD_BUCKET,
   Policy: JSON.stringify({

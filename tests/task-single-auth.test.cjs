@@ -4,10 +4,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
 
-// GET and DELETE on /api/tasks/single are only reachable behind this handler's own
-// checks: the edge middleware passes cookieless requests straight through, and the
-// GET response carries the task body. Removing either check re-opens a real hole,
-// so this exercises the handler rather than asserting on its source.
 
 const root = path.resolve(__dirname, "..");
 const MEMBER_PROJECT = 15;
@@ -16,8 +12,6 @@ const TASK_ON_MEMBER_BOARD = 1;
 const TASK_ON_FOREIGN_BOARD = 2;
 const MEMBER_USER_ID = 6;
 
-// The agent this session owns, and one it does not. A body-supplied agentId is
-// only worth honouring for an agent the caller controls (HTPR-4810 review).
 const OWNED_AGENT = "agent-owned";
 const REVOKED_AGENT = "agent-revoked";
 const BORROWED_AGENT = "agent-someone-elses";
@@ -110,8 +104,6 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
         await taskBroadcastGate;
       },
     },
-    // The route imports these for PUT relation sync. This auth-focused harness
-    // keeps references empty so it can exercise the route without alias loading.
     "@/utils/controllers/comments/extractTaskReferences": {
       extractTaskReferencesFromCommentText: () => [],
     },
@@ -209,9 +201,6 @@ test("DELETE runs for a board member", async () => {
   assert.deepEqual(deleted, [TASK_ON_MEMBER_BOARD]);
 });
 
-// PUT is the hot path for board moves, inline edits and agent writes, and it
-// used to take the identity cookie without ever checking board membership: any
-// logged-in account could edit any task on any board (HTPR-4810).
 
 test("PUT refuses an anonymous caller", async () => {
   const { handler, updated } = loadHandler(null);
@@ -311,9 +300,6 @@ test("PUT refuses a move onto a board the caller is not on", async () => {
   assert.deepEqual(broadcasts, []);
 });
 
-// agentId arrives in the request body, so honouring it without checking who
-// owns that agent would reopen the same hole through a side door: agent UUIDs
-// are visible to any teammate in an assignee dropdown.
 test("PUT refuses an agentId the session does not own", async () => {
   const { handler, updated, broadcasts } = loadHandler({ userId: MEMBER_USER_ID });
   const { status } = await call(handler, {

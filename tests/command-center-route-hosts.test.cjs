@@ -8,7 +8,6 @@ const { COMMAND_MENU_ROUTE_HOSTS } = jiti(
 );
 const root = path.join(__dirname, "../src");
 
-// Each page's import chain ends at its palette host. Shared hosts live outside app/.
 const hosts = {
   "/project": {
     "app/[...boardURL]/page.tsx": [

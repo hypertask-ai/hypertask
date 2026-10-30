@@ -5,7 +5,6 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-// The helper reads storage config at import time, so pin it before loading the module.
 process.env.R2_ENDPOINT = "https://example-r2.invalid";
 process.env.R2_UPLOAD_KEY = "test-key";
 process.env.R2_UPLOAD_SECRET = "test-secret";
@@ -29,11 +28,6 @@ const BASE = "https://files.hypertask.app";
 const SESSION = "sess-abc";
 const OWN = `${BASE}/ai-chat/attachments/${SESSION}/1785_shot.png`;
 
-// WHY: AI chat attachments hit the same CORS wall as the task writer (HTPR-4735). The file
-// is uploaded the moment it is pasted, and files.hypertask.app serves no CORS header, so
-// the browser can never read it back into base64. Sending the URL is the only option, which
-// means the persist route now has to trust a client-supplied URL. These tests pin the check
-// that makes that safe. Ref HTPR-4777.
 
 test("this session's own uploaded attachment resolves to its storage key", () => {
   assert.equal(
@@ -42,9 +36,6 @@ test("this session's own uploaded attachment resolves to its storage key", () =>
   );
 });
 
-// Deleting a chat session deletes the underlying object for every attachment row it holds,
-// so anything accepted here can later be destroyed by whoever owns that session. Accepting
-// another user's task attachment would turn "delete my chat" into "delete their file".
 test("a file belonging to anyone else is refused", () => {
   const foreign = [
     [`${BASE}/tasks/attachments/1785_victim.png`, "someone else's task attachment"],
@@ -52,7 +43,6 @@ test("a file belonging to anyone else is refused", () => {
     [`${BASE}/ai-chat/attachments/${SESSION}/../other-session/x.png`, "path traversal"],
     [`${BASE}/ai-chat/attachments/${SESSION}/nested/x.png`, "a nested key"],
     [`${BASE}/ai-chat/attachments/${SESSION}`, "the folder itself"],
-    // url.pathname leaves %2F encoded, so these look like a single segment until decoded.
     [`${BASE}/ai-chat/attachments/${SESSION}/a%2F..%2Fb.png`, "encoded separator"],
     [`${BASE}/ai-chat/attachments/${SESSION}/a%5Cb.png`, "encoded backslash"],
     [`${BASE}/ai-chat/attachments/${SESSION}/%2E%2E%2Fx.png`, "encoded traversal"],
@@ -62,9 +52,6 @@ test("a file belonging to anyone else is refused", () => {
   }
 });
 
-// The previous revision reused a broader helper that fell back to accepting any hostname
-// ending in amazonaws.com or cloudfront.net, so an attacker-controlled host could be
-// persisted and later rendered and fed to the model.
 test("a foreign host is refused even when the path looks right", () => {
   const KEY = `/ai-chat/attachments/${SESSION}/1785_shot.png`;
   for (const host of [
@@ -83,8 +70,6 @@ test("a foreign host is refused even when the path looks right", () => {
   }
 });
 
-// R2 and S3 key off the decoded path while the URL carries it percent-encoded, so without
-// decoding, a file with a non-ASCII name misses its own object.
 test("a percent-encoded file name resolves to the decoded key", () => {
   assert.equal(
     resolveOwnAiChatAttachmentKey(
@@ -101,7 +86,6 @@ test("junk input returns null rather than throwing", () => {
   }
 });
 
-// Source-level guards for the two wiring mistakes that would reintroduce the bug.
 const ROUTE = fs.readFileSync(
   path.join(root, "src/app/api/ai-chat/add-message/route.ts"),
   "utf8"
@@ -115,9 +99,6 @@ test("the hosted-URL branch runs before the data-URL parse, which throws on http
   assert.ok(authorise < parse, "authorising second would throw before it ever ran");
 });
 
-// A HEAD can fail for transient or permission reasons. Treating that as "not allowed" would
-// drop the user's own message while the assistant reply persists separately, leaving a
-// reply with no question.
 test("a failed size lookup does not reject the attachment", () => {
   const branch = ROUTE.slice(
     ROUTE.indexOf("const ownKey ="),

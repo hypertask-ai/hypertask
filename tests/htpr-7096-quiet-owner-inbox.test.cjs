@@ -1,6 +1,3 @@
-// HTPR-7096: with the flag on, the owner's inbox only hears from their own
-// agents when a comment mentions them, an agent mention is Important only when
-// it is an unanswered Question. Flag off keeps today's behaviour.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

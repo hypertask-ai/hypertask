@@ -54,7 +54,6 @@ export async function query(url, token, body, headers = {}) {
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.any([AbortSignal.timeout(timeLeft(90000)), ...(deadlines.getStore() ? [deadlines.getStore().signal] : [])]),
   });
-  // Provider response bodies may contain credentials; callers only expose safe status codes.
   let data;
   try { data = await response.json(); } catch { throw new Error('invalid query response'); }
   return { status: response.status, data };

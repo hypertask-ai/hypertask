@@ -337,7 +337,7 @@ test('unchanged red tick makes one API call and no second alert; new failures ap
   const mock = counted(d, { cancelled: false });
   await tick({ dir, api: mock.api });
   const firstCalls = mock.github();
-  assert.equal(firstCalls, 4 + d.prs.length); // list, failed job, log, compare, and new-streak PR files
+  assert.equal(firstCalls, 4 + d.prs.length);
   const writes = mock.writes.length;
   mock.api.task = () => assert.fail('repeated streak must not read fixer tickets');
   mock.api.identity = () => assert.fail('idle tick must not resolve a writer');
@@ -349,7 +349,7 @@ test('unchanged red tick makes one API call and no second alert; new failures ap
     log: `${originalLog}\ntest at tests/new-red.test.cjs:1:1\n  Error: newFailureToken is not a function\ntest at tests/another-red.test.cjs:1:1\n  Error: anotherFailureToken is not a function\n` });
   next.api.task = () => assert.fail('existing streak must not re-read tickets');
   await tick({ dir, api: next.api });
-  assert.equal(next.github(), 4); // list, two failed jobs, log; no PR patches
+  assert.equal(next.github(), 4);
   assert.equal(next.calls.filter(([bin, args]) => bin === 'gh' && args[3].includes('/pulls/')).length, 0);
   assert.equal(next.writes.length, 1);
   assert.deepEqual(next.writes[0].slice(0, 3), ['activity', 'add', 'YPER4-9999']);

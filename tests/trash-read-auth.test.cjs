@@ -55,7 +55,6 @@ function harness({ userId = 42, ownerId = 99, members = [], status = "Normal", t
     await handler({ headers: {}, query: { projectId, userId: 99 }, body: { userId: 99 } }, res);
     return res;
   }
-  // Execute the actual server component with JSX/navigation boundaries stubbed.
   const filename = path.resolve(__dirname, "../src/app/trash/[projectId]/page.tsx");
   const compiled = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     fileName: filename,

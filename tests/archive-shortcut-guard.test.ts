@@ -24,7 +24,6 @@ test("a long press archives exactly one task, however long it is held", () => {
 test("auto-repeat reported as discrete presses is still held to one task", () => {
   resetArchiveShortcutGuard();
   let archived = 0;
-  // X11 auto-repeat and some remote desktops deliver repeat === false.
   for (let repeat = 0; repeat < 100; repeat += 1) {
     if (shouldRunArchiveShortcut({ repeat: false })) archived += 1;
   }
@@ -46,7 +45,6 @@ test("rapid separate taps each archive without a cooldown", () => {
 test("the held state is shared across the next card and column", () => {
   resetArchiveShortcutGuard();
   assert.equal(shouldRunArchiveShortcut({ repeat: false }), true);
-  // A different card component handling the same held key gets the same answer.
   assert.equal(shouldRunArchiveShortcut({ repeat: false }), false);
   assert.equal(shouldRunArchiveShortcut({ repeat: false }), false);
 });

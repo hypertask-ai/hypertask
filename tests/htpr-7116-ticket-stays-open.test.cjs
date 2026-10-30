@@ -1,4 +1,3 @@
-// HTPR-7116: a ticket opened on a phone must not vanish when its late panels load.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -12,7 +11,6 @@ const hook = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetai
 test("the late panels mount in a transition when the flag is on, urgently when off", () => {
   assert.match(hook, /const ticketStaysOpen = useFlag\(HTPR_7116_TICKET_STAYS_OPEN_FLAG\);/);
   assert.match(hook, /ticketStaysOpen\s*\?\s*\(\) => startTransition\(\(\) => setSecondaryPanelsReady\(true\)\)\s*:\s*\(\) => setSecondaryPanelsReady\(true\)/);
-  // No other path may flip the panels on outside the flagged choice.
   assert.equal(hook.match(/setSecondaryPanelsReady\(true\)/g).length, 2);
 });
 
@@ -24,12 +22,9 @@ test("flag is a bugfix, default Everyone, with release risk", () => {
   assert.ok(def.default.releaseRisk);
 });
 
-// The mechanism the fix relies on: React keeps an already shown Suspense boundary on
-// screen while a transition suspends, but hides it for an urgent update.
 test("react keeps a shown boundary for a suspending transition and hides it for an urgent update", async () => {
   const { JSDOM } = require("jsdom");
   const dom = new JSDOM("<!doctype html><div id=root></div>");
-  // Left installed: React's scheduler may still tick after the test (own process per file).
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;

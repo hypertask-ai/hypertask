@@ -1,9 +1,3 @@
-/**
- * HTPR-6516: agent tokens stamp the acting agent on write, and a deleted
- * agent's stored name is what readers see.
- *
- * Run: npm run test:file -- tests/htpr-6516-agent-attribution.test.cjs
- */
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");

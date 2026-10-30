@@ -5,8 +5,6 @@ import os from "node:os";
 
 export const CONTAINER = "ht4671pg";
 
-// Throwaway container, so the password is generated per run rather than
-// written down. Override to reuse a container across runs.
 const POSTGRES_PASSWORD =
   process.env.HTPR4671_PG_PASSWORD ?? crypto.randomUUID();
 
@@ -39,7 +37,6 @@ export function psqlFile(sqlText, { db = "postgres" } = {}) {
 
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
 
-/** JWTs shaped like the real agent credential, covering every base64url padding class. */
 export function sampleTokens(count = 200) {
   const rows = [];
   for (let i = 0; i < count; i++) {

@@ -79,18 +79,11 @@ test("recent mobile waveform, dictation, and touch-target fixes remain", () => {
   assert.match(mobileBar, /key="new-task-dictation"/);
   assert.match(mobileBar, /visualizerClassName="!mb-0 w-full"/);
   assert.match(mobileBar, /id="create-task-modal-audio-button"/);
-  // Idle dictation must keep its 44px target. It now also carries ml-auto to
-  // open the gap after attach, so match the guarantee rather than the literal.
   assert.match(
     mobileBar,
     /className=\{isDictating \? undefined : MOBILE_TARGET\}/,
     "the idle recorder keeps MOBILE_TARGET",
   );
-  // Wireframe row (HTPR-5517): the mic is the filled primary while the composer
-  // is empty and joins the bare-glyph group once text exists. Flex order moves
-  // the one mounted instance instead of conditional JSX, so it never remounts.
-  // The order MUST ride on wrapperClassName: only the .audio-recorder root is a
-  // direct flex child, order on the inner className div is silently ignored.
   assert.match(
     mobileBar,
     /let recorderWrapperClassName = hasText \? "order-2" : "order-4";/,

@@ -1,5 +1,3 @@
-// YPER4-334: one production error gives one Bugs ticket. PostHog issue alerts
-// file it; the older reporter only files when PostHog did not get the error.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

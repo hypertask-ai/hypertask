@@ -47,7 +47,6 @@ const helper = jiti(path.join(root, 'src/utils/controllers/turbopuffer/turbopuff
 const { turbopufferGetDocuments } = jiti(path.join(root, 'src/utils/controllers/search/document.ts')) as typeof import('../src/utils/controllers/search/document')
 const handler = jiti(path.join(root, 'src/pages/api/search/document.ts')).default as any
 
-// Compile the actual row JSX without loading unrelated app providers and hooks.
 const source = fs.readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
 const ast = ts.createSourceFile('SearchComp.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
 const row = ast.statements.find((statement) => ts.isVariableStatement(statement) &&

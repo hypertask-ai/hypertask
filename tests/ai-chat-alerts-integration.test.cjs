@@ -250,7 +250,6 @@ test("existing Manager webhook transport retries three times and reports handled
   assert.equal((await webhook.deliverAgentWebhook("outbox")).status, "skipped");
   assert.equal(queued.length, 3);
   assert.equal(JSON.stringify(reports).includes("private upstream body"), false);
-  // YPER4-358: the dead delivery leaves one log line for the error collector, without the reply body.
   const dead = loggedErrors.filter((line) => line.startsWith("[agent-webhook] delivery failed"));
   assert.deepEqual(dead, ["[agent-webhook] delivery failed after 4 attempts (HTTP 503)"]);
   assert.equal(loggedErrors.join("\n").includes("private upstream body"), false);

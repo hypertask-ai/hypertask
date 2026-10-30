@@ -109,7 +109,6 @@ test("verifyGithubSignature accepts a valid signature and rejects everything els
   assert.equal(verifyGithubSignature(`${rawBody}tampered`, signature, secret), false);
   assert.equal(verifyGithubSignature(rawBody, undefined, secret), false);
   assert.equal(verifyGithubSignature(rawBody, "sha256=too-short", secret), false);
-  // Fails closed: no secret configured must never validate, even with a well-formed header.
   assert.equal(verifyGithubSignature(rawBody, signature, undefined), false);
   assert.equal(verifyGithubSignature(rawBody, signature, ""), false);
 });
@@ -858,8 +857,6 @@ test("extractTicketId ignores flag keys in the body of another board's PR (PR 11
     "src/app/api/webhooks/github/github-webhook-helpers.ts"
   );
 
-  // HTPR-7014: PR 1191 belonged to YPER4-220, but its description mentioned
-  // the flag "htpr-7010", so merging it moved HTPR-7010 to QA.
   assert.equal(
     extractTicketId({
       boardPrefix: "HTPR",
@@ -894,9 +891,6 @@ test("extractTicketId prefers the branch's ticket over a different ticket mentio
     "src/app/api/webhooks/github/github-webhook-helpers.ts"
   );
 
-  // Title references a stale/related ticket; branch is the PR's own ticket.
-  // Trusting the title here would silently act on the wrong (possibly
-  // cross-board) ticket.
   assert.equal(
     extractTicketId({
       boardPrefix: "INNE",
@@ -913,9 +907,6 @@ test("extractTicketId is not hijacked by ticket-shaped technical prose in the ti
     "src/app/api/webhooks/github/github-webhook-helpers.ts"
   );
 
-  // "UTF-8" / "SHA-256" match the WORD-123 shape but are not ticket ids.
-  // Branch-first precedence means the real ticket wins before the title is
-  // even inspected.
   assert.equal(
     extractTicketId({
       boardPrefix: "HTPR",

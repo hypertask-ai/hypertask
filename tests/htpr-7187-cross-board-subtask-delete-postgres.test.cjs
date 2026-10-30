@@ -1,6 +1,3 @@
-// Real-controller regression for https://app.hypertask.ai/detail/project-15/7187.
-// Only dummy data in a disposable PostgreSQL container; no mocked Prisma reads.
-// Docker unavailable: SKIP locally, hard failure with HT_REQUIRE_PG_TESTS=1.
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -83,7 +80,6 @@ async function provision() {
       return { skipReason: "postgres container did not become ready within 30s", cleanup };
     }
 
-    // Match the existing PG harnesses: materialize the full Prisma schema as SQL.
     schemaSql = path.join(os.tmpdir(), `htpr7187-schema-${process.pid}-${Date.now()}.sql`);
     const diff = run(process.execPath, [
       path.join(root, "node_modules", "prisma", "build", "index.js"),
@@ -102,9 +98,7 @@ async function provision() {
     }
 
     process.env.DATABASE_URL = url;
-    // Feature-flag evaluation must not reach a developer's shared Redis cache.
     delete process.env.REDIS_URL;
-    // Hard deletion also removes search documents; keep that side effect local.
     searchServer = http.createServer((req, res) => {
       req.resume();
       res.writeHead(200, { "Content-Type": "application/json" });
@@ -114,7 +108,7 @@ async function provision() {
       searchServer.on("error", reject);
       searchServer.listen(0, "127.0.0.1", resolve);
     });
-    process.env.TURBOPUFFER_API_KEY = "x"; // dummy, the local stub ignores it
+    process.env.TURBOPUFFER_API_KEY = "x";
     process.env.TURBOPUFFER_BASE_URL = `http://127.0.0.1:${searchServer.address().port}`;
     const jiti = require("jiti")(__filename, {
       interopDefault: true,

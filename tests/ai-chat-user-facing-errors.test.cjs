@@ -253,17 +253,10 @@ test("board agent instructions never let the model answer as the agent after a f
   assert.notEqual(end, -1, "METADATA FILTERING LOGIC section must follow it");
   const section = AGENT_SYSTEM_PROMPT.slice(start, end);
 
-  // The synthesize-and-attribute instruction only fires on success; a
-  // generic "success: false" guard (not a list of the tool's specific error
-  // strings) keeps this correct even if new failure branches are added.
   assert.match(section, /returns success: true, synthesize/);
   assert.match(section, /returns success: false/);
   assert.match(section, /do not answer the question from your own general knowledge/i);
   assert.match(section, /never present your own knowledge as if it came from the agent/i);
 
-  // The failure message must stay user-safe: the model is told to describe
-  // the failure in its own words, never to quote the tool's raw error text
-  // (which would cross the model-facing vs user-facing error boundary this
-  // file otherwise maintains via errorMessage()/userFacingErrorMessage()).
   assert.match(section, /do not quote the tool's raw error text/i);
 });

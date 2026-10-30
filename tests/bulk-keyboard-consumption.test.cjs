@@ -12,7 +12,6 @@ const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") 
 const { KeyCodes } = jiti(path.join(root, "src/lib/constants/keyboard-handler.ts"));
 const { getTaskShortcutAction } = jiti(path.join(root, "src/lib/keyboard/taskShortcuts.ts"));
 
-// Execute the real handlers; stub only hooks and their external action boundaries.
 function load(file, names, env) {
   const text = file === cardFile && process.env.BULK_KEYBOARD_CARD_SOURCE
     ? fs.readFileSync(process.env.BULK_KEYBOARD_CARD_SOURCE, "utf8")
@@ -84,8 +83,6 @@ function fixture({ selected = true, isApple = false } = {}) {
     });
     return run;
   });
-  // Provider document dispatch can consume an event before a card's listener on
-  // the same node; stopPropagation alone cannot prevent that second listener.
   const { onDocumentKeyDown: bulkDocumentHandler } = load(bulkFile, ["onDocumentKeyDown"], env);
   const send = async (keyCode, modifiers = {}, target = cards[1]) => {
     target.focus();

@@ -5,10 +5,6 @@ const path = require("node:path");
 const Module = require("node:module");
 const ts = require("typescript");
 
-// A push token identifies a browser, so it belongs to exactly one account at a
-// time. Registration used to create a second row instead of taking the token
-// from the previous owner, so a browser signed in as one account kept receiving
-// another account's notifications, ticket titles included (HTPR-4865).
 
 const root = path.resolve(__dirname, "..");
 const source = fs.readFileSync(
@@ -29,7 +25,6 @@ const OLD_OWNER = 6;
 const NEW_OWNER = 985;
 
 function loadHandler(session) {
-  // Stands in for the SubscribedDevices table.
   let rows = [
     { id: "r1", firebaseId: TOKEN, userId: OLD_OWNER },
     { id: "r2", firebaseId: "another-browser", userId: OLD_OWNER },

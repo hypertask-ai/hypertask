@@ -8,12 +8,6 @@ const read = (p) => fs.readFileSync(path.join(root, p), "utf8");
 
 const CHAT_HOOK = "src/hooks/MultiPages/AIChat/useAiChat.ts";
 
-// WHY (HTPR-6095): AI chat archives/unarchives notifications server-side and
-// only tells this tab about it through a Pusher broadcast. That broadcast
-// competes with the same tab re-rendering every streamed token, so the inbox
-// badge could stay stale long after the chat turn actually finished (13
-// notifications archived, badge still showed the pre-archive count). The fix
-// self-corrects at stream end instead of waiting on the websocket round trip.
 test("the chat stream refetches the inbox query when a turn's 'done' event arrives", () => {
   const source = read(CHAT_HOOK);
 

@@ -4,14 +4,6 @@ const path = require("node:path");
 const axios = require("axios");
 const { QueryClient } = require("@tanstack/react-query");
 
-// HTPR-6063: useGetNotifications mounts independently in the app shell and
-// the inbox page, so each mount's own effect fired its own
-// /api/notifications/access request - 2-3x per load, confirmed via HAR,
-// competing for connections in the window that gates the inbox GET's start
-// time. fetchInboxAccessibleProjectIds collapses concurrent callers onto one
-// in-flight request via React Query's own dedupe (queryKey + staleTime: 0),
-// not a time-based cache: a fresh call after the prior one settles must
-// still hit the server.
 
 const root = path.join(__dirname, "..");
 const jiti = require("jiti")(__filename, {

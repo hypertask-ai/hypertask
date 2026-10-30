@@ -2,10 +2,6 @@
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import nookies from "nookies";
 
-/**
- * @typedef {Object} HUser
- * @property {number} id - User identifier in the application database
- */
 interface HUser {
   id: number;
 }
@@ -47,12 +43,6 @@ type TLoginWithEmail = {
   skipDatabaseUpdate: boolean;
 };
 
-/**
- * @typedef {Object} IAuth
- * @property {HUser|null} currentUser - The current authenticated user or null if not authenticated
- * @property {Function} signupWithGoogle - Function to sign up with Google
- * @property {Function} loginWithGoogle - Function to log in with Google
- */
 interface IAuth {
   authenticatedUserId: number | null;
   currentUser: HUser | null;

@@ -94,7 +94,6 @@ test('revoked page cookies reload the same URL signed out, keeping login link to
       assert.equal(response.cookies.get(name)?.expires.getTime(), 0)
     }
   }
-  // The reload carries no cookies, so the usual signed-out handling sends /inbox to login.
   const reload = await h.proxy(request('/inbox', undefined, { user: false }))
   assert.match(reload.headers.get('location') ?? '', /\/login/)
 })

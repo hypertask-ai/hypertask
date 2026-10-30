@@ -1,5 +1,3 @@
-// HTPR-5690: open task detail views must live-sync when a ticket is archived
-// from another tab, the board, AI chat, or the auto-archive sweep.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

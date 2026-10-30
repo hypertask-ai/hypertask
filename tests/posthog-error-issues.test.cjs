@@ -422,7 +422,6 @@ test("review racing creation rechecks before create and converges duplicates on 
       if (++creations === 2) release();
       await created;
     }
-    // Reverse search ordering to prove the canonical choice does not depend on it.
     if (url.includes("/tasks?")) {
       const page = JSON.parse(await result.text());
       return response({ tasks: page.tasks.reverse() });

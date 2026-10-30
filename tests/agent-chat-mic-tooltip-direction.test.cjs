@@ -1,6 +1,3 @@
-// HTPR-6292: the Agent Chat composer sits on the viewport's bottom edge, so
-// its mic tooltips must open upward (positive CSS bottom) instead of being
-// clipped below the fold. Every other mic keeps opening downward.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -88,7 +85,6 @@ const renderMic = (id) => {
     Event: dom.window.Event,
     MouseEvent: dom.window.MouseEvent,
     IS_REACT_ACT_ENVIRONMENT: true,
-    // AudioButton reads the bare `localStorage` global, not window.localStorage.
     localStorage: dom.window.localStorage,
   });
 
@@ -112,7 +108,6 @@ const renderMic = (id) => {
   });
   const mic = dom.window.document.getElementById(id);
   assert.ok(mic, "mic element should render");
-  // React synthesizes onMouseEnter from delegated mouseover events.
   act(() => {
     mic.dispatchEvent(
       new dom.window.MouseEvent("mouseover", { bubbles: true }),

@@ -81,7 +81,6 @@ for (const route of ["priority/getByTask", "estimate/getByTask", "labels/getByTa
       const h = harness(null);
       const res = await h[mode](route, { taskId: 17, id: 17, projectId: 17, currentTaskId: 17, userId: 99 });
       assert.equal(res.statusCode, 401);
-      // The adapter and the shared route may each look the caller up; neither may read content.
       assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"));
     });
   }

@@ -15,12 +15,10 @@ const durationReporter = fileURLToPath(new URL("./test-duration-reporter.mjs", i
 const fileDurations = [];
 let timingDirectory;
 const testsRoot = path.join(root, "tests");
-// A hung or runaway test file is cancelled after 20 minutes instead of running for hours (YPER4-279).
 const FILE_TIMEOUT = `--test-timeout=${process.env.TEST_FILE_TIMEOUT_MS ?? 20 * 60 * 1000}`;
 const isCi = process.env.CI === "true" || process.env.GITHUB_ACTIONS !== undefined;
 const TEST_CONCURRENCY = process.env.TEST_CONCURRENCY ?? (isCi ? 4 : 2);
 
-// Match Next's server alias in plain Node tests, including nested test processes.
 process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${path.join(testsRoot, "helpers/register-server-only.cjs")}`.trim();
 
 function relative(absolute) {
@@ -111,9 +109,6 @@ if (requested.length > 0) {
 const cjsTests = selected.filter((file) => file.endsWith(".test.cjs"));
 const tsTests = selected.filter((file) => file.endsWith(".test.ts"));
 
-// These tests replace TypeScript modules through require.cache or inspect
-// repository-wide contract files. Run them one at a time before the shared
-// suite so their fixtures cannot overlap with another test file.
 const isolatedCjsTests = new Set([
   "tests/action-archive-cache.test.cjs",
   "tests/agent-run-activities.test.cjs",
@@ -185,8 +180,6 @@ if (cjsTests.length > 0) {
     await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`);
   }
   if (shared.length > 0) {
-    // Cap at 4 workers in CI and 2 on the shared VPS: the default (one per core)
-    // put 18+ node processes on the box (owner, 2026-08-25; YPER4-339).
     await run(process.execPath, ["--test", FILE_TIMEOUT, `--test-concurrency=${TEST_CONCURRENCY}`, ...shared], "Node test suite", Number(TEST_CONCURRENCY));
   }
 }

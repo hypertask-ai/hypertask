@@ -1,8 +1,3 @@
-// HTPR-3805: a failed custom-field save (e.g. the owner-403 bug) discarded
-// the error silently and reverted the typed value with no explanation, which
-// looked like "the number just didn't save". The rail editor must surface
-// the failure via toast, matching how sibling rail properties report saves
-// that fail (see the "Unable to clear blocked by person" toast in this file).
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

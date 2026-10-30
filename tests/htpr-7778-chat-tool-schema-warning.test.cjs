@@ -11,10 +11,6 @@ const load = require("jiti")(__filename, {
   fsCache: false,
 });
 
-// @ai-sdk/openai strips propertyNames and regex lookaround patterns from every
-// tool schema before a request and logs an "AI SDK Warning" each time. Zod
-// emits propertyNames for z.record(), so chat tools must not use it: one
-// rag_retrieval schema produced a warning on every chat turn (HTPR-7778).
 function strippedKeywords(schema) {
   const found = [];
   const walk = (node, at) => {

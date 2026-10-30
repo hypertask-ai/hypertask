@@ -1,7 +1,3 @@
-// Editor uploads stored a hardcoded "1" instead of the real byte count, so every
-// attachment added through the task description or a comment failed the download
-// integrity check and no client could ever fetch the file. These tests encode why
-// that sentinel must be treated as "never measured" and repaired on first download.
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const test = require('node:test')
@@ -81,11 +77,6 @@ test('still rejects a genuinely measured size that does not match the bytes', as
 })
 
 test('fails closed on a corrupt stored size instead of treating it as unmeasured', async () => {
-  // A malformed size is not "never measured": trusting it would silently drop
-  // the integrity guarantee for whatever wrote the bad value.
-  // '01', ' 1 ' and '1e0' all read as 1 through Number(). Treating them as the
-  // legacy sentinel would skip the length check forever, because the repair
-  // path only ever rewrites the exact string '1'.
   for (const storedSize of [
     '-1',
     '1.5',
@@ -105,8 +96,6 @@ test('fails closed on a corrupt stored size instead of treating it as unmeasured
 })
 
 test('a genuine one byte upload is served and rewritten with its true size', async () => {
-  // Known ceiling of the sentinel: a real one byte file reads as unmeasured, so
-  // it skips the length check and is simply rewritten with the same value.
   const oneByte = Buffer.from('x')
   const { GET, repaired } = handler({
     storedSize: '1',
@@ -119,8 +108,6 @@ test('a genuine one byte upload is served and rewritten with its true size', asy
 })
 
 test('does not record a size for a download that fails its content type check', async () => {
-  // Writing a length back for bytes we then refuse would launder a bad object
-  // into a row that looks verified.
   const { GET, repaired } = handler({
     storedSize: '1',
     fetchAttachment: async () => ({ buffer: bytes, contentType: 'text/html' }),
@@ -145,13 +132,10 @@ test('a measured size is stored verbatim so downloads can verify it', () => {
   assert.equal(measuredSizeString(0), '0')
   assert.equal(measuredSizeString(1), '1')
   assert.equal(measuredSizeString(2048576), '2048576')
-  // A size read back out of the database arrives as a string and must survive.
   assert.equal(measuredSizeString('4096'), '4096')
 })
 
 test('an unusable client-supplied size is stored as unmeasured, never as a fake number', () => {
-  // The original bug was a fake "1" written for every editor upload. Storing any
-  // other bad value would reintroduce it, so these all become null.
   for (const value of [
     undefined, null, NaN, Infinity, -1, 1.5, '', 'abc', {},
     Number.MAX_SAFE_INTEGER + 1,

@@ -1,8 +1,5 @@
-// Layout lock matrix (YPER4-252): the same page parts, compared at every width and sidebar state.
 import type { Box } from './layout-lock'
 
-// flowY: the vertical position depends on scroll or on how tall earlier content is (a long thread, a phone page
-// that opens scrolled), so only x, width and the relations to fixed parts are compared.
 export type Anchor = { selector: string; box: Box; contentHeight?: boolean; flowY?: boolean }
 export type Anchors = Record<string, Anchor>
 export type MatrixState = { ai: 'open' | 'closed'; rail: 'expanded' | 'collapsed' }
@@ -16,7 +13,6 @@ export const MATRIX_STATES: MatrixState[] = [
   { ai: 'open', rail: 'expanded' },
   { ai: 'open', rail: 'collapsed' },
 ]
-// "A few pixels" (YPER4-252). The older layout-lock spec keeps its looser 24px.
 export const MATRIX_TOLERANCE = 8
 const EDGE = 2
 export const MATRIX_CHANGE_MESSAGE = "Layout moved. If the ticket asked for this change, update e2e/smoke/layout-lock-matrix.baseline.json, add the page to its approvedIn map with the ticket where Valentin approved it, and put 'Layout change approved: <that ticket URL>' in the PR body."
@@ -39,7 +35,6 @@ const bottom = (box: Box) => box.y + box.height
 const overlapsVertically = (a: Box, b: Box) => a.y < bottom(b) - EDGE && b.y < bottom(a) - EDGE
 const overlapsHorizontally = (a: Box, b: Box) => a.x < right(b) - EDGE && b.x < right(a) - EDGE
 
-// Which parts sit side by side (same row, one left of the other) or stacked (one above the other).
 export function relations(boxes: Record<string, Box>): Relation[] {
   const names = Object.keys(boxes).sort()
   const found: Relation[] = []
@@ -80,7 +75,6 @@ export function matrixDifferences(
     }
     present[name] = box
   }
-  // Relational checks first: they name the cause, the displacement lines below give the numbers.
   const fixed = Object.fromEntries(Object.entries(baseline).filter(([, anchor]) => !anchor.flowY).map(([name, anchor]) => [name, anchor.box]))
   for (const relation of relations(fixed)) {
     const a = present[relation.a]
@@ -128,7 +122,6 @@ export function validateMatrixFlagChanges(entries: readonly MatrixFlagChange[], 
   return failures
 }
 
-// The composer is the last thing of a ticket thread, including when only the description is rendered.
 export function composerFollowsThread(label: string, composerTop: number | null, lastCommentBottom: number | null, descriptionBottom: number | null): string[] {
   if (composerTop === null) return [`${label}: comment composer is missing`]
   const threadBottom = lastCommentBottom ?? descriptionBottom
@@ -138,7 +131,6 @@ export function composerFollowsThread(label: string, composerTop: number | null,
     : []
 }
 
-// Self-contained so Playwright can serialize it; injected readers/frames keep its unit cases pure.
 export async function waitForStableScroll({
   baselineLayout,
   read = () => {

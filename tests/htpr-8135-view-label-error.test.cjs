@@ -4,10 +4,6 @@ const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const { unresolvedLabelMessage } = load("src/lib/mcp/labelMessages.ts", {});
 
-// The view tools refused an unknown tag with "Label(s) not found in project: X"
-// and never said which tags the board has, so an agent had to guess. The tag
-// tools already answer that question; this helper is now the one wording both
-// paths use, so they cannot drift apart again.
 test("names the unknown tag and lists the tags the board has", () => {
   assert.equal(
     unresolvedLabelMessage(["Backlog"], [
