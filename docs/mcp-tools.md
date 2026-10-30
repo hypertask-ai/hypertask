@@ -100,7 +100,7 @@ The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_
 
 Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
 
-This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Everyone. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.
+This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Owner + QA because it can move a ticket to Trash. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.
 
 ### Archive or delete a ticket
 
@@ -108,7 +108,7 @@ This is the app repository's API/MCP contract; native CLI argument parsing lives
 
 Archive does the same write as Archive in the app: the ticket leaves the board and stays in Archive. Delete does the same write as Delete in the app: the ticket and its sub-tasks move to Trash, `permanentlyDeleteAt` is 30 days out, and the ticket can be restored from Trash until then. Both answer `{ "success": true, "task": { "id", "ticketNumber", "projectId", "status", "archivedAt", "permanentlyDeleteAt" } }`.
 
-A read-only agent, or an agent without write access to the ticket's board, is refused; a ticket on another board answers 404. The ticket switch `htpr-8215-agent-archive-delete` defaults to Everyone. Switching it off makes both endpoints answer 404 without changing archive or delete in the app. The native CLI commands live in the separate CLI repository.
+A read-only agent, or an agent without write access to the ticket's board, is refused; a ticket on another board answers 404. The ticket switch `htpr-8215-agent-archive-delete` defaults to Owner + QA because it can move a ticket to Trash. Switching it off makes both endpoints answer 404 without changing archive or delete in the app. The native CLI commands live in the separate CLI repository.
 
 ## Connected-agent skill templates
 
