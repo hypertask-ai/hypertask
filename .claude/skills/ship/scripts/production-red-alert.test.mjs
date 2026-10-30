@@ -183,7 +183,10 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     const route = args[3];
     if (route.endsWith(`/actions/runs/${data.run.id}`)) return JSON.stringify(data.run);
     if (/\/attempts\/\d+$/.test(route)) {
-      const attempt = attempts.find(r => route.endsWith(`/runs/${r.id}/attempts/${r.run_attempt}`));
+      const given = attempts.find(r => route.endsWith(`/runs/${r.id}/attempts/${r.run_attempt}`));
+      const number = Number(route.match(/\/attempts\/(\d+)$/)[1]);
+      const attempt = given || (route.includes(`/runs/${data.run.id}/attempts/`) && number >= 1
+        ? { ...data.run, run_attempt: number } : null);
       assert.ok(attempt, route); return JSON.stringify(attempt);
     }
     if (route.includes('/runs?')) {

@@ -84,6 +84,13 @@ function live(run = command) {
           if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
               r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
           const replay = target && r.id === target.id && !r.previousAttempt && (r.run_attempt || 1) > 1;
+          // An unchanged red tick stays one API call, so the idle check runs before any job read.
+          if (!latest) {
+            latest = r;
+            if (!target && state.lastRun === `${r.id}:${r.run_attempt || 1}:${r.updated_at || ''}`) {
+              return { status: 'idle', run: r };
+            }
+          }
           // A successful workflow cannot contain a failed test job.
           // Every failed test job is read: a red smoke job must never hide the failing ci-tests file.
           const shortcut = r.conclusion === 'success' && !replay;
@@ -94,12 +101,6 @@ function live(run = command) {
             : failedJobs[0] || jobList.find(j => j.name === 'ci-tests') || jobList[0];
           // A replay stands in for the first attempt, so a dry run shows the rerun the incident deserved.
           const row = replay && job.conclusion === 'failure' ? { ...r, run_attempt: 1, replay: true } : r;
-          if (!latest) {
-            latest = row;
-            if (!target && state.lastRun === `${row.id}:${row.run_attempt || 1}:${row.updated_at || ''}`) {
-              return { status: 'idle', run: row };
-            }
-          }
           if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
           if (!red) {
             if (job.conclusion !== 'failure') return { status: job.conclusion, run: row };
