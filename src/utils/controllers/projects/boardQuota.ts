@@ -51,7 +51,7 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
 
   return teams.some(
     (team) =>
-      (!savedPlanOnly && isInternalCompTeam(team.id)) ||
+      (savedPlanOnly ? false : isInternalCompTeam(team.id)) ||
       isTeamComped(team) ||
       team.subscriptionPlan.some(
         (plan) => cancelledFree
