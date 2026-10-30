@@ -28,6 +28,7 @@ function load(relativePath, stubs) {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts", {});
     if (request in stubs) return stubs[request];
+    if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
@@ -237,7 +238,7 @@ test("CLI get returns the current ticket number for an old reference scoped to i
   const f = fixture();
   const response = await f.get({ ticket_number: "HTPR-6641", project_id: "15" });
   assert.equal(response.status, 200);
-  assert.deepEqual(response.body.tasks, [{ id: 44769, projectId: 20, ticketNumber: "NEW-6814" }]);
+  assert.deepEqual(response.body.tasks, [{ id: 44769, projectId: 20, ticketNumber: "NEW-6814", skill_context: await require("./helpers/mcp-skill-context.cjs").getMcpSkillContext() }]);
   const byIndex = await f.get({ unique_index: "6641", project_id: "15" });
   assert.deepEqual(byIndex.body.tasks, response.body.tasks);
 });

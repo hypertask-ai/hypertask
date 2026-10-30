@@ -6,7 +6,7 @@ const jiti = require('jiti')(__filename, { interopDefault: true, alias: { '@': p
 const access = jiti(path.join(root, 'src/utils/controllers/projects/getAllIncludes.ts'));
 
 function matches(row, where = {}) {
-  if (row == null) return where === null;
+  if (row == null) return where === null || where?.equals === require('@prisma/client').Prisma.DbNull;
   return Object.entries(where).every(([key, value]) => {
     if (value === undefined || key === 'mode') return true;
     if (key === 'AND') return (Array.isArray(value) ? value : [value]).every(branch => matches(row, branch));

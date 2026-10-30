@@ -37,6 +37,7 @@ function loadRoute(comments) {
     },
   };
   const stubs = {
+    "@/lib/mcp/skills/context": require("./helpers/mcp-skill-context.cjs"),
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "next/server": {
       NextResponse: {
