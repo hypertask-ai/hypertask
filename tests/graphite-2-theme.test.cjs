@@ -95,7 +95,7 @@ test("theme hook gates cookie reads and writes independently of Material", () =>
 });
 
 test("Ctrl+K adds one command beside Graphite, dispatches it, and keeps old command ids", () => {
-  const commands = enabled => getAllCommands({ context: "Others" }, false, false, "", "", false, false, enabled).find(group => group.group === "Appearance").commandLists;
+  const commands = enabled => getAllCommands({ context: "Others" }, false, false, "", "", false, false, false, enabled).find(group => group.group === "Appearance").commandLists;
   const on = commands(true);
   const off = commands(false);
   const command = on.find(command => command.key === "graphite2Theme");
