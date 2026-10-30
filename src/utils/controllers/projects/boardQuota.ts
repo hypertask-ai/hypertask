@@ -1,6 +1,5 @@
 import { Prisma, Status } from "@prisma/client";
 
-import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
@@ -39,7 +38,6 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
       OR: [{ googleAccount: { userId } }, { members: { some: { userId } } }],
     },
     select: {
-      id: true,
       compedUntil: true,
       subscriptionPlan: { select: { subscriptionStatus: true } },
     },
@@ -49,7 +47,6 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
 
   return teams.some(
     (team) =>
-      isInternalCompTeam(team.id) ||
       isTeamComped(team) ||
       team.subscriptionPlan.some(
         (plan) => cancelledFree

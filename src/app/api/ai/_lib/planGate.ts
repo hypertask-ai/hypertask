@@ -1,6 +1,5 @@
 import prisma from "@/lib/prisma";
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
-import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { applyTeamComp } from "@/lib/teamComp";
 import {
   pickEntitlingSubscriptionRow,
@@ -36,7 +35,6 @@ export type TeamPlanSource = {
 
 export function storePlanIdForTeam(team: TeamPlanSource | null | undefined) {
   if (!team) return "Free" as const;
-  if (isInternalCompTeam(team.id)) return "Pro" as const;
   const row = pickEntitlingSubscriptionRow(
     team.subscriptionPlan,
     team.activeSubscriptionPlanId,
@@ -53,7 +51,6 @@ export async function storePlanIdForProject(
   teamId?: string | null
 ) {
   if (!projectId && !teamId) return "Free" as const;
-  if (isInternalCompTeam(teamId)) return "Pro" as const;
   const team = projectId
     ? (
         await prisma.project.findUnique({

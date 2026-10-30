@@ -1,5 +1,4 @@
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
-import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { teamCompPlan, applyTeamComp } from "@/lib/teamComp";
 import {
   pickEntitlingSubscriptionRow,
@@ -25,10 +24,9 @@ export function deriveTeamBilling(
     ? planKindFromStripePriceId(stripePriceId)
     : { storePlanId: "Free" as const, billingInterval: null };
   const comp = teamCompPlan(team);
-  const paidStorePlanId = applyTeamComp(team, paid.storePlanId);
+  const storePlanId = applyTeamComp(team, paid.storePlanId);
   const billingInterval =
-    comp && paidStorePlanId === comp ? null : paid.billingInterval;
-  const storePlanId = isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
+    comp && storePlanId === comp ? null : paid.billingInterval;
   const byokProviderFlags =
     team.byokApiKeys?.map(({ enabled, provider }) => ({
       enabled,

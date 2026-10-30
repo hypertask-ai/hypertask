@@ -215,6 +215,8 @@ should be migrated with the managed-key provisioning command.
 - Team "Hypertasks" (`08f79efd-770e-4e32-9728-65e6d29ec893`, boards 15 /
   229 / 1534 / 2063) uses `GATEWAY_KEY_HYPERTASK`. Before dedicated wiring,
   its traffic billed the trials key (~72% of that key's volume).
+  Its plan comes from its saved subscription like every team's (HTPR-7852);
+  no team id is forced to Pro in plan resolution.
 - inne swapped to Pro-monthly x16 with a permanent $300-off coupon (flat
   $100/mo deal) on 2026-07-11; gateway key unchanged. Their legacy raw
   OpenRouter BYOK row was deleted the same day.
