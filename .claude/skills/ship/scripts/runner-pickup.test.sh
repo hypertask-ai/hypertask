@@ -307,6 +307,16 @@ done
 [ -f "$T/units/runner-pickup@.timer" ] && [ -x "$HOME/.local/lib/hypertask/runner-pickup/runner-inbox-stop.sh" ] && ok "install copies units and hook" || bad "install files"
 grep -q 'enable --now runner-pickup@3.timer' "$T/systemctl.log" && ok "install enables the timer" || bad "enable"
 
+# A board read larger than one process argument can carry must still tick, never die on jq (YPER4-961).
+long=$(printf 'x%.0s' $(seq 1 900))
+jq -n --arg a 'Runner 3' --arg now "$NOWISO" --arg long "$long" \
+  '[range(0;200) | {ticketNumber:("YPER4-"+(2000+.|tostring)), uniqueIndex:(2000+.), title:("Big "+$long), section:"Backlog", projectId:15, createdAt:$now, updatedAt:$now, assignees:[{id:6, agent:{id:"x", displayName:$a}}]}] | {success:true, total:length, tasks:.}' > "$FAKE_TASKS"
+rm -f "$inbox"
+"$SCRIPT" run 3 2>"$T/big.err"; rc=$?
+eq "a board read over the argv limit still ticks" "$rc" "0"
+eq "every ticket of the big board read is queued" "$(jq '.items|length' "$inbox")" "200"
+grep -q 'Argument list too long' "$T/big.err" && bad "argv limit still hit: $(head -2 "$T/big.err")" || ok "no argv overflow on a big board read"
+
 echo "$passes passed, $fails failed"
 [ "$fails" = 0 ] && echo "ALL PASS"
 exit "$fails"
