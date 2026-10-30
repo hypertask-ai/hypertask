@@ -793,7 +793,6 @@ Hosted `ship-scripts-tests` runs the pickup domain fixture with
 `runner-pickup.recovery.test.py` and `runner-pickup.test.sh`. These cover pickup
 coordination, not manual claims.
 
-
 ## GitHub completion notifications (YPER4-881)
 
 `ci-wait <PR> --repo hypertask-ai/hypertask --timeout 1800` waits on local
