@@ -76,7 +76,9 @@ function inputRefusal(input: AiFeedbackInput): boolean {
 export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
-  const noDetails = !input.tool && input.status === undefined && !input.errorCode && !input.error && !input.note
+  const failureKind = input.category ?? 'other'
+  const noDetails = (failureKind === 'call_failed' || failureKind === 'other') &&
+    input.status === undefined && !input.errorCode && !input.error && !input.note
   let happened: string
   let reading: string
   let action: string

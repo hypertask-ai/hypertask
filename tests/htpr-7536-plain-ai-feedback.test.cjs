@@ -338,6 +338,14 @@ test('plain summaries distinguish scope, categories and supplied free text witho
   assert.match(rendered, /Free text was supplied and not stored/)
 })
 
+test('a tool name alone is not a detail, so the ticket asks for nothing', () => {
+  const { plainFeedback } = setup()
+  const toolOnly = { surface: 'cli', tool: 'task.comments', category: 'call_failed' }
+  assert.equal(plainFeedback(toolOnly, 'a'.repeat(64)).title, "An agent's CLI call to task.comments failed with no details (21 Oct)")
+  assert.match(plainFeedback(toolOnly, 'a'.repeat(64)).description, /Nothing for now/)
+  assert.match(plainFeedback({ ...toolOnly, errorCode: 'invalid_subcommand' }, 'a'.repeat(64)).description, /An engineer should look/)
+})
+
 for (const [mode, expectedPlain] of [['EVERYONE', true], ['OFF', false]]) {
   test(`anonymous automatic reports use global flag mode ${mode}`, async () => {
     const previous = process.env.AI_FEEDBACK_AGENT_USER_ID
