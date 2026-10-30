@@ -55,6 +55,7 @@ function fixture(options = {}) {
       assert.equal(userId, ctx.user.id);
       if (key === "htpr-7665-agent-read-role-guard") return true;
       if (key === "htpr-7724-blocker-comment") return options.blockerFlagEnabled !== false;
+      if (key === "htpr-8205-agent-clear-blocker") return options.clearFlagEnabled === true;
       assert.equal(key, "htpr-7723-task-waiting-on");
       return options.flagEnabled !== false;
     } },
@@ -384,7 +385,10 @@ for (const blockerCommentId of [101, null]) {
     assert.equal(receipt.waitingOnUserId, 8);
     assert.equal(receipt.waitingOnSetById, 7);
     assert.deepEqual(f.writes.map(({ data }) => data), [{ blockerCommentId }]);
-    assert.deepEqual(f.flags, [{ key: "htpr-7724-blocker-comment", userId: 7 }]);
+    assert.deepEqual(f.flags, [
+      { key: "htpr-7724-blocker-comment", userId: 7 },
+      ...(blockerCommentId === null ? [{ key: "htpr-8205-agent-clear-blocker", userId: 7 }] : []),
+    ]);
     for (const calls of [f.members, f.activities, f.inboxes]) assert.deepEqual(calls, []);
   });
 }

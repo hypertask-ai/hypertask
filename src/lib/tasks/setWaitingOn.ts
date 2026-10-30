@@ -101,7 +101,7 @@ export async function setTaskWaitingOn({
   });
 
   if (userId !== undefined || clearsBlocker) {
-    const actingAgent = agentId
+    const actingAgent = clearsBlocker && agentId
       ? await prisma.agent.findUnique({ where: { id: agentId }, select: actingAgentSelect })
       : null;
     await createActivity({
