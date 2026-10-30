@@ -23,5 +23,15 @@
     "maxUsdPerDay": 0,
     "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
+  },
+  "src/app/api/ai/task-questions/route.ts:c660e44a83f0584190f23325cef412c7534f34c5a06cc74da414e62810524554": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-7979 keeps the existing one chip request per new ticket on the existing Haiku model. Only the prompt text changes: it adds the original note and board rules, each clipped to 2000 characters, and the flag is Only Me. About 3000 input tokens at 0.1 USD per million is far under 1 USD a day even at 1000 new tickets.",
+    "source": "https://app.hypertask.ai/detail/project-15/7979"
+  },
+  "src/components/AI_CHAT/MessageList.tsx:3bafcad83053f0ac3553c525db5c0d0f232ce66d4c6957c52939f3e5495ffeb0": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7979 sends the original note to Hypertask's own same-origin task questions route. The browser call itself pays nothing; the route's model cost is noted on the route entry.",
+    "source": "https://app.hypertask.ai/detail/project-15/7979"
   }
 }
