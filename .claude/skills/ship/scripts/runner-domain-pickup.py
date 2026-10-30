@@ -123,12 +123,14 @@ for ticket, lease in mine.items():
             lease['acquired'] = lease['held'][:]
 
 held = {d for lease in mine.values() for d in lease['held']}
+admitted_other = {d for owner, leases in owners.items() if owner != runner for lease in leases.values()
+                  for d in (lease['held'] if not lease['pending'] else lease.get('acquired', []))}
 accepted = []
 for item in data['candidates']:
     ticket = item['ticket']
     d = domain(tasks[ticket])
     if ticket in mine:
-        if not mine[ticket]['pending'] and not any(conflicts(scope, other) for scope in mine[ticket]['held']):
+        if not mine[ticket]['pending'] and not any(conflicts(scope, admitted_other) for scope in mine[ticket]['held']):
             accepted.append({**item, '_pickupPrevious': mine[ticket].get('envelope')})
     elif not any(lease['pending'] for lease in mine.values()) and (not held or held == {d}) and not conflicts(d, other):
         mine[ticket] = {'held': [d], 'current': d, 'pending': False}

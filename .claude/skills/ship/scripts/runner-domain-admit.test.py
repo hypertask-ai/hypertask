@@ -31,7 +31,7 @@ if args[:2] == ['tasks', 'list']:
     project = int(args[args.index('--project') + 1])
     rows = [t for t in tasks if t['projectId'] == project]
     offset = int(args[args.index('--offset') + 1])
-    print(json.dumps({'success': True, 'total': len(rows) + int(os.environ.get('BAD_PAGE', '0')), 'tasks': rows[offset:offset+100]}))
+    print(json.dumps({'success': True, 'total': len(rows) + int(os.environ.get('BAD_PAGE', '0')), 'tasks': rows[offset:offset+100], 'nextCursor': 'full-page' if len(rows[offset:offset+100]) == 100 else None}))
 elif args[:2] == ['tasks', 'get']:
     print(json.dumps({'success': True, 'tasks': [t for t in tasks if t['ticketNumber'] == args[2]]}))
 elif args[:2] == ['comment', 'list']:
@@ -120,6 +120,15 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         self.assertEqual(result.returncode, 4)
         self.assertFalse((self.root / 'writes').exists())
 
+    def test_full_final_page_and_multiple_pages(self):
+        for count in (100, 101, 200):
+            with self.subTest(count=count):
+                self.set_tasks([self.task(f'YPER4-{n}', 'Flags') for n in range(1, count + 1)])
+                result = self.admit(1, 'YPER4-1')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']
+                self.assertEqual(lease['held'], ['Flags'])
+
     def test_concurrent_real_admission(self):
         self.set_tasks([self.task('YPER4-1', 'Flags'), self.task('YPER4-2', 'Flags')])
         procs = [subprocess.Popen(['python3', str(HERE / 'runner-domain-admit.py'), str(n), f'YPER4-{n}'],
@@ -139,7 +148,8 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         for task in (denied, allowed):
             task.update(title=task['ticketNumber'], section='Backlog')
         self.set_tasks([owner, denied, allowed])
-        rows = [{'runner': 'RUNNER 1', 'pane': '%1', 'state': 'idle'}]
+        rows = [{'runner': 'RUNNER 1', 'pane': '%1', 'state': 'idle'},
+                {'runner': 'RUNNER 2', 'pane': '%2', 'state': 'done'}]
         boards = {15: [], 4060: [owner, denied, allowed]}
         comments = {t['ticketNumber']: [] for t in boards[4060]}
         loop = self.root / 'loop'
@@ -152,9 +162,10 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
                 patch.object(module, 'send', side_effect=lambda pane, text, claim: delivered.append(text)):
             result = module.dispatch(rows, boards, comments, 1, 1800000000, go=True,
                                      claim_dir=self.root / 'claims', loop=loop, state=self.root)
-        self.assertEqual(delivered, ['/ship YPER4-2'])
+        self.assertEqual(delivered, ['/ship YPER4-2', '/ship YPER4-1'])
         self.assertEqual(result[0]['ticket'], 'YPER4-2')
-        self.assertFalse((self.root / 'claims' / 'YPER4-1.json').exists())
+        self.assertEqual(result[1]['ticket'], 'YPER4-1')
+        self.assertTrue((self.root / 'claims' / 'YPER4-1.json').exists())
 
     def test_deployed_dispatch_fallback_and_missing_helper(self):
         loader = importlib.machinery.SourceFileLoader('dispatch_deployed', str(HERE / 'runner-dispatch'))

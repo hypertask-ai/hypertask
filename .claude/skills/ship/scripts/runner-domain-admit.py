@@ -71,8 +71,6 @@ def main():
                     tasks[task['ticketNumber']] = task
                 offset += len(page['tasks'])
                 if offset == expected:
-                    if page.get('nextCursor'):
-                        raise ValueError('incomplete board page')
                     break
                 if not page['tasks']:
                     raise ValueError('incomplete board page')

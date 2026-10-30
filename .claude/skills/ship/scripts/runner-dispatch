@@ -665,6 +665,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
         if (load > 12 or runner not in ELIGIBLE or row["state"] not in {"done", "idle"}
                 or blocking or now - last.get(pane, 0) < 600):
             continue
+        denied = []
         while free:
             ticket = free.pop(0)
             if go:
@@ -691,6 +692,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 except (OSError, subprocess.SubprocessError) as error:
                     (claim_dir / f"{ticket}.json").unlink()
                     print(f"runner-dispatch: domain admission held {ticket}: {error}", file=sys.stderr)
+                    denied.append(ticket)
                     continue
                 at = time.time()
                 send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
@@ -705,6 +707,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 result["action"] = "sent"
             result["ticket"] = ticket
             break
+        free = denied + free
     return output
 
 
