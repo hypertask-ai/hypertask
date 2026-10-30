@@ -85,15 +85,36 @@ commit_time() {
 # A ticket shared by a PR and a column is read only once.
 inspect_ticket() {
   local t=$1 comments claim claim_id has_resume stamp line rc last_commit offset suffix count
+  local cursor='' pages=0 next
   [[ $t =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || fail "invalid ticket number: $t"
   jq --arg t "$t" '[.[] | select(.ticketNumber == $t)][0] // empty' "$work/tasks" > "$work/$t.task"
   if [ ! -s "$work/$t.task" ]; then
     fail "task batch has no row for $t"
   fi
-  hypertask comment list "$t" --sort createdAt:desc --limit 100 --json > "$work/$t.comments" \
-    || fail "cannot read comments for $t"
-  jq -e '.success == true and (.comments | type == "array")' "$work/$t.comments" >/dev/null \
-    || fail "invalid comments for $t"
+  echo '{"success":true,"comments":[]}' > "$work/$t.comments"
+  while :; do
+    pages=$((pages + 1))
+    [ "$pages" -le 20 ] || fail "too many comment pages for $t; retry the scan"
+    if [ -z "$cursor" ]; then
+      hypertask comment list "$t" --sort createdAt:desc --limit 100 --json > "$work/$t.page" \
+        || fail "cannot read comments for $t"
+    else
+      hypertask comment list "$t" --sort createdAt:desc --limit 100 --cursor "$cursor" --json > "$work/$t.page" \
+        || fail "cannot read comments for $t"
+    fi
+    jq -e '.success == true and (.comments | type == "array")' "$work/$t.page" >/dev/null \
+      || fail "invalid comments for $t"
+    jq -s '.[0] + {comments: (.[0].comments + .[1].comments)}' "$work/$t.comments" "$work/$t.page" > "$work/$t.merged" \
+      || fail "cannot collect comments for $t"
+    mv "$work/$t.merged" "$work/$t.comments"
+    jq -e 'any(.comments[]; (.agent.id != null or (.agent_display_name // "") != "")
+      and ((.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed.")))' \
+      "$work/$t.comments" >/dev/null && break
+    next=$(jq -r '.nextCursor // ""' "$work/$t.page")
+    [ -n "$next" ] || break
+    [ "$next" != "$cursor" ] || fail "comment paging made no progress for $t"
+    cursor=$next
+  done
   printf '{"success":true,"activities":[]}' > "$work/$t.log"
   offset=0
   while :; do
@@ -117,8 +138,8 @@ inspect_ticket() {
   claim=$(jq -c '[.comments[] | select(.agent.id != null or (.agent_display_name // "") != "")
     | select((.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed."))]
     | sort_by(.createdAt) | last // null' "$comments")
-  if [ "$claim" = null ] && [ "$(jq '.comments | length' "$work/$t.comments")" -ge 100 ]; then
-    fail "latest claim for $t may be outside the bounded comment read"
+  if [ "$claim" = null ] && [ "$(jq '.comments | length' "$work/$t.comments")" -eq 0 ]; then
+    fail "no readable comments or agent log for $t; retry the scan"
   fi
   claim_id=$(jq -r '.agent.id // ""' <<< "$claim")
   has_resume=$(jq '(.text // .commentText // "") | gsub("<[^>]*>"; " ")
