@@ -59,7 +59,7 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/tasks\/follow$/, params: [], methods: ["POST"], load: () => import('./tasks/follow/operation') },
   { pattern: /^\/mcp\/tasks\/archive$/, params: [], methods: ["POST"], load: () => import('./tasks/archive/operation') },
   { pattern: /^\/mcp\/tasks\/delete$/, params: [], methods: ["POST"], load: () => import('./tasks/delete/operation') },
-  { pattern: /^\/mcp\/tasks\/next$/, params: [], methods: ["GET"], load: () => import('./tasks/next/operation') },
+  { pattern: /^\/mcp\/tasks\/share$/, params: [], methods: ["GET","POST"], load: () => import('./tasks/share/operation') },  { pattern: /^\/mcp\/tasks\/next$/, params: [], methods: ["GET"], load: () => import('./tasks/next/operation') },
   { pattern: /^\/mcp\/tasks\/tree$/, params: [], methods: ["GET"], load: () => import('./tasks/tree/operation') },
   { pattern: /^\/mcp\/inbox\/list$/, params: [], methods: ["GET"], load: () => import('./inbox/list/operation') },
   { pattern: /^\/mcp\/inbox\/move$/, params: [], methods: ["POST"], load: () => import('./inbox/move/operation') },

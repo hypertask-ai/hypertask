@@ -53,6 +53,13 @@ export const FollowTaskInputSchema = z.object({
 export const ArchiveTaskInputSchema = createTaskIdentificationSchema();
 export const DeleteTaskInputSchema = createTaskIdentificationSchema();
 
+export const ShareTaskInputSchema = z.object({
+  taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
+}).strict();
+
+export const GetTaskShareInputSchema = z.object({
+  taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
+}).strict();
 export function getGetTasksInputSchema() {
   return createTaskIdentificationArraySchema();
 }

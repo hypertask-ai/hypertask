@@ -13,6 +13,8 @@ import {
   ArchiveTaskInputSchema,
   DeleteTaskInputSchema,
   FollowTaskInputSchema,
+  ShareTaskInputSchema,
+  GetTaskShareInputSchema,
   AssignUserInputSchema,
   LinkTasksInputSchema,
   NextTasksInputSchema,
@@ -1021,11 +1023,32 @@ export class TaskService {
     }, generateCorrelationId());
   }
 
+  async shareTask(params: unknown) {
+    const body = ShareTaskInputSchema.parse(params);
+    return this.apiClient.makeRequest<{
+      success: true;
+      share: { taskId: number; ticketNumber: string; isPublic: boolean; link: string; shareType: string };
+    }>('/mcp/tasks/share', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, generateCorrelationId());
+  }
+
   async deleteTask(params: unknown) {
     const body = DeleteTaskInputSchema.parse(params);
     return this.apiClient.makeRequest<PutAwayTaskResponse>('/mcp/tasks/delete', {
       method: 'POST',
       body: JSON.stringify(body),
+    }, generateCorrelationId());
+  }
+
+  async getTaskShare(params: unknown) {
+    const body = GetTaskShareInputSchema.parse(params);
+    return this.apiClient.makeRequest<{
+      success: true;
+      share: { taskId: number; ticketNumber: string; isPublic: boolean; link: string | null; shareType: string | null };
+    }>(`/mcp/tasks/share?taskId=${body.taskId}`, {
+      method: 'GET',
     }, generateCorrelationId());
   }
 
