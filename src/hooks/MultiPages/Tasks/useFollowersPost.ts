@@ -5,6 +5,10 @@ import { useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilState } from "@/lib/state";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
+import toast from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8199_FOLLOW_SHORTCUT_FEEDBACK_FLAG } from "@/lib/flags/definitions/htpr-8199-follow-shortcut-feedback";
+import { followNote } from "@/lib/followers/followNote";
 
 const useFollowers = (task: ITask) => {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
@@ -13,14 +17,17 @@ const useFollowers = (task: ITask) => {
     task.id,
   );
   const queryClient = useQueryClient();
+  const followsWithNote = useFlag(HTPR_8199_FOLLOW_SHORTCUT_FEEDBACK_FLAG);
   const path = `${process.env.NEXT_PUBLIC_BASEURL}/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
   const PostFollower = async (userId: number, taskId: number) => {
     const check = followers?.some(
       (item: any) => item?.userId === userId && item.taskId === taskId,
     );
-    if (check) return;
-    if (parseInt(task.userId as string) === userId) return;
+    if (!followsWithNote) {
+      if (check) return;
+      if (parseInt(task.userId as string) === userId) return;
+    }
 
     try {
       const response = await axios.post("/api/follower/createFollower", {
@@ -41,9 +48,13 @@ const useFollowers = (task: ITask) => {
           taskLink: path,
           taskId: task.id,
         });
+        if (followsWithNote) toast("Added as follower");
+      } else if (followsWithNote) {
+        toast(followNote(response.data));
       }
-    } catch (error) {
-      console.log("🚀 ~ PostFollower ~ error:", error);
+    } catch (error: any) {
+      if (followsWithNote) toast(followNote(error?.response?.data));
+      else console.log("🚀 ~ PostFollower ~ error:", error);
     }
   };
 
