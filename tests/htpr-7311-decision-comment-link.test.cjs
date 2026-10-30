@@ -106,7 +106,7 @@ test("server scopes mentions to any viewer, ignores agent replies, and uses only
   };
   const { getDecisionComments } = loadTsModule("src/utils/controllers/notifications/decisionTasks.ts", {
     "@/lib/prisma": { __esModule: true, default: db },
-    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/flags": { isFeatureEnabled: async (key) => key !== "htpr-8205-agent-clear-blocker" },
     "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: "htpr-7092-decisions" },
   });
   const decisions = await getDecisionComments(viewer, { userId: viewer });
