@@ -383,10 +383,17 @@ run_tick() {
       | select(.resumeAfterFreeze or ((.updatedAt // "") >= $cutoff))
       | {ticket: .ticketNumber, title: .title, url: "https://app.hypertask.ai/detail/project-\(.projectId)/\(.uniqueIndex)", section: .section, createdAt: .createdAt, resumeAfterFreeze: .resumeAfterFreeze}]
     | sort_by(.createdAt)' <<<"$resp") || die 'cannot parse board read'
-  cand=$(jq -cn --argjson tasks "$(jq -c '.tasks' <<<"$resp")" --argjson candidates "$cand" --argjson previous "$prev" '{tasks:$tasks,candidates:$candidates,previous:$previous}' | python3 "$HERE/runner-domain-pickup.py" "$STATE" "$n") || die 'domain ownership failed'
+  # A whole board read does not fit in argv (YPER4-961): jq fails with "Argument list too long" and the tick dies.
+  tmpd=$(mktemp -d) || die 'cannot create temp dir'
+  trap 'rm -rf "$tmpd"' EXIT
+  jq -c '.tasks' <<<"$resp" > "$tmpd/tasks.json" || die 'cannot parse board read'
+  printf '%s' "$cand" > "$tmpd/candidates.json"
+  printf '%s' "$prev" > "$tmpd/previous.json"
+  cand=$(jq -cn --slurpfile t "$tmpd/tasks.json" --slurpfile c "$tmpd/candidates.json" --slurpfile p "$tmpd/previous.json" '{tasks:$t[0],candidates:$c[0],previous:$p[0]}' | python3 "$HERE/runner-domain-pickup.py" "$STATE" "$n") || die 'domain ownership failed'
   rm -f "$bfile"
-  merged=$(jq -c --argjson prev "$prev" --argjson now "$NOW" '
-    map(. as $candidate | del(._pickupPrevious) as $c
+  merged=$(jq -c --slurpfile prevp "$tmpd/previous.json" --argjson now "$NOW" '
+    ($prevp[0] // []) as $prev
+    | map(. as $candidate | del(._pickupPrevious) as $c
       | (($prev | map(select(.ticket == $c.ticket)) | first) // $candidate._pickupPrevious) as $old
       | if $old and ($old.resumeAfterFreeze == $c.resumeAfterFreeze) then $old + {title: $c.title, url: $c.url, section: $c.section}
         else $c + {queuedAt: $now, delivered: false, notified: false, seen: false} end)' <<<"$cand")
@@ -398,7 +405,7 @@ run_tick() {
     else log "activity line for $t failed, will retry next tick"; fi
   done
   merged=$(jq -c 'map(.seen = true)' <<<"$merged")
-  jq -n --argjson items "$merged" --argjson n "$n" --argjson now "$NOW" '{runner: $n, updatedAt: $now, items: $items}' > "$inbox.tmp" \
+  jq -c --argjson n "$n" --argjson now "$NOW" '{runner: $n, updatedAt: $now, items: .}' <<<"$merged" > "$inbox.tmp" \
     && mv "$inbox.tmp" "$inbox" || die 'cannot update pickup inbox'
   flock -u 7; exec 7>&-
   log "RUNNER $n: $(jq 'length' <<<"$merged") queued"
