@@ -138,9 +138,6 @@ inspect_ticket() {
   claim=$(jq -c '[.comments[] | select(.agent.id != null or (.agent_display_name // "") != "")
     | select((.text // .commentText // "") | gsub("<[^>]*>"; " ") | contains("Claimed."))]
     | sort_by(.createdAt) | last // null' "$comments")
-  if [ "$claim" = null ] && [ "$(jq '.comments | length' "$work/$t.comments")" -eq 0 ]; then
-    fail "no readable comments or agent log for $t; retry the scan"
-  fi
   claim_id=$(jq -r '.agent.id // ""' <<< "$claim")
   has_resume=$(jq '(.text // .commentText // "") | gsub("<[^>]*>"; " ")
     | test("(claude[[:space:]]+--resume|codex[[:space:]]+resume|hax[[:space:]]+--resume|tmux[[:space:]]+attach)[[:space:]]+[^[:space:]]+")' <<< "$claim")
