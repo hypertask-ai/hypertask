@@ -64,8 +64,11 @@ realtime service through this check.
 
 The seed copies `production-flag-modes.json` into the local database, including
 all released `EVERYONE` modes. This dated snapshot comes from a read of the live
-admin API; refresh its keys, modes and capture date when production release
-modes change. The browser asserts the app's flag response matches those modes
+admin API. Never edit it: it is built from `flag-modes/`, one small file per
+flag, so renaming or retiring a flag touches one file. Refresh it with
+`node scripts/flags/production-flag-modes.mjs --write`, or add a flag that is
+new in code with `--add-defaults`, and rebuild the copy with
+`node scripts/shared-lists/build.mjs --write`. The browser asserts the app's flag response matches those modes
 for its plain user. A second card-click run uses `--instant-open-control` to
 turn on only the instant-open flag in the disposable database, so a temporary
 production OFF mode cannot conceal the PR #997 regression. Neither run changes

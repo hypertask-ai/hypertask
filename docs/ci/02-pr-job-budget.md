@@ -1,0 +1,22 @@
+## PR job budget (YPER4-663)
+
+The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jobs.
+Small guards share scanner work and trusted metadata:
+
+- `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
+- `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
+- Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
+- The trusted guard publishes one existing required `pr-title` context for outside and title results. Size stays advisory. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
+- Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
+- `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. PR runs and fleet sweeps share the non-cancelling `feature-flag-gate-production` group, so an old sweep cannot overwrite a newer PR verdict. The shared group uses `queue: max`, preserving up to 100 pending runs instead of replacing the previous pending PR event. GitHub cancels new arrivals beyond that documented limit; scheduled sweeps recover missed events. See [GitHub concurrency syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency). The single-PR path still lists open heads to reject shared commits, but never reads or posts unrelated verdicts. Policy changes and closed/shared-head recovery reach other PRs at the next scheduled sweep; GitHub scheduling can delay that sweep. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group, which also uses `queue: max`, so a burst of PR events no longer cancels the waiting run (before this, 109 of 400 runs were cancelled). Its hourly schedule is a backstop only: GitHub ran it about every four hours at `*/10`, and the hourly `required-check-settings.yml` shows the same four to six hour gaps, so no cron line shortens the wait. Reactions are reread on each PR event. Their original semantic statuses and flag fingerprints are unchanged.
+- Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
+- Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
+
+Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job). Path-specific evals,
+visual checks, preview deployments and external review are extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
+head check runs, including reruns but excluding skipped/unstarted runs, with
+`scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
+runs stay attached to their old commit; record both snapshots for comparison.
+CodeQL uses GitHub default setup; path filtering would require advanced setup,
+which this change does not introduce.

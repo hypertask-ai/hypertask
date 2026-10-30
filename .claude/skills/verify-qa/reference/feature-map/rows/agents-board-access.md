@@ -1,0 +1,1 @@
+| Agents and board access | [agents-board-access.md](agents-board-access.md) | QA 985 throwaway agents on sandbox 7049; self-access 403 text, /mcp safe reason, 24/24 invite picker opens; delete fixtures |
