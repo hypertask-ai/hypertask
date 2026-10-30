@@ -126,7 +126,7 @@ test("required CI invokes the real command on exact PR commits, without a new jo
   const root = path.resolve(__dirname, "..");
   const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8"));
   const step = workflow.jobs["ci-checks"].steps.find((entry) => entry.name === "Changed style tokens");
-  assert.equal(step.if, "github.event_name == 'pull_request'");
+  assert.equal(step.if, "needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'pull_request')");
   assert.equal(workflow.jobs["ci-checks"].steps.find((entry) => entry.uses?.startsWith("actions/checkout@")).with["fetch-depth"], 0);
   assert.equal(step.env.BASE_SHA, "${{ github.event.pull_request.base.sha }}");
   assert.equal(step.env.HEAD_SHA, "${{ github.event.pull_request.head.sha }}");

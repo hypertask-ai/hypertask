@@ -15,7 +15,7 @@ cat > "$T/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$SHIP_SESSION_NAME|$*" >> "$FAKE_LOG"
 case "$1 $2" in
-  "task list") [ -z "${FAKE_HANG:-}" ] || sleep 30; [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
+  "task list") [ -z "${FAKE_HANG:-}" ] || sleep 30; [ -z "${FAKE_FAIL:-}" ] || exit 1; offset=0; for ((i=1; i<=$#; i++)); do if [ "${!i}" = --offset ]; then j=$((i+1)); offset=${!j}; fi; done; jq --argjson offset "$offset" '.tasks |= .[$offset:$offset+100]' "$FAKE_TASKS" ;;
   "inbox list") [ -z "${FAKE_INBOX_FAIL:-}" ] || exit 1; [ -n "${FAKE_INBOX:-}" ] && cat "$FAKE_INBOX" || echo '{"success":true,"agent_notifications":[]}' ;;
   "activity add") exit 0 ;;
   *) exit 9 ;;
@@ -28,7 +28,7 @@ task() { # ticket section agent project
     '{ticketNumber:$t, uniqueIndex:($t|capture("-(?<n>[0-9]+)").n|tonumber), title:("Title of "+$t), section:$s, projectId:$p, createdAt:$now, updatedAt:$now,
       assignees:[{id:6, agent:{id:"x", displayName:$a}}]}'
 }
-write_tasks() { printf '{"success":true,"tasks":[%s]}\n' "$(IFS=,; echo "$*")" > "$FAKE_TASKS"; }
+write_tasks() { printf '{"success":true,"total":%s,"tasks":[%s]}\n' "$#" "$(IFS=,; echo "$*")" > "$FAKE_TASKS"; }
 write_tasks "$(task YPER4-300 Todo 'Runner 3' 4060)" "$(task YPER4-301 'In Progress' 'Runner 3' 4060)" "$(task HTPR-400 Todo 'Runner 4' 15)" "$(task HTPR-401 Done 'Runner 3' 15)" "$(task YPER4-302 Backlog 'Runner 3' 4060)"
 inbox=$RUNNER_INBOX_DIR/runner-3.json
 activity() { grep -c '|activity add' "$FAKE_LOG" 2>/dev/null || true; }
@@ -37,7 +37,7 @@ activity() { grep -c '|activity add' "$FAKE_LOG" 2>/dev/null || true; }
 "$SCRIPT" run 3 2>/dev/null
 eq "queues unclaimed tickets of this runner only" "$(jq -r '[.items[].ticket]|sort|join(",")' "$inbox")" "YPER4-300,YPER4-302"
 eq "item carries the full URL" "$(jq -r '.items[]|select(.ticket=="YPER4-300").url' "$inbox")" "https://app.hypertask.ai/detail/project-4060/300"
-eq "identity used for the read" "$(head -1 "$FAKE_LOG")" "RUNNER 3|task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --json"
+eq "identity used for the read" "$(head -1 "$FAKE_LOG")" "RUNNER 3|task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --offset 0 --json"
 eq "no activity line on first sight" "$(activity)" "0"
 eq "exactly one board read per tick" "$(grep -c '|task list' "$FAKE_LOG")" "1"
 # Tick 2: still undelivered -> one activity line each; tick 3: no more lines (idempotent).
