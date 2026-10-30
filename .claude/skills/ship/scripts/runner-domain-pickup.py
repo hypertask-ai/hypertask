@@ -40,7 +40,11 @@ for inbox in state.glob('runner-*.json'):
         ticket = item.get('ticket')
         if not isinstance(ticket, str):
             raise ValueError('invalid queued ticket')
-        owners.setdefault(slot, {}).setdefault(ticket, {'held': ['Shared'], 'current': 'Shared', 'pending': True})
+        lease = owners.setdefault(slot, {}).setdefault(ticket, {'held': ['Shared'], 'current': 'Shared', 'pending': True})
+        if item.get('delivered') is True:
+            lease['protected'] = True
+            if lease['pending'] and 'acquired' not in lease:
+                lease['acquired'] = lease['held'][:]
 
 name = 'Runner ' + runner
 tasks = {t['ticketNumber']: t for t in data['tasks'] if t.get('ticketNumber')}
@@ -75,7 +79,17 @@ for ticket, task in tasks.items():
 for ticket, lease in mine.items():
     if ticket not in tasks:
         continue
-    d = domain(tasks[ticket])
+    task = tasks[ticket]
+    d = domain(task)
+    previous = next((item for item in data['previous'] if item.get('ticket') == ticket), None)
+    if task.get('section') in ('In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review'):
+        lease['protected'] = True
+        if lease['pending'] and 'acquired' not in lease:
+            lease['acquired'] = lease['held'][:]
+    if previous is not None:
+        lease['undelivered'] = previous.get('delivered') is False and task.get('section') == 'Todo'
+    if lease.get('protected'):
+        lease['undelivered'] = False
     if d != lease['current']:
         if not lease['pending']:
             lease['acquired'] = lease['held'][:]
@@ -84,13 +98,19 @@ for ticket, lease in mine.items():
             lease['held'].append(d)
         lease['pending'] = any(conflicts(scope, other) for scope in lease['held'])
     if lease['pending']:
+        if lease.get('undelivered') and lease.get('acquired') and any(
+                (owner < runner or not other_lease.get('undelivered'))
+                and other_lease['pending'] and other_lease.get('acquired')
+                and any(conflicts(scope, other_lease['held']) for scope in lease['held'])
+                for owner, leases in owners.items() if owner != runner for other_lease in leases.values()):
+            lease['acquired'] = []
         priority = {d for owner, leases in owners.items() if owner != runner for other_lease in leases.values()
-                    if (not other_lease['pending']
-                        or (bool(other_lease.get('acquired')) > bool(lease.get('acquired')))
-                        or (bool(other_lease.get('acquired')) == bool(lease.get('acquired')) and owner < runner))
-                    for d in other_lease['held']}
+                    for d in (other_lease['held'] if not other_lease['pending']
+                              or (bool(other_lease.get('acquired')) == bool(lease.get('acquired')) and owner < runner)
+                              else other_lease.get('acquired', []))}
         if not any(conflicts(scope, priority) for scope in lease['held']):
             lease['pending'] = False
+            lease['acquired'] = lease['held'][:]
 
 held = {d for lease in mine.values() for d in lease['held']}
 accepted = []

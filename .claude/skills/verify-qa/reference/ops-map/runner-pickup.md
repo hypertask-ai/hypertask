@@ -16,11 +16,12 @@ the entry point is `.claude/skills/ship/scripts/runner-pickup`.
    admissions, relabels, legacy inboxes and failed reads:
    `python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py`.
 
-Leases keep all observed domains until a successful read confirms completion or
-unassignment. A conflicting relabel stays pending; it does not displace the
-existing holder. Pending scopes block new work. Pending leases with acquired
-scopes take priority over legacy pending leases; runner-ID order breaks ties
-within each group. Active owners still take priority. Incomplete reads retain leases.
+Delivered and active leases keep acquired domains until a successful read confirms
+completion or unassignment. A conflicting relabel stays pending; it does not displace the
+existing holder. Pending scopes block new work. Pending owners retain acquired scopes regardless of runner ordering.
+Reciprocal relabels may release reservations only for proven undelivered Todo work;
+runner-ID order resolves that cycle. Active reciprocal relabels cannot be preempted.
+Legacy pending leases use runner-ID order. Incomplete reads retain leases.
 Manual claims bypass pickup. Existing manual work is invisible until its runner's
 successful tick; imported active work may already conflict. Preview and fixture
 results do not prove fleet-wide exclusivity.

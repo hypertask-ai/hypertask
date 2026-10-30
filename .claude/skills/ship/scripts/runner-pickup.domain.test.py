@@ -207,6 +207,30 @@ else: sys.exit(9)
         self.board(1, [changed]); self.tick(1); self.tick(3)
         self.assertEqual(self.items(3), ['HTPR-4'])
 
+    def test_active_delivered_pending_owner_keeps_acquired_scope(self):
+        changed = self.task(2, 'HTPR-2', 'Commands')
+        search = self.task(3, 'HTPR-3', 'Search')
+        contender = self.task(1, 'HTPR-1', 'Flags')
+        self.board(2, [changed]); self.tick(2)
+        inbox = self.state / 'runner-2.json'
+        data = json.loads(inbox.read_text())
+        data['items'][0]['delivered'] = True
+        inbox.write_text(json.dumps(data))
+        self.board(3, [search]); self.tick(3)
+        self.board(1, [contender]); self.tick(1)
+        changed['section'] = 'In Progress'
+        changed['labels'] = [{'name': 'Domain: Search'}]
+        self.board(2, [changed]); self.tick(2)
+        contender['labels'] = [{'name': 'Domain: Commands'}]
+        self.board(1, [contender]); self.tick(1); self.tick(2); self.tick(1)
+        self.assertEqual(self.items(1), [])
+        leases = json.loads((self.state / 'domain-ownership.json').read_text())
+        self.assertIn('Commands', leases['2']['HTPR-2']['acquired'])
+        self.assertTrue(leases['1']['HTPR-1']['pending'])
+        changed['section'] = 'Done'
+        self.board(2, [changed]); self.tick(2); self.tick(1)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+
     def test_reciprocal_relabels_serialize_and_release(self):
         for first in (1, 2):
             with self.subTest(first=first):
@@ -221,7 +245,7 @@ else: sys.exit(9)
                 self.board(1, [a]); self.board(2, [b])
                 self.tick(first)
                 self.assertEqual(self.items(first), [])
-                self.tick(3 - first); self.tick(first)
+                self.tick(3 - first); self.tick(first); self.tick(1)
                 self.assertEqual(self.items(1), ['HTPR-1'])
                 self.assertEqual(self.items(2), [])
                 self.board(3, [self.task(3, 'HTPR-3', 'Commands')]); self.tick(3)

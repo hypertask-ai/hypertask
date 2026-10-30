@@ -37,12 +37,14 @@ lease does not expire. An assigned task in an active or review column keeps its
 lease; completed or unassigned tasks release it after a successful readback.
 Incomplete list pages cannot release leases. A missing task needs a successful
 individual readback. Older inbox tickets without known leases are treated as Shared until
-reconciled. Leases retain every observed scope until release. A relabel that
+reconciled. Delivered and active leases retain acquired scopes until release. A relabel that
 conflicts with another lease stays pending and is withheld; the existing holder
-keeps admission. Pending scopes block new work. Pending leases with acquired
-scopes take priority over legacy pending leases. Among pending leases of the same
-priority, runner-ID order breaks ties; this is deterministic, not a fairness
-guarantee. Active owners still take priority. Ownership applies to pickup, not
+keeps admission. Pending scopes block new work. Acquired scopes remain protected even while their owner waits for another domain.
+Reciprocal relabels can release acquired reservations only for inbox work proven
+undelivered in Todo; runner-ID order chooses the winner. Delivered or active work
+is never preempted, so reciprocal active relabels require completion or reassignment.
+Legacy pending leases use runner-ID order; this is deterministic, not a fairness
+guarantee. Ownership applies to pickup, not
 manual claims. It cannot discover pre-existing manual work before that runner's first successful pickup tick. Imported active work can already conflict;
 importing it does not guarantee exclusive ownership.
 
