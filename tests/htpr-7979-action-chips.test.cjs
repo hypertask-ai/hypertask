@@ -2,11 +2,10 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const vm = require("node:vm");
-const ts = require("typescript");
 const { z } = require("zod");
 
 const root = path.resolve(__dirname, "..");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const load = require("jiti")(__filename, { fsCache: false });
 const { renderPrompt } = load(path.join(root, "src/lib/ai/prompts/registry.ts"));
 const chipFlagModule = load(path.join(root, "src/lib/flags/definitions/htpr-7979-action-chips.ts"));
@@ -65,18 +64,10 @@ function harness({ chips, writing = false, rules }) {
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_id, args) => args.fixed },
   };
-  const filename = path.join(root, "src/app/api/ai/task-questions/route.ts");
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const loaded = { exports: {} };
-  vm.runInNewContext(code, {
-    module: loaded, exports: loaded.exports, console,
-    require: (id) => { assert.ok(id in stubs, `Unexpected route dependency: ${id}`); return stubs[id]; },
-  }, { filename });
+  const loaded = loadModule("src/app/api/ai/task-questions/route.ts", stubs);
   return {
     calls, flagCalls, reports,
-    post: (body) => loaded.exports.POST({ json: async () => ({ taskId: task.id, ...body }) }),
+    post: (body) => loaded.POST({ json: async () => ({ taskId: task.id, ...body }) }),
   };
 }
 
