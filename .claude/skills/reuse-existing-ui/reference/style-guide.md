@@ -90,6 +90,14 @@ Use the eight named sizes from `tailwind.config.ts`:
 
 Prefer the named utilities over arbitrary `text-[Npx]`. Keep font weight quiet: regular for content, medium or semibold for controls and hierarchy, and bold only when the existing pattern calls for it. See `.claude/skills/reuse-existing-ui/reference/typography.md` for surface-specific conventions.
 
+### Graphite 2 description-heading exception
+
+Only `.graphite-2 .description-container :is(h1,h2,h3)` may use `--font-size-description-heading: 15px`. The eight-size default remains unchanged everywhere else, including other themes.
+
+[HT Product Lead's recommendation](https://app.hypertask.ai/detail/project-15/8054#comment-329400) asked to release Graphite 2 with 15px headings and recommended yes. [The lead's later comment](https://app.hypertask.ai/detail/project-15/8054#comment-329418) recorded Valentin's chat response:
+
+> re gprahite 2 pls do it like our ecommeendation say yes to all
+
 ## Icons
 
 Use Lucide for new product icons unless the surrounding component already uses another family.
