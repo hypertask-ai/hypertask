@@ -180,7 +180,7 @@ test('timer is five minutes, low priority, bounded, and installation is explicit
   await assert.rejects(main(['--run', '39719731623']), /replay-only/);
 });
 
-function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], attempts = [], smoke = false, log } = {}) {
+function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], attempts = [], smoke = false, ciFails = true, log } = {}) {
   const calls = [], run = (bin, args, options) => {
     calls.push([bin, args]);
     if (bin === 'python3') return execFileSync(bin, args, { encoding: 'utf8', input: options.input });
@@ -200,7 +200,7 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     if (route.includes('/jobs?')) {
       assert.ok(!route.includes(`/runs/${data.run.id + 5}/`), 'cancelled run jobs must not be read');
       const green = route.includes(`/runs/${data.green.id}/`);
-      const jobs = [{ id: green ? 1 : data.run.job.id, name: 'ci-tests', status: 'completed', conclusion: green || smoke ? 'success' : 'failure' }];
+      const jobs = [{ id: green ? 1 : data.run.job.id, name: 'ci-tests', status: 'completed', conclusion: green || (smoke && !ciFails) ? 'success' : 'failure' }];
       if (smoke && !green) jobs.push({ id: 2, name: 'browser-smoke', status: 'completed', conclusion: 'failure' });
       return JSON.stringify({ jobs });
     }
@@ -210,7 +210,8 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
         sha: String(i).padStart(40, 'a'), commit: { message: `${pr.title} (#${pr.number})\n\nSquash body` }
       })) });
     }
-    if (route.endsWith('/logs')) return log ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
+    if (route.endsWith('/logs')) return (typeof log === 'function' ? log(route) : log)
+      ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
     const pr = data.prs.find(pr => route.includes(`/pulls/${pr.number}/files?`));
     if (pr) return JSON.stringify(pr.files.map((filename, i) => ({ filename, patch: pr.patches?.[i] })));
     assert.fail(`Unexpected fixture command: ${bin} ${args.join(' ')}`);
@@ -512,7 +513,7 @@ const SMOKE_FAILURE = { file: 'e2e/smoke/layout-lock.spec.ts',
   name: 'layout baseline: ticket from board card', device: 'Desktop', error: 'Test timeout of 50000ms exceeded.' };
 
 test('a red browser-smoke job is production red even when ci-tests passed', async () => {
-  const data = second(), mock = fixtureCommand(data, { smoke: true, log: SMOKE_LOG });
+  const data = second(), mock = fixtureCommand(data, { smoke: true, ciFails: false, log: SMOKE_LOG });
   const result = await live(mock.run).collect();
   assert.equal(result.status, 'failure');
   assert.deepEqual(result.failures, [SMOKE_FAILURE]);
@@ -547,4 +548,14 @@ test('the red after that rerun files one urgent fixer ticket naming the smoke te
   assert.match(create[create.indexOf('--title') + 1], /layout baseline: ticket from board card/);
   assert.match(create[create.indexOf('--description') + 1], /e2e\/smoke\/layout-lock\.spec\.ts layout baseline: ticket from board card \[Desktop\]: Test timeout/);
   assert.equal(api.writes.filter(a => a[1] === 'create').length, 1);
+});
+
+test('both failed test jobs are read, so a red smoke never hides a failing ci-tests file', async () => {
+  const data = second();
+  const ciLog = fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
+  const mock = fixtureCommand(data, { smoke: true,
+    log: route => route.includes(`/jobs/${data.run.job.id}/`) ? ciLog : SMOKE_LOG });
+  const result = await live(mock.run).collect();
+  assert.equal(result.status, 'failure');
+  assert.deepEqual(result.failures.map(f => f.file), [data.failures[0].file, SMOKE_FAILURE.file]);
 });

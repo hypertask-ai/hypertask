@@ -63,8 +63,7 @@ function live(run = command) {
       all.push(...rows);
       if (rows.length < 100) break;
     }
-    return all.filter(j => TEST_JOBS.includes(j.name)).sort((a, b) => b.id - a.id)
-      .find(j => j.conclusion === 'failure') || all.filter(j => j.name === 'ci-tests').sort((a, b) => b.id - a.id)[0];
+    return all.filter(j => TEST_JOBS.includes(j.name)).sort((a, b) => b.id - a.id);
   };
   return {
     async collect(runId, state = { alerts: {} }) {
@@ -85,9 +84,13 @@ function live(run = command) {
               r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
           const replay = target && r.id === target.id && !r.previousAttempt && (r.run_attempt || 1) > 1;
           // A successful workflow cannot contain a failed test job.
-          const job = r.conclusion === 'success' && !replay
-            ? { status: 'completed', conclusion: 'success' }
+          // Every failed test job is read: a red smoke job must never hide the failing ci-tests file.
+          const jobList = r.conclusion === 'success' && !replay ? []
             : jobs(r.id, r.previousAttempt ? r.run_attempt : (replay ? 1 : undefined));
+          const failedJobs = jobList.filter(j => j.conclusion === 'failure');
+          const job = jobList.length
+            ? failedJobs[0] || jobList.find(j => j.name === 'ci-tests') || jobList[0]
+            : { status: 'completed', conclusion: 'success' };
           // A replay stands in for the first attempt, so a dry run shows the rerun the incident deserved.
           const row = replay && job.conclusion === 'failure' ? { ...r, run_attempt: 1 } : r;
           if (!latest) {
@@ -99,7 +102,7 @@ function live(run = command) {
           if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
           if (!red) {
             if (job.conclusion !== 'failure') return { status: job.conclusion, run: row };
-            red = { ...row, job }; firstRed = row;
+            red = { ...row, job, failedJobs: failedJobs.length ? failedJobs : [job] }; firstRed = row;
           } else if (job.conclusion === 'success') { green = row; break; }
           else if (job.conclusion === 'failure') firstRed = row;
           if (r.run_attempt > 1) {
@@ -110,10 +113,10 @@ function live(run = command) {
       }
       if (!red) return { status: 'none' };
       if (!green) throw new Error('No last green production run found; refusing an incomplete PR range');
-      const failures = json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
-        input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${red.job.id}/logs`,
+      const failures = (red.failedJobs || [red.job]).flatMap(job => json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
+        input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${job.id}/logs`,
           '--allow-escape-sequences', '--paginate'])
-      }));
+      }))).filter((failure, index, all) => all.findIndex(f => f.file === failure.file && f.name === failure.name) === index);
       if (!failures.length) throw new Error('Failed ci-tests log names no failing test file; refusing to guess');
       for (const sha of [green.head_sha, red.head_sha, firstRed.head_sha]) {
         if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid CI commit SHA');

@@ -41,7 +41,8 @@ def spec_failures(text):
             continue
         device, file, _line, raw_name = match.groups()
         name = spec_name(raw_name)
-        if not name or found.get(name, {}).get("error", NO_ERROR) != NO_ERROR:
+        key = (file, name, device.strip())
+        if not name or found.get(key, {}).get("error", NO_ERROR) != NO_ERROR:
             continue
         error = NO_ERROR
         for follow in lines[index + 1:index + 12]:
@@ -51,7 +52,7 @@ def spec_failures(text):
                 break
             if summary or HEADER.match(follow):
                 break
-        found[name] = {"file": file, "name": name, "device": device.strip(), "error": error}
+        found[key] = {"file": file, "name": name, "device": device.strip(), "error": error}
     return list(found.values())
 
 
