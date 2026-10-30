@@ -65,8 +65,11 @@ export async function storePlanIdForProject(
   teamId?: string | null
 ) {
   if (!projectId && !teamId) return "Free";
-  const savedPlanOnly = await internalTeamUsesSavedPlan();
-  if (!savedPlanOnly && isInternalCompTeam(teamId)) return "Pro";
+  let savedPlanOnly = false;
+  if (isInternalCompTeam(teamId)) {
+    savedPlanOnly = await internalTeamUsesSavedPlan();
+    if (!savedPlanOnly) return "Pro";
+  }
   const team = projectId
     ? (
         await prisma.project.findUnique({
@@ -106,6 +109,9 @@ export async function storePlanIdForProject(
           },
         },
       });
+  if (!savedPlanOnly && isInternalCompTeam(team?.id)) {
+    savedPlanOnly = await internalTeamUsesSavedPlan();
+  }
   return storePlanIdForTeam(team, savedPlanOnly);
 }
 
