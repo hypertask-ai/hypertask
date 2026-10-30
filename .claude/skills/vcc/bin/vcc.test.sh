@@ -488,6 +488,10 @@ allowed bash "$vcc" task create --title 'Clearer settings' --description '<p>Not
 agent_detail_refused comment add X-1 --kind qa --text '<p><strong>Helpers</strong>: none</p>'
 agent_detail_refused --json comment add X-1 --kind qa --text 'tmux attach -t runner-8'
 agent_detail_refused --project 15 task update X-1 --description 'Outputs: private'
+for option in --help --h --help=true --h=true --version --V --version=true --V=true -h -V; do
+  agent_detail_refused comment add X-1 --kind qa --text 'Outputs: private' -- "$option"
+  agent_detail_refused task update X-1 --description 'Outputs: private' -- "$option"
+done
 run bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
 [ "$status" = 5 ] || fail 'unreadable people content must fail closed'
 printf '<p>Settings now works.</p>\n' > "$T/plain.html"

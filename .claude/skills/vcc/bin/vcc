@@ -139,7 +139,6 @@ people_content() {
   local mode='' kind='' text='' file='' description='' description_file='' mentioned=false arg status
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --help|--h|--version|--V|--help=true|--h=true|--version=true|--V=true) return 0 ;;
       --project|--team) [ "$#" -ge 2 ] || return 0; shift 2 ;;
       --json|--human|--project=*|--team=*) shift ;;
       *) break ;;
@@ -154,7 +153,7 @@ people_content() {
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
-      --help|--h|--version|--V|--help=true|--h=true|--version=true|--V=true) return 0 ;;
+      --) break ;;
       --kind|--text|--body|--file|--description|--description-file|--mentions)
         [ "$#" -ge 2 ] || break
         case "$arg" in
