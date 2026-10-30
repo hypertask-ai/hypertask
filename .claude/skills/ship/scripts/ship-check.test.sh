@@ -1109,6 +1109,73 @@ B 0 '' 'vcc task move YPER4-999 --section "Done"'
 unset -f B
 rm -rf "$E2"
 
+# Elsewhere path (YPER4-949): the work landed under another ticket or repo, so the ticket closes on a merged or
+# closed PR plus its closing comment. Fakes: PR state from a file, comments from a file, gh calls in a log.
+mkdir -p "$E/else-bin" "$E/else"
+cat > "$E/else-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+echo "$*" >> "$ELSE_DIR/calls"
+[[ $1 == pr && $2 == view ]] || exit 1
+st=$(cat "$ELSE_DIR/state-$3") || exit 1
+case "$*" in
+  *'--json state --jq .state'*) echo "$st" ;;
+  *'--json title'*) echo "YPER4-778 [IMPROVE] Elsewhere fixture" ;;
+  *'--json number,title,state,mergeCommit,baseRefName'*)
+    sha=null; [ "$st" = MERGED ] && sha='{"oid":"abc123"}'
+    echo "{\"number\":$3,\"title\":\"YPER4-778 [IMPROVE] Elsewhere fixture\",\"state\":\"$st\",\"mergeCommit\":$sha,\"baseRefName\":\"production\"}" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/else-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == comment && $2 == list ]] && cat "$ELSE_DIR/comments" || exit 1
+MOCK
+chmod +x "$E/else-bin/gh" "$E/else-bin/hypertask"
+export ELSE_DIR="$E/else"
+EL() { PATH="$E/else-bin:$PATH" ./ship-check "$@"; }
+closing() { jq -n --arg t "$1" '{success:true,comments:[{text:$t}]}' > "$ELSE_DIR/comments"; }
+closing '<p><strong>Resolved without a change:</strong> the work landed under https://example.com/t/2 .</p>'
+echo MERGED > "$ELSE_DIR/state-901"; echo CLOSED > "$ELSE_DIR/state-902"; echo OPEN > "$ELSE_DIR/state-903"
+EL elsewhere YPER4-778 901 >/dev/null && bad "elsewhere accepted a comment that does not link the PR" || ok "elsewhere needs the closing comment to link the recorded PR"
+closing '<p>Agent note, no record yet.</p>'
+EL elsewhere YPER4-778 901 >/dev/null && bad "elsewhere accepted a ticket with no resolution comment" || ok "elsewhere refuses a ticket with no closing comment"
+closing '<p><strong>Resolved without a change:</strong> landed under https://github.com/hypertask-ai/hypertask/pull/901 .</p>'
+EL elsewhere YPER4-778 903 >/dev/null && bad "elsewhere accepted an open PR" || ok "elsewhere refuses an open PR"
+[ ! -e "$E/YPER4-778/elsewhere" ] && ok "refused elsewhere writes no record" || bad "refused elsewhere wrote a record"
+EL elsewhere FOO-778 >/dev/null && bad "elsewhere accepted a non-ticket id" || ok "elsewhere refuses a non-ticket id (FOO-778)"
+EL elsewhere YPER4-778 >/dev/null && bad "elsewhere accepted a ticket with no PR" || ok "elsewhere refuses a ticket with no bound PR"
+out=$(EL elsewhere YPER4-778 901); [ "$out" = 'recorded YPER4-778 as finished elsewhere (PR 901 MERGED in hypertask-ai/hypertask)' ] && ok "elsewhere records a merged PR" || bad "elsewhere: $out"
+[ "$(cat "$E/YPER4-778/pr")" = 901 ] && [ "$(cat "$E/YPER4-778/elsewhere")" = 901 ] && ok "elsewhere binds the PR" || bad "elsewhere record"
+for x in merged:merged deployed:deployed proof:proof pr:title; do
+  EL ${x%%:*} YPER4-778 | grep -q "^${x#*:} ok (elsewhere: PR 901 MERGED)" && ok "elsewhere passes ${x%%:*}" || bad "elsewhere ${x%%:*}"
+done
+EL docs YPER4-778 >/dev/null && bad "elsewhere shortcut the docs rule" || ok "elsewhere leaves the docs gate to its own rule (a docs PR is still required)"
+out=$(EL elsewhere YPER4-778); [ "$out" = 'recorded YPER4-778 as finished elsewhere (PR 901 MERGED in hypertask-ai/hypertask)' ] && ok "elsewhere reads the bound PR when no number is given" || bad "elsewhere bound PR: $out"
+closing '<p><strong>Resolved without a change:</strong> the work moved to https://github.com/hypertask-ai/hypertask/pull/902 .</p>'
+EL elsewhere YPER4-778 902 | grep -q 'PR 902 CLOSED' && ok "elsewhere accepts a closed outdated PR" || bad "elsewhere closed PR"
+echo OPEN > "$ELSE_DIR/state-903"
+EL elsewhere YPER4-778 903 >/dev/null && bad "elsewhere passed an open PR over a finished binding" || ok "elsewhere refuses an open PR while another one is bound"
+echo MERGED > "$ELSE_DIR/state-903"
+EL elsewhere YPER4-778 903 >/dev/null && bad "elsewhere replaced a bound PR that is still open" || ok "elsewhere refuses to replace a bound PR that is still open"
+echo CLOSED > "$ELSE_DIR/state-903"; echo OPEN > "$ELSE_DIR/state-902"
+EL merged YPER4-778 >/dev/null && bad "elsewhere passed merged after the PR reopened" || ok "elsewhere merged gate fails once the PR reopens"
+echo CLOSED > "$ELSE_DIR/state-902"
+# A foreign repository survives on the record, the way bind saves it.
+EL elsewhere YPER4-778 902 >/dev/null
+[ "$(cat "$E/YPER4-778/repo")" = hypertask-ai/hypertask ] && ok "elsewhere saves the repository with the record" || bad "elsewhere did not save the repository"
+SHIP_REPO=hypertask-ai/reviewer EL elsewhere YPER4-778 902 >/dev/null && bad "elsewhere took a comment that links another repository's PR" || ok "elsewhere needs the link to name the recorded repository"
+closing '<p><strong>Resolved without a change:</strong> the work moved to https://github.com/hypertask-ai/reviewer/pull/902 .</p>'
+: > "$ELSE_DIR/calls"
+SHIP_REPO=hypertask-ai/reviewer EL elsewhere YPER4-778 902 >/dev/null
+[ "$(cat "$E/YPER4-778/repo")" = hypertask-ai/reviewer ] && ok "elsewhere records a foreign repository" || bad "elsewhere lost the foreign repository"
+: > "$ELSE_DIR/calls"
+EL elsewhere YPER4-778 >/dev/null
+grep -q 'reviewer' "$ELSE_DIR/calls" && ok "elsewhere restores the saved repository without the env var" || bad "elsewhere read the default repository"
+# The same number in another repository is a different PR, so the old binding is read in its own repository.
+echo OPEN > "$ELSE_DIR/state-902"
+SHIP_REPO=hypertask-ai/hypertask EL elsewhere YPER4-778 902 >/dev/null && bad "elsewhere replaced an open binding by number" || ok "elsewhere reads the old binding in its own repository"
+EL bind YPER4-778 902 >/dev/null && [ ! -e "$E/YPER4-778/elsewhere" ] && ok "bind clears elsewhere" || bad "bind did not clear elsewhere"
+
 if [ "${1:-}" = --premerge-only ]; then
   echo "$passes passed, $fails failed"
   [ "$fails" = 0 ] && echo 'premerge ship-check tests passed'
