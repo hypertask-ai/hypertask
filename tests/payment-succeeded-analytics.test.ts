@@ -235,6 +235,7 @@ function response() {
 
 function webhook(h: ReturnType<typeof harness>, evt: Stripe.Event, verified = true) {
   const billing: string[] = [];
+  process.env.WEBHOOK_SECRET_STRIPE = "whsec_payment_test";
   h.mocks["raw-body"] = { default: async () => Buffer.from("signed fixture") };
   h.mocks["stripe"] = { Stripe: class {
     events = { retrieve: async () => evt };
@@ -270,10 +271,13 @@ test("verified first-invoice webhook returns unchanged response before analytics
   assert.deepEqual(payments(h), [expected(evt)]);
 });
 
-test("unverified Stripe events never schedule payment analytics", async () => {
+test("unverified Stripe events are refused with 400 and never schedule payment analytics", async () => {
   const h = harness();
   const { billing, handle } = webhook(h, event(), false);
-  await assert.rejects(handle({ headers: { "stripe-signature": "invalid" } }, response()), /invalid signature/);
+  const res = response();
+  await handle({ headers: { "stripe-signature": "invalid" } }, res);
+  assert.equal(res.code, 400);
+  assert.deepEqual(res.body, { message: "invalid signature" });
   assert.deepEqual(h.jobs, []);
   assert.deepEqual(h.captures, []);
   assert.deepEqual(billing, []);

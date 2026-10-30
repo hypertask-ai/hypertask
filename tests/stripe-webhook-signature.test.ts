@@ -4,6 +4,8 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
 
+const RealStripe = require("stripe");
+
 const secret = "whsec_htpr8209_test_secret";
 const payload = JSON.stringify({
   id: "evt_htpr8209",
@@ -24,6 +26,7 @@ function signature(overrides: { timestamp?: number; secret?: string } = {}) {
 
 function harness() {
   const h = activationHarness();
+  h.mocks["stripe"] = { Stripe: RealStripe };
   h.mocks["@/utils/controllers/stripe/webhook/onCheckoutSuccess"] = {
     default: async () => undefined,
   };
@@ -57,6 +60,7 @@ function request(headers: Record<string, string>) {
 }
 
 function handler() {
+  process.env.STRIPE_SECRET_KEY = "sk_test_htpr8209";
   return harness().load("src/pages/api/stripe/webhook.ts").default;
 }
 

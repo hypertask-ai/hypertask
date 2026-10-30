@@ -418,6 +418,7 @@ function response() {
 
 function webhook(h: ReturnType<typeof harness>, evt: Stripe.Event, retrieve: any = async () => subscription()) {
   const calls: any[] = [];
+  process.env.WEBHOOK_SECRET_STRIPE = "whsec_invite_test";
   h.mocks["raw-body"] = { default: async () => Buffer.from("verified fixture") };
   h.mocks["stripe"] = { Stripe: class { events = { retrieve: async () => evt }; webhooks = { constructEvent: () => evt }; subscriptions = { retrieve }; invoices = { list: noPaidHistory }; } };
   h.mocks["@/utils/controllers/stripe/webhook/onCheckoutSuccess"] = { default: async (...args: any[]) => { calls.push(["checkout", ...args]); } };
