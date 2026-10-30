@@ -474,6 +474,26 @@ test('live collection separates same-SHA reruns after a newer green run and keep
   assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:2:${green.id}`]);
   assert.ok(Object.values(saved.alerts)[0].closed);
 });
+test('a cancelled run created after a green retry does not defer it into an old failure (YPER4-954)', async () => {
+  const d = second();
+  const retried = { ...d.run, id: d.run.id + 1, run_attempt: 2, conclusion: 'success', head_sha: d.green.head_sha,
+    created_at: '2026-10-30T15:29:00Z', run_started_at: '2026-10-30T15:50:13Z' };
+  const cancelled = { ...d.run, id: d.run.id + 2, conclusion: 'cancelled',
+    created_at: '2026-10-30T15:46:54Z', run_started_at: '2026-10-30T15:47:00Z' };
+  const oldFailure = { ...d.run, id: d.run.id + 3, created_at: '2026-10-30T15:10:00Z', run_started_at: '2026-10-30T15:10:00Z' };
+  const green = { ...d.green, created_at: '2026-10-30T15:00:00Z' };
+  const mock = fixtureCommand({ ...d, run: retried, green });
+  const run = (bin, args, options) => {
+    if (bin !== 'gh') return mock.run(bin, args, options);
+    const route = args[3];
+    if (route.includes('/runs?')) return JSON.stringify({ workflow_runs: [retried, cancelled, oldFailure, green] });
+    if (route.includes('/jobs?')) return JSON.stringify({ jobs: [{ id: 1, name: 'ci-tests', status: 'completed', conclusion: 'failure' }] });
+    return mock.run(bin, args, options);
+  };
+  const result = await live(run).collect();
+  assert.equal(result.status, 'success');
+  assert.equal(result.run.id, retried.id);
+});
 test('a green retry that started after a newer red run still reports that red (YPER4-954)', async () => {
   const d = second();
   const red = { ...d.run, created_at: '2026-10-30T15:46:54Z', run_started_at: '2026-10-30T15:47:00Z' };
