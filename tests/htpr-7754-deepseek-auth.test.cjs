@@ -50,6 +50,7 @@ function harness({ enabled = true, flagError = false, failure = authError(), ret
     } },
   }, { console: Object.fromEntries(Object.keys(logs).map((level) => [level, (...args) => logs[level].push(args)])) });
   const reply = load("src/lib/ai/chatStream/modelReply.ts", {
+    "@/lib/ai/teamAiFunding": require("./helpers/team-ai-funding-stub.cjs"),
     "@/lib/net/downloadWithoutBrotli": {},
     "@/app/api/ai/_lib/planGate": {},
     "@/app/api/ai/_lib/byokKeys": {},

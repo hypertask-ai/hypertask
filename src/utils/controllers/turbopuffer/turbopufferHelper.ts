@@ -5,6 +5,7 @@ import { TextNode } from "node-html-parser";
 import prisma from "@/lib/prisma";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { embeddingAuthorization, resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
+import { embedRowsForWrite } from "./embedRowsForWrite";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -140,10 +141,6 @@ export type TurbopufferCustomInstructionFileRow = {
   chunkIndex: number;
   updatedAt: string;
   $dist?: number;
-};
-
-type TurbopufferVectorRow<T> = T & {
-  vector?: number[];
 };
 
 export const taskNamespaceSchema = {
@@ -552,10 +549,10 @@ export async function upsertTaskRowsToTurbopuffer(
   options: { disableBackpressure?: boolean } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer task upsert"
+    "turbopuffer task upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -611,10 +608,10 @@ export async function upsertCommentRowsToTurbopuffer(
   options: { disableBackpressure?: boolean } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer comment upsert"
+    "turbopuffer comment upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -654,10 +651,10 @@ export async function upsertPageRowsToTurbopuffer(
   options: { disableBackpressure?: boolean } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer page upsert"
+    "turbopuffer page upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -764,10 +761,10 @@ export async function upsertCustomInstructionFileRowsToTurbopuffer(
   } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer custom instruction file upsert"
+    "turbopuffer custom instruction file upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -1140,59 +1137,6 @@ async function ensureNamespaceSchema(
   await ns.write({
     deletes: [schemaRow.id],
   });
-}
-
-async function embeddingTeamId(
-  row: { teamId?: string; projectId?: number },
-  projectTeams: Map<number, string | null>,
-): Promise<string | null> {
-  if (typeof row.teamId === "string" && row.teamId && row.teamId !== "__schema__") return row.teamId;
-  if (typeof row.projectId !== "number" || row.projectId <= 0) return null;
-  if (!projectTeams.has(row.projectId)) {
-    const project = await prisma.project.findUnique({
-      where: { id: row.projectId },
-      select: { teamId: true },
-    });
-    projectTeams.set(row.projectId, project?.teamId ?? null);
-  }
-  return projectTeams.get(row.projectId) ?? null;
-}
-
-async function embedRowsForWrite<T extends { searchText: string; teamId?: string; projectId?: number }>(
-  rows: T[],
-  context: string
-): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
-  try {
-    const projectTeams = new Map<number, string | null>();
-    const groups = new Map<string, number[]>();
-    for (let index = 0; index < rows.length; index += 1) {
-      const teamId = await embeddingTeamId(rows[index], projectTeams);
-      const key = teamId ?? "";
-      const indexes = groups.get(key) ?? [];
-      indexes.push(index);
-      groups.set(key, indexes);
-    }
-    const vectors: number[][] = new Array(rows.length);
-    for (const [teamId, indexes] of groups) {
-      const embeddings = await embedTexts(indexes.map((index) => rows[index].searchText), teamId || null);
-      indexes.forEach((rowIndex, embeddingIndex) => {
-        vectors[rowIndex] = embeddings[embeddingIndex];
-      });
-    }
-    return {
-      rows: rows.map((row, index) => ({
-        ...row,
-        vector: vectors[index],
-      })),
-      hasVectors: true,
-    };
-  } catch (error) {
-    console.error(
-      `${context} embedding error, upserting without vectors:`,
-      error
-    );
-    return { rows, hasVectors: false };
-  }
 }
 
 async function embedQueryForSearch(

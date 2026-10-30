@@ -57,7 +57,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
       findFirst: async () => ({ id: projectId, teamId, team: { aiProviderSettings: settings } }),
       findUnique: async () => ({ team: { id: teamId, subscriptionPlan: [{ priceId: plan, subscriptionStatus: "active" }] } }),
     },
-    team: { findUnique: async () => ({ id: teamId, aiProviderSettings: settings, subscriptionPlan: [{ priceId: plan, subscriptionStatus: "active" }] }) },
+    team: { findUnique: async () => ({ id: teamId, aiKeyOnly: false, aiProviderSettings: settings, googleAccount: { userId: 6 }, byokApiKeys: [], subscriptionPlan: [{ priceId: plan, subscriptionStatus: "active" }] }) },
     teamByokApiKey: { findUnique: async ({ where }) => {
       const provider = where.teamId_provider.provider;
       const credential = provider === "claude" && teamByok ? teamKey

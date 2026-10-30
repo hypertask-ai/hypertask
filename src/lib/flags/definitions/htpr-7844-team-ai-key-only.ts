@@ -11,6 +11,6 @@ export default {
   releaseRisk: {
     risk: "new",
     highRisk: "money",
-    reason: "Stops platform, gateway, demo, embedding and dictation keys from paying for a key-only team's AI. Off keeps today's funding.",
+    reason: "Stops platform, gateway, demo, embedding and dictation keys from paying for a key-only team's AI. Off pauses AI for marked teams; other teams keep existing funding.",
   },
 } as const satisfies FeatureFlagDefinition;

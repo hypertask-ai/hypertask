@@ -296,10 +296,6 @@ async function extractBinaryDocumentTextWithOpenAI(
     projectId?: number | null;
   }
 ) {
-  if (!gatewayApiKey && !isAiGatewayEnabled()) {
-    return "";
-  }
-
   const isImage = mediaType.startsWith("image/");
   const prompt = isImage
     ? renderPrompt("custom-instruction-image")
@@ -342,6 +338,7 @@ async function extractBinaryDocumentTextWithOpenAI(
       throw error;
     }
   }
+  if (!gatewayApiKey && !isAiGatewayEnabled()) return "";
   const loadedContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
   const defaultContext = isImage && !("backgroundClaudeEnabled" in loadedContext && loadedContext.backgroundClaudeEnabled)
     ? { haiku55Enabled: false, byok: undefined }

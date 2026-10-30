@@ -78,7 +78,12 @@ async function resolveLookupTeamId(lookup?: ByokLookupContext) {
 
   if (projectId != null) {
     const userId = lookup?.userId;
-    if (!userId) return undefined;
+    if (!userId) {
+      const trustedTeamId = normalizeTeamId(lookup?.trustedTeamId);
+      if (!trustedTeamId) throw new TeamKeyOnlyRefusal();
+      if (lookup?.teamScope != null && trustedTeamId !== lookup.teamScope.teamId) throw new Error("Project not found or access denied");
+      return trustedTeamId;
+    }
 
     const project = await prisma.project.findFirst({
       where: {

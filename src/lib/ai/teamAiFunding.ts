@@ -1,6 +1,5 @@
-import { HTPR_7844_TEAM_AI_KEY_ONLY_FLAG } from "@/lib/flags/definitions/htpr-7844-team-ai-key-only";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
-import { getAiProviderByByokKey, type TAiProviderKey, type TByokProviderKey } from "@/lib/aiProviders";
+import { getAiProviderByByokKey, resolveTeamProviderEnabled, type TAiProviderKey, type TByokProviderKey } from "@/lib/aiProviders";
 import prisma from "@/lib/prisma";
 
 export const TEAM_KEY_ONLY_MESSAGE =
@@ -45,6 +44,7 @@ export type TeamAiFundingSnapshot = {
   flagOn: boolean;
   aiKeyOnly: boolean;
   keys: Partial<Record<string, string>>;
+  anthropicEnabled?: boolean;
 };
 
 export type KeyOnlyUsageRow = {
@@ -105,7 +105,8 @@ export function decideTeamAiFunding(
   snapshot: TeamAiFundingSnapshot,
   request: TeamAiFundingRequest,
 ): TeamAiFunding {
-  if (!snapshot.flagOn || !snapshot.aiKeyOnly) return { mode: "unrestricted" };
+  if (!snapshot.aiKeyOnly) return { mode: "unrestricted" };
+  if (!snapshot.flagOn) return refused();
   if (
     request.feature === "dictation" ||
     request.feature === "images" ||
@@ -114,7 +115,7 @@ export function decideTeamAiFunding(
   ) {
     return refused();
   }
-  const claude = anthropicKey(snapshot.keys);
+  const claude = snapshot.anthropicEnabled === false ? undefined : anthropicKey(snapshot.keys);
   const anthropicRequest = request.provider === "anthropic" || request.provider === "claude";
   if (request.feature === "labels" || request.feature === "side-call" || anthropicRequest) {
     return claude ? byok("claude", claude) : refused();
@@ -230,17 +231,11 @@ export function modelOptionsForKeyOnlyTeam<T extends { modelKey: string }>(
 }
 
 async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingSnapshot | null> {
-  if (!teamId) return null;
-  let flagOn = false;
-  try {
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    flagOn = await isFeatureEnabled(HTPR_7844_TEAM_AI_KEY_ONLY_FLAG, 0);
-  } catch {
-    return null;
-  }
-  if (!flagOn) return null;
+  if (!teamId) throw new TeamKeyOnlyRefusal();
   let team: {
     aiKeyOnly: boolean;
+    aiProviderSettings: unknown;
+    googleAccount: { userId: number };
     byokApiKeys: Array<{ provider: string; ciphertext: string | null }>;
   } | null;
   try {
@@ -248,17 +243,31 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
       where: { id: teamId },
       select: {
         aiKeyOnly: true,
+        aiProviderSettings: true,
+        googleAccount: { select: { userId: true } },
         byokApiKeys: {
           where: { enabled: true },
           select: { provider: true, ciphertext: true },
         },
       },
     });
-  } catch (error) {
-    if (error instanceof TypeError) return null;
-    throw new TeamKeyOnlyRefusal(TEAM_KEY_ONLY_MESSAGE);
+  } catch {
+    throw new TeamKeyOnlyRefusal();
   }
-  if (!team?.aiKeyOnly) return null;
+  if (!team) throw new TeamKeyOnlyRefusal();
+  if (team.aiKeyOnly === false) return null;
+  if (team.aiKeyOnly !== true) throw new TeamKeyOnlyRefusal();
+  let flagOn: boolean;
+  try {
+    if (!Number.isSafeInteger(team.googleAccount?.userId) || team.googleAccount.userId <= 0) {
+      throw new Error("Team owner unavailable");
+    }
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    flagOn = await isFeatureEnabled("htpr-7844-team-ai-key-only", team.googleAccount.userId);
+  } catch {
+    throw new TeamKeyOnlyRefusal();
+  }
+  if (flagOn !== true) return { flagOn: false, aiKeyOnly: true, keys: {} };
   const keys: Partial<Record<string, string>> = {};
   for (const row of team.byokApiKeys) {
     const ciphertext = row.ciphertext?.trim();
@@ -270,7 +279,7 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
       continue;
     }
   }
-  return { flagOn: true, aiKeyOnly: true, keys };
+  return { flagOn: true, aiKeyOnly: true, keys, anthropicEnabled: resolveTeamProviderEnabled(team.aiProviderSettings, "anthropic") };
 }
 
 export async function resolveTeamAiFunding(

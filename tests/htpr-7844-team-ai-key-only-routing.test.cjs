@@ -35,7 +35,7 @@ function loadByok(flagOn, extraKeys = {}, options = {}) {
     delete require.cache[path.join(root, relativePath)];
   }
   stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key) => flagOn && key === "htpr-7844-team-ai-key-only",
+    isFeatureEnabled: async (key, userId) => { if (options.flagError) throw new Error("flag unavailable"); assert.equal(userId, 42); return flagOn && key === "htpr-7844-team-ai-key-only"; },
   });
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     storePlanIdForProject: async () => "BYOK",
@@ -52,14 +52,15 @@ function loadByok(flagOn, extraKeys = {}, options = {}) {
   stubModule("src/lib/prisma.ts", {
     default: {
       team: {
-        findUnique: async () => ({
-          aiKeyOnly: true,
-          aiProviderSettings: null,
+        findUnique: async () => { if (options.teamError) throw new TypeError("team unavailable"); return ({
+          aiKeyOnly: options.aiKeyOnly ?? true,
+          googleAccount: { userId: 42 },
+          aiProviderSettings: options.aiProviderSettings ?? null,
           byokApiKeys: [
             { provider: "claude", ciphertext: TEAM_KEY },
             ...Object.entries(extraKeys).map(([provider, ciphertext]) => ({ provider, ciphertext })),
           ],
-        }),
+        }); },
       },
       teamByokApiKey: {
         findUnique: async (args) => {
@@ -152,11 +153,41 @@ test("key-only model options and the haiku shortcut stay on the team claude key"
   });
 });
 
-test("flag off still uses the shared gateway key", async () => {
+test("flag off pauses key-only teams, while other teams remain unrestricted", async () => {
   await withPlatformKeys(async () => {
     const byok = loadByok(false);
-    const funding = await byok.getTeamGatewayFunding({ trustedTeamId: TEAM_ID, userId: 7 });
-    assert.equal(funding.source, "shared");
+    await assert.rejects(() => byok.getTeamGatewayApiKey({ trustedTeamId: TEAM_ID, userId: 7 }), { name: "TeamKeyOnlyRefusal" });
+    const unrestricted = loadByok(false, {}, { aiKeyOnly: false });
+    const result = await unrestricted.getTeamGatewayFunding({ trustedTeamId: TEAM_ID, userId: 7 });
+    assert.equal(result.source, "shared");
+    assert.equal(result.apiKey, PLATFORM.AI_GATEWAY_API_KEY);
+  });
+});
+
+
+test("funding failures refuse rather than falling back", async () => {
+  for (const options of [{ flagError: true }, { teamError: true }]) {
+    const byok = loadByok(true, {}, options);
+    await assert.rejects(() => byok.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID }), { name: "TeamKeyOnlyRefusal" });
+  }
+});
+
+test("background funding uses the team owner and respects disabled Anthropic", async () => {
+  const enabled = loadByok(true);
+  assert.equal(await enabled.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID }), TEAM_KEY);
+  assert.equal(await enabled.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID, projectId: 123 }), TEAM_KEY);
+  await assert.rejects(() => enabled.getByokOrTeamGatewayApiKey("claude", undefined, { projectId: 123 }), { name: "TeamKeyOnlyRefusal" });
+  const disabled = loadByok(true, {}, { aiProviderSettings: { providers: { anthropic: false } } });
+  await assert.rejects(
+    () => disabled.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID }),
+    { name: "TeamKeyOnlyRefusal" },
+  );
+});
+
+test("unrestricted teams do not depend on flag availability", async () => {
+  await withPlatformKeys(async () => {
+    const byok = loadByok(false, {}, { aiKeyOnly: false, flagError: true });
+    const funding = await byok.getTeamGatewayFunding({ trustedTeamId: TEAM_ID });
     assert.equal(funding.apiKey, PLATFORM.AI_GATEWAY_API_KEY);
   });
 });

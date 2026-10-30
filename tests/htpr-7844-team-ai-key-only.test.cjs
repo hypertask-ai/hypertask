@@ -94,7 +94,8 @@ test("a key-only team without a provider key is refused instead of falling back"
     );
 
     const off = funding.runKeyOnlyAiPaths({ flagOn: false, aiKeyOnly: true, keys: {} });
-    assert.deepEqual(off.calls, Array(funding.KEY_ONLY_AI_PATHS.length).fill("PLATFORM_FALLBACK"));
+    assert.deepEqual(off.calls, []);
+    assert.equal(off.refusals.length, funding.KEY_ONLY_AI_PATHS.length);
   });
 });
 
@@ -165,4 +166,14 @@ test("the picker lists only Anthropic models when that is the only saved key", (
   }
   const mixedRows = funding.applyKeyOnlyProviderVisibility(rows, ["anthropic", "openai"], true);
   assert.deepEqual(mixedRows.filter((row) => row.enabled).map((row) => row.key), ["anthropic"]);
+});
+
+
+test("disabled Anthropic refuses owned funding, while unrestricted teams stay unchanged", () => {
+  const snapshot = { flagOn: true, aiKeyOnly: true, keys: { claude: TEAM_KEY }, anthropicEnabled: false };
+  for (const feature of ["chat", "side-call", "labels"]) {
+    assert.equal(funding.decideTeamAiFunding(snapshot, { provider: "claude", feature }).mode, "refused");
+  }
+  assert.equal(funding.decideTeamAiFunding({ ...snapshot, anthropicEnabled: true }, { provider: "claude", feature: "chat" }).mode, "byok");
+  assert.equal(funding.decideTeamAiFunding({ ...snapshot, aiKeyOnly: false }, { provider: "claude", feature: "chat" }).mode, "unrestricted");
 });

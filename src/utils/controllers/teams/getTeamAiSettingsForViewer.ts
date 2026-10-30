@@ -26,6 +26,7 @@ export async function getTeamAiSettingsForViewer(
     select: {
       aiProviderSettings: true,
       aiKeyOnly: true,
+      googleAccount: { select: { userId: true } },
       byokApiKeys: {
         where: { enabled: true },
         select: { provider: true },
@@ -38,6 +39,7 @@ export async function getTeamAiSettingsForViewer(
       ok: true as const,
       settings: team.aiProviderSettings,
       aiKeyOnly: team.aiKeyOnly,
+      ownerUserId: team.googleAccount.userId,
       savedByokProviders: team.byokApiKeys.map((row) => row.provider),
     };
   }
