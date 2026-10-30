@@ -2,7 +2,6 @@ import React, { useContext, useLayoutEffect, useRef, useState } from "react";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
-import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
@@ -40,9 +39,7 @@ export default function AIChatClosedLayout({
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
-  const chatOverlaysTicket = useFlag(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG);
   const settingsChatEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
-  const overlayDetailPage = chatOverlaysTicket && isDetailPage;
   const [sidebarOverlays, setSidebarOverlays] = useState(false);
   const previousIsMobile = useRef(isMobile);
   const [viewportKey, setViewportKey] = useState(0);
@@ -57,12 +54,12 @@ export default function AIChatClosedLayout({
   useLayoutEffect(() => {
     if (isMobile || sidebarWidthPx <= 0) return;
     const update = () => setSidebarOverlays(
-      window.innerWidth < Math.max(768, sidebarWidthPx + (overlayDetailPage ? DETAIL_PAGE_MIN_WIDTH : 340))
+      window.innerWidth < Math.max(768, sidebarWidthPx + (isDetailPage ? DETAIL_PAGE_MIN_WIDTH : 340))
     );
     update();
     window.addEventListener("resize", update);
     return () => window.removeEventListener("resize", update);
-  }, [isMobile, sidebarWidthPx, overlayDetailPage]);
+  }, [isMobile, sidebarWidthPx, isDetailPage]);
 
   const workspaceClasses = cn(
     "outline-none",

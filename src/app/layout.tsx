@@ -39,7 +39,7 @@ import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 import { HTPR_7718_FIRST_VISIT_FLAG_SEED_FLAG } from "@/lib/flags/definitions/htpr-7718-first-visit-flag-seed";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import { buildTicketSidebarBootScript, TICKET_SIDEBAR_BOOT_CSS } from "@/lib/ticketSidebarBoot";
-import { HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export async function generateViewport() {
   const device = await isMobileDevice();
@@ -106,9 +106,9 @@ export default async function RootLayout(
   const sidebarFirstPaint = analyticsSession ? await isFeatureEnabled(HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG, analyticsSession.id) : false;
   const sidebarFlags = analyticsSession && sidebarFirstPaint ? await Promise.all([
     isFeatureEnabled(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG, analyticsSession.id),
-    isFeatureEnabled(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, analyticsSession.id),
     isFeatureEnabled(HTPR_8088_MANUAL_CHAT_FLAG, analyticsSession.id),
   ]) : null;
+  const [keepAiChatClosed, manualChat] = sidebarFlags ?? [];
   let autoOpenSwitchesUserId: number | null = null;
   if (analyticsSession && sidebarFlags && await isFeatureEnabled(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, analyticsSession.id)) {
     autoOpenSwitchesUserId = analyticsSession.id;
@@ -183,10 +183,10 @@ export default async function RootLayout(
             <script
               dangerouslySetInnerHTML={{
                 __html: buildTicketSidebarBootScript({
-                  keepClosed: sidebarFlags[0],
-                  overlayTicket: sidebarFlags[1],
+                  keepClosed: keepAiChatClosed,
+                  overlayTicket: true,
                   autoOpenSwitches: autoOpenSwitchesUserId !== null,
-                  manualChat: sidebarFlags[2],
+                  manualChat,
                   userId: autoOpenSwitchesUserId,
                 }),
               }}
