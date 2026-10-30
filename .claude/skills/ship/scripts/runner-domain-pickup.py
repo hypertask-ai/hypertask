@@ -56,8 +56,6 @@ def domain(task):
 mine = owners.get(runner, {})
 mine = {ticket: lease for ticket, lease in mine.items() if ticket not in tasks or (assigned(tasks[ticket]) and tasks[ticket].get('section') not in terminal and tasks[ticket].get('status') not in terminal)}
 other = {d for owner, leases in owners.items() if owner != runner for lease in leases.values() for d in lease['held']}
-priority = {d for owner, leases in owners.items() if owner != runner for lease in leases.values()
-            for d in (lease['held'] if not lease['pending'] or owner < runner else lease.get('acquired', []))}
 
 def conflicts(d, scopes):
     return bool(scopes) and (d == 'Shared' or 'Shared' in scopes or d in scopes)
@@ -85,8 +83,14 @@ for ticket, lease in mine.items():
         if d not in lease['held']:
             lease['held'].append(d)
         lease['pending'] = any(conflicts(scope, other) for scope in lease['held'])
-    if lease['pending'] and not any(conflicts(scope, priority) for scope in lease['held']):
-        lease['pending'] = False
+    if lease['pending']:
+        priority = {d for owner, leases in owners.items() if owner != runner for other_lease in leases.values()
+                    if (not other_lease['pending']
+                        or (bool(other_lease.get('acquired')) > bool(lease.get('acquired')))
+                        or (bool(other_lease.get('acquired')) == bool(lease.get('acquired')) and owner < runner))
+                    for d in other_lease['held']}
+        if not any(conflicts(scope, priority) for scope in lease['held']):
+            lease['pending'] = False
 
 held = {d for lease in mine.values() for d in lease['held']}
 accepted = []

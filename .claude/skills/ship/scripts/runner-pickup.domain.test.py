@@ -207,6 +207,47 @@ else: sys.exit(9)
         self.board(1, [changed]); self.tick(1); self.tick(3)
         self.assertEqual(self.items(3), ['HTPR-4'])
 
+    def test_reciprocal_relabels_serialize_and_release(self):
+        for first in (1, 2):
+            with self.subTest(first=first):
+                for path in self.state.iterdir():
+                    path.unlink()
+                a = self.task(1, 'HTPR-1', 'Commands')
+                b = self.task(2, 'HTPR-2', 'Search')
+                self.board(1, [a]); self.board(2, [b])
+                self.tick(1); self.tick(2)
+                a['labels'] = [{'name': 'Domain: Search'}]
+                b['labels'] = [{'name': 'Domain: Commands'}]
+                self.board(1, [a]); self.board(2, [b])
+                self.tick(first)
+                self.assertEqual(self.items(first), [])
+                self.tick(3 - first); self.tick(first)
+                self.assertEqual(self.items(1), ['HTPR-1'])
+                self.assertEqual(self.items(2), [])
+                self.board(3, [self.task(3, 'HTPR-3', 'Commands')]); self.tick(3)
+                self.assertEqual(self.items(3), [])
+                a['section'] = 'Done'
+                self.board(1, [a]); self.tick(1); self.tick(2); self.tick(3)
+                self.assertEqual(self.items(2), ['HTPR-2'])
+                self.assertEqual(self.items(3), [])
+                b['section'] = 'Done'
+                self.board(2, [b]); self.tick(2); self.tick(3)
+                self.assertEqual(self.items(3), ['HTPR-3'])
+
+    def test_pending_acquired_lease_precedes_legacy_after_winner_finishes(self):
+        changed = self.task(2, 'HTPR-2', 'Commands')
+        winner = self.task(3, 'HTPR-3', 'Search')
+        self.board(2, [changed]); self.board(3, [winner])
+        self.tick(2); self.tick(3)
+        changed['labels'] = [{'name': 'Domain: Search'}]
+        self.board(2, [changed]); self.tick(2)
+        (self.state / 'runner-1.json').write_text(json.dumps({'items': [{'ticket': 'HTPR-1'}]}))
+        self.board(1, [self.task(1, 'HTPR-1', 'Commands')]); self.tick(1)
+        winner['section'] = 'Done'
+        self.board(3, [winner]); self.tick(3); self.tick(2); self.tick(1)
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        self.assertEqual(self.items(1), [])
+
     def test_relabel_to_shared_waits_without_displacing_winner(self):
         changed = self.task(1, 'HTPR-1', 'Commands')
         self.board(1, [changed]); self.tick(1)

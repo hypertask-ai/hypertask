@@ -39,11 +39,11 @@ test('board registration boundary accepts contracts and rejects concrete domains
       const json = spawnSync(process.execPath, [...args, '--output-type', 'json', board], { cwd: dir, encoding: 'utf8' });
       assert.equal(json.status, 0, json.stderr);
       const report = JSON.parse(json.stdout);
-      const module = report.modules.find((item) => item.source === board);
-      assert.ok(module, `Missing scanned module: ${board}`);
+      const scannedModule = report.modules.find((item) => item.source === board);
+      assert.ok(scannedModule, `Missing scanned module: ${board}`);
       for (const target of targets) {
         assert.ok(report.modules.some((item) => item.source === target), `Missing module: ${target}`);
-        assert.ok(module.dependencies.some((item) => item.resolved === target), `Missing dependency: ${target}`);
+        assert.ok(scannedModule.dependencies.some((item) => item.resolved === target), `Missing dependency: ${target}`);
       }
       assert.deepEqual(report.summary.violations.map(({ from, to, rule }) => ({ from, to, name: rule.name, severity: rule.severity })), forbidden
         ? [{ from: board, to: targets[0], name: 'board-registration-boundary', severity: 'error' }]
@@ -54,8 +54,8 @@ test('board registration boundary accepts contracts and rejects concrete domains
     const assembly = spawnSync(process.execPath, [cli, '--config', config, '--ts-config', 'tsconfig.json', '--output-type', 'json', 'src/components/Modals/commands/HTC/commands.ts'], { cwd: dir, encoding: 'utf8' });
     assert.equal(assembly.status, 0, assembly.stderr + assembly.stdout);
     const report = JSON.parse(assembly.stdout);
-    const module = report.modules.find((item) => item.source === 'src/components/Modals/commands/HTC/commands.ts');
-    assert.ok(module?.dependencies.some((item) => item.resolved === board));
+    const scannedModule = report.modules.find((item) => item.source === 'src/components/Modals/commands/HTC/commands.ts');
+    assert.ok(scannedModule?.dependencies.some((item) => item.resolved === board));
     assert.ok(report.modules.some((item) => item.source === board));
     assert.deepEqual(report.summary.violations, []);
   } finally { rmSync(dir, { recursive: true, force: true }); }

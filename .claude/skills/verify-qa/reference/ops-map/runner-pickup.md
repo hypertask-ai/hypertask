@@ -18,7 +18,9 @@ the entry point is `.claude/skills/ship/scripts/runner-pickup`.
 
 Leases keep all observed domains until a successful read confirms completion or
 unassignment. A conflicting relabel stays pending; it does not displace the
-existing holder. Pending scopes block new work. Incomplete reads retain leases.
+existing holder. Pending scopes block new work. Pending leases with acquired
+scopes take priority over legacy pending leases; runner-ID order breaks ties
+within each group. Active owners still take priority. Incomplete reads retain leases.
 Manual claims bypass pickup. Existing manual work is invisible until its runner's
 successful tick; imported active work may already conflict. Preview and fixture
 results do not prove fleet-wide exclusivity.
