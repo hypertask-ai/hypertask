@@ -133,6 +133,8 @@ for (const name of [...screens, 'ticket from board card']) {
       if (!phone) {
         // YPER4-939: wait for the server-to-live row handoff before clicking a row it replaces.
         await waitForTicketInitialScroll(page)
+        // YPER4-953: the board-card click parks the pointer on an author avatar, whose open hovercard blocks every other click.
+        await page.mouse.move(0, 0)
         await page.getByTestId('ticket-comment').first().click({ timeout: 15_000 })
         await page.getByTestId('ticket-comment').last().click({ timeout: 15_000 })
         await expect(page.locator('[data-testid="ticket-comment"] .comment-body')).toHaveCount(2)
