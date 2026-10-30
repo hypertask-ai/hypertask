@@ -28,6 +28,7 @@ const notificationCategoryByType: Record<
   TaskReminder: "dueDates",
   Invited: "invites",
   AgentMessage: "comments",
+  AgentBoardAccessRequest: "invites",
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
