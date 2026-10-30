@@ -33,10 +33,10 @@ function withPlatformKeys(run) {
   }
 }
 
-test("key-only flag stays off and is marked as money risk", () => {
+test("key-only flag defaults to owner and QA and is marked as money risk", () => {
   assert.equal(flag.HTPR_7844_TEAM_AI_KEY_ONLY_FLAG, "htpr-7844-team-ai-key-only");
   assert.equal(flag.default.key, "htpr-7844-team-ai-key-only");
-  assert.equal(flag.default.defaultMode, "OFF");
+  assert.equal(flag.default.defaultMode, "OWNER_AND_QA");
   assert.equal(flag.default.kind, "feature");
   assert.equal(flag.default.releaseRisk.highRisk, "money");
 });
