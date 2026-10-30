@@ -68,6 +68,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/tasks/description-versions',
   '/api/mcp/tasks/escalate',
   '/api/mcp/tasks/evidence',
+  '/api/mcp/tasks/follow',
   '/api/mcp/tasks/lease/claim',
   '/api/mcp/tasks/lease/heartbeat',
   '/api/mcp/tasks/lease/release',
