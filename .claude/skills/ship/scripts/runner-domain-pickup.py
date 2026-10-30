@@ -105,10 +105,12 @@ for ticket, lease in mine.items():
                 for owner, leases in owners.items() if owner != runner for other_lease in leases.values()):
             lease['acquired'] = []
         priority = {d for owner, leases in owners.items() if owner != runner for other_lease in leases.values()
-                    for d in (other_lease['held'] if not other_lease['pending']
-                              or (bool(other_lease.get('acquired')) == bool(lease.get('acquired')) and owner < runner)
-                              else other_lease.get('acquired', []))}
-        if not any(conflicts(scope, priority) for scope in lease['held']):
+                    for d in (other_lease['held'] if not other_lease['pending'] else other_lease.get('acquired', []))}
+        requested = {d for owner, leases in owners.items() if owner != runner for other_lease in leases.values()
+                     if other_lease['pending'] and bool(other_lease.get('acquired')) == bool(lease.get('acquired')) and owner < runner
+                     for d in other_lease['held'] if d not in other_lease.get('acquired', [])}
+        if not any(conflicts(scope, priority) or (scope not in lease.get('acquired', []) and conflicts(scope, requested))
+                   for scope in lease['held']):
             lease['pending'] = False
             lease['acquired'] = lease['held'][:]
 

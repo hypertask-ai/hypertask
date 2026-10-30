@@ -218,6 +218,11 @@ else: sys.exit(9)
         inbox.write_text(json.dumps(data))
         self.board(3, [search]); self.tick(3)
         self.board(1, [contender]); self.tick(1)
+        inbox = self.state / 'runner-1.json'
+        data = json.loads(inbox.read_text())
+        data['items'][0]['delivered'] = True
+        inbox.write_text(json.dumps(data))
+        contender['section'] = 'In Progress'
         changed['section'] = 'In Progress'
         changed['labels'] = [{'name': 'Domain: Search'}]
         self.board(2, [changed]); self.tick(2)
@@ -227,9 +232,15 @@ else: sys.exit(9)
         leases = json.loads((self.state / 'domain-ownership.json').read_text())
         self.assertIn('Commands', leases['2']['HTPR-2']['acquired'])
         self.assertTrue(leases['1']['HTPR-1']['pending'])
+        search['section'] = 'Done'
+        self.board(3, [search]); self.tick(3); self.tick(2); self.tick(1)
+        leases = json.loads((self.state / 'domain-ownership.json').read_text())
+        self.assertFalse(leases['2']['HTPR-2']['pending'])
+        self.assertTrue(leases['1']['HTPR-1']['pending'])
         changed['section'] = 'Done'
         self.board(2, [changed]); self.tick(2); self.tick(1)
-        self.assertEqual(self.items(1), ['HTPR-1'])
+        leases = json.loads((self.state / 'domain-ownership.json').read_text())
+        self.assertFalse(leases['1']['HTPR-1']['pending'])
 
     def test_reciprocal_relabels_serialize_and_release(self):
         for first in (1, 2):
