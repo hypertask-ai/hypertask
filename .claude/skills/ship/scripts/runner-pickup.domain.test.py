@@ -109,7 +109,15 @@ else: sys.exit(9)
         self.board(2, [self.task(2, 'HTPR-2', 'Search')])
         self.tick(2)
         self.assertEqual(self.items(2), [])
-        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1'], 'Shared')
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']['held'], ['Shared'])
+
+    def test_own_legacy_inbox_keeps_unknown_scope(self):
+        (self.state / 'runner-1.json').write_text(json.dumps({'items': [{'ticket': 'HTPR-1'}]}))
+        self.board(1, [self.task(1, 'HTPR-1', 'Commands')]); self.tick(1)
+        lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']
+        self.assertEqual(set(lease['held']), {'Shared', 'Commands'})
+        self.board(2, [self.task(2, 'HTPR-2', 'Search')]); self.tick(2)
+        self.assertEqual(self.items(2), [])
 
     def test_known_lease_survives_legacy_inbox_seeding(self):
         (self.state / 'domain-ownership.json').write_text(json.dumps({'1': {'HTPR-1': 'Commands'}}))
@@ -117,7 +125,59 @@ else: sys.exit(9)
         self.board(2, [self.task(2, 'HTPR-2', 'Search')])
         self.tick(2)
         self.assertEqual(self.items(2), ['HTPR-2'])
-        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1'], 'Commands')
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']['held'], ['Commands'])
+
+    def test_relabel_waits_for_existing_winner_and_retains_scopes(self):
+        changed = self.task(1, 'HTPR-1', 'Commands')
+        winner = self.task(2, 'HTPR-2', 'Search')
+        self.board(1, [changed]); self.board(2, [winner])
+        self.tick(1); self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        changed['labels'] = [{'name': 'Domain: Search'}]
+        extra = self.task(1, 'HTPR-3', 'Commands')
+        self.board(1, [changed, extra]); self.tick(1)
+        self.assertEqual(self.items(1), [])
+        lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']
+        self.assertEqual(set(lease['held']), {'Commands', 'Search'})
+        self.assertTrue(lease['pending'])
+        self.tick(2)
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        self.board(3, [self.task(3, 'HTPR-4', 'Commands')]); self.tick(3)
+        self.assertEqual(self.items(3), [])
+        self.tick(1)
+        self.assertEqual(self.items(1), [])
+        winner['section'] = 'Done'
+        self.board(2, [winner]); self.tick(2); self.tick(1)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']
+        self.assertEqual(set(lease['held']), {'Commands', 'Search'})
+        self.assertFalse(lease['pending'])
+        self.tick(3)
+        self.assertEqual(self.items(3), [])
+        changed['section'] = 'Done'
+        self.board(1, [changed]); self.tick(1); self.tick(3)
+        self.assertEqual(self.items(3), ['HTPR-4'])
+
+    def test_relabel_to_shared_waits_without_displacing_winner(self):
+        changed = self.task(1, 'HTPR-1', 'Commands')
+        self.board(1, [changed]); self.tick(1)
+        self.board(2, [self.task(2, 'HTPR-2', 'Search')]); self.tick(2)
+        changed['labels'] = []
+        self.board(1, [changed]); self.tick(1); self.tick(2)
+        self.assertEqual(self.items(1), [])
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        self.board(3, [self.task(3, 'HTPR-3', 'Flags')]); self.tick(3)
+        self.assertEqual(self.items(3), [])
+
+    def test_relabel_without_conflict_keeps_old_scope(self):
+        changed = self.task(1, 'HTPR-1', 'Commands')
+        self.board(1, [changed]); self.tick(1)
+        changed['labels'] = [{'name': 'Domain: Search'}]
+        self.board(1, [changed]); self.tick(1)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.board(2, [self.task(2, 'HTPR-2', 'Commands')]); self.tick(2)
+        self.assertEqual(self.items(2), [])
 
     def test_archived_status_releases_lease_on_readback(self):
         task = self.task(1, 'HTPR-1', 'Flags', 'In Progress')

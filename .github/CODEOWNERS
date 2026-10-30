@@ -4,7 +4,6 @@
 /scripts/parity-contract.mjs @valentinyeo
 /scripts/parity-ai-chat-inventory.mjs @valentinyeo
 
-# Domains
 /src/components/Modals/commands/HTC/ @valentinyeo
 /src/lib/flags.ts @valentinyeo
 /src/lib/flags/ @valentinyeo

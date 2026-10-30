@@ -6,7 +6,6 @@
 #   runner-pickup install-webhook  copy the webhook receiver and its unit, enable it (YPER4-256)
 # Backstop (YPER4-256): each tick also reads the agent inbox once and hands unseen human comments, mentions,
 # assignments and notices to the live runner session through runner-deliver; the webhook receiver is the fast path.
-# Never calls GitHub. Reads all pages, backs off on errors, and honors the agent-board-poll rate-limit marker.
 set -uo pipefail
 STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
 VCC=${RUNNER_PICKUP_VCC:-vcc}

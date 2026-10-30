@@ -37,7 +37,9 @@ lease does not expire. An assigned task in an active or review column keeps its
 lease; completed or unassigned tasks release it after a successful readback.
 Incomplete list pages cannot release leases. A missing task needs a successful
 individual readback. Older inbox tickets without known leases are treated as Shared until
-reconciled; known leases retain their domain. Ownership applies to pickup, not
+reconciled. Leases retain every observed scope until release. A relabel that
+conflicts with another lease stays pending and is withheld; the existing holder
+keeps admission. Pending scopes block new work. Ownership applies to pickup, not
 manual claims. It cannot discover pre-existing manual work before that runner's first successful pickup tick. Imported active work can already conflict;
 importing it does not guarantee exclusive ownership.
 
