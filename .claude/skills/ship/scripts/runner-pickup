@@ -383,7 +383,8 @@ run_tick() {
   fi
   cand=$(jq -cn --argjson tasks "$(jq -c '.tasks' <<<"$resp")" --argjson candidates "$cand" --argjson previous "$prev" '{tasks:$tasks,candidates:$candidates,previous:$previous}' | python3 "$HERE/runner-domain-pickup.py" "$STATE" "$n") || die 'domain ownership failed'
   merged=$(jq -c --argjson prev "$prev" --argjson now "$NOW" '
-    map(. as $c | ($prev | map(select(.ticket == $c.ticket)) | first) as $old
+    map(. as $candidate | del(._pickupPrevious) as $c
+      | (($prev | map(select(.ticket == $c.ticket)) | first) // $candidate._pickupPrevious) as $old
       | if $old and ($old.resumeAfterFreeze == $c.resumeAfterFreeze) then $old + {title: $c.title, url: $c.url, section: $c.section}
         else $c + {queuedAt: $now, delivered: false, notified: false, seen: false} end)' <<<"$cand")
   # One activity line per ticket, only when it is still undelivered one tick after it was queued (the runner is busy).

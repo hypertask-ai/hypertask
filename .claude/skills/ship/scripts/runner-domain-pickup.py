@@ -87,6 +87,7 @@ for ticket, lease in mine.items():
         if lease['pending'] and 'acquired' not in lease:
             lease['acquired'] = lease['held'][:]
     if previous is not None:
+        lease['envelope'] = previous
         lease['undelivered'] = previous.get('delivered') is False and task.get('section') == 'Todo'
     if lease.get('protected'):
         lease['undelivered'] = False
@@ -121,11 +122,14 @@ for item in data['candidates']:
     d = domain(tasks[ticket])
     if ticket in mine:
         if not mine[ticket]['pending']:
-            accepted.append(item)
+            accepted.append({**item, '_pickupPrevious': mine[ticket].get('envelope')})
     elif not any(lease['pending'] for lease in mine.values()) and (not held or held == {d}) and not conflicts(d, other):
         mine[ticket] = {'held': [d], 'current': d, 'pending': False}
         held.add(d)
         accepted.append(item)
+for lease in mine.values():
+    if not lease['pending']:
+        lease.pop('envelope', None)
 if mine:
     owners[runner] = mine
 else:

@@ -207,6 +207,53 @@ else: sys.exit(9)
         self.board(1, [changed]); self.tick(1); self.tick(3)
         self.assertEqual(self.items(3), ['HTPR-4'])
 
+    def test_relabel_readmission_preserves_delivery_envelope(self):
+        for changed_resume in (False, True):
+            with self.subTest(changed_resume=changed_resume):
+                for path in self.state.iterdir():
+                    path.unlink()
+                changed = self.task(1, 'HTPR-1', 'Commands')
+                winner = self.task(2, 'HTPR-2', 'Search')
+                self.board(1, [changed]); self.board(2, [winner])
+                self.tick(1); self.tick(2)
+                inbox = self.state / 'runner-1.json'
+                data = json.loads(inbox.read_text())
+                data['items'][0].update(delivered=True, notified=True, queuedAt=123, seen=True)
+                if changed_resume:
+                    data['items'][0]['resumeAfterFreeze'] = True
+                inbox.write_text(json.dumps(data))
+                changed['labels'] = [{'name': 'Domain: Search'}]
+                changed['title'] = 'Updated title'
+                changed['section'] = 'In Progress'
+                changed['uniqueIndex'] = 1001
+                self.board(1, [changed]); self.tick(1); self.tick(1)
+                self.assertEqual(self.items(1), [])
+                winner['section'] = 'Done'
+                self.board(2, [winner]); self.tick(2); self.tick(1)
+                item = json.loads(inbox.read_text())['items'][0]
+                self.assertEqual(item['title'], 'Updated title')
+                self.assertEqual(item['section'], 'In Progress')
+                self.assertEqual(item['url'], 'https://app.hypertask.ai/detail/project-15/1001')
+                self.assertEqual(item['delivered'], not changed_resume)
+                self.assertEqual(item['notified'], not changed_resume)
+                self.assertEqual(item['queuedAt'], 1793188800 if changed_resume else 123)
+                self.assertTrue(item['seen'])
+                self.assertNotIn('_pickupPrevious', item)
+
+    def test_delivered_ticket_requeues_after_parking(self):
+        task = self.task(1, 'HTPR-1', 'Commands')
+        self.board(1, [task]); self.tick(1)
+        inbox = self.state / 'runner-1.json'
+        data = json.loads(inbox.read_text())
+        data['items'][0]['delivered'] = True
+        inbox.write_text(json.dumps(data))
+        task['section'] = 'Later (parked)'
+        self.board(1, [task]); self.tick(1)
+        self.assertEqual(self.items(1), [])
+        task['section'] = 'Todo'
+        self.board(1, [task]); self.tick(1)
+        self.assertFalse(json.loads(inbox.read_text())['items'][0]['delivered'])
+
     def test_active_delivered_pending_owner_keeps_acquired_scope(self):
         changed = self.task(2, 'HTPR-2', 'Commands')
         search = self.task(3, 'HTPR-3', 'Search')
