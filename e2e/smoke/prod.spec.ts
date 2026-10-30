@@ -10,6 +10,7 @@ import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from '../../src/lib/firstScre
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const LOGIN_PATH = '/login'
+const BOARD_SWITCH_TIMEOUT = 15_000
 
 const RUNNER_ERROR_MARKERS = [
   /net::ERR_/i,
@@ -264,7 +265,9 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
       await page.locator(`#project-${board.id}:visible`).click()
     }
     await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id))
-    await expect(page.locator('[id^="task-"]').filter({ hasText: `${board.title} fixture` }).first()).toBeVisible()
+    await expect(page).toHaveTitle(`${board.title} • Hypertask`, { timeout: BOARD_SWITCH_TIMEOUT })
+    await expect(page.locator('[data-board-tasks-hydrated="true"]')).toBeAttached({ timeout: BOARD_SWITCH_TIMEOUT })
+    await expect(page.locator('[id^="task-"]').filter({ hasText: `${board.title} fixture` }).first()).toBeVisible({ timeout: BOARD_SWITCH_TIMEOUT })
   }
   await page.goto(withRealtime(a.path), { waitUntil: 'load' })
   await assertScope(a.title)
