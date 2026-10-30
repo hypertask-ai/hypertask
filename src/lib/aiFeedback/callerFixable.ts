@@ -1,6 +1,6 @@
 export type FeedbackRefusal = { code?: string; field?: string; options?: readonly unknown[] };
 
-const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "too_small", "too_big"]);
+const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big"]);
 
 export function callerCanFix(refusal: FeedbackRefusal): boolean {
   if (!refusal.code) return false;
@@ -9,15 +9,8 @@ export function callerCanFix(refusal: FeedbackRefusal): boolean {
   return Boolean(refusal.field);
 }
 
-export function refusalFromZodIssues(issues: readonly { code: string; path?: readonly PropertyKey[]; keys?: readonly string[]; options?: readonly unknown[] }[]): FeedbackRefusal {
-  const issue = issues[0];
-  if (!issue) return {};
-  const field = issue.code === "unrecognized_keys" ? issue.keys?.[0] : issue.path?.filter((part) => typeof part === "string").join(".") || undefined;
-  return {
-    code: issue.code,
-    ...(field ? { field } : {}),
-    ...(issue.options && issue.options.length ? { options: issue.options } : {}),
-  };
+export function callerCanFixRefusal(details: FeedbackRefusal | undefined, status: number): boolean {
+  return status < 500 && callerCanFix(details ?? {});
 }
 
 export const RECENTLY_FILED_HOURS = 24;

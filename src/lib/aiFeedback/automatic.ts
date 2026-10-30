@@ -4,7 +4,7 @@ import { HTPR_7498_EXPIRED_KEY_FEEDBACK_FLAG } from '@/lib/flags/definitions/htp
 import { automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
-import { callerCanFix, refusalFromZodIssues, quietFixableReports } from './callerFixable'
+import { callerCanFixRefusal, quietFixableReports } from './callerFixable'
 import { HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7838-conflict-no-feedback'
 import { HTPR_7819_NOT_FOUND_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7819-not-found-no-feedback'
 
@@ -146,11 +146,11 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
         if (status !== 403 && !await answerIsExpected(status, userId)) {
-          const callerCanFixRefusal = error instanceof ZodError && callerCanFix(refusalFromZodIssues(error.issues))
-          if (callerCanFixRefusal && await quietFixableReports(userId)) {
+          const details = feedbackErrorDetails(error)
+          if (callerCanFixRefusal(details && { code: details.errorCode, field: details.field }, status) && await quietFixableReports(userId)) {
             console.info('AI feedback not filed: the refusal tells the caller what to fix', { tool: tool.name })
           } else {
-            queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...feedbackErrorDetails(error) }, userId)
+            queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...details }, userId)
           }
         }
         throw error

@@ -13,7 +13,7 @@ function setup({ enabled = true, flagError = false } = {}) {
       return key === flag ? enabled : false
     } },
     './report': { fileAiFeedback: async (input) => { filed.push(input) } },
-    './callerFixable': { callerCanFix: () => false, refusalFromZodIssues: () => ({}), quietFixableReports: async () => false },
+    './callerFixable': { callerCanFixRefusal: () => false, quietFixableReports: async () => false },
   })
   const { observeFeedbackTools } = load('src/lib/aiFeedback/automatic.ts')
   return { filed, pending, observeFeedbackTools }
