@@ -398,27 +398,27 @@ export async function embedTexts(texts: string[], teamId?: string | null): Promi
       };
 
   const inputs = texts.map(toEmbeddingInput);
-  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], auth);
-  return embedInputs(inputs, auth);
+  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], auth, teamId);
+  return embedInputs(inputs, auth, teamId);
 }
 
 const inFlightSingleEmbeddings = new Map<string, Promise<number[][]>>();
 
-function shareInFlightEmbedding(input: string, auth: ReturnType<typeof embeddingAuthorization>) {
-  const key = JSON.stringify([input, auth.apiKey, auth.endpoint, auth.model]);
+function shareInFlightEmbedding(input: string, auth: ReturnType<typeof embeddingAuthorization>, teamId?: string | null) {
+  const key = JSON.stringify([input, auth.apiKey, auth.endpoint, auth.model, teamId ?? null]);
   const running = inFlightSingleEmbeddings.get(key);
   if (running) return running;
-  const started = embedInputs([input], auth).finally(() => inFlightSingleEmbeddings.delete(key));
+  const started = embedInputs([input], auth, teamId).finally(() => inFlightSingleEmbeddings.delete(key));
   inFlightSingleEmbeddings.set(key, started);
   return started;
 }
 
-async function embedInputs(inputs: string[], auth: ReturnType<typeof embeddingAuthorization>) {
+async function embedInputs(inputs: string[], auth: ReturnType<typeof embeddingAuthorization>, teamId?: string | null) {
   const embeddings: number[][] = [];
 
   for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
     const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
-    embeddings.push(...(await embedBatchWithRetry(batch, auth.apiKey, auth.endpoint, auth.model)));
+    embeddings.push(...(await embedBatchWithRetry(batch, auth.apiKey, auth.endpoint, auth.model, teamId)));
   }
 
   return embeddings;
@@ -436,6 +436,7 @@ async function embedBatchWithRetry(
   apiKey: string,
   endpoint = EMBEDDINGS_ENDPOINT,
   model = EMBEDDING_MODEL,
+  teamId?: string | null,
 ): Promise<number[][]> {
   let lastError: unknown;
 
@@ -508,7 +509,7 @@ async function embedBatchWithRetry(
       return batchEmbeddings;
     } finally {
       await logAiUsage({
-        userId: null, provider: "gateway-embeddings", model, feature: "embeddings",
+        userId: null, teamId: teamId ?? null, provider: "gateway-embeddings", model, feature: "embeddings",
         outcome: succeeded ? "ok" : "failed", inputTokens: usage?.prompt_tokens, totalTokens: usage?.total_tokens,
         costUsd: null, latencyMs: Date.now() - startedAt,
       });
@@ -1152,11 +1153,9 @@ async function embedQueryForSearch(
       if (!project?.teamId) return null;
       teams.add(project.teamId);
     }
-    for (const teamId of teams) {
-      const decision = await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" });
-      if (decision.mode !== "unrestricted") return null;
-    }
-    return await embedText(query);
+    if (teams.size !== 1) return null;
+    const [teamId] = teams;
+    return await embedText(query, teamId);
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;

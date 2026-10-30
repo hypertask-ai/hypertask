@@ -7,10 +7,10 @@ export default {
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-10-24",
-  description: "Team key-only AI funding. A team marked key-only uses its own saved keys and never a platform key.",
+  description: "Team key-only AI uses its Anthropic key; explicitly approved teams may use platform funding for search embeddings and dictation.",
   releaseRisk: {
     risk: "new",
     highRisk: "money",
-    reason: "Stops platform, gateway, demo, embedding and dictation keys from paying for a key-only team's AI. Off pauses AI for marked teams; other teams keep existing funding.",
+    reason: "Key-only teams use Anthropic BYOK; explicit team opt-in permits platform-funded embeddings and dictation. Off pauses AI for marked teams; other teams keep existing funding.",
   },
 } as const satisfies FeatureFlagDefinition;

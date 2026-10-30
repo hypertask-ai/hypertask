@@ -43,6 +43,7 @@ export type TeamAiFunding =
 export type TeamAiFundingSnapshot = {
   flagOn: boolean;
   aiKeyOnly: boolean;
+  aiKeyOnlyPlatformServices?: boolean;
   keys: Partial<Record<string, string>>;
   anthropicEnabled?: boolean;
 };
@@ -90,6 +91,9 @@ export function decideTeamAiFunding(
 ): TeamAiFunding {
   if (!snapshot.aiKeyOnly) return { mode: "unrestricted" };
   if (!snapshot.flagOn) return refused();
+  if ((request.feature === "embeddings" || request.feature === "dictation") && snapshot.aiKeyOnlyPlatformServices === true) {
+    return { mode: "unrestricted" };
+  }
   if (
     request.feature === "dictation" ||
     request.feature === "images" ||
@@ -190,6 +194,7 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
   if (!teamId) throw new TeamKeyOnlyRefusal();
   let team: {
     aiKeyOnly: boolean;
+    aiKeyOnlyPlatformServices: boolean;
     aiProviderSettings: unknown;
     googleAccount: { userId: number };
   } | null;
@@ -198,6 +203,7 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
       where: { id: teamId },
       select: {
         aiKeyOnly: true,
+        aiKeyOnlyPlatformServices: true,
         aiProviderSettings: true,
         googleAccount: { select: { userId: true } },
       },
@@ -239,7 +245,7 @@ async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingS
       continue;
     }
   }
-  return { flagOn: true, aiKeyOnly: true, keys, anthropicEnabled: resolveTeamProviderEnabled(team.aiProviderSettings, "anthropic") };
+  return { flagOn: true, aiKeyOnly: true, aiKeyOnlyPlatformServices: team.aiKeyOnlyPlatformServices === true, keys, anthropicEnabled: resolveTeamProviderEnabled(team.aiProviderSettings, "anthropic") };
 }
 
 export async function resolveTeamAiFunding(

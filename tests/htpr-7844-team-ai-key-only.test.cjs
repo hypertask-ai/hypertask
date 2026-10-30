@@ -180,3 +180,36 @@ test("disabled Anthropic refuses owned funding, while unrestricted teams stay un
   assert.equal(funding.decideTeamAiFunding({ ...snapshot, anthropicEnabled: true }, { provider: "claude", feature: "chat" }).mode, "byok");
   assert.equal(funding.decideTeamAiFunding({ ...snapshot, aiKeyOnly: false }, { provider: "claude", feature: "chat" }).mode, "unrestricted");
 });
+
+test("platform services require explicit opt-in and an enabled flag", () => {
+  const base = { flagOn: true, aiKeyOnly: true, keys: { claude: TEAM_KEY } };
+  for (const request of [{ feature: "embeddings", provider: "openai" }, { feature: "dictation", provider: "deepgram" }]) {
+    for (const value of [undefined, false, "true"]) {
+      assert.equal(funding.decideTeamAiFunding({ ...base, aiKeyOnlyPlatformServices: value }, request).mode, "refused");
+    }
+    assert.equal(funding.decideTeamAiFunding({ ...base, aiKeyOnlyPlatformServices: true }, request).mode, "unrestricted");
+    assert.equal(funding.decideTeamAiFunding({ ...base, flagOn: false, aiKeyOnlyPlatformServices: true }, request).mode, "refused");
+  }
+  const opted = { ...base, aiKeyOnlyPlatformServices: true };
+  assert.equal(funding.decideTeamAiFunding(opted, { feature: "chat", provider: "claude" }).apiKey, TEAM_KEY);
+  for (const request of [{ feature: "chat", provider: "openai" }, { feature: "images", provider: "gateway" }, { feature: "gateway", provider: "gateway" }]) {
+    assert.equal(funding.decideTeamAiFunding(opted, request).mode, "refused");
+  }
+});
+
+test("setter dry runs default closed and require explicit permission", () => {
+  const { spawnSync } = require("node:child_process");
+  const script = path.join(root, "scripts/set-team-ai-key-only.mjs");
+  const team = "11111111-1111-4111-8111-111111111111";
+  const run = (...args) => spawnSync(process.execPath, [script, "--team", team, ...args], { encoding: "utf8" });
+  for (const args of [["--on"], ["--on", "--deny-platform-search-dictation"], ["--off"]]) {
+    const result = run(...args);
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /aiKeyOnlyPlatformServices=false/);
+  }
+  const allowed = run("--on", "--allow-platform-search-dictation");
+  assert.equal(allowed.status, 0);
+  assert.match(allowed.stdout, /aiKeyOnlyPlatformServices=true/);
+  assert.notEqual(run("--off", "--allow-platform-search-dictation").status, 0);
+  assert.notEqual(run("--on", "--allow-platform-search-dictation", "--deny-platform-search-dictation").status, 0);
+});

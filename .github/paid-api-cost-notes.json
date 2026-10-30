@@ -71,7 +71,7 @@
   },
   "src/utils/controllers/turbopuffer/turbopufferHelper.ts:aadc9db2794d7e3ce3e6919997aa09d228a1c4569c23fdf7fc9bd4ffc229e9cd": {
     "maxUsdPerDay": 0,
-    "reason": "Existing embeddings request routes through the same gateway and model for unrestricted teams. Key-only teams refuse embeddings; this change adds no platform-funded request.",
+    "reason": "Zero additional spend relative to production: the existing embedding request, model, retries and indexing workloads are unchanged. Key-only teams now refuse it unless explicitly opted into the approved inne search exception. Opt-in preserves the existing platform-funded search and indexing behavior; no teams are opted in by this change.",
     "source": "https://app.hypertask.ai/detail/project-15/7844"
   }
 }

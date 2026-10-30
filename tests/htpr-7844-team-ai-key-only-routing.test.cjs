@@ -44,6 +44,7 @@ function loadByok(flagOn, extraKeys = {}, options = {}) {
       team: {
         findUnique: async (args) => { if (args.select.aiKeyOnly) options.metadataReads?.push(args); if (options.teamError) throw new TypeError("team unavailable"); return ({
           aiKeyOnly: options.aiKeyOnly ?? true,
+          aiKeyOnlyPlatformServices: options.aiKeyOnlyPlatformServices ?? false,
           googleAccount: { userId: 42 },
           aiProviderSettings: options.aiProviderSettings ?? null,
         }); },
@@ -189,7 +190,7 @@ test("funding reads secrets only for enabled key-only teams", async () => {
   const request = { trustedTeamId: TEAM_ID };
   const unrestricted = loadByok(true, {}, { aiKeyOnly: false, secretReads, metadataReads });
   await unrestricted.getTeamGatewayFunding(request);
-  assert.deepEqual(metadataReads, [{ where: { id: TEAM_ID }, select: { aiKeyOnly: true, aiProviderSettings: true, googleAccount: { select: { userId: true } } } }]);
+  assert.deepEqual(metadataReads, [{ where: { id: TEAM_ID }, select: { aiKeyOnly: true, aiKeyOnlyPlatformServices: true, aiProviderSettings: true, googleAccount: { select: { userId: true } } } }]);
   const disabled = loadByok(false, {}, { secretReads });
   await assert.rejects(() => disabled.getTeamGatewayApiKey(request), { name: "TeamKeyOnlyRefusal" });
   assert.deepEqual(secretReads, []);
