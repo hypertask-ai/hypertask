@@ -251,14 +251,16 @@ nochange_origin_branches() {
 # "Resolved without a change:" and carries evidence in that same comment: an https URL, or a <pre>/<code>
 # block whose visible inner text is not blank. Returns 2 when the comments cannot be read.
 resolution_comment() {
-  local t=$1 pr=${2:-} cmts
+  local t=$1 repo=${2:-} pr=${3:-} cmts
   cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || return 2
-  jq -e --arg pr "$pr" '.comments | any(.[]; (.text // "") as $x
+  jq -e --arg repo "$repo" --arg pr "$pr" '
+    ($repo | gsub("\\."; "\\.")) as $r
+    | .comments | any(.[]; (.text // "") as $x
       | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
       and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
         or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
              | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0))
-      and ($pr == "" or ($x | test("/pull/" + $pr + "([^0-9]|$)"))))' >/dev/null <<<"$cmts"
+      and ($pr == "" or ($x | test("github\\.com/" + $r + "/pull/" + $pr + "([^0-9]|$)"))))' >/dev/null <<<"$cmts"
 }
 
 resolution_comment_reason() {
@@ -304,9 +306,11 @@ nochange_ok() {
 # there, or it was closed as outdated. The record is the closing comment with a link, so the ticket closes without a
 # fresh release proof. Like dropped, the marker is only a record: every read re-checks the PR state.
 check_elsewhere() {
-  local t=${1:-} n prev prev_state state rc
+  local t=${1:-} n prev prev_repo prev_state state rc
   [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "elsewhere needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
-  prev=$(bound_pr "$t"); n=${2:-$prev}
+  # The binding is a repository and a number; the saved repository is where the old PR has to be read.
+  prev=$(bound_pr "$t"); prev_repo=$(cat "$EVID/$t/repo" 2>/dev/null); prev_repo=${prev_repo:-$REPO}
+  n=${2:-$prev}
   [[ $n =~ ^[0-9]+$ ]] || fail "$t has no bound PR; run ship-check elsewhere $t <pr number>"
   state=$(gh pr view "$n" -R "$REPO" --json state --jq .state 2>/dev/null) || fail "PR $n not found in $REPO"
   case $state in
@@ -315,19 +319,20 @@ check_elsewhere() {
   esac
   # Another PR may replace the binding only once it is finished too, so an unrelated closed PR cannot stand in
   # for work that is still open.
-  if [ -n "$prev" ] && [ "$prev" != "$n" ]; then
-    prev_state=$(gh pr view "$prev" -R "$REPO" --json state --jq .state 2>/dev/null) || fail "cannot read the bound PR $prev of $t"
+  if [ -n "$prev" ] && { [ "$prev" != "$n" ] || [ "$prev_repo" != "$REPO" ]; }; then
+    prev_state=$(gh pr view "$prev" -R "$prev_repo" --json state --jq .state 2>/dev/null) \
+      || fail "cannot read the bound PR $prev of $t in $prev_repo"
     case $prev_state in
       MERGED|CLOSED) ;;
-      *) fail "$t is still bound to PR $prev ($prev_state); finish or close it before recording another PR" ;;
+      *) fail "$t is still bound to PR $prev in $prev_repo ($prev_state); finish or close it before recording another PR" ;;
     esac
   fi
-  resolution_comment "$t" "$n"; rc=$?
+  resolution_comment "$t" "$REPO" "$n"; rc=$?
   [ "$rc" = 2 ] && fail "cannot read comments of $t"
-  [ "$rc" = 0 ] || fail "$t has no comment opening with \"Resolved without a change:\" that links PR $n (its /pull/$n URL) and carries evidence (an https URL, or a <pre>/<code> block with output)"
+  [ "$rc" = 0 ] || fail "$t has no comment opening with \"Resolved without a change:\" that links https://github.com/$REPO/pull/$n and carries evidence (an https URL, or a <pre>/<code> block with output)"
   mkdir -p "$EVID/$t" && rm -f "$EVID/$t/branch" "$EVID/$t/dropped" "$EVID/$t/nochange" "$EVID/$t/duplicate-of" \
     && echo "$n" > "$EVID/$t/pr" && echo "$REPO" > "$EVID/$t/repo" && echo "$BASE" > "$EVID/$t/base" \
-    && echo "$n" > "$EVID/$t/elsewhere" && echo "recorded $t as finished elsewhere (PR $n $state)"
+    && echo "$n" > "$EVID/$t/elsewhere" && echo "recorded $t as finished elsewhere (PR $n $state in $REPO)"
 }
 
 # Finished elsewhere: passes only while the recorded PR is still merged or closed.
