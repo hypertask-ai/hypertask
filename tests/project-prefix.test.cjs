@@ -26,6 +26,7 @@ function load(file, stubs = {}) {
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
     if (request in stubs) return stubs[request];
+    if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, isPlanLimitsEnabled: async () => false };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
     if (request === "@/lib/net/contentEncoding") return load("src/lib/net/contentEncoding.ts");

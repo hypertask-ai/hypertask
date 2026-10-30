@@ -23,6 +23,21 @@ function fixture(actor = 'bound', skillContextEnabled = true) {
     makeSkill(6, 'board-review', { body: 'Follow the board review steps.' }),
   ]
   f.prisma.aI_Skill = f.model(skills, 'skill')
+  for (const method of ['findMany', 'findFirst']) {
+    const query = f.prisma.aI_Skill[method]
+    f.prisma.aI_Skill[method] = async args => {
+      const result = await query(args)
+      const scalarFields = row => {
+        if (!row) return row
+        const { project, ...fields } = row
+        return fields
+      }
+      return Array.isArray(result) ? result.map(scalarFields) : scalarFields(result)
+    }
+  }
+  f.prisma.task = f.model(f.tasks, 'task')
+  f.mocks['@/utils/controllers/comments/createCommentService'] = { createCommentService: async () => assert.fail('Read must not create a comment') }
+  f.mocks['@/utils/controllers/comments/processMentions'] = { convertPlainTextMentionsToHtml: text => text, resolveTextMentions: async text => text }
   f.tasks.forEach(task => { task.comments = [] })
   const helper = f.load('src/lib/mcp/skills/context.ts', {
     './skillAccess': { AccountSkillAccessError: class extends Error {} },
