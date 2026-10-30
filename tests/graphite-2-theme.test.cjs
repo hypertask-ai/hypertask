@@ -140,7 +140,7 @@ test("Graphite 2 CSS is isolated and carries the approved palette", () => {
   element.className = "graphite-2";
   assert.equal(style().getPropertyValue("--bg-newcomment-well"), "var(--bg-pageBackground)");
   assert.notEqual(style().getPropertyValue("--bg-pageBackground"), style().getPropertyValue("--bg-cardBackground"));
-  for (const [property, expected] of Object.entries({ "--bg-pageBackground": "#17181b", "--bg-sidebar": "#17181b", "--bg-cardBackground": "#1f2125", "--bg-hover-active": "#26282d", "--color-border-comment-description": "#2a2c31", "--color-white-black": "#ececed", "--color-text-light-gray": "#9a9ca1", "--color-text-quiet": "#6c6f74", "--bg-label-span": "transparent" })) {
+  for (const [property, expected] of Object.entries({ "--bg-pageBackground": "#17181b", "--bg-sidebar": "#17181b", "--bg-cardBackground": "#1f2125", "--bg-hover-active": "#26282d", "--color-border-comment-description": "#2a2c31", "--color-white-black": "#ececed", "--color-text-light-gray": "#9a9ca1", "--color-text-quiet": "#6c6f74", "--bg-label-span": "#6c6f74" })) {
     assert.equal(style().getPropertyValue(property), expected, property);
     for (const theme of ["graphite", "porcelain", "amoled", "dia"]) {
       element.className = theme;
@@ -172,6 +172,28 @@ test("Graphite 2 stylesheet compiles its title size with the installed Tailwind 
   });
   assert.deepEqual(declarations.get("font-size"), { value: "24px", important: true });
   assert.equal(declarations.get("font-weight").value, "600");
+});
+
+test("Graphite 2 keeps labels transparent and shared backgrounds visible", async () => {
+  const { compile } = require("@tailwindcss/node");
+  const { chromium } = require("@playwright/test");
+  const options = { base: root, onDependency() {} };
+  const utilities = await compile('@import "./src/styles/tailwind-entry.css";', options);
+  const theme = await compile('@import "./src/styles/tailwindThemes/graphite-2.css";', options);
+  const browser = await chromium.launch({ channel: "chrome", headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.setContent(`<html class="graphite-2"><head><style>${utilities.build(["bg-label-span"])}${theme.build([])}</style></head><body>
+      <div id="handle" class="bg-label-span"></div>
+      <div id="pill" class="label-pill bg-label-span"></div>
+      <div data-task-properties-rail><div id="property" class="bg-label-span"></div></div>
+    </body></html>`);
+    const colors = await page.evaluate(() => ["handle", "pill", "property"].map(id => getComputedStyle(document.getElementById(id)).backgroundColor));
+    assert.equal(colors[0], "rgb(108, 111, 116)");
+    assert.deepEqual(colors.slice(1), ["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0)"]);
+  } finally {
+    await browser.close();
+  }
 });
 
 test("server document gates Graphite 2 without changing other saved themes", async () => {
