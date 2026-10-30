@@ -27,6 +27,7 @@ async function runMirror({
   postResponse = { status: 200, body: { success: true, url: "https://app.hypertask.ai/detail/project-15/1234" } },
   token = "test-token",
   rateLimitReads = 0,
+  rateLimitCommentRead = false,
 } = {}) {
   const calls = [];
   const failures = [];
@@ -62,7 +63,9 @@ async function runMirror({
 
   const github = {
     rest: {
-      pulls: { get: async () => (refusedReads > 0 ? Promise.reject(refuse()) : { data: pr }) },
+      pulls: {
+        get: async () => (!rateLimitCommentRead && refusedReads > 0 ? Promise.reject(refuse()) : { data: pr }),
+      },
       issues: { listComments: async () => ({ data: [] }) },
     },
     paginate: async () => (refusedReads > 0
@@ -295,10 +298,7 @@ test("the workflow mirrors no candidate code into the run", async () => {
   assert.ok(script.env.REVIEW_COMMENT_AUTHOR);
 });
 
-test("a rate-limited read waits for the reset and still mirrors the verdict (YPER4-925)", async () => {
-  // The live run failed on the comment read with 403 and x-ratelimit-remaining
-  // 0, 82 seconds before the window reset; the verdict never reached the
-  // ticket. Both reads now wait instead of dropping it.
+test("a rate-limited pull read waits for the reset and still mirrors the verdict (YPER4-925)", async () => {
   const { posts, failures, warnings } = await runMirror({ rateLimitReads: 2 });
 
   assert.deepEqual(failures, []);
@@ -306,4 +306,16 @@ test("a rate-limited read waits for the reset and still mirrors the verdict (YPE
   assert.match(JSON.parse(posts[0].init.body).text, /APPROVE/);
   assert.equal(warnings.length, 2);
   assert.match(warnings.join("\n"), /rate limited; retrying after \d+s/);
+});
+
+test("a rate-limited comment read waits for the reset and still mirrors the verdict (YPER4-925)", async () => {
+  // The live run failed on this read: 403, x-ratelimit-remaining 0, resetting
+  // 82 seconds later, and the verdict never reached the ticket.
+  const { posts, failures, warnings } = await runMirror({ rateLimitReads: 1, rateLimitCommentRead: true });
+
+  assert.deepEqual(failures, []);
+  assert.equal(posts.length, 1);
+  assert.match(JSON.parse(posts[0].init.body).text, /APPROVE/);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /rate limited; retrying after \d+s/);
 });
