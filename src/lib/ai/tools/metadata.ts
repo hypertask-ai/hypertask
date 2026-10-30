@@ -1,6 +1,7 @@
 
 
 export const toolStatus: Record<string, string> = {
+  hypertask_follow_task: "Updating your task tracking...",
   hypertask_settings: "Checking your settings...",
   hypertask_agent_webhook: "Managing the agent webhook...",
   hypertask_get_user_context: "Loading your Hypertask context...",

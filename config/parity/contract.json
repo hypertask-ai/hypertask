@@ -297,6 +297,24 @@
       }
     },
     {
+      "id": "tasks.follow",
+      "title": "Follow, star, and set a reminder on a task",
+      "matches": {
+        "api": ["^POST /api/mcp/tasks/follow$"],
+        "mcp": ["^hypertask_follow_task$"],
+        "cli": ["^task follow$"],
+        "ai_chat": ["^hypertask_follow_task$"],
+        "hyperai": ["^hypertask_follow_task$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/8217",
+          "expires": "2026-11-20",
+          "entries": ["task follow"]
+        }
+      }
+    },
+    {
       "id": "factory.acceptance",
       "title": "Review and authorize factory acceptance transitions",
       "matches": {

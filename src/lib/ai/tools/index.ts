@@ -62,6 +62,7 @@ import { createAttachFilesTool } from "./attachFiles";
 import { createUpdateCommentTool } from "./updateComment";
 import { createDeleteCommentTool } from "./deleteComment";
 import { createAssignUserTool } from "./assignUser";
+import { createFollowTaskTool } from "./followTask";
 import { createUnassignUserTool } from "./unassignUser";
 import { createClearTaskBlockerTool } from "./clearTaskBlocker";
 import { createMoveTaskBetweenBoardsTool } from "./moveTaskBetweenBoards";
@@ -169,6 +170,7 @@ export function buildTools(
     hypertask_update_comment: createUpdateCommentTool(context).hypertask_update_comment,
     hypertask_delete_comment: createDeleteCommentTool(context).hypertask_delete_comment,
     hypertask_assign_user: createAssignUserTool(context).hypertask_assign_user,
+    hypertask_follow_task: createFollowTaskTool(context).hypertask_follow_task,
     hypertask_unassign_user: createUnassignUserTool(context).hypertask_unassign_user,
     hypertask_clear_task_blocker: createClearTaskBlockerTool(context).hypertask_clear_task_blocker,
     hypertask_move_task_between_boards: createMoveTaskBetweenBoardsTool(context).hypertask_move_task_between_boards,

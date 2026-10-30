@@ -4,7 +4,6 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 180, mcp: 79, cli: 156, ai_chat: 87, hyperai: 79. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
@@ -22,6 +21,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, update, move, batch, or escalate tasks** | ✅ 7 (transition) | ✅ 4 (transition) | ✅ 5 (transition) | ✅ 4 | ✅ 4 (transition) |
 | **Assign people and attach files** | ✅ 3 | ✅ 2 | ✅ 5 | ✅ 3 | ✅ 2 |
 | **Link, unlink, and inspect task relations** | ✅ 3 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
+| **Follow, star, and set a reminder on a task** | ✅ 1 | ✅ 1 | 🛠 https://app.hypertask.ai/detail/project-15/8217 by 2026-11-20 | ✅ 1 | ✅ 1 |
 | **Review and authorize factory acceptance transitions** | ✅ 2 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
 | **List boards, teams, members, manifests, and playbooks** | ✅ 4 | ✅ 4 | ✅ 8 | ✅ 4 | ✅ 4 |
 | **Create, archive, invite to, and configure boards** | ✅ 7 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
