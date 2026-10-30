@@ -245,11 +245,11 @@
       "id": "tasks.mutate",
       "title": "Create, update, move, batch, or escalate tasks",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$", "^POST /api/mcp/tasks/waiting-on$", "^POST /api/mcp/tasks/(archive|delete)$"],
-        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$", "^hypertask_(archive|delete)_task$"],
+        "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$", "^POST /api/mcp/tasks/waiting-on$", "^POST /api/mcp/tasks/archive$", "^POST /api/mcp/tasks/delete$"],
+        "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$", "^hypertask_archive_task$", "^hypertask_delete_task$"],
         "cli": ["^task (create|update|move|move-board)$", "^agent move$", "^task waiting-on$"],
         "ai_chat": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_clear_task_blocker$"],
-        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$", "^hypertask_(archive|delete)_task$"]
+        "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$", "^hypertask_archive_task$", "^hypertask_delete_task$"]
       },
       "planned": {
         "api": {
