@@ -15,6 +15,7 @@ export const verbByType: Record<NotificationType, string> = {
   TaskReminder: "set a reminder",
   Invited: "invited you",
   AgentMessage: "sent you a message",
+  AgentBoardAccessRequest: "asked for board access",
 };
 
 const specificity: Partial<Record<NotificationType, number>> = {
