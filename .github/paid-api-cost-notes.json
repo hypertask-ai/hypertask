@@ -1,29 +1,4 @@
 {
-  "src/lib/ai/settings/client.ts:bdcc43a13da053bda1fd6d5e204100c0a3b4f56f76083078ad24cb821936111f": {
-    "maxUsdPerDay": 0,
-    "reason": "HTPR-7622 reads one setting-change card from Hypertask's own /api/ai/settings route; no third-party paid API is called.",
-    "source": "https://app.hypertask.ai/detail/project-15/7622"
-  },
-  "src/lib/ai/settings/client.ts:850ee8f73ae0d52168361a36282c8a0b72a8b59ffeb805fc5fb8c95f25ff6d7a": {
-    "maxUsdPerDay": 0,
-    "reason": "HTPR-7622 posts Apply, Cancel or Undo for one setting change to Hypertask's own /api/ai/settings route; no third-party paid API is called.",
-    "source": "https://app.hypertask.ai/detail/project-15/7622"
-  },
-  "src/lib/ai/chatStream/modelReply.ts:942cd87065de1b8f3cd5835d7eeaed3c1ea91e97128acf509f6efde980565521": {
-    "maxUsdPerDay": 0,
-    "reason": "Zero additional spend: existing streamText call is unchanged except extracting its error callback. No new request, model, retry, token budget, or provider routing; this only normalizes rejected credentials before reporting.",
-    "source": "https://api-docs.deepseek.com/quick_start/pricing"
-  },
-  "src/components/Modals/Settings/GitHubSection.tsx:c401886c70ab215a16bc73fde68f0d908d363e08777c43b6fabb1536f8c51f12": {
-    "maxUsdPerDay": 0,
-    "reason": "Reads board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
-    "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
-  },
-  "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
-    "maxUsdPerDay": 0,
-    "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
-    "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
-  },
   "src/app/api/ai/task-questions/route.ts:c660e44a83f0584190f23325cef412c7534f34c5a06cc74da414e62810524554": {
     "maxUsdPerDay": 1,
     "reason": "HTPR-7979 keeps the existing one chip request per new ticket on the existing Haiku model. Only the prompt text changes: it adds the original note and board rules, each clipped to 2000 characters, and the flag is on for everyone with a switch to turn it off. About 3000 input tokens at 0.1 USD per million is far under 1 USD a day even at 1000 new tickets.",
@@ -33,5 +8,40 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7979 sends the original note to Hypertask's own same-origin task questions route. The browser call itself pays nothing; the route's model cost is noted on the route entry.",
     "source": "https://app.hypertask.ai/detail/project-15/7979"
+  },
+  "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
+    "maxUsdPerDay": 0,
+    "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
+  },
+  "src/components/Modals/Settings/GitHubSection.tsx:c401886c70ab215a16bc73fde68f0d908d363e08777c43b6fabb1536f8c51f12": {
+    "maxUsdPerDay": 0,
+    "reason": "Reads board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
+  },
+  "src/hooks/General/useFollowerKanban.ts:1f078df2800a6871f1d34ba832e8cce99475af075913f2e9ba33e1fd9491d003": {
+    "maxUsdPerDay": 0,
+    "reason": "Same follower write and follower email requests that already existed in this hook; the diff only moved them under one try block and added a message. No new request, provider, retry or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/8199"
+  },
+  "src/hooks/General/useFollowerKanban.ts:7d843823a8ecd6a2fcb8b8dc8a295900d0984637aa5d0eb491435033eb3b6196": {
+    "maxUsdPerDay": 0,
+    "reason": "Same follower write and follower email requests that already existed in this hook; the diff only moved them under one try block and added a message. No new request, provider, retry or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/8199"
+  },
+  "src/lib/ai/chatStream/modelReply.ts:942cd87065de1b8f3cd5835d7eeaed3c1ea91e97128acf509f6efde980565521": {
+    "maxUsdPerDay": 0,
+    "reason": "Zero additional spend: existing streamText call is unchanged except extracting its error callback. No new request, model, retry, token budget, or provider routing; this only normalizes rejected credentials before reporting.",
+    "source": "https://api-docs.deepseek.com/quick_start/pricing"
+  },
+  "src/lib/ai/settings/client.ts:850ee8f73ae0d52168361a36282c8a0b72a8b59ffeb805fc5fb8c95f25ff6d7a": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7622 posts Apply, Cancel or Undo for one setting change to Hypertask's own /api/ai/settings route; no third-party paid API is called.",
+    "source": "https://app.hypertask.ai/detail/project-15/7622"
+  },
+  "src/lib/ai/settings/client.ts:bdcc43a13da053bda1fd6d5e204100c0a3b4f56f76083078ad24cb821936111f": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7622 reads one setting-change card from Hypertask's own /api/ai/settings route; no third-party paid API is called.",
+    "source": "https://app.hypertask.ai/detail/project-15/7622"
   }
 }
