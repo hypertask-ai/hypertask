@@ -88,6 +88,11 @@ export function useChatShortcuts(options: {
         chat.restoreChat();
         focusComposer();
         return true;
+      case "expand":
+        if (!chat.isSidebarMode) return false;
+        chat.toggleSidebarMode();
+        focusComposer();
+        return true;
       case "model": return click("[data-ai-chat-model] button");
       case "attach":
         chat.handleAttachmentClick();

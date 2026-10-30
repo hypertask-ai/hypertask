@@ -54,7 +54,7 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     selectSession: (id) => { actions.push(`select:${id}`); context.currentSession = sessions.find((session) => session.id === id); },
     handleAttachmentClick: () => actions.push("attach"), handleAddContext: () => actions.push("mention"),
     handleCancelStream: () => actions.push("stop"), deleteSession: async (id) => actions.push(`delete:${id}`),
-    mentionFlag: false,
+    mentionFlag: false, isSidebarMode: true, toggleSidebarMode: () => actions.push("expand"),
   };
   const { createAiChatKeyboard } = load("src/hooks/MultiPages/AIChat/aiChatKeyboard.ts", {
     "@/lib/constants/keyboard-handler": { KeyCodes: { ENTER: 13, ESCAPE: 27, Q: 81, U: 85, D: 68 } },
@@ -121,7 +121,7 @@ for (const surface of ["fullscreen", "sidebar", "floating"]) {
       for (const [key, modifiers, expected] of [
         ["b", { ctrlKey: true, shiftKey: true }, "scope"], ["m", { ctrlKey: true, shiftKey: true }, "model"],
         ["u", { ctrlKey: true }, "attach"], ["d", { ctrlKey: true, shiftKey: true }, "mic"],
-        ["2", { altKey: true }, "mention"], ["Enter", {}, "send"], ["Enter", { ctrlKey: true }, "send"],
+        ["2", { altKey: true }, "mention"], ["e", { ctrlKey: true, shiftKey: true }, "expand"], ["Enter", {}, "send"], ["Enter", { ctrlKey: true }, "send"],
       ]) {
         assert.equal(f.press(key, modifiers).defaultPrevented, true);
         assert.equal(f.actions.at(-1), expected);
@@ -161,7 +161,7 @@ for (const surface of ["fullscreen", "sidebar", "floating"]) {
       f.press("/", { altKey: true });
       let modal = f.render().modal;
       assert.equal(modal.props.header, "Chat shortcuts");
-      assert.equal(modal.props.options.length, 15);
+      assert.equal(modal.props.options.length, 16);
       assert.deepEqual(modal.props.options.map((option) => option.hint), registry.CHAT_SHORTCUTS.map((shortcut) => registry.chatShortcutHint(shortcut.id)));
       modal.props.onClose(); f.flush(); assert.equal(document.activeElement === f.composer, true, "focus stays in the owning composer");
       f.press("f", { ctrlKey: true, shiftKey: true });

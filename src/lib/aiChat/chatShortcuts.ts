@@ -21,6 +21,7 @@ export const CHAT_SHORTCUTS = [
   { id: "previous", label: "Previous chat", bindings: [{ key: "Tab", ctrl: true, shift: true, label: "Ctrl+Shift+Tab" }, { key: "ArrowUp", alt: true, label: "Alt+Up" }] },
   { id: "scope", label: "Board scope", bindings: [{ key: "b", command: true, shift: true, label: "Ctrl+Shift+B" }] },
   { id: "search", label: "Search chats", bindings: [{ key: "f", command: true, shift: true, label: "Ctrl+Shift+F" }] },
+  { id: "expand", label: "Sidebar chat full screen or back", bindings: [{ key: "e", command: true, shift: true, label: "Ctrl+Shift+E" }] },
   { id: "focus", label: "Focus message box", bindings: [{ key: "q", ctrl: true, label: "Ctrl+Q" }] },
   { id: "model", label: "Model and effort", bindings: [{ key: "m", command: true, shift: true, label: "Ctrl+Shift+M" }] },
   { id: "attach", label: "Attach files", bindings: [{ key: "u", command: true, label: "Ctrl+U" }] },
