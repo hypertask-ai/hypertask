@@ -901,7 +901,7 @@ const Inbox = ({
                     className="bg-transparent text-white-black outline-none"
                     id="search-inbox-filter-input"
                     value={inboxSearch}
-                    placeholder="Find in view..."
+                    placeholder="Find in view…"
                     onChange={(e) => setInboxSearch(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Escape") e.preventDefault();
