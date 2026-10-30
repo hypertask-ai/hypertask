@@ -29,7 +29,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Read, add, edit, and delete task comments** | ✅ 5 | ✅ 4 | ✅ 7 | ✅ 4 | ✅ 4 |
 | **Read and triage inbox notifications** | ✅ 6 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
 | **Create, read, search, update, archive, and restore pages** | ✅ 8 | ✅ 6 | ✅ 9 | ✅ 6 | ✅ 6 |
-| **Create, read, update, and delete saved reports** | ✅ 5 | ✅ 1 | ✅ 5 | ✅ 5 | ✅ 1 |
+| **Create, read, update, and delete saved reports** | ✅ 5 (transition) | ✅ 1 | ✅ 5 | ✅ 5 | ✅ 1 |
 | **Create, read, update, delete, and switch saved views** | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 |
 | **Create, read, update, delete, and import skills** | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 |
 | **Create, read, answer, and cancel decision requests** | ✅ 4 | ✅ 1 | ✅ 5 | ✅ 1 | ✅ 1 |
