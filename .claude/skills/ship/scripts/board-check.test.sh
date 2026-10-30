@@ -179,9 +179,10 @@ repeated, _ = run(dict(split_history, repeat_log_page=True))
 assert repeated.returncode != 0 and 'repeated agent activity' in repeated.stderr
 split_history['comments']['HTPR-1'] *= 2
 split_history['logs']['HTPR-1'] = []
-checked, _ = run(split_history)
-assert checked.returncode != 0 and 'outside the bounded' in checked.stderr
-print('ok complete agent log pages preserve claims and comment completeness remains guarded')
+checked, calls = run(split_history)
+assert checked.returncode == 0, checked.stderr
+assert len([c for c in calls if c[:3] == ['hypertask','comment','list']]) == 1, calls
+print('ok a full page of claim-free comments no longer fails the scan')
 
 
 
