@@ -483,7 +483,7 @@ test('a deferred green boundary never closes the alert it bounds (YPER4-954)', a
   const mock = fixtureCommand(data, { cancelled: false, attempts: [{ ...red, run_attempt: 1 }] });
   const run = (bin, args, options) => {
     if (bin !== 'gh') return mock.run(bin, args, options);
-    if (args[3].includes('/runs?')) return JSON.stringify({ workflow_runs: [retried, red] });
+    if (args[3].includes('/runs?')) return JSON.stringify({ workflow_runs: args[3].includes('page=2') ? [] : [retried, red] });
     return mock.run(bin, args, options);
   };
   const f = fake(data);
