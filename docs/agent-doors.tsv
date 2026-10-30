@@ -1,0 +1,39 @@
+action	person_action	cli	mcp_api	ai_chat	note
+task.create	Create a task, subtask, copy of a task, or a task from a comment	task create	/mcp/tasks/create	create_task	
+task.update	Rename a task and change its dates, priority, size, tags or description	task update	/mcp/tasks/update	update_task	
+task.move	Move a task to another column or board	task move	/mcp/tasks/move	move_task_between_boards	Column moves have no AI chat tool
+task.assign	Assign a task to a person or agent	task assign	/mcp/assignees/assign	assign_user	
+task.archive	Archive, delete or bulk-archive tasks	no	no	no	Gap HTPR-8215: /mcp/tasks is GET only and the CLI has no task archive or delete
+task.blocked	Mark a task blocked by a person, blocking, or clear the red border	task waiting-on	/mcp/tasks/waiting-on	no	Accept, decline and duplicate-mark have no door
+task.relations	Link tasks as related, remove a subtask, view subtasks	task link	/mcp/tasks/relations	link_tasks	
+task.follow	Follow, star, mark unread or set a reminder on a task	no	no	no	Gap HTPR-8217: no follow, star or reminder door
+task.inbox	Send a task to the inbox	task move-to-inbox	/mcp/inbox/move	move_task_to_inbox	
+comment.create	Reply to a ticket or write a comment	comment add	/mcp/comments	add_comment	
+comment.update	Edit a comment	comment update	/mcp/comments/([^/]+)	update_comment	
+comment.delete	Delete a comment	comment delete	/mcp/comments/([^/]+)	delete_comment	
+comment.react	React to a comment or like it	comment react	/mcp/comments/([^/]+)/reactions	no	
+comment.marker	Pin or star a comment	no	no	no	Gap HTPR-8218: no pin or star door
+inbox.archive	Archive inbox items, triage or clear the inbox	inbox archive	/mcp/inbox/archive	inbox_archive	One task per call; no bulk inbox archive door
+board.create	Create a board or team	project create-board	/mcp/teams/([^/]+)/boards	create_board	Creating a team has no door
+board.update	Rename, archive or delete a board, change its settings	project update	/mcp/projects/([^/]+)	rename_board	Join-link copy and reset have no door; delete goes through the CLI only
+task.search	Search tasks and jump to a task	search	/mcp/tasks/search	search_tasks	
+board.report	Board velocity report and generated status update	no	no	no	Gap HTPR-8219: pieces exist for hand-written reports only
+column.manage	Add, rename, hide or delete a board column	section create	/mcp/projects/([^/]+)/sections	section	
+column.bulk	Select all tickets in a column or on the board	no	no	no	Selection is a screen state; agents act on one ticket at a time
+label.manage	Create, rename, merge or apply tags	labels create	/mcp/projects/([^/]+)/labels	create_label	
+field.custom	Create a custom field and set its value on a task	fields create	/mcp/custom-fields	list_custom_fields	AI chat can set a value but cannot create the field
+view.manage	Save, switch and manage board views	view create	/mcp/view	create_view	
+time.track	Start, stop or log time on a task	time start	/mcp/time/start	start_timer	
+report.manage	Create, update or delete a report	report create	/mcp/reports/create	create_report	
+page.manage	Create, edit, archive or delete a page	pages create	/mcp/pages/create	create_page	Snippets are skills: create_skill covers them
+agent.manage	Create, rename, revoke or archive an agent	agents create	/mcp/agents/create	create_agent	
+member.manage	Invite or remove team and board members	project invite	/mcp/projects/([^/]+)/members	no	No AI chat tool
+task.share	Share a task publicly or copy its public link	no	no	no	Gap HTPR-8216: no public share door
+filter.view	Filter, sort or group the board and switch table columns	no	no	no	Screen state and saved-view settings; no door needed
+chat.control	AI chat controls: open, pin, switch mode, add agent, delete sessions	no	no	no	
+settings.pane	Settings panes, AI model picks, API keys, notifications and plans	no	no	no	
+navigate	Go to a screen, switch the app shell or expand the sidebar	no	no	no	
+appearance	Theme, layout and zoom switches	no	no	no	
+calendar.subscribe	Subscribe the board calendar in Google Calendar	no	no	no	
+copy	Copy a link, ID or comment text to the clipboard	no	no	no	
+comment.read	Expand, collapse or copy a comment thread	no	no	no	
