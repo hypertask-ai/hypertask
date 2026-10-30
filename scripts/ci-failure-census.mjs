@@ -153,7 +153,7 @@ export function redWindows(runs) {
       const end = greens.map(green => Date.parse(green.updated_at)).filter(time => time > start).sort((a, b) => a - b)[0] ?? latest;
       windows.push({ class: run.class ?? 'break', start, end });
     } else if (run.conclusion === 'success' && run.recovered) {
-      windows.push({ class: 'flaky', start, end: Date.parse(run.updated_at) });
+      windows.push({ class: run.recoveredInfra ? 'infra' : 'flaky', start, end: Date.parse(run.updated_at) });
     }
   }
   return windows.filter(window => window.end > window.start).sort((a, b) => a.start - b.start || a.end - b.end);
@@ -272,6 +272,7 @@ export async function collectClasses(options, api, logs) {
     try {
       const { jobs } = await api(`/actions/runs/${run.id}/attempts/1/jobs?per_page=100`);
       run.recovered = jobs.some(job => failed(job.conclusion));
+      run.recoveredInfra = jobs.length === 0;
     } catch {
       run.recovered = Boolean(run.previous_attempt_url);
     }

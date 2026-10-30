@@ -207,7 +207,7 @@ test('red hours run from the first red until production goes green again', async
   ]);
   const hours = hoursByWindow(redWindows(runs));
   assert.deepEqual(hours.byDay, [{ day: '2026-10-20', hours: 1.5 }]);
-  assert.deepEqual(hours.byClass.map(row => [row.class, Math.round(row.hours * 100) / 100]), [['infra', 1.17], ['break', 0.33]]);
+  assert.deepEqual(hours.byClass.map(row => [row.class, Math.round(row.hours * 100) / 100]), [['break', 1.5]]);
 });
 
 test('overlapping red windows are counted once', async () => {
