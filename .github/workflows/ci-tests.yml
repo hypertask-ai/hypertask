@@ -915,6 +915,18 @@ jobs:
           path: test-results/layout-lock-matrix/
           if-no-files-found: ignore
           retention-days: 7
+      # YPER4-939: a failing screen-spec test left no screenshot behind, so the flake could not be
+      # read back. Screenshots and Playwright's error context only; traces carry session traffic.
+      - name: Upload failing smoke screenshots
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-smoke-failures
+          path: |
+            test-results/**/*.png
+            test-results/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload premerge verify-qa evidence
         id: verify-qa-evidence
         if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
