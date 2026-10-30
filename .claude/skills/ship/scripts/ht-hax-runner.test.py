@@ -48,6 +48,12 @@ esac''')
         setup.parent.mkdir(parents=True)
         setup.write_text('#!/bin/sh\necho "login $SHIP_SESSION_NAME" >> "$HOME/events"\n')
         setup.chmod(0o755)
+        self.identity = self.home / '.agents/skills/ship/scripts/ship-identity'
+        self.identity.parent.mkdir(parents=True)
+        self.identity.write_text(
+            '#!/bin/sh\nprintf "RUNNER %s\\t%s/token\\n" "${SHIP_SESSION_NAME#RUNNER }" "$HOME"\n')
+        self.identity.chmod(0o755)
+        (self.home / 'token').write_text('runner-token\n')
 
     def command(self, name, body):
         path = self.bin / name
@@ -180,7 +186,7 @@ esac''')
         recovery.chmod(0o755)
         self.command('clear', 'exit 0')
         self.command('hax', """
-printf 'hax %s depth=%s identity=%s\\n' "$*" "${HAX_SUBAGENT_DEPTH-unset}" "$SHIP_SESSION_NAME" >> "$HOME/events"
+printf 'hax %s depth=%s identity=%s token=%s\\n' "$*" "${HAX_SUBAGENT_DEPTH-unset}" "$SHIP_SESSION_NAME" "${HT_TOKEN-unset}" >> "$HOME/events"
 printf 'session=%s claude=%s thread=%s\\n' "$CODEX_SESSION_ID" "${CLAUDE_CODE_SESSION_ID-unset}" "${CODEX_THREAD_ID-unset}" >> "$HOME/events"
 mkdir -p "$HT_HAX_PROC_ROOT/$PPID/task/$PPID" "$HT_HAX_PROC_ROOT/$$/fd"
 echo $$ > "$HT_HAX_PROC_ROOT/$PPID/task/$PPID/children"
@@ -260,7 +266,7 @@ exec /bin/sleep 0.01
                         pass
                     process.wait()
                 events = self.events.read_text().splitlines()
-                self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=medium depth=unset identity=RUNNER 8', events)
+                self.assertIn('hax --provider=codex --model=gpt-6.1-sol --effort=medium depth=unset identity=RUNNER 8 token=runner-token', events)
                 session = next(event for event in events if event.startswith('session='))
                 self.assertRegex(session, r'^session=[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12} claude=unset thread=unset$')
                 session_id = session.split()[0]
@@ -316,6 +322,24 @@ exec /bin/cat "$@"
 """)
         self.command('hax', 'echo launched >> "$HOME/events"')
         self.assertEqual(self.run_keeper('6', '--loop').returncode, 1)
+        self.assertEqual(self.events.read_text(), '')
+
+    def test_wrong_runner_login_never_launches_hax(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        self.identity.write_text('#!/bin/sh\nprintf "RUNNER 9\\t%s/token\\n" "$HOME"\n')
+        self.command('hax', 'echo launched >> "$HOME/events"')
+        result = self.run_keeper('6', '--loop')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('identity check failed for RUNNER 6', result.stderr)
+        self.assertEqual(self.events.read_text(), '')
+
+    def test_empty_runner_login_never_launches_hax(self):
+        self.env['TMUX_PANE'] = '%fixture'
+        (self.home / 'token').write_text('')
+        self.command('hax', 'echo launched >> "$HOME/events"')
+        result = self.run_keeper('6', '--loop')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('identity check failed for RUNNER 6', result.stderr)
         self.assertEqual(self.events.read_text(), '')
 
     def test_unreadable_completion_times_out_records_screen_and_retries(self):
