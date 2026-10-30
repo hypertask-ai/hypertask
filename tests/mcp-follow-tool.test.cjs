@@ -1,13 +1,14 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const fs = require("node:fs");
 const path = require("node:path");
+const root = path.resolve(__dirname, "..");
 const { load } = require("./task-route-loader.cjs");
 
 function fixture(options = {}) {
   const calls = [], writes = [], flags = [];
   const auth = { user: { id: 7 }, agentId: "agent-owner", agentRole: "write" };
   const mocks = {
+    "@/utils/controllers/reports/reportService": { REPORT_CAPABILITIES: "Report capabilities" },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       flags.push({ key, userId });
       if (key === "my-tasks-snooze") return false;
@@ -56,9 +57,20 @@ test("follow tool reaches the gated operation and keeps every tracking field", a
   assert.deepEqual(receipt, { success: true, taskId: 42, action: "remind", following: false, starred: false, remindAt: "2026-11-02T09:00:00Z", reminderId: null });
   assert.deepEqual(f.calls, [{ endpoint: "/mcp/tasks/follow", method: "POST", body: { action: "remind", taskId: 42, remindAt: "2026-11-02T09:00:00Z" } }]);
   assert.equal(f.writes.length, 1);
-  const registry = fs.readFileSync(path.join(__dirname, "../src/lib/mcp-server/tools/index.ts"), "utf8");
-  assert.match(registry, /import \{ followTaskTool \} from '\.\/follow-task\.tool'/);
-  assert.match(registry, /^  followTaskTool,$/m);
+});
+
+test("the tool registry publishes the follow tool so a connected client can find it", () => {
+  for (const [file, exports] of Object.entries({
+    "src/lib/prisma.ts": { __esModule: true, default: {} },
+    "src/lib/auth/getSessionUser.ts": { getSessionUser: async () => null },
+  })) {
+    const filename = path.join(root, file);
+    require.cache[filename] = { id: filename, filename, loaded: true, exports };
+  }
+  const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, cache: false });
+  const names = jiti(path.join(root, "src/lib/mcp-server/tools/index.ts")).MCP_TOOLS.map((registered) => registered.name);
+  assert.equal(new Set(names).size, names.length);
+  assert.ok(names.includes("hypertask_follow_task"));
 });
 
 test("flag off: the consolidated follow action propagates the refusal without writing", async () => {

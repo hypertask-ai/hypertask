@@ -9,7 +9,7 @@ function fixture(options = {}) {
     reminders: options.reminders ?? [],
     notificationsArchived: 0,
   };
-  const events = [];
+  const events = [], flags = [];
   let nextReminderId = 100;
   const tx = {
     reminder: {
@@ -80,13 +80,18 @@ function fixture(options = {}) {
           return { count: before - state.stars.length };
         },
       };
-      return run(star);
+      return run({ savedContent: star });
     } },
     "@/lib/tasks/setWaitingOn": {},
     "@/utils/controllers/tasks/assertTaskAccess": { taskAccessWhere: (userId, taskId, options) => ({ id: taskId, userId, ...options }) },
     "@/utils/controllers/reminders/revision": { nextReminderRevision: (rows) => new Date(1_800_000_000_000 + rows.length) },
     "@/utils/controllers/tasks/myTasksSnooze": { syncMyTasksSnoozeFromReminder: async () => {} },
-    "@/lib/flags": { isFeatureEnabled: async (key) => key !== "my-tasks-snooze", MY_TASKS_SNOOZE_FLAG: "my-tasks-snooze" },
+    "@/lib/flags": { isFeatureEnabled: async (key) => {
+      flags.push(key);
+      if (key === "my-tasks-snooze") return false;
+      assert.equal(key, "htpr-8217-agent-follow-reminder");
+      return options.trackingFlagEnabled !== false;
+    }, MY_TASKS_SNOOZE_FLAG: "my-tasks-snooze" },
     "@/lib/realtime/server": { broadcastInboxChange: async () => {} },
     "@/pages/api/queues/inboxQueue": {
       cancelInboxReminderJob: async (userId, taskId) => { events.push({ type: "cancelJob", userId, taskId }); },
@@ -97,7 +102,7 @@ function fixture(options = {}) {
   };
   const { setTaskTracking } = load("src/lib/tasks/taskTracking.ts", mocks);
   const context = { currentUser: { id: 7 }, agentId: "agent-owner", teamScope: null };
-  return { setTaskTracking, state, events, context };
+  return { setTaskTracking, state, events, flags, context };
 }
 
 test("follow writes the same follower row the app writes and reads the state back", async () => {
@@ -192,6 +197,16 @@ test("read reports following, starred and the live reminder without writing", as
     remindAt: "2026-11-05T09:00:00.000Z",
     reminderId: 9,
   });
+  assert.deepEqual(f.events, []);
+});
+
+test("the ticket flag off refuses every action, including the AI chat path that calls this service", async () => {
+  const f = fixture({ trackingFlagEnabled: false });
+  for (const action of ["follow", "unfollow", "star", "unstar", "read"]) {
+    const result = await f.setTaskTracking({ action, taskId: 42, ...f.context });
+    assert.equal(result.status, 404, action);
+    assert.equal(result.body.message, "Agent task tracking is not enabled");
+  }
   assert.deepEqual(f.events, []);
 });
 

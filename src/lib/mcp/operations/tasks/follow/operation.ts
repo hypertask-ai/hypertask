@@ -42,6 +42,7 @@ export async function POST(request: NextRequest) {
         !ACTIONS.includes(action) ||
         typeof body.taskId !== "number" ||
         !Number.isInteger(body.taskId) ||
+        body.taskId <= 0 ||
         (body.remindAt !== undefined && body.remindAt !== null && typeof body.remindAt !== "string")
       ) {
         return NextResponse.json({ success: false, error: `Provide action (${ACTIONS.join(", ")}) and integer taskId` }, { status: 400 });

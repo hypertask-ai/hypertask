@@ -6,6 +6,7 @@ import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
 import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
+import { HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-8217-agent-follow-reminder";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import {
   cancelInboxReminderJob,
@@ -76,6 +77,10 @@ export async function setTaskTracking({
   taskId: number;
   remindAt?: string | null;
 } & TrackingContext): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (!(await isFeatureEnabled(HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG, context.currentUser.id))) {
+    return { status: 404, body: { message: "Agent task tracking is not enabled" } };
+  }
+
   const task = await findTask(taskId, context);
   if (!task) return { status: 404, body: { message: "Task not found" } };
 

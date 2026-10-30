@@ -15,10 +15,3 @@ test("agent task tracking has its own Everyone-default feature flag with a relea
   assert.equal(require("../e2e/smoke/production-flag-modes.json").modes[definition.key], "EVERYONE");
   assert.deepEqual(require("../e2e/smoke/flag-modes/htpr-8217-agent-follow-reminder.json"), { mode: "EVERYONE" });
 });
-
-test("the follow door reads this ticket's flag, not a shared one", () => {
-  const fs = require("node:fs");
-  const source = fs.readFileSync("src/lib/mcp/operations/tasks/follow/operation.ts", "utf8");
-  assert.match(source, /HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG/);
-  assert.match(source, /htpr-8217-agent-follow-reminder/);
-});
