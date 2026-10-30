@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { signalAiChip } from "@/lib/ai/chipEvents";
+import { composeIntroTaskId } from "@/lib/ai/composeIntroTaskId";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -10,8 +11,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
-
-const composeIntroIdPattern = /^compose-task-(\d+)$/;
 
 const isSavedOrLocalComposeIntro = (content: string) => / from your note\. Want me to refine it\?/.test(content);
 
@@ -36,10 +35,10 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
-  const introTaskId = Number(composeIntroIdPattern.exec(lastMessage?.id ?? "")?.[1]);
+  const introTaskId = composeIntroTaskId(lastMessage?.id);
   let newTicketId = currentSession?.taskId;
-  if (actionChipsEnabled && !newTicketId && Number.isInteger(introTaskId)) newTicketId = introTaskId;
-  const lastMessageIsIntro = actionChipsEnabled && Number.isInteger(introTaskId);
+  if (actionChipsEnabled && !newTicketId && introTaskId !== undefined) newTicketId = introTaskId;
+  const lastMessageIsIntro = actionChipsEnabled && introTaskId !== undefined;
   const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;

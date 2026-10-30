@@ -146,10 +146,10 @@ test("client wiring: note is stored with the new task, sent with the chips reque
   assert.match(list, /if \(actionChipsEnabled && originalNoteState/);
 });
 
-test("client wiring: the ticket id comes from the compose intro when the manual chat session has no task id", () => {
-  const list = fs.readFileSync(path.join(root, "src/components/AI_CHAT/MessageList.tsx"), "utf8");
-  assert.match(list, /composeIntroIdPattern = \/\^compose-task-\(\\d\+\)\$\//);
-  assert.match(list, /if \(actionChipsEnabled && !newTicketId && Number\.isInteger\(introTaskId\)\) newTicketId = introTaskId/);
-  assert.match(list, /\(messages\.length === 1 \|\| lastMessageIsIntro\)/);
-  assert.match(list, /const lastMessageIsIntro = actionChipsEnabled && /);
+test("compose intro message id yields the new ticket id and nothing else does", () => {
+  const { composeIntroTaskId } = load(path.join(root, "src/lib/ai/composeIntroTaskId.ts"));
+  assert.equal(composeIntroTaskId("compose-task-83541"), 83541);
+  for (const id of [undefined, "", "compose-task-", "compose-task-12x", "x-compose-task-12", "7f0c-compose-task-12", "assistant-12"]) {
+    assert.equal(composeIntroTaskId(id), undefined);
+  }
 });
