@@ -1,4 +1,5 @@
 
+import { z } from 'zod';
 import { parseHypertaskUrl } from './task-parser';
 
 function coerceTaskIdInput<T extends Record<string, any>>(obj: T): void {
@@ -39,7 +40,11 @@ export function normalizeTaskInput<T extends Record<string, any>>(
       ? normalized.task_id[0]
       : normalized.task_id;
     if (id !== taskId) {
-      throw new Error('id and task_id must identify the same task when both are provided');
+      throw new z.ZodError([{
+        code: 'custom',
+        path: ['task_id'],
+        message: 'id and task_id must identify the same task when both are provided',
+      }]);
     }
   }
   delete normalized.id;

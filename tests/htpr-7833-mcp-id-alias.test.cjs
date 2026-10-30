@@ -44,9 +44,16 @@ for (const [name, schema, fields] of schemas) {
     assert.equal(Object.hasOwn(normalized, 'id'), false)
   })
 
-  test(`${name}: conflicting id and task_id throw the exact error`, () => {
+  test(`${name}: conflicting id and task_id answer a mapped input refusal`, () => {
     const parsed = schema.parse({ ...fields, id: 42, task_id: 43 })
-    assert.throws(() => normalizeTaskInput(parsed), { name: 'Error', message: conflictMessage })
+    assert.throws(() => normalizeTaskInput(parsed), (error) => {
+      assert.equal(error.name, 'ZodError')
+      const [issue] = error.issues
+      assert.equal(issue.code, 'custom')
+      assert.deepEqual(issue.path, ['task_id'])
+      assert.equal(issue.message, conflictMessage)
+      return true
+    })
   })
 
   test(`${name}: unknown keys still fail with unrecognized_keys`, () => {
