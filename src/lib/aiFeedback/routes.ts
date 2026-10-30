@@ -55,6 +55,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/reports/get',
   '/api/mcp/reports/list',
   '/api/mcp/reports/update',
+  '/api/mcp/reports/velocity',
   '/api/mcp/skills',
   '/api/mcp/skills/import',
   '/api/mcp/tasks',

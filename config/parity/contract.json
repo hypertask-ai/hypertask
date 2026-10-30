@@ -433,13 +433,6 @@
         "cli": ["^report (list|get|create|update|delete)$"],
         "ai_chat": ["^hypertask_(list_reports|get_report|create_report|update_report|delete_report)$"],
         "hyperai": ["^hypertask_report$"]
-      },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8219",
-          "expires": "2026-11-13",
-          "entries": ["GET /api/mcp/reports/velocity"]
-        }
       }
     },
     {

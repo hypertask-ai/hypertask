@@ -1,15 +1,7 @@
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import prisma from "@/lib/prisma";
-import {
-  buildVelocityReport,
-  resolveVelocityRange,
-  type VelocityTaskRow,
-  velocityWindow,
-} from "@/lib/velocity";
-import { doneColumnTitles, isDoneByName } from "@/lib/doneColumns";
-import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { loadVelocityReport } from "@/utils/controllers/reports/velocityReport";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -42,9 +34,6 @@ async function getVelocityReport(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const actingUserId = session?.agentId ? session.userId : userId;
-  const actingAgentId = session?.agentId;
-
   const projectId = Number(request.nextUrl.searchParams.get("projectId"));
   if (!Number.isInteger(projectId) || projectId <= 0) {
     return NextResponse.json(
@@ -52,130 +41,22 @@ async function getVelocityReport(request: NextRequest) {
       { status: 400 }
     );
   }
-  const range = resolveVelocityRange(
-    request.nextUrl.searchParams.get("range")
-  );
 
   try {
-    const project = await prisma.project.findFirst({
-      where: {
-        id: projectId,
-        ...getProjectWhere(userId),
-        AND: [getProjectWhere(actingUserId, actingAgentId)],
-      },
-      select: {
-        staleWarnDays: true,
-        staleHotDays: true,
-        section: {
-          where: { deleted: false },
-          select: { section_title: true, isDone: true },
-        },
-        owner: {
-          select: { id: true, displayName: true, email: true },
-        },
-        members: {
-          where: { agentId: null },
-          select: {
-            user: {
-              select: { id: true, displayName: true, email: true },
-            },
-          },
-        },
-      },
+    const report = await loadVelocityReport({
+      projectId,
+      userId,
+      actingUserId: session?.agentId ? session.userId : userId,
+      actingAgentId: session?.agentId ?? null,
+      teamScope: session?.teamScope ?? null,
+      rangeKey: request.nextUrl.searchParams.get("range"),
     });
 
-    if (!project) {
-      return NextResponse.json(
-        { error: "Board not found" },
-        { status: 404 }
-      );
+    if (!report) {
+      return NextResponse.json({ error: "Board not found" }, { status: 404 });
     }
 
-    const now = new Date();
-    const { priorStart, windowStart } = velocityWindow(now, range);
-
-    const [tasks, comments] = await Promise.all([
-      prisma.task.findMany({
-        where: {
-          projectId,
-          project: getProjectWhere(actingUserId, actingAgentId),
-          deletedAt: null,
-          status: { not: "Deleted" },
-          OR: [
-            { status: "Normal" },
-            { updatedAt: { gte: priorStart } },
-            { sectionChangedAt: { gte: priorStart } },
-          ],
-        },
-        select: {
-          id: true,
-          createdAt: true,
-          updatedAt: true,
-          sectionChangedAt: true,
-          lastCommentAt: true,
-          section: true,
-          status: true,
-          assignees: {
-            select: { userId: true },
-          },
-        },
-      }),
-      prisma.comment.groupBy({
-        by: ["creatorId"],
-        where: {
-          createdAt: { gte: windowStart, lte: now },
-          task: { projectId },
-        },
-        _count: { _all: true },
-        _max: { createdAt: true },
-      }),
-    ]);
-
-    const taskRows: VelocityTaskRow[] = tasks.map((task) => ({
-      id: task.id,
-      createdAt: task.createdAt,
-      updatedAt: task.updatedAt,
-      sectionChangedAt: task.sectionChangedAt,
-      lastCommentAt: task.lastCommentAt,
-      section: task.section,
-      status: task.status,
-      assigneeUserIds: task.assignees.map((assignee) => assignee.userId),
-    }));
-    const memberMap = new Map(
-      [project.owner, ...project.members.map(({ user }) => user)].map(
-        (member) => [
-          member.id,
-          {
-            userId: member.id,
-            displayName: member.displayName ?? member.email,
-            email: member.email,
-          },
-        ]
-      )
-    );
-
-    return NextResponse.json(
-      buildVelocityReport(
-        taskRows,
-        comments.flatMap((comment) =>
-          comment.creatorId === null || comment._max.createdAt === null
-            ? []
-            : [{
-                userId: comment.creatorId,
-                comments: comment._count._all,
-                lastCommentAt: comment._max.createdAt,
-              }]
-        ),
-        Array.from(memberMap.values()),
-        now,
-        range,
-        {
-          warnDays: project.staleWarnDays,
-          hotDays: project.staleHotDays,
-        },
-        doneColumnTitles(project.section, isDoneByName)
-      )
-    );
+    return NextResponse.json(report);
   } catch (error) {
     console.error("[reports/velocity] Unable to build report:", error);
     return NextResponse.json(
