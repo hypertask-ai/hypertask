@@ -120,7 +120,7 @@ function live(run = command) {
         }
       }
       if (!red) return { status: 'none' };
-      green = green || pendingGreen;
+      if (!green && pendingGreen) green = { ...pendingGreen, fallbackGreen: true };
       if (!green) throw new Error('No last green production run found; refusing an incomplete PR range');
       const failures = (red.failedJobs || [red.job]).flatMap(job => json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
         input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${job.id}/logs`,
@@ -254,7 +254,7 @@ async function apply(p, state, api, persist) {
   if (p.action === 'rerun') { api.rerun(p.run.id); return; }
   if (p.action === 'green') {
     for (const a of Object.values(state.alerts)) {
-      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
+      if (a.closed || p.run.fallbackGreen || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
       if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
       // Ambiguous activity writes are not retried: retain the intent for operator reconciliation.
       if (a.closing) throw new Error('Recovery note outcome unknown; reconcile saved closing intent manually');
