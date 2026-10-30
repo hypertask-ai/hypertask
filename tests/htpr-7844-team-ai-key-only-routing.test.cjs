@@ -12,27 +12,11 @@ const PLATFORM = {
   DEEPGRAM_API_KEY: "dg-platform-dictation",
 };
 
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = {
-    id: filename,
-    filename,
-    loaded: true,
-    exports,
-  };
-}
-
+const { loadModule } = require("./helpers/loadModule.cjs");
 function loadByok(flagOn, extraKeys = {}, options = {}) {
-  for (const relativePath of [
-    "src/lib/flags.ts",
-    "src/lib/prisma.ts",
-    "src/lib/crypto/byokCipher.ts",
-    "src/app/api/ai/_lib/planGate.ts",
-    "src/app/api/ai/_lib/byokKeys.ts",
-    "src/lib/ai/teamAiFunding.ts",
-    "src/utils/controllers/projects/getAllIncludes.ts",
-  ]) {
-    delete require.cache[path.join(root, relativePath)];
+  const stubs = {};
+  function stubModule(file, exports) {
+    stubs["@/" + file.slice(4).replace(/\.ts$/, "")] = exports;
   }
   stubModule("src/lib/flags.ts", {
     isFeatureEnabled: async (key, userId) => { if (options.flagError) throw new Error("flag unavailable"); assert.equal(userId, 42); return flagOn && key === "htpr-7844-team-ai-key-only"; },
@@ -72,11 +56,7 @@ function loadByok(flagOn, extraKeys = {}, options = {}) {
       agentByokApiKey: { findUnique: async () => options.agentClaude ? { enabled: true, ciphertext: options.agentClaude } : null },
     },
   });
-  const jiti = require("jiti")(__filename, {
-    interopDefault: true,
-    alias: { "@": path.join(root, "src") },
-  });
-  return jiti(path.join(root, "src/app/api/ai/_lib/byokKeys.ts"));
+  return loadModule("src/app/api/ai/_lib/byokKeys.ts", stubs);
 }
 
 function withPlatformKeys(run) {

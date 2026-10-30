@@ -220,7 +220,8 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
       const definition = targets.find((target) => target.provider === provider)?.option;
       const info = definition && getAiModelDefinition(definition.modelKey);
       if (!info || info.provider === "custom" || !resolveTeamProviderEnabled(team.aiProviderSettings, info.provider)) continue;
-      if (gatewayDecision.mode === "refused" && provider !== "claude") continue;
+      const decision = await resolveTeamAiFunding(team.id, { provider, feature: "chat" });
+      if (decision.mode === "refused") continue;
       const credential = await resolveTeamByokApiKey(provider, { trustedTeamId: team.id, userId: FEATURE_FLAG_QA_USER_ID });
       if (credential && !isVercelAiGatewayKey(credential) && !(gatewayDecision.mode === "refused" && isPlatformAiCredential(credential))) {
         credentials.set(`byok:${provider}`, credential);

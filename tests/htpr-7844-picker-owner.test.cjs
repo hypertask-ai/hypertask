@@ -1,11 +1,10 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
 const test = require("node:test");
-const root = path.resolve(__dirname, "..");
 let state;
+const { loadModule } = require("./helpers/loadModule.cjs");
+const stubs = {};
 function stub(file, exports) {
-  const filename = path.join(root, file);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
+  stubs["@/" + file.slice(4).replace(/\.ts$/, "")] = exports;
 }
 stub("src/lib/prisma.ts", { default: { user: { findUnique: async () => ({ id: 7 }) } } });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 7 }) });
@@ -18,8 +17,7 @@ stub("src/lib/flags.ts", { isFeatureEnabled: async (key, userId) => {
   if (state.error) throw new Error("flag unavailable");
   return state.enabled;
 } });
-const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true });
-const handler = load(path.join(root, "src/pages/api/teams/aiProviderSettings.ts")).default;
+const handler = loadModule("src/pages/api/teams/aiProviderSettings.ts", stubs).default;
 async function get() {
   const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } };
   await handler({ method: "GET", headers: {}, query: { teamId: "team" } }, res);

@@ -14,8 +14,7 @@ async function embeddingTeamId(
       where: { id: row.projectId },
       select: { teamId: true },
     });
-    if (!project?.teamId) throw new TeamKeyOnlyRefusal();
-    projectTeams.set(row.projectId, project.teamId);
+    projectTeams.set(row.projectId, project?.teamId ?? null);
   }
   return projectTeams.get(row.projectId) ?? null;
 }
@@ -28,14 +27,18 @@ export async function embedRowsForWrite<T extends { searchText: string; teamId?:
   try {
     const projectTeams = new Map<number, string | null>();
     const groups = new Map<string, number[]>();
+    const vectors: Array<number[] | null> = new Array(rows.length);
     for (let index = 0; index < rows.length; index += 1) {
       const teamId = await embeddingTeamId(rows[index], projectTeams);
-      const key = teamId ?? "";
+      if (!teamId) {
+        vectors[index] = null;
+        continue;
+      }
+      const key = teamId;
       const indexes = groups.get(key) ?? [];
       indexes.push(index);
       groups.set(key, indexes);
     }
-    const vectors: Array<number[] | null> = new Array(rows.length);
     for (const [teamId, indexes] of groups) {
       try {
         const embeddings = await embedTexts(indexes.map((index) => rows[index].searchText), teamId || null);

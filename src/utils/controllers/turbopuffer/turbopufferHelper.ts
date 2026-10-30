@@ -828,7 +828,7 @@ export async function searchTasks({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks", projectId ?? projectIds?.[0]);
+    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks", projectId != null && projectIds.includes(projectId) ? [projectId] : projectIds);
 
   if (queryVector) {
     try {
@@ -899,7 +899,7 @@ export async function searchComments({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchComments", projectIds?.[0]);
+    : await embedQueryForSearch(query, "turbopuffer searchComments", projectIds);
 
   if (queryVector) {
     try {
@@ -959,7 +959,7 @@ export async function searchCustomInstructionFiles({
   );
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles", projectId);
+    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles", [projectId]);
 
   if (queryVector) {
     try {
@@ -1142,13 +1142,21 @@ async function ensureNamespaceSchema(
 async function embedQueryForSearch(
   query: string,
   context: string,
-  projectId?: number | null,
+  projectIds?: number[] | null,
 ): Promise<number[] | null> {
   try {
-    const teamId = projectId
-      ? (await prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } }))?.teamId
-      : null;
-    return await embedText(query, teamId);
+    if (!projectIds?.length) return null;
+    const teams = new Set<string>();
+    for (const projectId of projectIds) {
+      const project = await prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } });
+      if (!project?.teamId) return null;
+      teams.add(project.teamId);
+    }
+    for (const teamId of teams) {
+      const decision = await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" });
+      if (decision.mode !== "unrestricted") return null;
+    }
+    return await embedText(query);
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;
