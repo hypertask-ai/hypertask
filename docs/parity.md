@@ -21,13 +21,12 @@ The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Revi
 | **Create, update, move, batch, or escalate tasks** | ✅ 7 (transition) | ✅ 4 (transition) | ✅ 5 (transition) | ✅ 4 | ✅ 4 (transition) |
 | **Assign people and attach files** | ✅ 3 | ✅ 2 | ✅ 5 | ✅ 3 | ✅ 2 |
 | **Link, unlink, and inspect task relations** | ✅ 3 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
-| **Follow, star, and set a reminder on a task** | ✅ 1 | ✅ 1 | 🛠 https://app.hypertask.ai/detail/project-15/8217 by 2026-11-20 | ✅ 1 | ✅ 1 |
 | **Review and authorize factory acceptance transitions** | ✅ 2 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
 | **List boards, teams, members, manifests, and playbooks** | ✅ 4 | ✅ 4 | ✅ 8 | ✅ 4 | ✅ 4 |
 | **Create, archive, invite to, and configure boards** | ✅ 7 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
 | **Manage labels, columns, and custom fields** | ✅ 10 | ✅ 5 (transition) | ✅ 15 (transition) | ✅ 5 (transition) | ✅ 5 (transition) |
 | **Read, add, edit, and delete task comments** | ✅ 5 | ✅ 4 | ✅ 7 | ✅ 4 | ✅ 4 |
-| **Read and triage inbox notifications** | ✅ 6 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
+| **Read and triage inbox notifications** | ✅ 7 | ✅ 5 | ✅ 6 | ✅ 5 | ✅ 5 |
 | **Create, read, search, update, archive, and restore pages** | ✅ 8 | ✅ 6 | ✅ 9 | ✅ 6 | ✅ 6 |
 | **Create, read, update, and delete saved reports** | ✅ 6 | ✅ 1 | ✅ 5 | ✅ 5 | ✅ 1 |
 | **Create, read, update, delete, and switch saved views** | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 |

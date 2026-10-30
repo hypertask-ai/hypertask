@@ -58,10 +58,10 @@ test("follow tool reaches the gated operation and keeps every tracking field", a
   assert.equal(f.writes.length, 1);
 });
 
-test("the parity inventory publishes the follow tool under its own door", () => {
+test("the parity inventory publishes the follow tool under the inbox door", () => {
   const inventory = require("../config/parity/generated-inventory.json");
   assert.ok(inventory.surfaces.mcp.includes("hypertask_follow_task"));
-  assert.equal(inventory.assignments.mcp.hypertask_follow_task, "tasks.follow");
+  assert.equal(inventory.assignments.mcp.hypertask_follow_task, "inbox.manage");
 });
 
 test("flag off: the consolidated follow action propagates the refusal without writing", async () => {
