@@ -145,3 +145,11 @@ test("client wiring: note is stored with the new task, sent with the chips reque
   assert.match(list, /if \(actionChipsEnabled\) body\.chipType = "action-chip"/);
   assert.match(list, /if \(actionChipsEnabled && originalNoteState/);
 });
+
+test("client wiring: the ticket id comes from the compose intro when the manual chat session has no task id", () => {
+  const list = fs.readFileSync(path.join(root, "src/components/AI_CHAT/MessageList.tsx"), "utf8");
+  assert.match(list, /composeIntroIdPattern = \/\^compose-task-\(\\d\+\)\$\//);
+  assert.match(list, /if \(actionChipsEnabled && !newTicketId && Number\.isInteger\(introTaskId\)\) newTicketId = introTaskId/);
+  assert.match(list, /\(messages\.length === 1 \|\| lastMessageIsIntro\)/);
+  assert.match(list, /const lastMessageIsIntro = actionChipsEnabled && /);
+});
