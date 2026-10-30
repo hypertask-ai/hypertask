@@ -8,6 +8,7 @@ import { currentProjectAtom, currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8199_FOLLOW_SHORTCUT_FEEDBACK_FLAG } from "@/lib/flags/definitions/htpr-8199-follow-shortcut-feedback";
 import { followNote } from "@/lib/followers/followNote";
+import { getAllFollowers } from "@/utils/api/Task Detail";
 
 const useFollowerKanban = () => {
   const [currentUser, _] = useRecoilState(currentUserAtom);
@@ -66,10 +67,19 @@ const useFollowerKanban = () => {
   };
 
   const removeFollowerKanban = async (taskId: number) => {
-    const followers: any = queryClient.getQueryData(["followersFor:", taskId]);
-    const matchedObject = followers.find(
-      (item: any) => item.userId === currentUser?.id
-    );
+    const followers: any = await queryClient.fetchQuery({
+      queryKey: ["followersFor:", taskId],
+      queryFn: () => getAllFollowers(taskId),
+      staleTime: 0,
+    });
+    const matchedObject = Array.isArray(followers)
+      ? followers.find((item: any) => item.userId === currentUser?.id)
+      : undefined;
+
+    if (!matchedObject && followsWithNote) {
+      toast("You do not follow this task");
+      return;
+    }
 
     if (matchedObject && matchedObject.id) {
       try {

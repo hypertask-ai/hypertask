@@ -34,6 +34,10 @@ test('both follow surfaces show the note only when the flag is on', () => {
     assert.match(source, /useFlag\(HTPR_8199_FOLLOW_SHORTCUT_FEEDBACK_FLAG\)/, `${file} must read the flag`);
     assert.match(source, /followNote\(/, `${file} must name the reason`);
   }
+  const boardHook = read('src/hooks/General/useFollowerKanban.ts');
+  assert.match(boardHook, /queryClient\.fetchQuery\(\{\n {6}queryKey: \["followersFor:", taskId\]/);
+  assert.doesNotMatch(boardHook, /queryClient\.getQueryData\(\["followersFor:"/);
+
   const ownerCase = read('src/hooks/MultiPages/Tasks/useFollowersPost.ts');
   assert.match(ownerCase, /if \(!followsWithNote\) \{\n {6}if \(check\) return;\n {6}if \(parseInt\(task\.userId as string\) === userId\) return;/);
 });
