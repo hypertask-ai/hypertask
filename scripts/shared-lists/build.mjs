@@ -54,7 +54,10 @@ const read = (relative, root = ROOT) => readFileSync(path.join(root, relative), 
 export function entryFiles(list, root = ROOT) {
   const directory = path.join(root, list.directory);
   if (!existsSync(directory)) throw new Error(`${list.directory} is missing`);
-  return readdirSync(directory).filter((name) => list.entryPattern.test(name)).sort();
+  const names = readdirSync(directory);
+  const strays = names.filter((name) => !name.startsWith("_") && !list.entryPattern.test(name));
+  if (strays.length) throw new Error(`${list.directory}: ${strays.join(", ")} is not an entry file name (one file per entry)`);
+  return names.filter((name) => list.entryPattern.test(name)).sort();
 }
 
 function buildJsonMap(list, root) {

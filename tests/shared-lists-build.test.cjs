@@ -30,16 +30,16 @@ test("the flag copy has exactly one entry file per flag it lists", async () => {
   assert.deepEqual(entryFiles(list).map((file) => file.replace(/\.json$/, "")), Object.keys(snapshot.modes));
 });
 
-test("every section file and row file is named so the builder picks it up", async () => {
-  const { LISTS } = await load();
-  const stray = [];
+test("an entry file with an unexpected name fails loudly instead of being dropped from the list", async () => {
+  const { LISTS, build } = await load();
+  const workspace = tempRoot();
   for (const list of LISTS) {
-    for (const name of fs.readdirSync(path.join(root, list.directory))) {
-      if (name.startsWith("_") || list.entryPattern.test(name)) continue;
-      stray.push(`${list.directory}/${name}`);
-    }
+    fs.mkdirSync(path.join(workspace, list.directory), { recursive: true });
+    write(path.join(workspace, list.directory, "Not A Key.json"), "{}\n");
+    assert.throws(() => build(list, workspace), /is not an entry file name/);
+    fs.rmSync(path.join(workspace, list.directory, "Not A Key.json"));
   }
-  assert.deepEqual(stray, [], "one file per entry, named <nn>-<slug>.md, <slug>.md or <flag-key>.json");
+  fs.rmSync(workspace, { recursive: true, force: true });
 });
 
 test("sections are joined in file-name order with one blank line between them", async () => {
@@ -69,16 +69,13 @@ test("one new row file changes only the row block of the index", async () => {
   fs.rmSync(workspace, { recursive: true, force: true });
 });
 
-test("a badly named flag file or a missing mode fails loudly instead of shipping a broken list", async () => {
+test("a flag entry without a mode fails loudly instead of shipping a broken list", async () => {
   const { build, listById } = await load();
   const list = listById("flag-modes");
   const workspace = tempRoot();
   write(path.join(workspace, list.directory, "_header.json"), JSON.stringify({ source: "s", view: "v", capturedAt: "2026-10-30T00:00:00.000Z" }));
   write(path.join(workspace, list.directory, "htpr-1-a.json"), JSON.stringify({ mode: "EVERYONE" }));
   assert.match(build(list, workspace), /"htpr-1-a": "EVERYONE"/);
-  write(path.join(workspace, list.directory, "Not A Key.json"), JSON.stringify({ mode: "EVERYONE" }));
-  assert.throws(() => build(list, workspace), /not a valid flag key/);
-  fs.rmSync(path.join(workspace, list.directory, "Not A Key.json"));
   write(path.join(workspace, list.directory, "htpr-1-a.json"), JSON.stringify({ mode: "" }));
   assert.throws(() => build(list, workspace), /mode must be a non-empty string/);
   fs.rmSync(workspace, { recursive: true, force: true });

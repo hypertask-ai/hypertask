@@ -78,7 +78,7 @@ export function writeEntries(root, snapshot) {
   }
   const header = Object.fromEntries(Object.entries(snapshot).filter(([field]) => field !== "modes"));
   writeFileSync(path.join(directory, list.headerFile), `${JSON.stringify(header, null, 2)}\n`);
-  writeFileSync(path.join(root, list.target), build(list));
+  writeFileSync(path.join(root, list.target), build(list, root));
 }
 
 // A flag missing from the copy is not an error: readers use its registry default until the refresher adds it.
