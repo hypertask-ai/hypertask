@@ -75,6 +75,7 @@ pr_job_budget:
       jobs: 1
       published_statuses: [ux-signoff-gate, ux-signoff]
       concurrency_group: ux-signoff-gate
+      queue: max
       cancel_in_progress: false
   context_publication: native_scanner_checks_and_combined_trusted_commit_status
   isolated_guards:
