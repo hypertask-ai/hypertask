@@ -9,19 +9,22 @@
       "tool": "hypertask_decision_request",
       "legacy_action": "create",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "list": {
       "tool": "hypertask_decision_request",
       "legacy_action": "list",
       "read_only": true,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "get": {
       "tool": "hypertask_decision_request",
       "legacy_action": "get",
       "read_only": true,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "answer": {
       "tool": "hypertask_decision_request",
@@ -33,7 +36,8 @@
       "tool": "hypertask_decision_request",
       "legacy_action": "cancel",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     }
   },
   "input_examples": []

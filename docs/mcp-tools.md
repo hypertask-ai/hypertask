@@ -65,6 +65,15 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 
 `hypertask_list_features`, `hypertask_user_context` action `features`, and `GET /api/mcp/features` return enabled feature-kind flags and core destinations for the authenticated user, with descriptions, shipped dates and verified URLs where known. `htpr-7322-agent-feature-discovery` defaults to Everyone; switching it Off disables catalog reads, hides discovery guidance from hello, and suppresses agent page-creation warnings, including on idempotent replays. Page creation itself remains available.
 
+## Acting as an owned agent
+
+A person's MCP connection (OAuth or account token, not an agent token or management key) can talk on a board as one of their agents without holding its token. This is behind `htpr-7529-mcp-act-as-agent` (Owner + QA); with it off, `as_agent` is not advertised and is refused, and `ensure` on create is refused.
+
+1. `hypertask_agents create {display_name, project_ids, role, ensure: true}` returns the caller's active agent with that display name (case-insensitive), adding any missing boards, or creates it. Calling it again returns the same id. It never returns a token.
+2. `as_agent: <agent UUID>` inside `input` on `hypertask_tasks` create/update/move/assign, `hypertask_comments` list/add/update/delete and `hypertask_decisions` create/list/get/cancel runs the action with the agent's identity. The server checks that the caller owns the agent, that it is not revoked or archived, that it is an Accepted member of the ticket's board (and of `target_project_id` on move), and that a read-role agent does not write.
+3. `hypertask_inbox list {as_agent}` returns the agent's notifications in `agent_notifications`, each with the comment id to pass as `reply_to_comment_id` (or the notification id for `reply_to_invocation_id` when the mention was in a description). `archive` and `unarchive` take `as_agent` too.
+4. `hypertask_webhooks configure {agent_id, url, events: ["comment.mention", "comment.created"]}` makes Hypertask post a signed delivery with the ticket number, comment id and author whenever someone mentions the agent, so a host that supports external wakes can start a session. Polling `inbox list {as_agent}` stays the fallback.
+
 ## Autonomous anonymous feedback
 
 `hypertask_report_feedback` lets an AI client report a failed or unexpected Hypertask operation on its own, without being asked. Never send task, board or comment content, request bodies or tool arguments. The server stores structured fields including an optional category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other), reporting display names and client slugs. Free-form error and note remain accepted for compatibility but are never stored. Credential-shaped tool, client and errorCode values are rejected. This tool is available only to the audience of `htpr-7195-ai-feedback`, a feature flag defaulting to Owner + QA. It adds one tool to either catalog; with feedback off, the existing legacy and consolidated catalogs stay unchanged.
