@@ -51,7 +51,7 @@ export async function getDecisionComments(
     where: { creatorId: userId, agentId: null, activity: { equals: Prisma.DbNull }, taskId: { in: taskIds } },
     select: { taskId: true, createdAt: true },
   });
-  const blockerClears = await isFeatureEnabled(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG, userId).catch(() => false)
+  const blockerClears = (await isFeatureEnabled(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG, userId))
     ? await prisma.comment.findMany({
         where: {
           taskId: { in: taskIds },
