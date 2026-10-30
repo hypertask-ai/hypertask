@@ -38,13 +38,23 @@ export default async function checkoutsWebhooksHandler(
   const rawBody = await getRawBody(req);
   const stripe = await getStripeInstance();
 
+  const secret = process.env.WEBHOOK_SECRET_STRIPE;
+  if (!secret) {
+    console.error("[stripe-webhook] WEBHOOK_SECRET_STRIPE is not configured");
+    return res.status(500).json({ message: "webhook secret is not configured" });
+  }
+
   if (signature) {
-    const event = stripe.webhooks.constructEvent(
-      rawBody,
-      signature,
-      process.env.WEBHOOK_SECRET_STRIPE?.toString() ?? ""
-    );
-    console.log("🚀 ~ event:", event)
+    let event: Stripe.Event;
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, signature, secret);
+    } catch (error) {
+      console.error(
+        "[stripe-webhook] signature verification failed:",
+        error instanceof Error ? error.message : error
+      );
+      return res.status(400).json({ message: "invalid signature" });
+    }
     try {
       switch (event.type) {
         case StripeWebhooks.InvoicePaid: {
@@ -122,6 +132,8 @@ export default async function checkoutsWebhooksHandler(
       return res.status(500).json(e);
     }
   }
+
+  return res.status(400).json({ message: "missing signature" });
 
 
   async function getSubscription(event: Stripe.Event) {

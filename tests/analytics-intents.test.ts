@@ -176,6 +176,7 @@ function stripeHarness(event = paidEvent()) {
       (resource as any)[method] = () => { writes.push(method); throw Error("Stripe write forbidden"); };
     }
   }
+  process.env.WEBHOOK_SECRET_STRIPE = "whsec_intents_test";
   h.mocks["raw-body"] = { default: async () => Buffer.from("signed test fixture") };
   h.mocks["stripe"] = { Stripe: class {
     static API_VERSION = "2023-08-16";
