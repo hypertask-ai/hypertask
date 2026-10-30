@@ -1206,6 +1206,7 @@ Check: reading only the headings, the bold words and the first line of each para
                       have" means tasks ASSIGNED TO THEM, never the total number of tasks on their boards.
                     - Assign user → hypertask_assign_user
                     - Unassign user → hypertask_unassign_user
+                    - Clear a task's red blocker border → hypertask_clear_task_blocker (needs a reason)
                     - Archive/unarchive inbox notifications → hypertask_inbox_archive / hypertask_inbox_unarchive
                     - Attach files from public URLs to a task description or comment → hypertask_attach_files
                     - List labels on a board → hypertask_list_labels

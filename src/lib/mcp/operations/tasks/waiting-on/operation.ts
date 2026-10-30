@@ -35,6 +35,7 @@ export async function POST(request: NextRequest) {
       if (!body || Array.isArray(body) || typeof body.taskId !== "number" || !Number.isInteger(body.taskId)
         || (body.userId !== undefined && body.userId !== null && (typeof body.userId !== "number" || !Number.isInteger(body.userId)))
         || (body.blockerCommentId !== undefined && body.blockerCommentId !== null && (typeof body.blockerCommentId !== "number" || !Number.isInteger(body.blockerCommentId) || body.blockerCommentId <= 0))
+        || (body.reason !== undefined && (typeof body.reason !== "string" || body.reason.length > 500))
         || (body.userId === undefined && body.blockerCommentId === undefined)) {
         return NextResponse.json({ success: false, error: "Provide integer taskId and userId and/or blockerCommentId (integer or null)" }, { status: 400 });
       }
@@ -51,6 +52,7 @@ export async function POST(request: NextRequest) {
           taskId: body.taskId,
           userId: body.userId,
           blockerCommentId: body.blockerCommentId,
+          reason: body.reason,
           currentUser,
           agentId: ctx.agentId,
           teamScope: ctx.teamScope,

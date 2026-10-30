@@ -63,6 +63,7 @@ import { createUpdateCommentTool } from "./updateComment";
 import { createDeleteCommentTool } from "./deleteComment";
 import { createAssignUserTool } from "./assignUser";
 import { createUnassignUserTool } from "./unassignUser";
+import { createClearTaskBlockerTool } from "./clearTaskBlocker";
 import { createMoveTaskBetweenBoardsTool } from "./moveTaskBetweenBoards";
 import { createInboxArchiveTool } from "./inboxArchive";
 import { createInboxUnarchiveTool } from "./inboxUnarchive";
@@ -169,6 +170,7 @@ export function buildTools(
     hypertask_delete_comment: createDeleteCommentTool(context).hypertask_delete_comment,
     hypertask_assign_user: createAssignUserTool(context).hypertask_assign_user,
     hypertask_unassign_user: createUnassignUserTool(context).hypertask_unassign_user,
+    hypertask_clear_task_blocker: createClearTaskBlockerTool(context).hypertask_clear_task_blocker,
     hypertask_move_task_between_boards: createMoveTaskBetweenBoardsTool(context).hypertask_move_task_between_boards,
     hypertask_inbox_archive: createInboxArchiveTool(context).hypertask_inbox_archive,
     hypertask_inbox_unarchive: createInboxUnarchiveTool(context).hypertask_inbox_unarchive,

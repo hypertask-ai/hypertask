@@ -209,13 +209,15 @@ const TaskWaitingOnActivity = ({
   <>
     <BoldElement>
       <CreatedByLocal
-        name={activity.data.fromUser.displayName ?? ""}
-        pfp={activity.data.fromUser.photoURL ?? ""}
+        name={activity.data.fromAgent?.displayName ?? activity.data.fromUser.displayName ?? ""}
+        pfp={activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser.photoURL ?? ""}
       />
     </BoldElement>{" "}
     {activity.data.waitingOnDisplayName
       ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
-      : "cleared blocked by"}
+      : activity.data.blockerCleared
+        ? `cleared the blocker${activity.data.reason ? `: ${activity.data.reason}` : ""}`
+        : "cleared blocked by"}
   </>
 );
 

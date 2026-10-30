@@ -30,9 +30,10 @@ export type DecisionMentionComment = {
 export const pickDecisionComments = (
   mentionComments: readonly DecisionMentionComment[],
   viewerComments: readonly { taskId: number; createdAt: Date }[],
+  blockerClears: readonly { taskId: number; createdAt: Date }[] = [],
 ): Map<number, DecisionMentionComment> => {
   const lastReply = new Map<number, number>();
-  for (const comment of viewerComments) {
+  for (const comment of [...viewerComments, ...blockerClears]) {
     lastReply.set(comment.taskId, Math.max(lastReply.get(comment.taskId) ?? 0, comment.createdAt.getTime()));
   }
   const decisions = new Map<number, DecisionMentionComment>();

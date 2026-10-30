@@ -62,7 +62,10 @@ export interface ITaskWaitingOnActivity {
   data: {
     fromUserId: number;
     fromUser: IUser;
+    fromAgent?: { id: string; displayName: string; photoURL?: string | null };
     waitingOnDisplayName?: string | null;
+    blockerCleared?: boolean;
+    reason?: string | null;
   };
 }
 

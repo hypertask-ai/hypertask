@@ -536,7 +536,7 @@ test("7673 native tools: a read agent with the flag on is refused every write to
       refused.push(name);
     }
   }
-  assert.equal(refused.length, 44 + Object.keys(HYBRID_INPUTS).length);
+  assert.equal(refused.length, 45 + Object.keys(HYBRID_INPUTS).length);
   assert.ok(!n.executed.some((name) => refused.includes(name) && !HYBRID_INPUTS[name]), "no refused tool ran");
   assert.ok(n.recorded.some((entry) => entry.result?.code === "insufficient_scope"), "the refusal is recorded as the tool result");
   assert.equal(n.w.counters.agentReads, refused.length, "only the refused calls read the agent row; read tools read nothing");
@@ -552,7 +552,7 @@ test("7673 native tools: the refused tool list is the reviewed one", () => {
     "hypertask_create_page", "hypertask_update_page", "hypertask_create_report", "hypertask_update_report",
     "hypertask_delete_report", "hypertask_create_label", "hypertask_update_task", "hypertask_add_comment",
     "hypertask_decision_request", "hypertask_attach_files", "hypertask_update_comment", "hypertask_delete_comment",
-    "hypertask_assign_user", "hypertask_unassign_user", "hypertask_move_task_between_boards", "hypertask_inbox_archive",
+    "hypertask_assign_user", "hypertask_unassign_user", "hypertask_clear_task_blocker", "hypertask_move_task_between_boards", "hypertask_inbox_archive",
     "hypertask_inbox_unarchive", "hypertask_create_view", "hypertask_update_view", "hypertask_switch_view",
     "hypertask_delete_view", "hypertask_create_skill", "hypertask_update_skill", "hypertask_delete_skill",
     "hypertask_import_skills", "hypertask_start_timer", "hypertask_stop_timer", "hypertask_pause_timer",
