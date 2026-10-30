@@ -474,6 +474,28 @@ test('live collection separates same-SHA reruns after a newer green run and keep
   assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:2:${green.id}`]);
   assert.ok(Object.values(saved.alerts)[0].closed);
 });
+test('a green retry that started after a newer red run still reports that red (YPER4-954)', async () => {
+  const d = second();
+  const red = { ...d.run, created_at: '2026-10-30T15:46:54Z', run_started_at: '2026-10-30T15:47:00Z' };
+  const retried = { ...d.run, id: d.run.id + 1, run_attempt: 2, conclusion: 'success', head_sha: d.green.head_sha,
+    created_at: '2026-10-30T15:29:00Z', run_started_at: '2026-10-30T15:50:13Z' };
+  const green = { ...d.green, created_at: '2026-10-30T15:00:00Z' };
+  const mock = fixtureCommand({ ...d, run: red, green });
+  const run = (bin, args, options) => {
+    const route = args[3];
+    if (route.includes('/runs?')) return JSON.stringify({ workflow_runs: [retried, red, green] });
+    if (route.includes('/jobs?')) {
+      const id = Number(route.match(/runs\/(\d+)\/jobs/)[1]);
+      return JSON.stringify({ jobs: [{ id: id + 900, name: 'ci-tests', status: 'completed',
+        conclusion: id === red.id ? 'failure' : 'success' }] });
+    }
+    return mock.run(bin, args, options);
+  };
+  const result = await live(run).collect();
+  assert.equal(result.status, 'failure');
+  assert.equal(result.run.id, red.id);
+  assert.equal(result.green.id, retried.id);
+});
 test('a failed rerun without a green boundary retains the first red attempt and skips compare', async t => {
   const dir = tmp(t), d = second(); d.run.run_started_at = '2026-10-22T11:00:00Z';
   const prior = structuredClone(d.run), firstMock = counted(d, { cancelled: false });

@@ -43,7 +43,7 @@ function identity(run = command) {
   return { name, credentialPath: expected };
 }
 function runOrder(a, b) {
-  const ta = Date.parse(a.run_started_at || a.created_at), tb = Date.parse(b.run_started_at || b.created_at);
+  const ta = Date.parse(a.created_at || a.run_started_at), tb = Date.parse(b.created_at || b.run_started_at);
   return (Number.isFinite(ta) && Number.isFinite(tb) ? tb - ta : 0) || b.id - a.id || (b.run_attempt || 1) - (a.run_attempt || 1);
 }
 function streak(data, state) {
@@ -247,7 +247,7 @@ async function apply(p, state, api, persist) {
   if (p.action === 'rerun') { api.rerun(p.run.id); return; }
   if (p.action === 'green') {
     for (const a of Object.values(state.alerts)) {
-      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
+      if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, created_at: a.runCreatedAt || a.runStartedAt }, p.run) < 0) continue;
       if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
       // Ambiguous activity writes are not retried: retain the intent for operator reconciliation.
       if (a.closing) throw new Error('Recovery note outcome unknown; reconcile saved closing intent manually');
@@ -263,7 +263,7 @@ async function apply(p, state, api, persist) {
   if (a?.closed) return;
   if (!a) {
     // Save an intent before the non-idempotent create. An interrupted create is reconciled, never blindly repeated.
-    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
+    a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runCreatedAt: p.run.created_at || p.run.run_started_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
     persist();
     const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
       '--title', p.title, '--description', p.description, '--priority', 'urgent', '--json']));
