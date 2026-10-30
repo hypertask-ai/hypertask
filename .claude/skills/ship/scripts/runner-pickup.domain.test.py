@@ -63,6 +63,38 @@ else: sys.exit(9)
     def items(self, n):
         return [x['ticket'] for x in json.loads((self.state / f'runner-{n}.json').read_text())['items']]
 
+    def test_stale_prelock_assignment_preserves_reservation(self):
+        task = self.task(1, 'HTPR-1', 'Flags', 'In Progress')
+        self.board(1, [task])
+        path = self.state / 'domain-ownership.json'
+        path.write_text(json.dumps({'1': {'HTPR-1': {'held': ['Flags'], 'current': 'Flags',
+                                                       'pending': False, 'admission': True}}}))
+        detail = self.root / 'detail-HTPR-1'
+        fresh = dict(task, assignees=[])
+        detail.write_text(json.dumps({'success': True, 'tasks': [fresh]}))
+        self.tick(1)
+        self.assertTrue(json.loads(path.read_text())['1']['HTPR-1']['admission'])
+        self.assertEqual(self.items(1), [])
+        detail.write_text(json.dumps({'success': True, 'tasks': [task]}))
+        self.tick(1)
+        self.assertNotIn('admission', json.loads(path.read_text())['1']['HTPR-1'])
+        task['section'] = 'Done'
+        self.board(1, [task])
+        self.tick(1)
+        self.assertNotIn('1', json.loads(path.read_text()))
+
+    def test_bad_admission_detail_keeps_state(self):
+        task = self.task(1, 'HTPR-1', 'Flags')
+        self.board(1, [task])
+        path = self.state / 'domain-ownership.json'
+        original = json.dumps({'1': {'HTPR-1': {'held': ['Flags'], 'current': 'Flags',
+                                                  'pending': False, 'admission': True}}})
+        path.write_text(original)
+        (self.root / 'detail-HTPR-1').write_text('{"success":true,"tasks":[{}]}')
+        self.tick(1)
+        self.assertEqual(path.read_text(), original)
+        self.assertFalse((self.state / 'runner-1.json').exists())
+
     def test_simultaneous_same_domain_and_retry_release(self):
         a, b = self.task(1, 'HTPR-1', 'Commands'), self.task(2, 'HTPR-2', 'Commands')
         self.board(1, [a]); self.board(2, [b])

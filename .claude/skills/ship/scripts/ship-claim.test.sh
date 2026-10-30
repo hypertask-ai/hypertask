@@ -6,6 +6,7 @@ fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (want '$3' got '$2')"; }
 D=$(mktemp -d); trap 'rm -rf "$D"' EXIT
+export HOME="$D"
 ME="sess-mine-1234"
 # c <id> <time> <agent id> <agent name> <html>
 c() { jq -n --argjson i "$1" --arg t "$2" --arg a "$3" --arg n "$4" --arg x "$5" \
@@ -346,6 +347,15 @@ esac
 EOF
 cat > "$D/hold-ht" <<'EOF'
 #!/usr/bin/env bash
+if [ "$1 $2" = 'tasks list' ] && [[ " $* " != *' --status '* ]]; then
+  project=15; [[ " $* " == *' --project 4060 '* ]] && project=4060
+  jq --argjson project "$project" '[.tasks[] | select(.projectId == $project) | .labels = (.labels // [])] | {success:true,total:length,tasks:.}' "$HOLD_BOARD"
+  exit
+fi
+if [ "$1 $2" = 'tasks get' ] && [ "$3" = 'YPER4-999' ]; then
+  printf '{"success":true,"tasks":[{"ticketNumber":"YPER4-999","projectId":4060,"section":"Todo","labels":[],"assignees":[]}]}'
+  exit
+fi
 if [ "$1 $2" != 'tasks list' ]; then exec "$HOLD_ORIGINAL_HT" "$@"; fi
 printf '%s\n' "$*" >> "$HOLD_READS"
 [ -z "${HOLD_BOARD_FAIL:-}" ] || exit 1
@@ -353,6 +363,7 @@ if [[ " $* " == *' --project 4060 '* ]] && [ -n "${HOLD_INFRA:-}" ]; then cat "$
 if [[ " $* " == *' --offset 100 '* ]]; then cat "$HOLD_BOARD_PAGE2"; else cat "$HOLD_BOARD"; fi
 EOF
 chmod +x "$D/hold-gh" "$D/hold-ht"
+export RUNNER_INBOX_DIR=$D/inbox
 export HOLD_READS=$D/hold-reads HOLD_OPEN=$D/open.json HOLD_MERGED=$D/merged.json HOLD_BOARD=$D/board.json HOLD_BOARD_PAGE2=$D/page2.json HOLD_ORIGINAL_HT=$D/hypertask
 export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUME="claude --resume $ME"
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
@@ -386,6 +397,8 @@ for section in Done 'Flag: Everyone' 'Flag: Only Me + QA' 'Flag: Off'; do
   jq --arg s "$section" '.tasks[0].section=$s' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
   SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "settled $section work permits the next claim" "$?" 0
 done
+jq -e '.["6"]["YPER4-999"].admission == true' "$RUNNER_INBOX_DIR/domain-ownership.json" >/dev/null && ok "unassigned fake claim retains reservation" || bad "fake claim lost reservation"
+export RUNNER_INBOX_DIR=$D/inbox-later
 jq '.tasks[0].section="QA" | .tasks[0].assignees[0].agent.displayName="Runner 16"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "another runner never holds this runner" "$?" 0
 jq '.tasks[0].assignees[0].agent.displayName="RUNNER 6"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
@@ -436,6 +449,7 @@ printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX
 [ ! -s "$D/log" ] && ok "open-PR hold still precedes board writes" || bad "open-PR hold wrote to board"
 printf '[{"number":99,"headRefName":"runner6/yper4-999","title":"YPER4-999 [INFRA] Existing open work","isDraft":false}]' > "$HOLD_OPEN"
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 >/dev/null; eq "actual claim dispatch resumes an open PR despite merged work" "$?" 0
+jq -e '.["6"]["HTPR-123"].protected == true' "$RUNNER_INBOX_DIR/domain-ownership.json" >/dev/null && ok "uppercase Runner 6 assignment imported" || bad "uppercase assignment not imported"
 grep -q '^task move YPER4-999 --section In Progress' "$D/log" && ok "recognized open work reaches the claim move" || bad "open resumption failed to write"
 printf '[]' > "$HOLD_OPEN"
 jq '.tasks += [.tasks[0] | .ticketNumber="YPER4-999" | .projectId=4060 | .uniqueIndex=999] | .total=2' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"

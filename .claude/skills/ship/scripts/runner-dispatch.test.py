@@ -66,6 +66,7 @@ class DispatchTests(unittest.TestCase):
         self.claim_dir = self.state / "runner-queue/claims"
         self.loop = self.state / "runner-loop"
         self.now = 1800000000
+        self.admission = patch.object(m, "admit_domain").start()
         self.commands = patch.object(m, "command", side_effect=AssertionError("Unmocked external command")).start()
         self.addCleanup(patch.stopall)
         self.sleep = patch.object(m.time, "sleep").start()

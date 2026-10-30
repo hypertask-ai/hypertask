@@ -356,15 +356,7 @@ run_tick() {
   inbox_resp=$(board "$n" inbox list --json 2>/dev/null) || inbox_resp=''
   jq -e '.success == true and (.agent_notifications | type == "array")' <<<"$inbox_resp" >/dev/null 2>&1 \
     || { log "agent inbox read failed, skipping the inbox backstop this tick"; inbox_resp=''; }
-  rm -f "$bfile"
   cutoff=$(date -u -d "@$((NOW - MAX_AGE_DAYS * 86400))" +%Y-%m-%dT%H:%M:%S)
-  cand=$(jq -c --arg name "Runner $n" --arg skip "$SKIP" --arg cutoff "$cutoff" '
-    [.tasks[] | select(any(.assignees[]?; .agent.displayName == $name))
-      | select(.projectId == 15 or .projectId == 4060)
-      | select(.resumeAfterFreeze or ((.section // "") | test($skip) | not))
-      | select(.resumeAfterFreeze or ((.updatedAt // "") >= $cutoff))
-      | {ticket: .ticketNumber, title: .title, url: "https://app.hypertask.ai/detail/project-\(.projectId)/\(.uniqueIndex)", section: .section, createdAt: .createdAt, resumeAfterFreeze: .resumeAfterFreeze}]
-    | sort_by(.createdAt)' <<<"$resp") || die 'cannot parse board read'
   exec 8>"$lock"; flock -x 8
   prev=$(jq -c '.items // []' "$inbox" 2>/dev/null || echo '[]')
   exec 7>"$STATE/domain-ownership.lock"; flock -x 7
@@ -373,15 +365,22 @@ run_tick() {
       jq -e 'type == "object"' "$STATE/domain-ownership.json" >/dev/null 2>&1 || die 'invalid domain ownership'; existing='';
     }
     for t in $existing; do
-      if ! jq -e --arg t "$t" 'any(.tasks[]; .ticketNumber == $t)' <<<"$resp" >/dev/null; then
-        detail=$(board "$n" task get "$t" --json 2>/dev/null) || continue
-        if jq -e --arg t "$t" '.success == true and (.tasks | type == "array" and length == 1) and .tasks[0].ticketNumber == $t and (.tasks[0].assignees | type == "array")' <<<"$detail" >/dev/null; then
-          resp=$(jq -cs '.[0].tasks += .[1].tasks | .[0]' <(printf '%s' "$resp") <(printf '%s' "$detail")) || die 'cannot merge task readback'
-        fi
+      if jq -e --arg n "$n" --arg t "$t" '.[$n][$t].admission == true' "$STATE/domain-ownership.json" >/dev/null || ! jq -e --arg t "$t" 'any(.tasks[]; .ticketNumber == $t)' <<<"$resp" >/dev/null; then
+        detail=$(board "$n" task get "$t" --json 2>/dev/null) || fail_tick 'task readback failed'
+        jq -e --arg t "$t" '.success == true and (.tasks | type == "array" and length == 1) and .tasks[0].ticketNumber == $t and (.tasks[0].assignees | type == "array") and (.tasks[0].section | type == "string") and (.tasks[0].projectId | type == "number") and (.tasks[0].labels | type == "array") and all(.tasks[0].assignees[]; type == "object" and ((.agent // null) == null or (.agent | type == "object" and (.displayName | type == "string"))))' <<<"$detail" >/dev/null || fail_tick 'task readback invalid'
+        resp=$(jq -cs --arg t "$t" '.[0].tasks = ((.[0].tasks | map(select(.ticketNumber != $t))) + .[1].tasks) | .[0]' <(printf '%s' "$resp") <(printf '%s' "$detail")) || fail_tick 'cannot merge task readback'
       fi
     done
   fi
+  cand=$(jq -c --arg name "Runner $n" --arg skip "$SKIP" --arg cutoff "$cutoff" '
+    [.tasks[] | select(any(.assignees[]?; (.agent.displayName // "" | ascii_downcase) == ($name | ascii_downcase)))
+      | select(.projectId == 15 or .projectId == 4060)
+      | select(.resumeAfterFreeze or ((.section // "") | test($skip) | not))
+      | select(.resumeAfterFreeze or ((.updatedAt // "") >= $cutoff))
+      | {ticket: .ticketNumber, title: .title, url: "https://app.hypertask.ai/detail/project-\(.projectId)/\(.uniqueIndex)", section: .section, createdAt: .createdAt, resumeAfterFreeze: .resumeAfterFreeze}]
+    | sort_by(.createdAt)' <<<"$resp") || die 'cannot parse board read'
   cand=$(jq -cn --argjson tasks "$(jq -c '.tasks' <<<"$resp")" --argjson candidates "$cand" --argjson previous "$prev" '{tasks:$tasks,candidates:$candidates,previous:$previous}' | python3 "$HERE/runner-domain-pickup.py" "$STATE" "$n") || die 'domain ownership failed'
+  rm -f "$bfile"
   merged=$(jq -c --argjson prev "$prev" --argjson now "$NOW" '
     map(. as $candidate | del(._pickupPrevious) as $c
       | (($prev | map(select(.ticket == $c.ticket)) | first) // $candidate._pickupPrevious) as $old

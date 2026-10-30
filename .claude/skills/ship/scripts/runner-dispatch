@@ -38,6 +38,16 @@ RESEARCH_PROMPT = ("/speed-analyst No free [SPEED] ticket is on the board. Read 
                    "identical output, tests and live QA before Done.")
 
 
+def admit_domain(runner, ticket, state):
+    helper = SCRIPTS / 'runner-domain-admit.py'
+    if not helper.is_file():
+        helper = Path.home() / '.agents/skills/ship/scripts/runner-domain-admit.py'
+    if not helper.is_file():
+        raise FileNotFoundError(f'domain admission helper missing: {helper}')
+    env = dict(os.environ, RUNNER_INBOX_DIR=os.environ.get('RUNNER_INBOX_DIR', str(state / 'runner-inbox')))
+    subprocess.run(['python3', str(helper), runner.split()[-1], ticket], env=env, check=True, timeout=180)
+
+
 def is_speed(task):
     labels = " ".join(str(l.get("name", l) if isinstance(l, dict) else l) for l in task.get("labels") or [])
     return "[speed]" in task["title"].casefold() or "speed" in labels.casefold()
@@ -676,6 +686,12 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 except Exception:
                     (claim_dir / f"{ticket}.json").unlink()
                     raise
+                try:
+                    admit_domain(runner, ticket, state)
+                except (OSError, subprocess.SubprocessError) as error:
+                    (claim_dir / f"{ticket}.json").unlink()
+                    print(f"runner-dispatch: domain admission held {ticket}: {error}", file=sys.stderr)
+                    continue
                 at = time.time()
                 send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
                 last[pane] = at
