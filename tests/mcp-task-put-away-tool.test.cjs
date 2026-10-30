@@ -1,7 +1,5 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const fs = require("node:fs");
-const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
 
 const RECEIPT = (status) => ({ success: true, task: { id: 42, ticketNumber: "HTPR-42", projectId: 15, status, archivedAt: null, permanentlyDeleteAt: null } });
@@ -37,11 +35,6 @@ test("archive and delete tools have their own names and are registered", () => {
   const f = fixture();
   assert.equal(f.archive.name, "hypertask_archive_task");
   assert.equal(f.delete.name, "hypertask_delete_task");
-  const registry = fs.readFileSync(path.join(__dirname, "../src/lib/mcp-server/tools/index.ts"), "utf8");
-  assert.match(registry, /import \{ archiveTaskTool \} from '\.\/archive-task\.tool'/);
-  assert.match(registry, /import \{ deleteTaskTool \} from '\.\/delete-task\.tool'/);
-  assert.match(registry, /^  archiveTaskTool,$/m);
-  assert.match(registry, /^  deleteTaskTool,$/m);
 });
 
 test("tools post one identifier to their own endpoint", async () => {

@@ -34,8 +34,12 @@ function fixture(options = {}) {
       taskIdentifierErrorResponse: () => null,
     },
     "@/lib/mcp/tasks/internalTaskWrite": {
-      postInternalTaskWrite: async (writeCtx, path, body) => {
-        internal.push({ writeCtx, path, body });
+      archiveTaskAsSession: async (writeCtx, taskId) => {
+        internal.push({ writeCtx, path: "/api/tasks/(un)archive", taskId });
+        return options.internal ?? { ok: true, status: 200, data: { success: true } };
+      },
+      trashTaskAsSession: async (writeCtx, taskId) => {
+        internal.push({ writeCtx, path: "/api/queues/tasks/taskDeleteReminder", taskId });
         return options.internal ?? { ok: true, status: 200, data: { success: true } };
       },
     },
@@ -132,7 +136,7 @@ test("write agent archives: same app route, Archive status, receipt from the sto
   assert.deepEqual(res.body, { success: true, task: { id: 42, ticketNumber: "HTPR-42", projectId: 15, status: "Archive", archivedAt: "2026-10-30T10:00:00.000Z", permanentlyDeleteAt: null } });
   assert.equal(f.internal.length, 1);
   assert.equal(f.internal[0].path, "/api/tasks/(un)archive");
-  assert.deepEqual(f.internal[0].body, { taskId: 42, status: "Archive" });
+  assert.equal(f.internal[0].taskId, 42);
   assert.equal(f.internal[0].writeCtx, f.ctx);
   assert.deepEqual(f.leases, [{ agentId: "agent-owner", userId: 7 }]);
 });
@@ -144,7 +148,7 @@ test("write agent deletes: same Trash route, receipt carries permanentlyDeleteAt
   assert.equal(res.body.task.status, "Deleted");
   assert.equal(res.body.task.permanentlyDeleteAt, "2026-11-29T10:00:00.000Z");
   assert.equal(f.internal[0].path, "/api/queues/tasks/taskDeleteReminder");
-  assert.deepEqual(f.internal[0].body, { taskId: 42 });
+  assert.equal(f.internal[0].taskId, 42);
 });
 
 test("a human session (no agent) still archives and deletes", async () => {

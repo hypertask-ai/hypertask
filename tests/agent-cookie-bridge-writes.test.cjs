@@ -7,7 +7,7 @@ const { NextRequest } = require('next/server')
 const { sessionModules, load } = require('./helpers/agent-cookie-bridge.cjs')
 const root = path.resolve(__dirname, '..')
 const mintFiles = [
-  'src/lib/mcp/tasks/services.ts', 'src/lib/mcp/tasks/updateTask.ts',
+  'src/lib/mcp/tasks/services.ts', 'src/lib/mcp/tasks/updateTask.ts', 'src/lib/mcp/tasks/internalTaskWrite.ts',
   'src/lib/mcp/operations/drafts/[draft_id]/publish/operation.ts',
 ]
 function walk(directory) {
@@ -107,7 +107,7 @@ test('source sync traces all four agent mint sites and exact Cookie-bearing fetc
   }
   assert.deepEqual(actualMints.sort(), [...mintFiles].sort())
   const calls = bridgeFetches()
-  assert.equal(calls.length, 8)
+  assert.equal(calls.length, 10)
   const { AGENT_COOKIE_BRIDGE_ROUTES } = load('src/lib/auth/agentCookieBridgeRoutes.ts', {})
   assert.deepEqual([...new Set(calls.map(call => `${call.method} ${call.pathname}`))].sort(), AGENT_COOKIE_BRIDGE_ROUTES.map(([method, pathname]) => `${method} ${pathname}`).sort())
 })
