@@ -15,7 +15,7 @@ stub("src/lib/prisma.ts", { default: { team: { findUnique: async ({ where }) => 
   aiKeyOnlyPlatformServices: where.id === "opted-in",
   aiProviderSettings: null,
   googleAccount: { userId: 42 },
-}) }, teamByokApiKey: { findMany: async () => [] }, project: { findUnique: async ({ where }) => ({ teamId: [1, 5].includes(where.id) ? (where.id === 1 ? "allowed" : "other-allowed") : where.id === 2 ? "restricted" : where.id === 4 ? "opted-in" : null }) } } });
+}) }, teamByokApiKey: { findMany: async () => [] }, project: { findUnique: async ({ where }) => ({ teamId: ({ 1: "allowed", 2: "restricted", 4: "opted-in", 5: "other-allowed" })[where.id] ?? null }) } } });
 stub("src/lib/flags.ts", { isFeatureEnabled: async (_key, userId) => { flagUsers.push(userId); return flagOn; } });
 stub("src/lib/turbopuffer.ts", {
   default: { namespace: () => ({ write: async (body) => { writes.push(body); return body; }, query: async (body) => { queries.push(body); return { rows: [] }; } }) },
@@ -148,7 +148,7 @@ test("embedding ownership survives deduplication and identifies each team", asyn
   }
 });
 
-test("single opted-in team search attributes embeddings; mixed teams use keywords", async () => {
+test("opted-in team searches retain semantic ranking and embedding attribution", async () => {
   const previousFetch = global.fetch;
   const previousKey = process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
   const requests = [];
@@ -162,8 +162,9 @@ test("single opted-in team search attributes embeddings; mixed teams use keyword
     await searchTasks({ searchQuery: "needle", projectIds: [4] });
     assert.equal(requests.length, 1);
     assert.equal(usage[0].teamId, "opted-in");
-    await searchTasks({ searchQuery: "needle", projectIds: [1, 4] });
-    assert.equal(requests.length, 1);
+    await searchTasks({ searchQuery: "mixed-opted-in", projectIds: [1, 4] });
+    assert.equal(requests.length, 2);
+    assert.equal(usage[1].teamId, "allowed");
   } finally {
     global.fetch = previousFetch;
     if (previousKey === undefined) delete process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
