@@ -32,7 +32,7 @@ REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
 readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node valentinyeo/ceo)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
-TITLE_RE='^(HTPR|HYFA|YPER4)-[0-9]+ \[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] [^ ]'
+TITLE_RE='^(HTPR|HYFA|YPER4|MARK|HEFE)-[0-9]+ \[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] [^ ]'
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -152,7 +152,7 @@ newest_pr() {
 bound_pr() { local f="$EVID/$1/pr"; [ -s "$f" ] && tr -dc '0-9' < "$f"; }
 # The ticket whose PR title the bound PR must carry: the ticket itself, or the one it duplicates.
 # Older merged PRs put the type first ("[BUGFIX] HTPR-6501 ..."). Accepted only for a duplicate's fixing PR.
-OLD_TITLE_RE='^\[(BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] (HTPR|HYFA|YPER4)-[0-9]+ [^ ]'
+OLD_TITLE_RE='^\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] (HTPR|HYFA|YPER4|MARK|HEFE)-[0-9]+ [^ ]'
 
 pr_owner() { local f="$EVID/$1/duplicate-of"; if [ -s "$f" ]; then tr -dc 'A-Z0-9-' < "$f"; else echo "$1"; fi; }
 

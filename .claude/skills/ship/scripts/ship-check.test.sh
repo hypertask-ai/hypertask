@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
 cd "$(dirname "$0")"; fails=0; passes=0
-python3 ./ship-check-finish.test.py || exit 1
-[ "${1:-}" != --finish-only ] || exit 0
+[ "${1:-}" != --finish-only ] || { python3 ./ship-check-finish.test.py || exit 1; exit 0; }
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
@@ -14,6 +13,43 @@ chmod +x "$E/read-bin/gh"; export PATH="$E/read-bin:$PATH"
 G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c "$*" '$c')}}" | ./ship-check guard >/dev/null 2>&1; local got=$?; [ "$got" = "$want" ] && ok "$got <- $*" || bad "want $want got $got <- $*"; }
 DONE='--section "Done"'
 M='gh pr merge'
+
+# Lead tickets merge their own PRs too: Growth's MARK and Support's HEFE boards, with the tags the leads write (YPER4-945).
+title_tests() {
+  local PATH=$PATH TITLE_FIXTURE
+  mkdir -p "$E/title-bin"; PATH="$E/title-bin:$PATH"
+  cat > "$E/title-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == pr && $2 == view && $3 == 4242 && $6 == --json && $7 == title ]] || exit 1
+printf '%s\n' "$TITLE_FIXTURE"
+MOCK
+  cat > "$E/title-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == tasks && $2 == get ]] || exit 1
+case "$3" in
+  MARK-173|HEFE-301|HTPR-6570) echo '{"success":true,"tasks":[{"section":"Approved"}]}' ;;
+  *) echo '{"success":false,"tasks":[]}' ;;
+esac
+MOCK
+  chmod +x "$E/title-bin/gh" "$E/title-bin/hypertask"
+  T() {
+    local want=$1; shift
+    out=$(TITLE_FIXTURE="$1" ./ship-check title 4242 2>&1); got=$?
+    [ "$got" = "$want" ] && ok "title: $1" || bad "title: want $want got $got <- $1 ($out)"
+  }
+  T 0 'MARK-173 [BUG] Help chat back to a floating icon'
+  T 0 'HEFE-301 [BUG] Docs link answers the wrong page'
+  T 0 'HTPR-6570 [BUGFIX] Keep the same AI chat after Settings'
+  T 1 'MARK-99999 [BUG] Made-up ticket number'
+  T 1 'MARK-173 Lead ticket without a type tag'
+  T 1 '[BUG] MARK-173 Type first, which only the duplicate path takes'
+}
+title_tests
+if [ "${1:-}" = --title-only ]; then
+  [ "$fails" = 0 ] && echo 'title ok' || exit 1
+  exit 0
+fi
+python3 ./ship-check-finish.test.py || exit 1
 
 if [ "${1:-}" != --premerge-only ]; then
 # Concatenated assignment fragments cannot bypass missing Done evidence.
