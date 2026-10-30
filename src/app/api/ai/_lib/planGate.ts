@@ -34,12 +34,10 @@ export type TeamPlanSource = {
   }> | null;
 };
 
-const INTERNAL_TEAM_SAVED_PLAN_FLAG = "htpr-7852-internal-team-saved-plan";
-
 export async function internalTeamUsesSavedPlan(): Promise<boolean> {
   try {
     const { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } = await import("@/lib/flags");
-    return await isFeatureEnabled(INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
+    return await isFeatureEnabled("htpr-7852-internal-team-saved-plan", FEATURE_FLAG_OWNER_USER_ID);
   } catch {
     return false;
   }
