@@ -106,7 +106,7 @@ function live(run = command) {
             if (job.conclusion !== 'failure') return { status: job.conclusion, run: row };
             red = { ...row, job, failedJobs: failedJobs.length ? failedJobs : [job] }; firstRed = row;
           } else if (job.conclusion === 'success') { green = row; break; }
-          else if (job.conclusion === 'failure') firstRed = row;
+          else if (job.conclusion === 'failure' && !r.previousAttempt) firstRed = row;
           if (r.run_attempt > 1) {
             rows.push({ ...api(`actions/runs/${r.id}/attempts/${r.run_attempt - 1}`), previousAttempt: true });
             rows.sort(runOrder);

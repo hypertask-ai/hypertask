@@ -482,6 +482,7 @@ test('a green retry that started after a newer red run still reports that red (Y
   const green = { ...d.green, created_at: '2026-10-30T15:00:00Z' };
   const mock = fixtureCommand({ ...d, run: red, green });
   const run = (bin, args, options) => {
+    if (bin !== 'gh') return mock.run(bin, args, options);
     const route = args[3];
     if (route.includes('/runs?')) return JSON.stringify({ workflow_runs: [retried, red, green] });
     if (route.includes('/jobs?')) {
