@@ -38,6 +38,21 @@ RESEARCH_PROMPT = ("/speed-analyst No free [SPEED] ticket is on the board. Read 
                    "identical output, tests and live QA before Done.")
 
 
+def admit_domain(runner, ticket, state):
+    helper = SCRIPTS / 'runner-domain-admit.py'
+    if not helper.is_file():
+        helper = Path.home() / '.agents/skills/ship/scripts/runner-domain-admit.py'
+    if not helper.is_file():
+        raise FileNotFoundError(f'domain admission helper missing: {helper}')
+    env = dict(os.environ, RUNNER_INBOX_DIR=os.environ.get('RUNNER_INBOX_DIR', str(state / 'runner-inbox')))
+    result = subprocess.run(['python3', str(helper), runner.split()[-1], ticket], env=env, check=True,
+                            capture_output=True, text=True, timeout=180)
+    data = json.loads(result.stdout)
+    if not isinstance(data, dict) or not isinstance(data.get('held'), list) or any(not isinstance(t, str) for t in data['held']):
+        raise ValueError('invalid domain admission result')
+    return data['held']
+
+
 def is_speed(task):
     labels = " ".join(str(l.get("name", l) if isinstance(l, dict) else l) for l in task.get("labels") or [])
     return "[speed]" in task["title"].casefold() or "speed" in labels.casefold()
@@ -655,6 +670,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
         if (load > 12 or runner not in ELIGIBLE or row["state"] not in {"done", "idle"}
                 or blocking or now - last.get(pane, 0) < 600):
             continue
+        denied = []
         while free:
             ticket = free.pop(0)
             if go:
@@ -676,6 +692,25 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 except Exception:
                     (claim_dir / f"{ticket}.json").unlink()
                     raise
+                try:
+                    fresh_holding = admit_domain(runner, ticket, state)
+                except (OSError, ValueError, subprocess.SubprocessError) as error:
+                    (claim_dir / f"{ticket}.json").unlink()
+                    print(f"runner-dispatch: domain admission held {ticket}: {error}", file=sys.stderr)
+                    denied.append(ticket)
+                    continue
+                try:
+                    fresh = [r for r in snapshots() if r["pane"] == pane and r["runner"] == runner]
+                    if (len(fresh) != 1 or fresh[0]["state"] not in {"done", "idle"}
+                            or (fresh[0]["state"] != "done" and fresh_holding) or os.getloadavg()[0] > 12):
+                        (claim_dir / f"{ticket}.json").unlink()
+                        free.insert(0, ticket)
+                        if len(fresh) == 1:
+                            result["state"] = fresh[0]["state"]
+                        break
+                except Exception:
+                    (claim_dir / f"{ticket}.json").unlink()
+                    raise
                 at = time.time()
                 send(pane, f"/ship {ticket}", claim_dir / f"{ticket}.json")
                 last[pane] = at
@@ -689,6 +724,7 @@ def dispatch(rows, boards, comments, load, now, *, go=False, claim_dir=CLAIMS, l
                 result["action"] = "sent"
             result["ticket"] = ticket
             break
+        free = denied + free
     return output
 
 

@@ -26,6 +26,7 @@ function load(file, stubs = {}) {
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
     if (request in stubs) return stubs[request];
+    if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false, assertBoardRoom: async () => {}, assertTaskCountTransition: async () => {}, isPlanLimitsEnabled: async () => false };
     if (request === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() };
     if (request === "@/lib/net/contentEncoding") return load("src/lib/net/contentEncoding.ts");
@@ -293,7 +294,7 @@ test("old prefix alias lookup resolves in MCP, CLI batch and detail", async () =
   assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6)).id, 101);
   const result = await f.get({ ticket_number: "OLD-123" });
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body.tasks, [{ id: 101, ticketNumber: "NEW-123" }]);
+  assert.deepEqual(result.body.tasks, [{ id: 101, ticketNumber: "NEW-123", skill_context: await require("./helpers/mcp-skill-context.cjs").getMcpSkillContext() }]);
   const batch = await f.get({ ticket_number: "OLD-123,NEW-123" });
   assert.equal(batch.body.tasks.length, 1);
 });
@@ -866,7 +867,7 @@ test("round 2: combined move and prefix history deduplicates the same destinatio
   assert.equal((await f.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "OLD-123" })).id, 101);
   assert.ok(f.aliasQueries() > 0, "prefix history must be consulted even when a move alias exists");
   assert.equal((await f.detail.findTaskByTicketNumber("OLD-123", 6)).id, 101);
-  assert.deepEqual((await f.get({ ticket_number: "OLD-123" })).body.tasks, [{ id: 101, ticketNumber: "DEST-7" }]);
+  assert.deepEqual((await f.get({ ticket_number: "OLD-123" })).body.tasks, [{ id: 101, ticketNumber: "DEST-7", skill_context: await require("./helpers/mcp-skill-context.cjs").getMcpSkillContext() }]);
 });
 
 test("round 2: combined history excludes inaccessible move destinations", async () => {

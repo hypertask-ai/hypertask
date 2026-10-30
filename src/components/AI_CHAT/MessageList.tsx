@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { signalAiChip } from "@/lib/ai/chipEvents";
+import { composeIntroTaskId } from "@/lib/ai/composeIntroTaskId";
 import { MessageItem } from "./MessageItem";
 import { TypingIndicator } from "./TypingIndicator";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import { useQuery } from "@tanstack/react-query";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, inViewObjectAtom } from "@/store";
+import { composeTaskOriginalNoteAtom, composeTaskQuestionsTaskIdAtom, composeTaskSkillFollowupAtom, inViewObjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
 
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
 
@@ -33,9 +34,17 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
-  const newTicketId = currentSession?.taskId;
+  const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
+  const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
+  const lastMessageLooksLikeIntro = lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
+  let introTaskId = composeIntroTaskId(lastMessage?.id);
+  if (actionChipsEnabled && introTaskId === undefined && lastMessageLooksLikeIntro) introTaskId = originalNoteState?.taskId;
   const onlyViewedTicket = useFlag(HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG);
   const viewedTaskId = useRecoilValue(inViewObjectAtom)?.taskId;
+  let newTicketId = currentSession?.taskId;
+  const introIsViewedTicket = introTaskId !== undefined && introTaskId === viewedTaskId;
+  if (actionChipsEnabled && introTaskId !== undefined && (!newTicketId || introIsViewedTicket)) newTicketId = introTaskId;
+  const lastMessageIsIntro = actionChipsEnabled && introTaskId !== undefined;
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
@@ -46,19 +55,23 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
   const waitingForSkillFollowup = Boolean(pendingFollowup) &&
     pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
-  const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
-    lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
+  const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && (messages.length === 1 || lastMessageIsIntro) &&
+    lastMessageLooksLikeIntro;
+  let originalNote: string | undefined;
+  if (actionChipsEnabled && originalNoteState?.taskId === newTicketId) originalNote = originalNoteState?.note;
   const ticketQuestions = useQuery({
     queryKey: ["task-questions", "new-ticket", newTicketId],
-    queryFn: async (): Promise<{ questions: string[] }> => {
+    queryFn: async (): Promise<{ questions: string[]; chipType?: "action-chip" }> => {
       const response = await fetch("/api/ai/task-questions", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ taskId: newTicketId, kind: "new-ticket" }),
+        body: JSON.stringify({ taskId: newTicketId, kind: "new-ticket", ...(originalNote ? { originalNote } : {}) }),
       });
       if (!response.ok) throw new Error("Failed to load new ticket questions");
-      return response.json();
+      const body: { questions: string[]; chipType?: "action-chip" } = await response.json();
+      if (actionChipsEnabled) body.chipType = "action-chip";
+      return body;
     },
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -70,12 +83,13 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     if (showTicketQuestions && newTicketId === questionsTaskId) setQuestionsTaskId(null);
   }, [showTicketQuestions, newTicketId, questionsTaskId, setQuestionsTaskId]);
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
+  const chipType = ticketQuestions.data?.chipType ?? "generated-question";
   const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
   useEffect(() => {
     if (!chipSignal || !active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;
-    chipSignal({ kind: "shown", surface: "new-ticket-questions", chipType: "generated-question", chips: newTicketQuestions, taskId: newTicketId ?? null });
+    chipSignal({ kind: "shown", surface: "new-ticket-questions", chipType, chips: newTicketQuestions, taskId: newTicketId ?? null });
     return () => chipSignal({ kind: "dismiss", surface: "new-ticket-questions" });
-  }, [chipSignal, active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey]);
+  }, [chipSignal, active, hidden, showTicketQuestions, newTicketId, newTicketQuestionsKey, chipType]);
 
   useLayoutEffect(() => {
     registerMessageListRef(messageListRef.current);
@@ -145,7 +159,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
                 data-compose-question
                 className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-meta text-left w-full"
                 onClick={() => {
-                  chipSignal?.({ kind: "clicked", text: question, index, chipType: "generated-question" });
+                  chipSignal?.({ kind: "clicked", text: question, index, chipType });
                   handleSendMessage(question);
                 }}
               >

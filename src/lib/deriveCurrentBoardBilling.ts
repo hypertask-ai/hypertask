@@ -11,7 +11,8 @@ import type { IProject, ITeam } from "@/models/model";
 export type TeamBillingSnapshot = Omit<CurrentBoardBilling, "projectId">;
 
 export function deriveTeamBilling(
-  team: ITeam | null | undefined
+  team: ITeam | null | undefined,
+  savedPlanOnly = false,
 ): TeamBillingSnapshot | null {
   if (!team?.id) return null;
 
@@ -28,7 +29,8 @@ export function deriveTeamBilling(
   const paidStorePlanId = applyTeamComp(team, paid.storePlanId);
   const billingInterval =
     comp && paidStorePlanId === comp ? null : paid.billingInterval;
-  const storePlanId = isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
+  const storePlanId =
+    !savedPlanOnly && isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
   const byokProviderFlags =
     team.byokApiKeys?.map(({ enabled, provider }) => ({
       enabled,
@@ -45,13 +47,14 @@ export function deriveTeamBilling(
 }
 
 export function deriveCurrentBoardBilling(
-  project: IProject | null
+  project: IProject | null,
+  savedPlanOnly = false,
 ): CurrentBoardBilling | null {
   if (!project?.id) return null;
 
   const team: ITeam | undefined = project.team;
   const teamId = project.teamId ?? team?.id ?? null;
-  const billing = deriveTeamBilling(team);
+  const billing = deriveTeamBilling(team, savedPlanOnly);
 
   if (!billing) return null;
 

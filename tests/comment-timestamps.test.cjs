@@ -22,6 +22,7 @@ function load(relativePath, modules = {}) {
   const loadedModule = { exports: {} }
   new Function('module', 'exports', 'require', 'Date', javascript)(loadedModule, loadedModule.exports, (name) => {
     if (name === './agentChatterRouting') return load('src/lib/mcp/operations/comments/agentChatterRouting.ts')
+    if (name === '@/lib/mcp/skills/context') return require('./helpers/mcp-skill-context.cjs')
     if (name in modules) return modules[name]
     if (name === "@/lib/planLimits") return { isPlanLimitReachedError: () => false }
     if (name === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() }

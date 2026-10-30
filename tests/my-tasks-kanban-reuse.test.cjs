@@ -15,6 +15,9 @@ const sortFile = "src/components/Modals/Kanban/BoardPriorityMode.tsx";
 const saveFile = "src/components/PageComponents/Kanban/HeaderComponents/SaveViewHeaderKanban.tsx";
 const modalFile = "src/components/Modals/ViewModals/SaveViewModal.tsx";
 const commandsFile = "src/components/Modals/commands/HTC/commands.tsx";
+const { createJiti } = require("jiti");
+const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
+const { boardCommands } = jiti(path.join(root, "src/components/Modals/commands/HTC/domains/boardCommands.ts"));
 
 function parsed(file) {
   return ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -83,11 +86,16 @@ test("sort adapter uses controlled BoardPriorityMode and keeps board outside the
   assert.match(read(controlsFile), /<ViewControlButton[\s\S]*<ArrowUpDown size=\{18\} strokeWidth=\{1\.75\}/);
 });
 
-test("commands are defined inside Commands useMemo and dispatch the matching local picker events", () => {
+test("Commands uses board picker commands and dispatches matching local events", () => {
   const memo = declaration(commandsFile, "allCommands_");
-  assert.match(memo, /if \(onMyTasks\)/);
+  assert.match(memo, /getBoardCommands\(\{[\s\S]*?onMyTasks[\s\S]*?myTasksViewsEnabled[\s\S]*?myTasksScopesEnabled/);
+  assert.match(memo, /group: "Boards", commandLists: boardCommands/);
+  const options = { projects: [], onMyTasks: true, myTasksViewsEnabled: true, myTasksFilterParityEnabled: true, myTasksScopesEnabled: true, columnArchiveEnabled: false };
+  const keys = (changes) => boardCommands({ ...options, ...changes }).map(({ key }) => key);
+  assert.deepEqual(keys({}), ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup"]);
+  assert.deepEqual(keys({ onMyTasks: false }), []);
+  assert.deepEqual(keys({ myTasksViewsEnabled: false, myTasksScopesEnabled: false }), ["myTasksGroup"]);
   for (const [key, event] of Object.entries({ myTasksInvolvement: "my-tasks-involvement-picker", myTasksSort: "my-tasks-sort-picker", myTasksGroup: "my-tasks-group-picker" })) {
-    assert.match(memo, new RegExp(`key: "${key}"`));
     assert.match(read(commandsFile), new RegExp(`${key}: "${event}"`));
     assert.match(read(controlsFile), new RegExp(`addEventListener\\("${event}"`));
     assert.match(read(controlsFile), new RegExp(`removeEventListener\\("${event}"`));

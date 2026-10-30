@@ -8,23 +8,27 @@
     "list": {
       "tool": "hypertask_get_comments_for_task",
       "read_only": true,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "add": {
       "tool": "hypertask_add_comment_to_task",
       "legacy_action": "add",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "update": {
       "tool": "hypertask_update_comment",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     },
     "delete": {
       "tool": "hypertask_delete_comment",
       "read_only": false,
-      "permission": "data"
+      "permission": "data",
+      "as_agent": "board"
     }
   },
   "input_examples": []

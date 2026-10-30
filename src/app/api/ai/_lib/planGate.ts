@@ -34,9 +34,21 @@ export type TeamPlanSource = {
   }> | null;
 };
 
-export function storePlanIdForTeam(team: TeamPlanSource | null | undefined) {
-  if (!team) return "Free" as const;
-  if (isInternalCompTeam(team.id)) return "Pro" as const;
+export async function internalTeamUsesSavedPlan(): Promise<boolean> {
+  try {
+    const { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled("htpr-7852-internal-team-saved-plan", FEATURE_FLAG_OWNER_USER_ID);
+  } catch {
+    return false;
+  }
+}
+
+export function storePlanIdForTeam(
+  team: TeamPlanSource | null | undefined,
+  savedPlanOnly = false,
+) {
+  if (!team) return "Free";
+  if (!savedPlanOnly && isInternalCompTeam(team.id)) return "Pro";
   const row = pickEntitlingSubscriptionRow(
     team.subscriptionPlan,
     team.activeSubscriptionPlanId,
@@ -52,8 +64,12 @@ export async function storePlanIdForProject(
   projectId: number | null | undefined,
   teamId?: string | null
 ) {
-  if (!projectId && !teamId) return "Free" as const;
-  if (isInternalCompTeam(teamId)) return "Pro" as const;
+  if (!projectId && !teamId) return "Free";
+  let savedPlanOnly = false;
+  if (isInternalCompTeam(teamId)) {
+    savedPlanOnly = await internalTeamUsesSavedPlan();
+    if (!savedPlanOnly) return "Pro";
+  }
   const team = projectId
     ? (
         await prisma.project.findUnique({
@@ -93,7 +109,10 @@ export async function storePlanIdForProject(
           },
         },
       });
-  return storePlanIdForTeam(team);
+  if (!savedPlanOnly && isInternalCompTeam(team?.id)) {
+    savedPlanOnly = await internalTeamUsesSavedPlan();
+  }
+  return storePlanIdForTeam(team, savedPlanOnly);
 }
 
 export async function backgroundClaudeModelEnabled(userId: number | null | undefined): Promise<boolean> {

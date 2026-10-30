@@ -3,6 +3,7 @@ import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
@@ -281,6 +282,7 @@ export async function GET(request: NextRequest) {
       }
 
       if (orConditions.length > 0) {
+        const { getMcpSkillContext } = await import('@/lib/mcp/skills/context')
         const includeAiSummary = !ctx.agentId && !ctx.management &&
           await isFeatureEnabled(HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, user.id).catch(() => false)
 
@@ -290,6 +292,12 @@ export async function GET(request: NextRequest) {
         }
 
         const include = {
+          comments: {
+            where: { activity: { equals: Prisma.DbNull } },
+            select: { text: true },
+            orderBy: { createdAt: 'desc' as const },
+            take: 20,
+          },
           ...taskMcpGetInclude(user.id, ctx.agentId, ctx.teamScope),
           ...(includeAiSummary ? {
             Task_Summary: {
@@ -337,8 +345,14 @@ export async function GET(request: NextRequest) {
           )
         }
 
-        const mapTask = (task: (typeof tasks)[number]) => {
-          const mapped = mapTaskToMcpGetResponse(task, user.id, ctx.agentId, ctx.teamScope)
+        const mapTask = async (task: (typeof tasks)[number]) => {
+          const detail = mapTaskToMcpGetResponse(task, user.id, ctx.agentId, ctx.teamScope)
+          const mapped = {
+            ...detail,
+            skill_context: await getMcpSkillContext(ctx, task.projectId, [
+              detail.title, detail.description, ...(task.comments ?? []).map(comment => comment.text),
+            ]),
+          }
           if (!includeAiSummary) return mapped
           const summary = (task as { Task_Summary?: { content: string; updatedAt: Date | null; createdAt: Date }[] }).Task_Summary?.[0]
           return {
@@ -353,13 +367,13 @@ export async function GET(request: NextRequest) {
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTask(tasks[0])
+            task: await mapTask(tasks[0])
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map(mapTask)
+          tasks: await Promise.all(tasks.map(mapTask))
         })
       }
     }

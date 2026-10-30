@@ -1,7 +1,7 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
+import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, composeTaskOriginalNoteAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -30,7 +30,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
@@ -71,6 +71,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
+  const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
   const newTaskWindow = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG) && enabled;
   const progressFlag = useFlag(HTPR_6951_TASK_WRITING_PROGRESS_FLAG);
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
@@ -126,6 +127,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const setPendingFollowup = useSetRecoilState(composeTaskSkillFollowupAtom);
   const setIntro = useSetRecoilState(composeTaskChatIntroAtom);
   const setQuestionsTaskId = useSetRecoilState(composeTaskQuestionsTaskIdAtom);
+  const setOriginalNote = useSetRecoilState(composeTaskOriginalNoteAtom);
   const setNewTicketPath = useSetRecoilState(aiChatNewTicketPathAtom);
   const setShowChat = useSetRecoilState(showAIChatInterfaceAtom);
   const setSidebar = useSetRecoilState(isAiChatSidebarModeAtom);
@@ -361,7 +363,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       } else if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       if (mobile && newTaskWindow) await onCreated();
       const content = composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason);
-      if (ticketQuestionsEnabled && / from your note\. Want me to refine it\?/.test(content)) setQuestionsTaskId(task.id);
+      if (ticketQuestionsEnabled && / from your note\. Want me to refine it\?/.test(content)) {
+        if (actionChipsEnabled) setOriginalNote({ taskId: task.id, note: text });
+        setQuestionsTaskId(task.id);
+      }
       if (skillFollowupEnabled && !writerFailed && skills?.length) {
         setPendingFollowup({ taskId: task.id });
         void (async () => {

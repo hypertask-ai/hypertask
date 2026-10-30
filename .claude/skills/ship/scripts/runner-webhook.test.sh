@@ -297,7 +297,7 @@ eq "missing coordinator identity fails without a request" "$(chat_reply ht-produ
 cat > "$T/vcc" <<'EOF'
 #!/usr/bin/env bash
 case "$1 $2" in
-  "task list") echo '{"success":true,"tasks":[]}' ;;
+  "task list") echo '{"success":true,"total":0,"tasks":[]}' ;;
   "inbox list") cat "$FAKE_INBOX" ;;
   *) exit 9 ;;
 esac

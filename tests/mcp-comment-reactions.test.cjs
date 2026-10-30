@@ -265,6 +265,7 @@ function loadCommentsRoute({
   const mockRequire = (request) => {
     if (request === './agentChatterRouting') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentChatterRouting.ts'))
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)
+    if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs")
     if (modules[request]) return modules[request]
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false }
     throw new Error(`Unexpected import: ${request}`)

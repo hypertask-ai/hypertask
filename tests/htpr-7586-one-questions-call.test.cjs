@@ -50,6 +50,7 @@ async function withSidebar(options, check) {
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
+    "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
     "@/lib/flags/keys": {
       HTPR_7586_ONE_QUESTIONS_CALL_FLAG: flag,
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,

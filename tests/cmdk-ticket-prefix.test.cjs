@@ -10,6 +10,7 @@ const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const registry = jiti(path.join(root, "src/components/Modals/commands/HTC/AllCommands.ts"));
+const { boardCommands: getBoardCommands } = jiti(path.join(root, "src/components/Modals/commands/HTC/domains/boardCommands.ts"));
 const palette = "src/components/Modals/commands/HTC/commands.tsx";
 const prefixKey = "settingsBoardTicketPrefix";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -50,7 +51,7 @@ function flagBindings(file, enabled, githubEnabled = false) {
 
 function paletteGroups(enabled, frequent = {}, contextOptions, githubEnabled = false) {
   const bindings = {
-    ...registry, ...flagBindings(palette, enabled, githubEnabled), CommandMode,
+    ...registry, ...flagBindings(palette, enabled, githubEnabled), CommandMode, getBoardCommands,
     useMemo: (callback) => callback(),
     boardLayout: "board", calendarSettings: { showWeekends: true },
     currentProject: { id: 15 }, frequentlyUsed: frequent, projects: [],
