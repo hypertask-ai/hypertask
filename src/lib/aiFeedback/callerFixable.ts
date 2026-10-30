@@ -9,26 +9,8 @@ export function callerCanFix(refusal: FeedbackRefusal): boolean {
   return Boolean(refusal.field);
 }
 
-export function refusalFromZodIssues(issues: readonly { code: string; path?: readonly PropertyKey[]; keys?: readonly string[]; options?: readonly unknown[] }[]): FeedbackRefusal {
-  const issue = issues[0];
-  if (!issue) return {};
-  const field = issue.code === "unrecognized_keys" ? issue.keys?.[0] : issue.path?.filter((part) => typeof part === "string").join(".") || undefined;
-  return {
-    code: issue.code,
-    ...(field ? { field } : {}),
-    ...(issue.options && issue.options.length ? { options: issue.options } : {}),
-  };
-}
-
-export function refusalFromThrown(error: unknown, status: number): FeedbackRefusal {
-  const issues = (error as { issues?: unknown } | null)?.issues;
-  if (Array.isArray(issues)) return refusalFromZodIssues(issues as Parameters<typeof refusalFromZodIssues>[0]);
-  if (status >= 500) return {};
-  const details = (error as { details?: Record<string, unknown> } | null)?.details;
-  return {
-    code: typeof details?.code === "string" ? details.code : undefined,
-    field: typeof details?.field === "string" ? details.field : undefined,
-  };
+export function callerCanFixRefusal(details: FeedbackRefusal | undefined, status: number): boolean {
+  return status < 500 && callerCanFix(details ?? {});
 }
 
 export const RECENTLY_FILED_HOURS = 24;

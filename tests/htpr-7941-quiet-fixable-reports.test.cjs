@@ -18,18 +18,12 @@ test('a value the caller wrote in the wrong format is one the caller can fix (HT
   assert.equal(fixable.callerCanFix({ code: 'invalid_format' }), false)
 })
 
-test('a thrown refusal becomes the same refusal whether it arrived as zod issues or as structured details', () => {
-  assert.deepEqual(
-    fixable.refusalFromThrown({ issues: [{ code: 'invalid_format', path: ['input'] }] }, 400),
-    { code: 'invalid_format', field: 'input' },
-  )
-  assert.deepEqual(
-    fixable.refusalFromThrown({ details: { code: 'invalid_format', field: 'input' } }, 400),
-    { code: 'invalid_format', field: 'input' },
-  )
-  assert.deepEqual(fixable.refusalFromThrown({ details: { code: 'invalid_format', field: 'input' } }, 500), {})
-  assert.deepEqual(fixable.refusalFromThrown(new Error('storage failed'), 500), {})
-  assert.equal(fixable.callerCanFix(fixable.refusalFromThrown(new Error('storage failed'), 400)), false)
+test('a refusal with a caller-fixable code is quiet only under 500 (HTPR-8202)', () => {
+  assert.equal(fixable.callerCanFixRefusal({ code: 'invalid_format', field: 'input' }, 400), true)
+  assert.equal(fixable.callerCanFixRefusal({ code: 'invalid_type', field: 'input' }, 400), true)
+  assert.equal(fixable.callerCanFixRefusal({ code: 'invalid_format', field: 'input' }, 500), false)
+  assert.equal(fixable.callerCanFixRefusal({ code: 'custom', field: 'input' }, 400), false)
+  assert.equal(fixable.callerCanFixRefusal(undefined, 400), false)
 })
 
 test('a refusal that names nothing the caller can fix still files', () => {
@@ -37,18 +31,6 @@ test('a refusal that names nothing the caller can fix still files', () => {
   assert.equal(fixable.callerCanFix({ code: 'custom', field: 'input' }), false)
   assert.equal(fixable.callerCanFix({}), false)
   assert.equal(fixable.callerCanFix({ code: 'tool-exception' }), false)
-})
-
-test('zod issues become a refusal with the offending field or the accepted values', () => {
-  assert.deepEqual(
-    fixable.refusalFromZodIssues([{ code: 'unrecognized_keys', keys: ['contnet'], path: [] }]),
-    { code: 'unrecognized_keys', field: 'contnet' },
-  )
-  assert.deepEqual(
-    fixable.refusalFromZodIssues([{ code: 'invalid_enum_value', path: ['input', 'relation_type'], options: ['RelatedTo', 'BlockedBy'] }]),
-    { code: 'invalid_enum_value', field: 'input.relation_type', options: ['RelatedTo', 'BlockedBy'] },
-  )
-  assert.deepEqual(fixable.refusalFromZodIssues([]), {})
 })
 
 test('a fingerprint filed in the last day is quiet, an older one is not', () => {
