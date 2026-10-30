@@ -77,19 +77,21 @@ question_check() {
     ($paragraphs | map(if $md then gsub("\\*\\*"; "") else unmention | visible end)) as $plain |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
      else $text | visible end) as $visible |
-    ([$plain | to_entries[] | select(.value | startswith("Question:")) | .key] | first) as $question_index |
+    ([$paragraphs | to_entries[] | select(.value |
+      (if $md then . else unmention end) |
+      [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
+        else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
+        (if $md then . else visible end) | endswith("?")] | any) | .key] | first) as $question_index |
     (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
     [
-      (if any($paragraphs[];
-        (if $md then . else unmention end) |
-        [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
-          else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
-          (if $md then . else visible end) | endswith("?")] | any)
+      (if $question_index != null
        then empty else "Question: <strong>yes/no question?</strong> (Markdown: Question: **yes/no question?**)" end),
       ("Yes:", "No:", "My recommendation:") as $part |
         if any($plain[]; startswith($part)) then empty else $part end
     ] + [
+      (if ([$plain[] | select(startswith("Question:"))] | length) > 1
+       then "only one Question:" else empty end),
       (if $question_index != null and $question_index > 3
        then "at most 3 lines before Question:" else empty end),
       (if $question_index != null and ($plain[$question_index + 1] // "" | startswith("My recommendation:") | not)

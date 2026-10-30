@@ -359,6 +359,15 @@ late='<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p><p>My reco
 question_refused 'right under' comment add X-1 --kind question --text "$late"
 fixture "$late"
 review_refused 'right under' task move X-1 --section 'Valentin Review'
+for text in \
+  "<p>Question: Earlier?</p><p>My recommendation: yes.</p><p>One.</p><p>Two.</p>$plain" \
+  "<p>Question: Earlier?</p><p>My recommendation: yes.</p>$late"; do
+  question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+done
+question_refused '3 lines' comment add X-1 --kind question --text "<p>Question: Earlier?</p><p>My recommendation: yes.</p><p>One.</p><p>Two.</p>$plain"
+question_refused 'right under' comment add X-1 --kind question --text "<p>Question: Earlier?</p><p>My recommendation: yes.</p>$late"
 for link in \
   '<a href="https://linear.app/docs">Linear</a>' \
   'https://notion.so/help' \
@@ -442,6 +451,13 @@ printf '%s\n' "$markdown" > "$T/question.md"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
 question_refused 'My recommendation:' comment add X-1 --kind question --markdown --body "${markdown/My recommendation:/Suggestion:}"
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
+markdown_context=$'Question: Earlier?\nMy recommendation: yes.\nOne.\nTwo.\n'"$markdown"
+markdown_detached=$'Question: Earlier?\nMy recommendation: yes.\nQuestion: **Keep it?**\nWhy: less work.\nMy recommendation: yes.\nYes: keep it.\nNo: remove it.'
+for text in "$markdown_context" "$markdown_detached"; do
+  question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "$text"
+done
+question_refused '3 lines' comment add X-1 --kind question --markdown --text "$markdown_context"
+question_refused 'right under' comment add X-1 --kind question --markdown --text "$markdown_detached"
 question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
 OAuth"
 question_refused 'links' comment add X-1 --kind question --markdown --text "$markdown
