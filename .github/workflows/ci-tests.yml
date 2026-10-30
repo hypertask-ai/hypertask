@@ -304,7 +304,9 @@ jobs:
 
       - name: Check board registration boundaries
         run: |
-          npx depcruise --config .dependency-cruiser.cjs src/components/Modals/commands/HTC/domains
+          npx depcruise --config .dependency-cruiser.cjs --output-type json src/components/Modals/commands/HTC/domains > "$RUNNER_TEMP/boundary-report.json"
+          jq '.summary | {error, violations, totalCruised, totalDependenciesCruised}' "$RUNNER_TEMP/boundary-report.json"
+          jq -e '.summary.error == 0 and any(.modules[]; .source == "src/components/Modals/commands/HTC/domains/boardCommands.ts" and any(.dependencies[]; .resolved == "src/models/enums.ts"))' "$RUNNER_TEMP/boundary-report.json"
           node --test tests/domain-boundary.test.cjs
 
       - name: Restore ESLint cache

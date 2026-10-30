@@ -39,7 +39,9 @@ Incomplete list pages cannot release leases. A missing task needs a successful
 individual readback. Older inbox tickets without known leases are treated as Shared until
 reconciled. Leases retain every observed scope until release. A relabel that
 conflicts with another lease stays pending and is withheld; the existing holder
-keeps admission. Pending scopes block new work. Ownership applies to pickup, not
+keeps admission. Pending scopes block new work. Waiting legacy leases are admitted
+in runner-ID order without displacing acquired scopes; this order is deterministic,
+not a fairness guarantee. Ownership applies to pickup, not
 manual claims. It cannot discover pre-existing manual work before that runner's first successful pickup tick. Imported active work can already conflict;
 importing it does not guarantee exclusive ownership.
 

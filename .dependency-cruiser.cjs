@@ -8,5 +8,5 @@ module.exports = {
       pathNot: '^(src/components/Modals/commands/HTC/domains/boardCommands\\.(ts|tsx)$|src/components/Modals/commands/HTC/HTCTypes\\.(ts|tsx)$|src/models/(enums|model)\\.(ts|tsx)$)',
     },
   }],
-  options: { doNotFollow: { path: 'node_modules' }, tsConfig: { fileName: 'tsconfig.json' } },
+  options: { doNotFollow: { path: 'node_modules' }, tsConfig: { fileName: 'tsconfig.json' }, tsPreCompilationDeps: true },
 };

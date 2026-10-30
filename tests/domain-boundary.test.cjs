@@ -6,7 +6,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 const root = path.resolve(__dirname, '..');
-const cli = path.join(root, 'node_modules/dependency-cruiser/bin/dependency-cruise.mjs');
+const cli = path.join(root, 'node_modules/dependency-cruiser/bin/dependency-cruiser.mjs');
 const config = path.join(root, '.dependency-cruiser.cjs');
 
 test('board registration boundary accepts contracts and rejects concrete domains', () => {
@@ -24,19 +24,39 @@ test('board registration boundary accepts contracts and rejects concrete domains
     put('src/lib/flags.ts', 'export const flags = 1;');
     put('src/components/Modals/commands/HTC/domains/other.ts', 'export const other = 1;');
     const board = 'src/components/Modals/commands/HTC/domains/boardCommands.ts';
-    for (const [imports, expected] of [
-      ["import { mode } from '@/models/enums'; import type { Contract } from '../HTCTypes'; export const a: Contract = String(mode);", 0],
-      ["import { commands } from '../commands'; export { commands };", 1],
-      ["import { other } from './other'; export { other };", 1],
-      ["import { flags } from '@/lib/flags'; export { flags };", 1],
-    ]) {
+    const cases = [
+      ["import { mode } from '@/models/enums'; import type { Contract } from '../HTCTypes'; export const a: Contract = String(mode);", ['src/models/enums.ts', 'src/components/Modals/commands/HTC/HTCTypes.ts'], false],
+      ["import { commands } from '../commands'; export { commands };", ['src/components/Modals/commands/HTC/commands.ts'], true],
+      ["import { other } from './other'; export { other };", ['src/components/Modals/commands/HTC/domains/other.ts'], true],
+      ["import { flags } from '@/lib/flags'; export { flags };", ['src/lib/flags.ts'], true],
+      ["import type { flags } from '@/lib/flags'; export type Flag = typeof flags;", ['src/lib/flags.ts'], true],
+    ];
+    for (const [imports, targets, forbidden] of cases) {
       put(board, imports);
-      const result = spawnSync(process.execPath, [cli, '--config', config, '--ts-config', 'tsconfig.json', board], { cwd: dir, encoding: 'utf8' });
-      assert.equal(result.status, expected, result.stderr + result.stdout);
+      const args = [cli, '--config', config, '--ts-config', 'tsconfig.json'];
+      const result = spawnSync(process.execPath, [...args, board], { cwd: dir, encoding: 'utf8' });
+      assert.equal(result.status, forbidden ? 1 : 0, result.stderr + result.stdout);
+      const json = spawnSync(process.execPath, [...args, '--output-type', 'json', board], { cwd: dir, encoding: 'utf8' });
+      assert.equal(json.status, 0, json.stderr);
+      const report = JSON.parse(json.stdout);
+      const module = report.modules.find((item) => item.source === board);
+      assert.ok(module, `Missing scanned module: ${board}`);
+      for (const target of targets) {
+        assert.ok(report.modules.some((item) => item.source === target), `Missing module: ${target}`);
+        assert.ok(module.dependencies.some((item) => item.resolved === target), `Missing dependency: ${target}`);
+      }
+      assert.deepEqual(report.summary.violations.map(({ from, to, rule }) => ({ from, to, name: rule.name, severity: rule.severity })), forbidden
+        ? [{ from: board, to: targets[0], name: 'board-registration-boundary', severity: 'error' }]
+        : []);
     }
     put(board, "import { mode } from '@/models/enums'; export { mode };");
     put('src/components/Modals/commands/HTC/commands.ts', "import { mode } from './domains/boardCommands'; export { mode };");
-    const assembly = spawnSync(process.execPath, [cli, '--config', config, '--ts-config', 'tsconfig.json', 'src/components/Modals/commands/HTC/commands.ts'], { cwd: dir, encoding: 'utf8' });
+    const assembly = spawnSync(process.execPath, [cli, '--config', config, '--ts-config', 'tsconfig.json', '--output-type', 'json', 'src/components/Modals/commands/HTC/commands.ts'], { cwd: dir, encoding: 'utf8' });
     assert.equal(assembly.status, 0, assembly.stderr + assembly.stdout);
+    const report = JSON.parse(assembly.stdout);
+    const module = report.modules.find((item) => item.source === 'src/components/Modals/commands/HTC/commands.ts');
+    assert.ok(module?.dependencies.some((item) => item.resolved === board));
+    assert.ok(report.modules.some((item) => item.source === board));
+    assert.deepEqual(report.summary.violations, []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

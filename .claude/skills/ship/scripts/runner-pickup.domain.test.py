@@ -111,6 +111,54 @@ else: sys.exit(9)
         self.assertEqual(self.items(2), [])
         self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']['held'], ['Shared'])
 
+    def test_two_legacy_inboxes_admit_in_order_and_release(self):
+        a, b = self.task(1, 'HTPR-1', 'Commands'), self.task(2, 'HTPR-2', 'Commands')
+        for n, ticket in ((1, 'HTPR-1'), (2, 'HTPR-2')):
+            (self.state / f'runner-{n}.json').write_text(json.dumps({'items': [{'ticket': ticket}]}))
+        self.board(1, [a]); self.board(2, [b])
+        self.tick(2); self.tick(1); self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), [])
+        a['section'] = 'Done'
+        self.board(1, [a]); self.tick(1); self.tick(2)
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        b['section'] = 'Done'
+        self.board(2, [b]); self.tick(2)
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text()), {})
+
+    def test_existing_pending_leases_recover_deterministically(self):
+        leases = {'1': {'HTPR-1': {'held': ['Shared', 'Commands'], 'current': 'Commands', 'pending': True}},
+                  '2': {'HTPR-2': {'held': ['Shared', 'Commands'], 'current': 'Commands', 'pending': True}}}
+        (self.state / 'domain-ownership.json').write_text(json.dumps(leases))
+        self.board(1, [self.task(1, 'HTPR-1', 'Commands')])
+        self.board(2, [self.task(2, 'HTPR-2', 'Commands')])
+        self.tick(2); self.tick(1); self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), [])
+
+    def test_pending_legacy_does_not_displace_acquired_owner(self):
+        leases = {'1': {'HTPR-1': {'held': ['Shared'], 'current': 'Shared', 'pending': True}},
+                  '2': {'HTPR-2': {'held': ['Commands'], 'current': 'Commands', 'pending': False}}}
+        (self.state / 'domain-ownership.json').write_text(json.dumps(leases))
+        self.board(1, [self.task(1, 'HTPR-1', 'Commands')])
+        self.board(2, [self.task(2, 'HTPR-2', 'Commands')])
+        self.tick(1); self.tick(2)
+        self.assertEqual(self.items(1), [])
+        self.assertEqual(self.items(2), ['HTPR-2'])
+
+    def test_pending_relabel_preserves_acquired_scope_against_legacy(self):
+        changed = self.task(2, 'HTPR-2', 'Commands')
+        self.board(2, [changed]); self.tick(2)
+        self.board(3, [self.task(3, 'HTPR-3', 'Search')]); self.tick(3)
+        changed['labels'] = [{'name': 'Domain: Search'}]
+        self.board(2, [changed]); self.tick(2)
+        (self.state / 'runner-1.json').write_text(json.dumps({'items': [{'ticket': 'HTPR-1'}]}))
+        self.board(1, [self.task(1, 'HTPR-1', 'Commands')]); self.tick(1)
+        self.assertEqual(self.items(1), [])
+        self.assertEqual(self.items(2), [])
+        self.tick(3)
+        self.assertEqual(self.items(3), ['HTPR-3'])
+
     def test_own_legacy_inbox_keeps_unknown_scope(self):
         (self.state / 'runner-1.json').write_text(json.dumps({'items': [{'ticket': 'HTPR-1'}]}))
         self.board(1, [self.task(1, 'HTPR-1', 'Commands')]); self.tick(1)
