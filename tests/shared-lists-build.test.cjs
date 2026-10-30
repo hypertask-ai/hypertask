@@ -16,10 +16,22 @@ function write(file, text) {
   fs.writeFileSync(file, text);
 }
 
+function firstDifference(built, onDisk) {
+  const a = built.split("\n");
+  const b = onDisk.split("\n");
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    if (a[index] !== b[index]) {
+      return `line ${index + 1}: built ${JSON.stringify(a[index])}, on disk ${JSON.stringify(b[index])} (${a.length} vs ${b.length} lines)`;
+    }
+  }
+  return "no line differs";
+}
+
 test("every built list equals its per-entry files, so two authors never edit one list", async () => {
   const { LISTS, build } = await load();
-  const drift = LISTS.filter((list) => build(list) !== fs.readFileSync(path.join(root, list.target), "utf8"))
-    .map((list) => `${list.target} does not match ${list.directory}/. Run node scripts/shared-lists/build.mjs --write`);
+  const drift = LISTS.map((list) => [list, build(list), fs.readFileSync(path.join(root, list.target), "utf8")])
+    .filter(([, built, onDisk]) => built !== onDisk)
+    .map(([list, built, onDisk]) => `${list.target} does not match ${list.directory}/ (${firstDifference(built, onDisk)}). Run node scripts/shared-lists/build.mjs --write`);
   assert.deepEqual(drift, []);
 });
 
