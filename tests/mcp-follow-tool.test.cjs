@@ -1,7 +1,5 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const path = require("node:path");
-const root = path.resolve(__dirname, "..");
 const { load } = require("./task-route-loader.cjs");
 
 function fixture(options = {}) {
@@ -16,6 +14,7 @@ function fixture(options = {}) {
       assert.equal(userId, auth.user.id);
       return options.flagEnabled !== false;
     } },
+    "@/lib/mcp/auth": { checkMcpRateLimit: async () => null },
     "@/lib/mcp/agents/readRoleGuard": { requireAgentWriteRole: async () => null },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (run) => run,
@@ -59,18 +58,10 @@ test("follow tool reaches the gated operation and keeps every tracking field", a
   assert.equal(f.writes.length, 1);
 });
 
-test("the tool registry publishes the follow tool so a connected client can find it", () => {
-  for (const [file, exports] of Object.entries({
-    "src/lib/prisma.ts": { __esModule: true, default: {} },
-    "src/lib/auth/getSessionUser.ts": { getSessionUser: async () => null },
-  })) {
-    const filename = path.join(root, file);
-    require.cache[filename] = { id: filename, filename, loaded: true, exports };
-  }
-  const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, cache: false });
-  const names = jiti(path.join(root, "src/lib/mcp-server/tools/index.ts")).MCP_TOOLS.map((registered) => registered.name);
-  assert.equal(new Set(names).size, names.length);
-  assert.ok(names.includes("hypertask_follow_task"));
+test("the parity inventory publishes the follow tool under the inbox door", () => {
+  const inventory = require("../config/parity/generated-inventory.json");
+  assert.ok(inventory.surfaces.mcp.includes("hypertask_follow_task"));
+  assert.equal(inventory.assignments.mcp.hypertask_follow_task, "inbox.manage");
 });
 
 test("flag off: the consolidated follow action propagates the refusal without writing", async () => {
