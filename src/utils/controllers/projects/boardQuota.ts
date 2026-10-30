@@ -3,12 +3,13 @@ import { Prisma, Status } from "@prisma/client";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import prisma from "@/lib/prisma";
 import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG } from "@/lib/flags/definitions/htpr-7852-internal-team-saved-plan";
 import { HTPR_7982_CANCELLED_FREE_FLAG } from "@/lib/flags/definitions/htpr-7982-cancelled-free";
 import { FREE_BOARD_LIMIT } from "@/lib/freePlanLimits";
 import { subscriptionStatusGrantsAccess } from "@/lib/subscriptionAccess";
 import { assertBoardRoom, assertTicketRoom, isFreeScope, isPlanLimitsEnabled, lockPlanLimitScope, scopeForProject, type PlanLimitContext } from "@/lib/planLimits";
 import { isTeamComped } from "@/lib/teamComp";
+
+const INTERNAL_TEAM_SAVED_PLAN_FLAG = "htpr-7852-internal-team-saved-plan";
 
 export { FREE_BOARD_LIMIT };
 export const FREE_BOARD_LIMIT_MESSAGE = `Free plan includes ${FREE_BOARD_LIMIT} boards. Upgrade to create more.`;
@@ -47,7 +48,7 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
   });
 
   const cancelledFree = await isFeatureEnabled(HTPR_7982_CANCELLED_FREE_FLAG, userId);
-  const savedPlanOnly = await isFeatureEnabled(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
+  const savedPlanOnly = await isFeatureEnabled(INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
 
   if (!savedPlanOnly && teams.some((team) => isInternalCompTeam(team.id))) return true;
 

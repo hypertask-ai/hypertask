@@ -2,7 +2,6 @@ import prisma from "@/lib/prisma";
 import { planKindFromStripePriceId } from "@/lib/planFromStripePriceId";
 import { isInternalCompTeam } from "@/lib/internalCompTeams";
 import { applyTeamComp } from "@/lib/teamComp";
-import { HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG } from "@/lib/flags/definitions/htpr-7852-internal-team-saved-plan";
 import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
@@ -35,10 +34,12 @@ export type TeamPlanSource = {
   }> | null;
 };
 
+const INTERNAL_TEAM_SAVED_PLAN_FLAG = "htpr-7852-internal-team-saved-plan";
+
 export async function internalTeamUsesSavedPlan(): Promise<boolean> {
   try {
     const { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } = await import("@/lib/flags");
-    return await isFeatureEnabled(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
+    return await isFeatureEnabled(INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
   } catch {
     return false;
   }
@@ -48,8 +49,8 @@ export function storePlanIdForTeam(
   team: TeamPlanSource | null | undefined,
   savedPlanOnly = false,
 ) {
-  if (!team) return "Free" as const;
-  if (!savedPlanOnly && isInternalCompTeam(team.id)) return "Pro" as const;
+  if (!team) return "Free";
+  if (!savedPlanOnly && isInternalCompTeam(team.id)) return "Pro";
   const row = pickEntitlingSubscriptionRow(
     team.subscriptionPlan,
     team.activeSubscriptionPlanId,
@@ -65,9 +66,9 @@ export async function storePlanIdForProject(
   projectId: number | null | undefined,
   teamId?: string | null
 ) {
-  if (!projectId && !teamId) return "Free" as const;
+  if (!projectId && !teamId) return "Free";
   const savedPlanOnly = await internalTeamUsesSavedPlan();
-  if (!savedPlanOnly && isInternalCompTeam(teamId)) return "Pro" as const;
+  if (!savedPlanOnly && isInternalCompTeam(teamId)) return "Pro";
   const team = projectId
     ? (
         await prisma.project.findUnique({
