@@ -514,7 +514,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
             <h2 className="mb-2 mt-4 text-meta font-medium text-text-light-gray">Tips</h2>
             <div data-search-layout-tips className="grid min-w-0 grid-cols-1 gap-x-6 @md:grid-cols-2">{rows.filter((row) => row.kind === 'operator').map((row) => renderRow(row, rows.indexOf(row)))}</div>
           </> : rows.map(renderRow)}
-          {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions...</div>}
+          {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions…</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
           {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · {plainSearch && !selectedRow ? 'Tab to accept · Enter to search' : 'Tab / Enter to accept'} · {escFooterText}</div>}
         </div>
@@ -525,7 +525,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           {error && localRows === null && !tips ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
-              loadingLabel="Loading suggestions..."
+              loadingLabel="Loading suggestions…"
               className={mobileEnabled ? "w-full h-full max-h-full max-w-full [&_button]:min-h-[44px]" : "max-w-full"}
               isLoading={localRows === null && !tips && loading}
               hasItems={rows.length > 0}
@@ -539,7 +539,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           )}
         </div>
       )}
-      {!picker && hydrationStatus && <div role={hydrationStatus === 'error' ? 'alert' : 'status'} className="mt-2 text-content text-text-light-gray">{hydrationStatus === 'error' ? 'Could not rebuild search filters. Reload to retry.' : 'Loading search filters...'}</div>}
+      {!picker && hydrationStatus && <div role={hydrationStatus === 'error' ? 'alert' : 'status'} className="mt-2 text-content text-text-light-gray">{hydrationStatus === 'error' ? 'Could not rebuild search filters. Reload to retry.' : 'Loading search filters…'}</div>}
       {summary && (!layoutEnabled || mobileOverlay) && <button type="button"
         style={mobileOverlay && mobileBounds ? { position: 'fixed', top: mobileBounds.summaryTop, left: mobileBounds.left, width: mobileBounds.width, marginTop: 0, zIndex: 301 } : undefined}
         className={`block text-left text-content text-white-black hover:bg-active-elementBg ${mobileOverlay ? "min-h-[44px] h-11 truncate bg-containerBackground" : "mt-2"}`}
