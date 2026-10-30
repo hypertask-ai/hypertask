@@ -1,3 +1,4 @@
+import datetime
 import importlib.machinery
 import importlib.util
 import json
@@ -34,6 +35,10 @@ if args[:2] == ['tasks', 'list']:
     print(json.dumps({'success': True, 'total': len(rows) + int(os.environ.get('BAD_PAGE', '0')), 'tasks': rows[offset:offset+100], 'nextCursor': 'full-page' if len(rows[offset:offset+100]) == 100 else None}))
 elif args[:2] == ['tasks', 'get']:
     print(json.dumps({'success': True, 'tasks': [t for t in tasks if t['ticketNumber'] == args[2]]}))
+elif args[:2] == ['task', 'agent-log']:
+    at = os.environ.get('LOG_AT', '')
+    if at == 'fail': sys.exit(1)
+    print(json.dumps({'success': True, 'activities': [{'createdAt': at}] if at else []}))
 elif args[:2] == ['comment', 'list']:
     print(json.dumps({'success': True, 'comments': [{'id': 1, 'createdAt': '2026-10-01T00:00:00Z', 'agent': {'id': 'a', 'displayName': 'Runner 1'}, 'text': 'Claimed. Claim id: [test resume]'}]}))
 else: sys.exit(1)
@@ -61,7 +66,7 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
     def task(self, ticket, domain, runner=None, section='Todo'):
         return {'ticketNumber': ticket, 'projectId': 4060, 'section': section,
                 'labels': [{'name': 'Domain: ' + domain}],
-                'assignees': [{'agent': {'displayName': f'Runner {runner}'}}] if runner else []}
+                'assignees': [{'agent': {'id': f'agent-{runner}', 'displayName': f'Runner {runner}'}}] if runner else []}
 
     def set_tasks(self, tasks):
         self.board.write_text(json.dumps(tasks))
@@ -70,9 +75,9 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         env = dict(self.env, SHIP_SESSION_NAME=f'RUNNER {runner}', TARGET=ticket, **extra)
         return subprocess.run([str(HERE / 'ship-claim'), ticket], env=env, capture_output=True, text=True)
 
-    def admit(self, runner, ticket):
+    def admit(self, runner, ticket, **extra):
         return subprocess.run(['python3', str(HERE / 'runner-domain-admit.py'), str(runner), ticket],
-                              env=self.env, capture_output=True, text=True)
+                              env=dict(self.env, **extra), capture_output=True, text=True)
 
     def test_conflict_before_write_and_distinct_and_retry(self):
         self.set_tasks([self.task('YPER4-1', 'Commands', 2, 'QA'), self.task('YPER4-2', 'Commands'),
@@ -268,6 +273,33 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
                 result = self.admit(2, 'YPER4-2')
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn('1', json.loads(path.read_text()))
+
+    def test_takeover_only_from_idle_runner(self):
+        owned = self.task('YPER4-1', 'Flags', 2, 'In Progress')
+        owned['labels'] = []
+        self.set_tasks([owned])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        stamp = lambda hours: (now - datetime.timedelta(hours=hours)).isoformat()
+        cases = ((stamp(1), 1, 'owner active an hour ago'), ('fail', 1, 'agent log unreadable'),
+                 (stamp(10), 0, 'owner idle for ten hours'), ('', 0, 'owner never logged'))
+        for log_at, expected, label in cases:
+            with self.subTest(label):
+                self.assertEqual(self.admit(1, 'YPER4-1', LOG_AT=log_at).returncode, expected)
+
+    def test_pending_shared_lease_on_unscoped_ticket_clears_for_its_runner(self):
+        path = self.state / 'domain-ownership.json'
+        stale = {'held': ['Shared', 'Unscoped'], 'current': 'Unscoped', 'pending': True,
+                 'acquired': ['Shared'], 'protected': True}
+        for label, expected in (('', 0), ('Flags', 1)):
+            with self.subTest(ticket_domain=label or 'Unscoped'):
+                old = self.task('YPER4-9', label or 'Flags', 1, 'In Progress')
+                old['labels'] = [{'name': 'Domain: ' + label}] if label else []
+                self.set_tasks([old, self.task('YPER4-2', 'Flags', 2, 'QA'), self.task('YPER4-3', 'Commands')])
+                path.write_text(json.dumps({'1': {'YPER4-9': dict(stale)}}))
+                result = self.admit(1, 'YPER4-3')
+                self.assertEqual(result.returncode, expected, result.stderr)
+                lease = json.loads(path.read_text())['1']['YPER4-9']
+                self.assertEqual(lease['pending'], bool(label))
 
     def test_dispatch_withholds_after_admission_when_pane_changes(self):
         loader = importlib.machinery.SourceFileLoader('dispatch_wait', str(HERE / 'runner-dispatch'))

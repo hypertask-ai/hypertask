@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime as dt
 import fcntl
 import json
 import os
@@ -11,6 +12,7 @@ DOMAINS = {'Commands', 'Flags', 'Search', 'Prompts', 'Parity', 'Shipping'}
 ACTIVE = {'In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review', 'UX Sign-off', 'Flag: Off'}
 UNSCOPED = 'Unscoped'
 TERMINAL = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
+TAKEOVER_IDLE = dt.timedelta(hours=6)
 
 
 def read(*args):
@@ -40,6 +42,23 @@ def domain(task):
     if not found:
         return UNSCOPED
     return next(iter(found)) if len(found) == 1 else 'Shared'
+
+
+def idle_runner(task):
+    now = dt.datetime.now(dt.timezone.utc)
+    for assignee in task['assignees']:
+        agent = assignee.get('agent') or {}
+        if not re.fullmatch(r'Runner [1-9][0-9]*', agent.get('displayName', ''), re.I):
+            continue
+        if not isinstance(agent.get('id'), str):
+            return False
+        log = read('task', 'agent-log', task['ticketNumber'], '--agent', agent['id'], '--limit', '1')
+        if not isinstance(log, dict) or log.get('success') is not True or not isinstance(log.get('activities'), list):
+            return False
+        for activity in log['activities']:
+            if now - dt.datetime.fromisoformat(activity['createdAt'].replace('Z', '+00:00')) <= TAKEOVER_IDLE:
+                return False
+    return True
 
 
 def conflict(a, b):
@@ -133,6 +152,9 @@ def main():
                     del leases[key]
                 elif own:
                     lease.pop('admission', None)
+                    if lease['pending'] and domain(task) == UNSCOPED:
+                        lease.update(held=[UNSCOPED], current=UNSCOPED, pending=False)
+                        lease.pop('acquired', None)
             if not leases:
                 del owners[slot]
         for task in tasks.values():
@@ -180,7 +202,7 @@ def main():
             blocked = True
         assigned = [(a.get('agent') or {}).get('displayName', '') for a in tasks[ticket]['assignees']]
         if any(re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) and name.casefold() != ('runner ' + runner).casefold() for name in assigned):
-            blocked = True
+            blocked = blocked or not idle_runner(tasks[ticket])
         if not blocked:
             lease = mine.setdefault(ticket, {'held': [d], 'current': d, 'pending': False})
             if d not in lease['held']:
