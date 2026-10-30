@@ -12,6 +12,7 @@ import {
   decideCoreSmokeAccess,
   isProductionCoreSmokeRequest,
 } from "../src/lib/productionSmoke/access";
+import { silenceCoreSmokeEmail } from "../src/lib/productionSmoke/quietEmail";
 import {
   CoreSmokeLockUnavailableError,
   CoreSmokeRunDeadlineError,
@@ -1162,4 +1163,20 @@ test("reports a rank that cleanup could not restore", async () => {
   assert.equal(result.ok, false);
   assert.equal(result.action, "cleanup verify");
   assert.equal(app.state.ranking, "rank-mutated");
+});
+
+test("the smoke identity stops receiving notification email before a run", async () => {
+  const writes: { where: { userId: number }; data: { notification: boolean } }[] = [];
+  await silenceCoreSmokeEmail(fixture.userId, {
+    userSetting: {
+      updateMany: async (args) => {
+        writes.push(args);
+        return { count: 1 };
+      },
+    },
+  });
+
+  assert.deepEqual(writes, [
+    { where: { userId: fixture.userId }, data: { notification: false } },
+  ]);
 });

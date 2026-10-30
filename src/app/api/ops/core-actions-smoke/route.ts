@@ -20,6 +20,7 @@ import {
   CoreSmokeLockUnavailableError,
   withCoreSmokeLock,
 } from "@/lib/productionSmoke/lock";
+import { silenceCoreSmokeEmail } from "@/lib/productionSmoke/quietEmail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -160,6 +161,7 @@ export async function POST(request: NextRequest) {
 
   let result;
   try {
+    await silenceCoreSmokeEmail(user.id, prisma);
     result = await withCoreSmokeLock(`${projectId}:${taskId}`, (signal) =>
       runCoreActionsSmoke({
         baseUrl: PRODUCTION_ORIGIN,
