@@ -124,6 +124,11 @@ roll() { # state then name:status:conclusion ...
   printf '%s\n' "$@" | jq -Rn --arg st "$st" '{state:$st, statusCheckRollup:[inputs | split(":") | {__typename:"CheckRun", name:.[0], status:.[1], conclusion:(.[2] // "")}]}' > "$T/rollup"
 }
 chmod +x "$T/gh"; roll OPEN "CI Tests:IN_PROGRESS:" "Lint:COMPLETED:SUCCESS"
+for repo in '' 'not-a-repository' 'owner/repo/extra'; do
+  CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --repo "$repo" >/dev/null 2>&1
+  eq "invalid explicit repository exits 3 ($repo)" "$?" 3
+done
+[ ! -e "$T/gh.log" ] && ok "invalid repository makes no GitHub reads" || bad "invalid repository read GitHub"
 ( CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify CI_WAIT_TICK=1 CI_WAIT_GAP=0 ./ci-wait 6 --repo hypertask-ai/hypertask --timeout 30 > "$T/cw.out"; echo $? > "$T/cw.rc" ) &
 CW=$!
 sleep 3
