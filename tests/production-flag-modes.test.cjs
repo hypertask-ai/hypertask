@@ -33,12 +33,25 @@ test("the plain QA view marks released flags Everyone and never leaves a hidden 
   assert.deepEqual(snapshot.modes, { "htpr-1-a": "EVERYONE", "htpr-2-b": "OFF", "htpr-3-c": "OWNER_ONLY" });
 });
 
-test("output is sorted and stable", async () => {
-  const { serialize } = await load();
-  const text = serialize({ ...fresh(), modes: { "htpr-3-c": "OFF", "htpr-1-a": "OFF" } });
+test("the copy is written from one file per flag, sorted, and rebuilt after one flag is retired", async () => {
+  const { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const { writeEntries } = await load();
+  const root = mkdtempSync(path.join(tmpdir(), "flag-modes-"));
+  const entries = path.join(root, "e2e/smoke/flag-modes");
+  mkdirSync(entries, { recursive: true });
+  writeEntries(root, { ...fresh(), modes: { "htpr-3-c": "OFF", "htpr-1-a": "OFF" } });
+  const target = path.join(root, "e2e/smoke/production-flag-modes.json");
+  const text = readFileSync(target, "utf8");
   assert.deepEqual(Object.keys(JSON.parse(text).modes), ["htpr-1-a", "htpr-3-c"]);
   assert.ok(text.endsWith("}\n"));
-  assert.equal(serialize(JSON.parse(text)), text);
+  assert.deepEqual(readdirSync(entries).sort(), ["_header.json", "htpr-1-a.json", "htpr-3-c.json"]);
+  assert.equal(JSON.parse(readFileSync(path.join(entries, "htpr-1-a.json"), "utf8")).mode, "OFF");
+  rmSync(path.join(entries, "htpr-3-c.json"));
+  writeEntries(root, { ...fresh(), modes: { "htpr-1-a": "OFF" } });
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(target, "utf8")).modes), ["htpr-1-a"]);
+  assert.deepEqual(readdirSync(entries).sort(), ["_header.json", "htpr-1-a.json"]);
+  rmSync(root, { recursive: true, force: true });
 });
 
 test("the check fails for a missing flag, a bad mode, a stale date and hand-edited order", async () => {

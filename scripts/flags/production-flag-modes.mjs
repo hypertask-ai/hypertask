@@ -1,5 +1,7 @@
 // Generates and checks e2e/smoke/production-flag-modes.json, the credential-free copy of the live
-// feature flag modes that the browser-smoke job and the layout lock use. Never hand-edit that file.
+// feature flag modes that the browser-smoke job and the layout lock use. Never hand-edit that file:
+// it is built from e2e/smoke/flag-modes/, one file per flag, so retiring or adding a flag touches
+// one small file (HTPR-8194).
 //
 //   node scripts/flags/production-flag-modes.mjs --write        read live modes, rewrite the file
 //   node scripts/flags/production-flag-modes.mjs --add-defaults add flags that are new in code, with their registry default
@@ -11,10 +13,11 @@
 // account itself (also sees Owner + QA). Together they tell Everyone, Owner + QA and Off apart. CI never calls
 // either: it only runs --check, which reads the repo alone.
 import { createRequire } from "node:module";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { localFlagModes, readPlainQaFlags } from "../premerge-local-flags.mjs";
+import { build, listById } from "../shared-lists/build.mjs";
 
 process.env.FEATURE_FLAG_TYPESCRIPT_PATH = createRequire(import.meta.url).resolve("typescript");
 const { FLAG_DEFINITIONS_DIRECTORY, parseFlagFiles } = await import("../../.github/scripts/feature-flag-registry.mjs");
@@ -58,7 +61,25 @@ export function buildSnapshot(defaults, live, now = new Date()) {
   return { source: SNAPSHOT_SOURCE, view, capturedAt: now.toISOString(), modes: sorted(modes) };
 }
 
-export const serialize = (snapshot) => `${JSON.stringify({ ...snapshot, modes: sorted(snapshot.modes) }, null, 2)}\n`;
+// Writes one small file per flag plus the capture header, then rebuilds the copy every reader uses.
+// A flag appears or disappears by one file, so two authors retiring different flags never clash.
+export function writeEntries(root, snapshot) {
+  const list = listById("flag-modes");
+  const directory = path.join(root, list.directory);
+  mkdirSync(directory, { recursive: true });
+  const kept = new Set(Object.keys(snapshot.modes).map((key) => `${key}.json`));
+  for (const name of readdirSync(directory)) {
+    if (list.entryPattern.test(name) && !kept.has(name)) rmSync(path.join(directory, name));
+  }
+  for (const [key, mode] of Object.entries(sorted(snapshot.modes))) {
+    const text = `${JSON.stringify({ mode }, null, 2)}\n`;
+    const file = path.join(directory, `${key}.json`);
+    if (!existsSync(file) || readFileSync(file, "utf8") !== text) writeFileSync(file, text);
+  }
+  const header = Object.fromEntries(Object.entries(snapshot).filter(([field]) => field !== "modes"));
+  writeFileSync(path.join(directory, list.headerFile), `${JSON.stringify(header, null, 2)}\n`);
+  writeFileSync(path.join(root, list.target), build(list, root));
+}
 
 // A flag missing from the copy is not an error: readers use its registry default until the refresher adds it.
 export function missingFlags(snapshot, defaults) {
@@ -130,14 +151,17 @@ async function main(argv, root) {
   const defaults = definitionDefaults(root);
   const mode = argv.find((arg) => ["--write", "--add-defaults", "--check", "--check-live"].includes(arg));
   if (mode === "--write") {
-    writeFileSync(file, serialize(buildSnapshot(defaults, await readLive())));
+    writeEntries(root, buildSnapshot(defaults, await readLive()));
     console.log(`Wrote ${SNAPSHOT_PATH} (${Object.keys(defaults).length} flags)`);
   } else if (mode === "--add-defaults") {
-    writeFileSync(file, serialize(addMissingDefaults(read(), defaults)));
+    writeEntries(root, addMissingDefaults(JSON.parse(build(listById("flag-modes"), root)), defaults));
     console.log(`Updated ${SNAPSHOT_PATH}`);
   } else if (mode === "--check" || mode === "--check-live") {
     const snapshot = read();
     const problems = snapshotProblems(snapshot, defaults);
+    if (build(listById("flag-modes"), root) !== readFileSync(file, "utf8")) {
+      problems.push(`${SNAPSHOT_PATH} does not match the per-flag files; run node scripts/shared-lists/build.mjs --write`);
+    }
     const missing = missingFlags(snapshot, defaults);
     if (missing.length) console.log(`note: not in the copy yet (readers use the registry default): ${missing.join(", ")}`);
     if (mode === "--check-live") problems.push(...modeDifferences(snapshot, buildSnapshot(defaults, await readLive())));

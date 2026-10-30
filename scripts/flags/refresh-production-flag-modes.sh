@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Keeps e2e/smoke/production-flag-modes.json fresh. Runs on the VPS from a systemd timer, where the
-# plain QA session is available, never in CI. It regenerates the file in a throwaway worktree of
-# origin/production and, only when the file changed (modes, or capture older than 7 days), pushes
+# plain QA session is available, never in CI. It regenerates the per-flag files under
+# e2e/smoke/flag-modes/ and the built copy in a throwaway worktree of origin/production and, only
+# when either changed (modes, or capture older than 7 days), pushes
 # branch flag-modes-refresh and opens or updates ONE pull request. It never merges anything.
 # A missing QA session or a failed live read exits non-zero and changes nothing.
 set -euo pipefail
 file=e2e/smoke/production-flag-modes.json
+dir=e2e/smoke/flag-modes
 pause="$HOME/.local/state/gh-shared-cache/pause-until"
 if [ -r "$pause" ] && [ "$(date +%s)" -lt "$(tr -dc 0-9 < "$pause" | head -c 12 | sed 's/^$/0/')" ]; then
   echo "flag-modes-refresh: paused by gh-shared-cache pause-until, skipping"
@@ -23,7 +25,8 @@ if ! node scripts/flags/production-flag-modes.mjs --write; then
   exit 1
 fi
 committed_age=$(git show "origin/production:$file" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Math.floor((Date.now()-Date.parse(JSON.parse(s).capturedAt))/86400000)))')
-if git diff --quiet -I'"capturedAt"' -- "$file" && [ "$committed_age" -lt 7 ]; then
+git add -A -- "$dir"
+if git diff --cached --quiet -I'"capturedAt"' -- "$dir" "$file" && [ "$committed_age" -lt 7 ]; then
   echo "flag-modes-refresh: live modes unchanged and the copy is $committed_age days old, nothing to do"
   for n in $(gh pr list --repo hypertask-ai/hypertask --head flag-modes-refresh --state open --json number --jq '.[].number'); do
     gh pr close "$n" --repo hypertask-ai/hypertask --delete-branch --comment "Live switch settings match production again; closing."
@@ -31,7 +34,7 @@ if git diff --quiet -I'"capturedAt"' -- "$file" && [ "$committed_age" -lt 7 ]; t
   exit 0
 fi
 git checkout -q -B flag-modes-refresh
-git add "$file"
+git add -A -- "$dir" "$file"
 git commit -q -m "YPER4-253 [INFRA] Refresh the live switch settings copy"
 git push -q --force origin flag-modes-refresh
 if [ -n "$(gh pr list --repo hypertask-ai/hypertask --head flag-modes-refresh --state open --json number --jq '.[].number')" ]; then

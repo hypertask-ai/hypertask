@@ -1,0 +1,21 @@
+## Visual regression (informational v1)
+
+`Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on non-draft production PRs touching screen or harness files; manual runs accept `base` and `head` refs.
+It builds base then head on one GitHub-hosted runner, each with a fresh disposable database; base creates temporary expected PNGs and head compares against them.
+Each build restores the production browser-smoke Next.js incremental cache using that checkout's lockfile/config hash and resolved commit, with the same compatible-hash fallback. Restore uses the producer's `.next/cache` archive path, then moves only that directory into the matching checkout before building. Visual runs never publish shared build caches; successful production browser-smoke pushes remain the only producer. A screenshot-cache hit skips the unused base restore, and production baseline-only runs skip the unused head restore. Cold misses still build and compare normally.
+The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
+Base and head must install the same Playwright version, so one Chromium build draws both sides; a run stops when they differ and a Playwright bump needs fresh production baselines. Each checkout must also install exactly the version its own `package-lock.json` locks, and a cached base is compared against the base commit's locked version. Chromium captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
+On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
+Production pushes capture the ten base PNGs once and save them with `actions/cache`.
+PRs and manual comparisons restore only the exact key: base SHA, OS/architecture,
+runner image version, and the head visual harness, seed, search stub, paired runner
+and workflow hashes. There are no fallback keys; changed harnesses miss the cache.
+Only successful production pushes save; PR-created caches cannot supply production
+baselines. A hit validates all ten PNG signatures and viewport dimensions, skips
+the base lifecycle, and still seeds, builds and compares the head. A miss retains
+the existing paired lifecycle. Missing or malformed cached screenshots fail closed.
+Phase timings mark skipped base work as `not reached`; summaries name cache reuse.
+Only PNGs are cached, never databases, auth state or browser traces.
+
+An intended visual change is approved by a human in the PR description with `Visual change approved: <ticket URL>`; the job still shows the diff and does not auto-approve it.
+This v1 signal is not required by a ruleset and does not replace existing browser-smoke, layout locks or premerge evidence. No committed PNG baselines or storage-state artifacts are used.
