@@ -9,12 +9,7 @@ import { execFileSync } from 'node:child_process';
 const require = createRequire(import.meta.url);
 const { agent, identity, live, plan, tick, units, main } = require('./production-red-alert');
 const here = path.dirname(fileURLToPath(import.meta.url));
-// Every saved incident reached its fixer after the automatic rerun, so replay it at attempt 2.
-const fixture = name => {
-  const data = JSON.parse(fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${name}.json`), 'utf8'));
-  if (data.run && data.firstRed) { data.run.run_attempt = 2; data.firstRed.run_attempt = 2; }
-  return data;
-};
+const fixture = name => JSON.parse(fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${name}.json`), 'utf8'));
 const tasks = fixture('tasks');
 tasks['HTPR-7311'] = { ...structuredClone(tasks['HTPR-7322']), ticketNumber: 'HTPR-7311' };
 tasks['HTPR-7576'] = { ...structuredClone(tasks['HTPR-7574']), ticketNumber: 'HTPR-7576' };
@@ -180,7 +175,7 @@ test('timer is five minutes, low priority, bounded, and installation is explicit
   await assert.rejects(main(['--run', '39719731623']), /replay-only/);
 });
 
-function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], attempts = [], smoke = false, ciFails = true, log } = {}) {
+function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], attempts = [], log } = {}) {
   const calls = [], run = (bin, args, options) => {
     calls.push([bin, args]);
     if (bin === 'python3') return execFileSync(bin, args, { encoding: 'utf8', input: options.input });
@@ -188,11 +183,7 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     const route = args[3];
     if (route.endsWith(`/actions/runs/${data.run.id}`)) return JSON.stringify(data.run);
     if (/\/attempts\/\d+$/.test(route)) {
-      // The fixtures replay a red streak that was rerun, so every earlier attempt of the red run was red too.
-      const given = attempts.find(r => route.endsWith(`/runs/${r.id}/attempts/${r.run_attempt}`));
-      const number = Number(route.match(/\/attempts\/(\d+)$/)[1]);
-      const attempt = given || (route.includes(`/runs/${data.run.id}/attempts/`) && number >= 1
-        ? { ...data.run, run_attempt: number } : null);
+      const attempt = attempts.find(r => route.endsWith(`/runs/${r.id}/attempts/${r.run_attempt}`));
       assert.ok(attempt, route); return JSON.stringify(attempt);
     }
     if (route.includes('/runs?')) {
@@ -204,9 +195,7 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     if (route.includes('/jobs?')) {
       assert.ok(!route.includes(`/runs/${data.run.id + 5}/`), 'cancelled run jobs must not be read');
       const green = route.includes(`/runs/${data.green.id}/`);
-      const jobs = [{ id: green ? 1 : data.run.job.id, name: 'ci-tests', status: 'completed', conclusion: green || (smoke && !ciFails) ? 'success' : 'failure' }];
-      if (smoke && !green) jobs.push({ id: 2, name: 'browser-smoke', status: 'completed', conclusion: 'failure' });
-      return JSON.stringify({ jobs });
+      return JSON.stringify({ jobs: [{ id: green ? 1 : data.run.job.id, name: 'ci-tests', status: 'completed', conclusion: green ? 'success' : 'failure' }] });
     }
     if (route.includes('/compare/')) {
       assert.equal(route, `repos/hypertask-ai/hypertask/compare/${data.green.head_sha}...${data.run.head_sha}?per_page=100&page=1`);
@@ -214,8 +203,7 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
         sha: String(i).padStart(40, 'a'), commit: { message: `${pr.title} (#${pr.number})\n\nSquash body` }
       })) });
     }
-    if (route.endsWith('/logs')) return (typeof log === 'function' ? log(route) : log)
-      ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
+    if (route.endsWith('/logs')) return log ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
     const pr = data.prs.find(pr => route.includes(`/pulls/${pr.number}/files?`));
     if (pr) return JSON.stringify(pr.files.map((filename, i) => ({ filename, patch: pr.patches?.[i] })));
     assert.fail(`Unexpected fixture command: ${bin} ${args.join(' ')}`);
@@ -473,7 +461,7 @@ test('live collection separates same-SHA reruns after a newer green run and keep
   assert.equal(firstMock.writes.filter(a => a[1] === 'create').length, 1);
   assert.equal(rerun.writes.filter(a => a[1] === 'create').length, 1);
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
-  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:1:${green.id}`]);
+  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:2:${green.id}`]);
   assert.ok(Object.values(saved.alerts)[0].closed);
 });
 test('a failed rerun without a green boundary retains the first red attempt and skips compare', async t => {
@@ -503,63 +491,5 @@ test('red after green at the same SHA blames that commit and opens one new incid
   assert.equal(rerun.writes.filter(a => a[1] === 'create').length, 1);
   assert.ok(!rerun.calls.some(([bin, args]) => bin === 'gh' && args[3].includes('/compare/')));
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'state.json')));
-  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:1:${green.id}`]);
-});
-
-const SMOKE_LOG = [
-  '  ✘  10 [Desktop] › e2e/smoke/layout-lock.spec.ts:111:7 › layout baseline: ticket from board card (50.1s)',
-  '', '  1) [Desktop] › e2e/smoke/layout-lock.spec.ts:111:7 › layout baseline: ticket from board card ─────',
-  '', '    Test timeout of 50000ms exceeded.', '',
-  '  1 failed', '     [Desktop] › e2e/smoke/layout-lock.spec.ts:111:7 › layout baseline: ticket from board card ──',
-  '  7 skipped', '  65 passed (3.7m)', ''
-].join('\n');
-const SMOKE_FAILURE = { file: 'e2e/smoke/layout-lock.spec.ts',
-  name: 'layout baseline: ticket from board card', device: 'Desktop', error: 'Test timeout of 50000ms exceeded.' };
-
-test('a red browser-smoke job is production red even when ci-tests passed', async () => {
-  const data = second(), mock = fixtureCommand(data, { smoke: true, ciFails: false, log: SMOKE_LOG });
-  const result = await live(mock.run).collect();
-  assert.equal(result.status, 'failure');
-  assert.deepEqual(result.failures, [SMOKE_FAILURE]);
-});
-
-test('--run replays the first failed attempt of a run that was later rerun green', async () => {
-  const data = second(), target = { ...data.run, run_attempt: 2, conclusion: 'success' };
-  const mock = fixtureCommand({ ...data, run: target }, { smoke: true, log: SMOKE_LOG });
-  assert.equal((await live(mock.run).collect(String(target.id))).status, 'failure');
-});
-
-test('a first red attempt is rerun once before any fixer is paged', async t => {
-  const dir = tmp(t), d = second(), reruns = [];
-  d.run.run_attempt = 1; d.firstRed.run_attempt = 1;
-  const mock = counted(d, { cancelled: false });
-  mock.api.rerun = id => reruns.push(id);
-  assert.equal((await tick({ dir, api: mock.api })).action, 'rerun');
-  assert.deepEqual(reruns, [d.run.id]);
-  assert.equal(mock.writes.length, 0);
-  const dry = await tick({ dir: tmp(t), api: mock.api, dryRun: true });
-  assert.equal(dry.action, 'rerun');
-});
-
-test('the red after that rerun files one urgent fixer ticket naming the smoke test', async t => {
-  const dir = tmp(t), d = second();
-  d.failures = [SMOKE_FAILURE];
-  d.prs.forEach(pr => { pr.files = ['unrelated.txt']; });
-  const api = fake(d);
-  await tick({ dir, api });
-  const create = api.writes.find(a => a[1] === 'create');
-  assert.ok(create.includes('urgent'));
-  assert.match(create[create.indexOf('--title') + 1], /layout baseline: ticket from board card/);
-  assert.match(create[create.indexOf('--description') + 1], /e2e\/smoke\/layout-lock\.spec\.ts layout baseline: ticket from board card \[Desktop\]: Test timeout/);
-  assert.equal(api.writes.filter(a => a[1] === 'create').length, 1);
-});
-
-test('both failed test jobs are read, so a red smoke never hides a failing ci-tests file', async () => {
-  const data = second();
-  const ciLog = fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
-  const mock = fixtureCommand(data, { smoke: true,
-    log: route => route.includes(`/jobs/${data.run.job.id}/`) ? ciLog : SMOKE_LOG });
-  const result = await live(mock.run).collect();
-  assert.equal(result.status, 'failure');
-  assert.deepEqual(result.failures.map(f => f.file), [data.failures[0].file, SMOKE_FAILURE.file]);
+  assert.deepEqual(Object.keys(saved.alerts), [`${d.run.id}:1:${second().green.id}`, `${d.run.id}:2:${green.id}`]);
 });

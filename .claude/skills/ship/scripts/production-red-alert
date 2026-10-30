@@ -9,6 +9,7 @@ const { createHash } = require('node:crypto');
 const REPO = 'hypertask-ai/hypertask';
 const IDENTITY = 'INFRA MANAGER';
 const TEST_JOBS = ['ci-tests', 'browser-smoke'];
+const RERUN_WINDOW = 600;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const STATE = path.join(os.homedir(), '.local/state/production-red-alert');
 
@@ -92,7 +93,7 @@ function live(run = command) {
           const job = shortcut ? { status: 'completed', conclusion: 'success' }
             : failedJobs[0] || jobList.find(j => j.name === 'ci-tests') || jobList[0];
           // A replay stands in for the first attempt, so a dry run shows the rerun the incident deserved.
-          const row = replay && job.conclusion === 'failure' ? { ...r, run_attempt: 1 } : r;
+          const row = replay && job.conclusion === 'failure' ? { ...r, run_attempt: 1, replay: true } : r;
           if (!latest) {
             latest = row;
             if (!target && state.lastRun === `${row.id}:${row.run_attempt || 1}:${row.updated_at || ''}`) {
@@ -179,12 +180,15 @@ function live(run = command) {
     }
   };
 }
-async function plan(data, api, state = { alerts: {} }) {
+async function plan(data, api, state = { alerts: {} }, now = Date.now()) {
   if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : data.status === 'idle' ? 'idle' : 'none', run: data.run };
   const files = [...new Set(data.failures.map(f => f.file))].sort();
   const { key, existingKey } = streak(data, state);
-  // GitHub's attempt number is the record of that one rerun, so a retried tick cannot rerun twice.
-  if (!existingKey && (data.run.run_attempt || 1) === 1) {
+  // GitHub's attempt number records that one rerun, so a retried tick cannot rerun twice. A run older than
+  // the window was already seen by a human, so it goes straight to the fixer.
+  const age = now - Date.parse(data.run.updated_at || data.run.created_at || '');
+  const fresh = data.run.replay || (age >= 0 && age <= RERUN_WINDOW * 1000);
+  if (!existingKey && (data.run.run_attempt || 1) === 1 && fresh) {
     return { action: 'rerun', key, run: data.run, failures: data.failures };
   }
   if (existingKey) return { action: 'alert', key, existingKey, firstRed: data.firstRed.head_sha, run: data.run, green: data.green, failures: data.failures };
@@ -289,7 +293,7 @@ async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Ma
   if (!dryRun && state.until > now) return { action: 'backoff', until: state.until };
   try {
     const context = dryRun ? { alerts: {} } : state;
-    const p = await plan(await api.collect(runId, context), api, context);
+    const p = await plan(await api.collect(runId, context), api, context, now * 1000);
     if (dryRun) {
       let writer;
       try { writer = api.identity(); } catch { writer = { name: IDENTITY, refused: 'Session credential unavailable; writes refused (no Valentin fallback)' }; }
