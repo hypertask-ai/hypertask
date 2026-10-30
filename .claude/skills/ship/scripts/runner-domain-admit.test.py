@@ -286,6 +286,26 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
             with self.subTest(label):
                 self.assertEqual(self.admit(1, 'YPER4-1', LOG_AT=log_at).returncode, expected)
 
+    def test_idle_takeover_is_exclusive_until_assignment_changes(self):
+        owned = self.task('YPER4-1', 'Flags', 2, 'In Progress')
+        owned['labels'] = []
+        self.set_tasks([owned])
+        old = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=10)).isoformat()
+        self.assertEqual(self.admit(1, 'YPER4-1', LOG_AT=old).returncode, 0)
+        self.assertEqual(self.admit(3, 'YPER4-1', LOG_AT=old).returncode, 1)
+        self.assertEqual(self.admit(1, 'YPER4-1', LOG_AT=old).returncode, 0)
+        recent = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        owned['assignees'] = [{'agent': {'id': 'agent-4', 'displayName': 'Runner 4'}}]
+        self.set_tasks([owned])
+        self.assertEqual(self.admit(3, 'YPER4-1', LOG_AT=recent).returncode, 1)
+        self.assertNotIn('1', json.loads((self.state / 'domain-ownership.json').read_text()))
+        owned['assignees'] = [{'agent': {'id': 'agent-2', 'displayName': 'Runner 2'}},
+                              {'agent': {'id': 'agent-1', 'displayName': 'Runner 1'}}]
+        self.set_tasks([owned])
+        self.assertEqual(self.admit(1, 'YPER4-1', LOG_AT=recent).returncode, 1)
+        self.assertEqual(self.admit(1, 'YPER4-1', LOG_AT=old).returncode, 0)
+        self.assertNotIn('admission', json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1'])
+
     def test_pending_shared_lease_on_unscoped_ticket_clears_for_its_runner(self):
         path = self.state / 'domain-ownership.json'
         stale = {'held': ['Shared', 'Unscoped'], 'current': 'Unscoped', 'pending': True,

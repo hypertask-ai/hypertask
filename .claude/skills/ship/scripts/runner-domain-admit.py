@@ -44,11 +44,12 @@ def domain(task):
     return next(iter(found)) if len(found) == 1 else 'Shared'
 
 
-def idle_runner(task):
+def idle_runner(task, runner):
     now = dt.datetime.now(dt.timezone.utc)
     for assignee in task['assignees']:
         agent = assignee.get('agent') or {}
-        if not re.fullmatch(r'Runner [1-9][0-9]*', agent.get('displayName', ''), re.I):
+        name = agent.get('displayName', '')
+        if not re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) or name.casefold() == ('runner ' + runner).casefold():
             continue
         if not isinstance(agent.get('id'), str):
             return False
@@ -148,7 +149,8 @@ def main():
                 own = any(name.casefold() == ('runner ' + slot).casefold() for name in names)
                 terminal = task['section'] in TERMINAL or task.get('status') in TERMINAL
                 if terminal or (not own and (not lease.get('admission') or any(
-                        re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) for name in names))):
+                        re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) and name.casefold() not in lease.get('takeover_from', [])
+                        for name in names))):
                     del leases[key]
                 elif own:
                     lease.pop('admission', None)
@@ -201,8 +203,12 @@ def main():
         if tasks[ticket]['section'] in TERMINAL or tasks[ticket].get('status') in TERMINAL:
             blocked = True
         assigned = [(a.get('agent') or {}).get('displayName', '') for a in tasks[ticket]['assignees']]
+        previous = []
         if any(re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) and name.casefold() != ('runner ' + runner).casefold() for name in assigned):
-            blocked = blocked or not idle_runner(tasks[ticket])
+            previous = [name.casefold() for name in assigned if re.fullmatch(r'Runner [1-9][0-9]*', name, re.I)
+                        and name.casefold() != ('runner ' + runner).casefold()]
+            reserved = any(key == ticket and lease.get('admission') for slot, key, lease in others)
+            blocked = blocked or reserved or not idle_runner(tasks[ticket], runner)
         if not blocked:
             lease = mine.setdefault(ticket, {'held': [d], 'current': d, 'pending': False})
             if d not in lease['held']:
@@ -210,8 +216,11 @@ def main():
             lease.update(current=d, protected=True)
             if any(name.casefold() == ('runner ' + runner).casefold() for name in assigned):
                 lease.pop('admission', None)
+                lease.pop('takeover_from', None)
             else:
                 lease['admission'] = True
+                if previous:
+                    lease['takeover_from'] = previous
         if not mine:
             owners.pop(runner, None)
         tmp = path.with_name(path.name + '.' + str(os.getpid()))
