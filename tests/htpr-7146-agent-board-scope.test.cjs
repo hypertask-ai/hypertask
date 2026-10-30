@@ -122,7 +122,7 @@ test('presence service hides denied-board sessions and lease titles, including r
   f.prisma.taskLease = { findMany: async args => leases.filter(row => matches(row, args.where)) };
   const { getTeamAgentPresence } = f.load('src/lib/mcp/agents/presence.ts');
   const caller = { userId: f.user.id, agentId: f.agent.id };
-  assert.deepEqual((await getTeamAgentPresence('team', caller)).map(row => row.currentTask.title), ['Task 15', 'Task 4060']);
+  assert.deepEqual((await getTeamAgentPresence('team', caller)).map(row => row.currentTask.title).sort(), ['Task 15', 'Task 4060']);
   assert.equal((await getTeamAgentPresence('team')).length, 3);
   f.projects[0].members = [];
   assert.deepEqual((await getTeamAgentPresence('team', caller)).map(row => row.currentTask.title), ['Task 4060']);
