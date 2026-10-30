@@ -44,6 +44,7 @@ stub("src/lib/flags.ts", { isFeatureEnabled: async (key, userId) => {
   if (flag instanceof Error) throw flag;
   return flag;
 } });
+stub("src/lib/ai/teamAiFunding.ts", require("./helpers/team-ai-funding-stub.cjs"));
 stub("src/lib/prisma.ts", { default: {
   project: { findFirst: async () => { projectReads++; return { teamId: "project-team" }; } },
   team: { findUnique: async ({ select }) => {

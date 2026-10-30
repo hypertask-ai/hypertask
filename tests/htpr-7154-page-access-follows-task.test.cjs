@@ -242,6 +242,7 @@ test('page indexing uses the owning page board and selects it on upsert', async 
     '@/utils/controllers/search/rankHits': {},
     '@/app/api/ai/_lib/boardMemoryContract': {},
     '@/lib/ai/teamAiFunding': require('./helpers/team-ai-funding-stub.cjs'),
+    './embedRowsForWrite': {},
   });
   assert.equal(helper.turbopufferPageInclude.project.select.title, true);
   assert.equal(helper.buildTurbopufferPageRow(PAGE).projectId, 1);

@@ -18,6 +18,12 @@ function loadByok(flagOn, extraKeys = {}, options = {}) {
   function stubModule(file, exports) {
     stubs["@/" + file.slice(4).replace(/\.ts$/, "")] = exports;
   }
+  stubModule("src/app/api/ai/_lib/modelProvider.ts", {
+    isVercelAiGatewayKey: (key) => typeof key === "string" && key.startsWith("vck_"),
+    registerManagedGatewayKey: () => {},
+    resolveAiModel: (provider, model, apiKey) => ({ provider, model, apiKey }),
+    aiUsageProviderForCredential: (provider) => `byok:${provider}`,
+  });
   stubModule("src/lib/flags.ts", {
     isFeatureEnabled: async (key, userId) => { if (options.flagError) throw new Error("flag unavailable"); assert.equal(userId, 42); return flagOn && key === "htpr-7844-team-ai-key-only"; },
   });
@@ -93,6 +99,7 @@ test("key-only routing never returns a platform key", async () => {
     assert.equal(claude, TEAM_KEY);
     const side = await byok.keyOnlySideCallModel(lookup, "google");
     assert.equal(side.usageProvider, "byok:claude");
+    assert.deepEqual(side.model, { provider: "claude", model: "claude-haiku-4-5", apiKey: TEAM_KEY });
     assert.equal(JSON.stringify(side).includes(PLATFORM.AI_GATEWAY_API_KEY), false);
     assert.equal(JSON.stringify(side).includes(PLATFORM.TURBOPUFFER_EMBEDDINGS_API_KEY), false);
     assert.equal(JSON.stringify(side).includes(PLATFORM.DEEPGRAM_API_KEY), false);

@@ -15,6 +15,7 @@ function harness() {
   const prisma = { aiUsage: { create: async ({ data }) => { rows.push(data); return data; } } };
   const stubs = {
     'next/server': { NextResponse: { json: Response.json }, NextRequest: Request },
+    '@/lib/ai/teamAiFunding': require('./helpers/team-ai-funding-stub.cjs'),
     '@/lib/prisma': { default: prisma },
     '@/lib/errors/reportError': { reportError: async (error) => errors.push(error) },
     '@/lib/net/downloadWithoutBrotli': { downloadWithoutBrotli: async () => [] },
