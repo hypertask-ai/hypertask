@@ -22,9 +22,6 @@ Use either plain text or complete HTML, not mixed formatting. Links need HTML an
 
 ## Claim a ticket before working it (collision avoidance)
 
-The moment you actually start working a ticket (writing code / doing the fix, not just reading or triaging), make it visible on the board so no one else picks up the same work:
+Before investigating or coding, check `ship-identity`, then run `ship-claim <PREFIX-NNN> "<resume command>"`. Use the session's identity for board writes through `vcc`; never write as Valentin. Proceed only when the claim succeeds. Respect competing claims and step back if another runner claimed first.
 
-1. Claim via `vcc`: `vcc comment add <PREFIX-NNN> --text "<p><strong>Claimed.</strong> Session working it now.</p>"`. **No session ever writes in Valentin's name: no ticket, comment, assignment or move goes through his user token. All board writes use `vcc`, identity "Valentins Claude Code". Never assign userId 6. Only Valentin assigns himself. A ticket he assigned himself or moved by hand stays exactly as he left it.**
-2. Move it to In Progress: `vcc task move <PREFIX-NNN> --section "In Progress"`.
-
-Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self-assigns tickets he picks up; **never work a ticket assigned to Abdul** - leave it and pick another.
+Preserve human assignees and moves. Only Valentin assigns himself; a ticket he assigned himself or moved by hand stays exactly as he left it. Never work a ticket assigned to Abdul; leave it and pick another.
