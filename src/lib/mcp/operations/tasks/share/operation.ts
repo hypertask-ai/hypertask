@@ -14,9 +14,6 @@ import { HTPR_8216_AGENT_TASK_SHARE_FLAG } from "@/lib/flags/definitions/htpr-82
 import { readTaskShare, shareTaskWithLink } from "@/lib/tasks/taskSharing";
 import prisma from "@/lib/prisma";
 
-const shareDoorClosed = async (userId: number) =>
-  !(await isFeatureEnabled(HTPR_8216_AGENT_TASK_SHARE_FLAG, userId));
-
 const taskIdFromQuery = (request: NextRequest) => {
   const raw = request.nextUrl.searchParams.get("taskId");
   if (raw === null || !/^\d+$/.test(raw.trim())) return null;
@@ -31,7 +28,7 @@ export async function GET(request: NextRequest) {
       if (rateLimited) return rateLimited;
       const ctx = await validateMcpRouteAuth(request);
       if (!ctx) return await mcpRouteUnauthorizedResponse(request);
-      if (await shareDoorClosed(ctx.user.id)) {
+      if (!(await isFeatureEnabled(HTPR_8216_AGENT_TASK_SHARE_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: "Ticket sharing is not enabled" }, { status: 404 });
       }
       const taskId = taskIdFromQuery(request);
@@ -71,7 +68,7 @@ export async function POST(request: NextRequest) {
       if (!ctx) return await mcpRouteUnauthorizedResponse(request);
       const roleRefusal = await requireAgentWriteRole(ctx);
       if (roleRefusal) return roleRefusal;
-      if (await shareDoorClosed(ctx.user.id)) {
+      if (!(await isFeatureEnabled(HTPR_8216_AGENT_TASK_SHARE_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: "Ticket sharing is not enabled" }, { status: 404 });
       }
       let body;
