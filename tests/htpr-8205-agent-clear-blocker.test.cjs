@@ -181,3 +181,36 @@ test("MCP schema takes a reason and still refuses unknown fields", () => {
   assert.throws(() => SetTaskWaitingOnInputSchema.parse({ taskId: 42, blockerCommentId: null, why: "x" }));
   assert.throws(() => SetTaskWaitingOnInputSchema.parse({ taskId: 42, blockerCommentId: null, reason: "x".repeat(501) }));
 });
+
+function clearToolWorld(clearFlag) {
+  const calls = { setters: [], flags: [] };
+  const { createClearTaskBlockerTool } = load("src/lib/ai/tools/clearTaskBlocker.ts", {
+    ai: { tool: (definition) => definition },
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { calls.flags.push({ key, userId }); return clearFlag; } },
+    "@/lib/mcp/tasks/resolveTask": { findTaskByIdentifier: async () => ({ id: 42 }) },
+    "@/lib/tasks/setWaitingOn": { setTaskWaitingOn: async (args) => { calls.setters.push(args); return { status: 200, body: { id: 42 } }; } },
+    "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async (id) => ({ id }) },
+    "@/lib/ai/tools/constants": { TOOL_TASK_ID_DESCRIPTION: "task id" },
+    "@/lib/ai/tools/execution": { withToolErrors: (run) => run },
+    "@/lib/ai/tools/helpers": { sanitizeForJson: (value) => value },
+  });
+  const tool = createClearTaskBlockerTool({ sendStatus: () => {}, user: { id: 19 }, actingAgentId: "agent-19", teamScope: null });
+  return { run: (input) => tool.hypertask_clear_task_blocker.execute(input), calls };
+}
+
+test("AI chat tool with the flag off refuses before touching the task", async () => {
+  const world = clearToolWorld(false);
+  const result = await world.run({ task_id: 42, reason: "Answered in the ticket" });
+  assert.equal(result.success, false);
+  assert.deepEqual(world.calls.setters, []);
+  assert.deepEqual(world.calls.flags, [{ key: FLAG, userId: 19 }]);
+});
+
+test("still allowed: AI chat tool with the flag on clears through the shared write", async () => {
+  const world = clearToolWorld(true);
+  const result = await world.run({ task_id: 42, reason: "Answered in the ticket" });
+  assert.deepEqual(result, { success: true, message: "Blocker cleared", taskId: 42 });
+  assert.deepEqual(world.calls.setters.map(({ taskId, blockerCommentId, reason, agentId }) => ({ taskId, blockerCommentId, reason, agentId })), [
+    { taskId: 42, blockerCommentId: null, reason: "Answered in the ticket", agentId: "agent-19" },
+  ]);
+});

@@ -2,6 +2,8 @@ import { tool } from "ai";
 import { z } from "zod";
 import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
 import { setTaskWaitingOn } from "@/lib/tasks/setWaitingOn";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { TOOL_TASK_ID_DESCRIPTION } from "@/lib/ai/tools/constants";
 import { withToolErrors } from "@/lib/ai/tools/execution";
@@ -29,6 +31,9 @@ export function createClearTaskBlockerTool(context: ToolContext) {
       }),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_clear_task_blocker");
+        if (!(await isFeatureEnabled(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG, user.id))) {
+          return { success: false, error: "Clearing a blocker from AI chat is not enabled" };
+        }
         const identifierCount = [
           input.task_id !== undefined,
           input.ticket_number !== undefined,

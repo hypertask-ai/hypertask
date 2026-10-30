@@ -478,16 +478,16 @@ const HYBRID_INPUTS = {
   hypertask_draft: { read: { action: "list" }, write: { action: "publish" } },
 };
 
-test("7673 native tools: the tool list has 86 tools and every one is classified", () => {
+test("7673 native tools: the tool list has 87 tools and every one is classified", () => {
   const names = nativeToolNames();
-  assert.equal(names.length, 86);
+  assert.equal(names.length, 87);
   const { gate } = nativeWorld(READ_REFUSED);
   const read = names.filter((name) => gate.NATIVE_READ_ONLY_TOOLS.has(name));
   const hybrid = names.filter((name) => gate.NATIVE_READ_ACTIONS.has(name));
   assert.equal(read.length, gate.NATIVE_READ_ONLY_TOOLS.size, "every read-only entry names a native tool");
   assert.deepEqual([...gate.NATIVE_READ_ACTIONS.keys()].sort(), Object.keys(HYBRID_INPUTS).sort());
   assert.equal(hybrid.length, Object.keys(HYBRID_INPUTS).length);
-  assert.equal(names.length - read.length - hybrid.length, 44);
+  assert.equal(names.length - read.length - hybrid.length, 45);
 });
 
 test("7673 native tools: no read tool of the HyperAI read-only list is lost", () => {
