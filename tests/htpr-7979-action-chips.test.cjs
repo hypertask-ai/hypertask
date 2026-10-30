@@ -80,9 +80,9 @@ function harness({ chips, writing = false, rules }) {
   };
 }
 
-test("flag definition defaults to owner only with the writing flag as a related flag", () => {
+test("flag definition defaults to everyone with the writing flag as a related flag", () => {
   assert.equal(chipFlagModule.default.key, chipFlag);
-  assert.equal(chipFlagModule.default.defaultMode, "OWNER_ONLY");
+  assert.equal(chipFlagModule.default.defaultMode, "EVERYONE");
   assert.ok(chipFlagModule.default.related.includes(writingFlag));
 });
 
