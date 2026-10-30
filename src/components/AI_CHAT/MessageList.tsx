@@ -40,8 +40,6 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
-  let chipType: "action-chip" | "generated-question" = "generated-question";
-  if (actionChipsEnabled) chipType = "action-chip";
   const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
   let chipSignal: typeof signalAiChip | undefined;
   if (chipEventsEnabled) chipSignal = signalAiChip;
@@ -56,7 +54,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   if (actionChipsEnabled && originalNoteState?.taskId === newTicketId) originalNote = originalNoteState?.note;
   const ticketQuestions = useQuery({
     queryKey: ["task-questions", "new-ticket", newTicketId],
-    queryFn: async (): Promise<{ questions: string[] }> => {
+    queryFn: async (): Promise<{ questions: string[]; chipType?: "action-chip" }> => {
       const response = await fetch("/api/ai/task-questions", {
         method: "POST",
         credentials: "include",
@@ -64,7 +62,9 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
         body: JSON.stringify({ taskId: newTicketId, kind: "new-ticket", ...(originalNote ? { originalNote } : {}) }),
       });
       if (!response.ok) throw new Error("Failed to load new ticket questions");
-      return response.json();
+      const body: { questions: string[]; chipType?: "action-chip" } = await response.json();
+      if (actionChipsEnabled) body.chipType = "action-chip";
+      return body;
     },
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -76,6 +76,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     if (showTicketQuestions && newTicketId === questionsTaskId) setQuestionsTaskId(null);
   }, [showTicketQuestions, newTicketId, questionsTaskId, setQuestionsTaskId]);
   const newTicketQuestions = ticketQuestions.data?.questions?.filter(Boolean) ?? [];
+  const chipType = ticketQuestions.data?.chipType ?? "generated-question";
   const newTicketQuestionsKey = showTicketQuestions ? JSON.stringify(newTicketQuestions) : "";
   useEffect(() => {
     if (!chipSignal || !active || hidden || !showTicketQuestions || newTicketQuestions.length === 0) return;

@@ -80,10 +80,10 @@ function harness({ chips, writing = false, rules }) {
   };
 }
 
-test("flag definition is owner only with the owner request and the writing flag as a related flag", () => {
+test("flag definition defaults to everyone with the writing flag as a related flag", () => {
   assert.equal(chipFlagModule.default.key, chipFlag);
-  assert.equal(chipFlagModule.default.defaultMode, "OWNER_ONLY");
-  assert.equal(chipFlagModule.default.releaseRisk.ownerRequest.ticketUrl, "https://app.hypertask.ai/detail/project-15/7979");
+  assert.equal(chipFlagModule.default.defaultMode, "EVERYONE");
+  assert.equal(chipFlagModule.default.releaseRisk.ownerRequest, undefined);
   assert.ok(chipFlagModule.default.related.includes(writingFlag));
 });
 
@@ -151,6 +151,6 @@ test("client wiring: note is stored with the new task, sent with the chips reque
   const list = read("src/components/AI_CHAT/MessageList.tsx");
   assert.match(list, /useFlag\(HTPR_7979_ACTION_CHIPS_FLAG\)/);
   assert.match(list, /originalNote/);
-  assert.match(list, /if \(actionChipsEnabled\) chipType = "action-chip"/);
+  assert.match(list, /if \(actionChipsEnabled\) body\.chipType = "action-chip"/);
   assert.match(list, /if \(actionChipsEnabled && originalNoteState/);
 });
