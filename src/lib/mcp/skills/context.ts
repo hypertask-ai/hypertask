@@ -11,7 +11,7 @@ export async function getMcpSkillContext(
   projectId: number,
   texts: string[],
 ) {
-  if (!await isFeatureEnabled(HTPR_7757_MCP_SKILL_CONTEXT_FLAG, ctx.user.id)) return null
+  if (!await isFeatureEnabled(HTPR_7757_MCP_SKILL_CONTEXT_FLAG, ctx.user.id).catch(() => false)) return null
   const context = { userId: ctx.user.id, projectId, agentId: ctx.agentId, teamScope: ctx.teamScope }
   const available = await prisma.aI_Skill.findMany({
     where: {

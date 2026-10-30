@@ -29,6 +29,7 @@ function fixture(actor = 'bound', skillContextEnabled = true) {
     '@/lib/flags': {
       isFeatureEnabled: async (key, userId) => {
         flagReads.push({ key, userId })
+        if (f.state.skillContextEnabled instanceof Error) throw f.state.skillContextEnabled
         return f.state.skillContextEnabled
       },
     },
@@ -73,6 +74,18 @@ for (const actor of ['bound', 'unbound', 'human']) {
     assert.deepEqual(f.writes, [])
   })
 }
+
+test('a failed flag lookup leaves authorized ticket reads available without skill context', async () => {
+  const f = fixture('unbound')
+  f.state.skillContextEnabled = new Error('Flag lookup unavailable')
+  f.prisma.aI_Skill.findMany = async () => assert.fail('Failed flag lookup must skip skill matching')
+  const route = f.load('src/lib/mcp/operations/tasks/operation.ts')
+  const response = await route.GET(request('tasks?task_id=150'))
+  assert.equal(response.status, 200)
+  const body = await response.json()
+  assert.equal(body.tasks[0].id, 150)
+  assert.equal(body.tasks[0].skill_context, null)
+})
 
 test('switching the flag off suppresses context on the next request', async () => {
   const f = fixture('unbound')
@@ -161,7 +174,7 @@ test('no match is request-local and does not carry a previous invocation into th
 
 test('CLI task get and concise MCP task results retain matched comment bodies and the active-skills line', async () => {
   const f = fixture('unbound')
-  f.tasks[0].comments = [{ text: '<p>/deeper please</p>' }]
+  f.tasks[0].comments = [{ text: '<p>/deeper please</p>', activity: null }]
   const route = f.load('src/lib/mcp/operations/tasks/operation.ts')
   const response = await route.GET(request('tasks?task_id=150'))
   assert.equal(response.status, 200)

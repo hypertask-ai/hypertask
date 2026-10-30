@@ -46,6 +46,18 @@ hint coexistence. Never send a valid comment-add probe on a real ticket.
 `node --test tests/get-tasks-single-identifier.test.cjs` checks scalar and list ticket identifiers, numeric task ids, invalid or missing identifiers, and wire-schema JSON conversion.
 `node --test tests/htpr-7519-hello-guided-start.test.cjs` checks hello identity, role/catalog-aware next steps, title fallback, and newest-board selection beyond the first 50 with mocked storage.
 
+## Matched skill context
+
+For a private QA ticket, include a harmless `/slug` or a declared
+trigger phrase in its description or comment. Read it through CLI task
+get and MCP `hypertask_tasks` get, including concise output. Require
+`skill_context.active_skills` to contain the complete matching body and
+`summary` to name its slug. Read comments and task context too. Disabled
+skills must report `status: disabled` in skill list/get and never match.
+Verify an inaccessible board's skill body never appears. Flag Off returns
+null context; matching remains request-local, without persistent modes.
+Use only QA-owned fixtures, and remove them afterward.
+
 ## Cleanup
 
 Read-only calls. No board writes or fixtures.
