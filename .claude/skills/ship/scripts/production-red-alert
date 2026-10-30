@@ -8,6 +8,8 @@ const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const REPO = 'hypertask-ai/hypertask';
 const IDENTITY = 'INFRA MANAGER';
+const TEST_JOBS = ['ci-tests', 'browser-smoke'];
+const RERUN_WINDOW = 600;
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
 const STATE = path.join(os.homedir(), '.local/state/production-red-alert');
 
@@ -47,6 +49,7 @@ function runOrder(a, b) {
 function streak(data, state) {
   const key = `${data.firstRed.id}:${data.firstRed.run_attempt || 1}:${data.green.id}`;
   const existingKey = Object.keys(state.alerts).find(k => k === key ||
+    (/^\d+:\d+:\d+$/.test(k) && k.split(':')[0] === String(data.firstRed.id) && k.split(':')[2] === String(data.green.id)) ||
     (!/^\d+:\d+:\d+$/.test(k) && !state.alerts[k].closed &&
       state.alerts[k].firstRed === data.firstRed.head_sha && state.alerts[k].runId > data.green.id));
   return { key, existingKey };
@@ -61,7 +64,7 @@ function live(run = command) {
       all.push(...rows);
       if (rows.length < 100) break;
     }
-    return all.filter(j => j.name === 'ci-tests').sort((a, b) => b.id - a.id)[0];
+    return all.filter(j => TEST_JOBS.includes(j.name)).sort((a, b) => b.id - a.id);
   };
   return {
     async collect(runId, state = { alerts: {} }) {
@@ -80,20 +83,30 @@ function live(run = command) {
           const r = rows.shift();
           if (r.name !== 'CI Tests' || r.head_branch !== 'production' || r.status !== 'completed' ||
               r.conclusion === 'cancelled' || (target && runOrder(r, target) < 0)) continue;
+          const replay = target && r.id === target.id && !r.previousAttempt && (r.run_attempt || 1) > 1;
+          // An unchanged red tick stays one API call, so the idle check runs before any job read.
           if (!latest) {
             latest = r;
             if (!target && state.lastRun === `${r.id}:${r.run_attempt || 1}:${r.updated_at || ''}`) {
               return { status: 'idle', run: r };
             }
           }
-          // A successful workflow cannot contain a failed ci-tests job.
-          const job = r.conclusion === 'success' ? { status: 'completed', conclusion: 'success' } : jobs(r.id, r.previousAttempt ? r.run_attempt : undefined);
+          // A successful workflow cannot contain a failed test job.
+          // Every failed test job is read: a red smoke job must never hide the failing ci-tests file.
+          const shortcut = r.conclusion === 'success' && !replay;
+          const jobList = shortcut ? [] : jobs(r.id, r.previousAttempt ? r.run_attempt : (replay ? 1 : undefined));
+          const failedJobs = jobList.filter(j => j.conclusion === 'failure');
+          // Only a successful workflow may skip the job read; a failed one with no test job fails closed.
+          const job = shortcut ? { status: 'completed', conclusion: 'success' }
+            : failedJobs[0] || jobList.find(j => j.name === 'ci-tests') || jobList[0];
+          // A replay stands in for the first attempt, so a dry run shows the rerun the incident deserved.
+          const row = replay && job.conclusion === 'failure' ? { ...r, run_attempt: 1, replay: true } : r;
           if (!job || job.status !== 'completed') throw new Error(`Missing completed ci-tests job for run ${r.id}`);
           if (!red) {
-            if (job.conclusion !== 'failure') return { status: job.conclusion, run: r };
-            red = { ...r, job }; firstRed = r;
-          } else if (job.conclusion === 'success') { green = r; break; }
-          else if (job.conclusion === 'failure') firstRed = r;
+            if (job.conclusion !== 'failure') return { status: job.conclusion, run: row };
+            red = { ...row, job, failedJobs: failedJobs.length ? failedJobs : [job] }; firstRed = row;
+          } else if (job.conclusion === 'success') { green = row; break; }
+          else if (job.conclusion === 'failure') firstRed = row;
           if (r.run_attempt > 1) {
             rows.push({ ...api(`actions/runs/${r.id}/attempts/${r.run_attempt - 1}`), previousAttempt: true });
             rows.sort(runOrder);
@@ -102,9 +115,11 @@ function live(run = command) {
       }
       if (!red) return { status: 'none' };
       if (!green) throw new Error('No last green production run found; refusing an incomplete PR range');
-      const failures = json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
-        input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${red.job.id}/logs`])
-      }));
+      const failures = (red.failedJobs || [red.job]).flatMap(job => json(run('python3', [path.join(__dirname, 'ci-test-failures.py'), '--json'], {
+        input: run('gh', ['api', '-X', 'GET', `repos/${REPO}/actions/jobs/${job.id}/logs`,
+          '--allow-escape-sequences', '--paginate'])
+      }))).filter((failure, index, all) => all.findIndex(f => f.file === failure.file && f.name === failure.name
+        && f.device === failure.device) === index);
       if (!failures.length) throw new Error('Failed ci-tests log names no failing test file; refusing to guess');
       for (const sha of [green.head_sha, red.head_sha, firstRed.head_sha]) {
         if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error('Invalid CI commit SHA');
@@ -149,6 +164,9 @@ function live(run = command) {
       if (tasks?.length !== 1) throw new Error(`Cannot read chosen PR ticket ${ticket}`);
       return tasks[0];
     },
+    rerun(id) {
+      run('gh', ['api', '-X', 'POST', `repos/${REPO}/actions/runs/${id}/rerun-failed-jobs`]);
+    },
     identity: () => identity(run),
     write(args) {
       return run('vcc', args, { env: { ...process.env, SHIP_SESSION_NAME: IDENTITY } });
@@ -163,10 +181,17 @@ function live(run = command) {
     }
   };
 }
-async function plan(data, api, state = { alerts: {} }) {
+async function plan(data, api, state = { alerts: {} }, now = Date.now()) {
   if (data.status !== 'failure') return { action: data.status === 'success' ? 'green' : data.status === 'idle' ? 'idle' : 'none', run: data.run };
   const files = [...new Set(data.failures.map(f => f.file))].sort();
   const { key, existingKey } = streak(data, state);
+  // GitHub's attempt number records that one rerun, so a retried tick cannot rerun twice. A run older than
+  // the window was already seen by a human, so it goes straight to the fixer.
+  const age = now - Date.parse(data.run.updated_at || data.run.created_at || '');
+  const fresh = data.run.replay || (age >= 0 && age <= RERUN_WINDOW * 1000);
+  if (!existingKey && (data.run.run_attempt || 1) === 1 && fresh) {
+    return { action: 'rerun', key, run: data.run, failures: data.failures };
+  }
   if (existingKey) return { action: 'alert', key, existingKey, firstRed: data.firstRed.head_sha, run: data.run, green: data.green, failures: data.failures };
   const touched = data.prs.find(pr => pr.files.some(f => files.includes(f)));
   const ignored = new Set(['function', 'return', 'iterable', 'unexpected', 'import', 'undefined', 'cannot',
@@ -185,7 +210,10 @@ async function plan(data, api, state = { alerts: {} }) {
   if (!chosen) throw new Error('Red range contains no PR; refusing to invent a fixer');
   const ticket = chosen.title.match(/^((?:HTPR|YPER4|HYFA)-\d+)\b/)?.[1];
   if (!ticket) throw new Error('Chosen PR title has no recognized ticket prefix');
-  const fixer = agent(await api.task(ticket));
+  // A flaky smoke test usually blames a PR whose ticket has no single agent; the alert still needs an owner,
+  // so the ticket is created unassigned for the infra queue instead of guessing a person.
+  let fixer = null;
+  try { fixer = agent(await api.task(ticket)); } catch { fixer = null; }
   const marker = `production-red-alert:${createHash('sha256').update(key).digest('hex')}`;
   const rule = touched ? 'failing-test-file' : implicated ? 'error-identifier' : 'oldest-pr';
   const why = touched ? `PR #${chosen.number} is the newest PR in this range that changed a failing test file.`
@@ -193,14 +221,17 @@ async function plan(data, api, state = { alerts: {} }) {
     : `No PR changed a failing test file or matched an error identifier, so PR #${chosen.number}, the oldest PR (first change after green), owns the fix.`;
   const description = [
     'Production tests are failing. One agent owns this fix so runners do not duplicate the work.', '',
-    'Failing tests (first error for each file):', ...data.failures.map(f => `- ${f.file}: ${f.error}`), '',
+    'Failing tests (first error for each file):',
+    ...data.failures.map(f => `- ${f.file}${f.name ? ` ${f.name}${f.device ? ` [${f.device}]` : ''}` : ''}: ${f.error}`), '',
     `Red run: ${data.run.html_url}`, `Last green run: ${data.green.html_url}`, '',
     'PRs merged since the last green run (newest first):', ...data.prs.map(pr => `- #${pr.number} ${pr.title} ${pr.url}`), '',
-    `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. Rule: ${rule}. ${why}`, '', marker
+    fixer ? `Fixer: ${fixer.name} (${fixer.id}), the agent assigned to ${ticket}. Rule: ${rule}. ${why}`
+      : `Fixer: none assigned, ${ticket} has no single agent, so this alert waits unassigned on board 4060. Rule: ${rule}. ${why}`, '', marker
   ].join('\n');
   return { action: 'alert', key, marker, firstRed: data.firstRed.head_sha, run: data.run,
     green: data.green, failures: data.failures, prs: data.prs, chosenPR: chosen.number, fixer, rule, why,
-    title: `Production red: ${data.failures[0].file}`, description, project: 4060, section: 'In Progress' };
+    title: `Production red: ${data.failures[0].file}${data.failures[0].name ? ` ${data.failures[0].name}` : ''}`,
+    description, project: 4060, section: 'In Progress' };
 }
 function load(dir) {
   try { return json(fs.readFileSync(path.join(dir, 'state.json'), 'utf8')); }
@@ -213,6 +244,7 @@ function save(dir, state) {
   fs.renameSync(tmp, path.join(dir, 'state.json'));
 }
 async function apply(p, state, api, persist) {
+  if (p.action === 'rerun') { api.rerun(p.run.id); return; }
   if (p.action === 'green') {
     for (const a of Object.values(state.alerts)) {
       if (a.closed || runOrder({ id: a.runId, run_attempt: a.runAttempt, run_started_at: a.runStartedAt }, p.run) < 0) continue;
@@ -234,13 +266,13 @@ async function apply(p, state, api, persist) {
     a = state.alerts[p.key] = { title: p.title, marker: p.marker, firstRed: p.firstRed, runId: p.run.id, runAttempt: p.run.run_attempt || 1, runStartedAt: p.run.run_started_at || p.run.created_at, fixer: p.fixer, files: p.failures.map(f => f.file) };
     persist();
     const result = json(api.write(['task', 'create', '--project', '4060', '--section', 'In Progress',
-      '--title', p.title, '--description', p.description, '--json']));
+      '--title', p.title, '--description', p.description, '--priority', 'urgent', '--json']));
     if (result.success !== true) throw new Error('Create returned no success receipt; reconcile saved intent');
     a.ticket = result.task?.ticketNumber || result.tasks?.[0]?.ticketNumber;
     if (!/^YPER4-\d+$/.test(a.ticket || '')) throw new Error('Create returned no alert ticket reference; reconcile saved intent');
     persist();
   } else if (!a.ticket) { a.ticket = api.recover(a.title, a.marker); persist(); }
-  if (!a.assigned) {
+  if (!a.assigned && a.fixer) {
     if (!UUID.test(a.fixer.id)) throw new Error('Refusing non-agent assignment');
     if (json(api.write(['task', 'assign', a.ticket, '--assignee', a.fixer.id, '--json'])).success !== true) {
       throw new Error('Assignment returned no success receipt');
@@ -262,13 +294,13 @@ async function tick({ dryRun = false, runId, dir = STATE, api = live(), now = Ma
   if (!dryRun && state.until > now) return { action: 'backoff', until: state.until };
   try {
     const context = dryRun ? { alerts: {} } : state;
-    const p = await plan(await api.collect(runId, context), api, context);
+    const p = await plan(await api.collect(runId, context), api, context, now * 1000);
     if (dryRun) {
       let writer;
       try { writer = api.identity(); } catch { writer = { name: IDENTITY, refused: 'Session credential unavailable; writes refused (no Valentin fallback)' }; }
       return { dryRun: true, identity: writer, ...p, alreadyAlerted: p.key ? !!state.alerts[p.key] : false };
     }
-    if (p.action !== 'idle') api.identity();
+    if (p.action !== 'idle' && p.action !== 'rerun') api.identity();
     await apply(p, state, api, () => save(dir, state));
     if (p.run) state.lastRun = `${p.run.id}:${p.run.run_attempt || 1}:${p.run.updated_at || ''}`;
     state.fails = 0; state.until = 0; save(dir, state);
