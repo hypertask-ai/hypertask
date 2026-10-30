@@ -121,6 +121,17 @@ test('all reused ID mutations still allow authorized nullable-task owner control
     assert.equal(response.status, 200, file); assert.equal(f.state.requests[0].status, 'pending'); assert.equal(f.state.grants, 0);
   }
 });
+test('malformed notification IDs cannot reach request or task writes', async () => {
+  for (const [file, field] of [['mark-done', 'id'], ['mark-unseen', 'notificationId']]) {
+    for (const id of ['', '1tail', '1.5', '1e0', ['1'], '9007199254740992']) {
+      const f = fixture(); await create(f); const routes = writeRoutes(f);
+      const response = await routes.load('src/lib/api/notification-writes/' + file + '.ts').GET(routes.request({ [field]: id, taskId: 88 }), session());
+      assert.equal(response.status, 400, `${file}: ${id}`);
+      assert.equal(f.state.notifications[0].status, 'Normal');
+      assert.equal(f.state.notifications[0].seen, false);
+    }
+  }
+});
 test('cleanup expires due rows, cancels invalid live authority, and purges terminal retention in bounded batches', async () => {
   const f = fixture(); await create(f);
   await f.service.cleanupBoardAccessRequests(new Date(+NOW + 7 * 86400000)); assert.equal(f.state.requests[0].status, 'expired');
@@ -193,7 +204,8 @@ test('pending card still exposes both actions and the failure slot is inline', (
 });
 test('Inbox mounts variant outside task Link; double-submit and task-only keyboard actions are guarded', () => {
   const code = source('src/components/notifications/inboxSplit/index.tsx');
-  assert.match(code, /notification.type === "AgentBoardAccessRequest" && boardAccessDecisionCard/);
+  assert.match(code, /boardAccessDecisions \|\| item.notification.type !== "AgentBoardAccessRequest"/);
+  assert.match(code, /id=\{`inbox-\$\{notification.id\}`\}/);
   assert.match(code, /!clickTarget \|\| clickTarget.type === "AgentBoardAccessRequest"/); assert.match(code, /!selectedKeyboardRow.item.notification.task/);
   assert.match(source('src/components/notifications/NotificationRow.tsx'), /if \(submitting.current\) return/);
   const board = source('src/app/agents/[agentId]/AgentBoardAccess.tsx'); assert.match(board, /Number.isSafeInteger\(rawBoardId\)/); assert.match(board, /agent.boardAccess.some/); assert.match(board, /setBoardAccessOpen\(true\)/);

@@ -18,6 +18,9 @@ const route = taskWriteRoute({
   allowNullBody: true,
   operation: async (body, session, request) => {
     const { id, taskId, tutorial, intent } = body;
+    if (id != null && ((typeof id !== "string" && typeof id !== "number") || !/^-?\d+$/.test(String(id)) || !Number.isSafeInteger(Number(id)) || Number(id) === 0)) {
+      return NextResponse.json({ message: "Invalid notification id" }, { status: 400 });
+    }
     const accessResponse = await boardAccessNotificationWrite(session, id, taskId, { status: "Archive" });
     if (accessResponse) return accessResponse;
     const userId = session.userId;

@@ -12,6 +12,9 @@ const route = taskWriteRoute({
   allowNullBody: true,
   operation: async (body, session) => {
     const { notificationId, taskId, seen } = body;
+    if (notificationId != null && ((typeof notificationId !== "string" && typeof notificationId !== "number") || !/^\d+$/.test(String(notificationId)) || !Number.isSafeInteger(Number(notificationId)) || Number(notificationId) === 0)) {
+      return NextResponse.json({ message: "Invalid notification id" }, { status: 400 });
+    }
     const accessResponse = await boardAccessNotificationWrite(session, notificationId, taskId, { seen: seen !== "1" });
     if (accessResponse) return accessResponse;
     if (!notificationId && !taskId && !seen) {

@@ -49,7 +49,7 @@ export function AgentBoardAccess({
   const params = useSearchParams();
   const accessRequestsEnabled = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const rawBoardId = Number(params?.get("boardAccess"));
-  const requestedBoardId = Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
+  const requestedBoardId = accessRequestsEnabled && Number.isSafeInteger(rawBoardId) && rawBoardId > 0 && agent.boardAccess.some(board => board.id === rawBoardId) ? rawBoardId : null;
   const [openedRequestedBoard, setOpenedRequestedBoard] = useState<number | null>(null);
   if (accessRequestsEnabled && requestedBoardId !== null && requestedBoardId !== openedRequestedBoard) {
     setOpenedRequestedBoard(requestedBoardId);

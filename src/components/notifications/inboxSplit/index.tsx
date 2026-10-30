@@ -282,7 +282,7 @@ const InboxSplit = ({
         notification,
         notificationIndex,
         date: new Date(notification.createdAt || 0),
-      })),
+      })).filter(item => boardAccessDecisions || item.notification.type !== "AgentBoardAccessRequest"),
       ...activeDrafts.map((draft) => ({
         kind: "draft" as const,
         draft,
@@ -295,7 +295,7 @@ const InboxSplit = ({
       selectedSplit === "Blocked by you",
       snapshot,
     );
-  }, [_notifications, activeDrafts, selectedSplit, snapshot]);
+  }, [_notifications, activeDrafts, selectedSplit, snapshot, boardAccessDecisions]);
   const groupedInboxEntries = Object.entries(groupedInboxItems);
   const keyboardRows = useMemo<InboxKeyboardTimelineRow[]>(
     () =>
@@ -1169,8 +1169,8 @@ const InboxSplit = ({
                                 ))}
                               <Seen notification={notification} />
                             </div>
-                            {notification.type === "AgentBoardAccessRequest" && boardAccessDecisionCard ? (
-                              boardAccessDecisionCard
+                            {notification.type === "AgentBoardAccessRequest" ? (
+                              <div id={`inbox-${notification.id}`} className="min-w-0 flex-1">{boardAccessDecisionCard}</div>
                             ) : notification.type === "AgentMessage" ? (
                               <div
                                 className={

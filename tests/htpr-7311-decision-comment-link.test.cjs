@@ -122,6 +122,7 @@ for (const enabled of [true, false]) {
     const untouched = { id: "3", taskId: 2 };
     const original = { status: 200, json: { notifications: [{ id: "1", taskId: 1 }, { id: "2", taskId: 1 }, untouched] } };
     const { default: getAll } = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
+      "@/lib/agents/boardAccessRequests/service": { getOwnerBoardAccessNotifications: async () => [] },
       "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
       "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({ userId: 42 }) },
       "@/utils/controllers/notifications/decisionTasks": { getDecisionComments: async () => new Map([[1, question(30, 15)]]) },
