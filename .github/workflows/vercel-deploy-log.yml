@@ -61,10 +61,29 @@ jobs:
                      -e 's#(token|secret|password|api[_-]?key|authorization)([=: ]+)[^[:space:]]+#\1\2<redacted>#Ig')
           echo "fetched $(printf '%s\n' "$EVENTS" | wc -l) event lines"
 
-          BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" \
-            '{unique_index: ($t|tonumber), project_id: 15, content_type: "html",
-              text: ("<p><strong>Vercel build log for " + ($d|@html) + "</strong> (last 80 lines, vercel-deploy-log workflow).</p><p>"
-                     + ($meta|@html) + "</p><pre>" + ($ev|@html) + "</pre>")}')
+          # YPER4-952: the comment API rejects text over 5000 characters, so keep the newest
+          # whole log lines that fit instead of posting an oversized body.
+          BODY_JQ=$(cat <<'JQ'
+            ($ev | split("\n") | map(select(length > 0)) | reverse) as $rev
+            | ("<p><strong>Vercel build log for " + ($d | @html)
+               + "</strong> (vercel-deploy-log workflow, newest lines).</p><p>" + ($meta | @html) + "</p>") as $head
+            | ([$rev[] | (if length > 400 then .[0:400] + " [...]" else . end) | @html]) as $lines
+            | (5000 - ($head | length) - 11 - 80) as $budget
+            | reduce $lines[] as $line
+                ({kept: [], used: 0, full: false};
+                 if .full then .
+                 elif (.used + ($line | length) + 1) <= $budget
+                   then {kept: ([$line] + .kept), used: (.used + ($line | length) + 1), full: false}
+                   else {kept: .kept, used: .used, full: true}
+                 end)
+            | {unique_index: ($t | tonumber), project_id: 15, content_type: "html",
+               text: ($head + "<pre>" + (.kept | join("\n")) + "</pre>"
+                      + (if (.kept | length) < ($lines | length)
+                         then "<p>Earlier lines were dropped to fit the 5000-character comment limit.</p>"
+                         else "" end))}
+          JQ
+          )
+          BODY=$(jq -n --arg meta "$META" --arg ev "$EVENTS" --arg d "$DEPLOYMENT" --arg t "$TICKET" "$BODY_JQ")
           code=$(curl -s -o /tmp/post.out -w "%{http_code}" -X POST "https://app.hypertask.ai/api/mcp/comments" \
             -H "Authorization: Bearer $MCP_TOKEN" -H "Content-Type: application/json" -d "$BODY")
           echo "comment post: HTTP $code"
