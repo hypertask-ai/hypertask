@@ -13,7 +13,7 @@ export class ReportService {
 
     try {
       const validatedInput = ReportCrudInputSchema.parse(params);
-      const { action, ...reportInput } = validatedInput;
+      const { action, range, ...reportInput } = validatedInput;
 
       logger.debug('Managing report', {
         correlationId,
@@ -23,12 +23,15 @@ export class ReportService {
         bodyLength: validatedInput.body_html?.length,
       });
 
-      if (action === 'list' || action === 'get') {
+      if (action === 'list' || action === 'get' || action === 'velocity') {
         const queryParams = new URLSearchParams({
           project_id: String(validatedInput.project_id),
         });
         if (validatedInput.slug !== undefined) {
           queryParams.set('slug', validatedInput.slug);
+        }
+        if (validatedInput.range !== undefined) {
+          queryParams.set('range', validatedInput.range);
         }
 
         return await this.apiClient.makeRequest<ReportApiResponse>(

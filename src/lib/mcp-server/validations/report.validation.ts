@@ -40,7 +40,8 @@ const bodyHtmlSchema = z.string().max(
 export function getReportCrudBaseSchema() {
   return z
     .object({
-      action: z.enum(['list', 'get', 'create', 'update', 'delete']),
+      action: z.enum(['list', 'get', 'velocity', 'create', 'update', 'delete']),
+      range: z.string().max(8).optional(),
       project_id: projectIdSchema.optional(),
       slug: slugSchema.optional(),
       title: titleSchema.optional(),
@@ -60,7 +61,11 @@ export function getReportCrudInputSchema() {
       });
     }
 
-    if (data.action !== 'list' && data.slug === undefined) {
+    if (
+      data.action !== 'list' &&
+      data.action !== 'velocity' &&
+      data.slug === undefined
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'slug is required for get, create, update, and delete',
