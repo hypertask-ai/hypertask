@@ -85,6 +85,15 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         self.assertEqual(self.claim(1, 'YPER4-3').returncode, 0)
         self.assertIn('task assign YPER4-3', (self.root / 'writes').read_text())
 
+    def test_unlabeled_tickets_never_hold_each_other(self):
+        held = self.task('YPER4-1', 'Commands', 2, 'QA')
+        held['labels'] = []
+        free = self.task('YPER4-2', 'Commands')
+        free['labels'] = []
+        self.set_tasks([held, free, self.task('YPER4-3', 'Commands', 3, 'QA'), self.task('YPER4-4', 'Commands')])
+        self.assertEqual(self.admit(1, 'YPER4-2').returncode, 0, 'unlabeled claim admitted beside another unlabeled lease')
+        self.assertNotEqual(self.admit(4, 'YPER4-4').returncode, 0, 'same labeled domain still refused')
+
     def test_imported_conflict_only_blocks_overlapping_resumes(self):
         self.set_tasks([self.task('YPER4-1', 'Flags', 2, 'QA'),
                         self.task('YPER4-2', 'Flags', 3, 'Review'),

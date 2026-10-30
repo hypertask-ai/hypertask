@@ -9,6 +9,7 @@ import sys
 
 DOMAINS = {'Commands', 'Flags', 'Search', 'Prompts', 'Parity', 'Shipping'}
 ACTIVE = {'In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review', 'UX Sign-off', 'Flag: Off'}
+UNSCOPED = 'Unscoped'
 TERMINAL = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
 
 
@@ -36,11 +37,13 @@ def validate(task, project=None):
 def domain(task):
     found = {x.get('name', x.get('value'))[8:] for x in task['labels']
              if x.get('name', x.get('value')).startswith('Domain: ')} & DOMAINS
+    if not found:
+        return UNSCOPED
     return next(iter(found)) if len(found) == 1 else 'Shared'
 
 
 def conflict(a, b):
-    return a == b or 'Shared' in (a, b)
+    return UNSCOPED not in (a, b) and (a == b or 'Shared' in (a, b))
 
 
 def main():
@@ -93,7 +96,7 @@ def main():
                 if isinstance(lease, str):
                     lease = leases[key] = {'held': [lease], 'current': lease, 'pending': False}
                 if (not isinstance(key, str) or not isinstance(lease, dict) or not isinstance(lease.get('held'), list)
-                        or not lease['held'] or any(d not in DOMAINS | {'Shared'} for d in lease['held'])
+                        or not lease['held'] or any(d not in DOMAINS | {'Shared', UNSCOPED} for d in lease['held'])
                         or lease.get('current') not in lease['held'] or type(lease.get('pending')) is not bool):
                     raise ValueError('invalid lease')
         for inbox in state.glob('runner-*.json'):
@@ -172,7 +175,7 @@ def main():
                 existing['held'].append(d)
             existing['current'] = d
             existing['pending'] = True
-        blocked = cross or any(lease['pending'] for lease in mine.values()) or (not existing and len({s for lease in mine.values() for s in lease['held']} | scopes) > 1)
+        blocked = cross or any(lease['pending'] for lease in mine.values()) or (not existing and len(({s for lease in mine.values() for s in lease['held']} | scopes) - {UNSCOPED}) > 1)
         if tasks[ticket]['section'] in TERMINAL or tasks[ticket].get('status') in TERMINAL:
             blocked = True
         assigned = [(a.get('agent') or {}).get('displayName', '') for a in tasks[ticket]['assignees']]
