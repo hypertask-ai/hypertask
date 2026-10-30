@@ -1,0 +1,151 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+SCRIPT = Path(__file__).with_name('runner-pickup')
+
+
+class PickupDomainTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.state = self.root / 'state'
+        self.state.mkdir()
+        fake = self.root / 'vcc'
+        fake.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ['FIXTURE'])
+n = os.environ['SHIP_SESSION_NAME'].split()[-1]
+a = sys.argv[1:]
+if a[:2] == ['task', 'list']:
+    data = json.loads((root / ('tasks' + n)).read_text())
+    offset = int(a[a.index('--offset') + 1]) if '--offset' in a else 0
+    if data.get('fail_offset') == offset: sys.exit(1)
+    rows = data['tasks'][offset:offset + 100]
+    print(json.dumps({'success': True, 'tasks': rows, 'total': data.get('total', len(data['tasks']))}))
+elif a[:2] == ['task', 'get']:
+    p = root / ('detail-' + a[2])
+    if not p.exists(): sys.exit(1)
+    print(p.read_text())
+elif a[:2] == ['inbox', 'list']: print('{"success":true,"agent_notifications":[]}')
+elif a[:2] == ['activity', 'add']: pass
+else: sys.exit(9)
+''')
+        fake.chmod(0o755)
+        self.env = dict(os.environ, FIXTURE=str(self.root), HOME=str(self.root),
+                        RUNNER_INBOX_DIR=str(self.state), RUNNER_PICKUP_VCC=str(fake),
+                        RUNNER_PICKUP_NOW='1793188800', RUNNER_PICKUP_RATE_MARKER=str(self.root / 'none'))
+
+    def task(self, n, ticket, domain=None, section='Todo'):
+        return {'ticketNumber': ticket, 'uniqueIndex': int(ticket.split('-')[1]), 'projectId': 15,
+                'section': section, 'title': ticket, 'createdAt': '2026-10-28T10:00:00Z',
+                'updatedAt': '2026-10-28T10:00:00Z', 'assignees': [{'agent': {'displayName': f'Runner {n}'}}],
+                'labels': [{'name': 'Domain: ' + domain}] if domain else []}
+
+    def board(self, n, tasks, **extra):
+        (self.root / f'tasks{n}').write_text(json.dumps({'tasks': tasks, **extra}))
+
+    def start(self, n):
+        return subprocess.Popen(['bash', str(SCRIPT), 'run', str(n)], env=self.env,
+                                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+    def finish(self, p):
+        out, err = p.communicate(timeout=30)
+        self.assertEqual(p.returncode, 0, out + err)
+
+    def tick(self, n):
+        self.finish(self.start(n))
+
+    def items(self, n):
+        return [x['ticket'] for x in json.loads((self.state / f'runner-{n}.json').read_text())['items']]
+
+    def test_simultaneous_same_domain_and_retry_release(self):
+        a, b = self.task(1, 'HTPR-1', 'Commands'), self.task(2, 'HTPR-2', 'Commands')
+        self.board(1, [a]); self.board(2, [b])
+        one, two = self.start(1), self.start(2)
+        self.finish(one); self.finish(two)
+        winner = 1 if self.items(1) else 2
+        loser = 3 - winner
+        self.assertEqual(len(self.items(winner)), 1)
+        self.assertEqual(self.items(loser), [])
+        self.tick(loser)
+        self.assertEqual(self.items(loser), [])
+        active = a if winner == 1 else b
+        active['section'] = 'AI Review'
+        self.board(winner, [active]); self.tick(winner); self.tick(loser)
+        self.assertEqual(self.items(loser), [])
+        active['section'] = 'Done'
+        self.board(winner, [active]); self.tick(winner); self.tick(loser)
+        self.assertEqual(len(self.items(loser)), 1)
+
+    def test_distinct_domains_and_one_domain_per_runner(self):
+        self.board(1, [self.task(1, 'HTPR-1', 'Commands'), self.task(1, 'HTPR-3', 'Flags')])
+        self.board(2, [self.task(2, 'HTPR-2', 'Search')])
+        one, two = self.start(1), self.start(2)
+        self.finish(one); self.finish(two)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        self.tick(1)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+
+    def test_shared_conflicts_and_pagination_failure_keeps_lease(self):
+        a = self.task(1, 'HTPR-1')
+        self.board(1, [a]); self.board(2, [self.task(2, 'HTPR-2', 'Search')])
+        self.tick(1); self.tick(2)
+        self.assertEqual(self.items(2), [])
+        rows = [self.task(1, f'HTPR-{i}', 'Commands', 'Done') for i in range(10, 110)]
+        self.board(1, rows, total=101, fail_offset=100)
+        self.tick(1)
+        self.tick(2)
+        self.assertEqual(self.items(2), [])
+        self.assertIn('HTPR-1', json.loads((self.state / 'domain-ownership.json').read_text())['1'])
+
+    def test_legacy_delivered_inbox_blocks_other_runner(self):
+        (self.state / 'runner-1.json').write_text(json.dumps({'items': [{'ticket': 'HTPR-1', 'delivered': True}]}))
+        self.board(2, [self.task(2, 'HTPR-2', 'Search')])
+        self.tick(2)
+        self.assertEqual(self.items(2), [])
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1'], 'Shared')
+
+    def test_known_lease_survives_legacy_inbox_seeding(self):
+        (self.state / 'domain-ownership.json').write_text(json.dumps({'1': {'HTPR-1': 'Commands'}}))
+        (self.state / 'runner-1.json').write_text(json.dumps({'items': [{'ticket': 'HTPR-1'}]}))
+        self.board(2, [self.task(2, 'HTPR-2', 'Search')])
+        self.tick(2)
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1'], 'Commands')
+
+    def test_archived_status_releases_lease_on_readback(self):
+        task = self.task(1, 'HTPR-1', 'Flags', 'In Progress')
+        self.board(1, [task]); self.tick(1)
+        self.board(1, [])
+        task['status'] = 'Archive'
+        (self.root / 'detail-HTPR-1').write_text(json.dumps({'success': True, 'tasks': [task]}))
+        self.tick(1)
+        self.assertNotIn('1', json.loads((self.state / 'domain-ownership.json').read_text()))
+
+    def test_preview_does_not_write_state(self):
+        self.board(1, [self.task(1, 'HTPR-1', 'Flags')])
+        result = subprocess.run(['bash', str(SCRIPT), 'preview', '1'], env=self.env,
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Domain: Flags', result.stdout)
+        self.assertEqual(list(self.state.iterdir()), [])
+
+    def test_absent_task_needs_detail_readback(self):
+        task = self.task(1, 'HTPR-1', 'Flags')
+        self.board(1, [task]); self.tick(1)
+        self.board(1, []); self.tick(1)
+        self.assertIn('HTPR-1', json.loads((self.state / 'domain-ownership.json').read_text())['1'])
+        task['assignees'] = [{'user': {'displayName': 'Human'}}]
+        (self.root / 'detail-HTPR-1').write_text(json.dumps({'success': True, 'tasks': [task]}))
+        self.tick(1)
+        self.assertNotIn('1', json.loads((self.state / 'domain-ownership.json').read_text()))
+
+
+if __name__ == '__main__':
+    unittest.main()

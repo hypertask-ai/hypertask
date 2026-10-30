@@ -64,6 +64,7 @@ jobs:
       statuses: read
       packages: read
     outputs:
+      boundary_needed: ${{ steps.boundary-scope.outputs.needed }}
       run_tests: ${{ steps.shards.outputs.run_tests }}
       shard_indexes: ${{ steps.shards.outputs.indexes }}
     steps:
@@ -112,6 +113,21 @@ jobs:
             echo "build_needed=true" >> "$GITHUB_OUTPUT"
             : > "$RUNNER_TEMP/changed-files.txt"
           fi
+
+      - name: Determine boundary scan scope
+        id: boundary-scope
+        env:
+          BUILD_NEEDED: ${{ steps.scope.outputs.build_needed }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          files = Path(os.environ['RUNNER_TEMP'], 'changed-files.txt').read_text().splitlines()
+          needed = os.environ['BUILD_NEEDED'] == 'true' or not files or any(
+              not (f.startswith('docs/') or (f.endswith('.md') and not f.startswith('src/'))) for f in files)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f"needed={str(needed).lower()}\n")
+          PY
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
@@ -253,7 +269,7 @@ jobs:
   ci-checks:
     name: ci-checks
     needs: ci-prepare
-    if: needs.ci-prepare.outputs.run_tests == 'true'
+    if: needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -286,7 +302,13 @@ jobs:
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      - name: Check board registration boundaries
+        run: |
+          npx depcruise --config .dependency-cruiser.cjs src/components/Modals/commands/HTC/domains
+          node --test tests/domain-boundary.test.cjs
+
       - name: Restore ESLint cache
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         id: restore-eslint-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -296,9 +318,11 @@ jobs:
             eslint-${{ runner.os }}-${{ hashFiles('package-lock.json', 'eslint.config.mjs', 'tsconfig.json') }}-
 
       - name: Relocate ESLint cache
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         run: node .github/scripts/relocate-eslint-cache.mjs .cache/eslint/.eslintcache "$GITHUB_WORKSPACE"
 
       - name: Restore agent scope pip cache
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         id: agent-scope-pip-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
@@ -306,6 +330,7 @@ jobs:
           key: agent-scope-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/agent-scope/requirements.txt') }}
 
       - name: Guard agent board scope
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         env:
           PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -323,19 +348,22 @@ jobs:
           python .github/scripts/agent-scope/run.py
 
       - name: Save agent scope pip cache
-        if: github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true')
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/agent-scope-pip-cache
           key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
 
       - name: Generate Prisma client
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         run: npx prisma generate
 
       - name: Board filter and sort contracts
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         run: node --test tests/board-filters/*.test.cjs
 
       - name: Restore TypeScript cache
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         id: restore-tsc-cache
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
         # falls back to a full check when they differ.
@@ -347,26 +375,27 @@ jobs:
             tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
 
       - name: Typecheck
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         # Next.js generates route-handler signature checks outside ordinary tsc.
         # Generate them first so CI catches the same errors as the Vercel build.
         run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
 
       - name: Save TypeScript cache
-        if: github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true')
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .cache/tsc
           key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
 
       - name: Paid API cost notes
-        if: github.event_name == 'pull_request'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'pull_request')
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
 
       - name: Changed style tokens
-        if: github.event_name == 'pull_request'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'pull_request')
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -375,6 +404,7 @@ jobs:
           npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"
 
       - name: Lint
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
 
       - name: Save ESLint cache
@@ -384,7 +414,7 @@ jobs:
         # cache-hit is true only for an exact primary-key match. Restoring the
         # previous production SHA through restore-keys returns false, so every new
         # production commit saves a refreshed cache; only same-SHA reruns skip it.
-        if: github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true'
+        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'push' && steps.restore-eslint-cache.outputs.cache-hit != 'true')
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .cache/eslint
@@ -393,11 +423,13 @@ jobs:
       # Directory discovery in this check is broader than the PR selector's
       # exact-path heuristic, so run it even when another suite owns the diff.
       - name: Settings Ctrl+K coverage
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         run: node --test tests/settings-cmdk-coverage.test.cjs
 
       # A PR that adds the offending test is exactly the PR the selector never
       # routes here, so this gate reads the whole tests/ tree on every PR.
       - name: Source-text regex gate
+        if: needs.ci-prepare.outputs.run_tests == 'true'
         run: node --test tests/source-text-regex-lint.test.cjs
 
   ci-test:
@@ -600,12 +632,18 @@ jobs:
         run: |
           set -euo pipefail
           test "${{ needs.ci-prepare.result }}" = "success"
+          case "${{ needs.ci-prepare.outputs.run_tests }}" in true|false) ;; *) exit 1 ;; esac
+          case "${{ needs.ci-prepare.outputs.boundary_needed }}" in true|false) ;; *) exit 1 ;; esac
           if [ "${{ needs.ci-prepare.outputs.run_tests }}" = "true" ]; then
             test "${{ needs.ci-checks.result }}" = "success"
             test "${{ needs.ci-test.result }}" = "success"
             test "${{ steps.prove.outcome }}" = "success"
           else
-            test "${{ needs.ci-checks.result }}" = "skipped"
+            if [ "${{ needs.ci-prepare.outputs.boundary_needed }}" = "true" ]; then
+              test "${{ needs.ci-checks.result }}" = "success"
+            else
+              test "${{ needs.ci-checks.result }}" = "skipped"
+            fi
             test "${{ needs.ci-test.result }}" = "skipped"
           fi
 

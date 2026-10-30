@@ -3,3 +3,18 @@
 /config/parity/ @valentinyeo
 /scripts/parity-contract.mjs @valentinyeo
 /scripts/parity-ai-chat-inventory.mjs @valentinyeo
+
+# Domains
+/src/components/Modals/commands/HTC/ @valentinyeo
+/src/lib/flags.ts @valentinyeo
+/src/lib/flags/ @valentinyeo
+/tests/feature-flags.test.cjs @valentinyeo
+/e2e/smoke/production-flag-modes.json @valentinyeo
+/src/pages/api/search/ @valentinyeo
+/tests/search-chips-values.test.cjs @valentinyeo
+/src/lib/ai/prompts/ @valentinyeo
+/tests/fixtures/ai/prompt-baseline.json @valentinyeo
+/docs/parity.md @valentinyeo
+/.claude/skills/ship/ @valentinyeo
+/docs/ci.md @valentinyeo
+/docs/ci-policy.yml @valentinyeo
