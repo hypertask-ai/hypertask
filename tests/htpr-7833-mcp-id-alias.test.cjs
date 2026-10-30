@@ -18,6 +18,17 @@ const schemas = [
 ]
 const conflictMessage = 'id and task_id must identify the same task when both are provided'
 
+function assertConflict(run) {
+  assert.throws(run, (error) => {
+    assert.equal(error.name, 'ZodError')
+    const [issue] = error.issues
+    assert.equal(issue.code, 'custom')
+    assert.deepEqual(issue.path, ['task_id'])
+    assert.equal(issue.message, conflictMessage)
+    return true
+  })
+}
+
 for (const [name, schema, fields] of schemas) {
   test(`${name}: numeric id alone satisfies task identification`, () => {
     const parsed = schema.parse({ ...fields, id: 42 })
@@ -46,14 +57,7 @@ for (const [name, schema, fields] of schemas) {
 
   test(`${name}: conflicting id and task_id answer a mapped input refusal`, () => {
     const parsed = schema.parse({ ...fields, id: 42, task_id: 43 })
-    assert.throws(() => normalizeTaskInput(parsed), (error) => {
-      assert.equal(error.name, 'ZodError')
-      const [issue] = error.issues
-      assert.equal(issue.code, 'custom')
-      assert.deepEqual(issue.path, ['task_id'])
-      assert.equal(issue.message, conflictMessage)
-      return true
-    })
+    assertConflict(() => normalizeTaskInput(parsed))
   })
 
   test(`${name}: unknown keys still fail with unrecognized_keys`, () => {
@@ -92,7 +96,7 @@ test('array task and ticket inputs keep their existing coercion and cardinality'
   assert.deepEqual(schema.parse({ ticket_number: ['HTPR-7833', 'HTPR-7834'] }), { ticket_number: ['HTPR-7833', 'HTPR-7834'] })
   assert.equal(schema.safeParse({ task_id: [] }).success, false)
   assert.equal(schema.safeParse({ ticket_number: [] }).success, false)
-  assert.throws(() => normalizeTaskInput(schema.parse({ id: 42, task_id: [42, 43] })), { message: conflictMessage })
+  assertConflict(() => normalizeTaskInput(schema.parse({ id: 42, task_id: [42, 43] })))
 })
 
 test('normalizer accepts raw numeric strings, preserves input, and rejects raw conflicts', () => {
@@ -100,7 +104,7 @@ test('normalizer accepts raw numeric strings, preserves input, and rejects raw c
   assert.deepEqual(normalizeTaskInput(input), { task_id: 42, project_id: 15 })
   assert.deepEqual(input, { id: '42', project_id: '15' })
   assert.deepEqual(normalizeTaskInput({ id: '42', task_id: 42 }), { task_id: 42 })
-  assert.throws(() => normalizeTaskInput({ id: '42', task_id: '43' }), { message: conflictMessage })
+  assertConflict(() => normalizeTaskInput({ id: '42', task_id: '43' }))
   assert.deepEqual(normalizeTaskInput({ task_id: '42', unknown: true }), { task_id: 42, unknown: true })
 })
 
