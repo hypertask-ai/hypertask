@@ -22,9 +22,6 @@ export async function POST(request: NextRequest) {
       if (rateLimited) return rateLimited;
       const ctx = await validateMcpRouteAuth(request);
       if (!ctx) return await mcpRouteUnauthorizedResponse(request);
-      if (ctx.agentId && !(await isFeatureEnabled(HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG, ctx.user.id))) {
-        return NextResponse.json({ success: false, error: "Agent task tracking is not enabled" }, { status: 404 });
-      }
       let body;
       try {
         body = await request.json();
@@ -35,6 +32,9 @@ export async function POST(request: NextRequest) {
       if (action !== "read") {
         const roleRefusal = await requireAgentWriteRole(ctx);
         if (roleRefusal) return roleRefusal;
+      }
+      if (ctx.agentId && !(await isFeatureEnabled(HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG, ctx.user.id))) {
+        return NextResponse.json({ success: false, error: "Agent task tracking is not enabled" }, { status: 404 });
       }
       if (
         !body ||

@@ -553,7 +553,7 @@ test("7673 native tools: the refused tool list is the reviewed one", () => {
     "hypertask_create_page", "hypertask_update_page", "hypertask_create_report", "hypertask_update_report",
     "hypertask_delete_report", "hypertask_create_label", "hypertask_update_task", "hypertask_add_comment",
     "hypertask_decision_request", "hypertask_attach_files", "hypertask_update_comment", "hypertask_delete_comment",
-    "hypertask_assign_user", "hypertask_unassign_user", "hypertask_clear_task_blocker", "hypertask_move_task_between_boards", "hypertask_inbox_archive",
+    "hypertask_assign_user", "hypertask_follow_task", "hypertask_unassign_user", "hypertask_clear_task_blocker", "hypertask_move_task_between_boards", "hypertask_inbox_archive",
     "hypertask_inbox_unarchive", "hypertask_create_view", "hypertask_update_view", "hypertask_switch_view",
     "hypertask_delete_view", "hypertask_create_skill", "hypertask_update_skill", "hypertask_delete_skill",
     "hypertask_import_skills", "hypertask_start_timer", "hypertask_stop_timer", "hypertask_pause_timer",
