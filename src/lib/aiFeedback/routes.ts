@@ -82,6 +82,7 @@ export const MCP_FEEDBACK_ROUTE_TEMPLATES = [
   '/api/mcp/tasks/relations',
   '/api/mcp/tasks/search',
   '/api/mcp/tasks/session',
+  '/api/mcp/tasks/share',
   '/api/mcp/tasks/tree',
   '/api/mcp/tasks/update',
   '/api/mcp/tasks/waiting-on',

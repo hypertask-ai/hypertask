@@ -4,6 +4,7 @@ const { load } = require("./task-route-loader.cjs");
 
 const mocks = {
   "@/utils/controllers/reports/reportService": { REPORT_CAPABILITIES: "Report capabilities" },
+  "./operations": { executeMcpOperation: async () => new Response(null, { status: 500 }) },
 };
 
 test("agent ticket sharing ships two MCP doors with annotations and summaries", () => {
