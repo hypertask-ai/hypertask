@@ -1,7 +1,5 @@
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8216_AGENT_TASK_SHARE_FLAG } from "@/lib/flags/definitions/htpr-8216-agent-task-share";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
 const baseURL = process.env.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
@@ -46,10 +44,6 @@ export async function shareTaskWithLink({
   agentId?: string | null;
   teamScope?: AgentTokenTeamScope | null;
 }) {
-  if (!(await isFeatureEnabled(HTPR_8216_AGENT_TASK_SHARE_FLAG, currentUser.id))) {
-    return { status: 404, body: { message: "Ticket sharing is not enabled" } };
-  }
-
   const task = await loadTask({ taskId, currentUser, agentId, teamScope });
   if (!task) {
     return { status: 404, body: { message: "Task not found, or you cannot share it" } };
@@ -58,13 +52,16 @@ export async function shareTaskWithLink({
     return { status: 403, body: { message: "This board does not allow sharing a ticket" } };
   }
 
-  const existing = await prisma.taskSharing.findFirst({
-    where: { taskId: task.id, userId: currentUser.id },
-    select: { id: true, shareType: true, expired: true, expiredAt: true },
+  const live = await prisma.taskSharing.findFirst({
+    where: {
+      taskId: task.id,
+      userId: currentUser.id,
+      expired: false,
+      OR: [{ expiredAt: null }, { expiredAt: { gt: new Date() } }],
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, shareType: true },
   });
-  const live = existing && !existing.expired && !(existing.expiredAt && existing.expiredAt <= new Date())
-    ? existing
-    : null;
   const share = live ?? await prisma.taskSharing.create({
     data: { taskId: task.id, userId: currentUser.id, projectId: task.projectId },
     select: { id: true, shareType: true },

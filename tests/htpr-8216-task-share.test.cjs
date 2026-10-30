@@ -24,7 +24,13 @@ function fixture(options = {}) {
       findFirst: async ({ where }) => {
         assert.equal(where.taskId, 42);
         assert.equal(where.userId, 7);
-        return rows.find((row) => row.taskId === 42 && row.userId === 7) ?? null;
+        const matches = rows.filter((row) => row.taskId === 42 && row.userId === 7);
+        if (where.expired === false) {
+          assert.deepEqual(where.OR, [{ expiredAt: null }, { expiredAt: { gt: where.OR[1].expiredAt.gt } }]);
+          assert.ok(where.OR[1].expiredAt.gt instanceof Date);
+          return matches.filter((row) => !row.expired && !(row.expiredAt && row.expiredAt <= new Date()))[0] ?? null;
+        }
+        return matches[0] ?? null;
       },
       create: async ({ data }) => {
         created.push(data);
@@ -72,6 +78,15 @@ test("shareTaskWithLink replaces an expired link", async () => {
   assert.equal(share.created.length, 1);
 });
 
+test("sharing twice after an expired replacement keeps reusing the live link", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-dead", taskId: 42, userId: 7, expired: true, expiredAt: null, shareType: "Anyone" });
+  const first = await share.shareTaskWithLink(actor);
+  const second = await share.shareTaskWithLink(actor);
+  assert.equal(first.body.link, second.body.link);
+  assert.equal(share.created.length, 1);
+});
+
 test("a board where sharing is off refuses politely", async () => {
   const share = fixture({ boardStatus: "Archived" });
   const result = await share.shareTaskWithLink(actor);
@@ -92,14 +107,6 @@ test("a ticket on a board the agent cannot reach is not found", async () => {
   const result = await share.shareTaskWithLink(actor);
   assert.equal(result.status, 404);
   assert.equal(result.body.message, "Task not found, or you cannot share it");
-});
-
-test("sharing off by flag makes no link", async () => {
-  const share = fixture({ flagEnabled: false });
-  const result = await share.shareTaskWithLink(actor);
-  assert.equal(result.status, 404);
-  assert.equal(result.body.message, "Ticket sharing is not enabled");
-  assert.equal(share.created.length, 0);
 });
 
 test("readTaskShare says the ticket is public and returns its link", async () => {

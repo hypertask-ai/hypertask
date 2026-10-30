@@ -44,8 +44,8 @@ test("ticket sharing has its own Everyone-default feature flag with a release ri
   assert.equal(HTPR_8216_AGENT_TASK_SHARE_FLAG, "htpr-8216-agent-task-share");
   assert.equal(definition.key, HTPR_8216_AGENT_TASK_SHARE_FLAG);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason);
-  assert.equal(definition.releaseRisk.highRisk, undefined);
+  assert.equal(definition.releaseRisk.highRisk, "access");
 });
