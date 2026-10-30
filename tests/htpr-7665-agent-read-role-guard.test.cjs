@@ -217,6 +217,8 @@ const CASES = [
   { area: "also guarded", name: "inbox/move", file: `${OPS}/inbox/move/operation.ts`, method: "POST", body: {} },
   { area: "also guarded", name: "tasks/lease/claim", file: `${API}/tasks/lease/claim/route.ts`, method: "POST", body: {} },
   { area: "also guarded", name: "tasks/lease/heartbeat", file: `${API}/tasks/lease/heartbeat/route.ts`, method: "POST", body: {} },
+  { area: "also guarded", name: "tasks/archive", file: `${OPS}/tasks/archive/operation.ts`, method: "POST", body: { task_id: 1 } },
+  { area: "also guarded", name: "tasks/delete", file: `${OPS}/tasks/delete/operation.ts`, method: "POST", body: { task_id: 1 } },
   { area: "also guarded", name: "tasks/waiting-on", file: `${OPS}/tasks/waiting-on/operation.ts`, method: "POST", body: { taskId: 1, userId: null } },
   { area: "also guarded", name: "tasks/follow", file: `${OPS}/tasks/follow/operation.ts`, method: "POST", body: { action: "follow", taskId: 1 } },
   { area: "also guarded", name: "tasks/session", file: `${API}/tasks/session/route.ts`, method: "POST", body: {} },

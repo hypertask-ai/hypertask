@@ -70,6 +70,8 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   CREATE_TASK: 'Returns the created task.',
   SET_TASK_WAITING_ON: 'Returns the task waiting-on person, setter and timestamp.',
   FOLLOW_TASK: 'Returns following, starred, remindAt and reminderId.',
+  ARCHIVE_TASK: 'Returns the archived task status.',
+  DELETE_TASK: 'Returns the trashed task and its permanent-delete date.',
   MOVE_TASK_BETWEEN_BOARDS: 'Returns the moved task.',
   ASSIGN_USER: 'Returns the assignees.',
   INBOX_LIST: 'Returns inbox items.',
