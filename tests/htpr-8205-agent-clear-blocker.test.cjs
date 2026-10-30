@@ -69,18 +69,29 @@ test("with the flag off, the clear marker is not read and the Question stays", a
   assert.equal(world.queries.length, 1);
 });
 
-function waitingOnWorld({ clearFlag = true, task = { projectId: 15, waitingOnUserId: null, blockerCommentId: 900 }, mentioned = [{ userId: 6 }, { userId: 7 }] } = {}) {
-  const activities = [], updates = [], inboxes = [], taskLookups = [];
+function waitingOnWorld({ clearFlag = true, task = { projectId: 15, waitingOnUserId: null, blockerCommentId: 900 }, mentioned = [{ userId: 6 }, { userId: 7 }], activityFails = false } = {}) {
+  const activities = [], updates = [], inboxes = [], taskLookups = [], order = [], transactions = [];
   const agent = { id: "agent-19", userId: 19, displayName: "RUNNER 19", photoURL: null };
   const db = {
     task: {
       findFirst: async (args) => { taskLookups.push(args.where); return task; },
-      update: async ({ data }) => { updates.push(data); return { id: 42, ...data }; },
+      update: async ({ data }) => { order.push("update"); updates.push(data); return { id: 42, ...data }; },
     },
     comment: { findFirst: async () => ({ id: 900 }) },
     user: { findUnique: async () => null },
-    agent: { findUnique: async () => agent },
+    agent: { findUnique: async () => { order.push("agent"); return agent; } },
     notification: { findMany: async () => mentioned },
+    $transaction: async (run) => {
+      const tx = { task: db.task };
+      transactions.push(tx);
+      const saved = updates.length;
+      try {
+        return await run(tx);
+      } catch (error) {
+        updates.length = saved;
+        throw error;
+      }
+    },
   };
   const { setTaskWaitingOn } = load("src/lib/tasks/setWaitingOn.ts", {
     "@/lib/prisma": { default: db },
@@ -93,9 +104,13 @@ function waitingOnWorld({ clearFlag = true, task = { projectId: 15, waitingOnUse
     },
     "@/lib/mcp/tasks/services": { validateProjectMemberIds: async () => ({ invalidIds: [] }) },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (...args) => ({ args }) },
-    "@/utils/controllers/activities/createActivity": { default: async (input) => { activities.push(input); } },
+    "@/utils/controllers/activities/createActivity": { default: async (input) => {
+      if (activityFails) throw new Error("Activity unavailable");
+      order.push("activity");
+      activities.push(input);
+    } },
   });
-  return { setTaskWaitingOn, activities, updates, inboxes, taskLookups, agent };
+  return { setTaskWaitingOn, activities, updates, inboxes, taskLookups, agent, order, transactions };
 }
 
 const agentClear = (world, extra = {}) => world.setTaskWaitingOn({
@@ -114,6 +129,21 @@ test("an agent clears the blocker with a reason and one note records who and why
   assert.equal(data.blockerCleared, true);
   assert.equal(data.reason, "Valentin answered in the ticket");
   assert.equal(data.fromAgent.displayName, "RUNNER 19");
+});
+
+test("the agent is looked up before the write, and the write and the note share one transaction", async () => {
+  const world = waitingOnWorld();
+  await agentClear(world);
+  assert.deepEqual(world.order, ["agent", "update", "activity"]);
+  assert.equal(world.transactions.length, 1);
+  assert.equal(world.activities[0].transaction, world.transactions[0]);
+});
+
+test("if the note cannot be written the clear is rolled back and the Question stays open", async () => {
+  const world = waitingOnWorld({ activityFails: true });
+  await assert.rejects(agentClear(world), /Activity unavailable/);
+  assert.deepEqual(world.updates, []);
+  assert.deepEqual(world.inboxes, []);
 });
 
 test("everyone with a Mention on the ticket gets an inbox refresh at once", async () => {

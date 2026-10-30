@@ -88,7 +88,7 @@ export async function setTaskWaitingOn({
     data.waitingOnSetAt = userId === null ? null : new Date();
   }
 
-  const updatedTask = await prisma.task.update({
+  const taskUpdate = {
     where: { id: taskId },
     data,
     select: {
@@ -98,25 +98,32 @@ export async function setTaskWaitingOn({
       waitingOnSetById: true,
       waitingOnSetAt: true,
     },
-  });
+  } satisfies Prisma.TaskUpdateArgs;
 
-  if (userId !== undefined || clearsBlocker) {
-    const actingAgent = clearsBlocker && agentId
-      ? await prisma.agent.findUnique({ where: { id: agentId }, select: actingAgentSelect })
-      : null;
-    await createActivity({
-      taskId,
-      activityBody: {
-        type: "TaskWaitingOn",
-        data: {
-          fromUserId: currentUser.id,
-          fromUser: currentUser,
-          ...(actingAgent ? { fromAgent: actingAgent } : {}),
-          waitingOnDisplayName: waitingOnUser?.displayName ?? null,
-          ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
-        },
-      },
+  const actingAgent = clearsBlocker && agentId
+    ? await prisma.agent.findUnique({ where: { id: agentId }, select: actingAgentSelect })
+    : null;
+  const activityBody = {
+    type: "TaskWaitingOn",
+    data: {
+      fromUserId: currentUser.id,
+      fromUser: currentUser,
+      ...(actingAgent ? { fromAgent: actingAgent } : {}),
+      waitingOnDisplayName: waitingOnUser?.displayName ?? null,
+      ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
+    },
+  };
+
+  let updatedTask;
+  if (clearsBlocker) {
+    updatedTask = await prisma.$transaction(async (tx) => {
+      const updated = await tx.task.update(taskUpdate);
+      await createActivity({ taskId, activityBody, transaction: tx });
+      return updated;
     });
+  } else {
+    updatedTask = await prisma.task.update(taskUpdate);
+    if (userId !== undefined) await createActivity({ taskId, activityBody });
   }
 
   void broadcastBoardChange(task.projectId, { originUserId: currentUser.id });

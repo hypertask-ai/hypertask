@@ -43,6 +43,7 @@ function fixture(options = {}) {
       return ![101, 102].includes(comment.id) || comment.taskId !== where.taskId || comment.activity !== null ? null : { id: comment.id };
     } },
     user: { findUnique: async ({ where }) => where.id === 7 ? owner : { displayName: "Member" } },
+    $transaction: async (run) => run(db),
   };
   const mocks = {
     "@/lib/auth/agentScope": {
