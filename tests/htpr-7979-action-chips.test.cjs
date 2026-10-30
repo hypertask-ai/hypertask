@@ -61,7 +61,7 @@ function harness({ chips, writing = false, rules }) {
     "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => ({ id: 985, displayName: "QA" }) },
     "@/app/api/ai/_lib/taskContent": { convertHtmlToText: (value) => value, isSessionNoise: () => false },
     "@/app/api/ai/_lib/systemModelLadder": { resolveSystemModel: () => ({ provider: "fixture", model: model.id }) },
-    "@/lib/prisma": { default: { task: { findFirst: async () => task }, comment: { findMany: async () => [] } } },
+    "@/lib/prisma": { __esModule: true, default: { task: { findFirst: async () => task }, comment: { findMany: async () => [] } } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_id, args) => args.fixed },
   };
@@ -80,9 +80,10 @@ function harness({ chips, writing = false, rules }) {
   };
 }
 
-test("flag definition defaults to everyone with the writing flag as a related flag", () => {
+test("flag definition is owner only with the owner request and the writing flag as a related flag", () => {
   assert.equal(chipFlagModule.default.key, chipFlag);
-  assert.equal(chipFlagModule.default.defaultMode, "EVERYONE");
+  assert.equal(chipFlagModule.default.defaultMode, "OWNER_ONLY");
+  assert.equal(chipFlagModule.default.releaseRisk.ownerRequest.ticketUrl, "https://app.hypertask.ai/detail/project-15/7979");
   assert.ok(chipFlagModule.default.related.includes(writingFlag));
 });
 
@@ -134,11 +135,10 @@ test("flag off: the writing flag decides and the original note is never sent to 
   }
 });
 
-test("next-move requests never consult the action chip flag", async () => {
+test("next-move requests never use the action chip prompt", async () => {
   for (const chips of [false, true]) {
     const h = harness({ chips });
     await h.post({ originalNote: "ignored" });
-    assert.equal(h.flagCalls.some(([key]) => key === chipFlag), false);
     assert.equal(h.calls[0].instructions, renderPrompt("task-questions-context-1"));
     assert.doesNotMatch(h.calls[0].prompt, /ORIGINAL NOTE/);
   }

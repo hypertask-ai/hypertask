@@ -315,7 +315,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
     user: { id: 985 }, currentProject: board, mounted: { current: true }, writerReasonEnabled: false, inlineAgentImages: false, applyWriterProperties: false, splitTasksEnabled: true, skillFollowupEnabled: false,
     createComposedTask: async () => result,
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
-    ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value),
+    ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value), setOriginalNote() {},
     setIntro: value => intros.push(value), composeTaskAssistantMessage: h.composeTaskAssistantMessage,
     chatAutoOpenAllowed: { current: true }, setNewTicketPath() {},
     updateActiveItemAndItemInView() {}, setScope() {}, setSidebar() {}, setSuppressed() {}, setExplicitOpen() {}, setShowChat() {},

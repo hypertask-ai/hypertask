@@ -52,7 +52,7 @@ function questionsRoute(options = {}) {
     "@/lib/flags/definitions/htpr-7716-allowance-fallbacks": { HTPR_7716_ALLOWANCE_FALLBACKS_FLAG: "htpr-7716-allowance-fallbacks" },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ agentId: options.agentId }) },
     "@/lib/auth/agentScope": { withAgentScopeRequest: (_request, run) => run() },
-    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { assert.equal(userId, 985); return [flag].includes(key) ? options.enabled !== false : true; } },
+    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { assert.equal(userId, 985); if (key === keys.HTPR_7979_ACTION_CHIPS_FLAG) return false; return [flag].includes(key) ? options.enabled !== false : true; } },
     "@/app/api/ai/_lib/skills": { resolveSkills: (text, context, lookup) => resolver.resolveSkills(text, context, lookup ?? (async (slugs, scope) => { lookups.push({ slugs, scope }); return options.skills ?? [skill]; })) },
     "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => options.unauthenticated ? null : ({ id: 985, displayName: "QA" }) },
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), configureAiModelUsage() {}, providerOptionsForAiModel: () => ({}), aiUsageProviderForCredential: () => "fixture" },
@@ -269,7 +269,7 @@ async function withCompose(options, check) {
   dom.window.HTMLElement.prototype.attachEvent = () => {};
   dom.window.HTMLElement.prototype.detachEvent = () => {};
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "lastUsedBoardsAtom", "composeTaskChatIntroAtom", "composeTaskSkillFollowupAtom", "composeTaskQuestionsTaskIdAtom", "showAIChatInterfaceAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatNewTicketPathAtom", "aiChatExplicitOpenAtAtom", "dockedChatScopeAtom", "fullScreenChatScopeAtom", "inViewObjectAtom", "taskDetailNonEssentialReadyAtom", "aiChatEditTaskIdAtom"].map((name) => [name, name]));
+  const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "lastUsedBoardsAtom", "composeTaskChatIntroAtom", "composeTaskSkillFollowupAtom", "composeTaskOriginalNoteAtom", "composeTaskQuestionsTaskIdAtom", "showAIChatInterfaceAtom", "isAiChatSidebarModeAtom", "aiChatAutoOpenSuppressedAtom", "aiChatNewTicketPathAtom", "aiChatExplicitOpenAtAtom", "dockedChatScopeAtom", "fullScreenChatScopeAtom", "inViewObjectAtom", "taskDetailNonEssentialReadyAtom", "aiChatEditTaskIdAtom"].map((name) => [name, name]));
   const project = { id: 15, title: "Board", uniqueIdentifier: "HTPR" };
   const values = new Map([[atoms.currentProjectAtom, project], [atoms.currentUserAtom, { id: 985, uid: "qa" }], [atoms.lastUsedBoardsAtom, {}], [atoms.taskDetailNonEssentialReadyAtom, true], [atoms.inViewObjectAtom, options.existing ? { taskId: 43, taskProjectId: 15 } : {}]]);
   const subscribers = new Set();

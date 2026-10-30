@@ -71,10 +71,12 @@ type TaskComment = {
 };
 
 export async function POST(request: NextRequest) {
-  return withAgentScopeRequest(request, () => taskQuestions(request));
+  const flagViewer = await getCurrentUserFromCookies();
+  const actionChipsFlag = flagViewer?.id ? await isFeatureEnabled(HTPR_7979_ACTION_CHIPS_FLAG, flagViewer.id) : false;
+  return withAgentScopeRequest(request, () => taskQuestions(request, actionChipsFlag));
 }
 
-async function taskQuestions(request: NextRequest) {
+async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
   const viewer = await getCurrentUserFromCookies();
   if (!viewer?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -277,7 +279,7 @@ async function taskQuestions(request: NextRequest) {
       reasoningFeature: "suggested-questions",
     });
     const newTicket = parsedBody.data.kind === "new-ticket";
-    const actionChips = newTicket && !skillContext && await isFeatureEnabled(HTPR_7979_ACTION_CHIPS_FLAG, viewer.id);
+    const actionChips = newTicket && !skillContext && actionChipsFlag;
     const writingQuestions = newTicket && !actionChips && await isFeatureEnabled(HTPR_7534_WRITING_QUESTIONS_FLAG, viewer.id);
     const boardRules = (task.project.ai_custom_instructions?.[0]?.customInstruction ?? "").trim().slice(0, MAX_BOARD_RULES);
     const result = await generateText({
@@ -304,7 +306,8 @@ async function taskQuestions(request: NextRequest) {
     const questions = result.output.questions
       .map((question) => question.trim())
       .filter(Boolean)
-      .slice(0, actionChips ? MAX_ACTION_CHIPS : newTicket ? 4 : 5);
+      .slice(0, newTicket ? 4 : 5)
+      .slice(0, actionChips ? MAX_ACTION_CHIPS : undefined);
     const followup = skillContext && "followup" in result.output && typeof result.output.followup === "string"
       ? result.output.followup.trim() : undefined;
     return NextResponse.json({ questions, ...(followup ? { followup } : {}) });
