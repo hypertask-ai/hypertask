@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
@@ -61,7 +62,7 @@ mine = owners.get(runner, {})
 mine = {ticket: lease for ticket, lease in mine.items() if ticket not in tasks or (
     tasks[ticket].get('section') not in terminal and tasks[ticket].get('status') not in terminal
     and (assigned(tasks[ticket]) or (lease.get('admission') is True and not any(
-        bool(a.get('agent'))
+        re.fullmatch(r'Runner [1-9][0-9]*', (a.get('agent') or {}).get('displayName', ''), re.I)
         for a in tasks[ticket].get('assignees', [])))))}
 for ticket, lease in mine.items():
     if ticket in tasks and assigned(tasks[ticket]):
@@ -128,6 +129,8 @@ admitted_other = {d for owner, leases in owners.items() if owner != runner for l
 accepted = []
 for item in data['candidates']:
     ticket = item['ticket']
+    if tasks[ticket].get('section') in terminal or tasks[ticket].get('status') in terminal:
+        continue
     d = domain(tasks[ticket])
     if ticket in mine:
         if not mine[ticket]['pending'] and not any(conflicts(scope, admitted_other) for scope in mine[ticket]['held']):

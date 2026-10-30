@@ -195,6 +195,53 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']
         self.assertTrue(lease['admission'])
 
+    def test_non_numeric_agent_reservation_blocks_overlapping_claims(self):
+        first = self.task('YPER4-1', 'Flags')
+        first['assignees'] = [{'agent': {'displayName': 'HT Product Lead'}}]
+        self.set_tasks([first, self.task('YPER4-2', 'Flags')])
+        result = self.claim(1, 'YPER4-1')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        pickup = subprocess.run(['python3', str(HERE / 'runner-domain-pickup.py'), str(self.state), '1'],
+                                input=json.dumps({'tasks': [first], 'previous': [], 'candidates': []}),
+                                capture_output=True, text=True)
+        self.assertEqual(pickup.returncode, 0, pickup.stderr)
+        self.assertTrue(json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']['admission'])
+        denied = self.claim(2, 'YPER4-2')
+        self.assertEqual(denied.returncode, 4, denied.stderr)
+
+    def test_resume_retained_multi_domain_but_refuse_new_other_ticket(self):
+        self.set_tasks([self.task('YPER4-1', 'Search', 1, 'In Progress'),
+                        self.task('YPER4-2', 'Search')])
+        (self.state / 'domain-ownership.json').write_text(json.dumps({
+            '1': {'YPER4-1': {'held': ['Commands', 'Search'], 'current': 'Search', 'pending': False}}}))
+        resume = self.admit(1, 'YPER4-1')
+        self.assertEqual(resume.returncode, 0, resume.stderr)
+        self.assertNotEqual(self.admit(1, 'YPER4-2').returncode, 0)
+
+    def test_dispatch_withholds_after_admission_when_pane_changes(self):
+        loader = importlib.machinery.SourceFileLoader('dispatch_wait', str(HERE / 'runner-dispatch'))
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        task = self.task('YPER4-1', 'Flags', section='Backlog')
+        task['title'] = 'Work'
+        self.set_tasks([task])
+        boards = {15: [], 4060: [task]}
+        comments = {'YPER4-1': []}
+        row = {'runner': 'RUNNER 1', 'pane': '%1', 'state': 'idle'}
+        changed = dict(row, state='typed')
+        loop = self.root / 'loop'
+        loop.mkdir()
+        with patch.dict(os.environ, self.env), patch.object(module, 'maintain_runner', return_value=False), \
+                patch.object(module, 'snapshots', side_effect=[[row], [changed]]), \
+                patch.object(module.os, 'getloadavg', return_value=(1, 1, 1)), \
+                patch.object(module, 'command', return_value=''), patch.object(module, 'send') as send:
+            module.dispatch([row], boards, comments, 1, 1800000000, go=True,
+                            claim_dir=self.root / 'claims', loop=loop, state=self.root)
+        send.assert_not_called()
+        self.assertFalse((self.root / 'claims' / 'YPER4-1.json').exists())
+        self.assertTrue(json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']['admission'])
+
     def test_pickup_keeps_preassignment_reservation(self):
         task = self.task('YPER4-1', 'Flags')
         self.set_tasks([task])

@@ -399,6 +399,46 @@ else: sys.exit(9)
         self.assertIn('Domain: Flags', result.stdout)
         self.assertEqual(list(self.state.iterdir()), [])
 
+    def test_terminal_readback_never_requeues_or_recreates_lease(self):
+        for terminal in ('Archived', 'Flag: Everyone', 'Flag: Only Me + QA'):
+            with self.subTest(terminal=terminal):
+                task = self.task(1, 'HTPR-1', 'Flags')
+                self.board(1, [task]); self.tick(1)
+                self.board(1, [])
+                if terminal == 'Archived':
+                    task['status'] = terminal
+                else:
+                    task['section'] = terminal
+                    task['resumeAfterFreeze'] = True
+                (self.root / 'detail-HTPR-1').write_text(json.dumps({'success': True, 'tasks': [task]}))
+                self.tick(1)
+                self.assertEqual(self.items(1), [])
+                self.assertNotIn('1', json.loads((self.state / 'domain-ownership.json').read_text()))
+
+    def test_terminal_candidate_cannot_recreate_lease_in_helper(self):
+        task = self.task(1, 'HTPR-1', 'Flags')
+        task['status'] = 'Archived'
+        result = subprocess.run(['python3', str(SCRIPT.with_name('runner-domain-pickup.py')), str(self.state), '1'],
+                                input=json.dumps({'tasks': [task], 'previous': [],
+                                                  'candidates': [{'ticket': 'HTPR-1'}]}),
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [])
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text()), {})
+
+    def test_malformed_missing_nonadmission_detail_retries_same_tick_time(self):
+        task = self.task(1, 'HTPR-1', 'Flags')
+        self.board(1, [task]); self.tick(1)
+        self.board(1, [])
+        detail = self.root / 'detail-HTPR-1'
+        detail.write_text('{"success":true,"tasks":[{}]}')
+        self.tick(1)
+        self.assertIn('HTPR-1', json.loads((self.state / 'domain-ownership.json').read_text())['1'])
+        task['assignees'] = []
+        detail.write_text(json.dumps({'success': True, 'tasks': [task]}))
+        self.tick(1)
+        self.assertNotIn('1', json.loads((self.state / 'domain-ownership.json').read_text()))
+
     def test_absent_task_needs_detail_readback(self):
         task = self.task(1, 'HTPR-1', 'Flags')
         self.board(1, [task]); self.tick(1)

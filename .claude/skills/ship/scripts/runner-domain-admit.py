@@ -125,7 +125,8 @@ def main():
                 names = [(a.get('agent') or {}).get('displayName', '') for a in task['assignees']]
                 own = any(name.casefold() == ('runner ' + slot).casefold() for name in names)
                 terminal = task['section'] in TERMINAL or task.get('status') in TERMINAL
-                if terminal or (not own and (not lease.get('admission') or any(names))):
+                if terminal or (not own and (not lease.get('admission') or any(
+                        re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) for name in names))):
                     del leases[key]
                 elif own:
                     lease.pop('admission', None)
@@ -169,7 +170,7 @@ def main():
                 existing['held'].append(d)
             existing['current'] = d
             existing['pending'] = True
-        blocked = cross or any(lease['pending'] for lease in mine.values()) or len({s for lease in mine.values() for s in lease['held']} | scopes) > 1
+        blocked = cross or any(lease['pending'] for lease in mine.values()) or (not existing and len({s for lease in mine.values() for s in lease['held']} | scopes) > 1)
         if tasks[ticket]['section'] in TERMINAL or tasks[ticket].get('status') in TERMINAL:
             blocked = True
         assigned = [(a.get('agent') or {}).get('displayName', '') for a in tasks[ticket]['assignees']]
@@ -190,6 +191,9 @@ def main():
             tmp.unlink(missing_ok=True)
         if blocked:
             raise ValueError('domain admission held' + (': ' + ', '.join(f'Runner {s} {t}' for s, t in cross) if cross else ''))
+        print(json.dumps({'held': [key for key, task in tasks.items() if task['section'] in ACTIVE
+                                   and any((a.get('agent') or {}).get('displayName', '').casefold() == ('runner ' + runner).casefold()
+                                           for a in task['assignees'])]}))
 
 
 if __name__ == '__main__':
