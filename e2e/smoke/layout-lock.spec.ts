@@ -131,8 +131,10 @@ for (const name of [...screens, 'ticket from board card']) {
       await expect(page.getByTestId('comment-composer')).toBeVisible()
       // Seen-state can collapse old comments between visits; compare the expanded thread.
       if (!phone) {
-        await page.getByTestId('ticket-comment').first().click()
-        await page.getByTestId('ticket-comment').last().click()
+        // YPER4-939: wait for the server-to-live row handoff before clicking a row it replaces.
+        await waitForTicketInitialScroll(page)
+        await page.getByTestId('ticket-comment').first().click({ timeout: 15_000 })
+        await page.getByTestId('ticket-comment').last().click({ timeout: 15_000 })
         await expect(page.locator('[data-testid="ticket-comment"] .comment-body')).toHaveCount(2)
       }
     } else if (screen === 'board' || (screen === 'app-shell' && phone)) {
