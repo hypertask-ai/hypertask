@@ -8,8 +8,8 @@ import subprocess
 import sys
 
 DOMAINS = {'Commands', 'Flags', 'Search', 'Prompts', 'Parity', 'Shipping'}
-ACTIVE = {'In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review', 'UX Sign-off'}
-TERMINAL = {'Done', 'Archive', 'Archived'}
+ACTIVE = {'In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review', 'UX Sign-off', 'Flag: Off'}
+TERMINAL = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
 
 
 def read(*args):

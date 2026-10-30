@@ -48,7 +48,7 @@ for inbox in state.glob('runner-*.json'):
 
 name = 'Runner ' + runner
 tasks = {t['ticketNumber']: t for t in data['tasks'] if t.get('ticketNumber')}
-terminal = {'Done', 'Archive', 'Archived'}
+terminal = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
 def assigned(task):
     return any((a.get('agent') or {}).get('displayName', '').casefold() == name.casefold() for a in task.get('assignees', []))
 

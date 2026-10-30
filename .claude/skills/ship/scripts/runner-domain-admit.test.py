@@ -114,6 +114,16 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         self.assertEqual(set(remaining), {'YPER4-3', 'YPER4-4'})
         self.assertTrue(remaining['YPER4-3']['admission'])
 
+    def test_declared_release_modes_release_but_off_retains(self):
+        for section in ('Flag: Everyone', 'Flag: Only Me + QA', 'Flag: Off'):
+            with self.subTest(section=section):
+                self.set_tasks([self.task('YPER4-1', 'Flags', 2, section), self.task('YPER4-2', 'Flags')])
+                path = self.state / 'domain-ownership.json'
+                path.write_text(json.dumps({'2': {'YPER4-1': {'held': ['Flags'], 'current': 'Flags', 'pending': False}}}))
+                result = self.admit(1, 'YPER4-2')
+                self.assertEqual(result.returncode, 1 if section == 'Flag: Off' else 0, result.stderr)
+                self.assertEqual('2' in json.loads(path.read_text()), section == 'Flag: Off')
+
     def test_malformed_page_has_no_board_write(self):
         self.set_tasks([self.task('YPER4-1', 'Flags')])
         result = self.claim(1, 'YPER4-1', BAD_PAGE='1')
