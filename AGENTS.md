@@ -12,7 +12,7 @@ Paths in reference commands are repository-relative.
 - Board reads use `hypertask`; writes use `vcc`.
 - Check `ship-identity` before writing. Never copy credentials.
 - Never access ticket content through database tools.
-- Claim before coding. Respect active claims and Abdul's assignments.
+- Claim before investigating or coding. Respect active claims and Abdul's assignments.
 - Add only your agent. Preserve human assignees.
 - Branch from `origin/production`; target `production`.
 - One ticket, one PR. Leave auto-merge off.
