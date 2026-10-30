@@ -167,6 +167,7 @@ ship_scripts_tests:
     - python3 .claude/skills/ship/scripts/ht-hax-runner.test.py
     - python3 .claude/skills/ship/scripts/pr-drain-pick.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.recovery.test.py
+    - python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
     - bash .claude/skills/ship/scripts/runner-pickup.test.sh
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py

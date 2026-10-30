@@ -44,9 +44,14 @@ Reciprocal relabels can release acquired reservations only for inbox work proven
 undelivered in Todo; runner-ID order chooses the winner. Delivered or active work
 is never preempted, so reciprocal active relabels require completion or reassignment.
 Legacy pending leases use runner-ID order; this is deterministic, not a fairness
-guarantee. Ownership applies to pickup, not
-manual claims. It cannot discover pre-existing manual work before that runner's first successful pickup tick. Imported active work can already conflict;
-importing it does not guarantee exclusive ownership.
+guarantee. Manual claims and numeric runner dispatch use the same lock and ownership file.
+Admission reads both boards completely and imports active and review assignments.
+Conflicting legacy runner resumptions are refused until ownership is resolved.
+Unrelated domains remain admissible; nonconflicting same-ticket resumes are allowed. Reservations
+survive pickup before assignment and have no expiry. An uncertain claim or
+delivery failure retains its reservation. The same runner may retry that ticket;
+completion or reassignment releases it through pickup. Incomplete or malformed
+board reads refuse admission before board writes.
 
 ### Internal operations QA
 

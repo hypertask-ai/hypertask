@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
@@ -48,9 +49,9 @@ for inbox in state.glob('runner-*.json'):
 
 name = 'Runner ' + runner
 tasks = {t['ticketNumber']: t for t in data['tasks'] if t.get('ticketNumber')}
-terminal = {'Done', 'Archive', 'Archived'}
+terminal = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
 def assigned(task):
-    return any((a.get('agent') or {}).get('displayName') == name for a in task.get('assignees', []))
+    return any((a.get('agent') or {}).get('displayName', '').casefold() == name.casefold() for a in task.get('assignees', []))
 
 def domain(task):
     found = {label.get('name', label.get('value')) for label in (task.get('labels') or []) if isinstance(label, dict)}
@@ -58,7 +59,14 @@ def domain(task):
     return choices[0] if len(choices) == 1 else 'Shared'
 
 mine = owners.get(runner, {})
-mine = {ticket: lease for ticket, lease in mine.items() if ticket not in tasks or (assigned(tasks[ticket]) and tasks[ticket].get('section') not in terminal and tasks[ticket].get('status') not in terminal)}
+mine = {ticket: lease for ticket, lease in mine.items() if ticket not in tasks or (
+    tasks[ticket].get('section') not in terminal and tasks[ticket].get('status') not in terminal
+    and (assigned(tasks[ticket]) or (lease.get('admission') is True and not any(
+        re.fullmatch(r'Runner [1-9][0-9]*', (a.get('agent') or {}).get('displayName', ''), re.I)
+        for a in tasks[ticket].get('assignees', [])))))}
+for ticket, lease in mine.items():
+    if ticket in tasks and assigned(tasks[ticket]):
+        lease.pop('admission', None)
 other = {d for owner, leases in owners.items() if owner != runner for lease in leases.values() for d in lease['held']}
 
 def conflicts(d, scopes):
@@ -116,12 +124,16 @@ for ticket, lease in mine.items():
             lease['acquired'] = lease['held'][:]
 
 held = {d for lease in mine.values() for d in lease['held']}
+admitted_other = {d for owner, leases in owners.items() if owner != runner for lease in leases.values()
+                  for d in (lease['held'] if not lease['pending'] else lease.get('acquired', []))}
 accepted = []
 for item in data['candidates']:
     ticket = item['ticket']
+    if tasks[ticket].get('section') in terminal or tasks[ticket].get('status') in terminal:
+        continue
     d = domain(tasks[ticket])
     if ticket in mine:
-        if not mine[ticket]['pending']:
+        if not mine[ticket]['pending'] and not any(conflicts(scope, admitted_other) for scope in mine[ticket]['held']):
             accepted.append({**item, '_pickupPrevious': mine[ticket].get('envelope')})
     elif not any(lease['pending'] for lease in mine.values()) and (not held or held == {d}) and not conflicts(d, other):
         mine[ticket] = {'held': [d], 'current': d, 'pending': False}

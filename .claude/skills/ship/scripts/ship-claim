@@ -226,6 +226,11 @@ if [[ $T == HTPR-* ]]; then
   [ "$rc" = 0 ] || exit "$rc"
 fi
 
+if [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+  python3 "$(dirname "$(readlink -f "$0")")/runner-domain-admit.py" "${BASH_REMATCH[1]}" "$T" \
+    || { echo "ship-claim: HOLD. Domain admission failed." >&2; exit 4; }
+fi
+
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
 "$VCC" activity add "$T" "Claimed. Session working it now. Claim id: [$RID]
 Next: I examine and fix it. Resume: $RESUME" >/dev/null \
