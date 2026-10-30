@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime as dt
 import fcntl
 import json
 import os
@@ -11,6 +12,7 @@ DOMAINS = {'Commands', 'Flags', 'Search', 'Prompts', 'Parity', 'Shipping'}
 ACTIVE = {'In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review', 'UX Sign-off', 'Flag: Off'}
 UNSCOPED = 'Unscoped'
 TERMINAL = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
+TAKEOVER_IDLE = dt.timedelta(hours=6)
 
 
 def read(*args):
@@ -40,6 +42,24 @@ def domain(task):
     if not found:
         return UNSCOPED
     return next(iter(found)) if len(found) == 1 else 'Shared'
+
+
+def idle_runner(task, runner):
+    now = dt.datetime.now(dt.timezone.utc)
+    for assignee in task['assignees']:
+        agent = assignee.get('agent') or {}
+        name = agent.get('displayName', '')
+        if not re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) or name.casefold() == ('runner ' + runner).casefold():
+            continue
+        if not isinstance(agent.get('id'), str):
+            return False
+        log = read('task', 'agent-log', task['ticketNumber'], '--agent', agent['id'], '--limit', '1')
+        if not isinstance(log, dict) or log.get('success') is not True or not isinstance(log.get('activities'), list):
+            return False
+        for activity in log['activities']:
+            if now - dt.datetime.fromisoformat(activity['createdAt'].replace('Z', '+00:00')) <= TAKEOVER_IDLE:
+                return False
+    return True
 
 
 def conflict(a, b):
@@ -129,10 +149,14 @@ def main():
                 own = any(name.casefold() == ('runner ' + slot).casefold() for name in names)
                 terminal = task['section'] in TERMINAL or task.get('status') in TERMINAL
                 if terminal or (not own and (not lease.get('admission') or any(
-                        re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) for name in names))):
+                        re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) and name.casefold() not in lease.get('takeover_from', [])
+                        for name in names))):
                     del leases[key]
                 elif own:
                     lease.pop('admission', None)
+                    if lease['pending'] and domain(task) == UNSCOPED:
+                        lease.update(held=[UNSCOPED], current=UNSCOPED, pending=False)
+                        lease.pop('acquired', None)
             if not leases:
                 del owners[slot]
         for task in tasks.values():
@@ -179,8 +203,12 @@ def main():
         if tasks[ticket]['section'] in TERMINAL or tasks[ticket].get('status') in TERMINAL:
             blocked = True
         assigned = [(a.get('agent') or {}).get('displayName', '') for a in tasks[ticket]['assignees']]
+        previous = []
         if any(re.fullmatch(r'Runner [1-9][0-9]*', name, re.I) and name.casefold() != ('runner ' + runner).casefold() for name in assigned):
-            blocked = True
+            previous = [name.casefold() for name in assigned if re.fullmatch(r'Runner [1-9][0-9]*', name, re.I)
+                        and name.casefold() != ('runner ' + runner).casefold()]
+            reserved = any(key == ticket and lease.get('admission') for slot, key, lease in others)
+            blocked = blocked or reserved or not idle_runner(tasks[ticket], runner)
         if not blocked:
             lease = mine.setdefault(ticket, {'held': [d], 'current': d, 'pending': False})
             if d not in lease['held']:
@@ -188,8 +216,11 @@ def main():
             lease.update(current=d, protected=True)
             if any(name.casefold() == ('runner ' + runner).casefold() for name in assigned):
                 lease.pop('admission', None)
+                lease.pop('takeover_from', None)
             else:
                 lease['admission'] = True
+                if previous:
+                    lease['takeover_from'] = previous
         if not mine:
             owners.pop(runner, None)
         tmp = path.with_name(path.name + '.' + str(os.getpid()))
