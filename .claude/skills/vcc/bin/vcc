@@ -27,6 +27,11 @@ guard_args() {
   local -a positional=() options=()
   while [ "$#" -gt 0 ]; do
     arg=$1
+    if [ "${#positional[@]}" = 3 ] && [ "${positional[0]}" = activity ] && [ "${positional[1]}" = add ]; then
+      positional+=("$arg")
+      shift
+      continue
+    fi
     [[ $arg != -?* || $arg == --* ]] || arg="-$arg"
     case "$arg" in
       --) shift; positional+=("$@"); break ;;

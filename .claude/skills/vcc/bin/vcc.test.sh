@@ -130,6 +130,42 @@ for option in --help=false --h= --version=no --V=0 -h=false -V=no; do
 done
 printf 'ok help and version bypass mutation dispatch\n'
 
+cp "$T/bin/curl" "$T/curl-original"
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+method='' output='' data=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --request) method=$2; shift ;;
+    --output) output=$2; shift ;;
+    --data) data=$2; shift ;;
+  esac
+  shift
+done
+if [ "$method" = GET ]; then
+  printf '%s' '{"success":true,"run":{"status":"active"}}' > "$output"
+else
+  printf '%s' "$data" > "$VCC_TEST_ACTIVITY"
+  printf '%s' '{"success":true,"activity":{"id":"fixture-activity"}}' > "$output"
+fi
+printf 200
+STUB
+export VCC_TEST_ACTIVITY="$T/activity"
+mkdir -p "$HOME/.local/state/vcc-runs/fixture"
+printf 'fixture-run\n' > "$HOME/.local/state/vcc-runs/fixture/X-1"
+for value in --help -h --version -V; do
+  refused env VCC_HELPER=1 bash "$vcc" activity add X-1 "$value"
+  run bash "$vcc" activity add X-1 "$value"
+  [ "$status" = 0 ] || fail "activity text failed: $value"
+  [ "$(< "$T/out")" = fixture-activity ] || fail "activity did not dispatch: $value"
+  [ "$(jq -r '.text' "$VCC_TEST_ACTIVITY")" = "$value" ] || fail "activity text changed: $value"
+  allowed bash "$vcc" activity add X-1 "$value" --help
+  [[ $(< "$T/out") == "stub: <activity> <add> <X-1> <$value> <--help>" ]] || fail 'trailing help changed activity arguments'
+  refused env VCC_HELPER=1 bash "$vcc" activity add X-1 "$value" --help
+done
+mv "$T/curl-original" "$T/bin/curl"
+printf 'ok help-like activity text stays literal\n'
+
 allowed env HAX_PROVIDER=codex HAX_MODEL=gpt-6.1-sol HAX_EFFORT=high bash "$vcc" comment add X-1 --text hi
 [[ $(< "$T/out") == 'stub: <comment> <add> <X-1> <--text> <hi>' ]] || fail 'write arguments changed'
 printf 'ok runner write reaches stub without helper markers or ancestors\n'
