@@ -46,9 +46,11 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
   });
 
   const cancelledFree = await isFeatureEnabled(HTPR_7982_CANCELLED_FREE_FLAG, userId);
-  const savedPlanOnly = await isFeatureEnabled("htpr-7852-internal-team-saved-plan", FEATURE_FLAG_OWNER_USER_ID);
 
-  if (!savedPlanOnly && teams.some((team) => isInternalCompTeam(team.id))) return true;
+  if (
+    teams.some((team) => isInternalCompTeam(team.id)) &&
+    !(await isFeatureEnabled("htpr-7852-internal-team-saved-plan", FEATURE_FLAG_OWNER_USER_ID))
+  ) return true;
 
   return teams.some(
     (team) =>
