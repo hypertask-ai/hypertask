@@ -151,5 +151,6 @@ test("client wiring: note is stored with the new task, sent with the chips reque
   const list = read("src/components/AI_CHAT/MessageList.tsx");
   assert.match(list, /useFlag\(HTPR_7979_ACTION_CHIPS_FLAG\)/);
   assert.match(list, /originalNote/);
-  assert.match(list, /actionChipsEnabled \? "action-chip" : "generated-question"/);
+  assert.match(list, /if \(actionChipsEnabled\) chipType = "action-chip"/);
+  assert.match(list, /if \(actionChipsEnabled && originalNoteState/);
 });

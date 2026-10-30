@@ -40,7 +40,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
-  const chipType = actionChipsEnabled ? "action-chip" : "generated-question";
+  let chipType: "action-chip" | "generated-question" = "generated-question";
+  if (actionChipsEnabled) chipType = "action-chip";
   const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
   let chipSignal: typeof signalAiChip | undefined;
   if (chipEventsEnabled) chipSignal = signalAiChip;
@@ -51,7 +52,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
   const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && messages.length === 1 &&
     lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
-  const originalNote = originalNoteState && originalNoteState.taskId === newTicketId ? originalNoteState.note : undefined;
+  let originalNote: string | undefined;
+  if (actionChipsEnabled && originalNoteState?.taskId === newTicketId) originalNote = originalNoteState?.note;
   const ticketQuestions = useQuery({
     queryKey: ["task-questions", "new-ticket", newTicketId],
     queryFn: async (): Promise<{ questions: string[] }> => {
