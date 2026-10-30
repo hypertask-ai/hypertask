@@ -521,7 +521,7 @@ check('reporting', 'noise alert rolling windows reject spread matches and combin
 
 check('reporting', 'noise alert opt-ins are explicit, never alert expected responses or forced tests, and respect service scope', () => withHarness(async h => {
   const rules = JSON.parse(readFileSync(join(HERE, 'noise.json')));
-  assert.deepEqual(rules.filter(rule => rule.alert).map(rule => rule.id), ['ssl-mode-warning', 'ai-sdk-warning', 'pg-query-deprecation', 'url-parse-deprecation', 'aws-sdk-v2-note', 'console-time-warning', 'qstash-cancel-404']);
+  assert.deepEqual(rules.filter(rule => rule.alert).map(rule => rule.id), ['stripe-webhook-bad-signature', 'ssl-mode-warning', 'ai-sdk-warning', 'pg-query-deprecation', 'url-parse-deprecation', 'aws-sdk-v2-note', 'console-time-warning', 'qstash-cancel-404']);
   const messages = ['HTTP 404', 'Authenticated agents cannot archive or delete tasks in Done', 'Warning: SECURITY WARNING: The SSL modes [ht-forced-test]', 'AbortError'];
   h.events(messages.map(message => event({ service: 'vercel', message, count: 500 })));
   await h.run();
@@ -647,6 +647,19 @@ check('reporting', 'noise alert fixture dry run prints the planned ticket for 12
   assert.ok(h.calls().every(call => call.name === 'ht' && call.args[0] === 'GET'));
   console.log(result.stdout.trim());
   console.log('SSL fixture planned ticket verified');
+}));
+
+check('reporting', 'a rejected Stripe webhook signature is noise, so one probe files no ticket', () => withHarness(async h => {
+  const messages = [
+    '[stripe-webhook] signature verification failed: No signatures found matching the expected signature for payload. Are you passing the raw request body you received from Stripe?',
+    '[stripe-webhook] signature verification failed: Unable to extract timestamp and signatures from header',
+  ];
+  h.events(messages.map(message => event({ service: 'vercel', route: '/api/stripe/webhook', message })));
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(activities(h).length, 0);
+  assert.equal(h.state().days['2026-10-14'].vercel.noise, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
 }));
 
 check('reporting', 'noise counted per service and day, no tickets; daily summary once after 06 or forced', () => withHarness(async h => {

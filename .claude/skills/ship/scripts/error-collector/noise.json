@@ -17,6 +17,14 @@
     "reason": "Expected unauthorized, forbidden or missing-resource responses"
   },
   {
+    "id": "stripe-webhook-bad-signature",
+    "service": "vercel",
+    "match": "^\\[stripe-webhook\\] signature verification failed: ",
+    "reason": "A request that is not Stripe, or not signed with the current webhook secret, is deliberately answered 400 (HTPR-8209); the rejection is logged at error level, so one probe filed one Error Log ticket. Volume means a probe storm or a wrong secret, and still files one source-fix ticket.",
+    "alert": true,
+    "name": "Stripe webhook signature rejected"
+  },
+  {
     "id": "ssl-mode-warning",
     "service": "vercel",
     "match": "Warning: SECURITY WARNING: The SSL modes",
