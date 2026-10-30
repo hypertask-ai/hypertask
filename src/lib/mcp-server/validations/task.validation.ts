@@ -38,6 +38,7 @@ export const SetTaskWaitingOnInputSchema = z.object({
   taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
   userId: z.number().int().positive().max(2_147_483_647).nullable().optional().describe('Board member user ID to wait on, or null to clear.'),
   blockerCommentId: z.number().int().positive().max(2_147_483_647).nullable().optional().describe('Comment on this task explaining the blocker; null clears the marker. Send with userId to change both atomically.'),
+  reason: z.string().trim().min(1).max(500).optional().describe('Why the blocker is cleared. Required when an agent sets blockerCommentId to null on a task that has one; it is written in the note that says who cleared it.'),
 }).strict().refine((input) => input.userId !== undefined || input.blockerCommentId !== undefined, { message: 'Provide userId or blockerCommentId' });
 
 export function getGetTasksInputSchema() {

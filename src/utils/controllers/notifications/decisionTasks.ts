@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7092_DECISIONS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
 import { pickDecisionComments, type DecisionMentionComment } from "@/lib/inboxDecisions";
 
 export async function getDecisionComments(
@@ -50,5 +51,14 @@ export async function getDecisionComments(
     where: { creatorId: userId, agentId: null, activity: { equals: Prisma.DbNull }, taskId: { in: taskIds } },
     select: { taskId: true, createdAt: true },
   });
-  return pickDecisionComments(candidates, viewerComments);
+  const blockerClears = (await isFeatureEnabled(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG, userId))
+    ? await prisma.comment.findMany({
+        where: {
+          taskId: { in: taskIds },
+          activity: { path: ["data", "blockerCleared"], equals: true },
+        },
+        select: { taskId: true, createdAt: true },
+      })
+    : [];
+  return pickDecisionComments(candidates, viewerComments, blockerClears);
 }

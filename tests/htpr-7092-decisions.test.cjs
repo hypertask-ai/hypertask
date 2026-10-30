@@ -156,7 +156,7 @@ test("flag off hides the board view: the view list drops it unless the flag is o
 const loadServer = (enabled, db) =>
   loadTsModule("src/utils/controllers/notifications/decisionTasks.ts", {
     "@/lib/prisma": { __esModule: true, default: db },
-    "@/lib/flags": { isFeatureEnabled: async () => enabled },
+    "@/lib/flags": { isFeatureEnabled: async (key) => enabled && key === FLAG },
     "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
   }).getDecisionComments;
 

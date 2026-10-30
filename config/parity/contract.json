@@ -256,11 +256,6 @@
           "issue": "https://app.hypertask.ai/detail/project-15/7723",
           "expires": "2026-11-13",
           "entries": ["task waiting-on"]
-        },
-        "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8205",
-          "expires": "2026-11-13",
-          "entries": ["hypertask_clear_task_blocker"]
         }
       }
     },

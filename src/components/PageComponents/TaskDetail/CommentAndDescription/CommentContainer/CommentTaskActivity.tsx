@@ -21,6 +21,8 @@ import TaskLabelComponent from "@/components/Modals/CreateLabel/TaskLabelCompone
 import CreatedBy from "../Common/CreatedBy";
 import DueDateLabel from "@/components/Labels/DueDateLabel";
 import { activityAgentId } from "@/lib/agents/activityAttribution";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
 import { pullRequestBadgeByState } from "@/components/PageComponents/TaskDetail/pullRequestBadge";
 
 const CommentTaskActivity = () => {
@@ -205,19 +207,33 @@ const TaskWaitingOnActivity = ({
   activity,
 }: {
   activity: ITaskWaitingOnActivity;
-}) => (
-  <>
-    <BoldElement>
-      <CreatedByLocal
-        name={activity.data.fromUser.displayName ?? ""}
-        pfp={activity.data.fromUser.photoURL ?? ""}
-      />
-    </BoldElement>{" "}
-    {activity.data.waitingOnDisplayName
-      ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
-      : "cleared blocked by"}
-  </>
-);
+}) => {
+  const agentClearsBlocker = useFlag(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG);
+  if (agentClearsBlocker && activity.data.blockerCleared) {
+    const clearedBy = activity.data.fromAgent ?? activity.data.fromUser;
+    return (
+      <>
+        <BoldElement>
+          <CreatedByLocal name={clearedBy.displayName ?? ""} pfp={clearedBy.photoURL ?? ""} />
+        </BoldElement>{" "}
+        {`cleared the blocker${activity.data.reason ? `: ${activity.data.reason}` : ""}`}
+      </>
+    );
+  }
+  return (
+    <>
+      <BoldElement>
+        <CreatedByLocal
+          name={activity.data.fromUser.displayName ?? ""}
+          pfp={activity.data.fromUser.photoURL ?? ""}
+        />
+      </BoldElement>{" "}
+      {activity.data.waitingOnDisplayName
+        ? `marked this blocked by ${activity.data.waitingOnDisplayName}`
+        : "cleared blocked by"}
+    </>
+  );
+};
 
 const TaskPullRequestActivity = ({
   activity,

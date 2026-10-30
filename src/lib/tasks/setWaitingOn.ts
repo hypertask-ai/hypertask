@@ -6,12 +6,15 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import createActivity from "@/utils/controllers/activities/createActivity";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
+import { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG } from "@/lib/flags/definitions/htpr-8205-agent-clear-blocker";
+import { actingAgentSelect } from "@/lib/agents/activityAttribution";
 import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
 export async function setTaskWaitingOn({
   taskId,
   userId,
   blockerCommentId,
+  reason,
   currentUser,
   agentId,
   teamScope,
@@ -19,6 +22,7 @@ export async function setTaskWaitingOn({
   taskId: number;
   userId?: number | null;
   blockerCommentId?: number | null;
+  reason?: string | null;
   currentUser: { id: number };
   agentId?: string | null;
   teamScope?: AgentTokenTeamScope | null;
@@ -35,10 +39,17 @@ export async function setTaskWaitingOn({
         ? { AND: [getProjectWhere(currentUser.id), getProjectWhere(currentUser.id, agentId, teamScope)] }
         : getProjectWhere(currentUser.id),
     },
-    select: { projectId: true, waitingOnUserId: true },
+    select: { projectId: true, waitingOnUserId: true, blockerCommentId: true },
   });
   if (!task) {
     return { status: 404, body: { message: "Task not found" } };
+  }
+
+  const clearsBlocker = blockerCommentId === null && task.blockerCommentId !== null &&
+    await isFeatureEnabled(HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG, currentUser.id);
+  const clearReason = reason?.trim() || null;
+  if (clearsBlocker && agentId && !clearReason) {
+    return { status: 400, body: { message: "Say why the blocker is cleared: reason is required when an agent clears it" } };
   }
 
   if (blockerCommentId != null && !await prisma.comment.findFirst({
@@ -77,7 +88,7 @@ export async function setTaskWaitingOn({
     data.waitingOnSetAt = userId === null ? null : new Date();
   }
 
-  const updatedTask = await prisma.task.update({
+  const taskUpdate = {
     where: { id: taskId },
     data,
     select: {
@@ -87,27 +98,49 @@ export async function setTaskWaitingOn({
       waitingOnSetById: true,
       waitingOnSetAt: true,
     },
-  });
+  } satisfies Prisma.TaskUpdateArgs;
 
-  if (userId !== undefined) await createActivity({
-    taskId,
-    activityBody: {
-      type: "TaskWaitingOn",
-      data: {
-        fromUserId: currentUser.id,
-        fromUser: currentUser,
-        waitingOnDisplayName: waitingOnUser?.displayName ?? null,
-      },
+  const actingAgent = clearsBlocker && agentId
+    ? await prisma.agent.findUnique({ where: { id: agentId }, select: actingAgentSelect })
+    : null;
+  const activityBody = {
+    type: "TaskWaitingOn",
+    data: {
+      fromUserId: currentUser.id,
+      fromUser: currentUser,
+      ...(actingAgent ? { fromAgent: actingAgent } : {}),
+      waitingOnDisplayName: waitingOnUser?.displayName ?? null,
+      ...(clearsBlocker ? { blockerCleared: true, reason: clearReason } : {}),
     },
-  });
+  };
+
+  let updatedTask;
+  if (clearsBlocker) {
+    updatedTask = await prisma.$transaction(async (tx) => {
+      const updated = await tx.task.update(taskUpdate);
+      await createActivity({ taskId, activityBody, transaction: tx });
+      return updated;
+    });
+  } else {
+    updatedTask = await prisma.task.update(taskUpdate);
+    if (userId !== undefined) await createActivity({ taskId, activityBody });
+  }
 
   void broadcastBoardChange(task.projectId, { originUserId: currentUser.id });
   if (blockerCommentId !== undefined) void broadcastTaskChange(taskId, { originUserId: currentUser.id });
-  for (const affectedUserId of new Set(
-    (userId === undefined ? [] : [task.waitingOnUserId, userId]).filter(
+  const mentionedUserIds = clearsBlocker
+    ? (await prisma.notification.findMany({
+        where: { taskId, type: "Mentioned" },
+        select: { userId: true },
+        distinct: ["userId"],
+      })).map((row) => row.userId)
+    : [];
+  for (const affectedUserId of new Set([
+    ...(userId === undefined ? [] : [task.waitingOnUserId, userId]).filter(
       (id): id is number => typeof id === "number"
-    )
-  )) {
+    ),
+    ...mentionedUserIds,
+  ])) {
     void broadcastInboxChange(affectedUserId, { originUserId: currentUser.id });
   }
 
