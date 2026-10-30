@@ -9,6 +9,7 @@ import { createMetaTools } from './deferred-tools'
 import { annotationsForActions } from './config/tool-annotations'
 import type { AgentRole } from '@/lib/mcp/agents/scopes'
 import { runAsAgent } from './utils/actAsAgent'
+import { AuthorizationError, ValidationError } from './utils/errors'
 
 export type ToolCaller = { managementPermissions?: ManagementPermissions; agent?: boolean; teamScoped?: boolean; agentRole?: AgentRole; actAsAgent?: boolean }
 type Action = { tool: string; legacy_action?: string; read_only: boolean; permission: string; as_agent?: 'board' | 'owner' }
@@ -196,7 +197,7 @@ export function selectMcpTools(
         execute: async (raw: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
           const requested = (raw as Record<string, unknown>)?.action
           const action = actions.find((candidate) => candidate.legacy_action === requested) ?? actions[0]
-          if (!canCall(action, caller)) throw new Error('This action is not allowed by this credential. Reconnect with the required scope or a human account.')
+          if (!canCall(action, caller)) throw new AuthorizationError('This action is not allowed by this credential. Reconnect with the required scope or a human account.')
           return tool.execute(raw, token, invocation)
         },
       }]
@@ -205,9 +206,9 @@ export function selectMcpTools(
   const byName = new Map(legacyTools.map((tool) => [tool.name, tool]))
   const definitions = CONSOLIDATED_TOOL_DESCRIPTIONS as Description[]
   const dispatch = async (action: Action, input: unknown, token: string, invocation?: Parameters<PortableTool['execute']>[2]) => {
-    if (!canCall(action, caller)) throw new Error('This action is not allowed by this credential. Reconnect with the required scope or a human account.')
+    if (!canCall(action, caller)) throw new AuthorizationError('This action is not allowed by this credential. Reconnect with the required scope or a human account.')
     const tool = byName.get(action.tool)
-    if (!tool) throw new Error('This action is unavailable. Refresh the tool catalog before retrying.')
+    if (!tool) throw new ValidationError('This action is unavailable. Refresh the tool catalog before retrying.')
     return tool.execute(input, token, invocation)
   }
   const catalog: PortableTool[] = definitions.flatMap((definition) => {
@@ -281,7 +282,9 @@ export function selectMcpTools(
         const oldArgs = rawArgs
         const oldInput = Object.fromEntries(Object.keys(legacyShape).filter((key) => oldArgs[key] !== undefined).map((key) => [key, oldArgs[key]]))
         const { as_agent: requestedAgent, ...actionInput } = args.input
-        if (requestedAgent !== undefined && !(caller.actAsAgent && action.as_agent)) throw new Error(`as_agent is not supported on ${definition.name} ${args.action}.`)
+        if (requestedAgent !== undefined && !(caller.actAsAgent && action.as_agent)) {
+          throw new ValidationError(`as_agent is not supported on ${definition.name} ${args.action}; send the call without as_agent.`, { code: 'invalid_value', field: 'input.as_agent' })
+        }
         const input = { ...oldInput, ...legacyArguments(actionInput, action, tool, taskNumberAlias) }
         const supportsOffset = 'offset' in tool.parameters.shape
         const supportsLimit = 'limit' in tool.parameters.shape
