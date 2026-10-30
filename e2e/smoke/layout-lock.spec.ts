@@ -13,7 +13,7 @@ import { layoutDifferences, validateFlagChanges, verticalOrder, LAYOUT_CHANGE_ME
 import { FEATURE_FLAG_KEYS } from '../../src/lib/flags'
 import path from 'node:path'
 import { withRealtime } from './lib/realtime'
-import { scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
+import { parkPointerOffCommentThread, scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const fixturePath = path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'), 'card-fixture.json')
 
@@ -134,7 +134,8 @@ for (const name of [...screens, 'ticket from board card']) {
         // YPER4-939: wait for the server-to-live row handoff before clicking a row it replaces.
         await waitForTicketInitialScroll(page)
         // YPER4-953: the board-card click parks the pointer on an author avatar, whose open hovercard blocks every other click.
-        await page.mouse.move(0, 0)
+        // YPER4-958: moving the pointer alone races the close, so wait for the hovercard to be gone before clicking.
+        await parkPointerOffCommentThread(page)
         await page.getByTestId('ticket-comment').first().click({ timeout: 15_000 })
         await page.getByTestId('ticket-comment').last().click({ timeout: 15_000 })
         await expect(page.locator('[data-testid="ticket-comment"] .comment-body')).toHaveCount(2)
