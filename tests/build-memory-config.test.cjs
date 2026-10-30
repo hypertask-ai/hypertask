@@ -57,3 +57,16 @@ for (const smoke of [false, true]) {
     });
   }
 }
+
+test("production build heap cap leaves half the build machine for native memory", () => {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+  const cap = /--max-old-space-size=(\d+)/.exec(pkg.scripts.build);
+  assert.ok(cap, "the production build sets a heap cap");
+  const VERCEL_STANDARD_MACHINE_MB = 8192;
+  assert.ok(
+    Number(cap[1]) <= VERCEL_STANDARD_MACHINE_MB / 2,
+    `heap cap ${cap[1]} MB must stay within half of the ${VERCEL_STANDARD_MACHINE_MB} MB build machine, ` +
+      "or the parent Next process, native webpack memory and the page worker run the container out of memory " +
+      "(YPER4-957)",
+  );
+});
