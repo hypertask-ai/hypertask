@@ -12,20 +12,23 @@ const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const questionsFlag = "htpr-7317-ctrlj-ticket-questions";
 const viewedFlag = "htpr-7601-only-viewed-ticket-questions";
+const chipsFlag = "htpr-7979-action-chips";
+const savedIntro = (id) => ({ id, role: "assistant", content: "I created QASA-3581 from your note. Want me to refine it?" });
 const intro = (taskId) => ({ id: `compose-task-${taskId}`, role: "assistant", content: `I created QASA-${taskId} from your note. Want me to refine it?` });
 let flags = new Set();
 let viewedTaskId = null;
+let originalNote = null;
 let session = null;
 const mocks = {
-  "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId", inViewObjectAtom: "inView" },
+  "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId", inViewObjectAtom: "inView", composeTaskOriginalNoteAtom: "originalNote" },
   "@/lib/state": {
-    useRecoilValue: (atom) => (atom === "inView" ? { taskId: viewedTaskId } : null),
+    useRecoilValue: (atom) => (atom === "inView" ? { taskId: viewedTaskId } : atom === "originalNote" ? originalNote : null),
     useSetRecoilState: () => () => {},
   },
   "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
   "@/lib/ai/chipEvents": { signalAiChip: () => {} },
   "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
-  "@/lib/flags/keys": { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: questionsFlag, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG: viewedFlag },
+  "@/lib/flags/keys": { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: questionsFlag, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG: viewedFlag, HTPR_7979_ACTION_CHIPS_FLAG: chipsFlag },
   "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", { "data-message": message.id }, message.content) },
   "./TypingIndicator": { TypingIndicator: () => React.createElement("span", { "data-typing": "" }) },
   "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
@@ -95,6 +98,37 @@ test("flag off keeps today's request for the other ticket's session", async () =
   session = { id: "old", taskId: 67986, messages: [intro(67986)] };
   const view = await renderList();
   assert.deepEqual(view.requests, [{ taskId: 67986, kind: "new-ticket" }]);
+});
+
+test("still allowed: a manual chat whose saved intro lost its local id still shows the new ticket's questions", async () => {
+  flags = new Set([questionsFlag, viewedFlag, chipsFlag]);
+  viewedTaskId = 83662;
+  originalNote = { taskId: 83662, note: "Search is slow on Safari" };
+  session = { id: "manual", taskId: null, messages: [savedIntro("server-1"), savedIntro("server-2")] };
+  const view = await renderList();
+  assert.deepEqual(view.requests, [{ taskId: 83662, kind: "new-ticket", originalNote: "Search is slow on Safari" }]);
+  assert.equal(view.chips, 2);
+  originalNote = null;
+});
+
+test("now refused: a saved intro with no remembered new ticket sends no questions request", async () => {
+  flags = new Set([questionsFlag, viewedFlag, chipsFlag]);
+  viewedTaskId = 83662;
+  originalNote = null;
+  session = { id: "manual", taskId: null, messages: [savedIntro("server-1"), savedIntro("server-2")] };
+  const view = await renderList();
+  assert.deepEqual(view.requests, []);
+  assert.equal(view.chips, 0);
+});
+
+test("now refused: with the action chips flag off a saved intro with a remembered ticket sends no request", async () => {
+  flags = new Set([questionsFlag, viewedFlag]);
+  viewedTaskId = 83662;
+  originalNote = { taskId: 83662, note: "Search is slow on Safari" };
+  session = { id: "manual", taskId: null, messages: [savedIntro("server-1"), savedIntro("server-2")] };
+  const view = await renderList();
+  assert.deepEqual(view.requests, []);
+  originalNote = null;
 });
 
 test("flag ships as a bugfix on Everyone", () => {

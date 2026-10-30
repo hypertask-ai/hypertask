@@ -35,7 +35,10 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
-  const introTaskId = composeIntroTaskId(lastMessage?.id);
+  const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
+  const lastMessageLooksLikeIntro = lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
+  let introTaskId = composeIntroTaskId(lastMessage?.id);
+  if (actionChipsEnabled && introTaskId === undefined && lastMessageLooksLikeIntro) introTaskId = originalNoteState?.taskId;
   let newTicketId = currentSession?.taskId;
   if (actionChipsEnabled && !newTicketId && introTaskId !== undefined) newTicketId = introTaskId;
   const lastMessageIsIntro = actionChipsEnabled && introTaskId !== undefined;
@@ -44,7 +47,6 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const sessionIsAnotherTicket = onlyViewedTicket && Boolean(viewedTaskId) && viewedTaskId !== newTicketId;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
-  const originalNoteState = useRecoilValue(composeTaskOriginalNoteAtom);
   let chipSignal: typeof signalAiChip | undefined;
   if (chipEventsEnabled) chipSignal = signalAiChip;
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
@@ -53,7 +55,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const waitingForSkillFollowup = Boolean(pendingFollowup) &&
     pendingFollowup?.taskId === (viewedTaskId ?? newTicketId);
   const showTicketQuestions = !waitingForSkillFollowup && ticketQuestionsEnabled && Boolean(newTicketId) && !sessionIsAnotherTicket && (messages.length === 1 || lastMessageIsIntro) &&
-    lastMessage?.role === "assistant" && isSavedOrLocalComposeIntro(lastMessage.content ?? "");
+    lastMessageLooksLikeIntro;
   let originalNote: string | undefined;
   if (actionChipsEnabled && originalNoteState?.taskId === newTicketId) originalNote = originalNoteState?.note;
   const ticketQuestions = useQuery({
