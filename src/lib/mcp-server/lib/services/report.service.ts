@@ -23,6 +23,20 @@ export class ReportService {
         bodyLength: validatedInput.body_html?.length,
       });
 
+      if (action === 'status_update') {
+        return await this.apiClient.makeRequest<ReportApiResponse>(
+          '/mcp/reports/status-update',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              project_id: validatedInput.project_id,
+              ...(range === undefined ? {} : { range }),
+            }),
+          },
+          correlationId
+        );
+      }
+
       if (action === 'list' || action === 'get' || action === 'velocity') {
         const queryParams = new URLSearchParams({
           project_id: String(validatedInput.project_id),

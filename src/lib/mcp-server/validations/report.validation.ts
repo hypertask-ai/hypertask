@@ -40,7 +40,7 @@ const bodyHtmlSchema = z.string().max(
 export function getReportCrudBaseSchema() {
   return z
     .object({
-      action: z.enum(['list', 'get', 'velocity', 'create', 'update', 'delete']),
+      action: z.enum(['list', 'get', 'velocity', 'status_update', 'create', 'update', 'delete']),
       range: z.string().max(8).optional(),
       project_id: projectIdSchema.optional(),
       slug: slugSchema.optional(),
@@ -64,6 +64,7 @@ export function getReportCrudInputSchema() {
     if (
       data.action !== 'list' &&
       data.action !== 'velocity' &&
+      data.action !== 'status_update' &&
       data.slug === undefined
     ) {
       ctx.addIssue({

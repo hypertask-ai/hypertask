@@ -59,6 +59,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Pages | [pages.md](pages.md) | no write journey; verify by hand (flagged standalone parts through the session API) |
 | PR ticket binding | [pr-ticket-binding.md](pr-ticket-binding.md) | trusted workflow rerun and persisted CLI readback |
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
+| Board report agent doors | [reports-agent-doors.md](reports-agent-doors.md) | MCP velocity numbers and status update draft match /report/<slug>/velocity |
 | Search and filters | [search-and-filters.md](search-and-filters.md) | `view-AI-search` (load-only, capital AI); no write journey for filters |
 | Search autocomplete | [search.md](search.md) | `view-AI-search` (load-only); suggestions verify by hand |
 | Slack app | [slack-app.md](slack-app.md) | read-only install/support pages and redirects; real workspace parity needs a human |

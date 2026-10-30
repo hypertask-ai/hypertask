@@ -1,9 +1,9 @@
 {
   "name": "hypertask_reports",
-  "does": "List, read, create, update or delete saved HTML reports on a board, and read the board speed report as numbers.",
+  "does": "List, read, create, update or delete saved HTML reports on a board, read the board speed report as numbers, or draft the board status update from those numbers.",
   "use_when": "Use for a persistent board report rather than an ephemeral answer.",
   "do_not_use_when": "Do not use to compute time totals or to edit ordinary pages; use hypertask_time report or hypertask_pages instead.",
-  "parameters_and_caveats": "action selects an operation, including velocity, which returns the board speed report numbers with no HTML; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
+  "parameters_and_caveats": "action selects an operation, including velocity, which returns the board speed report numbers with no HTML, and status_update, which drafts and saves the board status update; input contains only that operation’s documented fields. response_format defaults to concise for reads; detailed retains full fields. limit defaults to 20 (maximum 50) and offset defaults to 0 for bounded read results; use returned pagination or narrower filters. Identifiers and required fields depend on the selected action; writes keep existing authorization and confirmation rules.",
   "actions": {
     "list": {
       "tool": "hypertask_report",
@@ -38,6 +38,12 @@
     "delete": {
       "tool": "hypertask_report",
       "legacy_action": "delete",
+      "read_only": false,
+      "permission": "data"
+    },
+    "status_update": {
+      "tool": "hypertask_report",
+      "legacy_action": "status_update",
       "read_only": false,
       "permission": "data"
     }

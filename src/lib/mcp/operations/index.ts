@@ -50,6 +50,7 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/user\/profile$/, params: [], methods: ["PATCH"], load: () => import('./user/profile/operation') },
   { pattern: /^\/mcp\/reports\/get$/, params: [], methods: ["GET"], load: () => import('./reports/get/operation') },
   { pattern: /^\/mcp\/reports\/velocity$/, params: [], methods: ["GET"], load: () => import('./reports/velocity/operation') },
+  { pattern: /^\/mcp\/reports\/status-update$/, params: [], methods: ["POST"], load: () => import('./reports/status-update/operation') },
   { pattern: /^\/mcp\/time\/resume$/, params: [], methods: ["POST"], load: () => import('./time/resume/operation') },
   { pattern: /^\/mcp\/time\/status$/, params: [], methods: ["POST"], load: () => import('./time/status/operation') },
   { pattern: /^\/mcp\/time\/report$/, params: [], methods: ["GET"], load: () => import('./time/report/operation') },

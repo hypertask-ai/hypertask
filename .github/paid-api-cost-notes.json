@@ -11,12 +11,12 @@
   },
   "src/components/Modals/Settings/GitHubSection.tsx:aea21b21a5fc71a8aec8029bd4b0da5f2c32aaf3f9e3ba497671ca232d1bca00": {
     "maxUsdPerDay": 0,
-    "reason": "Saves board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Saves board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/components/Modals/Settings/GitHubSection.tsx:c401886c70ab215a16bc73fde68f0d908d363e08777c43b6fabb1536f8c51f12": {
     "maxUsdPerDay": 0,
-    "reason": "Reads board repository settings through Hypertask\u2019s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
+    "reason": "Reads board repository settings through Hypertask’s own same-origin API. GitHub App repository metadata requests do not call a paid API or change spending limits.",
     "source": "https://docs.github.com/en/rest/apps/installations#list-repositories-accessible-to-the-app-installation"
   },
   "src/hooks/General/useFollowerKanban.ts:1f078df2800a6871f1d34ba832e8cce99475af075913f2e9ba33e1fd9491d003": {
@@ -48,5 +48,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7582 posts one approve or decline decision to Hypertask's own /api/agents/board-access-requests route; no third-party paid API is called.",
     "source": "https://app.hypertask.ai/detail/project-15/7582"
+  },
+  "src/utils/controllers/reports/statusUpdate.ts:0077ee3860d1c451ce4d19411b0ac7ed462af82971f83e2f3d04684d4557783d": {
+    "maxUsdPerDay": 1,
+    "reason": "HTPR-8219 moves the board status update text generation out of its web route unchanged, so the web button pays exactly what it paid before. One generation is at most 900 output tokens on the board team's existing status update model; about ten agent or human drafts a day stays under 1 USD.",
+    "source": "https://app.hypertask.ai/detail/project-15/8219"
   }
 }
