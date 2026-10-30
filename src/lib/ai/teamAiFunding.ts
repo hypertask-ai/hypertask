@@ -47,23 +47,6 @@ export type TeamAiFundingSnapshot = {
   anthropicEnabled?: boolean;
 };
 
-export type KeyOnlyUsageRow = {
-  feature: string;
-  provider: string;
-  apiKey: string;
-  billing: "byok";
-};
-
-export const KEY_ONLY_AI_PATHS = [
-  { feature: "chat", provider: "anthropic", label: "chat" },
-  { feature: "side-call", provider: "google", label: "side-call" },
-  { feature: "labels", provider: "google", label: "labels" },
-  { feature: "images", provider: "gateway", label: "images" },
-  { feature: "embeddings", provider: "openai", label: "embeddings" },
-  { feature: "dictation", provider: "deepgram", label: "dictation" },
-  { feature: "gateway", provider: "gateway", label: "gateway" },
-] as const satisfies ReadonlyArray<{ feature: TeamAiFeature; provider: string; label: string }>;
-
 export function isPlatformAiCredential(apiKey: string | null | undefined): boolean {
   const normalized = apiKey?.trim();
   if (!normalized) return false;
@@ -138,33 +121,6 @@ export function sideCallDecision(
   requestedProvider: string,
 ): TeamAiFunding {
   return decideTeamAiFunding(snapshot, { provider: requestedProvider, feature: "side-call" });
-}
-
-export function runKeyOnlyAiPaths(snapshot: TeamAiFundingSnapshot): {
-  usage: KeyOnlyUsageRow[];
-  calls: string[];
-  refusals: Array<{ feature: string; message: string }>;
-} {
-  const usage: KeyOnlyUsageRow[] = [];
-  const calls: string[] = [];
-  const refusals: Array<{ feature: string; message: string }> = [];
-  for (const path of KEY_ONLY_AI_PATHS) {
-    const decision = decideTeamAiFunding(snapshot, path);
-    if (decision.mode === "byok") {
-      usage.push({
-        feature: path.label,
-        provider: isPlatformAiCredential(decision.apiKey) ? "platform" : `byok:${decision.provider}`,
-        apiKey: decision.apiKey,
-        billing: "byok",
-      });
-      calls.push(decision.apiKey);
-    } else if (decision.mode === "refused") {
-      refusals.push({ feature: path.label, message: decision.message });
-    } else {
-      calls.push("PLATFORM_FALLBACK");
-    }
-  }
-  return { usage, calls, refusals };
 }
 
 export function embeddingAuthorization(

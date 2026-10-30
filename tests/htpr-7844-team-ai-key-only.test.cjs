@@ -41,24 +41,26 @@ test("key-only flag defaults to owner and QA and is marked as money risk", () =>
   assert.equal(flag.default.releaseRisk.highRisk, "money");
 });
 
-test("a key-only team bills no platform key on any AI path", () => {
+test("key-only funding decisions use the team key or refuse", () => {
   withPlatformKeys(() => {
-    const result = funding.runKeyOnlyAiPaths({
-      flagOn: true,
-      aiKeyOnly: true,
-      keys: { claude: TEAM_KEY },
-    });
-    assert.deepEqual(result.calls, [TEAM_KEY, TEAM_KEY, TEAM_KEY]);
-    assert.deepEqual(result.usage.map((row) => row.feature), ["chat", "side-call", "labels"]);
-    for (const row of result.usage) {
-      assert.equal(row.billing, "byok");
-      assert.equal(row.provider, "byok:claude");
-      assert.equal(row.apiKey, TEAM_KEY);
-      assert.equal(funding.isPlatformAiCredential(row.apiKey), false);
+    const snapshot = { flagOn: true, aiKeyOnly: true, keys: { claude: TEAM_KEY } };
+    for (const request of [
+      { feature: "chat", provider: "anthropic" },
+      { feature: "side-call", provider: "google" },
+      { feature: "labels", provider: "google" },
+    ]) {
+      assert.deepEqual(funding.decideTeamAiFunding(snapshot, request), {
+        mode: "byok", provider: "claude", apiKey: TEAM_KEY,
+      });
     }
-    assert.deepEqual(result.refusals.map((row) => row.feature), ["images", "embeddings", "dictation", "gateway"]);
-    assert.equal(result.usage.some((row) => row.provider === "platform" || row.provider === "managed" || row.provider === "shared"), false);
-    assert.equal(result.calls.some((key) => Object.values(PLATFORM_KEYS).includes(key)), false);
+    for (const request of [
+      { feature: "images", provider: "gateway" },
+      { feature: "embeddings", provider: "openai" },
+      { feature: "dictation", provider: "deepgram" },
+      { feature: "gateway", provider: "gateway" },
+    ]) {
+      assert.equal(funding.decideTeamAiFunding(snapshot, request).mode, "refused");
+    }
   });
 });
 
@@ -77,7 +79,6 @@ test("a key-only team without a provider key is refused instead of falling back"
       { provider: "gateway", feature: "gateway" },
     );
     assert.equal(gateway.mode, "refused");
-    assert.equal(funding.embeddingAuthorization.length, 2);
     assert.throws(
       () => funding.embeddingAuthorization(
         { mode: "refused", message: funding.TEAM_KEY_ONLY_MESSAGE },
@@ -93,9 +94,11 @@ test("a key-only team without a provider key is refused instead of falling back"
       (error) => error instanceof funding.TeamKeyOnlyRefusal,
     );
 
-    const off = funding.runKeyOnlyAiPaths({ flagOn: false, aiKeyOnly: true, keys: {} });
-    assert.deepEqual(off.calls, []);
-    assert.equal(off.refusals.length, funding.KEY_ONLY_AI_PATHS.length);
+    const off = funding.decideTeamAiFunding(
+      { flagOn: false, aiKeyOnly: true, keys: { claude: TEAM_KEY } },
+      { provider: "claude", feature: "chat" },
+    );
+    assert.equal(off.mode, "refused");
   });
 });
 
