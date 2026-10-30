@@ -75,6 +75,22 @@ refused env VCC_HELPER=1 bash "$vcc" --project 15 task move X-1 --section Done
 refused env VCC_HELPER=1 bash "$vcc"
 printf 'ok explicit helper writes blocked before credentials\n'
 
+login_refused() {
+  run "$@"
+  [ "$status" = 2 ] || fail "runner without a board login was not refused: $* ($status) $(cat "$T/err")"
+  [[ $(< "$T/err") == 'vcc: '* ]] || fail "wrong login refusal message: $*"
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail "refused runner reached the board: $*"
+}
+login_refused env SHIP_SESSION_NAME='RUNNER 8' bash "$vcc" comment add X-1 --text hi
+login_refused env SHIP_SESSION_NAME='SPEED RUNNER' bash "$vcc" task move X-1 --section 'In Progress'
+login_refused env SHIP_SESSION_NAME='RUNNER 8 | HTPR-1 | fix' bash "$vcc" activity add X-1 'note'
+allowed env SHIP_SESSION_NAME='HTPR-1 | fix' bash "$vcc" comment add X-1 --text hi
+printf 'blank\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
+[ "$status" = 2 ] || fail 'empty board login was not refused'
+printf 'fixture-token\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+printf 'ok runner writes refused without its own board login\n'
+
 for command in get list search last; do
   allowed env VCC_HELPER=1 bash "$vcc" tasks "$command" X-1
   [[ $(< "$T/out") == "stub: <tasks> <$command> <X-1>" ]] || fail 'read arguments changed'

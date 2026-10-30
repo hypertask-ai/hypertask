@@ -195,7 +195,15 @@ IDENTITY="Valentins Claude Code"
 if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
   IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
 fi
+# A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
+# token exists, which would post a runner's words under his name (YPER4-960).
+case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
+  *runner*)
+    [ "$IDENTITY" = "${SHIP_SESSION_NAME%% | *}" ] \
+      || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; } ;;
+esac
 HT_TOKEN="$(cat "$TOKEN_FILE")"
+[ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
 completion_move "$@"
 review_refuse() {
