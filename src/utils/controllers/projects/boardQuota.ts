@@ -49,9 +49,10 @@ export async function hasPaidPlan(userId: number): Promise<boolean> {
   const cancelledFree = await isFeatureEnabled(HTPR_7982_CANCELLED_FREE_FLAG, userId);
   const savedPlanOnly = await isFeatureEnabled(HTPR_7852_INTERNAL_TEAM_SAVED_PLAN_FLAG, FEATURE_FLAG_OWNER_USER_ID);
 
+  if (!savedPlanOnly && teams.some((team) => isInternalCompTeam(team.id))) return true;
+
   return teams.some(
     (team) =>
-      (savedPlanOnly ? false : isInternalCompTeam(team.id)) ||
       isTeamComped(team) ||
       team.subscriptionPlan.some(
         (plan) => cancelledFree
