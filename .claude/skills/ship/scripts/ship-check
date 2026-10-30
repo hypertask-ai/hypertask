@@ -6,8 +6,8 @@
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
 #   ship-check elsewhere <T> [pr] the work landed elsewhere: the bound PR (or the given one) is merged in another repo or
-#                                closed as outdated, and the ticket carries a comment opening "Resolved without a change:" with a
-#                                link. Then pr, merged, deployed and proof pass; docs keeps its own rule.
+#                                closed as outdated, and the ticket carries a comment opening "Resolved without a change:" that
+#                                links that PR. Then pr, merged, deployed and proof pass; docs keeps its own rule.
 #   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
 #                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
@@ -251,13 +251,14 @@ nochange_origin_branches() {
 # "Resolved without a change:" and carries evidence in that same comment: an https URL, or a <pre>/<code>
 # block whose visible inner text is not blank. Returns 2 when the comments cannot be read.
 resolution_comment() {
-  local t=$1 cmts
+  local t=$1 pr=${2:-} cmts
   cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || return 2
-  jq -e '.comments | any(.[]; (.text // "") as $x
+  jq -e --arg pr "$pr" '.comments | any(.[]; (.text // "") as $x
       | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
       and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
         or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
-             | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0)))' >/dev/null <<<"$cmts"
+             | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0))
+      and ($pr == "" or ($x | test("/pull/" + $pr + "([^0-9]|$)"))))' >/dev/null <<<"$cmts"
 }
 
 resolution_comment_reason() {
@@ -303,21 +304,30 @@ nochange_ok() {
 # there, or it was closed as outdated. The record is the closing comment with a link, so the ticket closes without a
 # fresh release proof. Like dropped, the marker is only a record: every read re-checks the PR state.
 check_elsewhere() {
-  local t=${1:-} n state rc
+  local t=${1:-} n prev prev_state state rc
   [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "elsewhere needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
-  n=${2:-$(bound_pr "$t")}
+  prev=$(bound_pr "$t"); n=${2:-$prev}
   [[ $n =~ ^[0-9]+$ ]] || fail "$t has no bound PR; run ship-check elsewhere $t <pr number>"
   state=$(gh pr view "$n" -R "$REPO" --json state --jq .state 2>/dev/null) || fail "PR $n not found in $REPO"
   case $state in
     MERGED|CLOSED) ;;
     *) fail "PR $n is $state; elsewhere needs a merged or a closed PR" ;;
   esac
-  resolution_comment "$t"; rc=$?
+  # Another PR may replace the binding only once it is finished too, so an unrelated closed PR cannot stand in
+  # for work that is still open.
+  if [ -n "$prev" ] && [ "$prev" != "$n" ]; then
+    prev_state=$(gh pr view "$prev" -R "$REPO" --json state --jq .state 2>/dev/null) || fail "cannot read the bound PR $prev of $t"
+    case $prev_state in
+      MERGED|CLOSED) ;;
+      *) fail "$t is still bound to PR $prev ($prev_state); finish or close it before recording another PR" ;;
+    esac
+  fi
+  resolution_comment "$t" "$n"; rc=$?
   [ "$rc" = 2 ] && fail "cannot read comments of $t"
-  [ "$rc" = 0 ] || fail "$(resolution_comment_reason "$t")"
+  [ "$rc" = 0 ] || fail "$t has no comment opening with \"Resolved without a change:\" that links PR $n (its /pull/$n URL) and carries evidence (an https URL, or a <pre>/<code> block with output)"
   mkdir -p "$EVID/$t" && rm -f "$EVID/$t/branch" "$EVID/$t/dropped" "$EVID/$t/nochange" "$EVID/$t/duplicate-of" \
-    && echo "$n" > "$EVID/$t/pr" && echo "$n" > "$EVID/$t/elsewhere" \
-    && echo "recorded $t as finished elsewhere (PR $n $state)"
+    && echo "$n" > "$EVID/$t/pr" && echo "$REPO" > "$EVID/$t/repo" && echo "$BASE" > "$EVID/$t/base" \
+    && echo "$n" > "$EVID/$t/elsewhere" && echo "recorded $t as finished elsewhere (PR $n $state)"
 }
 
 # Finished elsewhere: passes only while the recorded PR is still merged or closed.
@@ -330,7 +340,7 @@ elsewhere_ok() {
     MERGED|CLOSED) ;;
     *) fail "elsewhere PR $n for $2 is $state, not merged or closed" ;;
   esac
-  echo "$1 ok (elsewhere: PR $n $state)"
+  if [ "$1" = pr ]; then echo "title ok (elsewhere: PR $n $state)"; else echo "$1 ok (elsewhere: PR $n $state)"; fi
 }
 
 merge_sha() {
@@ -344,6 +354,7 @@ merge_sha() {
 
 check_pr() {
   nochange_ok pr "$1" && return 0
+  elsewhere_ok pr "$1" && return 0
   local row; row=$(pr_row "$1") || fail "${row#FAIL: }"
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\""
   # A duplicate's PR was checked at bind time and is merged; its original ticket may since be deleted.
@@ -968,7 +979,7 @@ PY
 }
 
 case "${1:-}" in
-  pr|merged|deployed|docs|proof|done|cleaned)
+  pr|merged|deployed|docs|proof|done|cleaned|elsewhere)
     if [ "${SHIP_REPO+x}" != x ] && [ -s "$EVID/${2:-}/repo" ]; then
       REPO=$(cat "$EVID/$2/repo") || fail "could not read bound repo for $2"
     fi
