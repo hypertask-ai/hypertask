@@ -30,6 +30,9 @@ after: a refusal that opens a ticket is the bug this page exists for.
 
 - A correct refusal (unknown field, wrong type, bad page/offset pair) filing a
   new ticket, which fills Bugs with work nobody can do.
+- A hand-filed `call_failed` report that names a tool but no status, error code
+  or field opening a ticket nobody can act on (HTPR-8197). It is answered with
+  `reason: no_evidence` and no ticket; adding `--status` or `--error-code` files it.
 - The opposite failure is worse: a 5xx, an expired key or a 400 the API itself
   returned must keep filing. The unit tests pin both sides.
 
