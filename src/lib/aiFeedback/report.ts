@@ -1,6 +1,7 @@
 import prisma from '@/lib/prisma'
 import { aiFeedbackEnabled } from './enabled'
 import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
+import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
@@ -71,6 +72,21 @@ const INPUT_REFUSAL_CODES = new Set([
 
 function inputRefusal(input: AiFeedbackInput): boolean {
   return input.status === 400 && INPUT_REFUSAL_CODES.has((input.errorCode ?? '').toLowerCase())
+}
+
+function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
+  return input.category === 'call_failed' && input.tool !== undefined && input.status === undefined && !input.errorCode && !input.field
+}
+
+async function noEvidenceRefused(userId?: number): Promise<boolean> {
+  try {
+    const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
+    return userId === undefined
+      ? await featureFlagCandidateUserIds(HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG) === null
+      : await isFeatureEnabled(HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG, userId)
+  } catch {
+    return false
+  }
 }
 
 export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
@@ -167,6 +183,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
+        }
+        if (reporter.origin === 'agent' && toolOnlyFailure(input) && !existing && await noEvidenceRefused(userId)) {
+          console.info('AI feedback not filed: the report names a tool but no status, error code or field', { surface: input.surface, tool: input.tool, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
+          return { success: false as const, filed: false as const, reason: 'no_evidence' as const, error: 'No ticket filed: the report names a tool but no HTTP status or error code. Report again with the status and error code of the failed call.' }
         }
         if (reporter.origin === 'automatic' && inputRefusal(input) && !existing) {
           console.info('AI feedback not filed: tool input refusal', { surface: input.surface, tool: input.tool, errorCode: input.errorCode, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
