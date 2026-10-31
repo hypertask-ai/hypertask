@@ -810,6 +810,7 @@ jobs:
       - name: Create the build database
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         env:
+          BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
           MCP_CLI_API_CONTRACT: '1'
         run: |
           npx prisma migrate deploy

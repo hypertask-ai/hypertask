@@ -91,7 +91,9 @@ function checkWorkflow(file, content) {
     if (rootInstall) continue;
     const nodeScripts = (run) => [...run.matchAll(/\bnode\s+(?:--[\w-]+\s+)*["']?((?:[\w.-]+\/)+[\w.-]+\.(?:mjs|cjs|js|ts))\b/g)]
       .map((match) => match[1].replace(/^(?:trusted|head)\//, "").replace(/^\.\//, ""));
-    if (file === "visual-regression.yml") {
+    // The visual runner installs each phase's dependencies itself.
+    const runsVisualRunner = steps.some((step) => /node\s+\S*scripts\/visual-regression-ci\.mjs/.test(step.run ?? ""));
+    if (file === "visual-regression.yml" || runsVisualRunner) {
       assert.match(read("scripts/visual-regression-ci.mjs"), /^\s+command\(root, env, \["npm", "ci"/m);
       continue;
     }
