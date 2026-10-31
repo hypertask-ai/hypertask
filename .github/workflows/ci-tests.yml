@@ -28,8 +28,8 @@ concurrency:
 # measured run time each one carries half of 1713s of lane-adjusted work, so two
 # 4-vCPU runners cannot finish below 856s and CI cannot come under 15 min. A
 # third shard takes the critical path to 635s, while the queue cost it adds is
-# measured at 46s median and 97s p90 over the 39 runs to 2026-10-31T13:30Z
-# (shard jobs only; the 20-min waits in that window were all browser-smoke).
+# measured at 45s median and 82s p90 over the last 39 runs (shard jobs only;
+# every 20-min wait in that window was browser-smoke, never a shard).
 # The required check stays the aggregate job named ci-tests.
 env:
   CI_TEST_SHARDS: "3"
