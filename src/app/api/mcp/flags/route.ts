@@ -134,7 +134,7 @@ export async function PATCH(request: NextRequest) {
       }
       if (usesFailure) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
-        if (!stored && !FEATURE_FLAG_KEYS.includes(body.key as string)) return;
+        if (!stored && !(FEATURE_FLAG_KEYS as readonly string[]).includes(body.key as string)) return;
         const current = stored?.mode ?? defaultFeatureFlagMode(body.key as string);
         if (current === body.mode) {
           throw new FeatureFlagApprovalError("Flag is already in that mode");
