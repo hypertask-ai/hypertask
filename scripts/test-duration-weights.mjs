@@ -1,13 +1,3 @@
-// YPER4-777: rebuild config/test-duration-weights.json from real runs.
-// GitHub is the only place tests run, so the input is the `test-durations`
-// artifact of finished production ci-tests runs:
-//
-//   gh run download <run-id> --repo hypertask-ai/hypertask -n test-durations -D runs/<run-id>
-//   node scripts/test-duration-weights.mjs --input runs --source "<what these runs are>"
-//
-// Whole-file wall time from a serial lane (isolated files, TypeScript files) is
-// its own cost; a pooled file costs 1/concurrency of it because the shard runs
-// several at once. Median across runs, so one slow box does not set the plan.
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
