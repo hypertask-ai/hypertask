@@ -49,10 +49,10 @@
     "reason": "HTPR-7582 posts one approve or decline decision to Hypertask's own /api/agents/board-access-requests route; no third-party paid API is called.",
     "source": "https://app.hypertask.ai/detail/project-15/7582"
   },
-  "src/utils/controllers/reports/statusUpdate.ts:0077ee3860d1c451ce4d19411b0ac7ed462af82971f83e2f3d04684d4557783d": {
+  "src/utils/controllers/reports/statusUpdate.ts:991bc7356f65e05825ddfc9c282b51f046445eb327617091d4720c75282d7a6a": {
     "maxUsdPerDay": 1,
-    "reason": "HTPR-8219 moves the board status update text generation out of its web route unchanged, so the web button pays exactly what it paid before. One generation is at most 900 output tokens on the board team's existing status update model; about ten agent or human drafts a day stays under 1 USD.",
-    "source": "https://app.hypertask.ai/detail/project-15/8219"
+    "reason": "HTPR-8222 raises the status update reply cap from 900 to 2600 output tokens so the reply can hold the object its own schema allows; the cap is a ceiling, a draft still writes a few hundred tokens on the board team's existing status update model, and about ten agent or human drafts a day stays under 1 USD.",
+    "source": "https://app.hypertask.ai/detail/project-15/8222"
   },
   "src/lib/mcp/tasks/internalTaskWrite.ts:1f85a692c97e7eb069e41aef6168a6315388f47a129e1bc9b7ad56c8ad745984": {
     "maxUsdPerDay": 0,
