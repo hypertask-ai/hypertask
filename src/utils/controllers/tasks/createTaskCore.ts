@@ -1,3 +1,4 @@
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import prisma from '@/lib/prisma';
 import { isFeatureEnabled } from '@/lib/flags';
 import { waitUntil } from '@vercel/functions';
@@ -74,6 +75,7 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         updateTeamActivity = true
     } = options;
 
+    await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description });
     const taskCount = await getUniqueTaskCount(projectId);
     const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;
 

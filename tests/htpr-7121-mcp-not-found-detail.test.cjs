@@ -17,6 +17,8 @@ function loadPost({ flagOn, knownLabelIds }) {
   let createdLabels;
   const json = (body, init) => ({ body, status: init && init.status });
   const stubs = {
+    "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}),
+    "@/lib/agents/writingEnforcement": require("./helpers/stub-map.cjs").enforcementFor(require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {})),
     "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/mcp/routeWrapper": {

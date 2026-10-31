@@ -1,3 +1,4 @@
+import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
 import { tool } from "ai";
 import { z } from "zod";
 import { validateTaskIdentifier, findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
@@ -87,6 +88,15 @@ export function createDecisionRequestTool(context: ToolContext) {
           return { success: false, error: "Task not found or access denied" };
         }
 
+        const optionItems = options
+          .map((option: string) => `<li>${escapeHtml(option)}</li>`)
+          .join("");
+        const commentText = sanitizeRichHtml(
+          `<p><strong>Decision needed:</strong> ${escapeHtml(question)}</p>` +
+          `<ol>${optionItems}</ol>` +
+          "<p>Reply with your choice.</p>"
+        );
+        await enforceAgentWriting(user.id, actingAgentId, { text: commentText });
         const decisionRequest = await prisma.decisionRequest.create({
           data: {
             taskId: task.id,
@@ -97,15 +107,9 @@ export function createDecisionRequestTool(context: ToolContext) {
             agentId: actingAgentId,
           },
         });
-        const optionItems = options
-          .map((option: string) => `<li>${escapeHtml(option)}</li>`)
-          .join("");
         const comment = await createCommentService({
-          text: sanitizeRichHtml(
-            `<p><strong>Decision needed:</strong> ${escapeHtml(question)}</p>` +
-            `<ol>${optionItems}</ol>` +
-            "<p>Reply with your choice, or this will be answerable from the UI soon.</p>"
-          ),
+          text: commentText,
+          kind: "question",
           creatorId: user.id,
           taskId: task.id,
           ownerId: taskOwner.userId,

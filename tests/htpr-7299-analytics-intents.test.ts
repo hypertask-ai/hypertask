@@ -205,6 +205,11 @@ test("failed connection enqueue releases the cache so the next request retries",
 function taskController(h: Harness) {
   const noop = async () => undefined;
   Object.assign(h.mocks, {
+    "@/lib/agents/writing": h.load("src/lib/agents/writing.ts"),
+    "@/lib/agents/writingEnforcement": {
+      agentWritingPolicyEnabled: async () => true,
+      enforceAgentWriting: async (_userId: number, agentId: string | null | undefined, fields: any, previous: any = {}) => h.load("src/lib/agents/writing.ts").assertAgentWriting(agentId, fields, previous),
+    },
     "@/lib/tasks/sameBoardRelations": h.load("src/lib/tasks/sameBoardRelations.ts"),
     "@/utils/controllers/tasks/parentTaskAccess": h.load("src/utils/controllers/tasks/parentTaskAccess.ts"),
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },

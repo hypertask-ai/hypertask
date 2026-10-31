@@ -1,3 +1,5 @@
+import { AgentWritingError } from '@/lib/agents/writing'
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { EstimateConstants, PriorityConstants } from '@/lib/constants/constants'
 import prisma from '@/lib/prisma'
 import { NextResponse } from 'next/server'
@@ -38,6 +40,18 @@ async function preflight(options: ExecuteTaskUpdateOptions, plan: UpdatePlan) {
         ? NextResponse.json({ success: true, dry_run: true, valid: true, would }, { status: 200 })
         : NextResponse.json({ success: false, tasks: [], error: 'Task not found or access denied' }, { status: 404 }),
       outcome: 'not_found' as const,
+    }
+  }
+  if (ctx.agentId && (requestBody.title !== undefined || requestBody.description !== undefined)) {
+    const previous = await prisma.task.findMany({
+      where: { id: { in: tasks.map((task) => task.id) } },
+      select: { title: true, description: true, description_: { select: { content: true } } },
+    })
+    try {
+      for (const task of previous) await enforceAgentWriting(ctx.user.id, ctx.agentId, requestBody, { title: task.title, description: task.description_?.content ?? task.description })
+    } catch (error) {
+      if (error instanceof AgentWritingError) return { response: NextResponse.json({ ...buildFieldError(error.code, error.field, error.message), ...(dryRun && { valid: false }) }, { status: 400 }), outcome: 'error' as const }
+      throw error
     }
   }
   if (hasActiveTaskOnlyMutation(requestBody)) {

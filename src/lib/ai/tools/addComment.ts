@@ -46,6 +46,7 @@ export function createAddCommentTool(context: ToolContext) {
           unique_index: z.coerce.number().int().positive().optional(),
           project_id: z.coerce.number().int().positive().optional(),
           text: z.string().min(1).max(5000),
+          kind: z.enum(['question', 'qa', 'done']).optional().describe('Required when acting as an agent. Choose question, qa or done for a people comment; put progress in the agent log.'),
           ...inlineAgentImageFields(context.inlineAgentImagesEnabled),
           images: z.array(z.string()).optional(),
           mentions: z
@@ -188,6 +189,7 @@ export function createAddCommentTool(context: ToolContext) {
 
           const comment = await createCommentService({
             text: sanitizedText,
+            kind: input.kind,
             creatorId: user.id,
             taskId: task.id,
             ownerId: taskWithOwner.userId,

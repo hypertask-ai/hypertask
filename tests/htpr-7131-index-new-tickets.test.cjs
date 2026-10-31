@@ -40,6 +40,7 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
     "@/lib/prisma": { default: db },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       if (key === "htpr-7740-create-response") return true;
+      if (key === "yper4-910-agent-writing") return true;
       flags.push([key, userId]);
       assert.equal(key, flagKey);
       return enabled;

@@ -1,3 +1,5 @@
+import { AgentWritingError } from '@/lib/agents/writing'
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
@@ -107,6 +109,7 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
+        await enforceAgentWriting(user.id, ctx.agentId, { title, description });
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
         if (projectCheck.error) {
             return NextResponse.json(
@@ -282,6 +285,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(response, { status: 200 });
     } catch (error) {
+        if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
         if (isPlanLimitReachedError(error)) {
             const refusal = planLimitResponse(error);
             return NextResponse.json(refusal.body, { status: refusal.status });

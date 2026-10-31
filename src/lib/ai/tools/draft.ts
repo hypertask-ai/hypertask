@@ -1,3 +1,4 @@
+import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { tool } from "ai";
 import { inlineAgentImageFields } from "./schemas";
@@ -213,6 +214,7 @@ export function createDraftTool(context: ToolContext) {
           });
         }
 
+        if (draft.type === "Comment") await enforceAgentWriting(user.id, actingAgentId, { text: draft.content });
         draft.content = await inlineAgentImagesForUser(draft.content ?? "", user.id, { instructions: body?.message, inlineImages: input.inline_images, attachments: [...(input.image_urls?.map((url: string) => ({ url })) ?? []), ...[...(body?.images64 ?? []), ...(body?.attachments ?? [])].flatMap((file) => file.url && (input.image_urls?.includes(file.url) || draft.content?.includes(file.url)) ? [{ url: file.url, fileName: file.fileName, mimeType: file.mimeType }] : [])] });
         const taskId = draft.taskId;
         const taskTicketNumber = draft.task.ticketNumber || `Task #${taskId}`;
@@ -252,6 +254,7 @@ export function createDraftTool(context: ToolContext) {
 
           const comment = await createCommentService({
             text: commentText,
+            kind: actingAgentId ? "qa" : undefined,
             creatorId: user.id,
             taskId,
             ownerId: taskWithOwner.userId,

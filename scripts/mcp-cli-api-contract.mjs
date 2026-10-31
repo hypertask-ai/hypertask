@@ -249,12 +249,12 @@ export async function runContract() {
     requireThat(projects.projects?.some(row => row.id === board.id), `${role}: seeded board missing`);
     taskRow(await call(token, "tasks", "get", { task_id: [board.task.id] }), board.task.id, board.task.title);
     taskRow(await call(token, "search", "tasks", { query: "contract", project_id: board.id }), board.task.id, board.task.title);
-    const title = `${role} contract ${randomUUID()}`;
+    const title = `${role} contract ${Date.now()}`;
     const created = await call(token, "tasks", "create", { project_id: board.id, title, section_id: board.columns[0].id });
     requireThat(Number.isInteger(created.task?.id) && created.task.title === title, `${role}: invalid created task`);
     const id = created.task.id;
     taskRow(await rest(`/tasks?task_id=${id}`, token), id, title);
-    const text = `${role} comment ${randomUUID()}`;
+    const text = `${role} comment ${Date.now()}`;
     const added = await call(token, "comments", "add", { task_id: id, text, ...(role === "write-agent" ? { kind: "qa" } : {}) });
     requireThat(Number.isInteger(added.comment?.id), `${role}: invalid comment receipt`);
     requireThat(added.routedTo === "comments" && added.visibleToPeople === true, `${role}: comment visibility receipt missing`);

@@ -7,6 +7,7 @@ const user = { id: 42, email: 'fixture@example.com', displayName: 'Fixture', pho
 let state
 const events = () => state.events
 const prisma = {
+  featureFlag: { findUnique: async () => null },
   task: {
     findMany: async ({ where }) => where.OR
       ? state.tasks.map(({ id, sectionId, projectId, status }) => ({ id, sectionId, projectId, status }))

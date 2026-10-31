@@ -103,3 +103,24 @@ Do not switch production flags for the rollback check: hosted route-entry
 tests prove flag Off restores creation and its attachment/comment writes,
 while the removal path performs none. Record absent attachment fixtures as
 UNREACHABLE rather than claiming rendering proof.
+
+## Agent writing rules
+
+Agent comments need `kind: question`, `qa` or `done` to appear in the
+people thread. Untyped text goes to the agent log, including mentions and
+replies. An unavailable log must return 503, never publish the note. File
+uploads require an explicit kind before writing, so a rejected note cannot
+lose its files. Human writes remain unrestricted.
+
+Use an authorized agent's `POST /api/mcp/comments` with `dry_run: true`
+on a readable fixture. A long typed sentence, status line or file path must
+return 400 naming `text`; a short typed summary must remain valid. Untyped
+technical text must report `would.routedTo: log`, including a person mention
+or reply target. Read the real comment list after posting a hidden note and
+confirm its unique marker is absent. Reload the thread and confirm the
+short typed summary remains. Agent task create/update must also reject long
+new titles and descriptions before any mutation. Edits may preserve existing
+lines, but new lines are checked. Repeat with a human QA credential: the same
+long text must remain valid. Delete only the temporary QA fixtures.
+
+Targeted regression: `npm run test:file -- tests/yper4-910-agent-writing.test.cjs tests/mcp-comments-agent-chatter-routing.test.cjs tests/htpr-7512-comment-attachments-routing.test.cjs`.

@@ -4,7 +4,7 @@
     "call": "prisma.comment.count({ where: commentWhere })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7757",
-    "sha256": "295b8d8838386ba1457227e95df733761e8166a4c8bcd319c0708e8cac245dd4",
+    "sha256": "efa0175c3280e30e9c2f057548d2b8244559407ba6927af810187d8a83aa261a",
     "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it. HTPR-8114 re-review: only rollout attribution reads and their arguments were removed; authentication, identifier authorization, commentWhere construction and both scoped query calls are unchanged. Team-content and agent-scope route tests exercise permitted callers and denied cross-board reads. HTPR-7757 re-review: existing ctx.agentId/teamScope authorization, comment task binding and accessible project restrictions remain unchanged. Skill matching runs only after authorized hydration; the added comment relation is task-bound and read-only."
   },
   {
@@ -12,7 +12,7 @@
     "call": "prisma.comment.findMany({ where: commentWhere, include: commentInclude(user.id, task.projectId), orderBy: [ { [sortField]: effectiveSortOrder }, { id: effectiveSortOrder }, ], take: pageLimit, skip: cursorId ? 1 : offset, ...(cursorId ? { cursor: { id: cursorId } } : {}), })",
     "occurrence": 1,
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7757",
-    "sha256": "295b8d8838386ba1457227e95df733761e8166a4c8bcd319c0708e8cac245dd4",
+    "sha256": "efa0175c3280e30e9c2f057548d2b8244559407ba6927af810187d8a83aa261a",
     "reason": "validateMcpAuth supplies ctx.user, ctx.agentId and ctx.teamScope. findTaskByIdentifier(user, identifier, ctx.agentId, undefined, ctx.teamScope) must authorize the task before either comment query; commentWhere fixes taskId to that task and, for team credentials, also retains task.project = getProjectWhere(user.id, ctx.agentId, ctx.teamScope). Text/date/activity filters only narrow it. HTPR-8114 re-review: only rollout attribution reads and their arguments were removed; authentication, identifier authorization, commentWhere construction and both scoped query calls are unchanged. Team-content and agent-scope route tests exercise permitted callers and denied cross-board reads. HTPR-7757 re-review: existing ctx.agentId/teamScope authorization, comment task binding and accessible project restrictions remain unchanged. Skill matching runs only after authorized hydration; the added comment relation is task-bound and read-only."
   },
   {

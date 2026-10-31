@@ -37,7 +37,7 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
   assert.equal(calls.urls.length, 0)
   assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', teamScope: null, displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
   assert.equal(calls.activities[0][2].type, 'THOUGHT')
-  assert.deepEqual(calls.flags, [{ key: flag, userId: 6 }])
+  assert.deepEqual(calls.flags, [{ key: 'yper4-910-agent-writing', userId: 6 }])
 })
 
 for (const kind of routing.COMMENT_KINDS) {
@@ -54,29 +54,29 @@ test('human posts remain comments with flag on', async () => {
 })
 
 for (const field of ['reply_to_comment_id', 'reply_to_invocation_id']) {
-  test(`${field} agent mention replies remain comments`, async () => {
+  test(`${field} explicit agent replies remain comments`, async () => {
     const { post, calls } = setup()
-    assertComment(await post({ [field]: 12 }), calls)
+    assertComment(await post({ [field]: 12, kind: 'qa' }), calls, 'qa')
     assert.equal(calls.comments[0][field === 'reply_to_comment_id' ? 'directReplySourceCommentId' : 'directReplyInvocationId'], 12)
   })
 }
 
-test('agent Question that @mentions a person in the text stays a comment without a kind', async () => {
+test('explicit agent Question that mentions a person stays a comment', async () => {
   const { post, calls } = setup({ textMentions: ['6'] })
-  assertComment(await post({ text: '<p>Question: Switch htpr-7290-durable-signup-identify to Owner + QA?</p>' }), calls)
+  assertComment(await post({ text: '<p>Question: Release this change?</p>', kind: 'question' }), calls, 'question')
   assert.equal(calls.runs.length, 0)
 })
 
-test('agent post with a mentions list stays a comment without a kind', async () => {
+test('explicit agent post with a mentions list stays a comment', async () => {
   const { post, calls } = setup()
-  assertComment(await post({ mentions: [{ user_id: 6, display_name: 'Valentin Yeo' }] }), calls)
+  assertComment(await post({ mentions: [{ user_id: 6, display_name: 'Valentin Yeo' }], kind: 'qa' }), calls, 'qa')
   assert.equal(calls.runs.length, 0)
 })
 
-test('flag off still allows untyped agent comments exactly as before', async () => {
+test('old flag off cannot expose untyped agent notes', async () => {
   const { post, calls } = setup({ flag: false })
-  assertComment(await post(), calls)
-  assert.equal(calls.runs.length, 0)
+  assert.equal((await post()).body.routedTo, 'log')
+  assert.equal(calls.comments.length, 0)
 })
 
 for (const kind of ['chatter', null, '', 1]) {
@@ -91,19 +91,18 @@ for (const kind of ['chatter', null, '', 1]) {
   })
 }
 
-for (const options of [{ noRun: true }, { runtime: false }, { noActivity: true }, { formattedText: '<p><img src="https://example.com/a.png"></p>' }]) {
-  test(`unavailable log falls back to a comment: ${JSON.stringify(options)}`, async () => {
+for (const options of [{ noRun: true }, { runtime: false }, { noActivity: true }]) {
+  test(`unavailable log refuses publication: ${JSON.stringify(options)}`, async () => {
     const { post, calls } = setup(options)
     const response = await post()
-    assert.equal(response.status, 201)
-    assert.equal(response.body.routedTo, 'comments')
-    assert.equal(response.body.visibleToPeople, true)
-    assert.equal(calls.comments.length, 1)
+    assert.equal(response.status, 503)
+    assert.equal(response.body.success, false)
+    assert.equal(calls.comments.length, 0)
   })
 }
 
 test('dry run reports routing without run, activity or comment writes', async () => {
-  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'comments'], [{}, { kind: 'question' }, 'comments'], [{ runtime: false }, {}, 'comments']]) {
+  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'log'], [{}, { kind: 'question' }, 'comments']]) {
     const { post, calls } = setup(options)
     const response = await post({ ...body, dry_run: true })
     assert.equal(response.status, 200)
@@ -115,7 +114,7 @@ test('dry run reports routing without run, activity or comment writes', async ()
 
 test('agent progress post with images stays a comment so the images are kept', async () => {
   const { post, calls } = setup()
-  assertComment(await post({ images: ['https://example.com/shot.png'] }), calls)
+  assertComment(await post({ images: ['https://example.com/shot.png'], kind: 'qa' }), calls, 'qa')
   assert.equal(calls.runs.length, 0)
 })
 
@@ -169,13 +168,16 @@ test('all six real IGSH-266 texts replay to the log, never comments', async () =
   assert.equal(calls.comments.length, 0)
 })
 
-test('pure routing accepts only declared kinds and preserves both direct reply forms', () => {
+test('pure routing requires a declared kind for people comments', () => {
   assert.equal(routing.parseCommentKind(undefined), undefined)
   assert.throws(() => routing.parseCommentKind('chatter'), /question, qa, done/)
-  assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent' }), 'log')
-  assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', replyToInvocationId: 1 }), 'comments')
-  assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', mentionsPerson: true }), 'comments')
-  assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', hasImages: true }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { flagEnabled: true, mentionsPerson: false, hasImages: false } }), 'log')
+  assert.equal(routing.routeComment({ agentId: 'agent', kind: 'qa', legacy: { flagEnabled: true, mentionsPerson: false, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { flagEnabled: true, mentionsPerson: true, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', legacy: { flagEnabled: false, mentionsPerson: false, hasImages: false } }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent', kind: 'qa' }), 'comments')
+  assert.equal(routing.routeComment({ agentId: 'agent' }), 'log')
+  assert.equal(routing.routeComment({ agentId: null }), 'comments')
 })
 
 test('kind is stored on the real comment persistence create payload', async () => {
@@ -235,10 +237,11 @@ for (const enabled of [false, true]) {
     assert.equal((await forged.post({ has_image_attachments: true })).body.routedTo, "log");
     const image = setup({ inlineImages: enabled });
     const response = await image.post({ attachments: [{ filename: "image.png", content_type: "image/png", url: "https://files.hypertask.app/image.png" }] });
-    assert.equal(response.body.routedTo, enabled ? "comments" : "log");
+    assert.equal(response.status, 400);
+    assert.equal(response.body.field, "kind");
     const document = setup({ inlineImages: enabled });
-    assert.equal((await document.post({ attachments: [{ filename: "report.pdf", content_type: "application/pdf", url: "https://files.hypertask.app/report.pdf" }] })).body.routedTo, "log");
+    assert.equal((await document.post({ attachments: [{ filename: "report.pdf", content_type: "application/pdf", url: "https://files.hypertask.app/report.pdf" }] })).status, 400);
     const invalid = setup({ inlineImages: enabled });
-    assert.equal((await invalid.post({ attachments: [{ filename: "image.png", content_type: "image/png" }] })).status, enabled ? 400 : 201);
+    assert.equal((await invalid.post({ attachments: [{ filename: "image.png", content_type: "image/png" }] })).status, 400);
   });
 }

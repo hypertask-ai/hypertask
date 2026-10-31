@@ -136,7 +136,7 @@ test("the real sweep saves the removal description under an adopted lease and re
     headers: { authorization: "Bearer test-cron-secret" },
   }));
   if (errors.length) {
-    assert.ok(errors[0][1] instanceof AgentMutationLeaseMissingError);
+    assert.ifError(errors[0][1]);
     assert.equal(state.task.description, "");
     assert.equal(state.description, null);
     assert.equal(state.lease, null);

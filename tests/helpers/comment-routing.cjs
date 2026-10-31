@@ -39,6 +39,7 @@ function setup(options = {}) {
     },
     '@/utils/controllers/comments/agentInvocationCorrelation': { AgentInvocationNotPendingError: class extends Error {} },
     '@/lib/mcp/tasks/resolveTask': {
+      taskIdentifierErrorResponse: () => null,
       validateTaskIdentifier: () => ({ valid: true }),
       findTaskByIdentifier: async () => options.noTask ? null : ({ id: 99, projectId: 15 }),
     },
@@ -67,12 +68,15 @@ function setup(options = {}) {
     '@/lib/mcp/comments/reactionResponse': {},
     '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async () => new Map() },
     '@/lib/agents/publicAgent': {},
-    '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-      calls.flags.push({ key, userId })
-      return (key === 'htpr-7341-agent-chatter-to-log' && options.flag !== false) ||
-        (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
-        (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true)
-    } },
+    '@/lib/flags': {
+      isFeatureEnabled: async (key, userId) => {
+        calls.flags.push({ key, userId })
+        return (key === 'htpr-7341-agent-chatter-to-log' && options.flag !== false) ||
+          (key === 'yper4-910-agent-writing' && options.writing !== false) ||
+          (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
+          (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true)
+      },
+    },
     '@/lib/mcp/listQuery': {},
     '@/lib/mcp/readListQuery': {},
     '@/lib/agentRuns/service': {
