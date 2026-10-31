@@ -22,7 +22,7 @@ export function commentSaveOperation(mode: 'pin' | 'star') {
       return comment ? { commentId: comment.id, taskId: comment.taskId, projectId: comment.task.projectId } : null;
     },
     toggle: async (ctx, target, selectedMode) => {
-      const result = await toggleSavedContent({ ...target, userId: ctx.user.id, type: selectedMode === 'pin' ? 'Public' : 'Private' });
+      const result = await toggleSavedContent({ ...target, userId: ctx.user.id, agentId: ctx.agentId ?? null, type: selectedMode === 'pin' ? 'Public' : 'Private' });
       return result.status === 200;
     },
   }));

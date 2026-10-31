@@ -31,9 +31,6 @@ export function createCommentSaveHandler<TContext extends CommentSaveContext>(de
     if (!context) return NextResponse.json({ success: false, error: 'Unauthorized. Invalid or missing authentication token.' }, { status: 401 });
     const refusal = await dependencies.authorizeWrite(context);
     if (refusal) return refusal;
-    if (dependencies.mode === 'star' && context.agentId) {
-      return NextResponse.json({ success: false, error: 'Private comment stars are available only to human accounts' }, { status: 403 });
-    }
     const gateRefusal = await (dependencies.refuse ?? refuseWhenCommentMarkersOff)(context);
     if (gateRefusal) return gateRefusal;
     const { comment_id } = await props.params;

@@ -565,7 +565,7 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
       FROM "SavedContent" sc
       WHERE sc."commentId" IN (SELECT id FROM base_comments)
         AND sc."taskId" = ${taskId}
-        AND ((sc."userId" = ${userId} AND sc."type" = 'Private') OR sc."type" = 'Public')
+        AND ((sc."userId" = ${userId} AND sc."agentId" IS NULL AND sc."type" = 'Private') OR sc."type" = 'Public')
       GROUP BY sc."commentId"
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
@@ -702,7 +702,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
       FROM "SavedContent" sc
       WHERE sc."commentId" IN (SELECT id FROM base_comments)
         AND sc."taskId" = (SELECT "taskId" FROM task_row)
-        AND ((sc."userId" = ${userId} AND sc."type" = 'Private') OR sc."type" = 'Public')
+        AND ((sc."userId" = ${userId} AND sc."agentId" IS NULL AND sc."type" = 'Private') OR sc."type" = 'Public')
       GROUP BY sc."commentId"
     )
     SELECT bc.id, bc.text, bc.summary, bc."taskId", bc."creatorId", bc."createdAt",
@@ -746,7 +746,7 @@ export function legacyCommentsQuery(db: Db, taskId: number, userId: number) {
       COALESCE((
         SELECT JSONB_AGG(sc.*) FROM "SavedContent" sc
         WHERE sc."commentId" = c.id AND sc."taskId" = ${taskId}
-          AND ((sc."userId" = ${userId} AND sc."type" = 'Private') OR sc."type" = 'Public')
+          AND ((sc."userId" = ${userId} AND sc."agentId" IS NULL AND sc."type" = 'Private') OR sc."type" = 'Public')
       ), '[]'::jsonb) AS "savedContent",
       ${publicCommentCreator} AS creator,
       ${publicCommentAgent} AS agent

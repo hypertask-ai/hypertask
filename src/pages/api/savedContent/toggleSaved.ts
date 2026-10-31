@@ -63,7 +63,7 @@ const handler: NextApiHandler = async (
     const taskId = task.id;
     const projectId = task.projectId;
 
-    const result = await toggleSavedContent({ userId, taskId, projectId, commentId, type, alwaysRemove });
+    const result = await toggleSavedContent({ userId, agentId: session.agentId ?? null, taskId, projectId, commentId, type, alwaysRemove });
     return result.status === 200
       ? res.status(200).json({ saved: result.saved })
       : res.status(201).json({});

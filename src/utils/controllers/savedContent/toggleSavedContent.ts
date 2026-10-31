@@ -1,8 +1,9 @@
 import { includeSavedContentComment } from "@/utils/controllers/savedContent/helper";
 import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
 
-export async function toggleSavedContent({ userId, taskId, projectId, commentId, type, alwaysRemove }: {
+export async function toggleSavedContent({ userId, agentId = null, taskId, projectId, commentId, type, alwaysRemove }: {
   userId: number;
+  agentId?: string | null;
   taskId: number;
   projectId: number;
   commentId: number | null;
@@ -15,7 +16,7 @@ export async function toggleSavedContent({ userId, taskId, projectId, commentId,
     taskId,
     type,
     commentId,
-    ...(type === "Private" ? { userId } : {}),
+    ...(type === "Private" ? { userId, agentId } : {}),
   };
 
   return withTaskStarWriteLock(taskId, async (tx) => {
@@ -27,7 +28,7 @@ export async function toggleSavedContent({ userId, taskId, projectId, commentId,
     if (alwaysRemove === true) return { status: 201 as const };
 
     const saved = await tx.savedContent.create({
-      data: { userId, taskId, projectId, commentId, type },
+      data: { userId, ...(type === "Private" ? { agentId } : {}), taskId, projectId, commentId, type },
       include: {
         task: includeSavedContentComment(userId, !isPrivateTaskStar),
         comment: { include: { creator: true } },

@@ -7,14 +7,16 @@ const root = path.resolve(__dirname, '..');
 const jiti = require('jiti')(__filename, { interopDefault: true, alias: { '@': path.join(root, 'src') }, cache: false });
 const { createCommentSaveHandler } = jiti(path.join(root, 'src/lib/mcp/comments/commentSaveHandler.ts'));
 
-function setup(mode = 'pin', overrides = {}) {
-  let row = null;
+const matches = (row, where) => Object.entries(where).every(([key, value]) => row[key] === value);
+
+function setup(mode = 'pin', overrides = {}, rows = []) {
+  const store = rows.map((row) => ({ ...row }));
   const created = [];
   const queries = [];
   const tx = { savedContent: {
-    findFirst: async ({ where }) => { queries.push(where); return row; },
-    deleteMany: async () => { row = null; },
-    create: async ({ data }) => { created.push(data); row = data; return data; },
+    findFirst: async ({ where }) => { queries.push(where); return store.find((row) => matches(row, where)) ?? null; },
+    deleteMany: async ({ where }) => { store.splice(0, store.length, ...store.filter((row) => !matches(row, where))); },
+    create: async ({ data }) => { created.push(data); store.push(data); return data; },
   } };
   const { toggleSavedContent } = loadModule('src/utils/controllers/savedContent/toggleSavedContent.ts', {
     '@/lib/taskCardActions/writeLocks': { withTaskStarWriteLock: async (_id, operation) => operation(tx) },
@@ -25,12 +27,12 @@ function setup(mode = 'pin', overrides = {}) {
     mode, checkRateLimit: async () => null, validateAuth: async () => context,
     authorizeWrite: async () => null, refuse: async () => null,
     findTarget: async () => ({ commentId: 7, taskId: 42, projectId: 15 }),
-    toggle: async (ctx, target, selectedMode) => (await toggleSavedContent({ ...target, userId: ctx.user.id, type: selectedMode === 'pin' ? 'Public' : 'Private' })).status === 200,
+    toggle: async (ctx, target, selectedMode) => (await toggleSavedContent({ ...target, userId: ctx.user.id, agentId: ctx.agentId ?? null, type: selectedMode === 'pin' ? 'Public' : 'Private' })).status === 200,
     ...overrides,
   });
   const request = () => new NextRequest(`https://example.test/mcp/comments/7/${mode}`, { method: 'POST' });
   const props = { params: Promise.resolve({ comment_id: '7' }) };
-  return { POST, request, props, created, queries, toggleSavedContent };
+  return { POST, request, props, created, queries, store, toggleSavedContent };
 }
 
 for (const [mode, type, on, off] of [['pin', 'Public', 'pinned', 'unpinned'], ['star', 'Private', 'starred', 'unstarred']]) {
@@ -38,8 +40,11 @@ for (const [mode, type, on, off] of [['pin', 'Public', 'pinned', 'unpinned'], ['
     const { POST, request, props, created, queries } = setup(mode);
     assert.deepEqual(await (await POST(request(), props)).json(), { success: true, state: on });
     assert.deepEqual(await (await POST(request(), props)).json(), { success: true, state: off });
-    assert.deepEqual(created[0], { userId: 6, taskId: 42, projectId: 15, commentId: 7, type });
+    assert.deepEqual(created[0], mode === 'star'
+      ? { userId: 6, agentId: null, taskId: 42, projectId: 15, commentId: 7, type }
+      : { userId: 6, taskId: 42, projectId: 15, commentId: 7, type });
     assert.equal(queries[0].userId, mode === 'star' ? 6 : undefined);
+    assert.equal(queries[0].agentId, mode === 'star' ? null : undefined);
   });
 }
 
@@ -102,12 +107,29 @@ test('operation applies agent, team, and user project scope', async () => {
   });
 });
 
-test('a managed agent cannot write a private comment star', async () => {
-  const { POST, request, props, created } = setup('star', { validateAuth: async () => ({ user: { id: 6 }, agentId: 'agent', teamScope: null }) });
-  const response = await POST(request(), props);
-  assert.equal(response.status, 403);
-  assert.deepEqual(await response.json(), { success: false, error: 'Private comment stars are available only to human accounts' });
-  assert.deepEqual(created, []);
+const ownerStar = { id: 'owner-star', userId: 6, agentId: null, taskId: 42, projectId: 15, commentId: 7, type: 'Private' };
+const agentContext = { validateAuth: async () => ({ user: { id: 6 }, agentId: 'agent', teamScope: null }) };
+
+test('a managed agent stars a comment without touching the owner star', async () => {
+  const { POST, request, props, created, store } = setup('star', agentContext, [ownerStar]);
+  assert.deepEqual(await (await POST(request(), props)).json(), { success: true, state: 'starred' });
+  assert.deepEqual(created[0], { userId: 6, agentId: 'agent', taskId: 42, projectId: 15, commentId: 7, type: 'Private' });
+  assert.deepEqual(store.find((row) => row.id === 'owner-star'), ownerStar);
+});
+
+test('a managed agent unstar removes only its own marker', async () => {
+  const agentStar = { id: 'agent-star', userId: 6, agentId: 'agent', taskId: 42, projectId: 15, commentId: 7, type: 'Private' };
+  const { POST, request, props, store } = setup('star', agentContext, [ownerStar, agentStar]);
+  assert.deepEqual(await (await POST(request(), props)).json(), { success: true, state: 'unstarred' });
+  assert.deepEqual(store, [ownerStar]);
+});
+
+test('another agent star stays separate from the owner and from other agents', async () => {
+  const otherAgentStar = { id: 'other-agent-star', userId: 6, agentId: 'other-agent', taskId: 42, projectId: 15, commentId: 7, type: 'Private' };
+  const { POST, request, props, created, store } = setup('star', agentContext, [ownerStar, otherAgentStar]);
+  assert.deepEqual(await (await POST(request(), props)).json(), { success: true, state: 'starred' });
+  assert.deepEqual(created[0].agentId, 'agent');
+  assert.deepEqual(store.map((row) => row.id), ['owner-star', 'other-agent-star', undefined]);
 });
 
 test('write role refusal prevents changes', async () => {

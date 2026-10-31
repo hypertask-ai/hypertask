@@ -10,6 +10,6 @@ export default {
   description: "Agents can pin and star a comment, the same marker people already use.",
   releaseRisk: {
     risk: "small",
-    reason: "Adds one agent action on the existing comment tool; it saves or removes the caller's own marker and touches no other comment data. Off removes the action and leaves add, update and delete as before.",
+    reason: "Adds one agent action on the existing comment tool; it saves or removes the caller's own marker and touches no other comment data. An agent star is stored as that agent's own marker, so it never changes the person's star. Off removes the action and leaves add, update and delete as before.",
   },
 } as const satisfies FeatureFlagDefinition;
