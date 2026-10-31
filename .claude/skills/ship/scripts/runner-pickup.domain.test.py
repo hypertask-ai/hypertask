@@ -427,6 +427,17 @@ else: sys.exit(9)
         self.assertEqual(json.loads(result.stdout), [])
         self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text()), {})
 
+    def test_unscoped_ticket_assigned_to_two_runners_delivers_once(self):
+        shared_task = self.task(1, 'HTPR-1')
+        shared_task['assignees'] = [{'agent': {'displayName': 'Runner 1'}},
+                                    {'agent': {'displayName': 'Runner 2'}}]
+        self.board(1, [shared_task])
+        self.board(2, [shared_task])
+        self.tick(1)
+        self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), [])
+
     def test_unscoped_lease_from_admission_keeps_ticking(self):
         leases = {'1': {'HTPR-1': {'held': ['Unscoped'], 'current': 'Unscoped', 'pending': False, 'protected': True}},
                   '2': {'HTPR-2': {'held': ['Unscoped'], 'current': 'Unscoped', 'pending': False}}}

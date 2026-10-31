@@ -130,6 +130,8 @@ for item in data['candidates']:
     ticket = item['ticket']
     if tasks[ticket].get('section') in terminal or tasks[ticket].get('status') in terminal:
         continue
+    if any(ticket in leases for owner, leases in owners.items() if owner != runner):
+        continue
     d = domain(tasks[ticket])
     if ticket in mine:
         if not mine[ticket]['pending'] and not contested(mine[ticket]['held'], admitted_other):
