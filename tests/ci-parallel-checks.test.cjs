@@ -37,14 +37,15 @@ function assertParallelChecks(ci) {
   assertTrustedTypeScriptCache(checks.steps);
 }
 
-// HTPR-8234: the TypeScript cache also fills from pull requests, so the branch
-// that pushes again reuses its own state. That is only safe while a PR write
-// stays in its own namespace and production can never read one back.
 function assertTrustedTypeScriptCache(steps) {
   const restore = steps.find((step) => step.name === "Restore TypeScript cache");
   const save = steps.find((step) => step.name === "Save TypeScript cache");
   assert.ok(restore && save, "TypeScript cache steps exist");
-  assert.equal(save.if, "needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'");
+  assert.equal(
+    save.if,
+    "needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'",
+    "the TypeScript cache may fill from a pull request only inside its own namespace",
+  );
   assert.equal(save.with.key, "${{ steps.restore-tsc-cache.outputs.cache-primary-key }}");
   const namespace = restore.env.TSC_CACHE_NAMESPACE;
   assert.match(namespace, /github\.event_name == 'pull_request' && format\('pr-\{0\}', github\.event\.pull_request\.number\) \|\| 'prod'/);
