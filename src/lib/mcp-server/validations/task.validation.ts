@@ -4,6 +4,7 @@ import { getConfig } from '../config/index';
 import {
   createTaskIdentificationArraySchema,
   createTaskIdentificationBaseSchema,
+  createTaskIdentificationSchema,
   taskIdOneOrManySchema,
   ticketNumberOneOrManySchema,
 } from './common/task-identification';
@@ -49,6 +50,8 @@ export const FollowTaskInputSchema = z.object({
   message: 'remind requires remindAt',
   path: ['remindAt'],
 });
+export const ArchiveTaskInputSchema = createTaskIdentificationSchema();
+export const DeleteTaskInputSchema = createTaskIdentificationSchema();
 
 export function getGetTasksInputSchema() {
   return createTaskIdentificationArraySchema();

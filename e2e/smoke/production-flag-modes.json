@@ -180,6 +180,7 @@
     "htpr-7723-task-waiting-on": "EVERYONE",
     "htpr-7734-agent-chat-context": "OWNER_AND_QA",
     "htpr-8205-agent-clear-blocker": "EVERYONE",
+    "htpr-8215-agent-archive-delete": "OWNER_AND_QA",
     "htpr-8217-agent-follow-reminder": "EVERYONE",
     "htpr-8219-status-update-door": "EVERYONE",
     "htpr-8219-velocity-report": "EVERYONE"

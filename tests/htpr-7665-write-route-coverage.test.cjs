@@ -64,6 +64,8 @@ const EXISTING_GUARD_IN_IMPORTED_MODULE = {
   [`DELETE ${API}/ai/sessions/[sessionId]/route.ts`]: `${API}/ai/sessions/_dependencies.ts`,
   [`POST ${OPS}/tasks/update/operation.ts`]: "src/lib/mcp/tasks/updateTask.ts",
   [`PATCH ${OPS}/agents/[agentId]/operation.ts`]: "src/lib/mcp/agents/delegatedAccess.ts",
+  [`POST ${OPS}/tasks/archive/operation.ts`]: "src/lib/mcp/tasks/putAwayTask.ts",
+  [`POST ${OPS}/tasks/delete/operation.ts`]: "src/lib/mcp/tasks/putAwayTask.ts",
 };
 
 const BOARD_ACCESS_REQUEST_GUARD = `POST ${OPS}/agents/board-access-requests/operation.ts`;
@@ -161,7 +163,7 @@ test("allowlist rows exist, carry a reason and are not also guarded by the new h
   }
   for (const [key, moduleFile] of Object.entries(EXISTING_GUARD_IN_IMPORTED_MODULE)) {
     assert.ok(byKey.has(key), `stale import-guard row ${key}`);
-    assert.match(read(moduleFile), /\b(requireRole|getAgentRole)\(/, `${key}: ${moduleFile} has no role check`);
+    assert.match(read(moduleFile), /\b(requireRole|requireAgentWriteRole|getAgentRole)\(/, `${key}: ${moduleFile} has no role check`);
   }
 });
 

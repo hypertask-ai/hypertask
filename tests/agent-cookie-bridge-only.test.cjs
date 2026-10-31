@@ -5,7 +5,7 @@ const { harness, load } = require('./helpers/agent-cookie-bridge.cjs')
 const tuples = [
   ['POST', '/api/tasks/createGlobally'], ['PUT', '/api/tasks/single'],
   ['PUT', '/api/tasks/moveTask'], ['POST', '/api/tasks/(un)archive'],
-  ['POST', '/api/tasks/setDueDate'], ['POST', '/api/priority/setPriority'],
+  ['POST', '/api/queues/tasks/taskDeleteReminder'], ['POST', '/api/tasks/setDueDate'], ['POST', '/api/priority/setPriority'],
   ['POST', '/api/estimate/setEstimate'],
 ]
 const refused = [

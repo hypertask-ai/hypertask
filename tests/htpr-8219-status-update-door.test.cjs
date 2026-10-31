@@ -11,10 +11,16 @@ function request(body) {
 
 class BoardNotFound extends Error {}
 class Disabled extends Error {}
-class GenerationFailed extends Error {}
+class GenerationFailed extends Error {
+  constructor(message, cause) {
+    super(message);
+    this.cause = cause;
+  }
+}
 
 function world({ enabled = true, authed = true, result = RESULT, throwError = null, args = [] } = {}) {
   const flags = [];
+  const crashes = [];
   const { POST } = load("src/lib/mcp/operations/reports/status-update/operation.ts", {
     "next/server": { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler },
@@ -22,7 +28,7 @@ function world({ enabled = true, authed = true, result = RESULT, throwError = nu
       validateMcpAuth: async () => (authed ? { user: { id: 6 }, agentId: null, teamScope: null } : null),
       checkMcpRateLimit: async () => null,
     },
-    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: (_request, error) => crashes.push(error) },
     "@/lib/flags": {
       isFeatureEnabled: async (key, userId) => {
         flags.push({ key, userId });
@@ -34,7 +40,7 @@ function world({ enabled = true, authed = true, result = RESULT, throwError = nu
         args.push(input);
         if (throwError === "board") throw new BoardNotFound("Board not found");
         if (throwError === "disabled") throw new Disabled("Status updates are turned off for this team");
-        if (throwError === "generation") throw new GenerationFailed("Could not generate the status update");
+        if (throwError === "generation") throw new GenerationFailed("Could not generate the status update", new Error("model call failed"));
         return result;
       },
       StatusUpdateBoardNotFoundError: BoardNotFound,
@@ -42,7 +48,7 @@ function world({ enabled = true, authed = true, result = RESULT, throwError = nu
       StatusUpdateGenerationError: GenerationFailed,
     },
   });
-  return { POST, flags, args };
+  return { POST, flags, args, crashes };
 }
 
 test("flag is an Everyone-default improvement with a release risk", () => {
@@ -117,9 +123,11 @@ test("a team with status updates turned off gets a plain refusal", async () => {
   assert.equal(response.body.error, "Status updates are turned off for this team");
 });
 
-test("a model failure is a 500 with no leaked detail", async () => {
-  const { POST } = world({ throwError: "generation" });
+test("a model failure is a 502 that reports the real cause", async () => {
+  const { POST, crashes } = world({ throwError: "generation" });
   const response = await POST(request({ project_id: 15 }));
-  assert.equal(response.status, 500);
+  assert.equal(response.status, 502);
   assert.equal(response.body.error, "Could not generate the status update");
+  assert.equal(crashes.length, 1);
+  assert.equal(crashes[0].message, "model call failed");
 });

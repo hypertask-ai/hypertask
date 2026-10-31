@@ -252,21 +252,6 @@
         "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$", "^hypertask_set_task_waiting_on$", "^hypertask_archive_task$", "^hypertask_delete_task$"]
       },
       "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8215",
-          "expires": "2026-11-27",
-          "entries": ["POST /api/mcp/tasks/archive", "POST /api/mcp/tasks/delete"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8215",
-          "expires": "2026-11-27",
-          "entries": ["hypertask_archive_task", "hypertask_delete_task"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8215",
-          "expires": "2026-11-27",
-          "entries": ["hypertask_archive_task", "hypertask_delete_task"]
-        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/7723",
           "expires": "2026-11-13",

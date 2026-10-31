@@ -10,6 +10,8 @@ import {
   CreateTaskInputSchema,
   MoveTaskBetweenBoardsInputSchema,
   SetTaskWaitingOnInputSchema,
+  ArchiveTaskInputSchema,
+  DeleteTaskInputSchema,
   FollowTaskInputSchema,
   AssignUserInputSchema,
   LinkTasksInputSchema,
@@ -30,6 +32,18 @@ import {
   idempotencyKeyForInvocation,
   type McpInvocationIdentity,
 } from '../../utils/invocation-idempotency';
+
+export interface PutAwayTaskResponse {
+  success: true;
+  task: {
+    id: number;
+    ticketNumber: string | null;
+    projectId: number;
+    status: 'Normal' | 'Archive' | 'Deleted';
+    archivedAt: string | null;
+    permanentlyDeleteAt: string | null;
+  };
+}
 
 export interface TaskDetail {
   id: number;
@@ -994,6 +1008,22 @@ export class TaskService {
       success: true;
       task: { id: number; blockerCommentId?: number | null; waitingOnUserId: number | null; waitingOnSetById: number | null; waitingOnSetAt: string | null };
     }>('/mcp/tasks/waiting-on', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, generateCorrelationId());
+  }
+
+  async archiveTask(params: unknown) {
+    const body = ArchiveTaskInputSchema.parse(params);
+    return this.apiClient.makeRequest<PutAwayTaskResponse>('/mcp/tasks/archive', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, generateCorrelationId());
+  }
+
+  async deleteTask(params: unknown) {
+    const body = DeleteTaskInputSchema.parse(params);
+    return this.apiClient.makeRequest<PutAwayTaskResponse>('/mcp/tasks/delete', {
       method: 'POST',
       body: JSON.stringify(body),
     }, generateCorrelationId());
