@@ -31,6 +31,16 @@ function splitByCount(unique, shardCount) {
   return shards;
 }
 
+// HYCI-42: `node --test` starts the files in list order and takes the next one as
+// a worker frees up, so a 270-322s file at the end of a lane extends that lane by
+// its whole run time. Every lane is written longest first, which is the shortest
+// makespan for a fixed set of files.
+function orderByWork(files, weights) {
+  if (!weights) return [...files].sort();
+  const work = (file) => weights.files[file] ?? weights.defaultWorkMs;
+  return [...files].sort((a, b) => work(b) - work(a) || a.localeCompare(b));
+}
+
 function splitByWork(unique, shardCount, weights) {
   const work = unique.map((file) => ({
     file,
@@ -47,7 +57,7 @@ function splitByWork(unique, shardCount, weights) {
     shards[target].push(item.file);
     load[target] += item.workMs;
   }
-  return shards.map((files) => files.sort());
+  return shards.map((files) => orderByWork(files, weights));
 }
 
 // HYCI-6: a serial file holds one worker for its whole run, so a lane that mixes
@@ -58,7 +68,7 @@ function splitWithSerialLane(unique, shardCount, weights) {
   const pooled = unique.filter((file) => !isSerialTestFile(file));
   const serial = unique.filter((file) => isSerialTestFile(file));
   const lanes = weights ? splitByWork(pooled, shardCount - 1, weights) : splitByCount(pooled, shardCount - 1);
-  return [...lanes, serial.sort()];
+  return [...lanes, orderByWork(serial, weights)];
 }
 
 export function partition(files, count, weights, options = {}) {
