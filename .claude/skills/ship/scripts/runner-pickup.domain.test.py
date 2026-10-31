@@ -125,7 +125,8 @@ else: sys.exit(9)
         self.assertEqual(self.items(1), ['HTPR-1'])
 
     def test_shared_conflicts_and_pagination_failure_keeps_lease(self):
-        a = self.task(1, 'HTPR-1')
+        a = self.task(1, 'HTPR-1', 'Commands')
+        a['labels'].append({'name': 'Domain: Search'})
         self.board(1, [a]); self.board(2, [self.task(2, 'HTPR-2', 'Search')])
         self.tick(1); self.tick(2)
         self.assertEqual(self.items(2), [])
@@ -366,7 +367,7 @@ else: sys.exit(9)
         changed = self.task(1, 'HTPR-1', 'Commands')
         self.board(1, [changed]); self.tick(1)
         self.board(2, [self.task(2, 'HTPR-2', 'Search')]); self.tick(2)
-        changed['labels'] = []
+        changed['labels'] = [{'name': 'Domain: Commands'}, {'name': 'Domain: Search'}]
         self.board(1, [changed]); self.tick(1); self.tick(2)
         self.assertEqual(self.items(1), [])
         self.assertEqual(self.items(2), ['HTPR-2'])
@@ -436,7 +437,8 @@ else: sys.exit(9)
         self.tick(2)
         self.assertEqual(self.items(1), ['HTPR-1'])
         self.assertEqual(self.items(2), ['HTPR-2'])
-        self.assertIn('Unscoped', json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']['held'])
+        lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']
+        self.assertEqual(lease['current'], 'Unscoped')
 
     def test_malformed_missing_nonadmission_detail_retries_same_tick_time(self):
         task = self.task(1, 'HTPR-1', 'Flags')
