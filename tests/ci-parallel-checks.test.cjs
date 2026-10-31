@@ -5,7 +5,7 @@ const test = require("node:test");
 const yaml = require("js-yaml");
 
 const workflow = () => yaml.load(readFileSync(".github/workflows/ci-tests.yml", "utf8"));
-const staticSteps = ["Guard agent board scope", "Typecheck", "Lint"];
+const staticSteps = ["Guard agent board scope", "Typecheck", "Lint (oxlint)", "Lint (eslint, rules Oxlint lacks)"];
 
 function assertParallelChecks(ci) {
   const checks = ci.jobs["ci-checks"];

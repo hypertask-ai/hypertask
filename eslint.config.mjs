@@ -7,6 +7,7 @@ import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
 import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +16,13 @@ const __dirname = path.dirname(__filename);
 // eslint-config-next still ships ESLint 9-era plugins (react, jsx-a11y, import)
 // whose rules call context.getFilename(). ESLint 10 removed those methods.
 const nextConfigs = fixupConfigRules(nextCoreWebVitals);
+
+const oxlintConfig = JSON.parse(readFileSync(new URL("./.oxlintrc.json", import.meta.url), "utf8"));
+
+function oxlintOwnedRules() {
+  const blocks = [oxlintConfig, ...(oxlintConfig.overrides ?? [])];
+  return [...new Set(blocks.flatMap((block) => Object.keys(block.rules ?? {})))];
+}
 
 export default defineConfig([
   {
@@ -100,5 +108,13 @@ export default defineConfig([
       "@next/next/no-img-element": "off",
       "jsx-a11y/role-supports-aria-props": "off",
     },
+  },
+  {
+    // Oxlint owns these rules (.oxlintrc.json) so the lint stage does not run them twice.
+    // tests/oxlint-overlap.test.cjs fails if the two files disagree.
+    files: ["**/*.{js,cjs,mjs,jsx,ts,tsx}"],
+    rules: Object.fromEntries(
+      oxlintOwnedRules().map((rule) => [rule, "off"]),
+    ),
   },
 ]);

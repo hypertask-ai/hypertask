@@ -6,13 +6,14 @@ function git(args) {
   return result.stdout;
 }
 
-const base = git(["merge-base", "HEAD", "origin/production"]).trim();
+const base = process.argv[2] ?? "origin/production";
+
 const changed = [...new Set([
   ...git(["diff", "--name-only", "-z", "--diff-filter=ACMR", base, "--"]).split("\0"),
   ...git(["ls-files", "--others", "--exclude-standard", "-z"]).split("\0"),
 ].filter(Boolean))];
 const configurationChanges = [...changed, ...git(["diff", "--name-only", "-z", base, "--"]).split("\0")];
-const full = configurationChanges.some(file => /^(eslint[^/]*\.[^/]+|\.eslint[^/]*|eslint-local-rules\/|package(?:-lock)?\.json$|tsconfig[^/]*\.json$)/.test(file));
+const full = configurationChanges.some(file => /^(eslint[^/]*\.[^/]+|\.eslint[^/]*|eslint-local-rules\/|\.oxlintrc\.json$|package(?:-lock)?\.json$|tsconfig[^/]*\.json$)/.test(file));
 const files = full ? ["."] : changed.filter(file => /\.(?:[cm]?[jt]s|[jt]sx)$/.test(file));
 if (!files.length) {
   console.log("No changed JavaScript or TypeScript files to lint.");

@@ -422,9 +422,25 @@ jobs:
           git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
           npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"
 
-      - name: Lint
+      - name: Lint (oxlint)
         if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
+        run: npm run lint:oxlint
+
+      - name: Lint (eslint, rules Oxlint lacks)
+        if: needs.ci-prepare.outputs.run_tests == 'true'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$PR_BASE_SHA" ]; then
+            git fetch --no-tags --depth=1000 origin "$PR_BASE_SHA"
+            npm run lint:changed -- "$PR_BASE_SHA"
+          else
+            npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
+          fi
+
+      - name: Lint overlap guard
+        if: needs.ci-prepare.outputs.run_tests == 'true'
+        run: node --test tests/oxlint-overlap.test.cjs
 
       - name: Save ESLint cache
         # PRs may restore the trusted base-branch cache, but only production pushes
