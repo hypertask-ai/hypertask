@@ -1,5 +1,4 @@
 const { load } = require('../task-route-loader.cjs')
-const { enforcementFor } = require('./stub-map.cjs')
 
 function setup(options = {}) {
   const calls = { comments: [], runs: [], activities: [], broadcasts: [], urls: [], flags: [], idempotency: [] }
@@ -69,7 +68,6 @@ function setup(options = {}) {
     '@/lib/mcp/comments/reactionResponse': {},
     '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async () => new Map() },
     '@/lib/agents/publicAgent': {},
-    '@/lib/agents/writingEnforcement': { ...enforcementFor(load('src/lib/agents/writing.ts', {})), agentWritingPolicyEnabled: async () => options.writing !== false },
     '@/lib/flags': {
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push({ key, userId })
