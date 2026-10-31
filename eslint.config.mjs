@@ -7,6 +7,7 @@ import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
 import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import { testHarnessLintConfig } from "./eslint-local-rules/test-harness.mjs";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -100,5 +101,14 @@ export default defineConfig([
       "@next/next/no-img-element": "off",
       "jsx-a11y/role-supports-aria-props": "off",
     },
+  },
+  {
+    // Oxlint owns these rules (.oxlintrc.json) so the lint stage does not run them twice.
+    // tests/oxlint-overlap.test.cjs fails if the two files disagree.
+    files: ["**/*.{js,cjs,mjs,jsx,ts,tsx}"],
+    rules: Object.fromEntries(
+      Object.keys(JSON.parse(readFileSync(new URL("./.oxlintrc.json", import.meta.url), "utf8")).rules)
+        .map((rule) => [rule, "off"]),
+    ),
   },
 ]);
