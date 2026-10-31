@@ -17,6 +17,24 @@ const REVIEW = `APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**
 const loadScript = async () => yaml.load(await readFile(WORKFLOW, "utf8")).jobs.mirror.steps
   .find(step => step.with?.script).with.script;
 
+// The board runs this TypeScript guard before it saves an agent's people
+// comment, so the test executes the real module instead of a copy of the rules.
+const loadWritingGuard = () => {
+  const ts = require("typescript");
+  const path = require("node:path");
+  const Module = require("node:module");
+  const { readFileSync } = require("node:fs");
+  const filePath = path.join(process.cwd(), "src/lib/agents/writing.ts");
+  const javascript = ts.transpileModule(readFileSync(filePath, "utf8"), {
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText;
+  const loaded = new Module(filePath);
+  loaded.filename = filePath;
+  loaded.require = (request) => require(request);
+  loaded._compile(javascript, filePath);
+  return loaded.exports;
+};
+
 async function runMirror({
   eventName = "issue_comment",
   comment = { user: REVIEWER, body: REVIEW },
@@ -118,16 +136,44 @@ test("the review verdict lands in the ticket thread with the reviewed commit", a
   const { posts, failures } = await runMirror();
 
   assert.deepEqual(failures, []);
-  assert.equal(posts.length, 1);
+  assert.equal(posts.length, 2);
   assert.match(posts[0].url, /\/api\/mcp\/comments$/);
   assert.equal(posts[0].init.headers["Idempotency-Key"], `ai-review-mirror-43-${SHA}`);
-  const body = JSON.parse(posts[0].init.body);
-  assert.equal(body.ticket_number, "HTPR-1234");
-  assert.equal(body.kind, "qa");
-  assert.match(body.text, /APPROVE \(minors only: 1\)/);
-  assert.match(body.text, /MINOR/);
-  assert.ok(body.text.includes(`reviewed-commit: ${SHA}`));
-  assert.doesNotMatch(body.text, /ai-review-signature/);
+  const people = JSON.parse(posts[0].init.body);
+  assert.equal(people.ticket_number, "HTPR-1234");
+  assert.equal(people.kind, "qa");
+  assert.match(people.text, /APPROVE/);
+  // The findings carry paths, code and long sentences, and the board refuses
+  // that in the thread people read, so only a short plain line goes there.
+  assert.doesNotMatch(people.text, /MINOR/);
+  assert.ok(!people.text.includes(`reviewed-commit: ${SHA}`), "the marker stays out of the people line");
+  assert.match(people.text, /agent log/);
+
+  assert.equal(posts[1].init.headers["Idempotency-Key"], `ai-review-mirror-log-43-${SHA}`);
+  const log = JSON.parse(posts[1].init.body);
+  assert.equal(log.ticket_number, "HTPR-1234");
+  assert.equal(log.kind, undefined, "no kind files the findings in the agent log");
+  assert.match(log.text, /MINOR/);
+  assert.ok(log.text.includes(`reviewed-commit: ${SHA}`));
+  assert.doesNotMatch(log.text, /ai-review-signature/);
+});
+
+test("the people line passes the board's voice guard, which the findings cannot (YPER4-910)", async () => {
+  const { posts } = await runMirror();
+  const { assertAgentWriting, AgentWritingError } = loadWritingGuard();
+
+  assert.doesNotThrow(
+    () => assertAgentWriting("agent-id", { text: JSON.parse(posts[0].init.body).text }),
+    "the short plain verdict must survive the guard",
+  );
+  // The same guard is why the findings moved: proof the old one-post shape fails.
+  assert.throws(
+    () => assertAgentWriting("agent-id", {
+      text: `<p><strong>AI review:</strong> APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**</p>
+<pre>- **MINOR** — \`.github/scripts/pr-size.cjs:34\` hardcodes report-only, which is longer than twelve words</pre>`,
+    }),
+    AgentWritingError,
+  );
 });
 
 test("only the reviewer's comment wakes the mirror and only production PRs are mirrored", async () => {
@@ -166,12 +212,12 @@ test("a branch that names no ticket is not mirrored", async () => {
 
 test("the [bot] spelling of the same reviewer account is mirrored too", async () => {
   const event = await runMirror({ comment: { user: { login: "hypertask-ai-review[bot]" }, body: REVIEW } });
-  assert.equal(event.posts.length, 1);
+  assert.equal(event.posts.length, 2);
 
   const rest = await runMirror({
     pr: productionPr({ comments: [{ user: { login: "hypertask-ai-review[bot]" }, body: REVIEW }] }),
   });
-  assert.equal(rest.posts.length, 1);
+  assert.equal(rest.posts.length, 2);
 });
 
 test("a lookalike account name is still refused", async () => {
@@ -233,7 +279,7 @@ test("findings are escaped so the ticket renders them as text", async () => {
       }],
     }),
   });
-  const text = JSON.parse(posts[0].init.body).text;
+  const text = JSON.parse(posts[1].init.body).text;
   assert.equal(text.includes("<script>"), false, "raw markup must never survive");
   assert.match(text, /&lt;script&gt;x&lt;\/script&gt;/);
   assert.match(text, /a &amp; b &lt;b&gt;/);
@@ -287,7 +333,7 @@ test("a rate-limited pull read waits for the reset and still mirrors the verdict
   const { posts, failures, warnings } = await runMirror({ rateLimitReads: 2 });
 
   assert.deepEqual(failures, []);
-  assert.equal(posts.length, 1);
+  assert.equal(posts.length, 2);
   assert.match(JSON.parse(posts[0].init.body).text, /APPROVE/);
   assert.equal(warnings.length, 2);
   assert.match(warnings.join("\n"), /rate limited; retrying after \d+s/);
@@ -297,7 +343,7 @@ test("a rate-limited comment read waits for the reset and still mirrors the verd
   const { posts, failures, warnings } = await runMirror({ rateLimitReads: 1, rateLimitCommentRead: true });
 
   assert.deepEqual(failures, []);
-  assert.equal(posts.length, 1);
+  assert.equal(posts.length, 2);
   assert.match(JSON.parse(posts[0].init.body).text, /APPROVE/);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /rate limited; retrying after \d+s/);
