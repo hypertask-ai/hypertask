@@ -40,6 +40,7 @@ test("the selector, the sharding and the scope detector run the whole suite", as
   for (const file of [
     ".github/scripts/select-tests.mjs",
     ".github/scripts/shard-tests.mjs",
+    ".github/scripts/shard-containers.mjs",
     ".github/scripts/ci-change-scope.cjs",
   ]) {
     assert.equal(await select([file]), "ALL", file);

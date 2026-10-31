@@ -28,7 +28,7 @@ const WIDE_PATTERNS = [
   /^middleware\./,
   /^src\/middleware\./,
   /^scripts\/(run-tests|test-inventory)\.mjs$/,
-  /^\.github\/scripts\/(?:select-tests|shard-tests)\.mjs$/,
+  /^\.github\/scripts\/(?:select-tests|shard-tests|shard-containers)\.mjs$/,
   /^\.github\/scripts\/ci-change-scope\.cjs$/,
 ];
 
