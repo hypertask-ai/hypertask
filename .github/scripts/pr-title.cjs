@@ -1,5 +1,5 @@
 module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
-  const PREFIXES = ['HTPR', 'HYFA', 'YPER4'];
+  const PREFIXES = ['HTPR', 'HYFA', 'YPER4', 'HYCI'];
   const TAGS = [
     'BUGFIX', 'FEATURE', 'IMPROVE', 'CLI/MCP/AI', 'SPEED', 'FEEDBACK',
     'DASH', 'QA', 'BOARD', 'COST', 'PLAN', 'INFRA', 'REFACTOR',
@@ -69,13 +69,14 @@ module.exports = async ({ github, context, core, fetchImpl = fetch, pr }) => {
       `Pull request title does not match the required shape.`,
       ``,
       `  got:      ${pr.title}`,
-      `  expected: (HTPR|HYFA|YPER4)-<n> [TAG] <summary>`,
+      `  expected: (${PREFIXES.join('|')})-<n> [TAG] <summary>`,
       ``,
       `Valid tags: ${TAGS.join(', ')}`,
       ``,
       `Example: HTPR-5626 [INFRA] Move every job off GitHub-hosted runners`,
       `         HYFA-43 [INFRA] Add Factory acceptance routes`,
       `         YPER4-17 [INFRA] Step 4: rules enforced in code`,
+      `         HYCI-27 [INFRA] Fail the run when a known-bug todo starts passing`,
       ``,
       `Edit the title and this check re-runs on its own.`,
     ].join('\n')
