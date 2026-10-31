@@ -9,6 +9,7 @@ import { withRealtime } from './lib/realtime'
 import { parkPointerOffCommentThread, scrollToBaselinePosition, waitForTicketInitialScroll } from './lib/layout-lock-scroll'
 
 const fixturePath = path.join(path.dirname(process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'), 'card-fixture.json')
+const boardCardSignalTimeout = 20_000
 
 const baselinePath = path.join(__dirname, 'layout-lock.baseline.json')
 const update = process.env.LAYOUT_LOCK_UPDATE === '1'
@@ -109,13 +110,15 @@ for (const name of [...screens, 'ticket from board card']) {
       : screen === 'my-tasks' ? '/my-tasks?view=all'
       : screen === 'inbox' || (screen === 'app-shell' && !phone) ? '/inbox'
       : process.env.SMOKE_BOARD_PATH!
-    const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
+    const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok(), { timeout: boardCardSignalTimeout })
     await page.goto(withRealtime(fromBoard ? process.env.SMOKE_BOARD_PATH! : route), { waitUntil: 'load' })
     const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
     for (const [key, enabled] of Object.entries(fixture.flags)) expect(flags[key] === true, `layout flag ${key}`).toBe(enabled)
     if (fromBoard) {
-      await page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`).click()
-      await expect(page).toHaveURL(url => url.pathname === fixture.detailPath)
+      const card = page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`)
+      await expect(card, 'the fixture ticket must be on the board as a card before the click').toBeVisible({ timeout: boardCardSignalTimeout })
+      await card.click({ timeout: boardCardSignalTimeout })
+      await expect(page, 'the board card click must open the ticket page').toHaveURL(url => url.pathname === fixture.detailPath, { timeout: boardCardSignalTimeout })
     }
     if (screen === 'ticket') {
       await expect(page.locator('#title-input')).toHaveValue('Browser smoke board fixture')
@@ -197,15 +200,17 @@ test('layout lock: comment composer is the end of the ticket thread', async ({ p
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean>; allFlagsOn?: boolean }
   for (const entry of ['direct', 'board card']) {
     await test.step(entry, async () => {
-      const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
+      const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok(), { timeout: boardCardSignalTimeout })
       await page.goto(withRealtime(entry === 'direct' ? fixture.detailPath : process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
       const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
       for (const [key, enabled] of Object.entries(fixture.flags)) {
         expect(flags[key] === true, `layout lock flag ${key}`).toBe(enabled)
       }
       if (entry === 'board card') {
-        await page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`).click()
-        await expect(page).toHaveURL((url) => url.pathname === fixture.detailPath)
+        const card = page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`)
+        await expect(card, 'the fixture ticket must be on the board as a card before the click').toBeVisible({ timeout: boardCardSignalTimeout })
+        await card.click({ timeout: boardCardSignalTimeout })
+        await expect(page, 'the board card click must open the ticket page').toHaveURL((url) => url.pathname === fixture.detailPath, { timeout: boardCardSignalTimeout })
       }
       const composer = page.getByTestId('comment-composer')
       const comments = page.getByTestId('ticket-comment')
