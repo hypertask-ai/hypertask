@@ -205,6 +205,7 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
             with self.assertRaises(FileNotFoundError):
                 module.admit_domain('RUNNER 1', 'YPER4-1', self.root)
             shutil.copyfile(HERE / 'runner-domain-admit.py', helper)
+            shutil.copyfile(HERE / 'runner_domains.py', helper.with_name('runner_domains.py'))
             module.admit_domain('RUNNER 1', 'YPER4-1', self.root)
         lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']
         self.assertTrue(lease['admission'])
@@ -356,6 +357,19 @@ with open(os.environ['WRITES'], 'a') as f: f.write(' '.join(sys.argv[1:]) + '\\n
         lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']
         self.assertTrue(lease['admission'])
         self.assertEqual(self.admit(2, 'YPER4-1').returncode, 1)
+
+    def test_pickup_accepts_the_unscoped_lease_admission_writes(self):
+        task = self.task('YPER4-1', 'Flags')
+        task['labels'] = []
+        self.set_tasks([task])
+        self.assertEqual(self.admit(1, 'YPER4-1').returncode, 0)
+        self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']['held'], ['Unscoped'])
+        result = subprocess.run(['python3', str(HERE / 'runner-domain-pickup.py'), str(self.state), '1'],
+                                input=json.dumps({'tasks': [task], 'previous': [], 'candidates': []}),
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [])
+        self.assertIn('Unscoped', json.loads((self.state / 'domain-ownership.json').read_text())['1']['YPER4-1']['held'])
 
 
 if __name__ == '__main__':

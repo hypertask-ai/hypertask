@@ -426,6 +426,18 @@ else: sys.exit(9)
         self.assertEqual(json.loads(result.stdout), [])
         self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text()), {})
 
+    def test_unscoped_lease_from_admission_keeps_ticking(self):
+        leases = {'1': {'HTPR-1': {'held': ['Unscoped'], 'current': 'Unscoped', 'pending': False, 'protected': True}},
+                  '2': {'HTPR-2': {'held': ['Unscoped'], 'current': 'Unscoped', 'pending': False}}}
+        (self.state / 'domain-ownership.json').write_text(json.dumps(leases))
+        self.board(1, [self.task(1, 'HTPR-1')])
+        self.board(2, [self.task(2, 'HTPR-2')])
+        self.tick(1)
+        self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        self.assertIn('Unscoped', json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']['held'])
+
     def test_malformed_missing_nonadmission_detail_retries_same_tick_time(self):
         task = self.task(1, 'HTPR-1', 'Flags')
         self.board(1, [task]); self.tick(1)

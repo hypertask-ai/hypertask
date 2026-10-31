@@ -8,9 +8,9 @@ import re
 import subprocess
 import sys
 
-DOMAINS = {'Commands', 'Flags', 'Search', 'Prompts', 'Parity', 'Shipping'}
+from runner_domains import LEASE_DOMAINS, SHARED, UNSCOPED, conflicts, label_domain
+
 ACTIVE = {'In Progress', 'QA', 'AI Review', 'Review', 'Valentin Review', 'UX Sign-off', 'Flag: Off'}
-UNSCOPED = 'Unscoped'
 TERMINAL = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA'}
 TAKEOVER_IDLE = dt.timedelta(hours=6)
 
@@ -37,11 +37,7 @@ def validate(task, project=None):
 
 
 def domain(task):
-    found = {x.get('name', x.get('value'))[8:] for x in task['labels']
-             if x.get('name', x.get('value')).startswith('Domain: ')} & DOMAINS
-    if not found:
-        return UNSCOPED
-    return next(iter(found)) if len(found) == 1 else 'Shared'
+    return label_domain(task['labels'])
 
 
 def idle_runner(task, runner):
@@ -60,10 +56,6 @@ def idle_runner(task, runner):
             if now - dt.datetime.fromisoformat(activity['createdAt'].replace('Z', '+00:00')) <= TAKEOVER_IDLE:
                 return False
     return True
-
-
-def conflict(a, b):
-    return UNSCOPED not in (a, b) and (a == b or 'Shared' in (a, b))
 
 
 def main():
@@ -116,7 +108,7 @@ def main():
                 if isinstance(lease, str):
                     lease = leases[key] = {'held': [lease], 'current': lease, 'pending': False}
                 if (not isinstance(key, str) or not isinstance(lease, dict) or not isinstance(lease.get('held'), list)
-                        or not lease['held'] or any(d not in DOMAINS | {'Shared', UNSCOPED} for d in lease['held'])
+                        or not lease['held'] or any(d not in LEASE_DOMAINS for d in lease['held'])
                         or lease.get('current') not in lease['held'] or type(lease.get('pending')) is not bool):
                     raise ValueError('invalid lease')
         for inbox in state.glob('runner-*.json'):
@@ -129,7 +121,7 @@ def main():
             for item in data['items']:
                 if not isinstance(item, dict) or not isinstance(item.get('ticket'), str):
                     raise ValueError('invalid inbox item')
-                owners.setdefault(match[1], {}).setdefault(item['ticket'], {'held': ['Shared'], 'current': 'Shared', 'pending': True, 'protected': True})
+                owners.setdefault(match[1], {}).setdefault(item['ticket'], {'held': [SHARED], 'current': SHARED, 'pending': True, 'protected': True})
         for slot, leases in list(owners.items()):
             for key, lease in list(leases.items()):
                 task = tasks.get(key)
@@ -185,14 +177,14 @@ def main():
         scopes.add(d)
         others = [(slot, key, lease) for slot, leases in owners.items() if slot != runner for key, lease in leases.items()]
         cross = [(slot, key) for slot, key, lease in others if any(
-            conflict(a, b) for a in scopes
+            conflicts(a, b) for a in scopes
             for b in (lease.get('acquired', []) if existing and not existing.get('admission') and lease['pending'] else lease['held']))]
         all_leases = [(slot, key, lease) for slot, leases in owners.items() for key, lease in leases.items()]
-        conflicts = [(a, b) for i, a in enumerate(all_leases) for b in all_leases[i + 1:]
-                     if a[0] != b[0] and any(conflict(x, y) for x in a[2]['held'] for y in b[2]['held'])]
-        if conflicts:
+        clashes = [(a, b) for i, a in enumerate(all_leases) for b in all_leases[i + 1:]
+                   if a[0] != b[0] and any(conflicts(x, y) for x in a[2]['held'] for y in b[2]['held'])]
+        if clashes:
             print('runner-domain-admit: existing conflicts: ' + ', '.join(
-                f'Runner {a[0]} {a[1]} / Runner {b[0]} {b[1]}' for a, b in conflicts), file=sys.stderr)
+                f'Runner {a[0]} {a[1]} / Runner {b[0]} {b[1]}' for a, b in clashes), file=sys.stderr)
         if existing and d != existing['current']:
             existing.setdefault('acquired', existing['held'][:])
             if d not in existing['held']:
