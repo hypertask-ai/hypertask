@@ -65,7 +65,7 @@ jobs:
             }), { log: core.warning });
             core.setOutput('pr', JSON.stringify({
               number: pr.number, state: pr.state, title: pr.title, user: pr.user,
-              head: pr.head, base: pr.base, additions: pr.additions, deletions: pr.deletions,
+              head: pr.head, base: pr.base, additions: pr.additions, deletions: pr.deletions, changed_files: pr.changed_files,
             }));
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         id: outside
@@ -82,81 +82,7 @@ jobs:
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
         with:
           script: |
-            const marker = '<!-- pr-size-warning -->';
-            const cap = 400;
-            const botLogin = 'github-actions[bot]';
-
-            async function run() {
-              const prNumber = context.payload.pull_request?.number;
-              if (!prNumber) {
-                core.info('No pull_request payload; skipping pr-size check.');
-                return;
-              }
-
-              const pr = JSON.parse(process.env.PR_METADATA);
-
-              core.setOutput('sha', pr.head.sha);
-
-              // This repo has no fork contributors; skip explicitly and visibly rather
-              // than silently commenting on a fork PR we don't intend to support.
-              if (pr.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) {
-                core.info(`PR #${pr.number} is from a fork (${pr.head.repo.full_name}); skipping pr-size comment.`);
-                return;
-              }
-
-              const total = (pr.additions || 0) + (pr.deletions || 0);
-              const over = total > cap;
-
-              let body;
-              if (over) {
-                body = `${marker}\n\n:warning: **PR size warning** — this PR is **${total}** changed lines (additions + deletions), over the ~${cap}-line cap in AGENTS.md. Consider splitting it into a stack of small PRs: each builds green and is safe to merge alone, landed in order. The cap is advisory — this comment never blocks merging.`;
-              } else {
-                body = `${marker}\n\n:white_check_mark: This PR is now **${total}** changed lines (additions + deletions), within the ~${cap}-line cap in AGENTS.md.`;
-              }
-
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                ...context.repo,
-                issue_number: pr.number,
-              });
-              const existing = comments.find((c) => c.user?.login === botLogin && (c.body || '').includes(marker));
-
-              if (over) {
-                if (existing) {
-                  if (existing.body !== body) {
-                    await github.rest.issues.updateComment({
-                      ...context.repo,
-                      comment_id: existing.id,
-                      body,
-                    });
-                    core.info(`Updated size comment for PR #${pr.number}.`);
-                  } else {
-                    core.info(`Size comment for PR #${pr.number} is already up to date.`);
-                  }
-                } else {
-                  await github.rest.issues.createComment({
-                    ...context.repo,
-                    issue_number: pr.number,
-                    body,
-                  });
-                  core.info(`Created size comment for PR #${pr.number}.`);
-                }
-              } else if (existing) {
-                await github.rest.issues.updateComment({
-                  ...context.repo,
-                  comment_id: existing.id,
-                  body,
-                });
-                core.info(`Updated size comment to within-cap for PR #${pr.number}.`);
-              } else {
-                core.info(`PR #${pr.number} is within the cap and has no size comment; nothing to do.`);
-              }
-            }
-
-            try {
-              await run();
-            } catch (err) {
-              core.warning(`pr-size check failed but will not block the PR: ${err.message}`);
-            }
+            await require('./.github/scripts/pr-size.cjs')({ github, context, core, prMetadata: process.env.PR_METADATA });
 
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         id: title
@@ -180,6 +106,14 @@ jobs:
             const pr = JSON.parse(process.env.PR_METADATA);
             core.setOutput('sha', pr.head.sha);
             await require('./.github/scripts/ci-runner-policy.cjs').checkPullRequest({ pr, core });
+      - name: Save report-only size measurement
+        if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr-size-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/pr-size-*.json
+          retention-days: 14
+          if-no-files-found: error
       - name: Publish combined guard result
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7

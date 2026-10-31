@@ -10,7 +10,7 @@ const workflow = yaml.load(readFileSync('.github/workflows/pr-guards-trusted.yml
 const steps = workflow.jobs['pr-guards-trusted'].steps;
 const sha = 'a'.repeat(40);
 const pr = {
-  number: 721, state: 'open', title: 'YPER4-721 [INFRA] Recover quota', additions: 1, deletions: 1,
+  number: 721, state: 'open', title: 'YPER4-721 [INFRA] Recover quota', additions: 1, deletions: 1, changed_files: 1,
   head: { sha, repo: { full_name: 'fixture/repo' } },
   base: { ref: 'production', repo: { full_name: 'fixture/repo' } }, user: { login: 'runner' },
 };
@@ -37,7 +37,7 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
   };
   const github = {
     rest: {
-      pulls: { get: async () => {
+      pulls: { listFiles() {}, get: async () => {
         calls.push('pulls.get');
         if (limitedRead) { limitedRead = false; throw limited(); }
         if (limitedMetadataRead && posts.some(post => post.state === 'pending')) {
@@ -54,7 +54,14 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
       } },
       issues: { listComments() {} },
     },
-    paginate: async () => { calls.push('issues.listComments'); return []; },
+    paginate: async method => {
+      if (method === github.rest.pulls.listFiles) {
+        calls.push('pulls.listFiles');
+        return [{ filename: 'src/example.ts', additions: 1, deletions: 1 }];
+      }
+      calls.push('issues.listComments');
+      return [];
+    },
   };
   const previous = { PR_METADATA: process.env.PR_METADATA, RESULTS: process.env.RESULTS };
   try {
@@ -101,7 +108,7 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
   }
 }
 
-test('executed production workflow baseline spends 22 calls versus six for the candidate', async () => {
+test('executed production workflow baseline spends 22 calls versus eight for the candidate', async () => {
   const old = process.env.HYPERTASK_MCP_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = 'isolated-fixture';
   try {
@@ -109,7 +116,7 @@ test('executed production workflow baseline spends 22 calls versus six for the c
     assert.equal(before.calls.length, 22);
     assert.equal(before.posts.length, 10);
     const after = await run();
-    assert.equal(after.calls.length, 6);
+    assert.equal(after.calls.length, 8);
     assert.equal(after.posts.length, 2);
     assert.deepEqual(before.failures, []);
     assert.deepEqual(after.failures, []);
@@ -125,7 +132,7 @@ test('ten workflow push replays recover read and status quota refusals with fres
   try {
     for (let push = 0; push < 10; push++) {
       const normal = await run();
-      assert.deepEqual(normal.calls, ['pulls.get', 'repos.createCommitStatus', 'pulls.get', 'issues.listComments', 'pulls.get', 'repos.createCommitStatus']);
+      assert.deepEqual(normal.calls, ['pulls.get', 'repos.createCommitStatus', 'pulls.get', 'pulls.listFiles', 'pulls.get', 'issues.listComments', 'pulls.get', 'repos.createCommitStatus']);
       assert.deepEqual(normal.posts.map(({ context, state, sha: head }) => ({ context, state, head })), [
         { context: 'pr-title', state: 'pending', head: sha },
         { context: 'pr-title', state: 'success', head: sha },
@@ -133,7 +140,7 @@ test('ten workflow push replays recover read and status quota refusals with fres
       const recovered = await run({ limitedRead: true, limitedPost: true });
       assert.deepEqual(recovered.failures, []);
       assert.deepEqual(recovered.waits, [1000, 1000]);
-      assert.equal(recovered.calls.length, 9);
+      assert.equal(recovered.calls.length, 11);
       assert.equal(recovered.posts.length, 2);
       assert.equal(recovered.posts.at(-1).state, 'success');
     }
@@ -167,7 +174,7 @@ test('a delayed status retry rechecks changed head, title, base and open state b
     for (const changed of [{ head: { ...pr.head, sha: 'b'.repeat(40) } }, { title: 'Edited title' },
       { base: { ...pr.base, ref: 'main' } }, { state: 'closed' }]) {
       const result = await run({ limitedPost: true, current: calls =>
-        calls.filter(call => call === 'pulls.get').length >= 4 ? changed : {} });
+        calls.filter(call => call === 'pulls.get').length >= 5 ? changed : {} });
       assert.deepEqual(result.waits, [1000]);
       assert.deepEqual(result.posts.map(post => post.state), ['pending']);
       assert.deepEqual(result.failures, []);
