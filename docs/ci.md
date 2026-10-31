@@ -405,6 +405,25 @@ It runs directly with Python's standard library, not the repository suite.
 Daily live cleanup is separately installed by the runner; see
 [QA evidence storage](../.claude/skills/verify-qa/reference/evidence-storage.md).
 
+The `ship-scripts-tests-siblings` job runs the sibling suites no check ran
+before HYCI-21: `disk-guard.test.py`,
+`error-collector/{collector,sources,vercel-logs}.test.mjs`,
+`mcp-contract-watch.test.sh`, `ship-gates.test.sh`,
+`scripts/daily-stats.test.py`, `scripts/proc-watchdog.test.py` and
+`scripts/premerge-local-{flags,search}.test.mjs`. They run as their own job so
+the existing job keeps its feedback time and each job keeps its own timeout.
+
+The `ship-gates` fixture drives the real unlazy ledger checker, which this
+repository does not vendor. Its job checks out `Leonxlnx/unlazy` (MIT) at pinned
+commit `16671491f6679ad9378f52604d3bc2415b4120c7` into `.ship-scripts-unlazy`
+and links it at the temporary HOME's `.agents/skills/unlazy`, where the fixture
+looks for it. Nothing is installed from it, it receives no credentials, and the
+job requests only `contents: read`.
+
+The light gate dependency contract accepts a dynamic `import(pathToFileURL(..))`
+target, which loads a local file and therefore no package, and still fails
+closed on every other non-literal dynamic load.
+
 ## Feature-map citation check (YPER4-610)
 
 The non-required `feature-map-check` job in

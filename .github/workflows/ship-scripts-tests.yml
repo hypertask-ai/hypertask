@@ -13,6 +13,7 @@ on:
       - 'scripts/daily-stats*'
       - 'scripts/proc-watchdog*'
       - 'scripts/premerge-local.sh'
+      - 'scripts/premerge-local-*.mjs'
       - '.claude/skills/verify-qa/scripts/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
@@ -96,3 +97,58 @@ jobs:
           bash .claude/skills/ship/scripts/error-collector.test.sh
           node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
           bash .claude/skills/ship/scripts/ship-claim.test.sh
+
+  ship-scripts-tests-siblings:
+    name: ship-scripts-tests-siblings
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Check out the ledger checker the ship-gates fixture runs
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: Leonxlnx/unlazy
+          ref: 16671491f6679ad9378f52604d3bc2415b4120c7
+          path: .ship-scripts-unlazy
+          persist-credentials: false
+
+      - name: Install offline test dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y python3 jq git
+          mkdir -p "$RUNNER_TEMP/ship-scripts-home/.agents/skills" "$RUNNER_TEMP/ship-scripts-bin"
+          ln -s "$GITHUB_WORKSPACE/.ship-scripts-unlazy" "$RUNNER_TEMP/ship-scripts-home/.agents/skills/unlazy"
+          cat > "$RUNNER_TEMP/ship-scripts-bin/gh" <<'SH'
+          #!/usr/bin/env bash
+          echo 'Unexpected gh call outside offline test fixtures' >&2
+          exit 1
+          SH
+          chmod +x "$RUNNER_TEMP/ship-scripts-bin/gh"
+          echo "$RUNNER_TEMP/ship-scripts-bin" >> "$GITHUB_PATH"
+
+      - name: Run the sibling offline ship script tests
+        env:
+          HOME: ${{ runner.temp }}/ship-scripts-home
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .claude/skills/ship/scripts/disk-guard.test.py
+          node --test .claude/skills/ship/scripts/error-collector/collector.test.mjs
+          node --test .claude/skills/ship/scripts/error-collector/sources.test.mjs
+          node --test .claude/skills/ship/scripts/error-collector/vercel-logs.test.mjs
+          bash .claude/skills/ship/scripts/mcp-contract-watch.test.sh
+          bash .claude/skills/ship/scripts/ship-gates.test.sh
+          python3 scripts/daily-stats.test.py
+          python3 scripts/proc-watchdog.test.py
+          node --test scripts/premerge-local-flags.test.mjs
+          node --test scripts/premerge-local-search.test.mjs
