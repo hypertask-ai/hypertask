@@ -54,6 +54,10 @@ terminal = {'Done', 'Archive', 'Archived', 'Flag: Everyone', 'Flag: Only Me + QA
 def assigned(task):
     return any((a.get('agent') or {}).get('displayName', '').casefold() == name.casefold() for a in task.get('assignees', []))
 
+def runner_slots(task):
+    return {match[1] for a in task.get('assignees', [])
+            if (match := re.fullmatch(r'Runner ([1-9][0-9]*)', (a.get('agent') or {}).get('displayName') or '', re.I))}
+
 def domain(task):
     return label_domain(task.get('labels') or [])
 
@@ -130,7 +134,8 @@ for item in data['candidates']:
     ticket = item['ticket']
     if tasks[ticket].get('section') in terminal or tasks[ticket].get('status') in terminal:
         continue
-    if any(ticket in leases for owner, leases in owners.items() if owner != runner):
+    if any(owner in runner_slots(tasks[ticket]) for owner, leases in owners.items()
+           if owner != runner and ticket in leases):
         continue
     d = domain(tasks[ticket])
     if ticket in mine:
