@@ -52,6 +52,8 @@ import { setTaskWaitingOnTool } from './set-task-waiting-on.tool';
 import { followTaskTool } from './follow-task.tool';
 import { archiveTaskTool } from './archive-task.tool';
 import { deleteTaskTool } from './delete-task.tool';
+import { shareTaskTool } from './share-task.tool';
+import { getTaskShareTool } from './get-task-share.tool';
 import { moveTaskBetweenBoardsTool } from './move-task-between-boards.tool';
 import { assignUserTool } from './assign-user.tool';
 import { attachFilesTool } from './attach-files.tool';
@@ -159,6 +161,8 @@ export const MCP_TOOLS = [
   followTaskTool,
   archiveTaskTool,
   deleteTaskTool,
+  shareTaskTool,
+  getTaskShareTool,
   assignUserTool,
   decisionRequestTool,
   draftTool,

@@ -492,6 +492,16 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
     description:
       'Resume the paused timer for a task. Requires a task id, unique index, or ticket id.',
   },
+  SHARE_TASK: {
+    name: buildToolName('share_task'),
+    description:
+      'Makes a ticket public and returns the client link, the same link the app Share modal copies. Requires taskId from get_tasks. Reuses the existing public link when it is still live. Refuses politely when the board is archived or you cannot write to it. Use get_task_share to read the state back.',
+  },
+  GET_TASK_SHARE: {
+    name: buildToolName('get_task_share'),
+    description:
+      'Reads whether a ticket is public and returns its client link. Requires taskId from get_tasks. isPublic is false when no live public link exists. Does not create or change a link; use share_task for that.',
+  },
   DECISION_REQUEST: {
     name: buildToolName('decision_request'),
     description:

@@ -1,0 +1,173 @@
+const assert = require("node:assert/strict");
+const test = require("node:test");
+const { load } = require("./task-route-loader.cjs");
+
+function fixture(options = {}) {
+  const rows = [];
+  const created = [];
+  const task = {
+    id: 42,
+    ticketNumber: "HTPR-42",
+    status: options.taskDeleted ? "Deleted" : "Normal",
+    projectId: 15,
+    project: { status: options.boardStatus ?? "Normal" },
+  };
+  const prisma = {
+    task: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.id, 42);
+        assert.ok(where.project);
+        return options.taskMissing ? null : { ...task };
+      },
+    },
+    taskSharing: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.taskId, 42);
+        assert.ok(where.userId === 7 || where.userId === undefined);
+        const matches = rows.filter((row) => row.taskId === 42 && (where.userId === undefined || row.userId === where.userId));
+        const newest = (list) =>
+          [...list].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).at(-1) ?? null;
+        if (where.expired === false) {
+          assert.deepEqual(where.OR, [{ expiredAt: null }, { expiredAt: { gt: where.OR[1].expiredAt.gt } }]);
+          assert.ok(where.OR[1].expiredAt.gt instanceof Date);
+          return newest(matches.filter((row) => !row.expired && !(row.expiredAt && row.expiredAt <= new Date())));
+        }
+        return newest(matches);
+      },
+      create: async ({ data }) => {
+        created.push(data);
+        const row = { id: `share-${created.length}`, expired: false, expiredAt: null, shareType: "Anyone", ...data };
+        rows.push(row);
+        return row;
+      },
+    },
+  };
+  const mocks = {
+    "@/lib/prisma": { default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async () => options.flagEnabled !== false },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (userId) => ({ access: userId }) },
+  };
+  return { ...load("src/lib/tasks/taskSharing.ts", mocks), rows, created };
+}
+
+const actor = { taskId: 42, currentUser: { id: 7 }, agentId: "agent-owner", teamScope: null };
+
+test("shareTaskWithLink creates the public link an agent can hand to a client", async () => {
+  const share = fixture();
+  const result = await share.shareTaskWithLink(actor);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.taskId, 42);
+  assert.equal(result.body.ticketNumber, "HTPR-42");
+  assert.equal(result.body.isPublic, true);
+  assert.match(result.body.link, /\/share\?id=share-1$/);
+  assert.equal(result.body.shareType, "Anyone");
+  assert.deepEqual(share.created, [{ taskId: 42, userId: 7, projectId: 15 }]);
+});
+
+test("shareTaskWithLink reuses a live link instead of creating a second one", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-old", taskId: 42, userId: 7, expired: false, expiredAt: null, shareType: "Anyone" });
+  const result = await share.shareTaskWithLink(actor);
+  assert.equal(result.body.link, "https://app.hypertask.ai/share?id=share-old");
+  assert.equal(share.created.length, 0);
+});
+
+test("shareTaskWithLink replaces an expired link", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-dead", taskId: 42, userId: 7, expired: true, expiredAt: null, shareType: "Anyone" });
+  const result = await share.shareTaskWithLink(actor);
+  assert.match(result.body.link, /share\?id=share-1$/);
+  assert.equal(share.created.length, 1);
+});
+
+test("sharing twice after an expired replacement keeps reusing the live link", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-dead", taskId: 42, userId: 7, expired: true, expiredAt: null, shareType: "Anyone" });
+  const first = await share.shareTaskWithLink(actor);
+  const second = await share.shareTaskWithLink(actor);
+  assert.equal(first.body.link, second.body.link);
+  assert.equal(share.created.length, 1);
+});
+
+test("a board where sharing is off refuses politely", async () => {
+  const share = fixture({ boardStatus: "Archived" });
+  const result = await share.shareTaskWithLink(actor);
+  assert.equal(result.status, 403);
+  assert.equal(result.body.message, "This board does not allow sharing a ticket");
+  assert.equal(share.created.length, 0);
+});
+
+test("a deleted ticket cannot be shared", async () => {
+  const share = fixture({ taskDeleted: true });
+  const result = await share.shareTaskWithLink(actor);
+  assert.equal(result.status, 403);
+  assert.equal(share.created.length, 0);
+});
+
+test("a ticket on a board the agent cannot reach is not found", async () => {
+  const share = fixture({ taskMissing: true });
+  const result = await share.shareTaskWithLink(actor);
+  assert.equal(result.status, 404);
+  assert.equal(result.body.message, "Task not found, or you cannot share it");
+});
+
+test("readTaskShare says the ticket is public and returns its link", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-live", taskId: 42, userId: 7, expired: false, expiredAt: null, shareType: "Anyone" });
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.isPublic, true);
+  assert.equal(result.body.link, "https://app.hypertask.ai/share?id=share-live");
+  assert.equal(result.body.shareType, "Anyone");
+});
+
+test("readTaskShare says not public when no link exists", async () => {
+  const share = fixture();
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.body.isPublic, false);
+  assert.equal(result.body.link, null);
+  assert.equal(result.body.shareType, null);
+});
+
+test("readTaskShare says not public when the link expired", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-past", taskId: 42, userId: 7, expired: false, expiredAt: new Date("2020-01-01T00:00:00Z"), shareType: "Anyone" });
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.body.isPublic, false);
+  assert.match(result.body.link, /share\?id=share-past$/);
+});
+
+test("readTaskShare never creates a link", async () => {
+  const share = fixture();
+  await share.readTaskShare(actor);
+  assert.equal(share.created.length, 0);
+});
+
+test("read-back agrees with the write door when an expired row is newer", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-live", taskId: 42, userId: 7, expired: false, expiredAt: null, shareType: "Anyone", createdAt: 1 });
+  share.rows.push({ id: "share-dead", taskId: 42, userId: 7, expired: true, expiredAt: null, shareType: "Anyone", createdAt: 2 });
+  const read = await share.readTaskShare(actor);
+  const write = await share.shareTaskWithLink(actor);
+  assert.equal(read.body.isPublic, true);
+  assert.equal(read.body.link, write.body.link);
+  assert.match(read.body.link, /share\?id=share-live$/);
+  assert.equal(share.created.length, 0);
+});
+
+test("readTaskShare reports a ticket shared by someone else as public", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-other", taskId: 42, userId: 8, expired: false, expiredAt: null, shareType: "Anyone" });
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.body.isPublic, true);
+  assert.equal(result.body.link, "https://app.hypertask.ai/share?id=share-other");
+  assert.equal(share.created.length, 0);
+});
+
+test("readTaskShare prefers the caller's own live link when another owner also shared", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-mine", taskId: 42, userId: 7, expired: false, expiredAt: null, shareType: "Anyone", createdAt: 1 });
+  share.rows.push({ id: "share-other", taskId: 42, userId: 8, expired: false, expiredAt: null, shareType: "Anyone", createdAt: 2 });
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.body.link, "https://app.hypertask.ai/share?id=share-mine");
+});
