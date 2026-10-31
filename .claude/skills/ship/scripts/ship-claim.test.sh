@@ -476,6 +476,10 @@ prs_adopt() { jq -n --argjson n "$1" --arg tk "$2" \
 holdrc() { SHIP_SESSION_NAME="$1" ./ship-claim hold "$2" >"$D/hold-out" 2>&1; echo $?; }
 printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"; printf '[]' > "$HOLD_OPEN"
 empty_infra
+printf '[{"number":98,"headRefName":"ci-runner-6/yper4-777","title":"YPER4-777 [INFRA] CI work","isDraft":false}]' > "$HOLD_OPEN"
+eq "CI team branch never holds this runner" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX] Open work","isDraft":false},{"number":98,"headRefName":"ci-runner-6/yper4-777","title":"YPER4-777 [INFRA] CI work","isDraft":false}]' > "$HOLD_OPEN"
+eq "own branch still holds beside a CI team branch" "$(holdrc 'RUNNER 6' HTPR-1)" 4
 prs 5;  eq "queue 5, app ticket -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 20; eq "queue exactly 20 -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, app ticket -> hold" "$(holdrc 'RUNNER 6' HTPR-1)" 4

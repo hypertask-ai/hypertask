@@ -107,7 +107,8 @@ hold_check() {
     and (.isDraft | type == "boolean"))' <<<"$open" >/dev/null \
     || { echo "ship-claim: HOLD. Open PR read is malformed or incomplete for RUNNER $rn." >&2; return 4; }
   HELD=$(jq -r --arg n "$rn" --arg t "$t" '
-    [.[] | select(.headRefName | test("(^|[/_-])runner-?" + $n + "($|[/_-])"; "i"))] as $m
+    [.[] | select(.headRefName | test("(^|[/_-])runner-?" + $n + "($|[/_-])"; "i"))
+      | select(.headRefName | test("^ci-runner-"; "i") | not)] as $m
     | if any($m[]; (.title | ascii_upcase | startswith($t + " ")) or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))
       then "RESUME" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
