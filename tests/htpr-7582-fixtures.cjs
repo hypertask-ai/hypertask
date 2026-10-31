@@ -5,7 +5,7 @@ const { loadModule } = require('./helpers/loadModule.cjs');
 const root = path.resolve(__dirname, '..');
 const source = file => fs.readFileSync(path.join(root, file), 'utf8');
 const FLAG = ['htpr', '7582', 'agent', 'access', 'request'].join('-');
-const NOW = new Date('2026-10-24T12:00:00Z');
+const NOW = new Date(Date.now() - 60_000);
 const ID = 'f605ee00-b3a3-41c4-bb9c-954d570d87d4';
 const ctx = (extra = {}) => ({ user: { id: 6, email: 'owner@example.test' }, agentId: 'agent-1', teamScope: null, agentTokenGeneration: 'generation-1', agentRuntimeGeneration: 1, ...extra });
 const session = (extra = {}) => ({ userId: 6, source: 'legacy', teamScope: null, needsBridge: true, ...extra });
