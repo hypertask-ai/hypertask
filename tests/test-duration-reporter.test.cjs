@@ -25,6 +25,24 @@ test("reporter emits whole-file completion once, not nested test or suite durati
   ]);
 });
 
+test("a shared process reports each file's own test time and no double count", async () => {
+  const { default: reporter } = await import(reporterPath);
+  const first = path.resolve("tests/first.test.cjs");
+  const second = path.resolve("tests/second.test.cjs");
+  async function* events() {
+    yield { type: "test:complete", data: { nesting: 0, file: first, name: "first case", details: { duration_ms: 300 } } };
+    yield { type: "test:complete", data: { nesting: 0, file: first, name: "first other", details: { duration_ms: 200 } } };
+    yield { type: "test:complete", data: { nesting: 1, file: first, name: "nested child", details: { duration_ms: 150 } } };
+    yield { type: "test:complete", data: { nesting: 0, file: second, name: "second case", details: { duration_ms: 400 } } };
+  }
+  let output = "";
+  for await (const chunk of reporter(events())) output += chunk;
+  assert.deepEqual(output.split("\n").filter(Boolean).map(JSON.parse), [
+    { file: "tests/first.test.cjs", durationMs: 500, shared: true },
+    { file: "tests/second.test.cjs", durationMs: 400, shared: true },
+  ]);
+});
+
 test("real Node events capture nested, failing, empty and timed-out files without losing spec stdout", () => {
   const directory = mkdtempSync(path.join(tmpdir(), "duration-reporter-test-"));
   try {

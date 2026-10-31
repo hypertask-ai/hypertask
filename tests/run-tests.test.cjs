@@ -2,8 +2,8 @@ const assert = require("node:assert/strict");
 const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
-const { spawnSync } = require("node:child_process");
 const { pathToFileURL } = require("node:url");
+const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 const yaml = require("js-yaml");
 
@@ -13,7 +13,7 @@ function fixture(t, sources) {
   const directory = mkdtempSync(path.join(tmpdir(), "run-tests-timings-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const folder of ["scripts", "config", "tests/helpers", "node_modules/tsx/dist"]) mkdirSync(path.join(directory, folder), { recursive: true });
-  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs", "todo-passing.mjs", "test-isolation.mjs"]) {
+  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs", "todo-passing.mjs", "test-isolation.mjs", "test-lanes.mjs"]) {
     copyFileSync(path.join(root, "scripts", file), path.join(directory, "scripts", file));
   }
   writeFileSync(path.join(directory, "tests/helpers/register-server-only.cjs"), "");
@@ -34,7 +34,7 @@ function run(directory, files = [], overrides = {}) {
   return { ...result, report: existsSync(reportFile) ? JSON.parse(readFileSync(reportFile, "utf8")) : null, summary: readFileSync(path.join(directory, "summary.md"), "utf8") };
 }
 
-test("runner publishes all files, descending top 20 and concurrency/serial accounting", (t) => {
+test("runner publishes every process run, descending top 20 and lane accounting", (t) => {
   const sources = Object.fromEntries(Array.from({ length: 21 }, (_, index) => [
     `shared-${index}.test.cjs`, `require('node:test')('shared ${index}', () => {});`,
   ]));
@@ -47,23 +47,32 @@ test("runner publishes all files, descending top 20 and concurrency/serial accou
   assert.match(stdout, /shared 0/);
   assert.match(stdout, /serial TypeScript fixture/);
   assert.equal(report.selectedFiles, 23);
-  assert.equal(report.recordedFiles, 23);
+  assert.equal(report.recordedRuns, 4);
   assert.equal(report.exitCode, 0);
-  assert.deepEqual(report.files.map(({ file }) => file).sort(), Object.keys(sources).map(file => `tests/${file}`).sort());
+  assert.deepEqual(report.files.map(({ file }) => file).sort(), [
+    "Shared Node lane 1/2 (10 files)",
+    "Shared Node lane 2/2 (11 files)",
+    "tests/action-archive-cache.test.cjs",
+    "tests/serial.test.ts",
+  ].sort());
   for (let index = 1; index < report.files.length; index++) assert.ok(report.files[index - 1].durationMs >= report.files[index].durationMs);
-  const isolated = report.files.filter(({ concurrency }) => concurrency === 1);
-  assert.deepEqual(isolated.map(({ file }) => file).sort(), ["tests/action-archive-cache.test.cjs", "tests/serial.test.ts"]);
+  const laneRows = report.files.filter(({ lane }) => lane);
+  assert.equal(laneRows.reduce((total, row) => total + row.fileCount, 0), 21);
   assert.equal(report.concurrency, 2);
+  assert.equal(report.sharedFiles.length, laneRows.reduce((total, row) => total + row.fileCount, 0));
   assert.equal(report.totalFileDurationMs, report.files.reduce((sum, file) => sum + file.durationMs, 0));
-  assert.equal(report.concurrencyAdjustedDurationMs, report.totalFileDurationMs / 2);
-  assert.equal(report.laneAdjustedDurationMs, report.files.reduce((sum, file) => sum + file.durationMs / file.concurrency, 0));
-  assert.equal(report.differencePercent, 100 * (report.concurrencyAdjustedDurationMs - report.durationMs) / report.durationMs);
+  assert.equal(report.longestLaneMs, Math.max(...laneRows.map(({ durationMs }) => durationMs)));
+  assert.equal(report.poolEstimatedMs, 0);
+  assert.equal(report.serialDurationMs, report.files.find(({ file }) => file === "tests/action-archive-cache.test.cjs").durationMs);
+  assert.equal(report.tsSerialMs, report.files.find(({ file }) => file === "tests/serial.test.ts").durationMs);
+  assert.equal(report.laneAdjustedDurationMs, report.serialDurationMs + Math.max(report.poolEstimatedMs, report.longestLaneMs) + report.tsSerialMs);
+  assert.equal(report.differencePercent, 100 * (report.laneAdjustedDurationMs - report.durationMs) / report.durationMs);
   assert.ok(report.durationMs >= Math.max(...report.files.map(({ durationMs }) => durationMs)));
   const rows = summary.split("\n").filter(line => /^\| \d+ \|/.test(line));
-  assert.equal(rows.length, 20);
-  assert.deepEqual(rows.map(line => line.split(" | ")[1]), report.files.slice(0, 20).map(({ file }) => file));
+  assert.equal(rows.length, report.files.length);
+  assert.deepEqual(rows.map(line => line.split(" | ")[1]), report.files.map(({ file }) => file));
   assert.match(summary, /Recorded 23\/23/);
-  assert.match(summary, /serial isolated\/TypeScript lanes/);
+  assert.match(summary, /longest shared lane/);
   assert.match(summary, /npm\/heavy-job startup is outside/);
 });
 
@@ -89,6 +98,79 @@ test("an invalid TEST_CONCURRENCY fails the run instead of guessing a lane count
     assert.notEqual(result.status, 0, value);
     assert.match(result.stderr, new RegExp(`TEST_CONCURRENCY must be a positive integer, got ${value.replace(".", "\\.")}`));
   }
+});
+
+test("files that need their own process stay out of a shared lane", (t) => {
+  const directory = fixture(t, {
+    "env-writer.test.cjs": `process.env.FIXTURE_FLAG = 'set'; require('node:test')('env writer', () => {});`,
+    "clean-two.test.cjs": `require('node:test')('clean two', () => {});`,
+    "clean-three.test.cjs": `require('node:test')('clean three', () => {});`,
+  });
+  const { status, stderr, stdout, report } = run(directory);
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /env writer/);
+  assert.match(stdout, /clean two/);
+  assert.match(stdout, /clean three/);
+  assert.equal(report.selectedFiles, 3);
+  assert.ok(report.files.some(({ file }) => file === "tests/env-writer.test.cjs"), "env-writing file keeps its own process");
+  assert.equal(report.sharedFiles.length, 2, "both clean files report their own time");
+});
+
+test("process-wide state, loader edits and their helpers keep their own process", async (t) => {
+  const directory = mkdtempSync(path.join(tmpdir(), "run-tests-classify-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  mkdirSync(path.join(directory, "tests/helpers"), { recursive: true });
+  const sources = {
+    "env-write.test.cjs": `process.env.FIXTURE_FLAG = 'set';`,
+    "env-delete.test.cjs": `delete process.env.FIXTURE_FLAG;`,
+    "env-assign.test.cjs": `Object.assign(process.env, { FIXTURE_FLAG: 'set' });`,
+    "env-alias.test.cjs": `const fixtureEnv = process.env;`,
+    "globals-define.test.cjs": `Object.defineProperty(global, 'document', { configurable: true, value: {} });`,
+    "jsdom-install.test.cjs": `globalThis.window = {};`,
+    "stdout-listener.test.cjs": `process.stdout.on('data', () => {});`,
+    "prototype-patch.test.cjs": `Date.prototype.toISOString = () => '';`,
+    "loader-edit.test.cjs": `require('node:module')._resolveFilename = () => '';`,
+    "helper-user.test.cjs": `require('./helpers/env-poison.cjs');`,
+    "clean.test.cjs": `require('node:test')('clean', () => {});`,
+  };
+  for (const [file, source] of Object.entries(sources)) writeFileSync(path.join(directory, "tests", file), source);
+  writeFileSync(path.join(directory, "tests/helpers/env-poison.cjs"), `Object.assign(process.env, { FIXTURE_FLAG: 'set' });`);
+  const { classifySuite } = await import(pathToFileURL(path.join(root, "scripts/test-lanes.mjs")).href);
+  const { pool, safe } = await classifySuite({ root: directory, files: Object.keys(sources).map(file => `tests/${file}`) });
+  assert.deepEqual(safe, ["tests/clean.test.cjs"]);
+  for (const file of Object.keys(sources).filter(file => file !== "clean.test.cjs")) {
+    assert.ok(pool.includes(`tests/${file}`), `${file} keeps its own process`);
+  }
+});
+
+test("a lane over the file cap runs in bounded batches without dropping a file", (t) => {
+  const names = Array.from({ length: 6 }, (_, index) => `batch-${index}.test.cjs`);
+  const sources = Object.fromEntries(names.map((name, index) => [name, `require('node:test')('batch file ${index}', () => {});`]));
+  const directory = fixture(t, sources);
+  const { status, stderr, stdout, report } = run(directory, [], { TEST_LANE_FILE_CAP: "2" });
+  assert.equal(status, 0, stderr);
+  for (let index = 0; index < names.length; index++) assert.match(stdout, new RegExp(`batch file ${index}\\b`));
+  const lanes = report.files.filter(({ lane }) => lane);
+  assert.equal(lanes.length, 4);
+  for (const row of lanes) assert.ok(row.fileCount <= 2, `${row.file} carried ${row.fileCount} files`);
+  for (const row of lanes) assert.match(row.file, /batch \d+\/\d+/);
+  assert.equal(lanes.reduce((total, row) => total + row.fileCount, 0), names.length);
+});
+
+test("a lane over the byte budget splits into more processes without dropping a file", (t) => {
+  const names = Array.from({ length: 6 }, (_, index) => `bytes-${index}.test.cjs`);
+  const padding = "x".repeat(400);
+  const sources = Object.fromEntries(names.map((name, index) => [
+    name, `const padding = '${padding}';\nrequire('node:test')('byte file ${index} ' + padding.length, () => {});`,
+  ]));
+  const directory = fixture(t, sources);
+  const { status, stderr, stdout, report } = run(directory, [], { TEST_LANE_BYTE_CAP: "600", TEST_LANE_FILE_CAP: "40" });
+  assert.equal(status, 0, stderr);
+  for (let index = 0; index < names.length; index++) assert.match(stdout, new RegExp(`byte file ${index} 400`));
+  const lanes = report.files.filter(({ lane }) => lane);
+  assert.equal(lanes.length, names.length);
+  for (const row of lanes) assert.equal(row.fileCount, 1, `${row.file} carried ${row.fileCount} files`);
+  assert.equal(report.sharedFiles.length, names.length);
 });
 
 test("runner honors selected files and overwrites previous timing JSON", (t) => {
@@ -146,7 +228,7 @@ test("failed isolated files still publish partial evidence and preserve failure 
   assert.match(stdout, /fixture failed/);
   assert.equal(report.exitCode, 1);
   assert.equal(report.selectedFiles, 2);
-  assert.equal(report.recordedFiles, 1);
+  assert.equal(report.recordedRuns, 1);
   assert.deepEqual(report.files.map(({ file }) => file), ["tests/action-archive-cache.test.cjs"]);
   assert.match(summary, /Recorded 1\/2/);
 });
@@ -180,7 +262,7 @@ for (const extraFailure of [false, true]) {
     assert.equal(status, extraFailure ? 1 : 0, stderr);
     assert.match(stderr, /- known flaky #1 \(unowned \)/);
     assert.doesNotMatch(stderr, /- ordinary case/);
-    assert.equal(report.recordedFiles, 2);
+    assert.equal(report.recordedRuns, 2);
     assert.equal(report.exitCode, extraFailure ? 1 : 0);
   });
 }

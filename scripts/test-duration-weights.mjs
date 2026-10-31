@@ -44,6 +44,12 @@ async function main() {
       work.get(file.file).push(value);
       if (concurrency > 1) pooled.push(value);
     }
+    for (const file of parsed.sharedFiles ?? []) {
+      const value = Number(file.testMs);
+      if (!Number.isFinite(value) || value < 0) throw new Error(`bad shared duration in ${report}`);
+      if (!work.has(file.file)) work.set(file.file, []);
+      work.get(file.file).push(value);
+    }
   }
 
   const files = {};
