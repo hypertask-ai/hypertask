@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
+  FEATURE_FLAG_KEYS,
   FEATURE_FLAG_MODES,
   FEATURE_FLAG_OWNER_USER_ID,
   FeatureFlagInputError,
@@ -133,6 +134,7 @@ export async function PATCH(request: NextRequest) {
       }
       if (usesFailure) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
+        if (!stored && !FEATURE_FLAG_KEYS.includes(body.key as string)) return;
         const current = stored?.mode ?? defaultFeatureFlagMode(body.key as string);
         if (current === body.mode) {
           throw new FeatureFlagApprovalError("Flag is already in that mode");
