@@ -210,7 +210,7 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
       })) });
     }
     const commitPulls = route.match(/\/commits\/([0-9a-f]+)\/pulls$/);
-    if (commitPulls) { assert.ok(pulls?.[commitPulls[1]], route); return JSON.stringify([pulls[commitPulls[1]]]); }
+    if (commitPulls) return JSON.stringify(pulls?.[commitPulls[1]] ? [pulls[commitPulls[1]]] : []);
     if (route.endsWith('/logs')) return (typeof log === 'function' ? log(route) : log)
       ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
     if (route.includes('/commits/')) {
@@ -439,10 +439,12 @@ test('GitHub compare paginates beyond 250 commits and reverses the entire range 
     return mock.run(bin, args, opts);
   };
   const result = await live(run).collect();
-  assert.deepEqual(comparisons, [1, 2, 3]); assert.equal(result.prs.length, 251);
-  assert.deepEqual(result.prs.map(p => p.number), commits.map(c => Number(c.commit.message.match(/#(\d+)/)[1])).reverse());
+  const newestFirst = [...commits].reverse().map(c => Number(c.commit.message.match(/#(\d+)/)[1]));
+  const unique = newestFirst.filter((n, i) => newestFirst.indexOf(n) === i);
+  assert.deepEqual(comparisons, [1, 2, 3]);
+  assert.deepEqual(result.prs.map(p => p.number), unique);
 });
-test('GitHub compare refuses incomplete, divergent, changing and non-squash ranges', async () => {
+test('GitHub compare refuses incomplete, divergent, changing and unidentified ranges', async () => {
   for (const comparison of [
     { status: 'ahead', total_commits: 1, commits: [] },
     { status: 'diverged', total_commits: 0, commits: [] },
@@ -451,7 +453,7 @@ test('GitHub compare refuses incomplete, divergent, changing and non-squash rang
   ]) {
     const mock = fixtureCommand(second());
     const run = (bin, args, opts) => bin === 'gh' && args[3].includes('/compare/') ? JSON.stringify(comparison) : mock.run(bin, args, opts);
-    await assert.rejects(live(run).collect(), /production commit range|Non-squash/);
+    await assert.rejects(live(run).collect(), /production commit range|names no merged PR/);
   }
   const mock = fixtureCommand(second()); let page = 0;
   const run = (bin, args, opts) => bin === 'gh' && args[3].includes('/compare/')
