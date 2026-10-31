@@ -75,21 +75,24 @@ async function seed(visual) {
 test("workflow is informational, read-only, path-scoped and uses the smoke services/environment", () => {
   const workflow = source(".github/workflows/visual-regression.yml");
   assert.match(workflow, /name: Visual Regression/);
-  assert.match(workflow, /types: \[opened, synchronize, reopened, ready_for_review\]/);
-  assert.match(workflow, /branches: \[production\]/);
-  for (const pattern of ["src/app/**", "!src/app/api/**", "src/components/**", "src/hooks/**", "src/styles/**", "styles/**", "**/*.css", "tailwind.config.*", "public/**", "e2e/visual/**"]) assert.ok(workflow.includes(`'${pattern}'`));
+  // HYCI-10: pull-request comparisons live in ci-tests.yml visual-compare so the
+  // head reuses the one app build; this workflow keeps pushes and manual runs.
+  assert.equal(yaml.load(workflow).on.pull_request, undefined);
+  assert.deepEqual(yaml.load(workflow).on.push.branches, ["production"]);
   assert.match(workflow, /workflow_dispatch:[\s\S]*base:[\s\S]*default: production[\s\S]*head:/);
+  // The old pull_request paths filter moved here unchanged.
+  const scope = source(".github/scripts/visual-change-scope.cjs");
+  for (const pattern of ["src/app/**", "src/components/**", "src/hooks/**", "src/styles/**", "styles/**", "**/*.css", "tailwind.config.*", "public/**", "e2e/visual/**", "scripts/seed-browser-smoke.mjs", "scripts/visual-regression-ci.mjs", ".github/workflows/visual-regression.yml"]) assert.ok(scope.includes(`'${pattern}'`), pattern);
+  for (const pattern of ["src/app/api/**", "**/*.md"]) assert.ok(scope.includes(`'${pattern}'`), pattern);
   const job = yaml.load(workflow).jobs["visual-regression"];
   assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
   assert.doesNotMatch(workflow, /secrets\.|: write|workflow_run|pull_request_target/);
-  assert.match(workflow, /github\.event\.pull_request\.draft == false/);
   const parsed = yaml.load(workflow);
   const evaluate = (expression, event, journey) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
     github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production" },
     inputs: { journey }, format: (template, value) => template.replace("{0}", value),
   });
   for (const [event, journey, group, cancel, visual, verify] of [
-    ["pull_request", "", "visual-regression-19", true, true, false],
     ["push", "", "visual-regression-refs/heads/production", true, true, false],
     ["workflow_dispatch", "", "visual-regression-refs/heads/production", true, true, false],
     ["workflow_dispatch", "visual", "visual-regression-refs/heads/production", true, true, false],
@@ -118,10 +121,17 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length)
     .split("\n").filter(line => !/^        if: /.test(line)).join("\n");
   assert.equal(credentials(workflow), credentials(smoke));
-  assert.deepEqual(job.steps.find(step => step.name === "Upload visual differences").with.path.trim().split("\n"), ["test-results/**/*.png", "test-results/**/error-context.md", "test-results/**/trace.zip"]);
+  const compareJob = yaml.load(smoke).jobs["visual-compare"];
+  assert.deepEqual(compareJob.permissions, { contents: "read", packages: "read" });
+  for (const service of ["postgres", "redis"]) assert.deepEqual(compareJob.services[service], job.services[service]);
+  const smokeBlocks = smoke.split("      - name: Prepare disposable local credentials").slice(1)
+    .map(block => block.slice(0, block.indexOf('          } >> "$GITHUB_ENV"')).split("\n").filter(line => !/^        if: /.test(line)).join("\n"));
+  assert.equal(new Set(smokeBlocks).size, 1, "every smoke consumer must share one environment");
+  assert.deepEqual(compareJob.steps.find(step => step.name === "Upload visual differences").with.path.trim().split("\n"), ["test-results/**/*.png", "test-results/**/error-context.md", "test-results/**/trace.zip"]);
   assert.match(workflow, /retention-days: 7/);
   assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
-  assert.equal(job.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
+  assert.equal(compareJob.steps.find(step => step.name === "Summarize failed screens").if, "always() && steps.scope.outputs.visual_needed != 'false' && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
+  assert.equal(compareJob.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
   const required = yaml.load(source("docs/ci-policy.yml")).required_checks.contexts;
   assert.equal(required.includes("visual-regression"), false);
   assert.equal(required.includes("verify-qa"), false);

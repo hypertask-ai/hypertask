@@ -1,5 +1,5 @@
-version: 11
-last_updated: 2026-10-28
+version: 12
+last_updated: 2026-10-31
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -44,9 +44,9 @@ runner_policy:
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 17
+  normal_synchronize_after: 18
   opened_before: 18
-  opened_after: 17
+  opened_after: 18
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -422,8 +422,8 @@ ci_tests:
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
   docs_only:
-    jobs: [ci-tests, browser-smoke]
-    heavy_jobs: [app-smoke, browser-smoke]
+    jobs: [ci-tests, app-build, browser-smoke]
+    heavy_jobs: [app-smoke, app-build, browser-smoke]
     heavy_output: heavy_needed
     heavy_paths: ["docs/**", ".claude/**", "skills/**", ".agents/skills/**", "tests/**", "**/*.md"]
     heavy_always_run_paths: ["src/**", ".github/**", "scripts/**", "package.json", "package-lock.json"]
@@ -442,6 +442,28 @@ ci_tests:
     browser_services: job_level_services_start_before_scope
     contract_summary_exception: successful_browser_job_with_explicit_docs_only_output
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
+  # HYCI-10: one candidate build per change. app-build uploads .next (without
+  # .next/cache) and both page checks download it; neither runs next build.
+  one_build:
+    job: app-build
+    artifact: app-build
+    artifact_excludes: [.next/cache]
+    retention_days: 1
+    cache_restore: nextjs-<lockfile>-<sha>
+    cache_save: successful_production_push_only
+    consumers: [browser-smoke, visual-compare]
+    consumer_download: same_run_native_no_polling
+    deterministic_secrets: sha256_of_head_sha_per_purpose
+    required_check_failure_mode: browser-smoke_fails_never_skips
+  visual_compare:
+    job: visual-compare
+    workflow: .github/workflows/ci-tests.yml
+    moved_from: .github/workflows/visual-regression.yml
+    trigger: non_draft_pull_request_touching_screen_or_harness_paths
+    path_scope: .github/scripts/visual-change-scope.cjs
+    head_build: reused_from_app_build
+    required_check: false
+    artifact_name: visual-regression-diffs
   metadata_restarts: false
   app_smoke_request_types: [opened, synchronize, reopened, ready_for_review]
   label_activation: none

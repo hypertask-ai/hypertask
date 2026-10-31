@@ -12,9 +12,11 @@ Small guards share scanner work and trusted metadata:
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
-Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
-(YPER4-721 adds one tiny native scanner summary job). Path-specific evals,
-visual checks, preview deployments and external review are extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
+Static normal non-draft app PR budget: **18 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job; HYCI-10 adds the `app-build` job
+that every page check now shares). Path-specific evals, the path-specific
+`visual-compare` check, preview deployments and external review are extra. Docs-only
+PRs start 16 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.

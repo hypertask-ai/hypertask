@@ -24,9 +24,13 @@ test("browser smoke exposes no repository or production credentials to PR code",
   assert.match(job, /ghcr\.io\/hypertask-ai\/ci-redis:7-alpine@sha256:[a-f0-9]{64}/);
   assert.match(job, /ghcr\.io\/hypertask-ai\/ci-soketi:[^@\s]+@sha256:[a-f0-9]{64}/);
   assert.match(job, /health-cmd "wget [^"]+http:\/\/127\.0\.0\.1:6001"/);
-  assert.match(job, /session_secret=\$\(openssl rand -hex 32\)/);
+  // HYCI-10: one build serves every consumer, so the disposable secrets come from
+  // the commit instead of openssl rand. They are still masked and still disposable.
+  assert.match(job, /seed="\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}-smoke"/);
+  assert.match(job, /session_secret=\$\(printf '%s' "\$seed:session" \| sha256sum \| cut -d' ' -f1\)/);
   assert.match(job, /printf '::add-mask::%s\\n' "\$session_secret"/);
   assert.match(job, /printf '::add-mask::%s\\n' "\$jwt_secret"/);
+  assert.doesNotMatch(job, /openssl rand/);
   assert.match(job, /REDIS_URL=redis:\/\/127\.0\.0\.1:6379/);
   assert.match(job, /QSTASH_CALLBACK_BASE_URL=http:\/\/127\.0\.0\.1:3100/);
   assert.match(job, /QSTASH_AUTO_REGISTER_SWEEP=false/);

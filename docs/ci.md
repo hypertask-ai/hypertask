@@ -49,9 +49,11 @@ Small guards share scanner work and trusted metadata:
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
-Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
-(YPER4-721 adds one tiny native scanner summary job). Path-specific evals,
-visual checks, preview deployments and external review are extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
+Static normal non-draft app PR budget: **18 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job; HYCI-10 adds the `app-build` job
+that every page check now shares). Path-specific evals, the path-specific
+`visual-compare` check, preview deployments and external review are extra. Docs-only
+PRs start 16 jobs; Dependabot/fork PRs no longer add a trusted scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.
@@ -438,10 +440,11 @@ removed source file. Its self-check covers both outputs and fail-closed cases:
 
 ## Visual regression (informational v1)
 
-`Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on non-draft production PRs touching screen or harness files; manual runs accept `base` and `head` refs.
-It builds base then head on one GitHub-hosted runner, each with a fresh disposable database; base creates temporary expected PNGs and head compares against them.
-Each build restores the production browser-smoke Next.js incremental cache using that checkout's lockfile/config hash and resolved commit, with the same compatible-hash fallback. Restore uses the producer's `.next/cache` archive path, then moves only that directory into the matching checkout before building. Visual runs never publish shared build caches; successful production browser-smoke pushes remain the only producer. A screenshot-cache hit skips the unused base restore, and production baseline-only runs skip the unused head restore. Cold misses still build and compare normally.
-The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
+`Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on production pushes and on manual runs, which accept `base` and `head` refs.
+Pull-request comparisons run as `visual-compare` in `.github/workflows/ci-tests.yml`, on non-draft production PRs touching screen or harness files (`.github/scripts/visual-change-scope.cjs` holds the list); HYCI-10 moved them there so the head reuses the one app build instead of building a second time.
+Base always builds from its own checkout with a fresh disposable database and creates temporary expected PNGs; head compares against them.
+Each base build restores the production browser-smoke Next.js incremental cache using that checkout's lockfile/config hash and resolved commit, with the same compatible-hash fallback. Restore uses the producer's `.next/cache` archive path, then moves only that directory into the matching checkout before building. Visual runs never publish shared build caches; successful production app-build pushes remain the only producer. A screenshot-cache hit skips the unused base restore, and production baseline-only runs skip the unused head restore. Cold misses still build and compare normally.
+The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. A pull-request comparison that reuses the shared build reports four phases and says so, because it never runs `next build` for the head. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
 Base and head must install the same Playwright version, so one Chromium build draws both sides; a run stops when they differ and a Playwright bump needs fresh production baselines. Each checkout must also install exactly the version its own `package-lock.json` locks, and a cached base is compared against the base commit's locked version. Chromium captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
 On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
 Production pushes capture the ten base PNGs once and save them with `actions/cache`.
@@ -450,7 +453,7 @@ runner image version, and the head visual harness, seed, search stub, paired run
 and workflow hashes. There are no fallback keys; changed harnesses miss the cache.
 Only successful production pushes save; PR-created caches cannot supply production
 baselines. A hit validates all ten PNG signatures and viewport dimensions, skips
-the base lifecycle, and still seeds, builds and compares the head. A miss retains
+the base lifecycle, and still seeds and compares the head. A miss retains
 the existing paired lifecycle. Missing or malformed cached screenshots fail closed.
 Phase timings mark skipped base work as `not reached`; summaries name cache reuse.
 Only PNGs are cached, never databases, auth state or browser traces.
@@ -807,3 +810,34 @@ Hosted `ship-scripts-tests` runs the pickup domain fixture with
 `python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py`, alongside
 `runner-pickup.recovery.test.py` and `runner-pickup.test.sh`. These cover pickup
 coordination, not manual claims.
+
+## One app build per change (HYCI-10)
+
+`app-build` in `.github/workflows/ci-tests.yml` runs `next build --webpack` once per
+change, on the same loopback services and the same disposable environment the page
+checks use. It uploads the compiled `.next` as the `app-build` artifact (`.next/cache`
+excluded, one day retained) and publishes the Next.js incremental cache exactly as
+before: restore on every run, save only on a successful `production` push.
+
+Two consumers download that artifact in the same run, natively, with no polling:
+
+- `browser-smoke` keeps the required context and every existing page check. It still
+  installs its own dependencies and Chromium, but it no longer runs `next build`, and
+  it fails (never skips) when `app-build` did not succeed.
+- `visual-compare` holds the pull-request visual comparison that used to live in
+  `visual-regression.yml`. It downloads the same artifact into `head/.next` and runs
+  the comparison with `VISUAL_HEAD_BUILD=artifact`, so base still builds from its own
+  checkout while head reuses the one build.
+
+Disposable secrets (`SESSION_SECRET`, `JWT_SECRET`, `BETTER_AUTH_SECRET`) are derived
+from the head commit and a per-purpose label instead of `openssl rand`, so the build
+and every consumer share one environment. They are still masked and still thrown away
+with the runner.
+
+A change therefore builds the candidate app once for page checks. The App Smoke
+container build stays separate by design: it runs the untrusted candidate with a
+different baked environment (mocked fonts, container network, `CORE_APP_SMOKE`) and no
+network, so sharing this artifact would weaken that boundary. `docs/ci-policy.yml`
+records that reuse as deferred (`premerge_verify_qa.app_smoke_build_reuse`).
+
+Docs-only PRs skip the build and both consumers' heavy steps, as before.

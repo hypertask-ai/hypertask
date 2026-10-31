@@ -9,8 +9,8 @@ const yaml = require("js-yaml");
 
 const load = file => yaml.load(readFileSync(file, "utf8"));
 const steps = load(".github/workflows/visual-regression.yml").jobs["visual-regression"].steps;
-const smoke = load(".github/workflows/ci-tests.yml").jobs["browser-smoke"].steps;
-const producer = smoke.find(step => step.name === "Save Next.js build cache");
+const compare = load(".github/workflows/ci-tests.yml").jobs["visual-compare"].steps;
+const producer = load(".github/workflows/ci-tests.yml").jobs["app-build"].steps.find(step => step.name === "Save Next.js build cache");
 
 for (const phase of ["base", "head"]) {
   test(`${phase} restores the compatible production browser-smoke cache before its build`, () => {
@@ -69,6 +69,7 @@ test("base and head use separate restores; cached screenshots and production-onl
 
 test("visual runs never write shared Next.js caches; only successful production smoke builds publish them", () => {
   assert.equal(steps.filter(step => step.uses?.startsWith("actions/cache/save@") && step.with.path.includes(".next")).length, 0);
+  assert.equal(compare.filter(step => step.uses?.startsWith("actions/cache/save@")).length, 0);
   for (const event of ["push", "pull_request", "workflow_dispatch"]) {
     for (const ref of ["refs/heads/production", "refs/heads/feature", "refs/pull/123/merge"]) {
       const condition = producer.if.replaceAll("steps.restore-nextjs-cache.outputs.cache-hit", '"false"');
@@ -76,4 +77,23 @@ test("visual runs never write shared Next.js caches; only successful production 
     }
   }
   assert.doesNotMatch(producer.if, /always\(|failure\(/);
+});
+
+test("the pull-request comparison reuses the one build instead of building the head", () => {
+  const runs = compare.filter(step => typeof step.run === "string").map(step => step.run).join("\n");
+  assert.doesNotMatch(runs, /next build/);
+  assert.equal(compare.find(step => step.name === "Download the one build").with.name, "app-build");
+  assert.equal(compare.find(step => step.name === "Give the head the one build").run,
+    'mkdir -p "$RUNNER_TEMP/app-build/unpacked"\n' +
+    'tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build/unpacked"\n' +
+    'mv "$RUNNER_TEMP/app-build/unpacked/.next" head/.next');
+  for (const name of ["Build and capture base, then compare head", "Summarize failed screens"]) {
+    assert.equal(compare.find(step => step.name === name).env.VISUAL_HEAD_BUILD, "artifact", name);
+  }
+  assert.equal(compare.find(step => step.name === "Build and capture base, then compare head").env.VISUAL_BASE_ONLY, "false");
+  const baseline = compare.find(step => step.id === "baseline-cache");
+  assert.equal(baseline.with.key, steps.find(step => step.id === "baseline-cache").with.key);
+  assert.equal(baseline.with["restore-keys"], undefined);
+  assert.equal(compare.find(step => step.id === "restore-head-nextjs-cache"), undefined);
+  assert.equal(compare.filter(step => step.uses?.startsWith("actions/checkout@") && step.with["persist-credentials"] === false).length, 2);
 });
