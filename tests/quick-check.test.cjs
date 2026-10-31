@@ -157,6 +157,47 @@ test("a lint configuration change runs the full lint without rewriting files", (
   assert.doesNotMatch(lint, /--fix/);
 });
 
+test("a changed file inside eslint-local-rules runs the full lint", () => {
+  const repository = makeRepository({ ...TWO_FILES, "eslint-local-rules/style.mjs": "export default [];\n" });
+  commit(repository, "eslint-local-rules/style.mjs", "export default [{ rules: {} }];\n");
+  const stubs = makeStubs();
+  const result = run(repository, stubs);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /lint configuration changed, running the full lint/);
+});
+
+test("a dirty configuration file blocks the push", () => {
+  const repository = makeRepository({ ...TWO_FILES, "tsconfig.json": '{ "compilerOptions": {} }\n' });
+  commit(repository, "tsconfig.json", '{ "compilerOptions": { "strict": true } }\n');
+  writeFileSync(path.join(repository, "tsconfig.json"), '{ "compilerOptions": { "strict": false } }\n');
+  const stubs = makeStubs();
+  const result = run(repository, stubs);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /uncommitted changes to tsconfig\.json/);
+});
+
+test("a push of another commit is not checked and not blocked", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  const other = git(repository, "rev-parse", "HEAD");
+  writeFileSync(path.join(repository, "src/one.ts"), "export const one = 99;\n");
+  git(repository, "add", "-A");
+  git(repository, "commit", "-qm", "later work");
+  const stubs = makeStubs({ eslintExit: 1 });
+  const result = spawnSync(process.execPath, [script], {
+    cwd: repository,
+    encoding: "utf8",
+    input: `refs/heads/feature ${other} refs/heads/feature ${"0".repeat(40)}\n`,
+    env: { ...process.env, PATH: `${stubs.directory}:${process.env.PATH}` },
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /not the checked-out commit, so it is not checked/);
+  assert.deepEqual(stubs.calls(), []);
+});
+
 test("a compiler configuration change runs the full type check", () => {
   const repository = makeRepository({ ...TWO_FILES, "tsconfig.json": '{ "compilerOptions": {} }\n' });
   commit(repository, "tsconfig.json", '{ "compilerOptions": { "strict": true } }\n');

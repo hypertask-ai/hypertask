@@ -1,4 +1,5 @@
 #!/bin/sh
+# hypertask quick check hook (HYCI-9). Installed by scripts/install-git-hooks.mjs.
 command -v node >/dev/null 2>&1 || exit 0
 root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
 [ -f "$root/scripts/quick-check.mjs" ] || exit 0

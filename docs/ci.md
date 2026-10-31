@@ -887,7 +887,8 @@ after the `ci-checks` job. `scripts/install-git-hooks.mjs` copies the hook into
 `$(git rev-parse --git-common-dir)/hooks/pre-push`, so one install covers every
 worktree of the checkout. The `prepare` npm script runs the installer, so a
 fresh clone gets the hook from `npm install` without a manual step. An existing
-unrelated `pre-push` hook is left alone, and the hook itself exits quietly when a
+unrelated `pre-push` hook is left alone; an older copy of this repository's hook
+carries a stable marker and is upgraded in place. The hook exits quietly when a
 worktree predates `scripts/quick-check.mjs`, so an older branch never blocks on a
 missing script.
 
@@ -911,7 +912,9 @@ process group, at 10 seconds for a normal change and 60 seconds for a full lint 
 full type check; a killed or skipped gate never blocks the push, because a killed
 process is not a verdict. `npm install` is
 required for the hook to run: without `node_modules` it reports the missing tool
-and passes. `HYPERTASK_SKIP_QUICK_CHECK=1` skips the hook for one push.
+and passes. `HYPERTASK_SKIP_QUICK_CHECK=1` skips the hook for one push. The hook reads Git's
+ref updates and passes the push without checking when the pushed commit is not
+the checked-out one, because the tools read the working copy.
 
 `.github/workflows/quick-check-proof.yml` measures the real hook on hosted
 Ubuntu, is path-filtered to the hook files, and adds no job to ordinary pull

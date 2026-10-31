@@ -65,6 +65,18 @@ test("an unrelated existing hook is never overwritten", () => {
   assert.equal(readFileSync(target, "utf8"), "#!/bin/sh\nexit 0\n");
 });
 
+test("an older copy of this repository's hook is upgraded", () => {
+  const repository = makeRepository();
+  const target = path.join(repository, ".git", "hooks", "pre-push");
+  mkdirSync(path.dirname(target), { recursive: true });
+  writeFileSync(target, "#!/bin/sh\n# hypertask quick check hook (HYCI-9). Older copy.\nexec node old.mjs\n");
+  chmodSync(target, 0o755);
+  const result = install(repository);
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(readFileSync(target, "utf8"), hookSource);
+});
+
 test("a linked worktree installs into the shared hooks directory", () => {
   const repository = makeRepository();
   const worktree = path.join(mkdtempSync(path.join(tmpdir(), "install-git-hooks-worktree-")), "tree");

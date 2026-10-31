@@ -12,8 +12,9 @@ function install() {
   const hooksDirectory = resolve(root, git(["rev-parse", "--git-common-dir"]), "hooks");
   const target = join(hooksDirectory, "pre-push");
   const body = readFileSync(join(root, ".githooks", "pre-push"), "utf8");
+  const marker = "hypertask quick check hook";
 
-  if (existsSync(target) && readFileSync(target, "utf8") !== body) {
+  if (existsSync(target) && readFileSync(target, "utf8") !== body && !readFileSync(target, "utf8").includes(marker)) {
     console.log(`install-git-hooks: ${target} already exists and is not this repository's hook, leaving it alone`);
     return;
   }
