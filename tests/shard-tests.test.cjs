@@ -98,7 +98,7 @@ test("balances shards by measured work instead of file count, deterministically"
   const weights = readDurationWeights(JSON.stringify({
     defaultWorkMs: 250,
     files: {
-      "tests/slow.test.cjs": 9000,
+      "tests/slow.test.cjs": 6000,
       "tests/medium.test.cjs": 4000,
       "tests/serial.test.ts": 3000,
       "tests/quick.test.cjs": 500,
