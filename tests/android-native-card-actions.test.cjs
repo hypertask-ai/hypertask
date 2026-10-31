@@ -37,6 +37,10 @@ const webInboxSource = require('node:fs').readFileSync(
   'utf8',
 )
 const webStarSource = require('node:fs').readFileSync(
+  path.join(root, 'src/utils/controllers/savedContent/toggleSavedContent.ts'),
+  'utf8',
+)
+const webStarRouteSource = require('node:fs').readFileSync(
   path.join(root, 'src/pages/api/savedContent/toggleSaved.ts'),
   'utf8',
 )
@@ -164,4 +168,5 @@ test('native and web mutations share locks and isolate manual Inbox items', () =
   assert.match(reminderSource, /TASK_INBOX_REMINDER_LOCK_CLASS/)
   assert.match(webInboxSource, /ensureTaskMovedToInbox/)
   assert.match(webStarSource, /withTaskStarWriteLock/)
+  assert.match(webStarRouteSource, /toggleSavedContent\(/)
 })

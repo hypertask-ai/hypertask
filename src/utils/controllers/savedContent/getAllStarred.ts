@@ -30,6 +30,7 @@ export const getAllStarred = async (userId: number) => {
     const pinnedComments = await prisma.savedContent.findMany({
       where: {
         userId,
+        agentId: null,
         commentId: { not: null },
         projectId: { in: projectIds },
         task: { project: projectContentAccessWhere(userId) },

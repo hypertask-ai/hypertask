@@ -1,10 +1,9 @@
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { includeSavedContentComment } from "@/utils/controllers/savedContent/helper";
-import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
 import { getDesktopCliTokenUser, logDesktopCliAuthorization } from "@/lib/auth/desktopCliTokenUser";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
+import { toggleSavedContent } from "@/utils/controllers/savedContent/toggleSavedContent";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (
@@ -64,43 +63,7 @@ const handler: NextApiHandler = async (
     const taskId = task.id;
     const projectId = task.projectId;
 
-    const isPrivateTaskStar = type === "Private" && commentId === null;
-    const whereClause = {
-      ...(isPrivateTaskStar ? {} : { projectId }),
-      taskId,
-      type,
-      commentId,
-      ...(type === "Private" ? { userId } : {}),
-    };
-
-    const result = await withTaskStarWriteLock(taskId, async (tx) => {
-      const checkSave = await tx.savedContent.findFirst({ where: whereClause });
-
-      if (checkSave) {
-        await tx.savedContent.deleteMany({ where: whereClause });
-        return { status: 201 as const };
-      }
-      if (alwaysRemove === true) return { status: 201 as const };
-
-      const saved = await tx.savedContent.create({
-        data: {
-          userId: userId,
-          taskId,
-          projectId,
-          commentId,
-          type,
-        },
-        include: {
-          task: includeSavedContentComment(userId, !isPrivateTaskStar),
-          comment: {
-            include: {
-              creator: true,
-            },
-          },
-        },
-      });
-      return { status: 200 as const, saved };
-    });
+    const result = await toggleSavedContent({ userId, agentId: commentId === null ? null : session.agentId ?? null, taskId, projectId, commentId, type, alwaysRemove });
     return result.status === 200
       ? res.status(200).json({ saved: result.saved })
       : res.status(201).json({});

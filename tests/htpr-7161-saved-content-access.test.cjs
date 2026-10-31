@@ -46,7 +46,7 @@ function loadToggle() {
         COMMENTS.find((c) => c.id === where.id && c.taskId === where.taskId) ?? null,
     },
   };
-  const handler = loadModule('src/pages/api/savedContent/toggleSaved.ts', {
+  const stubs = {
     '@/lib/auth/agentScope': { withAgentScopeRequest: (_request, run) => run() },
     '@/utils/controllers/savedContent/helper': { includeSavedContentComment: () => true },
     '@/lib/taskCardActions/writeLocks': { withTaskStarWriteLock: async (_id, op) => op(tx) },
@@ -54,7 +54,9 @@ function loadToggle() {
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 7 }) },
     '@/lib/prisma': { __esModule: true, default: prisma },
     '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ACCESS },
-  }).default;
+  };
+  stubs['@/utils/controllers/savedContent/toggleSavedContent'] = loadModule('src/utils/controllers/savedContent/toggleSavedContent.ts', stubs);
+  const handler = loadModule('src/pages/api/savedContent/toggleSaved.ts', stubs).default;
   async function call(body) {
     const res = { statusCode: 0, body: undefined, status(code) { this.statusCode = code; return this; }, json(b) { this.body = b; return this; } };
     await handler({ headers: {}, body }, res);

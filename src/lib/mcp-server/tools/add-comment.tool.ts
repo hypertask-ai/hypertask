@@ -68,6 +68,13 @@ export const addCommentTool = {
           return result;
         }
 
+        if (validatedInput.action === 'pin' || validatedInput.action === 'star') {
+          return service.saveComment({
+            commentId: validatedInput.comment_id!,
+            action: validatedInput.action,
+          });
+        }
+
         if (validatedInput.action === 'delete') {
           const result = await service.deleteComment({
             comment_id: validatedInput.comment_id!,

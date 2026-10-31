@@ -2253,9 +2253,12 @@ model SavedContent {
   project   Project        @relation(fields: [projectId], references: [id])
   projectId Int
   type      ViewVisibility @default(Private)
+  agentId   String?
+  agent     Agent?         @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([taskId, userId, commentId]) // For saved content lookup
   @@index([commentId, taskId, userId, type]) 
+  @@index([agentId])
 }
 
 model VerificationCode {
@@ -2778,6 +2781,7 @@ model Agent {
   agentRoomDeliveries       AgentRoomDelivery[]
   runs                      AgentRun[]
   byokApiKeys               AgentByokApiKey[]
+  savedContent              SavedContent[]
 
   @@index([userId])
   @@index([userId, revokedAt])
