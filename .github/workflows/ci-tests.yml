@@ -385,25 +385,65 @@ jobs:
         if: needs.ci-prepare.outputs.run_tests == 'true'
         id: restore-tsc-cache
         # A stale tsbuildinfo is safe: tsc validates it against file hashes and
-        # falls back to a full check when they differ.
+        # falls back to a full check when they differ. Generated route types move
+        # with it and are reused only when their own input digest still matches.
+        # HTPR-8234: PRs cache under their own `tsc-pr-` namespace so a repeat push
+        # reuses the branch's own state instead of a production one that has moved.
+        # Production never restores a `tsc-pr-` key: only trusted pushes may feed
+        # the production check, the same rule the ESLint cache follows.
+        env:
+          TSC_CACHE_NAMESPACE: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || 'prod' }}
+          TSC_CACHE_FINGERPRINT: ${{ hashFiles('package-lock.json', 'tsconfig.json') }}
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: .cache/tsc
-          key: tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-${{ github.sha }}
+          path: |
+            .cache/tsc
+            .next/types
+            .next/dev/types
+            next-env.d.ts
+          key: tsc-${{ env.TSC_CACHE_NAMESPACE }}-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-${{ github.sha }}
           restore-keys: |
-            tsc-${{ runner.os }}-${{ hashFiles('package-lock.json', 'tsconfig.json') }}-
+            tsc-${{ env.TSC_CACHE_NAMESPACE }}-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-
+            tsc-prod-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-
 
       - name: Typecheck
         if: needs.ci-prepare.outputs.run_tests == 'true'
-        # Next.js generates route-handler signature checks outside ordinary tsc.
-        # Generate them first so CI catches the same errors as the Vercel build.
-        run: npx next typegen && npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
+        # Next.js generates route-handler signature checks outside ordinary tsc, so
+        # they are generated before tsc runs and CI catches the same errors as the
+        # Vercel build. HTPR-8234: the generator step is skipped only when the
+        # restored types were produced from an identical route input digest, which
+        # makes a stale match impossible; any doubt regenerates. `next typegen` also
+        # writes the feature-flag index through next.config, so that index is built
+        # here directly and no check depends on the generator running at all.
+        run: |
+          set -euo pipefail
+          started=$(date +%s%3N)
+          node scripts/generate-flag-index.mjs
+          surface="unavailable"
+          surface=$(node .github/scripts/ts-route-surface.mjs) || surface="unavailable"
+          if [ "$surface" != "unavailable" ] && [ -d .next/types ] \
+            && node .github/scripts/ts-route-surface.mjs --match .cache/tsc/route-surface; then
+            echo "Route types reused: route inputs unchanged ($surface)."
+          else
+            typegen_started=$(date +%s%3N)
+            npx next typegen
+            echo "next typegen $(( $(date +%s%3N) - typegen_started ))ms"
+            node .github/scripts/ts-route-surface.mjs --write .cache/tsc/route-surface >/dev/null || true
+          fi
+          tsc_started=$(date +%s%3N)
+          npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
+          echo "tsc $(( $(date +%s%3N) - tsc_started ))ms"
+          echo "typecheck total $(( $(date +%s%3N) - started ))ms"
 
       - name: Save TypeScript cache
-        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'push' && steps.restore-tsc-cache.outputs.cache-hit != 'true')
+        if: needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: .cache/tsc
+          path: |
+            .cache/tsc
+            .next/types
+            .next/dev/types
+            next-env.d.ts
           key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
 
       - name: Paid API cost notes

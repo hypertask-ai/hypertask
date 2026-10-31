@@ -28,10 +28,42 @@ function assertParallelChecks(ci) {
   const boundary = checks.steps.filter((step) => step.name === "Check board registration boundaries");
   assert.equal(boundary.length, 1);
   assert.equal(boundary[0].if, undefined);
+  const typecheck = checks.steps.find((step) => step.name === "Typecheck").run;
+  const flagIndex = typecheck.indexOf("node scripts/generate-flag-index.mjs");
+  assert.ok(flagIndex >= 0, "the Typecheck step builds the generated flag index itself");
+  assert.ok(flagIndex < typecheck.indexOf("npx tsc --noEmit"), "the flag index exists before tsc reads it");
+  assert.ok(
+    typecheck.indexOf("npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo") > flagIndex,
+    "tsc keeps its incremental build info in the cached directory",
+  );
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);
-  for (const step of saves) {
+  const pushOnly = saves.filter((step) => step.name !== "Save TypeScript cache");
+  for (const step of pushOnly) {
     assert.match(step.if, /^needs\.ci-prepare\.outputs\.run_tests == 'true' && \(github\.event_name == 'push' && steps\.[\w-]+\.outputs\.cache-hit != 'true'\)$/);
+  }
+  assertTrustedTypeScriptCache(checks.steps);
+}
+
+function assertTrustedTypeScriptCache(steps) {
+  const restore = steps.find((step) => step.name === "Restore TypeScript cache");
+  const save = steps.find((step) => step.name === "Save TypeScript cache");
+  assert.ok(restore && save, "TypeScript cache steps exist");
+  assert.equal(
+    save.if,
+    "needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'",
+    "the TypeScript cache may fill from a pull request only inside its own namespace",
+  );
+  assert.equal(save.with.key, "${{ steps.restore-tsc-cache.outputs.cache-primary-key }}");
+  const namespace = restore.env.TSC_CACHE_NAMESPACE;
+  assert.match(namespace, /github\.event_name == 'pull_request' && format\('pr-\{0\}', github\.event\.pull_request\.number\) \|\| 'prod'/);
+  assert.match(restore.with.key, /^tsc-\$\{\{ env\.TSC_CACHE_NAMESPACE \}\}-/);
+  const restoreKeys = restore.with["restore-keys"].trim().split("\n").map((line) => line.trim());
+  for (const key of restoreKeys) {
+    assert.ok(
+      key.startsWith("tsc-${{ env.TSC_CACHE_NAMESPACE }}-") || key.startsWith("tsc-prod-"),
+      `production must never restore a pull-request cache: ${key}`,
+    );
   }
 }
 
@@ -67,6 +99,11 @@ test("static checks and shards share preparation, not a serial dependency", () =
   const unsafeCache = structuredClone(ci);
   unsafeCache.jobs["ci-checks"].steps.find((step) => step.uses?.startsWith("actions/cache/save@")).if = "always()";
   assert.throws(() => assertParallelChecks(unsafeCache));
+  const leakedTypeScriptCache = structuredClone(ci);
+  leakedTypeScriptCache.jobs["ci-checks"].steps
+    .find((step) => step.name === "Restore TypeScript cache")
+    .with["restore-keys"] += "\n            tsc-pr-${{ runner.os }}-\n";
+  assert.throws(() => assertParallelChecks(leakedTypeScriptCache));
 });
 
 test("real summary shell rejects failed, cancelled, skipped or missing static checks", () => {
