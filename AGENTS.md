@@ -42,12 +42,6 @@ Use either plain text or complete HTML, not mixed formatting. Links need HTML an
 
 Read [docs/ci.md](docs/ci.md) and [docs/ci-policy.yml](docs/ci-policy.yml) before changing workflows, runners, rulesets, required checks, previews, or deploy behavior. App CI uses GitHub-hosted Ubuntu. Never add a VPN runner or another host implicitly. Full CI belongs on hosted runners; run only the targeted checks permitted by the current task and host policy.
 
-### Small PR observation (YPER4-711)
-
-| Rule | Current behavior | Next gate |
-|---|---|---|
-| Prefer at most 400 hand-written changed lines | Trusted CI reports counts; exclusions live in `.github/scripts/pr-size-policy.json` | Post seven days of observations before enabling blocking; human `size-ok` approval needs independent safety review |
-
 ## Reuse existing UI (enforced)
 
 Before UI work, follow [reuse-existing-ui](.claude/skills/reuse-existing-ui/SKILL.md). Use the Ctrl+K command system and existing shared pickers, view-save controls, and selection components. Do not copy markup or invent a parallel control.
