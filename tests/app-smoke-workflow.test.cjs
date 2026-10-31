@@ -404,6 +404,23 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.equal(steps[0].with.ref, "production");
   assert.equal(steps[0].with["persist-credentials"], false);
   assert.ok(settingsIndex > 0);
+  assert.equal(settingsStep.id, "verify");
+  assert.equal(settingsStep.env.SETTINGS_PROOF, ".settings-proof/last-verified.json");
+  const restoreProof = steps[settingsIndex - 1];
+  assert.match(restoreProof.uses, /^actions\/cache\/restore@[0-9a-f]{40}/);
+  assert.deepEqual(restoreProof.with, {
+    path: ".settings-proof",
+    key: "required-check-settings-proof-${{ github.run_id }}",
+    "restore-keys": "required-check-settings-proof-",
+  });
+  const saveProof = steps[settingsIndex + 1];
+  assert.match(saveProof.uses, /^actions\/cache\/save@[0-9a-f]{40}/);
+  assert.equal(saveProof.if, "steps.verify.outputs.verified == 'true'");
+  assert.deepEqual(saveProof.with, {
+    path: ".settings-proof",
+    key: "required-check-settings-proof-${{ github.run_id }}",
+  });
+  assert.equal(steps.length, settingsIndex + 2);
   const settingsScript = await readFile(".github/scripts/verify-required-check-settings.mjs", "utf8");
   assert.match(settingsScript, /GITHUB_EVENT_NAME !== "pull_request"/);
   assert.match(settingsScript, /"fetch", "--no-tags", "--depth=1", "origin", base, head/);
@@ -422,6 +439,16 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.match(settingsScript, /rate limited, waiting \$\{seconds\}s until reset/);
   assert.match(settingsScript, /spawnSync\("sleep"/);
   assert.match(settingsScript, /process\.exitCode = 1/);
+  assert.match(settingsScript, /SETTINGS_PROOF/);
+  assert.match(settingsScript, /last-verified\.json/);
+  assert.match(settingsScript, /::warning::Required-check settings were not verified this run/);
+  assert.match(settingsScript, /Required-check settings: not verified this run\./);
+  assert.match(settingsScript, /Last verified settings: none stored/);
+  assert.match(settingsScript, /if \(error\.rateLimited\) \{\s*reportRateLimitRefusal\(error\);\s*\} else \{/);
+  const refusalBody = settingsScript.slice(settingsScript.indexOf("function reportRateLimitRefusal"),
+    settingsScript.indexOf("\ntry {"));
+  assert.ok(refusalBody.length > 0, "refusal reporter is missing");
+  assert.doesNotMatch(refusalBody, /exitCode = 1/);
   assert.match(settingsScript, /repository\.default_branch !== "production"/);
   assert.match(settingsScript, /ruleset\.name === "production-required-checks" && ruleset\.enforcement === "active"/);
   assert.match(settingsScript, /matches\.length !== 1/);

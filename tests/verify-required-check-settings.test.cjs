@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 
@@ -21,17 +21,26 @@ const endpoints = [
 function runSettings({
   event = "pull_request", file = ".github/workflows/ci-tests.yml",
   diffStatus = 0, fetchStatus = 0, httpStatus = 200, resetSeconds = 0,
-  liveContexts = contexts,
+  liveContexts = contexts, proof = null,
 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "required-check-settings-"));
   const log = join(directory, "calls");
   const eventPath = join(directory, "event.json");
+  const proofPath = join(directory, "proof/last-verified.json");
+  const outputPath = join(directory, "step-output");
+  const summaryPath = join(directory, "step-summary");
   const logArgs = `printf '%s' "$tool" >> "$CALL_LOG"
 printf '\\t%s' "$@" >> "$CALL_LOG"
 printf '\\n' >> "$CALL_LOG"
 `;
   try {
     writeFileSync(log, "");
+    writeFileSync(outputPath, "");
+    writeFileSync(summaryPath, "");
+    if (proof) {
+      mkdirSync(join(directory, "proof"), { recursive: true });
+      writeFileSync(proofPath, JSON.stringify(proof));
+    }
     writeFileSync(eventPath, JSON.stringify({ pull_request: { base: { sha: base }, head: { sha: head } } }));
     writeFileSync(join(directory, "git"), `#!/bin/sh
 set -eu
@@ -80,6 +89,9 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
         REPO: "test/repo",
         GITHUB_EVENT_NAME: event,
         GITHUB_EVENT_PATH: eventPath,
+        GITHUB_OUTPUT: outputPath,
+        GITHUB_STEP_SUMMARY: summaryPath,
+        SETTINGS_PROOF: proofPath,
         CALL_LOG: log,
         GH_COUNT: join(directory, "gh-count"),
         DIFF_FILE: file,
@@ -101,7 +113,10 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
     });
     assert.ifError(result.error);
     const calls = readFileSync(log, "utf8").trim().split("\n").filter(Boolean).map((line) => line.split("\t"));
-    return { ...result, output: result.stdout + result.stderr, calls };
+    const stored = existsSync(proofPath) ? JSON.parse(readFileSync(proofPath, "utf8")) : null;
+    const stepOutput = readFileSync(outputPath, "utf8");
+    const stepSummary = readFileSync(summaryPath, "utf8");
+    return { ...result, output: result.stdout + result.stderr, calls, stored, stepOutput, stepSummary };
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -110,16 +125,33 @@ printf 'HTTP/2.0 200 OK\\r\\ncontent-type: application/json\\r\\n\\r\\n%s\\n' "$
 function assertVerified(result, expectedEndpoints = endpoints) {
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Required-check settings verified:/);
-  assert.doesNotMatch(result.output, /skipping settings API reads|::error::/);
+  assert.doesNotMatch(result.output, /skipping settings API reads|::error::|not verified this run/);
   assert.deepEqual(result.calls.filter(([tool]) => tool === "gh"),
     expectedEndpoints.map((endpoint) => ["gh", "api", "--include", endpoint]));
+  assert.deepEqual(result.stored, {
+    repository: "test/repo",
+    defaultBranch: "production",
+    rulesetId: 42,
+    contexts: [...contexts].sort(),
+    verifiedAt: result.stored.verifiedAt,
+  });
+  assert.ok(Number.isFinite(Date.parse(result.stored.verifiedAt)), result.stored.verifiedAt);
+  assert.equal(result.stepOutput, "verified=true\n");
 }
 
 function assertRejected(result) {
   assert.equal(result.status, 1, result.output);
   assert.match(result.output, /::error::/);
-  assert.doesNotMatch(result.output, /Required-check settings verified:|skipping settings API reads/);
+  assert.doesNotMatch(result.output, /Required-check settings verified:|skipping settings API reads|not verified this run/);
   assert.deepEqual(result.calls.filter(([tool]) => tool === "sleep"), []);
+}
+
+function assertNotVerified(result) {
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /Required-check settings: not verified this run\./);
+  assert.match(result.output, /::warning::Required-check settings were not verified this run:/);
+  assert.doesNotMatch(result.output, /::error::|Required-check settings verified:/);
+  assert.equal(result.stepOutput, "verified=false\n");
 }
 
 for (const file of [".github/workflows/ci-tests.yml", "docs/ci-policy.yml"]) {
@@ -175,11 +207,34 @@ test("403 rate limit waits until reset then verifies settings", () => {
   assert.deepEqual(result.calls.map(([tool]) => tool), ["git", "git", "gh", "sleep", "gh", "gh", "gh"]);
 });
 
-test("403 reset beyond the wait cap fails without claiming verification", () => {
-  const result = runSettings({ httpStatus: 403, resetSeconds: 4000 });
-  assertRejected(result);
+test("403 reset beyond the wait cap keeps the last verified value instead of failing the run", () => {
+  const verifiedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const result = runSettings({
+    httpStatus: 403, resetSeconds: 4000,
+    proof: { repository: "test/repo", defaultBranch: "production", rulesetId: 42, contexts: [...contexts].sort(), verifiedAt },
+  });
+  assertNotVerified(result);
   assert.match(result.output, /not a test failure: wait cap exceeded.*settings were not verified/);
+  assert.match(result.output, new RegExp(`Last verified settings: ${verifiedAt} \\(3h \\d+m ago\\)`));
+  assert.match(result.output, /ruleset 42, required checks app-smoke, ai-review, browser-smoke, ci-tests, claude-review/);
+  assert.match(result.stepSummary, /### Required-check settings: not verified this run/);
+  assert.match(result.stepSummary, /An empty GitHub API allowance is not a settings failure/);
+  assert.deepEqual(result.stored.contexts, [...contexts].sort());
+  assert.equal(result.stored.verifiedAt, verifiedAt);
   assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 1);
+});
+
+test("403 reset beyond the wait cap with no stored proof reports that nothing was ever verified", () => {
+  const result = runSettings({ httpStatus: 403, resetSeconds: 4000 });
+  assertNotVerified(result);
+  assert.match(result.output, /Last verified settings: none stored/);
+  assert.equal(result.calls.filter(([tool]) => tool === "gh").length, 1);
+});
+
+test("a stored proof with an unreadable timestamp is reported as never verified", () => {
+  const result = runSettings({ httpStatus: 403, resetSeconds: 4000, proof: { rulesetId: 42 } });
+  assertNotVerified(result);
+  assert.match(result.output, /Last verified settings: none stored/);
 });
 
 for (const httpStatus of [404, 403]) {
