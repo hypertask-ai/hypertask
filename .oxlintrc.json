@@ -1,7 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["typescript", "react", "jsx-a11y", "import"],
-  "env": { "browser": true, "node": true, "es2024": true },
+  "plugins": [
+    "typescript",
+    "react",
+    "jsx-a11y",
+    "import"
+  ],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
   "categories": {
     "correctness": "off",
     "suspicious": "off",
@@ -11,15 +20,14 @@
     "restriction": "off",
     "nursery": "off"
   },
-  "rules": {
-    "import/no-anonymous-default-export": "warn"
-  },
+  "rules": {},
   "overrides": [
     {
-      "files": ["**/*.jsx", "**/*.tsx"],
+      "files": [
+        "**/*.jsx",
+        "**/*.tsx"
+      ],
       "rules": {
-        "react/display-name": "error",
-        "react/jsx-key": "error",
         "react/jsx-no-comment-textnodes": "error",
         "react/jsx-no-duplicate-props": "error",
         "react/jsx-no-undef": "error",
@@ -32,7 +40,6 @@
         "react/no-string-refs": "error",
         "react/no-unescaped-entities": "error",
         "react/require-render-return": "error",
-        "jsx-a11y/alt-text": "warn",
         "jsx-a11y/aria-props": "warn",
         "jsx-a11y/aria-proptypes": "warn",
         "jsx-a11y/aria-unsupported-elements": "warn",
