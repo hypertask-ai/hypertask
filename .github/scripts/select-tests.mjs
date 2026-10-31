@@ -28,7 +28,8 @@ const WIDE_PATTERNS = [
   /^middleware\./,
   /^src\/middleware\./,
   /^scripts\/(run-tests|test-inventory)\.mjs$/,
-  /^\.github\//,
+  /^\.github\/scripts\/(?:select-tests|shard-tests)\.mjs$/,
+  /^\.github\/scripts\/ci-change-scope\.cjs$/,
 ];
 
 // A shared-dir change with a broad blast radius is not worth guessing about.
