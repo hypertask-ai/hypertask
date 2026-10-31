@@ -91,6 +91,17 @@ case "$url" in
     else
       body=\$(printf '{"deployments":[{"uid":"deploy-current","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-prev","state":"READY","meta":{"githubCommitSha":"other"}}]}' "\$SHA")
     fi
+    # A retried build answers differently on a later read (HYCI-36).
+    if [ -n "\${HC_DEPLOYMENTS_JSON_AFTER:-}" ]; then
+      dcount_file="\$RUNNER_TEMP/hc-deploy-count"
+      didx=0
+      if [ -f "\$dcount_file" ]; then didx=\$(cat "\$dcount_file"); fi
+      didx=\$((didx + 1))
+      printf '%s' "\$didx" > "\$dcount_file"
+      if [ "\$didx" -ge "\${HC_DEPLOYMENTS_AFTER_READS:-2}" ]; then
+        body=\$(printf '%s' "\$HC_DEPLOYMENTS_JSON_AFTER" | sed "s/__SHA__/\$SHA/g")
+      fi
+    fi
     ;;
   https://api.vercel.com/v10/projects/*/promote/*)
     printf '%s' "\$url" > "\$RUNNER_TEMP/promoted"
@@ -292,6 +303,66 @@ test("two deployments for one commit pick the READY one without a broken pipe", 
   assert.match(result.stdout, /deployment state: READY/);
   assert.match(result.stdout, /Production healthy/);
   assert.equal(promoted, null);
+});
+
+// HYCI-36: Vercel's builder runs out of memory and retries the build. The retry
+// reached READY 6-14 minutes after the failure on 7 of the 26 red build-failure
+// runs in the week to 2026-10-31, so the wait must read through the failure
+// instead of reporting a red push for a commit that then shipped.
+test("an out-of-memory build that Vercel retries to READY is health-checked, not red", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}}]}',
+    HC_DEPLOYMENTS_JSON_AFTER: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}},{"uid":"deploy-retry","state":"READY","meta":{"githubCommitSha":"__SHA__"}}]}',
+    HC_DEPLOYMENTS_AFTER_READS: "5",
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /reading on for Vercel's retry/);
+  assert.match(result.stdout, /deployment state: READY/);
+  assert.match(result.stdout, /Production healthy/);
+  assert.doesNotMatch(result.stdout, /BUILD FAILED/);
+  assert.equal(promoted, null);
+});
+
+// The other half of HYCI-36: 19 of the 26 out-of-memory failures never retried.
+// Vercel's builder running out of memory is not a failure of the merged commit,
+// so it is alerted once and the push stays green.
+test("an out-of-memory build that never retries alerts without reddening the push", async () => {
+  const { result, promoted, outputs } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}}]}',
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /Production healthy/);
+  assert.match(result.stdout, /Vercel's builder ran out of memory for/);
+  assert.doesNotMatch(result.stdout, /::error::Production build failed/);
+  assert.equal(outputs.includes("rollback=true"), false);
+  assert.equal(promoted, null);
+});
+
+// The fail-open must not swallow a real code failure: a type error never clears
+// on retry, so it still reds the push on the first read.
+test("a code-class build failure is still red and does not wait for a retry", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-bad","state":"ERROR","errorCode":"type_error","meta":{"githubCommitSha":"__SHA__"}}]}',
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /::error::Production build failed \(live site unaffected\)/);
+  assert.doesNotMatch(result.stdout, /reading on for Vercel's retry/);
+  assert.doesNotMatch(result.stdout, /\[2\] deployment state/);
+  assert.equal(promoted, null);
+});
+
+// An ERROR whose cause cannot be classified fails closed, never open.
+test("a build failure without a readable error code is still red", async () => {
+  const { result } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-bad","state":"ERROR","meta":{"githubCommitSha":"__SHA__"}}]}',
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /BUILD FAILED for .* \(unknown\)/);
+  assert.doesNotMatch(result.stdout, /stays green/);
 });
 
 test("a commit with no deployment exits clean as an ignored build", async () => {
