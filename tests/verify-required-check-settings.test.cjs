@@ -216,7 +216,7 @@ test("403 reset beyond the wait cap keeps the last verified value instead of fai
   assertNotVerified(result);
   assert.match(result.output, /not a test failure: wait cap exceeded.*settings were not verified/);
   assert.match(result.output, new RegExp(`Last verified settings: ${verifiedAt} \\(3h \\d+m ago\\)`));
-  assert.match(result.output, /ruleset 42, required checks app-smoke, ai-review, browser-smoke, ci-tests, claude-review/);
+  assert.match(result.output, /ruleset 42, required checks ai-review, app-smoke, browser-smoke, ci-tests, claude-review/);
   assert.match(result.stepSummary, /### Required-check settings: not verified this run/);
   assert.match(result.stepSummary, /An empty GitHub API allowance is not a settings failure/);
   assert.deepEqual(result.stored.contexts, [...contexts].sort());
