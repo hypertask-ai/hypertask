@@ -128,7 +128,7 @@ function taskRoutes({ human = false, previous = {} } = {}) {
     '@/lib/mcp/tasks/mappers': { mapTaskToDetail: (task) => task },
     '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, write) => write(), IdempotencyAccessError: class extends Error {}, IdempotencyInProgressError: class extends Error {} },
     '@/lib/prisma': { default: { task: { findMany: async () => [{ title: 'Original', description: '', ...previous }] }, user: { findUnique: async () => ({ id: 6, email: 'qa@example.com' }) } } },
-    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'yper4-910-agent-writing' },
     '@/lib/media/inlineAgentImages.server': { inlineAgentImagesForUser: async (text) => text },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (request, error) => { throw error } },
     '@/lib/mcp/tasks/agentMutationLeaseAdoption': { withAdoptedAgentMutationLease: async (_db, _actor, execute) => execute() },
