@@ -277,7 +277,7 @@ test('an unnamed personal conversation falls back to AI chat in the header', asy
   })
   await page.goto(withRealtime(`/project?id=${fixture.projectId}&surface=board&agentSidebar=1`))
   const list = page.getByTestId('agent-sidebar-conversations')
-  await expect(list).toBeVisible({ timeout: 15_000 })
+  await expect(list).toBeVisible()
   const row = list.locator(`[data-command-key="session:${chat.id}"]`)
   await reveal(list, row)
   await row.click()
