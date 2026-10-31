@@ -23,6 +23,7 @@ function fixture(content = '<p>Please check this.</p>') {
   }
   const mocks = {
     '@/lib/agents/writing': writing,
+    '@/lib/agents/writingEnforcement': require('./helpers/stub-map.cjs').enforcementFor(writing),
     '@/lib/prisma': { default: db },
     '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ctx },
     '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },

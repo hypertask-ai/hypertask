@@ -57,6 +57,7 @@ function loader(stubs, logger) {
       Response, Headers, Request, Buffer, URL, TextEncoder, TextDecoder,
       require(id) {
         if (id === "@/lib/agents/writing") return require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {});
+        if (id === "@/lib/agents/writingEnforcement") return require("./helpers/stub-map.cjs").enforcementFor(require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}));
         if (Object.hasOwn(stubs, id)) return { __esModule: true, ...stubs[id] };
         if (id === "crypto" || id.startsWith("node:")) return require(id);
         const base = id.startsWith("@/")
