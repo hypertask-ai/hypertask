@@ -6,6 +6,17 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
 
+// Fetch exceptions may embed credential-bearing URLs and bot tokens, so the
+// reason is stripped of both before it reaches a log line.
+export function alertFailureReason(error) {
+  return String((error && error.message) || error)
+    .replace(/https?:\/\/\S+/g, "<url>")
+    .replace(/\b\d{6,}:[A-Za-z0-9_-]{20,}\b/g, "<token>")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200);
+}
+
 export async function reportProductionAlert(config, fetchImpl = fetch) {
   const { kind, cause, message, repository, githubToken, mcpToken, telegramToken, telegramChat, summaryFile } = config;
   if (!["setup", "live", "rollback"].includes(kind) || !/^[a-z0-9-]+$/.test(cause)) {
@@ -71,9 +82,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     telegramToken: process.env.TG_TOKEN, telegramChat: process.env.TG_CHAT,
     summaryFile: process.env.GITHUB_STEP_SUMMARY,
     runUrl: `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`,
-  }).catch(() => {
-    // Fetch exceptions may embed credential-bearing URLs, so never log them.
-    console.error("::error::Production alert delivery or ticket recording failed; details remain in the job summary");
+  }).catch((error) => {
+    const reason = alertFailureReason(error);
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\nAlert delivery failed: ${reason}\n`);
+    }
+    console.error(`::error::Production alert delivery or ticket recording failed: ${reason}`);
     process.exitCode = 1;
   });
 }

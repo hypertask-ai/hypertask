@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 const { spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
 
@@ -95,6 +97,29 @@ test('setup without agent credentials remains summary-only', async () => {
   const h = harness();
   assert.equal(await reportProductionAlert({ ...config(), mcpToken: '' }, h.fetch), 'summary-only');
   assert.equal(h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org').length, 0);
+});
+
+test('a failed alert says why in the log and the job summary, without the credential', async () => {
+  const { alertFailureReason } = await import('../.github/scripts/production-alert.mjs');
+  assert.equal(alertFailureReason(new Error('Daily alert lookup failed (HTTP 403)')), 'Daily alert lookup failed (HTTP 403)');
+  assert.equal(
+    alertFailureReason(new Error('request to https://api.telegram.org/bot123456:AAHfake-token-value-here/sendMessage failed')),
+    'request to <url> failed',
+  );
+  assert.equal(alertFailureReason(new Error('token 123456:AAHfake-token-value-here rejected')), 'token <token> rejected');
+  assert.equal(alertFailureReason(new Error(`x${'y'.repeat(400)}`)).length, 200);
+
+  const directory = mkdtempSync(join(tmpdir(), 'alert-reason-'));
+  try {
+    const summary = join(directory, 'summary');
+    writeFileSync(summary, '');
+    const result = spawnSync(process.execPath, ['.github/scripts/production-alert.mjs', 'not-a-kind', 'smoke', 'boom'], {
+      encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: summary },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Production alert delivery or ticket recording failed: Invalid production alert classification/);
+    assert.match(readFileSync(summary, 'utf8'), /Alert delivery failed: Invalid production alert classification/);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
 test('CI failure naming recognizes actual spec output and TAP, including a startup failure', () => {
