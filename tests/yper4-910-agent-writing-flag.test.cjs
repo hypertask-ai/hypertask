@@ -43,6 +43,15 @@ test("flag on refuses what the guard refuses, flag off accepts the same text aga
   await off.enforceAgentWriting(6, agent, { text: "Next: waiting for checks." });
 });
 
+test("a broken flag read keeps the declared Everyone default instead of failing the write", async () => {
+  const module = load("src/lib/agents/writingEnforcement.ts", {
+    "@/lib/flags": { isFeatureEnabled: async () => { throw new Error("flag store unavailable"); } },
+    "@/lib/flags/definitions/yper4-910-agent-writing": definition,
+  });
+  assert.equal(await module.agentWritingPolicyEnabled(6), true);
+  await assert.rejects(module.enforceAgentWriting(6, agent, { text: long }), /twelve/);
+});
+
 test("human writes skip the flag read entirely", async () => {
   const { module, reads } = enforcement(true);
   await module.enforceAgentWriting(6, null, { text: long });

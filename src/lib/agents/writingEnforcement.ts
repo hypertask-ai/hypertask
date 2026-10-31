@@ -3,7 +3,11 @@ import { YPER4_910_AGENT_WRITING_FLAG } from '@/lib/flags/definitions/yper4-910-
 
 export async function agentWritingPolicyEnabled(userId: number): Promise<boolean> {
   const { isFeatureEnabled } = await import('@/lib/flags')
-  return isFeatureEnabled(YPER4_910_AGENT_WRITING_FLAG, userId)
+  try {
+    return await isFeatureEnabled(YPER4_910_AGENT_WRITING_FLAG, userId)
+  } catch {
+    return true
+  }
 }
 
 export async function enforceAgentWriting(
