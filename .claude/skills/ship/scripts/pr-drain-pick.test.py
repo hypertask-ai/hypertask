@@ -64,6 +64,18 @@ cat "$HOME/prs.json"
         self.assertEqual(self.pick().stdout, 'NONE\n')
         self.assertIn('--base production --state open --limit 1000', (self.home / 'gh-args').read_text())
 
+    def test_ci_runner_prs_are_never_app_runner_queue_work(self):
+        self.prs = [self.pr(1, hours=8, branch='ci-runner-2/htpr-1'),
+                    self.pr(2, hours=20, draft=False, branch='ci-runner-3/htpr-2',
+                            checks=[{'state': 'FAILURE'}]),
+                    self.pr(3, hours=9)]
+        self.assertEqual(self.pick().stdout.split()[1], '3')
+        self.assertFalse((self.claims / '1').exists())
+        self.assertFalse((self.claims / '2').exists())
+        self.prs = [self.pr(1, hours=8, branch='ci-runner-2/htpr-1')]
+        self.owner(1, runner='RUNNER 16', hours=4)
+        self.assertEqual(self.pick().stdout, 'NONE\n')
+
     def test_active_and_claimed_drafts_wait_without_allowing_new_tickets(self):
         self.prs = [self.pr(1, hours=1), self.pr(2)]
         owner = self.owner(2)
