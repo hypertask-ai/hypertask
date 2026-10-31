@@ -25,12 +25,14 @@ function fixture(options = {}) {
         assert.equal(where.taskId, 42);
         assert.equal(where.userId, 7);
         const matches = rows.filter((row) => row.taskId === 42 && row.userId === 7);
+        const newest = (list) =>
+          [...list].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).at(-1) ?? null;
         if (where.expired === false) {
           assert.deepEqual(where.OR, [{ expiredAt: null }, { expiredAt: { gt: where.OR[1].expiredAt.gt } }]);
           assert.ok(where.OR[1].expiredAt.gt instanceof Date);
-          return matches.filter((row) => !row.expired && !(row.expiredAt && row.expiredAt <= new Date()))[0] ?? null;
+          return newest(matches.filter((row) => !row.expired && !(row.expiredAt && row.expiredAt <= new Date())));
         }
-        return matches[0] ?? null;
+        return newest(matches);
       },
       create: async ({ data }) => {
         created.push(data);
@@ -138,5 +140,17 @@ test("readTaskShare says not public when the link expired", async () => {
 test("readTaskShare never creates a link", async () => {
   const share = fixture();
   await share.readTaskShare(actor);
+  assert.equal(share.created.length, 0);
+});
+
+test("read-back agrees with the write door when an expired row is newer", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-live", taskId: 42, userId: 7, expired: false, expiredAt: null, shareType: "Anyone", createdAt: 1 });
+  share.rows.push({ id: "share-dead", taskId: 42, userId: 7, expired: true, expiredAt: null, shareType: "Anyone", createdAt: 2 });
+  const read = await share.readTaskShare(actor);
+  const write = await share.shareTaskWithLink(actor);
+  assert.equal(read.body.isPublic, true);
+  assert.equal(read.body.link, write.body.link);
+  assert.match(read.body.link, /share\?id=share-live$/);
   assert.equal(share.created.length, 0);
 });
