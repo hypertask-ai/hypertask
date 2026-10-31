@@ -35,7 +35,8 @@ REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
 readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node valentinyeo/ceo)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
-TITLE_RE='^(HTPR|HYFA|YPER4|MARK|HEFE)-[0-9]+ \[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] [^ ]'
+PREFIXES='HTPR|HYFA|YPER4|HYCI|IGSH|MARK|HEFE'
+TITLE_RE="^($PREFIXES)-[0-9]+ \\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\\] [^ ]"
 
 fail() { echo "FAIL: $*"; exit 1; }
 
@@ -62,7 +63,7 @@ deeper_gate_runnable() {
 
 check_deeper() {
   local t=${1:-} acts text label id
-  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "deeper needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
+  [[ $t =~ ^($PREFIXES)-[0-9]+$ ]] || fail "deeper needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
   acts=$(ht GET "/mcp/tasks/$t/agent-activity?limit=100" 2>/dev/null) || fail "cannot read agent activity of $t"
   text=$(jq -er '[.activities[] | select(.type == "thought" and ((.text // "") | test("^\\s*Deeper:")))]
     | max_by(.createdAt) | .text' <<<"$acts" 2>/dev/null) \
@@ -155,7 +156,7 @@ newest_pr() {
 bound_pr() { local f="$EVID/$1/pr"; [ -s "$f" ] && tr -dc '0-9' < "$f"; }
 # The ticket whose PR title the bound PR must carry: the ticket itself, or the one it duplicates.
 # Older merged PRs put the type first ("[BUGFIX] HTPR-6501 ..."). Accepted only for a duplicate's fixing PR.
-OLD_TITLE_RE='^\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\] (HTPR|HYFA|YPER4|MARK|HEFE)-[0-9]+ [^ ]'
+OLD_TITLE_RE="^\\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\\] ($PREFIXES)-[0-9]+ [^ ]"
 
 pr_owner() { local f="$EVID/$1/duplicate-of"; if [ -s "$f" ]; then tr -dc 'A-Z0-9-' < "$f"; else echo "$1"; fi; }
 
@@ -269,7 +270,7 @@ resolution_comment_reason() {
 
 nochange_verify() {
   local t=${1:-} open b ahead rc
-  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
+  [[ $t =~ ^($PREFIXES)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
   if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
     echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
   fi
@@ -307,7 +308,7 @@ nochange_ok() {
 # fresh release proof. Like dropped, the marker is only a record: every read re-checks the PR state.
 check_elsewhere() {
   local t=${1:-} n prev prev_repo prev_state state rc
-  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "elsewhere needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
+  [[ $t =~ ^($PREFIXES)-[0-9]+$ ]] || fail "elsewhere needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
   # The binding is a repository and a number; the saved repository is where the old PR has to be read.
   prev=$(bound_pr "$t"); prev_repo=$(cat "$EVID/$t/repo" 2>/dev/null); prev_repo=${prev_repo:-$REPO}
   n=${2:-$prev}
@@ -739,8 +740,8 @@ check_move() {
   local ref=${1:-} section=${2:-} project=${3:-} destination=${4:-} t rc
   local -a args=(tasks get "$ref" --json)
   [ -z "$project" ] || args+=(--project "$project")
-  t=$(hypertask "${args[@]}" 2>/dev/null | jq -er '.tasks | select(length == 1) | .[0].ticketNumber
-    | select(test("^(HTPR|HYFA|YPER4)-[0-9]+$"))') || fail "cannot resolve ticket $ref for completion checks"
+  t=$(hypertask "${args[@]}" 2>/dev/null | jq -er --arg prefixes "^($PREFIXES)-[0-9]+$" \
+    '.tasks | select(length == 1) | .[0].ticketNumber | select(test($prefixes))') || fail "cannot resolve ticket $ref for completion checks"
   local title="$section" board=${destination:-$project}
   if [[ $section =~ ^[0-9]+$ ]]; then
     [ -n "$board" ] || board=$(hypertask tasks get "$t" --json | jq -er '.tasks[0].boardId // .tasks[0].projectId') \
@@ -855,7 +856,7 @@ guard() {
   export SHIP_CHECKOUT SHIP_WORKER SHIP_DEPLOY
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
   local section_flag="--section([[:space:]]+|=)(\"[^\"]*\"|'[^']*'|[^[:space:]]+)"
-  local done="vcc[[:space:]]+tasks?[[:space:]]+(move|update)[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*$section_flag"
+  local done="vcc[[:space:]]+tasks?[[:space:]]+(move|update)[[:space:]]+[\"']?($PREFIXES)-[0-9]+[\"']?[[:space:]].*$section_flag"
   input=$(cat)
   cmd=$(jq -er '.tool_input.command | select(type == "string")' <<<"$input") || {
     echo "ship-check blocked: cannot read the hook command." >&2; exit 2;
@@ -955,7 +956,7 @@ PY
     # Move to the board's done column, by task move or task update --section: needs merge, deploy and
     # docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
-      [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
+      [[ $rest =~ ($PREFIXES)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
       [[ $rest =~ $section_flag ]]; section_title=${BASH_REMATCH[2]}
       section_title=${section_title#\"}; section_title=${section_title%\"}
       section_title=${section_title#\'}; section_title=${section_title%\'}

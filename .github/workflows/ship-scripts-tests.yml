@@ -73,6 +73,7 @@ jobs:
           set -euo pipefail
           bash .claude/skills/vcc/bin/vcc.test.sh
           bash .claude/skills/ship/scripts/ship-check.test.sh --premerge-only
+          python3 .claude/skills/ship/scripts/ship-check-finish.test.py
           python3 .claude/skills/ship/scripts/premerge-evidence.test.py
           python3 .claude/skills/ship/scripts/ci-why.test.py
           node --test .claude/skills/ship/scripts/production-red-alert.test.mjs

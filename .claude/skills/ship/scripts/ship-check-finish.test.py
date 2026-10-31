@@ -70,6 +70,13 @@ else:
         self.assertEqual(result.returncode == 0, success, result.stdout + result.stderr)
         return result.stdout + result.stderr
 
+    def guard(self, command):
+        result = subprocess.run([str(SCRIPT), 'guard'], env=self.env, cwd=self.repo,
+                                input=json.dumps({'tool_input': {'command': command}, 'cwd': str(self.repo)}),
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result.stderr
+
     def test_three_released_ticket_replays(self):
         for ticket, section in [('HTPR-7950', 'Flag: Everyone'),
                                 ('HTPR-7753', 'Flag: Only Me + QA'),
@@ -109,6 +116,17 @@ else:
         self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
         self.comments('Local tests got SIGKILL.')
         self.check('move', 'HTPR-7950', 'In Progress')
+
+    def test_ci_and_factory_tickets_finish_through_the_normal_step(self):
+        for ticket in ['HYCI-31', 'IGSH-1335']:
+            with self.subTest(ticket=ticket):
+                self.assertIn('move ok', self.check('move', ticket, 'In Progress'))
+
+    def test_guard_enforces_done_moves_on_the_ci_board(self):
+        for ticket in ['HYCI-31', 'IGSH-1335']:
+            with self.subTest(ticket=ticket):
+                out = self.guard(f'vcc task move {ticket} --section Done')
+                self.assertIn('blocked moving ' + ticket, out)
 
     def test_unreadable_handoff_fails_closed(self):
         (self.root / 'comments.json').write_text('{bad')
