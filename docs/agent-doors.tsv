@@ -6,7 +6,7 @@ task.assign	Assign a task to a person or agent	task assign	/mcp/assignees/assign
 task.archive	Archive, delete or bulk-archive tasks	no	no	no	Gap HTPR-8215: /mcp/tasks is GET only and the CLI has no task archive or delete
 task.blocked	Mark a task blocked by a person, blocking, or clear the red border	task waiting-on	/mcp/tasks/waiting-on	no	Accept, decline and duplicate-mark have no door
 task.relations	Link tasks as related, remove a subtask, view subtasks	task link	/mcp/tasks/relations	link_tasks	
-task.follow	Follow, star, mark unread or set a reminder on a task	no	no	no	Gap HTPR-8217: no follow, star or reminder door
+task.follow	Follow, star, mark unread or set a reminder on a task	no	/mcp/tasks/follow	follow_task	Mark unread has no door; the CLI door is planned on HTPR-8217
 task.inbox	Send a task to the inbox	task move-to-inbox	/mcp/inbox/move	move_task_to_inbox	
 comment.create	Reply to a ticket or write a comment	comment add	/mcp/comments	add_comment	
 comment.update	Edit a comment	comment update	/mcp/comments/([^/]+)	update_comment	

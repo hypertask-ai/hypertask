@@ -66,7 +66,9 @@ const ACTIONS = [
     id: "task.follow",
     person: "Follow, star, mark unread or set a reminder on a task",
     commands: /^(followtask|unfollowtask|starTask|markAsUnread|remindMe|setReminder)$/,
-    note: "Gap HTPR-8217: no follow, star or reminder door",
+    mcp: "/mcp/tasks/follow",
+    ai: "follow_task",
+    note: "Mark unread has no door; the CLI door is planned on HTPR-8217",
   },
   {
     id: "task.inbox",

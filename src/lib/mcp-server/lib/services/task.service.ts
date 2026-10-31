@@ -10,6 +10,7 @@ import {
   CreateTaskInputSchema,
   MoveTaskBetweenBoardsInputSchema,
   SetTaskWaitingOnInputSchema,
+  FollowTaskInputSchema,
   AssignUserInputSchema,
   LinkTasksInputSchema,
   NextTasksInputSchema,
@@ -969,6 +970,22 @@ export class TaskService {
       });
       throw error;
     }
+  }
+
+  async followTask(params: unknown) {
+    const body = FollowTaskInputSchema.parse(params);
+    return this.apiClient.makeRequest<{
+      success: true;
+      taskId: number;
+      action: string;
+      following: boolean;
+      starred: boolean;
+      remindAt: string | null;
+      reminderId: number | null;
+    }>('/mcp/tasks/follow', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }, generateCorrelationId());
   }
 
   async setTaskWaitingOn(params: unknown) {

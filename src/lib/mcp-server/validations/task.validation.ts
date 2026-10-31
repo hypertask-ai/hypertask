@@ -41,6 +41,15 @@ export const SetTaskWaitingOnInputSchema = z.object({
   reason: z.string().trim().min(1).max(500).optional().describe('Why the blocker is cleared. Required when an agent sets blockerCommentId to null on a task that has one; it is written in the note that says who cleared it.'),
 }).strict().refine((input) => input.userId !== undefined || input.blockerCommentId !== undefined, { message: 'Provide userId or blockerCommentId' });
 
+export const FollowTaskInputSchema = z.object({
+  action: z.enum(['follow', 'unfollow', 'star', 'unstar', 'remind', 'read']).describe('follow starts following the task, unfollow stops, star and unstar bookmark it privately, remind sets one reminder, read returns the current state.'),
+  taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
+  remindAt: z.string().optional().describe('ISO 8601 date time for the reminder; required by remind and ignored by other actions.'),
+}).strict().refine((input) => input.action !== 'remind' || Boolean(input.remindAt), {
+  message: 'remind requires remindAt',
+  path: ['remindAt'],
+});
+
 export function getGetTasksInputSchema() {
   return createTaskIdentificationArraySchema();
 }

@@ -386,30 +386,10 @@
         "hyperai": ["^hypertask_(inbox_list|inbox_archive|inbox_unarchive|move_task_to_inbox)$", "^hypertask_follow_task$"]
       },
       "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["POST /api/mcp/tasks/follow"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_follow_task"]
-        },
         "cli": {
           "issue": "https://app.hypertask.ai/detail/project-15/8217",
           "expires": "2026-11-20",
           "entries": ["task follow"]
-        },
-        "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_follow_task"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8217",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_follow_task"]
         }
       }
     },

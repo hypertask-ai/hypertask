@@ -69,6 +69,7 @@ export const TOOL_SUMMARIES: Record<string, string> = {
   UPDATE_TASK: 'Returns the updated task.',
   CREATE_TASK: 'Returns the created task.',
   SET_TASK_WAITING_ON: 'Returns the task waiting-on person, setter and timestamp.',
+  FOLLOW_TASK: 'Returns following, starred, remindAt and reminderId.',
   MOVE_TASK_BETWEEN_BOARDS: 'Returns the moved task.',
   ASSIGN_USER: 'Returns the assignees.',
   INBOX_LIST: 'Returns inbox items.',

@@ -4,7 +4,7 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 180, mcp: 79, cli: 156, ai_chat: 87, hyperai: 79. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 181, mcp: 80, cli: 156, ai_chat: 88, hyperai: 80. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
@@ -27,7 +27,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Create, archive, invite to, and configure boards** | ✅ 7 | ✅ 4 | ✅ 6 | ✅ 4 | ✅ 4 |
 | **Manage labels, columns, and custom fields** | ✅ 10 | ✅ 5 (transition) | ✅ 15 (transition) | ✅ 5 (transition) | ✅ 5 (transition) |
 | **Read, add, edit, and delete task comments** | ✅ 5 | ✅ 4 | ✅ 7 | ✅ 4 | ✅ 4 |
-| **Read and triage inbox notifications** | ✅ 6 (transition) | ✅ 4 (transition) | ✅ 6 (transition) | ✅ 4 (transition) | ✅ 4 (transition) |
+| **Read and triage inbox notifications** | ✅ 7 | ✅ 5 | ✅ 6 (transition) | ✅ 5 | ✅ 5 |
 | **Create, read, search, update, archive, and restore pages** | ✅ 8 | ✅ 6 | ✅ 9 | ✅ 6 | ✅ 6 |
 | **Create, read, update, and delete saved reports** | ✅ 6 (transition) | ✅ 1 | ✅ 5 | ✅ 5 | ✅ 1 |
 | **Create, read, update, delete, and switch saved views** | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 | ✅ 6 |

@@ -429,6 +429,12 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
       'Sets the person blocking a task, using the same write as the app Blocked by person modal. Requires taskId (database ID) and userId (board member ID) and/or blockerCommentId (a comment on this task). Send both to set the blocking person and reason atomically; pass both as null to clear both. Omitted fields stay unchanged. When you clear blockerCommentId on a task that has one, also send reason (why it is cleared): the ticket then leaves the Decisions list of the person asked and a note records who cleared it and why. Use list_project_members to resolve the person. Does not change task assignees or task-to-task blocking relations.',
   },
 
+  FOLLOW_TASK: {
+    name: buildToolName('follow_task'),
+    description:
+      'Follow, unfollow, star, unstar or set a reminder on a task, and read the tracking state back. follow and unfollow use the same follower write as the app Watch button; star and unstar write the same private star as the star control; remind sets one reminder that returns the task to the inbox at remindAt in ISO 8601 and replaces an earlier unsent reminder. Requires taskId (database ID). read returns following, starred, remindAt and reminderId.',
+  },
+
   MOVE_TASK_BETWEEN_BOARDS: {
     name: buildToolName('move_task_between_boards'),
     description:

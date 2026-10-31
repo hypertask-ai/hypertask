@@ -55,6 +55,7 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/time\/report$/, params: [], methods: ["GET"], load: () => import('./time/report/operation') },
   { pattern: /^\/mcp\/tasks\/move$/, params: [], methods: ["POST"], load: () => import('./tasks/move/operation') },
   { pattern: /^\/mcp\/tasks\/waiting-on$/, params: [], methods: ["POST"], load: () => import('./tasks/waiting-on/operation') },
+  { pattern: /^\/mcp\/tasks\/follow$/, params: [], methods: ["POST"], load: () => import('./tasks/follow/operation') },
   { pattern: /^\/mcp\/tasks\/next$/, params: [], methods: ["GET"], load: () => import('./tasks/next/operation') },
   { pattern: /^\/mcp\/tasks\/tree$/, params: [], methods: ["GET"], load: () => import('./tasks/tree/operation') },
   { pattern: /^\/mcp\/inbox\/list$/, params: [], methods: ["GET"], load: () => import('./inbox/list/operation') },
