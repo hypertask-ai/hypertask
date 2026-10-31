@@ -11,6 +11,7 @@ import sys
 import tempfile
 
 REPO = "hypertask-ai/hypertask"
+CI_RUNNER_PREFIX = "ci-runner-"
 CLAIMS = Path.home() / ".local/state/pr-drain/claims"
 CLAIM_TTL = dt.timedelta(hours=3)
 ACTIVE_WINDOW = dt.timedelta(hours=2)
@@ -56,6 +57,8 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX)
         candidates = []
         for pr in prs:
+            if pr["headRefName"].startswith(CI_RUNNER_PREFIX):
+                continue
             key = rank(pr, now)
             path = CLAIMS / str(pr["number"])
             owner_file = path / "owner"
