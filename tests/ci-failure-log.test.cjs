@@ -68,24 +68,78 @@ test('a run that later passed on the same code marks its lines flaky', async () 
   assert.equal(unmarked[0].flaky, undefined);
 });
 
-test('the cause marker travels with the filed ticket so a rerun finds it', async () => {
-  const { ticketHtml, ticketTitle } = await subject;
+test('two errors in one step get two titles, and one cause keeps one title', async () => {
+  const { ticketTitle } = await subject;
+  const cause = error => ({ cause: ['test', 'ci-tests', error].join('|'), job: 'ci-tests', step: 'Test' });
+  const slow = ticketTitle(cause('not-ok-4-rate-limit-wait-cap-exceeded'));
+  const network = ticketTitle(cause('not-ok-4-rate-limit-wait-cap-exceeded-network'));
+  assert.notEqual(slow, network);
+  assert.equal(slow, ticketTitle(cause('not-ok-4-rate-limit-wait-cap-exceeded')));
+  assert.equal(slow, '[INFRA] CI failure cause: Test in ci-tests — not-ok-4-rate-limit-wait-cap-exceeded');
+});
+
+test('existing cause tickets are indexed by normalized title, and different causes stay apart', async () => {
+  const { listExistingTasks, ticketTitle, titleKey } = await subject;
+  const group = error => ({ cause: ['test', 'ci-tests', error].join('|'), job: 'ci-tests', step: 'Test' });
+  const existing = { id: 7, uniqueIndex: 88, title: ticketTitle(group('boom')) };
+  const calls = [];
+  const realFetch = global.fetch;
+  global.fetch = async url => {
+    calls.push(String(url));
+    return { ok: true, text: async () => JSON.stringify({ tasks: [existing], nextCursor: null }) };
+  };
+  try {
+    const byTitle = await listExistingTasks({ token: 't' });
+    assert.equal(byTitle.get(titleKey(ticketTitle(group('boom'))))?.uniqueIndex, 88);
+    assert.equal(byTitle.get(titleKey(ticketTitle(group('boom-network')))), undefined);
+    assert.match(calls[0], /project_id=11514/);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+test('the lookup pages past the first page of board tickets', async () => {
+  const { listExistingTasks, ticketTitle, titleKey } = await subject;
+  const group = { cause: 'test|ci-tests|late', job: 'ci-tests', step: 'Test' };
+  const wanted = { id: 9, uniqueIndex: 91, title: ticketTitle(group) };
+  const calls = [];
+  const realFetch = global.fetch;
+  global.fetch = async url => {
+    calls.push(String(url));
+    const second = String(url).includes('cursor=page-2');
+    return {
+      ok: true,
+      text: async () => JSON.stringify(second
+        ? { tasks: [wanted], nextCursor: null }
+        : { tasks: [{ id: 1, title: 'unrelated' }], nextCursor: 'page-2' }),
+    };
+  };
+  try {
+    const byTitle = await listExistingTasks({ token: 't' });
+    assert.equal(byTitle.get(titleKey(ticketTitle(group)))?.uniqueIndex, 91);
+    assert.equal(calls.length, 2);
+  } finally {
+    global.fetch = realFetch;
+  }
+});
+
+test('filed tickets carry no description marker, because the platform strips html comments', async () => {
+  const { ticketHtml } = await subject;
   const group = {
-    cause: 'test|ci-tests|not-ok-4-rate-limit-wait-cap-exceeded',
+    cause: 'test|ci-tests|no-marker',
     job: 'ci-tests',
     step: 'Test',
-    lines: 3,
-    runs: [1, 2, 3],
+    lines: 2,
+    runs: [1, 2],
     branches: ['runner-1/a'],
-    errors: ['not ok 4 - rate limit wait cap exceeded'],
-    tests: ['tests/rate-limit.test.cjs'],
+    errors: ['no marker'],
+    tests: [],
     prs: [],
-    flaky: true,
+    flaky: false,
     first: '2026-10-19T00:00:00Z',
     last: '2026-10-21T00:00:00Z',
   };
-  assert.match(ticketHtml(group), /<!-- ci-failure-cause:test\|ci-tests\|not-ok-4-rate-limit-wait-cap-exceeded -->/);
-  assert.equal(ticketTitle(group), '[INFRA] CI failure cause: Test in ci-tests');
+  assert.doesNotMatch(ticketHtml(group), /<!--/);
 });
 
 test('the CLI prints the fixture tokens the ticket gates read', async () => {

@@ -9,9 +9,14 @@ on the `ci-failure-log` branch (`ci-failure-log.jsonl`). It never fixes anything
 The filing job reads that single log, groups lines with the existing
 `scripts/ci-failure-census.mjs` parser, labels a cause flaky when the same
 commit later passed, and files one `HYCI` ticket per cause with two or more
-lines. An existing ticket carries the same `ci-failure-cause:<key>` marker in
-its description, so a rerun comments on it instead of filing a duplicate.
-Groups of one line are never filed.
+lines. Groups of one line are never filed.
+
+A cause ticket is named for the whole cause, ``[INFRA] CI failure cause: <step>
+in <job> — <error key>``, so two different errors in one step do not share a
+ticket. The filing job finds the previous ticket by that normalized title and
+comments on it instead of filing a duplicate. The platform strips HTML comments
+from descriptions, which is why the title carries the cause and the description
+carries none of it.
 
 `node scripts/ci-failure-log.mjs --seed <days> --publish` backfills the log from
 real runs, `--file --from-branch` files the tickets, and `--dry-run` prints what

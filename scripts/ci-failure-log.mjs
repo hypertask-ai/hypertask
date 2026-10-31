@@ -11,6 +11,9 @@ const SECTION_ID = Number(process.env.CI_FAILURE_LOG_SECTION_ID || 32923);
 const APP_URL = (process.env.CI_FAILURE_LOG_APP_URL || 'https://app.hypertask.ai').replace(/\/$/, '');
 const MIN_LINES = 2;
 const LOG_PATH = 'ci-failure-log.jsonl';
+const TICKET_PAGE_SIZE = 100;
+const TICKET_MAX_PAGES = 20;
+const FLAKY_MAX_PAGES = 100;
 const LOG_BRANCH = 'ci-failure-log';
 const failed = conclusion => ['failure', 'timed_out', 'startup_failure', 'action_required'].includes(conclusion);
 const usage = 'Usage: node scripts/ci-failure-log.mjs --seed <days>|--report <file>|--file <file>|--append --run <id>|--print-fixture <file>';
@@ -127,7 +130,27 @@ export function ticketPlan(groups, existing = new Map()) {
 }
 
 export function ticketTitle(group) {
-  return `[INFRA] CI failure cause: ${group.step} in ${group.job}`.slice(0, 140);
+  const error = String(group.cause || causeKey(group)).split('|').slice(2).join('|');
+  const head = `[INFRA] CI failure cause: ${group.step} in ${group.job}`;
+  return error ? `${head} — ${error}` : head;
+}
+
+export function titleKey(title) {
+  return slug(title, 300);
+}
+
+export async function listExistingTasks(config) {
+  const found = new Map();
+  let cursor = '';
+  for (let page = 0; page < TICKET_MAX_PAGES; page++) {
+    const query = `project_id=${PROJECT_ID}&limit=${TICKET_PAGE_SIZE}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`;
+    const body = await jsonRequest(`${APP_URL}/api/mcp/tasks?${query}`, { headers: mcpHeaders(config.token) }, 'CI failure cause lookup');
+    const tasks = body.tasks ?? [];
+    for (const task of tasks) found.set(titleKey(task.title), task);
+    cursor = body.nextCursor ?? '';
+    if (!cursor || tasks.length === 0) return found;
+  }
+  throw new Error(`CI failure cause lookup stopped after ${TICKET_MAX_PAGES} pages without reaching the end`);
 }
 
 export function escapeHtml(value) {
@@ -157,7 +180,6 @@ export function ticketHtml(group, repo = 'hypertask-ai/hypertask') {
     `<p>Runs:</p>`,
     runLinks(group, repo),
     `<p>Fix the shared cause once, not one change at a time.</p>`,
-    `<!-- ci-failure-cause:${escapeHtml(group.cause)} -->`,
   ].join('');
 }
 
@@ -194,15 +216,11 @@ export async function fileTickets(groups, config) {
   const { create, comment } = ticketPlan(groups, config.existing ?? new Map());
   const limit = config.limit ?? create.length;
   const created = [];
-  const commented = [];
+  const commented = [...comment];
+  const byTitle = await listExistingTasks(config);
   for (const group of create.slice(0, limit)) {
     const title = ticketTitle(group);
-    const search = await jsonRequest(
-      `${APP_URL}/api/mcp/tasks?project_id=${PROJECT_ID}&search=${encodeURIComponent(title)}&limit=20`,
-      { headers: mcpHeaders(config.token) },
-      'CI failure cause search',
-    );
-    const found = (search.tasks ?? []).find(task => task.title === title);
+    const found = byTitle.get(titleKey(title));
     if (found) {
       commented.push({ group, task: found });
       continue;
@@ -223,8 +241,9 @@ export async function fileTickets(groups, config) {
       'CI failure cause ticket creation',
     );
     created.push({ group, task: body.task });
+    if (body.task) byTitle.set(titleKey(title), body.task);
   }
-  for (const { group, task } of [...comment, ...commented]) {
+  for (const { group, task } of commented) {
     if (!task?.id) continue;
     await jsonRequest(
       `${APP_URL}/api/mcp/comments`,
@@ -236,7 +255,7 @@ export async function fileTickets(groups, config) {
       'CI failure cause comment',
     );
   }
-  return { created, commented: [...commented, ...comment] };
+  return { created, commented };
 }
 
 export function formatReport(groups) {
@@ -366,11 +385,12 @@ export function applyFlaky(entries, api, workflow = WORKFLOW) {
   if (!entries.length) return entries;
   const since = entries.reduce((min, entry) => (String(entry.at) < min ? String(entry.at) : min), String(entries[0].at));
   const greens = [];
-  for (let page = 1; page <= 10; page++) {
+  for (let page = 1; page <= FLAKY_MAX_PAGES; page++) {
     const batch = api(`/actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=100&page=${page}`).workflow_runs;
     greens.push(...batch.filter(run => run.conclusion === 'success'));
-    if (batch.length < 100 || Date.parse(batch.at(-1).created_at) < Date.parse(since)) break;
+    if (batch.length < 100 || Date.parse(batch.at(-1).created_at) < Date.parse(since)) return markFlaky(entries, greens);
   }
+  process.stderr.write(`ci-failure-log: flaky lookup stopped at ${FLAKY_MAX_PAGES} pages, older lines stay unclassified\n`);
   return markFlaky(entries, greens);
 }
 
