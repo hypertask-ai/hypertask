@@ -466,10 +466,10 @@ ci_tests:
     required_summary: ci-tests
     additional_required_context: false
   test_lanes:
-    shards: 2
+    shards: 3
     shard_constant: CI_TEST_SHARDS
     required_check: ci-tests
-    split: count, one file on exactly one shard
+    split: measured work from config/test-duration-weights.json, one file on exactly one shard
     pull_request: scoped via .github/scripts/select-tests.mjs from the trusted base-branch commit; full suite on dependency/schema changes
     push_production:
       scope: full
