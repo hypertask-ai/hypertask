@@ -98,7 +98,7 @@ while IFS= read -r ticket; do canonical "$ticket"; done < "$work/tickets" \
   | awk '!seen[$0]++' > "$work/canonical"
 mv "$work/canonical" "$work/tickets"
 total=$(wc -l < "$work/tickets")
-head -n "$scan_limit" "$work/tickets" | jq -R -s --slurpfile tasks "$work/tasks" '
+head -n "$scan_limit" "$work/tickets" | jq -R -r -s --slurpfile tasks "$work/tasks" '
   split("\n") | map(select(length > 0))
   | map(select(. as $ticket | any($tasks[0][]; .ticketNumber == $ticket))) | .[]' > "$work/inspect"
 
@@ -239,15 +239,11 @@ wait_reads() {
   [ "$failed" = 0 ] || fail 'ticket inspection failed; no stale-work report'
 }
 while IFS= read -r ticket; do
-  if [ "$inspected" -ge "$scan_limit" ]; then
-    echo LIMIT > "$work/$ticket.state"
-    continue
-  fi
   inspected=$((inspected + 1))
   inspect_ticket "$ticket" &
   pids+=("$!")
   [ "${#pids[@]}" -lt 8 ] || wait_reads
-done < "$work/tickets"
+done < "$work/inspect"
 wait_reads
 
 while IFS= read -r pr; do
