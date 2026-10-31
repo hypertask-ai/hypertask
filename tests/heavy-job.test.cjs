@@ -289,9 +289,10 @@ test('local heavy jobs run at nice 19 and idle IO by default and HT_HEAVY_NICE i
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('the full suite uses 2 test workers locally and 4 in CI', () => {
+test('the full suite uses one worker per core in CI and at most 2 locally', () => {
   const runner = readFileSync(path.join(root, 'scripts/run-tests.mjs'), 'utf8');
-  assert.match(runner, /TEST_CONCURRENCY = process\.env\.TEST_CONCURRENCY \?\? \(isCi \? 4 : 2\)/);
+  assert.match(runner, /const cores = Math\.max\(1, availableParallelism\(\)\)/);
+  assert.match(runner, /return isCi \? cores : Math\.min\(cores, 2\)/);
   assert.match(runner, /--test-concurrency=\$\{TEST_CONCURRENCY\}/);
 });
 
