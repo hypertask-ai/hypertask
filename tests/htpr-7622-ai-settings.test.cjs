@@ -5,7 +5,7 @@ const { load } = require("./task-route-loader.cjs");
 
 function harness() {
   const state = {
-    enabled: true, rounded: true,
+    enabled: true, rounded: true, graphite2: true,
     session: { userId: 6, source: "better-auth", teamScope: null },
     ownerId: 6,
     members: [
@@ -71,7 +71,7 @@ function harness() {
   const mocks = {
     "@/lib/prisma": { default: db },
     "@/lib/redis": { getRedis: async () => redis },
-    "@/lib/flags": { isFeatureEnabled: async (key) => key === "rounded" ? state.rounded : state.enabled },
+    "@/lib/flags": { isFeatureEnabled: async (key) => key === "rounded" ? state.rounded : key === "htpr-8054-graphite-2" ? state.graphite2 : state.enabled },
     "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "rounded" },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => state.session },
     "@/lib/agentRuns/service": { browserMutationIsSameOrigin: (request) => request.headers.get("origin") === request.nextUrl.origin },
@@ -763,4 +763,42 @@ test("Settings sends its current page, theme and selected board instead of an un
     global.fetch = originalFetch;
     console.log = originalLog;
   }
+});
+
+
+test("Graphite 2 scope applies and undoes through the settings API", async () => {
+  const h = harness();
+  const scope = { section: "appearance", theme: "graphite-2" };
+  const card = await h.proposals.createSettingProposal(6, sessionId, scope, themeChange);
+  const applied = await h.route.POST(request({ id: card.id, action: "apply", scope }, { theme: "graphite-2" }));
+  assert.equal(applied.status, 200);
+  assert.equal((await applied.json()).theme, "graphite");
+  const undone = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "graphite" }));
+  assert.equal(undone.status, 200);
+  assert.equal((await undone.json()).theme, "graphite-2");
+  assert.match(undone.headers.get("set-cookie"), /theme=graphite-2/);
+});
+
+test("Graphite 2 disabled blocks apply and undo destinations, without blocking existing themes", async () => {
+  const h = harness();
+  const change = { kind: "theme", value: "graphite-2" };
+  const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, change);
+  h.state.graphite2 = false;
+  const page = await h.actions.readSettingsPage(6, themeScope);
+  assert.equal(page.options.some((option) => option.value === "graphite-2"), false);
+  assert.equal(page.options.some((option) => option.value === "graphite"), true);
+  const blocked = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
+  assert.equal(blocked.status, 409);
+  assert.match((await blocked.json()).error, /Graphite 2 theme is not available/);
+  const existing = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
+  const allowed = await h.route.POST(request({ id: existing.id, action: "apply", scope: themeScope }));
+  assert.equal(allowed.status, 200);
+  assert.equal((await allowed.json()).theme, "graphite");
+  h.state.graphite2 = true;
+  const fromGraphite2 = await h.proposals.createSettingProposal(6, sessionId, { ...themeScope, theme: "graphite-2" }, themeChange);
+  await h.route.POST(request({ id: fromGraphite2.id, action: "apply", scope: themeScope }, { theme: "graphite-2" }));
+  h.state.graphite2 = false;
+  const undo = await h.route.POST(request({ id: fromGraphite2.id, action: "undo", scope: themeScope }, { theme: "graphite" }));
+  assert.equal(undo.status, 409);
+  assert.match((await undo.json()).error, /Graphite 2 theme is not available/);
 });

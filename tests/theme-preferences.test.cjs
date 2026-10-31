@@ -42,7 +42,7 @@ const expectedThemes = [
 ];
 
 test("theme preferences use one clear label and order", () => {
-  assert.deepEqual(themeOptions.filter(({ value }) => value !== "rounded"), expectedThemes);
+  assert.deepEqual(themeOptions.filter(({ value }) => value !== "rounded" && value !== "graphite-2"), expectedThemes);
 });
 
 test("system mode follows the standard light and dark palettes", () => {

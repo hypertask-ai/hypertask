@@ -60,6 +60,14 @@ The left board-nav button uses `LuPanelLeft` at **18px desktop / 16px mobile**
 (`src/components/PageComponents/Kanban/HeaderComponents/header.tsx`) so it sits
 in the same visual weight as its neighbours rather than towering over them.
 
+### Graphite 2 description-heading exception
+
+Only `.graphite-2 .description-container :is(h1,h2,h3)` may use `--font-size-description-heading: 15px`. The eight-size default remains unchanged everywhere else, including other themes.
+
+[HT Product Lead's recommendation](https://app.hypertask.ai/detail/project-15/8054#comment-329400) asked to release Graphite 2 with 15px headings and recommended yes. [The lead's later comment](https://app.hypertask.ai/detail/project-15/8054#comment-329418) recorded Valentin's chat response:
+
+> re gprahite 2 pls do it like our ecommeendation say yes to all
+
 ## What is intentionally out of scope
 
 Modals, comment/description body content, and the AI chat keep their own sizing
