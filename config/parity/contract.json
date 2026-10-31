@@ -256,21 +256,6 @@
           "issue": "https://app.hypertask.ai/detail/project-15/7723",
           "expires": "2026-11-13",
           "entries": ["task waiting-on"]
-        },
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8216",
-          "expires": "2026-11-20",
-          "entries": ["POST /api/mcp/tasks/share", "GET /api/mcp/tasks/share"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8216",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_share_task", "hypertask_get_task_share"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/8216",
-          "expires": "2026-11-20",
-          "entries": ["hypertask_share_task", "hypertask_get_task_share"]
         }
       }
     },

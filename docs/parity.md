@@ -4,7 +4,7 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 184, mcp: 82, cli: 156, ai_chat: 88, hyperai: 82. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 186, mcp: 84, cli: 156, ai_chat: 88, hyperai: 84. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
@@ -19,7 +19,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Read task context, hierarchy, and description history** | ✅ 6 | ✅ 3 | ✅ 4 | ✅ 3 | ✅ 3 |
 | **Search, retrieve, and find related tasks** | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 |
 | **Pull, lease, and coordinate the next task** | ✅ 6 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
-| **Create, update, move, batch, or escalate tasks** | ✅ 9 (transition) | ✅ 6 (transition) | ✅ 5 (transition) | ✅ 4 | ✅ 6 (transition) |
+| **Create, update, move, batch, or escalate tasks** | ✅ 11 | ✅ 8 | ✅ 5 (transition) | ✅ 4 | ✅ 8 |
 | **Assign people and attach files** | ✅ 3 | ✅ 2 | ✅ 5 | ✅ 3 | ✅ 2 |
 | **Link, unlink, and inspect task relations** | ✅ 3 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
 | **Review and authorize factory acceptance transitions** | ✅ 2 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
