@@ -30,9 +30,14 @@ test("a workflow change selects the test that names it", async () => {
   assert.ok(selected.includes("tests/ai-review-mirror-workflow.test.cjs"));
 });
 
-test("the gate definition, the selector, the sharding and the scope detector run the whole suite", async () => {
+test("a workflow change runs the tests that read it", async () => {
+  const selected = await select([".github/workflows/ci-tests.yml"]);
+  assert.notEqual(selected, "ALL");
+  assert.ok(selected.includes("tests/ci-parallel-checks.test.cjs"));
+});
+
+test("the selector, the sharding and the scope detector run the whole suite", async () => {
   for (const file of [
-    ".github/workflows/ci-tests.yml",
     ".github/scripts/select-tests.mjs",
     ".github/scripts/shard-tests.mjs",
     ".github/scripts/ci-change-scope.cjs",
@@ -42,7 +47,8 @@ test("the gate definition, the selector, the sharding and the scope detector run
 });
 
 test("a workflow no test names still runs the whole suite", async () => {
-  assert.equal(await select([".github/workflows/no-test-names-this-qz.yml"]), "ALL");
+  // Built at runtime so this file's own text cannot match the needle.
+  assert.equal(await select([`.github/workflows/${"no"}${"-test-names-this-qz"}.yml`]), "ALL");
 });
 
 test("a change no test references falls back to the whole suite", async () => {
