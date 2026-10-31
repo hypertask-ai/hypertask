@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const BUDGET_MS = 10_000;
@@ -9,7 +9,7 @@ const typeBudgetMs = Number(process.env.QUICK_CHECK_TYPE_BUDGET_MS) || BUDGET_MS
 const LINTABLE = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const TYPED = /\.(?:ts|tsx|mts|cts)$/;
 const COMPILER = /^(?:tsconfig[^/]*\.json|package(?:-lock)?\.json)$/;
-const LINT_CONFIG = /^(?:eslint[^/]*\.[^/]+|\.eslint[^/]*|eslint-local-rules\/)$/;
+const LINT_CONFIG = /^(?:eslint[^/]*\.[^/]+|\.eslint[^/]*|eslint-local-rules\/.+)$/;
 
 function git(root, args) {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
@@ -44,6 +44,18 @@ function changedAgainstBase(root) {
 function binary(root, name) {
   const local = join(root, "node_modules", ".bin", name);
   return existsSync(local) ? local : name;
+}
+
+function pushedElsewhere(root) {
+  if (process.stdin.isTTY) return null;
+  const updates = readFileSync(0, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => line.trim().split(/\s+/))
+    .filter(([, localSha, remoteRef]) => !/^0+$/.test(localSha ?? "") && !remoteRef.startsWith("refs/tags/"));
+  if (!updates.length) return null;
+  const head = (git(root, ["rev-parse", "HEAD"]) ?? "").trim();
+  return [...new Set(updates.map(([, localSha]) => localSha))].find((sha) => sha !== head) ?? null;
 }
 
 function uncommitted(root, files) {
@@ -108,11 +120,18 @@ if (!root) {
   process.exit(0);
 }
 
+const pushedCommit = pushedElsewhere(root);
+if (pushedCommit) {
+  console.log(`quick check: this push sends ${pushedCommit.slice(0, 12)}, not the checked-out commit, so it is not checked`);
+  process.exit(0);
+}
+
 const explicit = explicitFiles(process.argv.slice(2));
 let lintTargets = [];
 let typeTargets = [];
 let fullLint = false;
 let fullTypecheck = false;
+let touched = [];
 
 if (explicit) {
   lintTargets = explicit.filter((file) => LINTABLE.test(file));
@@ -123,6 +142,7 @@ if (explicit) {
     console.log("quick check: no origin/production merge base, checking types only");
     typeTargets = [];
   } else {
+    touched = changes.touched;
     fullLint = changes.touched.some((file) => LINT_CONFIG.test(file));
     fullTypecheck = changes.touched.some((file) => COMPILER.test(file));
     lintTargets = fullLint ? [] : changes.changed.filter((file) => LINTABLE.test(file));
@@ -136,7 +156,8 @@ else if (lintTargets.length) console.log(`quick check: linting ${lintTargets.joi
 else console.log("quick check: no changed lint targets");
 
 const skipped = [];
-const checked = [...new Set([...lintTargets, ...(fullTypecheck ? [] : typeTargets)])];
+const configuration = touched.filter((file) => LINT_CONFIG.test(file) || COMPILER.test(file));
+const checked = [...new Set([...configuration, ...lintTargets, ...(fullTypecheck ? [] : typeTargets)])];
 const dirty = checked.length ? uncommitted(root, checked) : [];
 if (dirty.length) {
   blocked(`uncommitted changes to ${dirty.join(", ")}; commit them so the push carries what was checked`);
