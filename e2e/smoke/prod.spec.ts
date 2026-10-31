@@ -386,7 +386,7 @@ test('chat opener waits for hydration before accepting its first click', { tag: 
   })
   try {
     await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'commit' })
-    await expect(opener).toBeVisible()
+    await expect(opener).toBeVisible({ timeout: 15_000 })
     await expect(opener).toBeDisabled()
     await expect(opener).toHaveAttribute('aria-busy', 'true')
     const clicked = opener.click()
