@@ -41,9 +41,19 @@ concurrency:
 # lane, which runs beside the pool lanes. Measured on four production pushes the
 # serial stretch per lane was 26s to 183s; packed away, every pool lane plans
 # 337s instead of 406s.
+#
+# HYCI-42 raises the pool to six lanes on four production pushes from
+# 2026-10-31 (41246170446, 41245291300, 41243110481, 41243877982): a lane's wall
+# time tracks its own summed file time divided by four (441s planned 434s, 406s
+# planned 382s, 495s planned 418s), so the four workers are saturated and only
+# less work per lane shortens the slowest leg. Six lanes plan 225s each instead
+# of 337s, which is the 30% the ticket asks for, and a lane now opens with its
+# longest file so a 270-322s file never runs at the tail. Seven test jobs put a
+# non-draft PR at 19 jobs of the 20-job pool; the added queue cost is measured
+# after this ships, and the required check stays ci-tests.
 env:
-  # 4 pool lanes; the plan adds one serial lane, so CI Test is 5 lanes.
-  CI_TEST_SHARDS: "4"
+  # 6 pool lanes; the plan adds one serial lane, so CI Test is 7 lanes.
+  CI_TEST_SHARDS: "6"
 
 jobs:
   ci-prepare:

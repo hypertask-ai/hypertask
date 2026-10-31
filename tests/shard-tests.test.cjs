@@ -109,6 +109,11 @@ test("balances shards by measured work instead of file count, deterministically"
   const work = workOf(shards, weights);
   assert.ok(Math.max(...work) - Math.min(...work) <= weights.defaultWorkMs + 500,
     `shards are unbalanced: ${work.join(",")}`);
+  for (const lane of shards) {
+    const laneWork = lane.map((file) => weights.files[file] ?? weights.defaultWorkMs);
+    assert.deepEqual(laneWork, [...laneWork].sort((a, b) => b - a),
+      `lane does not start its longest file first: ${lane.join(",")}`);
+  }
   assert.deepEqual(partition([...files].reverse(), 2, weights), shards);
   assertPartition([...files].sort(), shards, weights);
   assert.throws(() => partition(files, 0, weights), /positive integer/);
@@ -139,7 +144,8 @@ test("the serial lane holds every TypeScript and isolated file, pooled files sta
   ];
   const lanes = partition(files, 3, weights, { serialLane: true });
   assert.equal(lanes.length, 3);
-  assert.deepEqual(lanes[2], ["tests/another.test.ts", "tests/feature-flags.test.cjs", "tests/serial.test.ts"]);
+  assert.deepEqual(lanes[2], ["tests/feature-flags.test.cjs", "tests/serial.test.ts", "tests/another.test.ts"],
+    "the serial lane also runs its longest file first, so its slowest file is not left at the end");
   const pooled = lanes.slice(0, 2).flat();
   assert.ok(pooled.every((file) => !isSerialTestFile(file)), pooled.join(","));
   assert.deepEqual([...pooled].sort(), ["tests/added.test.cjs", "tests/pooled.test.cjs", "tests/slow.test.cjs"]);

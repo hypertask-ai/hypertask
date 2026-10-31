@@ -44,9 +44,9 @@ runner_policy:
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 17
+  normal_synchronize_after: 19
   opened_before: 18
-  opened_after: 17
+  opened_after: 19
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -504,9 +504,9 @@ ci_tests:
     required_summary: ci-tests
     additional_required_context: false
   test_lanes:
-    pool_lanes: 4
+    pool_lanes: 6
     serial_lanes: 1
-    lane_count: 5
+    lane_count: 7
     shard_constant: CI_TEST_SHARDS
     required_check: ci-tests
     split: measured work from config/test-duration-weights.json, one file on exactly one lane
