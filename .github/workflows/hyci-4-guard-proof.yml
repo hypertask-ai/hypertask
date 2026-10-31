@@ -1,0 +1,55 @@
+name: HYCI-4 guard proof
+
+# Throwaway proof lane for ticket HYCI-4. One selection whose only test file skips
+# must be red after the execution guard and green before it. The job is expected to
+# fail on the last step; the two earlier steps are the contrast that proves the guard
+# is what changed the outcome. Delete this workflow with the proof pull request.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  guard-proof:
+    name: guard-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Production runner before the guard treated this selection as green
+        shell: bash
+        run: |
+          set -euo pipefail
+          GUARD_COMMIT=$(git log --format=%H --grep='Fail the run when no test executed' -1 origin/production)
+          test -n "$GUARD_COMMIT"
+          BEFORE=$(git rev-parse "$GUARD_COMMIT^")
+          echo "guard landed in $GUARD_COMMIT; running the runner from $BEFORE"
+          git worktree add "$RUNNER_TEMP/before" "$BEFORE"
+          cp tests/hyci-4-hidden-change.test.cjs "$RUNNER_TEMP/before/tests/"
+          cd "$RUNNER_TEMP/before"
+          CI=true node scripts/run-tests.mjs tests/hyci-4-hidden-change.test.cjs
+          echo "BEFORE: all-skipped selection is green without the guard"
+
+      - name: The same selection stays green outside CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          env -u CI -u GITHUB_ACTIONS node scripts/run-tests.mjs tests/hyci-4-hidden-change.test.cjs
+          echo "LOCAL: a clean no-docker skip still passes"
+
+      - name: Hidden change fails the run in CI
+        shell: bash
+        run: node scripts/run-tests.mjs tests/hyci-4-hidden-change.test.cjs
