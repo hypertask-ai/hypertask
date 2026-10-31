@@ -168,7 +168,8 @@ export async function emergencyRollback(failingSha, token, fetchImpl = fetch, de
   const repo = options.repo ?? process.env.GITHUB_REPOSITORY;
   const githubToken = options.githubToken ?? process.env.ROLLBACK_GITHUB_TOKEN;
   const runUrl = options.runUrl ?? `${process.env.GITHUB_SERVER_URL || "https://github.com"}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-  if (process.env.GITHUB_EVENT_NAME === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
+  const eventName = options.eventName ?? process.env.GITHUB_EVENT_NAME;
+  if (eventName === "workflow_dispatch") return { action: "skip", reason: "manual runs never roll back", revert: { status: "skipped" }, freeze: false };
   const missing = [!repo && "GITHUB_REPOSITORY", !githubToken && "ROLLBACK_GITHUB_TOKEN", !token && "VERCEL_TOKEN",
     !/^https?:\/\/[^/]+\/[^/]+\/[^/]+\/actions\/runs\/\d+$/.test(runUrl) && "valid GitHub run URL"].filter(Boolean);
   if (missing.length) return { action: "failed", reason: `missing ${missing.join(", ")}`, revert: { status: "skipped" }, freeze: false };
