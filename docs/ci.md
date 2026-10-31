@@ -897,7 +897,8 @@ on the `ci-failure-log` branch (`ci-failure-log.jsonl`). It never fixes anything
 The filing job reads that single log, groups lines with the existing
 `scripts/ci-failure-census.mjs` parser, labels a cause flaky when the same
 commit later passed, and files one `HYCI` ticket per cause with two or more
-lines. Groups of one line are never filed.
+lines. Groups of one line are never filed. An empty log files nothing and
+exits 0, so the first run before any red change is green.
 
 A cause ticket is named for the whole cause, `[INFRA] CI failure cause: <step>
 in <job> — <error key>`, so two different errors in one step do not share a

@@ -5,7 +5,7 @@ name: CI Failure Log
 # error and the run link on the `ci-failure-log` branch. The filing job reads
 # that single log, groups the lines by cause with the existing census parser,
 # and files one HYCI ticket per cause with two or more lines, or comments on
-# the ticket that already carries the cause marker.
+# the ticket that already carries that cause in its title.
 
 on:
   workflow_run:

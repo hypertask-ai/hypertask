@@ -507,9 +507,14 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   if (args.includes('--file')) {
-    const source = args.includes('--from-branch') ? readLogFromBranch() : readFileSync(option('--file'), 'utf8');
+    const fromBranch = args.includes('--from-branch');
+    const source = fromBranch ? readLogFromBranch() : readFileSync(option('--file'), 'utf8');
     const entries = parseLog(source);
-    if (!entries.length) throw new Error(`No CI failure lines found in ${args.includes('--from-branch') ? LOG_BRANCH : option('--file')}`);
+    if (!entries.length) {
+      console.log(`CI failure log is empty on ${fromBranch ? LOG_BRANCH : option('--file')}: nothing to file.`);
+      console.log(args.includes('--dry-run') ? 'dryRun=yes create=0 comment=0' : 'created=0 commented=0');
+      return;
+    }
     const groups = groupEntries(applyFlaky(entries, api));
     if (args.includes('--dry-run')) {
       const plan = ticketPlan(groups);

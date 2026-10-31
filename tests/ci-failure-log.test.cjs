@@ -142,6 +142,19 @@ test('filed tickets carry no description marker, because the platform strips htm
   assert.doesNotMatch(ticketHtml(group), /<!--/);
 });
 
+test('an empty log files nothing and exits 0, so the first live run is green', async () => {
+  const { mkdtempSync, writeFileSync } = require('node:fs');
+  const { tmpdir } = require('node:os');
+  const empty = path.join(mkdtempSync(path.join(tmpdir(), 'ci-failure-log-empty-')), 'ci-failure-log.jsonl');
+  writeFileSync(empty, '');
+  const result = spawnSync(process.execPath, ['scripts/ci-failure-log.mjs', '--file', empty], {
+    cwd: path.resolve(__dirname, '..'),
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /created=0 commented=0/);
+});
+
 test('the CLI prints the fixture tokens the ticket gates read', async () => {
   const result = spawnSync(process.execPath, ['scripts/ci-failure-log.mjs', '--print-fixture', path.join(fixtureDir, 'seed.json')], {
     cwd: path.resolve(__dirname, '..'),
