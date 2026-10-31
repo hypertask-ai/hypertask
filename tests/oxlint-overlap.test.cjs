@@ -9,6 +9,7 @@ const oxlintConfig = JSON.parse(readFileSync(join(root, ".oxlintrc.json"), "utf8
 const overlap = Object.assign({}, ...[oxlintConfig, ...(oxlintConfig.overrides ?? [])].map((block) => block.rules ?? {}));
 const schema = JSON.parse(readFileSync(join(root, "node_modules/oxlint/configuration_schema.json"), "utf8"));
 const implemented = new Set(Object.keys(schema.definitions.DummyRuleMap.properties));
+const probePath = "tests/oxlint-overlap-probe.tsx";
 const staysInEslint = /^(?:local|hypertask-ui|hypertask-style|hypertask-tests|tailwindcss|@next|react-hooks|@typescript-eslint)\//;
 
 test("every rule handed to Oxlint exists and no Hypertask rule is handed over", () => {
@@ -29,11 +30,20 @@ test("ESLint turns off exactly the rules Oxlint owns", async () => {
   for (const id of Object.keys(overlap)) assert.ok(off.has(id), `ESLint still runs ${id}`);
 });
 
+test("the probe file stays outside the TypeScript program", () => {
+  const tsconfig = JSON.parse(readFileSync(join(root, "tsconfig.json"), "utf8"));
+  assert.ok(tsconfig.include.includes("**/*.tsx"), "tsc globs tsx files");
+  assert.ok(
+    (tsconfig.exclude ?? []).includes(probePath),
+    `${probePath} exists only while this suite runs, so tsc must not glob it`,
+  );
+});
+
 test("Oxlint reports a handed-over rule in the repository", () => {
-  const probe = join(root, "tests/oxlint-overlap-probe.tsx");
+  const probe = join(root, probePath);
   writeFileSync(probe, 'export function Probe() {\n  return <div children="text" />;\n}\n');
   try {
-    const result = spawnSync(join(root, "node_modules/.bin/oxlint"), ["tests/oxlint-overlap-probe.tsx"], {
+    const result = spawnSync(join(root, "node_modules/.bin/oxlint"), [probePath], {
       cwd: root,
       encoding: "utf8",
     });

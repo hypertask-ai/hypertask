@@ -474,7 +474,9 @@ ci_tests:
     job: ci-checks
     needs: ci-prepare
     parallel_with: ci-test
-    checks: [agent-board-scope, typescript, lint, changed-style-tokens]
+    checks: [agent-board-scope, typescript, oxlint, eslint, lint-overlap-guard, changed-style-tokens]
+    within_job: concurrent_lanes
+    within_job_exceptions: none
     required_summary: ci-tests
     summary_needs: [ci-prepare, ci-checks, ci-test]
     docs_only: explicit_skipped_producers

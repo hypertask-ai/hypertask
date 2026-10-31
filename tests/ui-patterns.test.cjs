@@ -71,7 +71,7 @@ test("the actual required CI lint entry point enables the UI checks", async () =
   for (const rule of Object.keys(uiPatternsPlugin.rules)) assert.equal(config.rules[`hypertask-ui/${rule}`][0], 2);
   const workflow = readFileSync(resolve(root, ".github/workflows/ci-tests.yml"), "utf8");
   assert.match(workflow, /name: ci-tests/);
-  assert.match(workflow, /name: Lint[\s\S]*?run: npm run lint/);
+  assert.match(workflow, /name: Run independent static checks[\s\S]*?lane_eslint\(\) \{[\s\S]*?npm run lint -- --cache --cache-strategy content --cache-location \.cache\/eslint\/\.eslintcache/);
 });
 
 test("rejects historical parallel view-save actions", async () => {

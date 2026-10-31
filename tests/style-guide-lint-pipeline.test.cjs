@@ -44,14 +44,17 @@ test("the required CI lint step uses the baseline-aware npm command without rege
   const workflow = readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8");
   const checks = yaml.load(workflow).jobs["ci-checks"];
   assert.equal(checks.if, "needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'");
-  const condition = "needs.ci-prepare.outputs.run_tests == 'true'";
-  const oxlint = checks.steps.find((step) => step.name === "Lint (oxlint)");
-  assert.equal(oxlint.if, condition);
-  assert.equal(oxlint.run, "npm run lint:oxlint");
-  const eslintStep = checks.steps.find((step) => step.name === "Lint (eslint, rules Oxlint lacks)");
-  assert.equal(eslintStep.if, condition);
-  assert.match(eslintStep.run,
-    /^\s*npm run lint -- --cache --cache-strategy content --cache-location \.cache\/eslint\/\.eslintcache$/m);
+  const launcher = checks.steps.find((step) => step.name === "Run independent static checks");
+  const { run } = launcher;
+  assert.match(run, /^lane_oxlint\(\) \{\n {2}npm run lint:oxlint\n\}$/m);
+  assert.match(run, /^ {2}run_lane oxlint$/m);
+  const eslintLane = run.match(/^lane_eslint\(\) \{\n([\s\S]*?)\n\}$/m);
+  assert.ok(eslintLane, "eslint is a lane of the static gates, not its own step");
+  assert.match(eslintLane[1], /^ {4}npm run lint:changed -- "\$BASE_SHA"$/m);
+  assert.match(eslintLane[1],
+    /^ {4}npm run lint -- --cache --cache-strategy content --cache-location \.cache\/eslint\/\.eslintcache$/m);
+  assert.match(run, /^ {2}run_lane eslint$/m);
+  assert.equal(checks.steps.filter((step) => String(step.name ?? "").startsWith("Lint")).length, 0);
   assert.match(scripts.lint, /--suppressions-location eslint-local-rules\/style-guide-suppressions\.json/);
   assert.doesNotMatch(scripts.lint, /--suppress-all|--suppress-rule|--prune-suppressions/);
 });
