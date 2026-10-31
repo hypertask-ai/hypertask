@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { test, expect } from './lib/appReady'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { withRealtime } from './lib/realtime'

@@ -117,6 +117,60 @@ test("balances shards by measured work instead of file count, deterministically"
   assert.throws(() => assertPartition([...files].sort(), moved, weights), /measured work split/);
 });
 
+test("the serial lane holds every TypeScript and isolated file, pooled files stay in the pool lanes", async () => {
+  const { partition, assertPartition, readDurationWeights } = await import("../.github/scripts/shard-tests.mjs");
+  const { isSerialTestFile } = await import("../scripts/test-isolation.mjs");
+  const weights = readDurationWeights(JSON.stringify({
+    defaultWorkMs: 250,
+    files: {
+      "tests/slow.test.cjs": 8000,
+      "tests/pooled.test.cjs": 4000,
+      "tests/feature-flags.test.cjs": 9000,
+      "tests/serial.test.ts": 3000,
+    },
+  }));
+  const files = [
+    "tests/slow.test.cjs",
+    "tests/pooled.test.cjs",
+    "tests/added.test.cjs",
+    "tests/feature-flags.test.cjs",
+    "tests/serial.test.ts",
+    "tests/another.test.ts",
+  ];
+  const lanes = partition(files, 3, weights, { serialLane: true });
+  assert.equal(lanes.length, 3);
+  assert.deepEqual(lanes[2], ["tests/another.test.ts", "tests/feature-flags.test.cjs", "tests/serial.test.ts"]);
+  const pooled = lanes.slice(0, 2).flat();
+  assert.ok(pooled.every((file) => !isSerialTestFile(file)), pooled.join(","));
+  assert.deepEqual([...pooled].sort(), ["tests/added.test.cjs", "tests/pooled.test.cjs", "tests/slow.test.cjs"]);
+  assert.deepEqual(lanes[0], ["tests/slow.test.cjs"], "the heaviest pooled file gets its own lane");
+  assert.deepEqual(partition([...files].reverse(), 3, weights, { serialLane: true }), lanes);
+  const summary = assertPartition([...files].sort(), lanes, weights, { serialLane: true });
+  assert.equal(summary.files, files.length);
+  assert.deepEqual(summary.sizes, lanes.map((lane) => lane.length));
+  const moved = [[...lanes[0], "tests/pooled.test.cjs"], lanes[1].filter((file) => file !== "tests/pooled.test.cjs"), lanes[2]];
+  assert.throws(() => assertPartition([...files].sort(), moved, weights, { serialLane: true }), /measured work split/);
+  const countLanes = partition(files, 2, null, { serialLane: true });
+  assert.deepEqual(countLanes[1], ["tests/another.test.ts", "tests/feature-flags.test.cjs", "tests/serial.test.ts"]);
+  assert.deepEqual(countLanes[0], ["tests/added.test.cjs", "tests/pooled.test.cjs", "tests/slow.test.cjs"]);
+  assert.deepEqual(partition(files, 1, null, { serialLane: true }), [[...files].sort()]);
+});
+
+test("the real suite gives every serial file one lane and no file two lanes", async () => {
+  const { discoverSupportedTests, partition, assertPartition } = await import("../.github/scripts/shard-tests.mjs");
+  const { isSerialTestFile } = await import("../scripts/test-isolation.mjs");
+  const files = await discoverSupportedTests();
+  const lanes = partition(files, Number(process.env.CI_TEST_SHARDS || 4) + 1, null, { serialLane: true });
+  const serial = lanes.at(-1);
+  assert.ok(serial.length > 0, "the suite has serial files");
+  assert.ok(serial.every((file) => isSerialTestFile(file)), serial.join(","));
+  const pooled = lanes.slice(0, -1).flat();
+  assert.ok(pooled.every((file) => !isSerialTestFile(file)), "no serial file sits in a pool lane");
+  assert.equal(serial.length + pooled.length, files.length);
+  const summary = assertPartition([...files].sort(), lanes, null, { serialLane: true });
+  assert.equal(summary.files, files.length);
+});
+
 test("an unreadable or empty weights file is refused instead of silently unbalancing", async () => {
   const { readDurationWeights } = await import("../.github/scripts/shard-tests.mjs");
   assert.throws(() => readDurationWeights(JSON.stringify({ files: {} })), /defaultWorkMs/);

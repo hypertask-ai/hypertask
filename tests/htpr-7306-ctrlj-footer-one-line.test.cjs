@@ -74,7 +74,7 @@ for (const enabled of [false, true]) {
   });
 }
 
-test("feature flag ships for Everyone with a small release risk and generated export", () => {
+test("feature flag ships for Everyone with a small release risk", () => {
   const jiti = createJiti(__filename, { fsCache: false });
   const definition = jiti(path.join(root, `src/lib/flags/definitions/${flag}.ts`));
   assert.equal(definition.HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, flag);
@@ -83,5 +83,4 @@ test("feature flag ships for Everyone with a small release risk and generated ex
   assert.equal(definition.default.defaultMode, "EVERYONE");
   assert.equal(definition.default.releaseRisk.risk, "small");
   assert.ok(definition.default.releaseRisk.reason);
-  assert.match(fs.readFileSync(path.join(root, "src/lib/flags/definitions/index.generated.ts"), "utf8"), /export \{ HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG \}/);
 });

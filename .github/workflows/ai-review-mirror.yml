@@ -14,6 +14,13 @@ name: AI review verdict to ticket
 # the other trusted workflows already import, bounded to this job's timeout, so
 # a full installation window fails with the rate limit named instead of a
 # missing verdict.
+#
+# YPER4-978: the board stopped accepting the mirror's people comment. The voice
+# guard (YPER4-910) refuses technical text in the thread people read, and the
+# findings carry paths, code and long sentences, so five real mirrors failed
+# with HTTP 400 while the skip runs stayed green. The thread now gets one short
+# plain verdict line that points at the pull request; the agent log answers this
+# token with HTTP 503, so the findings stay where they already are.
 on:
   issue_comment:
     types: [created, edited]
@@ -170,19 +177,15 @@ jobs:
               .replace(/</g, '&lt;')
               .replace(/>/g, '&gt;')
               .replace(/"/g, '&quot;');
-            const findings = body
-              .split('\n')
-              .slice(1)
-              .join('\n')
-              .split(/<!--/)[0]
-              .trim()
-              .slice(0, 4000);
-            const marker = `reviewed-commit: ${sha}`;
+            // The board refuses technical text in a people comment: no paths, no
+            // code, no sentence over twelve words (YPER4-910). Findings are all
+            // of that, and the agent log answers this token with HTTP 503, so the
+            // ticket gets one short plain line that points at the pull request.
+            const verdictWord = /^(APPROVE|CONCERNS)\b/.exec(verdict)?.[1] ?? 'APPROVE';
             const text = [
-              `<p><strong>AI review (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${escapeHtml(verdict)}</p>`,
-              findings ? `<pre>${escapeHtml(findings)}</pre>` : '',
-              `<p><code>${marker}</code></p>`,
-            ].filter(Boolean).join('\n');
+              `<p><strong>AI review (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${verdictWord}.</p>`,
+              `<p>Findings are in the pull request.</p>`,
+            ].join('\n');
 
             const appRequest = (path, init = {}) => fetch(`${APP}${path}`, {
               ...init,
@@ -195,31 +198,12 @@ jobs:
               },
             });
 
-            // Re-reading the ticket keeps a re-run or an edited verdict comment
-            // from posting the same commit twice.
-            const existing = await appRequest(
-              `/api/mcp/comments?ticket_number=${encodeURIComponent(ticket)}&limit=100`,
-              { method: 'GET' });
-            if (!existing.ok) {
-              core.setFailed(`Reading ${ticket} comments returned HTTP ${existing.status}.`);
-              return;
-            }
-            const existingBody = await existing.json();
-            if (existingBody.success !== true || !Array.isArray(existingBody.comments)) {
-              core.setFailed(`Reading ${ticket} comments was not confirmed by the app.`);
-              return;
-            }
-            if (existingBody.comments.some(comment =>
-              `${comment.text ?? ''}${comment.commentText ?? ''}`.includes(marker))) {
-              core.info(`${ticket} already carries the verdict for ${sha.slice(0, 12)}; nothing to post.`);
-              return;
-            }
-
+            // `kind: qa` keeps the line in the ticket thread people read: an
+            // agent comment without a kind is filed in the hidden agent log. The
+            // per-commit key makes a re-run or an edited verdict a no-op (YPER4-925).
             const response = await appRequest('/api/mcp/comments', {
               method: 'POST',
               headers: { 'Idempotency-Key': `ai-review-mirror-${prNumber}-${sha}` },
-              // `kind: qa` keeps the verdict in the ticket thread people read:
-              // an agent comment without a kind is filed in the hidden agent log.
               body: JSON.stringify({ ticket_number: ticket, kind: 'qa', text }),
             });
             const result = await response.json().catch(() => ({}));
@@ -230,4 +214,4 @@ jobs:
               );
               return;
             }
-            core.info(`Mirrored ${verdict} for ${sha.slice(0, 12)} to ${ticket}: ${result.url ?? 'saved'}`);
+            core.info(`Mirrored ${verdictWord} for ${sha.slice(0, 12)} to ${ticket}: ${result.url ?? 'saved'}`);

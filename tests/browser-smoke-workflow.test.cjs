@@ -363,3 +363,20 @@ esac
     assert.match(calls, /workflow run automerge\.yml/, label);
   }
 });
+
+test("every required PR smoke spec navigates through the shared readiness gate", async () => {
+  const specs = ["prod", "layout-lock", "layout-lock-matrix", "agent-sidebar-chats", "inbox-cycle"];
+  const gate = await source("e2e/smoke/lib/appReady.ts");
+
+  for (const spec of specs) {
+    const body = await source(`e2e/smoke/${spec}.spec.ts`);
+    assert.match(body, /from '\.\/lib\/appReady'/, `${spec} does not use the shared navigation gate`);
+    assert.doesNotMatch(body, /import \{ test, expect[^}]*\} from '@playwright\/test'/, `${spec} bypasses the shared navigation gate`);
+  }
+
+  assert.match(gate, /__reactFiber\$/, "the gate does not prove React hydration");
+  assert.match(gate, /MutationObserver/, "the gate does not wait for the document to stop changing");
+  assert.match(gate, /page\.goto =/, "the gate does not wrap page.goto");
+  assert.match(gate, /page\.reload =/, "the gate does not wrap page.reload");
+  assert.match(gate, /timeout: MAX_WAIT_MS/, "the gate has no bounded wait");
+});

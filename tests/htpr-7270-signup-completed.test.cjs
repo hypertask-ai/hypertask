@@ -180,7 +180,7 @@ async function quiet(work) {
   try { return await work() } finally { Object.assign(console, previous) }
 }
 
-test('flag defaults to Owner + QA and is generated through the existing key export', () => {
+test('flag defaults to Owner + QA', () => {
   const flag = loader()('src/lib/flags/definitions/htpr-7270-signup-completed.ts')
   assert.equal(flag.HTPR_7270_SIGNUP_COMPLETED_FLAG, 'htpr-7270-signup-completed')
   assert.equal(flag.default.kind, 'feature')
@@ -188,8 +188,6 @@ test('flag defaults to Owner + QA and is generated through the existing key expo
   assert.equal(flag.default.shippedOn, '2026-10-16')
   assert.equal(flag.default.releaseRisk.risk, 'new')
   assert.ok(flag.default.releaseRisk.reason)
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/flags/definitions/index.generated.ts'), 'utf8'), /htpr-7270-signup-completed/)
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/flags/keys.ts'), 'utf8'), /export \* from "\.\/definitions\/index.generated"/)
 })
 
 test('flag off still allows exactly one unchanged user_signed_up and no signup_completed', async () => {

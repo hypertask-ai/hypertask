@@ -41,6 +41,7 @@ function pagesSmoke() {
       return JSON.stringify(fixture);
     } };
     if (name.startsWith("node:") || name === "zod") return require(name);
+    if (name === "./lib/appReady") return { test: register, expect };
     if (name === "./lib/errorPage") return {};
     if (name === "./lib/realtime") return { withRealtime: value => value };
     if (name === "./lib/tier") return { tieredId: value => value };

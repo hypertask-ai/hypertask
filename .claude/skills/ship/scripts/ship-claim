@@ -5,7 +5,7 @@
 #   ship-claim hold <TICKET>                            read-only: would unfinished work, the queue brake or infra first refuse this claim?
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error,
 #   4 HOLD (this RUNNER n has open PRs or unfinished merged work: finish it, claim nothing new; or, for an app
-#   ticket, the PR queue is full (more than QUEUE_MAX open non-draft PRs: infra only) or a free Fleet Infra ticket waits).
+#   ticket, the PR queue is full (more than QUEUE_MAX open non-draft PRs: infra and CI only) or a free Fleet Infra ticket waits).
 # Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id, then log ids.
 # Ownership is the claim id in the comment text, not the agent name: the harness session id, or the
 # last word of the resume command when the harness gives none. Assignment is never
@@ -71,10 +71,10 @@ decide() {
       end' "$2"
 }
 
-QUEUE_MAX=20  # queue brake: above this many open non-draft PRs, RUNNER n may claim YPER4 (Fleet Infra) tickets only
+QUEUE_MAX=20  # queue brake: above this many open non-draft PRs, RUNNER n may claim YPER4 (Fleet Infra) and HYCI (CI) tickets only
 
 # Infra first (Valentin, 2026-10-27: "infrastructure fixes always go first, in code, not prose"). After the open-PR and
-# unfinished-merged-work holds, a NEW app (non-YPER4) claim is refused while more than QUEUE_MAX non-draft PRs are open
+# unfinished-merged-work holds, a NEW app (non-YPER4, non-HYCI) claim is refused while more than QUEUE_MAX non-draft PRs are open
 # or while board 4060 Backlog has a free ticket (no agent, no agent assignee, not "do not touch"). Reads every page.
 # A ticket that already has an open PR is adoption, not new work, and is never braked.
 infra_free() {
@@ -138,7 +138,7 @@ hold_check() {
         || { echo "ship-claim: HOLD. Cannot read RUNNER $rn assignments." >&2; return 4; }
       while IFS=$'\t' read -r ticket project number; do
         [ -n "$ticket" ] || continue
-        [[ $ticket =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
+        [[ $ticket =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
           || { echo "ship-claim: HOLD. Invalid assigned ticket on board $board." >&2; return 4; }
         merged=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$ticket in:title" --limit 100 --json number,title) \
           || { echo "ship-claim: HOLD. Cannot read merged PRs for $ticket." >&2; return 4; }
@@ -170,11 +170,11 @@ hold_check() {
       or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))' <<<"$open" >/dev/null; then
     return 0
   fi
-  [[ $t == YPER4-* ]] && return 0  # Fleet Infra work is never braked
+  [[ $t == YPER4-* || $t == HYCI-* ]] && return 0  # Fleet Infra and CI work are never braked (Valentin, 2026-10-31: "CI work only, so CI gets fixed first")
   n=$(jq -e '[.[] | select(.isDraft | not)] | length' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot count open PRs for RUNNER $rn." >&2; return 4; }
   if [ "$n" -gt "$QUEUE_MAX" ]; then
-    echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) ticket or nothing."
+    echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) or HYCI (CI) ticket, or nothing."
     return 4
   fi
   free=$(infra_free) \
@@ -187,7 +187,7 @@ hold_check() {
 }
 
 if [ "${1:-}" = hold ]; then
-  [[ ${2:-} =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim hold <TICKET>" >&2; exit 2; }
+  [[ ${2:-} =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ ]] || { echo "usage: ship-claim hold <TICKET>" >&2; exit 2; }
   hold_check "$2"; rc=$?; [ "$rc" = 0 ] && echo "ship-claim: no hold for ${SHIP_SESSION_NAME:-this session} on $2"; exit "$rc"
 fi
 
@@ -199,7 +199,10 @@ if [ "${1:-}" = decide ]; then
 fi
 
 T=${1:-}
-[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN> [\"<resume command>\"]" >&2; exit 2; }
+[[ $T =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4|HYCI-NNNN> [\"<resume command>\"]" >&2; exit 2; }
+# The board a ticket lives on, so a refusal can name it. HYCI is the CI board (11514), owned by CI Boss.
+case "$T" in HTPR-*|HYFA-*) TICKET_BOARD=15 ;; YPER4-*) TICKET_BOARD=4060 ;; HYCI-*) TICKET_BOARD=11514 ;; *) TICKET_BOARD='' ;; esac
+ticket_board_name() { case "$1" in 15) echo "Hypertask" ;; 4060) echo "Fleet Infra" ;; 11514) echo "Hypertask CI" ;; *) echo "its own" ;; esac; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}
 SID=${CLAUDE_CODE_SESSION_ID:-}
 case "${2:-}" in
@@ -227,12 +230,21 @@ if [[ $T == HTPR-* ]]; then
   [ "$rc" = 0 ] || exit "$rc"
 fi
 
-if [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+# A CI ticket has no working area; its board (11514) decides who joins (YPER4-980).
+if [[ $T != HYCI-* && ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
   python3 "$(dirname "$(readlink -f "$0")")/runner-domain-admit.py" "${BASH_REMATCH[1]}" "$T" \
     || { echo "ship-claim: HOLD. Domain admission failed." >&2; exit 4; }
 fi
 
-"$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
+assigned=$("$VCC" task assign "$T" --self 2>&1 >/dev/null) || {
+  if grep -qi 'not a member' <<< "$assigned"; then
+    me=${SHIP_SESSION_NAME:-$("$(dirname "$(readlink -f "$0")")/ship-identity" | cut -f1)}
+    echo "ship-claim: REFUSED. board $TICKET_BOARD ($(ticket_board_name "$TICKET_BOARD")) does not list member \"$me\" for $T." >&2
+    echo "ship-claim: the board decides who may join it; ask its owner to add \"$me\". Do NOT start work." >&2
+    exit 4
+  fi
+  echo "ship-claim: assign failed: $assigned" >&2; exit 2
+}
 "$VCC" activity add "$T" "Claimed. Session working it now. Claim id: [$RID]
 Next: I examine and fix it. Resume: $RESUME" >/dev/null \
   || { echo "ship-claim: claim activity failed" >&2; exit 2; }

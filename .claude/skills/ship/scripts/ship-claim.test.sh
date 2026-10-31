@@ -181,6 +181,7 @@ cat > "$D/vcc" <<'EOF'
 echo "$*" >> "$FAKE_LOG"
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_NOT_MEMBER:-}" ]; then echo "Agent is not a member of this board" >&2; exit 1; fi
 if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
   jq --arg id "new-activity-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
   mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
@@ -203,7 +204,7 @@ EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
-[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* ]] || exit 1
+[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HYCI-30/agent-activity?limit=100'* ]] || exit 1
 if [ -n "${FAKE_AGENT_LOG:-}" ]; then
   offset=0; [[ "$2" == *'&offset='* ]] && offset=${2##*&offset=}
   [ -z "${FAKE_REPEAT_ACTIVITY:-}" ] || offset=0
@@ -249,6 +250,25 @@ if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 out=$(FAKE_ASSIGN_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
 eq "assignment failure stops the claim" "$rc" 2
 if grep -qE '^(comment|activity) add |^task move ' "$D/log"; then bad "failed assignment published a claim"; else ok "failed assignment leaves comments and log untouched"; fi
+
+# A CI ticket (HYCI) claims in one command when the board accepts the member.
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+: > "$D/log"; out=$(./ship-claim HYCI-30); rc=$?
+eq "CI ticket claim in one command" "$rc" 0
+grep -q '^task assign HYCI-30 --self' "$D/log" && grep -q '^task move HYCI-30 --section In Progress' "$D/log" \
+  && ok "CI ticket claims through the same steps" || bad "CI claim wrote nothing"
+
+# The read-only hold check reads a CI ticket too.
+out=$(SHIP_CLAIM_GH=$D/hold-gh HOLD_OPEN='[]' SHIP_CLAIM_HYPERTASK=$D/hold-ht HOLD_BOARD=$D/board.json ./ship-claim hold HYCI-30 2>&1); rc=$?
+[[ $out != *'usage: ship-claim hold'* ]] && ok "hold reads a CI ticket" || bad "hold refused a CI ticket: $out"
+
+# A board that refuses the member names the board and the member, and writes nothing else.
+mk
+: > "$D/log"; out=$(FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
+eq "member refusal stops the claim" "$rc" 4
+[[ $out == *'board 11514 (Hypertask CI)'* && $out == *'does not list member'* ]] \
+  && ok "refusal names the board and the missing member" || bad "unclear refusal: $out"
+grep -qE '^(comment|activity) add |^task move ' "$D/log" && bad "member refusal published a claim" || ok "member refusal writes nothing"
 
 # Hand-over replay through the full flow (task read via the stub).
 cp fixtures/ship-claim-y243-comments.json "$D/c.json"
@@ -485,6 +505,7 @@ prs 20; eq "queue exactly 20 -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, app ticket -> hold" "$(holdrc 'RUNNER 6' HTPR-1)" 4
 grep -q 'queue full: infra only (21 open non-draft PRs > 20)' "$D/hold-out" && ok "queue brake message" || bad "queue brake message: $(cat "$D/hold-out")"
 prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
+prs 21; eq "queue 21, CI ticket -> allowed" "$(holdrc 'RUNNER 6' HYCI-30)" 0
 prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "no runner name -> no brake" "$(SHIP_SESSION_NAME= ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 0
 prs 5; free_infra YPER4-4 free
@@ -523,5 +544,12 @@ prs_own 5 runner16/htpr-7-x HTPR-7
 eq "runner 1 never matches runner 16 branch names" "$(holdrc 'RUNNER 1' HTPR-1)" 0
 eq "runner 16 own PR holds runner 16" "$(holdrc 'RUNNER 16' HTPR-1)" 4
 printf '[]' > "$HOLD_OPEN"; empty_infra
+
+# A runner claims a CI ticket: no working-area check, so no usage error (YPER4-980).
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
+: > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim HYCI-30 2>&1); rc=$?
+eq "a runner claims a CI ticket" "$rc" 0
+[[ $out != *'Domain admission failed'* ]] && ok "a CI claim skips the working-area check" || bad "a CI claim hit the area check: $out"
+grep -q '^task move HYCI-30 --section In Progress' "$D/log" && ok "a runner's CI claim reaches the move" || bad "a runner's CI claim wrote nothing"
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

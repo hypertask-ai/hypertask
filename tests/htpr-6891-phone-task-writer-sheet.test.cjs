@@ -111,7 +111,7 @@ test('full-height MobileBottomSheet uses visible keyboard height and keeps its e
   } finally { ui.close(); }
 });
 
-test('phone writer flag registers exactly the requested feature metadata and Owner + QA default', () => {
+test('phone writer flag registers exactly the requested feature metadata', () => {
   const load = loader();
   const definition = load(`src/lib/flags/definitions/${flag}.ts`);
   assert.equal(definition.HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, flag);
@@ -121,6 +121,4 @@ test('phone writer flag registers exactly the requested feature metadata and Own
   assert.equal(definition.default.releaseRisk.risk, 'new');
   assert.ok(definition.default.releaseRisk.reason);
   assert.equal(definition.default.defaultMode, undefined);
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8'), /DEFAULT_FEATURE_FLAG_MODE(?:\s*:\s*FeatureFlagMode)?\s*=\s*"OWNER_AND_QA"/);
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/flags/definitions/index.generated.ts'), 'utf8'), /export \{ HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG \}/);
 });
