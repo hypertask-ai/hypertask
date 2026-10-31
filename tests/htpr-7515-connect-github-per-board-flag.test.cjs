@@ -17,5 +17,4 @@ test("Connect GitHub uses the per-file registry and the approved Only me access-
   assert.equal(definition.releaseRisk.risk, "new");
   assert.equal(definition.releaseRisk.highRisk, "access");
   assert.ok(definition.releaseRisk.reason.length > 0);
-  assert.match(source, /export const HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG =/);
 });

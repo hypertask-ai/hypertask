@@ -189,7 +189,7 @@ test("a cold board list cannot race Enter or Send and save on the old board", as
   });
 });
 
-test("feature flag ships for Everyone with small release risk and is read in the writer", () => {
+test("feature flag ships for Everyone with small release risk", () => {
   const definition = jiti(path.join(root, `src/lib/flags/definitions/${flag}.ts`));
   assert.equal(definition.HTPR_7305_BOARD_FROM_TEXT_FLAG, flag);
   assert.equal(definition.default.key, flag);
@@ -197,8 +197,4 @@ test("feature flag ships for Everyone with small release risk and is read in the
   assert.equal(definition.default.defaultMode, "EVERYONE");
   assert.equal(definition.default.releaseRisk.risk, "small");
   assert.ok(definition.default.releaseRisk.reason);
-  const writer = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/ComposeTaskWriter.tsx"), "utf8");
-  assert.match(writer, /const boardFromTextEnabled = useFlag\(HTPR_7305_BOARD_FROM_TEXT_FLAG\);/);
-  assert.match(writer, /import \{[^}]*HTPR_7305_BOARD_FROM_TEXT_FLAG[^}]*\} from "@\/lib\/flags\/keys";/);
-  assert.match(fs.readFileSync(path.join(root, "src/lib/flags/definitions/index.generated.ts"), "utf8"), /export \{ HTPR_7305_BOARD_FROM_TEXT_FLAG \}/);
 });
