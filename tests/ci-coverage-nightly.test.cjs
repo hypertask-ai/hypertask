@@ -37,7 +37,7 @@ test("metadata changes cannot restart or skip required CI, and PR/push tests col
   assert.equal(push.env.HT_REQUIRE_PG_TESTS, "${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}");
   assert.match(push.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/ci-shard-upload\/shard-\$\{SHARD\}\.log"/);
   assert.equal(ci.jobs["ci-test"].strategy["fail-fast"], false);
-  assert.equal(String(ci.env.CI_TEST_SHARDS), "3");
+  assert.equal(String(ci.env.CI_TEST_SHARDS), "4");
 });
 
 test("nightly diagnostics run the full production suite without publishing a required check", () => {
