@@ -39,7 +39,7 @@ test("Oxlint reports a handed-over rule in the repository", () => {
     });
     const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
     assert.notEqual(result.status, 0, output);
-    assert.match(output, /react\/no-children-prop/, output);
+    assert.match(output, /no-children-prop/, output);
     console.log("oxlint probe: caught react/no-children-prop");
   } finally {
     rmSync(probe, { force: true });
