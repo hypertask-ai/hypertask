@@ -1,3 +1,5 @@
+import { AgentWritingError } from '@/lib/agents/writing'
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -288,6 +290,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       }
     }
 
+    await enforceAgentWriting(ctx.agentId, { text: sanitizedText }, { text: comment.text })
     const updatedComment = await updateCommentService({
       commentId,
       text: sanitizedText,
@@ -353,6 +356,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
 
     return NextResponse.json(response)
   } catch (error) {
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
     console.error('[MCP PATCH Comment] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

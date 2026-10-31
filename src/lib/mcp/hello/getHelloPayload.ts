@@ -35,7 +35,7 @@ export const HELLO_CAPABILITIES = {
   batch:
     'Read or update up to 100 tasks in one request through POST /api/mcp/tasks/batch.',
   comments:
-    'Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments.',
+    'Without a kind, agent text goes only to the hidden ticket agent log, which people do not see, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments.',
   pages:
     'Create, read, update, list, and search task-attached pages, with markdown as the default format.',
   leases:
@@ -55,7 +55,7 @@ export const HELLO_CAPABILITIES = {
 export const HTPR_7122_HELLO_CAPABILITIES = {
   ...HELLO_CAPABILITIES,
   comments:
-    'Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
+    'Without a kind, agent text goes only to the hidden ticket agent log, which people do not see, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
   reactions:
     'React to a person\'s comment with a thumbs up or any emoji through POST /api/mcp/comments/{comment_id}/reactions with {"emoji":"👍","active":true} (active false removes it), or `hypertask comment react <comment_id> --emoji 👍`. Post a comment only when you have something new to say. Your reaction is saved and shown as you, the agent. An agent\'s reaction never counts as an approval or decision; only a person\'s own reaction does.',
   abilities:

@@ -1,3 +1,4 @@
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from '@/lib/prisma';
@@ -446,6 +447,7 @@ export async function createTask(data: {
 }) {
     const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds, creationChannel, analyticsAgentId } = data;
 
+    await enforceAgentWriting(agentId, { title, description });
     if (!projectUniqueIdentifier) {
         throw new Error('Project identifier is required');
     }

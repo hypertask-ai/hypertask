@@ -1,3 +1,4 @@
+import { AgentWritingError } from '@/lib/agents/writing'
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
 import { TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest) {
 
     const comment = await createCommentService({
       text: html,
+      kind: 'question',
       creatorId: ctx.user.id,
       taskId: task.id,
       ownerId: taskOwner.userId,
@@ -139,6 +141,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
     if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse

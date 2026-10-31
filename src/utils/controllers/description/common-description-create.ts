@@ -1,3 +1,4 @@
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import prisma from "@/lib/prisma";
 import { assertAgentAssignmentChangeAllowed } from "@/lib/mcp/tasks/agentMutationFence";
@@ -8,6 +9,7 @@ interface IParams {
   taskId: number;
   creatorId: number;
   content?: string;
+  previousContent?: string | null;
   agentId?: string | null;
   teamScope?: AgentTokenTeamScope | null;
   actingUserId: number;
@@ -47,7 +49,8 @@ const upsertTaskDescription = async (
       select: { content: true },
     });
 
-    const oldContent = existing?.content ?? "";
+    const oldContent = existing?.content ?? data.previousContent ?? "";
+    await enforceAgentWriting(agentId, { description: content }, { description: oldContent });
     if (existing && oldContent !== content) {
       const priorVersions = await tx.docVersion.count({
         where: { entityType: "task_description", entityId: taskId },

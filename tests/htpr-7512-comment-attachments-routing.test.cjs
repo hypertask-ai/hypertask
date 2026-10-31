@@ -13,9 +13,9 @@ function assertComment(response, calls, kind = null) {
   assert.equal(calls.broadcasts.length, 1)
 }
 
-test('untyped agent post with attachment intent stays a comment with an uploadable id', async () => {
+test('typed agent post with attachment intent has an uploadable id', async () => {
   const { post, calls } = setup()
-  assertComment(await post({ has_attachments: true }), calls)
+  assertComment(await post({ has_attachments: true, kind: 'qa' }), calls, 'qa')
 })
 
 for (const body of [{}, { has_attachments: false }]) {
@@ -55,30 +55,22 @@ for (const body of [{}, { has_attachments: true }, { has_attachments: false }]) 
   }
 }
 
-test('attachment-intent flag off restores agent log routing', async () => {
-  const { post, calls } = setup({ attachFlag: false })
-  const response = await post({ has_attachments: true })
-  assert.equal(response.status, 201)
-  assert.equal(response.body.routedTo, 'log')
-  assert.equal(response.body.activity.id, 'activity-1')
-  assert.equal(calls.comments.length, 0)
-})
-
-test('attachment flag does not change legacy comments or image exceptions', async () => {
-  const legacy = setup({ flag: false, attachFlag: false })
-  assertComment(await legacy.post({ has_attachments: true }), legacy.calls)
-  const images = setup({ attachFlag: false })
-  assertComment(await images.post({ images: ['https://example.com/a.png'] }), images.calls)
-})
-
-test('dry run reports attachment-intent routing without persisting', async () => {
-  for (const [attachFlag, expected] of [[true, 'comments'], [false, 'log']]) {
-    const { post, calls } = setup({ attachFlag })
-    const response = await post({ has_attachments: true, dry_run: true })
-    assert.equal(response.status, 200)
-    assert.equal(response.body.would.routedTo, expected)
-    assert.equal(calls.comments.length + calls.activities.length + calls.runs.length, 0)
+test('old attachment flags never expose an untyped note or lose files', async () => {
+  for (const body of [{ has_attachments: true }, { images: ['https://example.com/a.png'] }]) {
+    const { post, calls } = setup({ flag: false, attachFlag: false })
+    assert.equal((await post(body)).status, 400)
+    assert.equal(calls.comments.length + calls.activities.length, 0)
+    assertComment(await post({ ...body, kind: 'qa' }), calls, 'qa')
   }
+})
+
+test('dry run requires an explicit attachment kind without persisting', async () => {
+  const { post, calls } = setup()
+  assert.equal((await post({ has_attachments: true, dry_run: true })).status, 400)
+  const response = await post({ has_attachments: true, kind: 'qa', dry_run: true })
+  assert.equal(response.status, 200)
+  assert.equal(response.body.would.routedTo, 'comments')
+  assert.equal(calls.comments.length + calls.activities.length + calls.runs.length, 0)
 })
 
 test('MCP add schemas accept only boolean attachment intent and reject it on other actions', () => {
@@ -128,6 +120,7 @@ for (const attachments of [undefined, [], [{ filename: 'evidence.csv', content_t
         const resultPromise = addCommentTool.execute({
           task_id: 99,
           text: 'Evidence for review',
+          kind: 'qa',
           ...(attachments === undefined ? {} : { attachments }),
           ...(has_attachments === undefined ? {} : { has_attachments }),
         }, 'test-token')
@@ -140,9 +133,9 @@ for (const attachments of [undefined, [], [{ filename: 'evidence.csv', content_t
         const expectedIntent = attachments?.length ? true : has_attachments
         assert.deepEqual(requests[0], {
           url: '/mcp/comments',
-          body: { task_id: 99, text: 'Evidence for review', ...(expectedIntent === undefined ? {} : { has_attachments: expectedIntent }) },
+          body: { task_id: 99, text: 'Evidence for review', kind: 'qa', ...(expectedIntent === undefined ? {} : { has_attachments: expectedIntent }) },
         })
-        const staysComment = attachFlag && expectedIntent === true
+        const staysComment = true
         assert.equal(result.routedTo, staysComment ? 'comments' : 'log')
         assert.equal(result.comment?.id, staysComment ? 42 : undefined)
         assert.equal(route.calls.comments.length, staysComment ? 1 : 0)

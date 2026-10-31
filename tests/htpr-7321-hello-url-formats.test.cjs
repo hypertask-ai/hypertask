@@ -58,7 +58,7 @@ test("each board keeps its ticket template and gains its own board link", async 
 test("both hello capability modes explain hidden agent logs and human-facing kinds", () => {
   const mod = loadHello([board]);
   for (const capabilities of [mod.HELLO_CAPABILITIES, mod.HTPR_7122_HELLO_CAPABILITIES]) {
-    assert.match(capabilities.comments, /^Without a kind, a reply target or an @mention of a person/);
+    assert.match(capabilities.comments, /^Without a kind, agent text goes only to the hidden ticket agent log/);
     assert.match(capabilities.comments, /hidden ticket agent log, which people do not see/);
     assert.match(capabilities.comments, /question for a decision by a person/);
     assert.match(capabilities.comments, /qa for a QA verdict/);

@@ -31,13 +31,14 @@ function removalDescription(key: string, releasedAt: Date) {
   const released = releasedAt.toISOString().slice(0, 10);
   const days = removalWindowForFlag({ key });
   return (
-    `<p><strong>Delete the feature flag <code>${key}</code> and the code branch it guards.</strong></p>` +
-    `<ul><li><p>It has been on <strong>Everyone</strong> since ${released}, which is more than ` +
-    `${days} days, so the behaviour behind it is permanent.</p></li>` +
-    `<li><p>Remove the key from <code>FEATURE_FLAG_DEFINITIONS</code>, delete every <code>useFlag</code> ` +
-    `and server check for it, keep the enabled branch, and add a migration deleting the stored row.</p></li>` +
-    `<li><p>Filed automatically by the feature flag removal sweep. Press <strong>Keep</strong> on ` +
-    `<a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a> to stop this for a flag.</p></li></ul>`
+    `<p><strong>Keep this released change. Remove its safety switch.</strong></p>` +
+    `<p>Switch: <a href="${FEATURE_FLAG_ADMIN_URL}/${key}"><code>${key}</code></a></p>` +
+    `<ul><li><p>Live for <strong>Everyone</strong> since ${released}.</p></li>` +
+    `<li><p>Live for more than ${days} days.</p></li>` +
+    `<li><p>Keep enabled behaviour. Remove the switch and unused alternative.</p></li>` +
+    `<li><p>Remove its saved setting too.</p></li>` +
+    `<li><p>Need to keep it? Choose <strong>Keep</strong> on ` +
+    `<a href="${FEATURE_FLAG_ADMIN_URL}">the flags page</a>.</p></li></ul>`
   );
 }
 

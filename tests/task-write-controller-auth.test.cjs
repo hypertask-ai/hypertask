@@ -57,6 +57,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
+  stubs = withStubs({ "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}) }, stubs);
   stubs = withStubs({ "@/lib/planLimits": { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {} }, "@/lib/storage/verifyTaskAttachmentLinks": { verifyTaskAttachmentLinks: async () => new Map() } }, stubs);
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;

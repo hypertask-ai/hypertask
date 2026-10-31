@@ -14,6 +14,7 @@ const client = {
 };
 const javascript = new Map();
 function load(file, stubs) {
+  stubs = withStubs({ "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}) }, stubs);
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   if (!javascript.has(file)) javascript.set(file, ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },

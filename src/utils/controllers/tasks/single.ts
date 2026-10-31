@@ -1,3 +1,5 @@
+import { AgentWritingError } from '@/lib/agents/writing'
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { assertTaskCountTransition, isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -161,6 +163,7 @@ export async function updateTaskSingle(
       }
     }
 
+    await enforceAgentWriting(agentId, newTask, { title: oldTask.title, description: oldTask.description_?.content ?? oldTask.description });
     recordAgentBoardScopeMiss(oldTask.projectId, "write");
     let taskBeforeWrite = oldTask;
     let sectionChanged = false;
@@ -510,6 +513,7 @@ export async function updateTaskSingle(
             upsertTaskDescription(
               {
                 content: requestedMutation.description as string,
+                previousContent: currentState.description_?.content ?? currentState.description,
                 taskId: newTask.id,
                 creatorId: taskBeforeWrite.userId!,
                 agentId: agentId ?? null,
@@ -764,6 +768,7 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field } };
     if (isPlanLimitReachedError(error)) {
       const refusal = planLimitResponse(error);
       return { status: refusal.status, json: refusal.body };

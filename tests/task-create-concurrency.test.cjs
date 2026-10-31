@@ -8,6 +8,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 
 function load(relativePath, stubs) {
+  stubs = withStubs({ "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}) }, stubs);
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const javascript = ts.transpileModule(
     fs.readFileSync(path.join(root, relativePath), "utf8"),

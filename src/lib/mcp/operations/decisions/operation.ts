@@ -1,3 +1,5 @@
+import { AgentWritingError } from '@/lib/agents/writing'
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
 import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
@@ -53,7 +55,7 @@ function decisionCommentHtml(question: string, options: string[]) {
   return sanitizeRichHtml(
     `<p><strong>Decision needed:</strong> ${question}</p>` +
       `<ol>${optionItems}</ol>` +
-      '<p>Reply with your choice, or this will be answerable from the UI soon.</p>'
+      '<p>Reply with your choice.</p>'
   )
 }
 
@@ -181,6 +183,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const commentText = decisionCommentHtml(question, options)
+    await enforceAgentWriting(ctx.agentId, { text: commentText })
+
     const decisionRequestWrite = (tx: import('@prisma/client').Prisma.TransactionClient) => tx.decisionRequest.create({
       data: {
         taskId: task.id,
@@ -197,7 +202,8 @@ export async function POST(request: NextRequest) {
     }) : await decisionRequestWrite(prisma)
 
     const comment = await createCommentService({
-      text: decisionCommentHtml(question, options),
+      text: commentText,
+      kind: 'question',
       creatorId: ctx.user.id,
       taskId: task.id,
       ownerId: taskOwner.userId,
@@ -224,6 +230,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
     if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse

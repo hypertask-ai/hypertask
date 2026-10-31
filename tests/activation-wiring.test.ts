@@ -16,6 +16,7 @@ const timed = (captures: any[]) => captures.map(({ timestamp, ...capture }) => {
 function taskController(h: ReturnType<typeof activationHarness>) {
   const noop = async () => undefined;
   Object.assign(h.mocks, {
+    "@/lib/agents/writing": h.load("src/lib/agents/writing.ts"),
     "@/lib/tasks/sameBoardRelations": h.load("src/lib/tasks/sameBoardRelations.ts"),
     "@/utils/controllers/tasks/parentTaskAccess": h.load("src/utils/controllers/tasks/parentTaskAccess.ts"),
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },

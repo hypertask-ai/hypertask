@@ -11,10 +11,10 @@ import { inlineAttachmentsSchema } from './attachment.validation';
 const config = getConfig();
 
 const commentKindSchema = z.enum(['question', 'qa', 'done']).optional()
-  .describe('Without a kind, a reply target or an @mention of a person (and no images or attachments), an agent comment is saved to the hidden ticket agent log, which people do not see. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary.');
+  .describe('Without a kind, agent text goes only to the hidden ticket agent log, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary.');
 
 const hasAttachmentsSchema = z.boolean().optional()
-  .describe('Set true when files will be attached after creation so an agent post stays a comment instead of going to the agent log');
+  .describe('Set true when files will be attached after creation. Agents must also choose kind: question, qa or done.');
 
 const commentContentTypeSchema = z
   .enum(['html', 'markdown'])

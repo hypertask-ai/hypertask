@@ -56,6 +56,7 @@ function loader(stubs, logger) {
       module: mod, exports: mod.exports, console: logger, Error, Date, Object, Set, Map,
       Response, Headers, Request, Buffer, URL, TextEncoder, TextDecoder,
       require(id) {
+        if (id === "@/lib/agents/writing") return require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {});
         if (Object.hasOwn(stubs, id)) return { __esModule: true, ...stubs[id] };
         if (id === "crypto" || id.startsWith("node:")) return require(id);
         const base = id.startsWith("@/")

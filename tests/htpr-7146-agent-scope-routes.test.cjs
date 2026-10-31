@@ -342,7 +342,7 @@ test('comment creation by authenticated agent refuses board 2128 before dedupe o
   }).POST;
   for (const task of f.tasks) {
     f.writes.length = 0;
-    const result = await route(request('/api/mcp/comments', { task_id: task.id, text: 'After' }));
+    const result = await route(request('/api/mcp/comments', { task_id: task.id, text: 'After', kind: 'qa' }));
     assert.equal(result.status, task.projectId === 2128 ? 404 : 201);
     assert.equal(f.writes.length, task.projectId === 2128 ? 0 : 1);
   }
@@ -502,7 +502,7 @@ for (const mode of ['WATCH', 'ENFORCE']) {
             '@/lib/mcp/tasks/services': { validateProjectMemberIds: async () => ({ invalidIds: [] }) },
             '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async () => new Map() },
           }).POST;
-          invoke = board => route(request('/api/mcp/comments', { task_id: board * 10, text: 'Never in telemetry' }));
+          invoke = board => route(request('/api/mcp/comments', { task_id: board * 10, text: 'Never in telemetry', kind: 'qa' }));
         }
         for (const board of [15, 2128]) {
           f.writes.length = 0;

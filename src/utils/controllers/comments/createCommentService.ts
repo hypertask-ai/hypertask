@@ -1,3 +1,5 @@
+import { AgentWritingError } from '@/lib/agents/writing'
+import { agentWritingPolicyEnabled, enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import prisma from "@/lib/prisma";
 import idsToSendNotificationsTo from "@/utils/controllers/notifications/IdsToSendNotificationsTo";
 import { broadcastBoardChange, broadcastInboxChange, broadcastTaskComment } from "@/lib/realtime/server";
@@ -150,6 +152,11 @@ export async function createCommentService(params: CreateCommentParams) {
 
   if (!task) {
     throw new Error("Task not found or access denied");
+  }
+
+  if (!agentRunActivity && !agentRunSelection && !agentRunReplayComment && await agentWritingPolicyEnabled()) {
+    if (agentId && !params.kind) throw new AgentWritingError("kind", "Untyped agent notes must use the agent log");
+    await enforceAgentWriting(agentId, { text });
   }
 
   const existingInboundReceipt = inboundEmailId

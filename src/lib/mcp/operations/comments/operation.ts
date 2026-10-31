@@ -1,10 +1,12 @@
 import { getMcpSkillContext } from '@/lib/mcp/skills/context'
+import { AgentWritingError } from '@/lib/agents/writing'
+import { agentWritingPolicyEnabled, enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
-import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -54,7 +56,6 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
 import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
-import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
@@ -160,6 +161,8 @@ export type AddCommentResponse = {
 }
 
 type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentTokenTeamScope | null; displayName: string; source: 'agent' }
+
+class AgentLogUnavailableError extends Error {}
 
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
   const { runtimeAgentRunsEnabledFor } = await import('@/lib/agentRuns/service')
@@ -880,6 +883,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const writingPolicy = await agentWritingPolicyEnabled()
+    if (kind && writingPolicy) await enforceAgentWriting(ctx.agentId, { text: sanitizedText })
     const agentLogPrincipal = ctx.agentId
       ? {
           userId: user.id,
@@ -889,18 +894,27 @@ export async function POST(request: NextRequest) {
           source: 'agent' as const,
         }
       : null
-    const agentLogEntry = routeComment({
-      agentId: ctx.agentId,
-      kind,
+    if (writingPolicy && ctx.agentId && kind === undefined && (has_attachments || images?.length || /<img\b/i.test(sanitizedText) || (Array.isArray(body.attachments) && body.attachments.length))) {
+      return NextResponse.json(buildFieldError('missing_field', 'kind', 'Choose kind (question|qa|done) before attaching files to a people comment.'), { status: 400 })
+    }
+    const legacyRouting = writingPolicy ? undefined : {
+      flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
       mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
       hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
         (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
-      flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
+    }
+    const agentLogEntry = routeComment({
+      agentId: ctx.agentId,
+      kind,
+      legacy: legacyRouting,
     }) === 'log' && agentLogPrincipal
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)
       : null
+    if (writingPolicy && ctx.agentId && kind === undefined && !agentLogEntry) {
+      return NextResponse.json({ success: false, error: 'Agent log unavailable. Retry later or use kind (question|qa|done) for a people comment.' }, { status: 503 })
+    }
     const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
     const skillContext = await getMcpSkillContext(ctx, task.projectId, [text])
 
@@ -953,6 +967,7 @@ export async function POST(request: NextRequest) {
               activity: { id, runId, type, text, createdAt },
             }
           }
+          throw new AgentLogUnavailableError('Agent log unavailable. Retry later; no comment was published.')
         }
 
         const comment = await createCommentService({
@@ -1046,6 +1061,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ...mcpResponse, skill_context: skillContext }, { status: 201 })
   } catch (error) {
+    if (error instanceof AgentLogUnavailableError) return NextResponse.json({ success: false, error: error.message }, { status: 503 })
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
     if (isPlanLimitReachedError(error)) {
       const response = planLimitResponse(error);
       return NextResponse.json(response.body, { status: response.status });

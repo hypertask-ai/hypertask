@@ -259,6 +259,7 @@ function loadCommentsRoute({
       readListQuery: () => ({ listQuery: null }),
     },
   }
+  modules['@/lib/agents/writing'] = jiti(path.join(root, 'src/lib/agents/writing.ts'))
   const mockRequire = (request) => {
     if (request === './agentChatterRouting') return jiti(path.join(root, 'src/lib/mcp/operations/comments/agentChatterRouting.ts'))
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(modules)

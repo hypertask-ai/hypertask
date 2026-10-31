@@ -249,7 +249,7 @@ export async function runContract() {
     requireThat(projects.projects?.some(row => row.id === board.id), `${role}: seeded board missing`);
     taskRow(await call(token, "tasks", "get", { task_id: [board.task.id] }), board.task.id, board.task.title);
     taskRow(await call(token, "search", "tasks", { query: "contract", project_id: board.id }), board.task.id, board.task.title);
-    const title = `${role} contract ${randomUUID()}`;
+    const title = `${role} contract ${Date.now()}`;
     const created = await call(token, "tasks", "create", { project_id: board.id, title, section_id: board.columns[0].id });
     requireThat(Number.isInteger(created.task?.id) && created.task.title === title, `${role}: invalid created task`);
     const id = created.task.id;
