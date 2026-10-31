@@ -5,6 +5,11 @@ on:
     paths:
       - .github/workflows/e2e-ai-pilot.yml
       - e2e/ai-pilot/**
+# A newer push on the same pull request owns the result; the older run's jobs
+# would only queue behind it (YPER4-663).
+concurrency:
+  group: e2e-ai-pilot-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   E2E_TELEMETRY_DISABLED: '1'
 permissions:
