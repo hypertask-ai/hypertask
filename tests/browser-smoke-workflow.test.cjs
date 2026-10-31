@@ -519,3 +519,22 @@ test("HYCI-32: the two halves split the browser projects with nothing lost and n
   ].sort();
   assert.deepEqual([...seen.keys()].sort(), expected);
 });
+
+test("HYCI-32: the two halves never publish an artifact under one name", async () => {
+  // upload-artifact v4 refuses a second artifact with the same name in one run,
+  // so a shared failure-artifact name would hide the second half's screenshots
+  // exactly when both halves are red.
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const names = [];
+  for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
+    for (const step of workflow.jobs[key].steps) {
+      if (!step.uses?.startsWith("actions/upload-artifact@")) continue;
+      assert.ok(step.with?.name, `${key} uploads an artifact with no name`);
+      names.push(step.with.name);
+    }
+  }
+  assert.equal(names.length, 5);
+  assert.deepEqual(new Set(names).size, names.length, `duplicate artifact names: ${names.join(", ")}`);
+  assert.ok(names.includes("app-build"));
+});
