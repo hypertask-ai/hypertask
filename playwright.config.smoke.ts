@@ -16,7 +16,7 @@ export default defineConfig({
   testDir: './e2e/smoke',
   fullyParallel: true,
   retries: process.env.BROWSER_SMOKE_PR ? 0 : 1,
-  workers: 4,
+  workers: 8,
   reporter: [['list']],
   timeout: process.env.BROWSER_SMOKE_PR || process.env.SMOKE_POSTDEPLOY === '1' ? 50_000 : 20_000,
   use: {
