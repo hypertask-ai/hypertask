@@ -24,6 +24,33 @@ test("a wide fan-out across shared lib code runs the whole suite", async () => {
   assert.equal(await select(wide), "ALL");
 });
 
+test("a workflow change selects the test that names it", async () => {
+  const selected = await select([".github/workflows/ai-review-mirror.yml"]);
+  assert.notEqual(selected, "ALL");
+  assert.ok(selected.includes("tests/ai-review-mirror-workflow.test.cjs"));
+});
+
+test("a workflow change runs the tests that read it", async () => {
+  const selected = await select([".github/workflows/ci-tests.yml"]);
+  assert.notEqual(selected, "ALL");
+  assert.ok(selected.includes("tests/ci-parallel-checks.test.cjs"));
+});
+
+test("the selector, the sharding and the scope detector run the whole suite", async () => {
+  for (const file of [
+    ".github/scripts/select-tests.mjs",
+    ".github/scripts/shard-tests.mjs",
+    ".github/scripts/shard-containers.mjs",
+    ".github/scripts/ci-change-scope.cjs",
+  ]) {
+    assert.equal(await select([file]), "ALL", file);
+  }
+});
+
+test("a workflow no test names still runs the whole suite", async () => {
+  assert.equal(await select([`.github/workflows/${"no"}${"-test-names-this-qz"}.yml`]), "ALL");
+});
+
 test("a change no test references falls back to the whole suite", async () => {
   const unreferenced = `src/components/${"Unref"}${"erencedWidgetQqz"}.tsx`;
   assert.equal(await select([unreferenced]), "ALL");

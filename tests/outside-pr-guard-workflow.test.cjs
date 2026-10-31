@@ -291,5 +291,9 @@ test("test inventory discovers the guard and changed-test selection includes it"
   assert.ok(inventory.supported.includes(file));
   const selected = await selectTests([file]);
   assert.ok(selected === "ALL" || selected.includes(file));
-  assert.equal(await selectTests([workflowPath]), "ALL");
+  const forWorkflow = await selectTests([workflowPath]);
+  assert.ok(
+    forWorkflow === "ALL" || forWorkflow.includes(file),
+    "a change to the guard workflow must run the test that reads it",
+  );
 });
