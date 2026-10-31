@@ -175,7 +175,7 @@ test('timer is five minutes, low priority, bounded, and installation is explicit
   await assert.rejects(main(['--run', '39719731623']), /replay-only/);
 });
 
-function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], attempts = [], smoke = false, ciFails = true, log } = {}) {
+function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = false, history = [], attempts = [], smoke = false, ciFails = true, log, range = null, pulls = null } = {}) {
   const calls = [], run = (bin, args, options) => {
     calls.push([bin, args]);
     if (bin === 'python3') return execFileSync(bin, args, { encoding: 'utf8', input: options.input });
@@ -204,10 +204,13 @@ function fixtureCommand(data, { cancelled = true, greenOnly = false, paginate = 
     }
     if (route.includes('/compare/')) {
       assert.equal(route, `repos/hypertask-ai/hypertask/compare/${data.green.head_sha}...${data.run.head_sha}?per_page=100&page=1`);
+      if (range) return JSON.stringify({ status: 'ahead', total_commits: range.length, commits: range });
       return JSON.stringify({ status: 'ahead', total_commits: data.prs.length, commits: [...data.prs].reverse().map((pr, i) => ({
         sha: String(i).padStart(40, 'a'), commit: { message: `${pr.title} (#${pr.number})\n\nSquash body` }
       })) });
     }
+    const commitPulls = route.match(/\/commits\/([0-9a-f]+)\/pulls$/);
+    if (commitPulls) { assert.ok(pulls?.[commitPulls[1]], route); return JSON.stringify([pulls[commitPulls[1]]]); }
     if (route.endsWith('/logs')) return (typeof log === 'function' ? log(route) : log)
       ?? fs.readFileSync(path.join(here, 'fixtures/yper4-582', `${data.run.id}.log`), 'utf8');
     if (route.includes('/commits/')) {
@@ -592,6 +595,20 @@ test('both failed test jobs are read, so a red smoke never hides a failing ci-te
   const result = await live(mock.run).collect();
   assert.equal(result.status, 'failure');
   assert.deepEqual(result.failures.map(f => f.file), [data.failures[0].file, SMOKE_FAILURE.file]);
+});
+
+test('a merge commit and its branch commit fold into one merged PR instead of refusing the red', async () => {
+  const data = second(), pr = data.prs.at(-1), merge = 'b'.repeat(40), branch = 'c'.repeat(40);
+  const merged = { number: pr.number, title: pr.title, merged_at: '2026-10-22T12:00:00Z' };
+  const mock = fixtureCommand(data, {
+    range: [{ sha: merge, commit: { message: `Merge pull request #${pr.number} from hypertask-ai/runner\n\n${pr.title}` } },
+      { sha: branch, commit: { message: `${pr.title}\n\nBranch body` } }],
+    pulls: { [merge]: merged, [branch]: merged }
+  });
+  const result = await live(mock.run).collect();
+  assert.equal(result.status, 'failure');
+  assert.deepEqual(result.prs.map(p => p.number), [pr.number]);
+  assert.equal(result.prs[0].title, pr.title);
 });
 
 test('--run replays the first failed attempt of a run that was later rerun green', async () => {

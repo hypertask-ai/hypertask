@@ -147,11 +147,18 @@ function live(run = command) {
         if (commits.length === total) break;
         if (!comparison.commits.length || commits.length > total) throw new Error('Incomplete production commit range');
       }
-      const prs = [];
+      const prs = [], seen = new Set();
       for (const commit of commits.reverse()) {
         const sha = commit.sha, title = commit.commit.message.split('\n')[0];
-        const number = title.match(/\(#(\d+)\)$/)?.[1];
-        if (!number) throw new Error(`Non-squash commit ${sha} in production range; refusing to omit it`);
+        // A merge commit and its branch commits carry no (#N) suffix, so the merged PR is resolved from the
+        // commit itself and every commit of that PR is folded into one entry.
+        const squash = title.match(/\(#(\d+)\)$/);
+        const merged = squash ? null
+          : json(run('gh', ['api', '-X', 'GET', `repos/${REPO}/commits/${sha}/pulls`])).find(pr => pr.merged_at);
+        const number = squash?.[1] ?? merged?.number;
+        if (!number) throw new Error(`Commit ${sha} names no merged PR; refusing to omit it`);
+        if (seen.has(Number(number))) continue;
+        seen.add(Number(number));
         const files = [], patches = [];
         for (let page = 1; ; page++) {
           const rows = api(`pulls/${number}/files?per_page=100&page=${page}`);
@@ -161,7 +168,7 @@ function live(run = command) {
           if (rows.length < 100) break;
           if (page >= 30) throw new Error('GitHub PR file limit reached; refusing a partial range');
         }
-        prs.push({ number: Number(number), title: title.replace(/ \(#\d+\)$/, ''),
+        prs.push({ number: Number(number), title: squash ? title.replace(/ \(#\d+\)$/, '') : merged.title,
           url: `https://github.com/${REPO}/pull/${number}`, files, patches });
       }
       return { status: 'failure', run: red, firstRed, green, failures, prs };
