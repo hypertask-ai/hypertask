@@ -1,8 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 
 const maxWaitSeconds = 3900;
 const deadline = Date.now() + 4_000_000;
+const proofPath = process.env.SETTINGS_PROOF || ".settings-proof/last-verified.json";
 let waitedSeconds = 0;
 
 function needsVerification() {
@@ -73,6 +75,58 @@ function readSettings(endpoint) {
   }
 }
 
+function formatAge(milliseconds) {
+  const minutes = Math.floor(milliseconds / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h ${minutes % 60}m`;
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+}
+
+function lastVerified() {
+  try {
+    const proof = JSON.parse(readFileSync(proofPath, "utf8"));
+    if (!Number.isFinite(Date.parse(proof.verifiedAt))) return null;
+    return proof;
+  } catch {
+    return null;
+  }
+}
+
+function describeProof(proof) {
+  if (!proof) return "Last verified settings: none stored; nothing has been verified on this branch yet.";
+  const age = formatAge(Date.now() - Date.parse(proof.verifiedAt));
+  const contexts = Array.isArray(proof.contexts) ? proof.contexts.join(", ") : "unknown";
+  return `Last verified settings: ${proof.verifiedAt} (${age} ago), default branch ${proof.defaultBranch}, `
+    + `ruleset ${proof.rulesetId}, required checks ${contexts}.`;
+}
+
+function recordVerified(settings) {
+  const proof = { ...settings, verifiedAt: new Date().toISOString() };
+  mkdirSync(dirname(proofPath), { recursive: true });
+  writeFileSync(proofPath, `${JSON.stringify(proof, null, 2)}\n`);
+  return proof;
+}
+
+function publishResult(verified) {
+  const output = process.env.GITHUB_OUTPUT;
+  if (output) appendFileSync(output, `verified=${verified}\n`);
+}
+
+function reportRateLimitRefusal(error) {
+  const proof = lastVerified();
+  const line = describeProof(proof);
+  console.log(`Required-check settings: not verified this run. ${error.message}`);
+  console.log(line);
+  console.log(`::warning::Required-check settings were not verified this run: ${error.message}`);
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+      `### Required-check settings: not verified this run\n\n${error.message}\n\n${line}\n\n`
+      + "An empty GitHub API allowance is not a settings failure. The next hourly run verifies again.\n");
+  }
+  publishResult(false);
+}
+
 try {
   if (!needsVerification()) {
     console.log("Required-check settings: PR has no CI-policy changes; skipping settings API reads.");
@@ -103,12 +157,20 @@ try {
     if (JSON.stringify(actual) !== JSON.stringify(expected)) {
       throw new Error("Live required checks do not match docs/ci-policy.yml.");
     }
-    console.log("Required-check settings verified: default branch, production protection, and exact required contexts.");
+    recordVerified({
+      repository: repo,
+      defaultBranch: repository.default_branch,
+      rulesetId: matches[0].id,
+      contexts: actual,
+    });
+    publishResult(true);
+    console.log(`Required-check settings verified: default branch, production protection, and exact required contexts. Stored at ${proofPath}.`);
   }
 } catch (error) {
-  console.error(`::error::${error.message}`);
-  if (error.rateLimited && process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### GitHub API rate limit, not a test failure\n\n${error.message}\n\nRe-run this job after the limit resets.\n`);
+  if (error.rateLimited) {
+    reportRateLimitRefusal(error);
+  } else {
+    console.error(`::error::${error.message}`);
+    process.exitCode = 1;
   }
-  process.exitCode = 1;
 }

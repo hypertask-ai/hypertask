@@ -65,3 +65,6 @@ src/service_key.json
 
 # Rebuilt from one file per flag, never a shared committed insertion point.
 /src/lib/flags/definitions/index.generated.ts
+
+# Last verified required-check settings (YPER4-721); kept in the Actions cache.
+/.settings-proof/

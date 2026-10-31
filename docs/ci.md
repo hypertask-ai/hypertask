@@ -206,11 +206,23 @@ Reads use `gh api --include`. A rate-limited 403 or 429 waits for
 `rate limited, waiting Ns until reset`, then retries only that failed read.
 Cumulative sleeps are capped at **3900 seconds**, longer than one full
 installation window, with a 4,000-second overall budget and a 70-minute step
-timeout inside the 80-minute job. A cap failure names the GitHub API rate limit in the
-error and the step summary, so it is not mistaken for a test failure. Missing usable
-rate-limit timing, an exceeded budget, other API errors, malformed settings, or a
-settings mismatch fail the check; nothing passes without reading the settings
-when verification is required. No paid runner, service, or dependency is added.
+timeout inside the 80-minute job.
+
+An exhausted wait cap is an allowance refusal, not a settings failure, so it
+does not turn the job red. The verifier prints and warns
+`Required-check settings: not verified this run`, names the refusal in the step
+summary, and writes `verified=false`. It never reports a pass it did not
+measure. A successful run writes the verified value to
+`.settings-proof/last-verified.json` (timestamp, default branch, ruleset id and
+required contexts) and `actions/cache` saves it under the
+`required-check-settings-proof-` prefix, so a refused run reports the last
+verified value with its age, for example `(3h 12m ago)`, or states that nothing
+has been verified yet. Missing usable rate-limit timing, an exceeded overall
+budget, other API errors, malformed settings, or a settings mismatch still fail
+the check. A real settings change therefore shows late only when the allowance
+stays empty, and the age on the warning line is the bound on that delay. Reads
+stay at three per successful run; the proof cache costs no REST calls. No paid
+runner, service, or dependency is added.
 
 Runner CI watches use the existing `gh-app-token` helper, never the saved user
 login: `token=$(gh-app-token) && test -n "$token" && GH_TOKEN="$token" gh pr checks <PR> --repo hypertask-ai/hypertask --watch --interval 120`.
