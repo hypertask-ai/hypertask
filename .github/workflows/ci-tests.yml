@@ -1121,7 +1121,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          # Derived from the commit so the shared app-build matches this run.
+          # Derived from the commit so one build serves every consumer.
           seed="${{ github.event.pull_request.head.sha || github.sha }}-smoke"
           session_secret=$(printf '%s' "$seed:session" | sha256sum | cut -d' ' -f1)
           jwt_secret=$(printf '%s' "$seed:jwt" | sha256sum | cut -d' ' -f1)

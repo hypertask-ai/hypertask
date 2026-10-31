@@ -256,7 +256,7 @@ test("browser smoke retries its build once, only after a Google font download fa
   const path = require("node:path");
   const { spawnSync } = require("node:child_process");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
-  const step = workflow.jobs["app-build"].steps.find((s) => s.name === "Build the app once");
+  const step = workflow.jobs["browser-smoke"].steps.find((s) => s.name === "Build the local app (no migrations)");
   const run = (outcomes) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
     fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
