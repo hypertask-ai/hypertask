@@ -1,25 +1,10 @@
 name: Visual Regression
 run-name: ${{ inputs.journey || 'visual' }} @ ${{ inputs.head || github.head_ref || github.ref_name }}
 
+# HYCI-10: pull-request comparisons moved to ci-tests.yml (job visual-compare) so the
+# head reuses the one app build. This workflow keeps the production baseline capture
+# and the on-demand verify-qa journeys, neither of which has a build to share.
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [production]
-    paths:
-      - 'src/app/**'
-      - '!src/app/api/**'
-      - 'src/components/**'
-      - 'src/hooks/**'
-      - 'src/styles/**'
-      - 'styles/**'
-      - '**/*.css'
-      - 'tailwind.config.*'
-      - 'public/**'
-      - '.github/workflows/visual-regression.yml'
-      - 'e2e/visual/**'
-      - 'scripts/seed-browser-smoke.mjs'
-      - 'scripts/visual-regression-ci.mjs'
-      - '!**/*.md'
   push:
     branches: [production]
   workflow_dispatch:
@@ -46,7 +31,7 @@ concurrency:
 jobs:
   visual-regression:
     name: visual-regression
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual')) || (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && (inputs.journey == '' || inputs.journey == 'visual'))
     runs-on: ubuntu-latest
     timeout-minutes: 35
     permissions:
@@ -157,9 +142,11 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          session_secret=$(openssl rand -hex 32)
-          jwt_secret=$(openssl rand -hex 32)
-          better_auth_secret=$(openssl rand -hex 32)
+          # Derived from the commit so one build serves every consumer.
+          seed="${{ github.event.pull_request.head.sha || github.sha }}-smoke"
+          session_secret=$(printf '%s' "$seed:session" | sha256sum | cut -d' ' -f1)
+          jwt_secret=$(printf '%s' "$seed:jwt" | sha256sum | cut -d' ' -f1)
+          better_auth_secret=$(printf '%s' "$seed:better-auth" | sha256sum | cut -d' ' -f1)
           printf '::add-mask::%s\n' "$session_secret"
           printf '::add-mask::%s\n' "$jwt_secret"
           printf '::add-mask::%s\n' "$better_auth_secret"
@@ -297,9 +284,11 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          session_secret=$(openssl rand -hex 32)
-          jwt_secret=$(openssl rand -hex 32)
-          better_auth_secret=$(openssl rand -hex 32)
+          # Derived from the commit so one build serves every consumer.
+          seed="${{ github.event.pull_request.head.sha || github.sha }}-smoke"
+          session_secret=$(printf '%s' "$seed:session" | sha256sum | cut -d' ' -f1)
+          jwt_secret=$(printf '%s' "$seed:jwt" | sha256sum | cut -d' ' -f1)
+          better_auth_secret=$(printf '%s' "$seed:better-auth" | sha256sum | cut -d' ' -f1)
           printf '::add-mask::%s\n' "$session_secret"
           printf '::add-mask::%s\n' "$jwt_secret"
           printf '::add-mask::%s\n' "$better_auth_secret"

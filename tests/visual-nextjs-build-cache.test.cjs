@@ -67,6 +67,28 @@ test("base and head use separate restores; cached screenshots and production-onl
   }
 });
 
+test("the pull-request comparison reuses the one build instead of building the head", () => {
+  const compare = load(".github/workflows/ci-tests.yml").jobs["visual-compare"];
+  const runs = compare.steps.filter(step => typeof step.run === "string").map(step => step.run).join("\n");
+  assert.doesNotMatch(runs, /next build/);
+  assert.deepEqual(compare.needs, ["browser-smoke"]);
+  assert.equal(compare.steps.find(step => step.name === "Download the one build").with.name, "app-build");
+  assert.equal(compare.steps.find(step => step.name === "Give the head the one build").run,
+    'mkdir -p "$RUNNER_TEMP/app-build/unpacked"\n' +
+    'tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build/unpacked"\n' +
+    'mv "$RUNNER_TEMP/app-build/unpacked/.next" head/.next\n');
+  for (const name of ["Build and capture base, then compare head", "Summarize failed screens"]) {
+    assert.equal(compare.steps.find(step => step.name === name).env.VISUAL_HEAD_BUILD, "artifact", name);
+  }
+  assert.equal(compare.steps.find(step => step.name === "Build and capture base, then compare head").env.VISUAL_BASE_ONLY, "false");
+  const baseline = compare.steps.find(step => step.id === "baseline-cache");
+  assert.equal(baseline.with.key, steps.find(step => step.id === "baseline-cache").with.key);
+  assert.equal(baseline.with["restore-keys"], undefined);
+  assert.equal(compare.steps.find(step => step.id === "restore-head-nextjs-cache"), undefined);
+  assert.equal(compare.steps.filter(step => step.uses?.startsWith("actions/checkout@") && step.with["persist-credentials"] === false).length, 2);
+  assert.equal(compare.steps.filter(step => step.uses?.startsWith("actions/cache/save@")).length, 0);
+});
+
 test("visual runs never write shared Next.js caches; only successful production smoke builds publish them", () => {
   assert.equal(steps.filter(step => step.uses?.startsWith("actions/cache/save@") && step.with.path.includes(".next")).length, 0);
   for (const event of ["push", "pull_request", "workflow_dispatch"]) {

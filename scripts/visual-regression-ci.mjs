@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { appendFile, cp, mkdir, readFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -21,6 +21,18 @@ export function assertLocalCi(env) {
 export function captureArguments(phase) {
   if (!["base", "head"].includes(phase)) throw new Error("Unknown visual phase");
   return ["playwright", "test", "-c", "e2e/visual/playwright.visual.config.ts", `--update-snapshots=${phase === "base" ? "all" : "none"}`];
+}
+
+export function headBuildMode(env) {
+  const mode = env.VISUAL_HEAD_BUILD || "local";
+  if (!["local", "artifact"].includes(mode)) throw new Error(`Unknown VISUAL_HEAD_BUILD: ${mode}`);
+  return mode;
+}
+
+export function assertSharedHeadBuild(root) {
+  const buildId = path.join(root, ".next", "BUILD_ID");
+  if (!existsSync(buildId)) throw new Error("The shared app build is missing: head/.next/BUILD_ID was not downloaded");
+  return readFileSync(buildId, "utf8").trim();
 }
 
 export function failedScreens(report) {
@@ -109,6 +121,9 @@ async function startServer(root, env, log) {
 
 async function summarize(workspace, temp) {
   const lines = ["## Visual Regression", "", "Base-generated expected PNGs → head comparison; Porcelain, desktop + phone, five screens each.", ""];
+  if (headBuildMode(process.env) === "artifact") {
+    lines.push("- **head build**: reused the one app build from `app-build`; no second `next build`.", "");
+  }
   for (const phase of ["base", "head"]) {
     if (phase === "base" && process.env.VISUAL_BASE_CACHE_HIT === "true") {
       await validateBaseline(path.join(temp, "visual-expected"));
@@ -142,7 +157,12 @@ async function main() {
     return;
   }
   assertLocalCi(process.env);
-  const timings = new Map(["base build", "base seed+capture", "head build", "head seed+capture", "compare"].map(phase => [phase, null]));
+  const headBuild = headBuildMode(process.env);
+  const headsShareOneBuild = headBuild === "artifact";
+  const phases = headsShareOneBuild
+    ? ["base build", "base seed+capture", "head seed+capture", "compare"]
+    : ["base build", "base seed+capture", "head build", "head seed+capture", "compare"];
+  const timings = new Map(phases.map(phase => [phase, null]));
   let currentPhase = process.env.VISUAL_BASE_CACHE_HIT === "true" ? "head seed+capture" : "base seed+capture";
   let phaseStarted = performance.now();
   const recordPhase = nextPhase => {
@@ -195,9 +215,14 @@ async function main() {
       try { await redis.flushdb(); } finally { redis.disconnect(); }
       command(root, env, ["npx", "prisma", "migrate", "deploy"]);
       command(root, env, ["node", "scripts/seed-browser-smoke.mjs", "--visual"]);
-      recordPhase(`${phase} build`);
-      command(root, env, ["npx", "next", "build", "--webpack"]);
-      recordPhase(`${phase} seed+capture`);
+      if (phase === "head" && headsShareOneBuild) {
+        assertSharedHeadBuild(root);
+        console.log("Visual head reuses the one app build from app-build; no second next build");
+      } else {
+        recordPhase(`${phase} build`);
+        command(root, env, ["npx", "next", "build", "--webpack"]);
+        recordPhase(`${phase} seed+capture`);
+      }
       const stop = await startServer(root, env, path.join(temp, `visual-${phase}-server.log`));
       try {
         if (phase === "head") recordPhase("compare");

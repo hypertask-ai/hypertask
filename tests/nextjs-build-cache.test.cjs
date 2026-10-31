@@ -44,6 +44,18 @@ test("browser-smoke saves the rebuilt cache under the restore primary key, only 
   assert.notEqual(build["continue-on-error"], true);
 });
 
+test("the required browser-smoke context publishes the one build for the visual comparison", () => {
+  const pack = steps.find(step => step.name === "Package the one build");
+  const upload = steps.find(step => step.name === "Upload the one build");
+  const smoke = steps.find(step => step.id === "smoke");
+  assert.equal(pack.run, "tar --exclude='.next/cache' -czf \"$RUNNER_TEMP/app-build.tgz\" .next");
+  assert.equal(upload.with.name, "app-build");
+  assert.equal(upload.with.path, "${{ runner.temp }}/app-build.tgz");
+  assert.equal(upload.with["retention-days"], 1);
+  assert.ok(steps.indexOf(build) < steps.indexOf(pack));
+  assert.ok(steps.indexOf(upload) < steps.indexOf(smoke), "the build must be published before the page checks, so a failing check still publishes it");
+});
+
 test("only production pushes refresh the cache; PRs and exact-key reruns never save", () => {
   for (const event of ["pull_request", "push", "workflow_dispatch"]) {
     for (const ref of ["refs/heads/production", "refs/heads/feature", "refs/pull/123/merge"]) {
