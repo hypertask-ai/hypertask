@@ -44,9 +44,9 @@ runner_policy:
 pr_job_budget:
   parallel_job_limit: 20
   normal_synchronize_before: 17
-  normal_synchronize_after: 18
+  normal_synchronize_after: 17
   opened_before: 18
-  opened_after: 18
+  opened_after: 17
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -422,8 +422,8 @@ ci_tests:
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
   docs_only:
-    jobs: [ci-tests, app-build, browser-smoke]
-    heavy_jobs: [app-smoke, app-build, browser-smoke]
+    jobs: [ci-tests, browser-smoke]
+    heavy_jobs: [app-smoke, browser-smoke]
     heavy_output: heavy_needed
     heavy_paths: ["docs/**", ".claude/**", "skills/**", ".agents/skills/**", "tests/**", "**/*.md"]
     heavy_always_run_paths: ["src/**", ".github/**", "scripts/**", "package.json", "package-lock.json"]
@@ -442,23 +442,26 @@ ci_tests:
     browser_services: job_level_services_start_before_scope
     contract_summary_exception: successful_browser_job_with_explicit_docs_only_output
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
-  # HYCI-10: one candidate build per change. app-build uploads .next (without
-  # .next/cache) and both page checks download it; neither runs next build.
+  # HYCI-10: one candidate build per change. The required browser-smoke job
+  # publishes its .next (without .next/cache) and the visual comparison
+  # downloads it, so a screen change never builds the candidate twice.
   one_build:
-    job: app-build
+    job: browser-smoke
     artifact: app-build
     artifact_excludes: [.next/cache]
     retention_days: 1
+    published_after: next build, before the page checks
     cache_restore: nextjs-<lockfile>-<sha>
     cache_save: successful_production_push_only
-    consumers: [browser-smoke, visual-compare]
+    consumers: [visual-compare]
     consumer_download: same_run_native_no_polling
     deterministic_secrets: sha256_of_head_sha_per_purpose
-    required_check_failure_mode: browser-smoke_fails_never_skips
   visual_compare:
     job: visual-compare
     workflow: .github/workflows/ci-tests.yml
     moved_from: .github/workflows/visual-regression.yml
+    needs: browser-smoke
+    runs_after_required_check: true
     trigger: non_draft_pull_request_touching_screen_or_harness_paths
     path_scope: .github/scripts/visual-change-scope.cjs
     head_build: reused_from_app_build
