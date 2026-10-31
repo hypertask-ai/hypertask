@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const { mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
-const { tmpdir } = require("node:os");
+const { readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { join, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
@@ -30,13 +29,12 @@ test("ESLint turns off exactly the rules Oxlint owns", async () => {
   for (const id of Object.keys(overlap)) assert.ok(off.has(id), `ESLint still runs ${id}`);
 });
 
-test("Oxlint catches the errors ESLint gave up", () => {
-  const directory = mkdtempSync(join(tmpdir(), "oxlint-overlap-"));
+test("Oxlint reports a handed-over rule in the repository", () => {
+  const probe = join(root, "tests/oxlint-overlap-probe.tsx");
+  writeFileSync(probe, 'export function Probe() {\n  return <div children="text" />;\n}\n');
   try {
-    const probe = join(directory, "probe.tsx");
-    writeFileSync(probe, "export function Probe() {\n  return <div children=\"text\" />;\n}\n");
-    const result = spawnSync(join(root, "node_modules/.bin/oxlint"), ["-c", join(root, ".oxlintrc.json"), "probe.tsx"], {
-      cwd: directory,
+    const result = spawnSync(join(root, "node_modules/.bin/oxlint"), ["tests/oxlint-overlap-probe.tsx"], {
+      cwd: root,
       encoding: "utf8",
     });
     const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
@@ -44,6 +42,6 @@ test("Oxlint catches the errors ESLint gave up", () => {
     assert.match(output, /react\/no-children-prop/, output);
     console.log("oxlint probe: caught react/no-children-prop");
   } finally {
-    rmSync(directory, { recursive: true, force: true });
+    rmSync(probe, { force: true });
   }
 });
