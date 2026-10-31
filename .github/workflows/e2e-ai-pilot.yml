@@ -21,6 +21,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ^24.22.1
+          check-latest: true
       - name: Validate pilot syntax
         run: |
           for file in e2e/ai-pilot/e2e.config.js e2e/ai-pilot/layout.js e2e/ai-pilot/tests/smoke.e2e.js e2e/ai-pilot/measure.mjs; do
