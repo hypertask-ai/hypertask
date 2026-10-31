@@ -79,14 +79,21 @@ export async function classifySuite({ root, files }) {
 
 export const LANE_BATCH = { maxFiles: 20, maxBytes: 100_000, concurrentFiles: 2 };
 
+export function positiveInt(value, name) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1) throw new Error(`${name} must be a positive integer, got ${value}`);
+  return number;
+}
+
 export function batchLaneFiles(files, { maxFiles = Infinity, maxBytes = Infinity, weightOf = () => 1 } = {}) {
-  const fileCap = Math.max(1, Math.floor(maxFiles));
+  const fileCap = maxFiles === Infinity ? Infinity : positiveInt(maxFiles, "maxFiles");
+  const byteCap = maxBytes === Infinity ? Infinity : positiveInt(maxBytes, "maxBytes");
   const batches = [];
   let batch = [];
   let bytes = 0;
   for (const file of files) {
     const weight = Math.max(1, weightOf(file));
-    if (batch.length > 0 && (batch.length >= fileCap || bytes + weight > maxBytes)) {
+    if (batch.length > 0 && (batch.length >= fileCap || bytes + weight > byteCap)) {
       batches.push(batch);
       batch = [];
       bytes = 0;

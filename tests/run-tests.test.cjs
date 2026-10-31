@@ -155,6 +155,63 @@ test("a lane over the file cap runs in bounded batches without dropping a file",
   for (const row of lanes) assert.ok(row.fileCount <= 2, `${row.file} carried ${row.fileCount} files`);
   for (const row of lanes) assert.match(row.file, /batch \d+\/\d+/);
   assert.equal(lanes.reduce((total, row) => total + row.fileCount, 0), names.length);
+  const laneWalls = lanes.reduce((walls, row) => walls.set(row.lane, (walls.get(row.lane) ?? 0) + row.durationMs), new Map());
+  assert.equal(report.longestLaneMs, Math.max(...laneWalls.values()), "a lane's wall time sums its sequential batches");
+});
+
+test("one worker runs every file in the pool instead of two classes at once", (t) => {
+  const names = Array.from({ length: 3 }, (_, index) => `single-${index}.test.cjs`);
+  const sources = {
+    "single-env.test.cjs": `process.env.FIXTURE_FLAG = 'set'; require('node:test')('single env file', () => {});`,
+    ...Object.fromEntries(names.map((name, index) => [name, `require('node:test')('single file ${index}', () => {});`])),
+  };
+  const directory = fixture(t, sources);
+  const { status, stderr, stdout, report } = run(directory, [], { TEST_CONCURRENCY: "1" });
+  assert.equal(status, 0, stderr);
+  assert.match(stdout, /single env file/);
+  for (let index = 0; index < names.length; index++) assert.match(stdout, new RegExp(`single file ${index}\\b`));
+  assert.match(stdout, /Shared lanes: 0 for 0 safe files; own-process files: 4 at pool width 1\./);
+  assert.equal(report.files.filter(({ lane }) => lane).length, 0);
+  assert.equal(report.sharedFiles.length, 0);
+  assert.equal(report.longestLaneMs, 0);
+});
+
+test("an invalid TEST_LANE cap fails the run instead of lifting the bound", (t) => {
+  const directory = fixture(t, { "lane.test.cjs": `require('node:test')('lane fixture', () => {});` });
+  for (const [name, value] of [["TEST_LANE_FILE_CAP", "0"], ["TEST_LANE_FILE_CAP", "twenty"], ["TEST_LANE_BYTE_CAP", "-5"], ["TEST_LANE_CONCURRENCY", "1.5"]]) {
+    const result = spawnSync(process.execPath, ["scripts/run-tests.mjs"], {
+      cwd: directory,
+      env: { ...process.env, NODE_TEST_CONTEXT: undefined, NODE_OPTIONS: "", CI: "true", TEST_CONCURRENCY: "2", [name]: value },
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    assert.notEqual(result.status, 0, `${name}=${value}`);
+    assert.match(result.stderr, new RegExp(`${name} must be a positive integer, got ${value.replace(".", "\\.")}`));
+  }
+});
+
+test("lane rows never become per-file weights", async (t) => {
+  const directory = mkdtempSync(path.join(tmpdir(), "test-weights-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  for (const folder of ["scripts", "reports/a", "reports/b"]) mkdirSync(path.join(directory, folder), { recursive: true });
+  copyFileSync(path.join(root, "scripts/test-duration-weights.mjs"), path.join(directory, "scripts/test-duration-weights.mjs"));
+  for (const report of ["a", "b"]) {
+    writeFileSync(path.join(directory, `reports/${report}/test-durations.json`), JSON.stringify({
+      files: [
+        { file: "tests/heavy.test.cjs", durationMs: 8000, concurrency: 2 },
+        { file: "tests/safe.test.cjs", durationMs: 1200, concurrency: 1 },
+        { file: "Shared Node lane 1/1, batch 1/2 (20 files)", durationMs: 90000, concurrency: 2, lane: 1, fileCount: 20 },
+      ],
+      sharedFiles: [{ file: "tests/safe.test.cjs", testMs: 300 }],
+    }));
+  }
+  const result = spawnSync(process.execPath, ["scripts/test-duration-weights.mjs", "--input", "reports", "--out", "weights.json"], { cwd: directory, encoding: "utf8", timeout: 20000 });
+  assert.equal(result.status, 0, result.stderr);
+  const weights = JSON.parse(readFileSync(path.join(directory, "weights.json"), "utf8"));
+  assert.deepEqual(Object.keys(weights.files), ["tests/heavy.test.cjs", "tests/safe.test.cjs"]);
+  assert.equal(weights.files["tests/heavy.test.cjs"], 4000);
+  assert.equal(weights.files["tests/safe.test.cjs"], 750);
+  assert.equal(weights.defaultWorkMs, 4000);
 });
 
 test("a lane over the byte budget splits into more processes without dropping a file", (t) => {

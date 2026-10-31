@@ -10,7 +10,7 @@ import {
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 import { findPassingTodos, todoRemovalMessages } from "./todo-passing.mjs";
-import { LANE_BATCH, batchLaneFiles, classifySuite, partitionSafeFiles } from "./test-lanes.mjs";
+import { LANE_BATCH, batchLaneFiles, classifySuite, partitionSafeFiles, positiveInt } from "./test-lanes.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
@@ -33,9 +33,9 @@ function laneCount(override) {
   return lanes;
 }
 
-const TEST_LANE_FILE_CAP = Number(process.env.TEST_LANE_FILE_CAP ?? LANE_BATCH.maxFiles);
-const TEST_LANE_BYTE_CAP = Number(process.env.TEST_LANE_BYTE_CAP ?? LANE_BATCH.maxBytes);
-const TEST_LANE_CONCURRENCY = Number(process.env.TEST_LANE_CONCURRENCY ?? LANE_BATCH.concurrentFiles);
+const TEST_LANE_FILE_CAP = positiveInt(process.env.TEST_LANE_FILE_CAP ?? LANE_BATCH.maxFiles, "TEST_LANE_FILE_CAP");
+const TEST_LANE_BYTE_CAP = positiveInt(process.env.TEST_LANE_BYTE_CAP ?? LANE_BATCH.maxBytes, "TEST_LANE_BYTE_CAP");
+const TEST_LANE_CONCURRENCY = positiveInt(process.env.TEST_LANE_CONCURRENCY ?? LANE_BATCH.concurrentFiles, "TEST_LANE_CONCURRENCY");
 const TEST_ISOLATION = Number(process.versions.node.split(".")[0]) >= 23
   ? "--test-isolation=none"
   : "--experimental-test-isolation=none";
@@ -175,7 +175,8 @@ process.on("exit", (exitCode) => {
     const poolEstimatedMs = poolWidth > 0
       ? poolRows.reduce((total, file) => total + file.durationMs, 0) / poolWidth
       : 0;
-    const longestLaneMs = laneRows.reduce((longest, file) => Math.max(longest, file.durationMs), 0);
+    const laneWalls = laneRows.reduce((walls, file) => walls.set(file.lane, (walls.get(file.lane) ?? 0) + file.durationMs), new Map());
+    const longestLaneMs = laneWalls.size === 0 ? 0 : Math.max(...laneWalls.values());
     const serialDurationMs = serialRows.reduce((total, file) => total + file.durationMs, 0);
     const tsSerialMs = tsRows.reduce((total, file) => total + file.durationMs, 0);
     const laneAdjustedDurationMs = serialDurationMs + Math.max(poolEstimatedMs, longestLaneMs) + tsSerialMs;
@@ -231,18 +232,20 @@ if (cjsTests.length > 0) {
     await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`, { serial: true });
   }
   const width = Math.max(1, Number(TEST_CONCURRENCY));
-  const poolFiles = safe.length > 1 ? pool : [...pool, ...safe];
-  const sharedFiles = safe.length > 1 ? safe : [];
+  let poolFiles = safe.length > 1 ? pool : [...pool, ...safe];
+  let sharedFiles = safe.length > 1 ? safe : [];
   const weightOfClass = (files) => files.reduce((total, file) => total + weightOf(file), 0);
-  const poolWeight = weightOfClass(poolFiles);
-  const safeWeight = weightOfClass(sharedFiles);
-  const lanes = sharedFiles.length === 0 ? 0 : Math.max(
-    1,
-    Math.min(
-      poolFiles.length === 0 ? width : width - 1,
-      Math.round(width * safeWeight / Math.max(1, safeWeight + poolWeight)),
-    ),
-  );
+  const laneBudget = poolFiles.length === 0 ? width : width - 1;
+  const pickLanes = () => {
+    const poolWeight = weightOfClass(poolFiles);
+    const safeWeight = weightOfClass(sharedFiles);
+    return Math.min(laneBudget, Math.max(1, Math.round(width * safeWeight / Math.max(1, safeWeight + poolWeight))));
+  };
+  let lanes = sharedFiles.length === 0 || laneBudget < 1 ? 0 : pickLanes();
+  if (lanes === 0 && sharedFiles.length > 0) {
+    poolFiles = [...poolFiles, ...sharedFiles];
+    sharedFiles = [];
+  }
   const poolWidth = Math.max(1, width - lanes);
   console.log(`Shared lanes: ${lanes} for ${sharedFiles.length} safe files; own-process files: ${poolFiles.length} at pool width ${poolFiles.length > 0 ? poolWidth : 0}.`);
   const jobs = [];
