@@ -285,13 +285,14 @@ copy was rejected ("Unauthorized") and the failure was hidden by
   for what will merge.
 - The concurrency group carries the comment author and never cancels, so an
   ordinary comment on the same PR cannot cancel the reviewer's delivery.
-- Posts two comments. The ticket thread people read gets one short plain line
-  with `kind: qa`, because an agent comment without a kind is filed in the
-  hidden agent log instead. The findings, which carry paths, code and long
-  sentences, go to that agent log with no kind (YPER4-978). The board refuses
-  technical text in a people comment: the YPER4-910 voice guard answers it with
-  `HTTP 400`, and that is what broke five real mirrors between 18:46 and 19:18
-  UTC on 2026-10-31 while the skip runs stayed green.
+- Posts one comment with `kind: qa`, because an agent comment without a kind is
+  filed in the hidden agent log instead of the ticket thread. The text is one
+  short plain line naming the verdict and pointing at the pull request, never the
+  findings: the board refuses technical text in a people comment, and the
+  YPER4-910 voice guard answers it with `HTTP 400`. That guard broke five real
+  mirrors between 18:46 and 19:18 UTC on 2026-10-31 while the skip runs stayed
+  green, and the agent log refuses this token (`HTTP 503`), so the findings stay
+  on the pull request (YPER4-978).
 - Skips a commit the ticket already carries and sends an `Idempotency-Key` of
   `ai-review-mirror-<pr>-<sha>`, so a re-run or an edited verdict never doubles
   the comment.
