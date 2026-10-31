@@ -135,13 +135,13 @@ test('another agent star stays separate from the owner and from other agents', a
 test('the person starred list shows only person markers', async () => {
   const queries = [];
   const { getAllStarred } = loadModule('src/utils/controllers/savedContent/getAllStarred.ts', {
-    '@/lib/prisma': { default: { savedContent: { findMany: async (query) => { queries.push(query); return []; } } } },
-    '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ({}) },
-    '@/utils/controllers/savedContent/helper': {
-      commentOnSavedTask: () => [],
-      fetchProjectIds: async () => [15],
-      includeSavedContentComment: () => ({}),
+    '@/lib/prisma': {
+      default: {
+        savedContent: { findMany: async (query) => { queries.push(query); return []; } },
+        project: { findMany: async () => [{ id: 15 }] },
+      },
     },
+    '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ({}) },
   });
   assert.equal((await getAllStarred(6)).status, 200);
   assert.equal(queries[1].where.agentId, null);
