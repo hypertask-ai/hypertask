@@ -72,10 +72,6 @@ const prisma = {
       locks.push("change-write");
       return row;
     },
-    findFirst: async ({ where }) => {
-      const rows = changes.filter((change) => change.key === where.key);
-      return rows.length ? { reason: rows.at(-1).reason } : null;
-    },
   },
   featureFlagReview: {
     create: async ({ data }) => {
@@ -403,33 +399,23 @@ for (const mode of ["EVERYONE", "OWNER_ONLY", "OFF"]) {
     assert.equal((await switchFlag({ key, mode, failure })).status, 403); assertNoChange();
   });
 }
-for (const mode of ["OFF", "OWNER_ONLY"]) {
-  test(`failure-Owner + QA refuses to widen a flag held at ${mode} without this path's own hold`, async () => {
-    stored.get(key).mode = mode;
+test("failure-Owner + QA refuses to widen an Owner Only flag", async () => {
+  stored.get(key).mode = "OWNER_ONLY";
+  assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
+  assert.equal(stored.get(key).mode, "OWNER_ONLY");
+  assertNoChange();
+});
+
+for (const reason of [`live-qa-failed:${failure}`, "https://app.hypertask.ai/detail/project-15/8232#comment-1"]) {
+  test(`failure-Owner + QA never re-enables an Off flag, even when its last change was ${reason.slice(0, 24)}`, async () => {
+    stored.get(key).mode = "OFF";
+    changes.push({ key, reason, oldMode: "OWNER_ONLY", newMode: "OFF" });
     assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
-    assert.equal(stored.get(key).mode, mode);
-    assertNoChange();
+    assert.equal(stored.get(key).mode, "OFF");
+    assert.equal(changes.length, 1);
+    assert.equal(broadcasts, 0);
   });
 }
-
-test("failure-Owner + QA lifts a flag this path switched Off", async () => {
-  stored.get(key).mode = "OFF";
-  changes.push({ key, reason: `live-qa-failed:${failure}`, oldMode: "EVERYONE", newMode: "OFF" });
-  const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
-  assert.equal(response.status, 200);
-  assert.equal(response.body.previousMode, "OFF");
-  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
-  assert.equal(changes.length, 2);
-  assert.equal(changes.at(-1).reason, `live-qa-failed:${failure}`);
-});
-
-test("failure-Owner + QA ignores an approved Off when lifting", async () => {
-  stored.get(key).mode = "OFF";
-  changes.push({ key, reason: "https://app.hypertask.ai/detail/project-15/8232#comment-1", oldMode: "EVERYONE", newMode: "OFF" });
-  assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
-  assert.equal(stored.get(key).mode, "OFF");
-  assert.equal(changes.length, 1);
-});
 
 test("failure-Owner + QA refuses a flag already held and leaves history empty", async () => {
   assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);

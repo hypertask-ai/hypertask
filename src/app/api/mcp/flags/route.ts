@@ -30,7 +30,6 @@ import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
 const FLAG_REVIEW_POLICY_COMMENT_ID = 302454;
-const FAILURE_HOLD_REASON = "live-qa-failed:";
 const APPROVAL_REQUIRED_MESSAGE = "Needs a clear yes from Valentin within 7 days: his thumbs up on the switch question, his own comment on the ticket after exactly one switch question, or HT Product Lead's in-chat record of his exact words. Questions name the switch: Switch <flag-key> to <mode>";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
@@ -126,7 +125,7 @@ export async function PATCH(request: NextRequest) {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
       agentName: agent.displayName,
-      reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `${FAILURE_HOLD_REASON}${body.failure}` : body.reason as string,
+      reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `live-qa-failed:${body.failure}` : body.reason as string,
       source: "api",
     }, async (tx) => {
       if (requiresManagerGrant) {
@@ -139,14 +138,7 @@ export async function PATCH(request: NextRequest) {
           throw new FeatureFlagApprovalError("Flag is already in that mode");
         }
         if (current !== "EVERYONE") {
-          const previous = current === "OFF" ? await tx.featureFlagChange.findFirst({
-            where: { key: body.key as string },
-            orderBy: { id: "desc" },
-            select: { reason: true },
-          }) : null;
-          if (!previous?.reason?.startsWith(FAILURE_HOLD_REASON)) {
-            throw new FeatureFlagApprovalError("A failure hold only narrows a flag that is on for everyone, or restores a flag this hold switched Off");
-          }
+          throw new FeatureFlagApprovalError("A failure hold only narrows a flag that is on for everyone");
         }
         return;
       }
