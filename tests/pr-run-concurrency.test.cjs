@@ -25,7 +25,7 @@ test('the shared-line gates are the only exceptions, and each says why', () => {
 test('the pilot workflow cancels per pull request without touching its job', () => {
   const workflow = yaml.load(readFileSync(path.join(WORKFLOWS, 'e2e-ai-pilot.yml'), 'utf8'));
   assert.deepEqual(Object.keys(workflow.jobs), ['static']);
-  assert.match(workflow.concurrency.group, /github\.event\.pull_request\.number/);
+  assert.ok(workflow.concurrency.group.includes('github.event.pull_request.number'));
   assert.equal(workflow.concurrency['cancel-in-progress'], "${{ github.event_name == 'pull_request' }}");
 });
 
