@@ -91,6 +91,17 @@ case "$url" in
     else
       body=\$(printf '{"deployments":[{"uid":"deploy-current","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-prev","state":"READY","meta":{"githubCommitSha":"other"}}]}' "\$SHA")
     fi
+    # A retried build answers differently on a later read (HYCI-36).
+    if [ -n "\${HC_DEPLOYMENTS_JSON_AFTER:-}" ]; then
+      dcount_file="\$RUNNER_TEMP/hc-deploy-count"
+      didx=0
+      if [ -f "\$dcount_file" ]; then didx=\$(cat "\$dcount_file"); fi
+      didx=\$((didx + 1))
+      printf '%s' "\$didx" > "\$dcount_file"
+      if [ "\$didx" -ge "\${HC_DEPLOYMENTS_AFTER_READS:-2}" ]; then
+        body=\$(printf '%s' "\$HC_DEPLOYMENTS_JSON_AFTER" | sed "s/__SHA__/\$SHA/g")
+      fi
+    fi
     ;;
   https://api.vercel.com/v10/projects/*/promote/*)
     printf '%s' "\$url" > "\$RUNNER_TEMP/promoted"
@@ -292,6 +303,56 @@ test("two deployments for one commit pick the READY one without a broken pipe", 
   assert.match(result.stdout, /deployment state: READY/);
   assert.match(result.stdout, /Production healthy/);
   assert.equal(promoted, null);
+});
+
+test("an out-of-memory build that Vercel retries to READY is health-checked, not red", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}}]}',
+    HC_DEPLOYMENTS_JSON_AFTER: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}},{"uid":"deploy-retry","state":"READY","meta":{"githubCommitSha":"__SHA__"}}]}',
+    HC_DEPLOYMENTS_AFTER_READS: "5",
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /reading on for Vercel's retry/);
+  assert.match(result.stdout, /deployment state: READY/);
+  assert.match(result.stdout, /Production healthy/);
+  assert.doesNotMatch(result.stdout, /BUILD FAILED/);
+  assert.equal(promoted, null);
+});
+
+test("an out-of-memory build that never retries alerts without reddening the push", async () => {
+  const { result, promoted, outputs } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}}]}',
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /Production healthy/);
+  assert.match(result.stdout, /Vercel's builder ran out of memory for/);
+  assert.doesNotMatch(result.stdout, /::error::Production build failed/);
+  assert.equal(outputs.includes("rollback=true"), false);
+  assert.equal(promoted, null);
+});
+
+test("a code-class build failure is still red and does not wait for a retry", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-bad","state":"ERROR","errorCode":"type_error","meta":{"githubCommitSha":"__SHA__"}}]}',
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /::error::Production build failed \(live site unaffected\)/);
+  assert.doesNotMatch(result.stdout, /reading on for Vercel's retry/);
+  assert.doesNotMatch(result.stdout, /\[2\] deployment state/);
+  assert.equal(promoted, null);
+});
+
+test("a build failure without a readable error code is still red", async () => {
+  const { result } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-bad","state":"ERROR","meta":{"githubCommitSha":"__SHA__"}}]}',
+  });
+
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /BUILD FAILED for .* \(unknown\)/);
+  assert.doesNotMatch(result.stdout, /stays green/);
 });
 
 test("a commit with no deployment exits clean as an ignored build", async () => {

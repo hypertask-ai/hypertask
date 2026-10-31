@@ -17,3 +17,8 @@ same six smoke tests kept failing in different places: the click or the
 `window` command event arrived before its handler mounted. `browser-smoke`
 keeps zero retries, so this gate is the only wait that can hide nothing behind
 a green second attempt.
+
+`tests/browser-smoke-workflow.test.cjs` reads the spec list out of the
+`browser-smoke` job itself, so a spec added there fails the gate until it is
+listed and takes its `test` from `appReady` (HYCI-41: the list used to be a
+snapshot, and a new job spec could bypass the gate silently).

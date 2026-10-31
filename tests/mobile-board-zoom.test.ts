@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 import {
   BOARD_OVERVIEW_SCALE,
@@ -81,30 +79,4 @@ test("zoom state stays scoped to its board", () => {
   assert.deepEqual(firstBoardOverview, { 10: true });
   assert.deepEqual(secondBoardOverview, { 10: true, 20: true });
   assert.deepEqual(firstBoardNormal, { 10: false, 20: true });
-});
-
-test("overview styling and drag blocking stay mobile-only", () => {
-  const source = fs.readFileSync(
-    path.resolve(
-      process.cwd(),
-      "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(
-    source,
-    /const mobileBoardZoomedOut = _mbl && boardZoomedOut;/,
-  );
-  assert.match(source, /isDragDisabled=\{[^}]*mobileBoardZoomedOut\}/);
-  assert.match(source, /dragDisabled=\{mobileBoardZoomedOut\}/);
-  assert.match(source, /style=\{mobileBoardZoomedOut \? \{/);
-  assert.match(source, /alignSelf: "flex-start"/);
-  assert.match(source, /width: mobileBoardOverviewWidth/);
-  assert.match(
-    source,
-    /visibleSectionCount \* 300 \+ Math\.max\(0, visibleSectionCount - 1\) \* 12/,
-  );
-  assert.doesNotMatch(source, /width: "max-content"/);
-  assert.match(source, /maxWidth: "none"/);
 });

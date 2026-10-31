@@ -47,10 +47,12 @@ async function run(overrides = {}, opts = {}) {
   const result = await emergencyRollback(X, opts.vercelToken ?? "vercel-token", fetchImpl, async () => {}, {
     repo: opts.repo ?? "hypertask-ai/hypertask", githubToken: opts.githubToken ?? "github-token",
     runUrl: opts.runUrl ?? "https://github.com/hypertask-ai/hypertask/actions/runs/123",
+    eventName: opts.eventName ?? "schedule",
   });
   const retried = opts.repeatSha ? await emergencyRollback(opts.repeatSha, "vercel-token", fetchImpl, async () => {}, {
     repo: "hypertask-ai/hypertask", githubToken: "github-token",
     runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/124",
+    eventName: opts.eventName ?? "schedule",
   }) : undefined;
   return { result, calls, retried };
 }
@@ -274,13 +276,20 @@ test("monitoring test jobs do not retain a write-capable checkout token", async 
 });
 
 test("manual dispatch never freezes or reverts", async () => {
+  const { result, calls } = await run({}, { eventName: "workflow_dispatch" });
+  assert.equal(result.action, "skip");
+  assert.equal(result.freeze, false);
+  assert.deepEqual(calls, []);
+});
+
+test("a hand-started nightly still rolls back when the tool is told its own trigger", async () => {
   const before = process.env.GITHUB_EVENT_NAME;
   process.env.GITHUB_EVENT_NAME = "workflow_dispatch";
   try {
     const { result, calls } = await run();
-    assert.equal(result.action, "skip");
-    assert.equal(result.freeze, false);
-    assert.deepEqual(calls, []);
+    assert.equal(result.action, "requested");
+    assert.equal(result.revert.status, "created");
+    assert.equal(called(calls, `POST ${gh}/git/commits`)?.body.tree, "old-tree");
   } finally {
     if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
     else process.env.GITHUB_EVENT_NAME = before;

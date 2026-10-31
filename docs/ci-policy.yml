@@ -170,7 +170,7 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", "scripts/premerge-local-*.mjs", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
   node_major: 24
   commands:
     - node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs
@@ -191,6 +191,17 @@ ship_scripts_tests:
     - bash .claude/skills/ship/scripts/error-collector.test.sh
     - node --test .claude/skills/ship/scripts/error-collector/incident-grouping.test.mjs
     - bash .claude/skills/ship/scripts/ship-claim.test.sh
+  sibling_commands:
+    - python3 .claude/skills/ship/scripts/disk-guard.test.py
+    - node --test .claude/skills/ship/scripts/error-collector/collector.test.mjs
+    - node --test .claude/skills/ship/scripts/error-collector/sources.test.mjs
+    - node --test .claude/skills/ship/scripts/error-collector/vercel-logs.test.mjs
+    - bash .claude/skills/ship/scripts/mcp-contract-watch.test.sh
+    - bash .claude/skills/ship/scripts/ship-gates.test.sh
+    - python3 scripts/daily-stats.test.py
+    - python3 scripts/proc-watchdog.test.py
+    - node --test scripts/premerge-local-flags.test.mjs
+    - node --test scripts/premerge-local-search.test.mjs
   fixtures: offline_with_temporary_home_and_no_secrets
 
 feature_map_weekly:

@@ -26,9 +26,13 @@ function imports(file, source = read(file)) {
       if (argument && ts.isStringLiteralLike(argument)) add(argument.text, node);
       else if (argument?.getText(parsed) === "process.env.FEATURE_FLAG_TYPESCRIPT_PATH" ||
           (argument && ts.isConditionalExpression(argument) && ts.isStringLiteralLike(argument.whenFalse) && argument.whenFalse.text === "typescript")) add("typescript", node);
-      else throw new Error(`${file}: untracked dynamic module load: ${node.getText(parsed)}`);
+      else if (!localFilePath(argument)) throw new Error(`${file}: untracked dynamic module load: ${node.getText(parsed)}`);
     }
     ts.forEachChild(node, visit);
+  }
+  function localFilePath(argument) {
+    return Boolean(argument) && ts.isCallExpression(argument) && ts.isIdentifier(argument.expression) &&
+      argument.expression.text === "pathToFileURL";
   }
   visit(parsed);
   return dependencies;
@@ -152,6 +156,7 @@ test("dependency discovery follows ESM imports, re-exports, dynamic imports and 
     const a = require("parser/lib/main.js");
     const b = import("another-parser");
   `).map((entry) => entry.specifier), ["./registry.mjs", "@scope/parser/subpath", "parser/lib/main.js", "another-parser"]);
+  assert.deepEqual(imports("fixture.mjs", 'const local = await import(pathToFileURL(join(directory, "local.mjs")));'), []);
   assert.throws(() => imports("fixture.mjs", "require(process.env.UNKNOWN_PARSER)"), /untracked dynamic module load/);
 });
 
