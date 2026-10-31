@@ -43,8 +43,10 @@ runner_policy:
 
 pr_job_budget:
   parallel_job_limit: 20
-  normal_synchronize_before: 17
-  normal_synchronize_after: 17
+  # HYCI-32 split the browser check into two parallel halves plus the required
+  # summary job named browser-smoke: 17 -> 19, still under the 20-job limit.
+  normal_synchronize_before: 19
+  normal_synchronize_after: 19
   opened_before: 18
   opened_after: 17
   excludes: [path_specific_jobs, previews, external_review]
@@ -421,6 +423,23 @@ ci_tests:
   file: .github/workflows/ci-tests.yml
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
+  browser_halves:
+    ticket: https://app.hypertask.ai/detail/project-11514/32
+    required_context: browser-smoke
+    required_context_kind: summary_over_halves
+    halves: [browser-smoke-desktop, browser-smoke-mobile]
+    workers_per_half: 4
+    workers_source: playwright.config.smoke.ts
+    desktop_projects: [Desktop, Inbox]
+    mobile_projects: [Mobile, Matrix]
+    project_filter: explicit_project_flag_on_every_playwright_line
+    build: one_per_half
+    app_build_producer: browser-smoke-desktop
+    nextjs_cache_saver: browser-smoke-desktop
+    contract_executor: browser-smoke-desktop
+    premerge_verify_qa_executor: browser-smoke-desktop
+    job_budget_cost: 2
+    coverage_guard: tests/browser-smoke-workflow.test.cjs
   docs_only:
     jobs: [ci-tests, browser-smoke]
     heavy_jobs: [app-smoke, browser-smoke]

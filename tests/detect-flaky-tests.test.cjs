@@ -103,6 +103,19 @@ test("detector CLI reads failed shards for same-code comparisons across commits"
   assert.match(report, /Jobs in that set whose log names a failing test: 0\./);
 });
 
+test("detector CLI reads a failed browser half as the browser lane (HYCI-32)", () => {
+  const report = collect({
+    jobs: [
+      { id: 1, name: "browser-smoke-mobile", conclusion: "failure" },
+      { id: 3, name: "browser-smoke", conclusion: "failure" },
+    ],
+    logs: { 1: testLog("[Mobile] › e2e/smoke/prod.spec.ts:120:5 › phone board shows the card"), 3: summaryLog },
+    differentSha: true,
+  });
+  assert.match(report, /## Same-code flakes across SHAs \(1\)/);
+  assert.match(report, /phone board shows the card/);
+});
+
 test("detector CLI preserves a pre-test infrastructure failure", () => {
   const report = collect({
     jobs: [

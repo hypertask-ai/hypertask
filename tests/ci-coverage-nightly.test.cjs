@@ -17,7 +17,10 @@ function assertNormalTriggers(ci, request) {
   assert.equal(ci.on.schedule, undefined);
   assert.equal(ci.on.workflow_dispatch, undefined);
   assert.equal(ci.jobs["ci-prepare"].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
-  assert.equal(ci.jobs["browser-smoke"].if, "github.event_name == 'push' || github.event.pull_request.draft == false");
+  for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
+    assert.equal(ci.jobs[key].if, "github.event_name == 'push' || github.event.pull_request.draft == false", key);
+  }
+  assert.equal(ci.jobs["browser-smoke"].if, "always() && (github.event_name == 'push' || github.event.pull_request.draft == false)");
   assert.equal(ci.jobs["ci-tests"].name, "ci-tests");
   assert.equal(
     ci.jobs["ci-tests"].if,

@@ -65,9 +65,11 @@ function attempts(report) {
 
 test('PR smoke fails on the first failure in every project, without a hidden retry pass', () => {
   const workflow = yaml.load(readFileSync('.github/workflows/ci-tests.yml', 'utf8'));
-  const step = workflow.jobs['browser-smoke'].steps.find(step => step.run?.includes('npx playwright test'));
-  assert.equal(step.env.BROWSER_SMOKE_PR, '1');
-  assert.doesNotMatch(step.run, /--retries/);
+  for (const key of ['browser-smoke-desktop', 'browser-smoke-mobile']) {
+    const step = workflow.jobs[key].steps.find(step => step.run?.includes('npx playwright test'));
+    assert.equal(step.env.BROWSER_SMOKE_PR, '1', key);
+    assert.doesNotMatch(step.run, /--retries/, key);
+  }
   const { status, report } = runFailOnceProbe('pr');
   assert.equal(status, 1);
   const results = attempts(report);

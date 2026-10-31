@@ -87,9 +87,12 @@ test('heavy scope skips docs/skills/unit tests but never src, CI, dependencies, 
   assert.match(cancellation.with.script, /requestNumber < request\.run_number/);
   assert.match(cancellation.with.script, /if \(!await currentHead\(\)\) return;/);
   assert.match(smoke.jobs.report.if, /!cancelled\(\)/);
-  const browser = workflow('ci-tests').jobs['browser-smoke'];
-  assert.equal(browser.outputs.docs_only, "${{ steps.scope.outputs.heavy_needed == 'false' }}");
-  assert.match(browser.steps.find(step => step.id === 'smoke').if, /heavy_needed == 'true'/);
+  for (const key of ['browser-smoke-desktop', 'browser-smoke-mobile']) {
+    const browser = workflow('ci-tests').jobs[key];
+    assert.equal(browser.outputs.docs_only, "${{ steps.scope.outputs.heavy_needed == 'false' }}");
+    assert.match(browser.steps.find(step => step.id === 'smoke').if, /heavy_needed == 'true'/);
+  }
+  assert.equal(workflow('ci-tests').jobs['browser-smoke'].outputs.docs_only, "${{ needs.browser-smoke-desktop.outputs.docs_only }}");
   assert.equal(workflow('ci-tests').on.pull_request['paths-ignore'], undefined);
   assert.equal(workflow('visual-regression').on.pull_request, undefined);
   assert.match(readFileSync('.github/scripts/visual-change-scope.cjs', 'utf8'), /EXCLUDES = \['src\/app\/api\/\*\*', '\*\*\/\*\.md'\]/);

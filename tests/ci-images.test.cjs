@@ -72,8 +72,8 @@ test("every CI service and command-line consumer uses a pinned GHCR copy with re
 });
 
 test("CI image assertions reject anonymous sources, missing credentials, and login after pulls", () => {
-  const service = workflow("ci-tests").jobs["browser-smoke"].services.postgres;
-  const job = workflow("ci-tests").jobs["browser-smoke"];
+  const service = workflow("ci-tests").jobs["browser-smoke-desktop"].services.postgres;
+  const job = workflow("ci-tests").jobs["browser-smoke-desktop"];
   assert.throws(() => assertService({ ...service, image: service.image.replace("ghcr.io/hypertask-ai/ci-", ["public", "ecr", "aws/docker/library/"].join(".")) }, job));
   assert.throws(() => assertService({ ...service, credentials: undefined }, job));
   assert.throws(() => assertService(service, { ...job, permissions: { contents: "read" } }));
