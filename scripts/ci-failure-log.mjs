@@ -189,7 +189,7 @@ function mcpHeaders(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-export async function fileTickets(groups, config, fetchImpl = fetch) {
+export async function fileTickets(groups, config) {
   const { create, comment } = ticketPlan(groups, config.existing ?? new Map());
   const limit = config.limit ?? create.length;
   const created = [];
@@ -249,7 +249,7 @@ export function formatReport(groups) {
     group.cause,
     group.errors[0] ?? '',
   ]);
-  const cell = value => String(value ?? '').replace(/\|/g, '\\|').slice(0, 160);
+  const cell = value => String(value ?? '').replace(/\\/g, '\\\\').replace(/\|/g, '\\|').slice(0, 160);
   const table = [['Lines', 'Kind', 'First', 'Last', 'Cause', 'First error'], ['---', '---', '---', '---', '---', '---'], ...rows]
     .map(row => `| ${row.map(cell).join(' | ')} |`)
     .join('\n');
@@ -293,26 +293,43 @@ function ghApi(args, input) {
   return execFileSync('gh', ['api', ...args], { encoding: 'utf8', input, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }).trim();
 }
 
-export function readLogFromBranch() {
+function isNotFound(error) {
+  return /HTTP 404|Not Found/i.test(error instanceof Error ? error.message : String(error));
+}
+
+function readLogRef() {
   try {
-    const current = JSON.parse(ghApi([`repos/${repoName()}/contents/${LOG_PATH}?ref=${LOG_BRANCH}`]));
-    return Buffer.from(current.content ?? '', 'base64').toString('utf8');
-  } catch {
-    return '';
+    return JSON.parse(ghApi([`repos/${repoName()}/contents/${LOG_PATH}?ref=${LOG_BRANCH}`]));
+  } catch (error) {
+    if (isNotFound(error)) return null;
+    throw error;
   }
 }
 
-export function publishEntry(entry) {
-  let sha;
-  let previous = '';
+export function readLogFromBranch() {
+  const current = readLogRef();
+  return current ? Buffer.from(current.content ?? '', 'base64').toString('utf8') : '';
+}
+
+export function ensureLogBranch() {
   try {
-    const current = JSON.parse(ghApi([`repos/${repoName()}/contents/${LOG_PATH}?ref=${LOG_BRANCH}`]));
-    previous = Buffer.from(current.content ?? '', 'base64').toString('utf8');
-    sha = current.sha;
-  } catch {
-    previous = '';
+    ghApi([`repos/${repoName()}/branches/${LOG_BRANCH}`]);
+    return false;
+  } catch (error) {
+    if (!isNotFound(error)) throw error;
   }
+  const head = JSON.parse(ghApi([`repos/${repoName()}/git/ref/heads/${process.env.CI_FAILURE_LOG_BASE || 'production'}`]));
+  ghApi(['--method', 'POST', `repos/${repoName()}/git/refs`, '--input', '-'],
+    JSON.stringify({ ref: `refs/heads/${LOG_BRANCH}`, sha: head.object.sha }));
+  return true;
+}
+
+export function publishEntry(entry) {
+  ensureLogBranch();
+  const current = readLogRef();
+  const previous = current ? Buffer.from(current.content ?? '', 'base64').toString('utf8') : '';
   const { text, added } = appendEntry(previous, entry);
+  const sha = current?.sha;
   if (!added) return { added: false, lines: parseLog(text).length };
   const payload = {
     message: `CI failure log: run ${entry.run} (${entry.branch})`,
@@ -343,6 +360,18 @@ function runRows(run, api) {
     }
   }
   return failureRows(run, jobs, workflow, logs);
+}
+
+export function applyFlaky(entries, api, workflow = WORKFLOW) {
+  if (!entries.length) return entries;
+  const since = entries.reduce((min, entry) => (String(entry.at) < min ? String(entry.at) : min), String(entries[0].at));
+  const greens = [];
+  for (let page = 1; page <= 10; page++) {
+    const batch = api(`/actions/workflows/${encodeURIComponent(workflow)}/runs?per_page=100&page=${page}`).workflow_runs;
+    greens.push(...batch.filter(run => run.conclusion === 'success'));
+    if (batch.length < 100 || Date.parse(batch.at(-1).created_at) < Date.parse(since)) break;
+  }
+  return markFlaky(entries, greens);
 }
 
 export function seedEntries({ days, workflow = WORKFLOW, maxRuns = 80 }, api, now = Date.now(), progress = () => {}) {
@@ -460,7 +489,8 @@ export async function main(args = process.argv.slice(2)) {
   if (args.includes('--file')) {
     const source = args.includes('--from-branch') ? readLogFromBranch() : readFileSync(option('--file'), 'utf8');
     const entries = parseLog(source);
-    const groups = groupEntries(entries);
+    if (!entries.length) throw new Error(`No CI failure lines found in ${args.includes('--from-branch') ? LOG_BRANCH : option('--file')}`);
+    const groups = groupEntries(applyFlaky(entries, api));
     if (args.includes('--dry-run')) {
       const plan = ticketPlan(groups);
       console.log(`dryRun=yes create=${plan.create.length} comment=${plan.comment.length}`);
