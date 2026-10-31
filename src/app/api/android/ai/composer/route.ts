@@ -12,6 +12,8 @@ import {
 import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { buildComposerConfig, providersRequiringByokCheck } from "./config";
+import { isFeatureEnabled } from "@/lib/flags";
+import { aiProvidersForSavedByokKeys } from "@/lib/ai/teamAiFunding";
 
 function error(message: string, status: number) {
   return NextResponse.json({ success: false, error: message }, { status });
@@ -82,6 +84,11 @@ async function getComposer(request: NextRequest) {
     const grokGemini4Enabled = await import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7939_GROK_GEMINI4_MODELS_FLAG, ctx.user.id))
       .catch(() => false);
+    const keyOnly = Boolean(lookup.aiKeyOnly);
+    if (keyOnly && (!Number.isSafeInteger(lookup.ownerUserId) || lookup.ownerUserId <= 0 ||
+      !await isFeatureEnabled("htpr-7844-team-ai-key-only", lookup.ownerUserId))) {
+      return error("Team AI is paused.", 503);
+    }
     return NextResponse.json({
       success: true,
       projectId: project.id,
@@ -94,6 +101,7 @@ async function getComposer(request: NextRequest) {
         grokGemini4Enabled,
         haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
         defaultContext,
+        keyOnlySavedProviders: keyOnly ? aiProvidersForSavedByokKeys(lookup.savedByokProviders ?? []) : null,
       }),
     });
   } catch (cause) {

@@ -3,7 +3,8 @@ import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import type { Prisma } from "@prisma/client";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { TeamKeyOnlyRefusal } from "@/lib/ai/teamAiFunding";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
@@ -105,14 +106,20 @@ export async function uploadCustomInstructionFiles(args: {
   };
   const uniqueUrls = Array.from(new Set(args.urls.filter(Boolean)));
   const processed: ProcessUrlResult[] = [];
-  const gatewayApiKey = await getByokOrTeamGatewayApiKeyForProvider(
-    "openai",
-    undefined,
-    {
-      projectId: project.id,
-      userId: args.userId,
-    }
-  );
+  let gatewayApiKey: string | undefined;
+  try {
+    gatewayApiKey = await getByokOrTeamGatewayApiKeyForProvider(
+      "openai",
+      undefined,
+      {
+        projectId: project.id,
+        userId: args.userId,
+        trustedTeamId: teamId || undefined,
+      },
+    );
+  } catch (error) {
+    if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+  }
 
   for (const url of uniqueUrls) {
     try {
@@ -289,10 +296,6 @@ async function extractBinaryDocumentTextWithOpenAI(
     projectId?: number | null;
   }
 ) {
-  if (!gatewayApiKey && !isAiGatewayEnabled()) {
-    return "";
-  }
-
   const isImage = mediaType.startsWith("image/");
   const prompt = isImage
     ? renderPrompt("custom-instruction-image")
@@ -301,6 +304,41 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "text", text: `${prompt}\n\nFile: ${fileName}` },
     { type: "file", mediaType, data: new URL(url) },
   ];
+  const instructionTeamId = usageContext?.teamId ?? gatewayTags?.teamId;
+  if (instructionTeamId && typeof keyOnlySideCallModel === "function") {
+    try {
+      const owned = await keyOnlySideCallModel(
+        {
+          trustedTeamId: instructionTeamId,
+          userId: usageContext?.userId ?? gatewayTags?.userId,
+          projectId: usageContext?.projectId ?? gatewayTags?.projectId,
+        },
+        "claude",
+      );
+      if (owned) {
+        if (usageContext) configureAiModelUsage(owned.model, {
+          ...usageContext,
+          provider: owned.usageProvider,
+          feature: "custom-instructions",
+        });
+        const ownedResult = await generateText({
+          experimental_download: downloadWithoutBrotli,
+          model: owned.model,
+          messages: [{ role: "user", content }],
+          maxRetries: 2,
+          maxOutputTokens: 6000,
+        });
+        return ownedResult.text.trim();
+      }
+    } catch (error) {
+      if (typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal) {
+        console.error(`[custom-instructions] ${error.message}`);
+        return "";
+      }
+      throw error;
+    }
+  }
+  if (!gatewayApiKey && !isAiGatewayEnabled()) return "";
   const loadedContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
   const defaultContext = isImage && !("backgroundClaudeEnabled" in loadedContext && loadedContext.backgroundClaudeEnabled)
     ? { haiku55Enabled: false, byok: undefined }

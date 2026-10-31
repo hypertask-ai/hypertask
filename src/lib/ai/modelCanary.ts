@@ -4,6 +4,7 @@ import { selectModel } from "@/lib/ai/chatStream/models";
 import { aiImageModelDefinitions, aiModelOptions, getAiModelDefinition, isAiModelOptionVisible, type TAiModelOption } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, resolveTeamProviderEnabled, type TByokProviderKey } from "@/lib/aiProviders";
 import { resolveTeamByokApiKey } from "@/app/api/ai/_lib/byokKeys";
+import { isPlatformAiCredential, resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import { configureAiModelUsage, isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { FEATURE_FLAG_QA_USER_ID } from "@/lib/auth/ownerOrQaIds";
@@ -212,14 +213,19 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
     if (teams.length !== 1) throw new Error("Model canary requires exactly one QA-owned team");
     const team = teams[0];
     const targets = modelCanaryInventory();
-    const credentials = new Map<string, string | undefined>([["gateway", gatewayKey]]);
+    const gatewayDecision = await resolveTeamAiFunding(team.id, { provider: "gateway", feature: "gateway" });
+    const credentials = new Map<string, string | undefined>(gatewayDecision.mode === "refused" ? [] : [["gateway", gatewayDecision.mode === "byok" ? gatewayDecision.apiKey : gatewayKey]]);
     for (const provider of new Set(targets.flatMap((target) => target.provider ? [target.provider] : []))) {
       signal.throwIfAborted();
       const definition = targets.find((target) => target.provider === provider)?.option;
       const info = definition && getAiModelDefinition(definition.modelKey);
       if (!info || info.provider === "custom" || !resolveTeamProviderEnabled(team.aiProviderSettings, info.provider)) continue;
+      const decision = await resolveTeamAiFunding(team.id, { provider, feature: "chat" });
+      if (decision.mode === "refused") continue;
       const credential = await resolveTeamByokApiKey(provider, { trustedTeamId: team.id, userId: FEATURE_FLAG_QA_USER_ID });
-      if (credential && !isVercelAiGatewayKey(credential)) credentials.set(`byok:${provider}`, credential);
+      if (credential && !isVercelAiGatewayKey(credential) && !(gatewayDecision.mode === "refused" && isPlatformAiCredential(credential))) {
+        credentials.set(`byok:${provider}`, credential);
+      }
     }
     const work = targets.flatMap((target) => [
       { target, lane: "gateway" },

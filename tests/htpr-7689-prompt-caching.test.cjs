@@ -362,6 +362,7 @@ test("only an ownership-checked chat session becomes a trusted cache scope", asy
       "@/lib/aiModelPreferences": { getAiModelPreferenceIds: () => ({}) },
       "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro", haiku55ModelEnabled: async () => false, assertModelAllowedForPlan: async () => {} },
       "@/app/api/ai/_lib/byokKeys": { getByokOrTeamGatewayApiKeyForProvider: async () => "vck_fixture" },
+      "@/lib/ai/teamAiFunding": require("./helpers/team-ai-funding-stub.cjs"),
       "@/lib/nativeAgent/modelPin": { resolveAgentModelPin: () => null },
       "@/app/api/ai/_lib/providerGate": {},
       "@/lib/ai/chatStream/errors": { reportHandledChatError: async (error) => { throw error; } },

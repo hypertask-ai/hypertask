@@ -115,6 +115,7 @@ test("saved and requested Fast choices use each plan default while Off", () => {
 });
 
 test("Fast credentials preserve customer gateway keys and replace direct keys with gateway funding", async () => {
+  stubModule("src/lib/ai/teamAiFunding.ts", require("./helpers/team-ai-funding-stub.cjs"));
   stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
   const catalog = loadTs("src/lib/aiModelOptions.ts");
   let gatewayKey = "vck_team_gateway";

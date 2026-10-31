@@ -1,6 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, Output } from "ai";
 import { z } from "zod";
@@ -134,7 +134,9 @@ export async function handleSlackChat(input: {
     }
   } catch (error) {
     console.error("Slack chat failed", error);
-    const blocks = errorBlock(
+    const blocks = error instanceof Error && error.name === "TeamKeyOnlyRefusal"
+      ? errorBlock(error.message, "Save a key for this action, or turn key-only off.")
+      : errorBlock(
       "Something went wrong processing your request.",
       "Try again or use `/ht help`.",
     );
@@ -181,13 +183,16 @@ async function parseSlackIntent(
   const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: actor.teamId, userId: actor.user.id }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel("summaries", actor.teamAiProviderSettings, defaultContext.haiku55Enabled, defaultContext);
   if (!systemModel) return null;
-  const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
+  const funded = typeof keyOnlySideCallModel === "function"
+    ? await keyOnlySideCallModel({ trustedTeamId: actor.teamId, userId: actor.user.id }, systemModel.provider)
+    : null;
+  const gatewayApiKey = funded ? undefined : await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: actor.teamId, userId: actor.user.id }, feature: "chat" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
+  const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: actor.teamId, userId: actor.user.id }, feature: "chat" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey));
   configureAiModelUsage(model, {
     userId: actor.user.id,
     teamId: actor.teamId,
-    provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
+    provider: funded?.usageProvider ?? (haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider),
     feature: "chat",
   });
   const result = await generateText({

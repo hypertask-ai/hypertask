@@ -13,6 +13,7 @@ import { searchComments, searchTasks, type TurbopufferCommentRow, type Turbopuff
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { keyOnlyReplacementModelKey, resolveTeamAiFunding, TeamKeyOnlyRefusal } from "@/lib/ai/teamAiFunding";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -656,17 +657,21 @@ export async function selectTaskWriterModel(args: {
   );
   let hasEligibleByokCredential = false;
   if (storePlanId === "BYOK") {
-    const credential = await getByokOrTeamGatewayApiKeyForModelOption(
-      preferredAiModelOption,
-      args.byokProviderFlags,
-      keyLookup,
-    );
-    const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
-    hasEligibleByokCredential =
-      (typeof credential === "string" &&
-        credential.trim().length > 0 &&
-        credential.trim() !== sharedKey) ||
-      (credential !== null && typeof credential === "object");
+    try {
+      const credential = await getByokOrTeamGatewayApiKeyForModelOption(
+        preferredAiModelOption,
+        args.byokProviderFlags,
+        keyLookup,
+      );
+      const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+      hasEligibleByokCredential =
+        (typeof credential === "string" &&
+          credential.trim().length > 0 &&
+          credential.trim() !== sharedKey) ||
+        (credential !== null && typeof credential === "object");
+    } catch (error) {
+      if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+    }
   }
   const deepseekFlashFastEnabled = await import("@/lib/flags")
     .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, args.userId ?? 0))
@@ -734,9 +739,20 @@ export async function selectTaskWriterModel(args: {
     );
   }
 
-  const haikuByok = defaultContext.byok?.provider === "openrouter" &&
+  const keyOnlyDecision = teamContext.teamId && typeof resolveTeamAiFunding === "function"
+    ? await resolveTeamAiFunding(teamContext.teamId, { provider: "claude", feature: "chat" })
+    : { mode: "unrestricted" as const };
+  const replacementModelKey = typeof keyOnlyReplacementModelKey === "function"
+    ? keyOnlyReplacementModelKey(keyOnlyDecision, selection.provider, haiku55Enabled)
+    : null;
+  if (replacementModelKey) {
+    const replacement = getAiModelOptionById(replacementModelKey, haiku55Enabled);
+    if (replacement) selection = selectionFromModelOption(replacement);
+  }
+  let haikuByok = defaultContext.byok?.provider === "openrouter" &&
     !resolveTeamProviderEnabled(teamContext.settings, "openrouter")
     ? undefined : defaultContext.byok;
+  if (keyOnlyDecision.mode === "byok" && haikuByok?.provider !== "claude") haikuByok = undefined;
   const getSelectionApiKey = (
     selected: ReturnType<typeof resolveTaskWriterSelection>
   ) =>
@@ -869,6 +885,7 @@ export async function selectTaskWriterModel(args: {
       };
     }
     if (!previous || (previous.model === "gpt-6-luna" && !resolveTeamProviderEnabled(teamContext.settings, "openai"))) return null;
+    if (keyOnlyDecision.mode !== "unrestricted" && previous.model === "gpt-6-luna") return null;
     fellBack = true;
     console.warn(
       `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,

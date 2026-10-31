@@ -748,6 +748,8 @@ model Team {
   chatSessions                 ChatSession[]
   // HTPR-2572: signups on these email domains auto-join this team, billed a seat like an invite.
   allowedEmailDomains          String[]           @default([])
+  aiKeyOnly                    Boolean            @default(false)
+  aiKeyOnlyPlatformServices    Boolean            @default(false)
 }
 
 /// Team-scoped BYOK secrets (ciphertext). provider matches byokAiProviders.source in app code.

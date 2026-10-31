@@ -57,7 +57,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
       findFirst: async () => ({ id: projectId, teamId, team: { aiProviderSettings: settings } }),
       findUnique: async () => ({ team: { id: teamId, subscriptionPlan: [{ priceId: plan, subscriptionStatus: "active" }] } }),
     },
-    team: { findUnique: async () => ({ id: teamId, aiProviderSettings: settings, subscriptionPlan: [{ priceId: plan, subscriptionStatus: "active" }] }) },
+    team: { findUnique: async () => ({ id: teamId, aiKeyOnly: false, aiProviderSettings: settings, googleAccount: { userId: 6 }, byokApiKeys: [], subscriptionPlan: [{ priceId: plan, subscriptionStatus: "active" }] }) },
     teamByokApiKey: { findUnique: async ({ where }) => {
       const provider = where.teamId_provider.provider;
       const credential = provider === "claude" && teamByok ? teamKey
@@ -144,6 +144,12 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     "@/app/api/ai/_lib/planGate": gate,
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
     "@/app/api/ai/chat/stream/modelFallback": fallback,
+    "@/lib/ai/teamAiFunding": {
+      isPlatformAiCredential: () => false,
+      resolveTeamAiFunding: async () => ({ mode: "unrestricted" }),
+      resolveSideCallFunding: async () => ({ mode: "unrestricted" }),
+      TeamKeyOnlyRefusal: class TeamKeyOnlyRefusal extends Error {},
+    },
   });
   const providerGate = moduleWithStubs("src/app/api/ai/_lib/providerGate.ts", {
     "@/lib/prisma": prisma, "@/lib/aiModelOptions": catalog, "@/lib/aiProviders": providers,
@@ -598,7 +604,9 @@ test("conversation titles never apply the OpenAI-only default, so a supplied gat
       getByokOrTeamGatewayApiKeyForProvider: async () => undefined,
       resolveAiFallbackCredential: async (loadCredential) => loadCredential(),
       resolveAutomaticAiModel: (provider, model, input) => { resolved.push({ provider, model, input }); return { provider, model }; },
+      keyOnlySideCallModel: async () => null,
     },
+    "@/lib/ai/teamAiFunding": { TeamKeyOnlyRefusal: class TeamKeyOnlyRefusal extends Error {} },
     "@/app/api/ai/_lib/modelProvider": { resolveAiModel: () => ({}), aiUsageProviderForCredential: () => "fixture", configureAiModelUsage: () => {}, isAiGatewayEnabled: () => true, providerOptionsForAiModel: () => ({}) },
     "@/lib/ai/prompts/registry": { renderPrompt: () => "fixture" },
     ai: { generateText: async () => ({ text: "Fixture title" }) },
@@ -617,6 +625,9 @@ test("provider settings stays available with the flag off or a failing key read"
       "@/lib/prisma": { __esModule: true, default: { user: { findUnique: async () => ({ id: userId }) } } },
       "@/utils/controllers/teams/getTeamAiSettingsForViewer": { getTeamAiSettingsForViewer: async () => ({ ok: true, settings: {} }) },
       "@/app/api/ai/_lib/byokKeys": { getOpenAiOnlyDefaultContext: context },
+      "@/lib/flags": { isFeatureEnabled: async () => false },
+      "@/lib/flags/definitions/htpr-7844-team-ai-key-only": { HTPR_7844_TEAM_AI_KEY_ONLY_FLAG: "htpr-7844-team-ai-key-only" },
+      "@/lib/ai/teamAiFunding": { applyKeyOnlyProviderVisibility: (rows) => rows, aiProvidersForSavedByokKeys: () => [] },
     });
     let status, body;
     const res = { status(value) { status = value; return res; }, json(value) { body = value; return res; } };
@@ -654,6 +665,9 @@ test("provider settings exposes route booleans but never sends credentials to th
       assert.equal(lookup.userId, userId);
       return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: true, hasClaudeRoute: false, byok: { credential: "fixture-secret-not-for-client" } };
     } },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/definitions/htpr-7844-team-ai-key-only": { HTPR_7844_TEAM_AI_KEY_ONLY_FLAG: "htpr-7844-team-ai-key-only" },
+    "@/lib/ai/teamAiFunding": { applyKeyOnlyProviderVisibility: (rows) => rows, aiProvidersForSavedByokKeys: () => [] },
   });
   let status, body;
   const res = { status(value) { status = value; return res; }, json(value) { body = value; return res; } };

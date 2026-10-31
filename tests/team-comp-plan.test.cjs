@@ -54,6 +54,7 @@ function stubPrisma(teamRow, byokLookups = []) {
   for (const relativePath of stubbedModulePaths) {
     delete require.cache[path.join(root, relativePath)];
   }
+  stubModule("src/lib/ai/teamAiFunding.ts", require("./helpers/team-ai-funding-stub.cjs"));
   stubModule("src/app/api/ai/_lib/planAllowancePolicy.ts", { teamPlanAllowanceEnabled: async () => false });
   stubModule("src/lib/prisma.ts", {
     default: {
