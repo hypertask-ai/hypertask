@@ -119,6 +119,7 @@ test("balances shards by measured work instead of file count, deterministically"
 
 test("an unreadable or empty weights file is refused instead of silently unbalancing", async () => {
   const { readDurationWeights } = await import("../.github/scripts/shard-tests.mjs");
-  assert.throws(() => readDurationWeights("{}"), /defaultWorkMs/);
+  assert.throws(() => readDurationWeights(JSON.stringify({ files: {} })), /defaultWorkMs/);
+  assert.throws(() => readDurationWeights("{}"), /files object/);
   assert.throws(() => readDurationWeights(JSON.stringify({ defaultWorkMs: 10, files: { "tests/a.test.cjs": -1 } })), /bad measured work/);
 });
