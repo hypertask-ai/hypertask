@@ -41,8 +41,12 @@ test("every CI service and command-line consumer uses a pinned GHCR copy with re
   assert.ok(services > 0, "service inventory must not be vacuous");
   const ci = workflow("ci-tests").jobs["ci-test"];
   assert.equal(ci.env.HTPR_PG_IMAGE, reference(images.find((image) => image.tag === "16-alpine")));
-  assertLoginBefore(ci, "Pull PostgreSQL test image");
-  assertLoginBefore(ci, "Test shard", "steps.pg.outputs.need == '1'");
+  assertLoginBefore(ci, "Pull PostgreSQL test image", "steps.pg.outputs.containers == '1'");
+  assert.ok(
+    ci.steps.findIndex((step) => step.uses?.startsWith("docker/login-action@"))
+      < ci.steps.findIndex((step) => step.name === "Test shard"),
+    "the registry login runs before the tests that need it",
+  );
   const nightly = workflow("coverage-nightly").jobs["coverage-nightly"];
   assert.equal(nightly.env.HTPR_PG_IMAGE, ci.env.HTPR_PG_IMAGE);
   assertLoginBefore(nightly, "Pull PostgreSQL test image");

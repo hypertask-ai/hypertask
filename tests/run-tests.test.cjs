@@ -13,7 +13,7 @@ function fixture(t, sources) {
   const directory = mkdtempSync(path.join(tmpdir(), "run-tests-timings-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const folder of ["scripts", "config", "tests/helpers", "node_modules/tsx/dist"]) mkdirSync(path.join(directory, folder), { recursive: true });
-  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs", "todo-passing.mjs"]) {
+  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs", "todo-passing.mjs", "test-isolation.mjs"]) {
     copyFileSync(path.join(root, "scripts", file), path.join(directory, "scripts", file));
   }
   writeFileSync(path.join(directory, "tests/helpers/register-server-only.cjs"), "");
