@@ -46,7 +46,7 @@ async function settleAfter<T>(page: Page, navigate: () => Promise<T>): Promise<T
 }
 
 export const test = base.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page }, provide) => {
     const goto = page.goto.bind(page)
     const reload = page.reload.bind(page)
     const goBack = page.goBack.bind(page)
@@ -55,6 +55,6 @@ export const test = base.extend({
     page.reload = (options) => settleAfter(page, () => reload(options))
     page.goBack = (options) => settleAfter(page, () => goBack(options))
     page.goForward = (options) => settleAfter(page, () => goForward(options))
-    await use(page)
+    await provide(page)
   },
 })

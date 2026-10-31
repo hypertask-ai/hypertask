@@ -21,6 +21,7 @@ function inboxCheck() {
     exports: {}, __dirname: path.dirname(filename), process: { env: {} },
     require: specifier => {
       if (specifier === "@playwright/test") return { test: register, expect };
+      if (specifier === "./lib/appReady") return { test: register, expect };
       if (specifier === "../../src/lib/firstScreen/boardDisplay") return load("src/lib/firstScreen/boardDisplay.ts", {});
       if (specifier.startsWith("./lib/")) return load(`e2e/smoke/${specifier.slice(2)}.ts`, {});
       return require(specifier);

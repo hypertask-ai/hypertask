@@ -38,6 +38,7 @@ function smoke() {
     if (name === "@playwright/test") return { test: register, expect };
     if (name === "node:fs") return { ...require("node:fs"), readFileSync: (file, encoding) => file.endsWith("agent-sidebar-fixture.json") ? JSON.stringify(fixture) : require("node:fs").readFileSync(file, encoding) };
     if (name.startsWith("node:")) return require(name);
+    if (name === "./lib/appReady") return { test: register, expect };
     if (name === "./lib/realtime") return { withRealtime: value => value };
     if (name === "./lib/layout-lock-scroll") return {};
     assert.fail(`Unexpected dependency: ${name}`);
