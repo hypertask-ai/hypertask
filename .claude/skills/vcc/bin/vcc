@@ -21,10 +21,38 @@ helper_run() {
   return 1
 }
 
+guard_args() {
+  local arg
+  HELP_REQUESTED=false
+  local -a positional=() options=()
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    if [ "${#positional[@]}" = 3 ] && [ "${positional[0]}" = activity ] && [ "${positional[1]}" = add ]; then
+      positional+=("$arg")
+      shift
+      continue
+    fi
+    [[ $arg != -?* || $arg == --* ]] || arg="-$arg"
+    case "$arg" in
+      --) shift; positional+=("$@"); break ;;
+      --help|--h|--version|--V|--help=true|--h=true|--version=true|--V=true) HELP_REQUESTED=true ;;
+      --*=*|--markdown|--dry-run) options+=("$arg") ;;
+      --json|--human|--force|--all|--all-boards|--enabled|--disabled|--confirm|--clear|--restore|--stdin|--off|--has-due-date|--summary|--markdown|--clear-due|--clear-parent|--comment|--html|--canvas|--apply|--clear-description|--running|--default|--clear-labels|--clear-assignees|--add|--self) ;;
+      -*) options+=("$arg" "${2:-}"); shift; [ "$#" -gt 0 ] || break ;;
+      *) positional+=("$arg") ;;
+    esac
+    shift
+  done
+  CHECK_ARGS=("${positional[@]}" "${options[@]}")
+}
+guard_args "$@"
 if helper_run; then
-  case "${1:-}" in
-    --help|help|--version) ;;
-    *) case "${2:-}" in
+  case "${CHECK_ARGS[0]:-}" in
+    help) ;;
+    "") if [ "$HELP_REQUESTED" != true ]; then
+      printf '%s\n' 'vcc: helpers never write to the board; report to your runner' >&2; exit 3
+    fi ;;
+    *) case "${CHECK_ARGS[1]:-}" in
       get|list|search|last) ;;
       *) printf '%s\n' 'vcc: helpers never write to the board; report to your runner' >&2; exit 3 ;;
     esac ;;
@@ -37,25 +65,39 @@ question_check() {
       gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
     def unmention:
-      sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
+      sub("^\\s*(<(?:p|li|div|blockquote)\\b[^>]*>\\s*)*<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
     ($markdown == "true") as $md |
     (if $md then $text | split("\n") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0))
-     else [$text | scan("<p\\b[^>]*>(.*?)</p>"; "s") | .[0]] end) as $paragraphs |
-    ($paragraphs | map(if $md then gsub("\\*\\*"; "") else visible end)) as $plain |
+     else $text | gsub("[\\r\\n]+"; " ") |
+       gsub("(?<opening>Question:\\s*<strong\\b[^>]*>)(?<question>.*?)</strong>";
+         .opening + (.question | gsub("<br\\s*/?>"; " "; "i")) + "</strong>"; "is") |
+       gsub("</?(?:ul|ol)\\b[^>]*>"; ""; "i") |
+       gsub("<br\\s*/?>|</(?:p|li|div|blockquote|h[1-6])>"; "\n"; "i") | split("\n") |
+       map(gsub("^\\s+|\\s+$"; "") | select((visible | length) > 0)) end) as $paragraphs |
+    ($paragraphs | map(if $md then gsub("\\*\\*"; "") else unmention | visible end)) as $plain |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
      else $text | visible end) as $visible |
+    ([$paragraphs | to_entries[] | select(.value |
+      (if $md then . else unmention end) |
+      [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
+        else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
+        (if $md then . else visible end) | endswith("?")] | any) | .key] | first) as $question_index |
     (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
     [
-      (if any($paragraphs[];
-        (if $md then . else unmention end) |
-        [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
-          else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
-          (if $md then . else visible end) | endswith("?")] | any)
+      (if $question_index != null
        then empty else "Question: <strong>yes/no question?</strong> (Markdown: Question: **yes/no question?**)" end),
       ("Yes:", "No:", "My recommendation:") as $part |
         if any($plain[]; startswith($part)) then empty else $part end
     ] + [
+      (if ([$plain[] | select(startswith("Question:"))] | length) > 1
+       then "only one Question:" else empty end),
+      (if $question_index != null and $question_index > 3
+       then "at most 3 lines before Question:" else empty end),
+      (if $question_index != null and ($plain[$question_index + 1] // "" | startswith("My recommendation:") | not)
+       then "My recommendation: must be right under Question:" else empty end),
+      (if $text | test("https?://|www\\.|<a\\b|\\[[^\\]]*\\]\\("; "i")
+       then "no outside links in a Question" else empty end),
       (if any($plain[]; startswith("Why:") or (startswith("My recommendation:") and test("\\bWhy:")))
        then empty else "Why:" end),
       ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
@@ -113,6 +155,7 @@ people_content() {
   while [ "$#" -gt 0 ]; do
     arg=$1
     case "$arg" in
+      --) break ;;
       --kind|--text|--body|--file|--description|--description-file|--mentions)
         [ "$#" -ge 2 ] || break
         case "$arg" in
@@ -151,8 +194,29 @@ people_content() {
     exit 5
   fi
 }
-people_content "$@"
-question_comment "$@"
+if [ "$HELP_REQUESTED" != true ]; then
+  people_content "$@"
+  question_comment "${CHECK_ARGS[@]}"
+fi
+# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
+TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+IDENTITY="Valentins Claude Code"
+if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
+  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
+fi
+# A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
+# token exists, which would post a runner's words under his name (YPER4-960).
+case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
+  *runner*)
+    [ "$IDENTITY" = "${SHIP_SESSION_NAME%% | *}" ] \
+      || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; } ;;
+esac
+HT_TOKEN="$(cat "$TOKEN_FILE")"
+[ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
+export HT_TOKEN
+if [ "$HELP_REQUESTED" = true ]; then
+  exec /usr/bin/env -S hypertask "$@"
+fi
 
 completion_move() {
   local section='' project='' destination='' target_section='' out arg checker="$HOME/.agents/skills/ship/scripts/ship-check"
@@ -189,22 +253,6 @@ completion_move() {
   out=$("$checker" move "${positional[2]:-}" "$section" "$project" "$destination") || { printf '%s\n' "$out" >&2; exit 2; }
 }
 
-# Identity: the session's own name if a token exists for it, else Valentins Claude Code (ship-identity).
-TOKEN_FILE="$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-IDENTITY="Valentins Claude Code"
-if [ -x "$HOME/.agents/skills/ship/scripts/ship-identity" ]; then
-  IFS=$'\t' read -r IDENTITY TOKEN_FILE < <("$HOME/.agents/skills/ship/scripts/ship-identity")
-fi
-# A runner writes as its own agent or not at all: ship-identity falls back to Valentin when no
-# token exists, which would post a runner's words under his name (YPER4-960).
-case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
-  *runner*)
-    [ "$IDENTITY" = "${SHIP_SESSION_NAME%% | *}" ] \
-      || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; } ;;
-esac
-HT_TOKEN="$(cat "$TOKEN_FILE")"
-[ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
-export HT_TOKEN
 completion_move "$@"
 review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
@@ -237,7 +285,7 @@ review_move() {
   [ -z "$reason" ] || review_refuse "$ticket" "$reason; rewrite it for a product owner (pospeak)"
 }
 if [ "${1:-}" != activity ]; then
-  review_move "$@"
+  review_move "${CHECK_ARGS[@]}"
   exec /usr/bin/env -S hypertask "$@"
 fi
 
