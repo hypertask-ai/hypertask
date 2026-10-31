@@ -58,6 +58,11 @@ def is_speed(task):
     return "[speed]" in task["title"].casefold() or "speed" in labels.casefold()
 
 
+def is_check_work(task):
+    return any(str(label.get("name", label.get("value", "")) if isinstance(label, dict) else label)
+               .strip().casefold() == "ci" for label in task.get("labels") or [])
+
+
 def command(*args):
     result = subprocess.run(args, capture_output=True, text=True, timeout=60)
     if result.returncode:
@@ -207,7 +212,8 @@ def free_tickets(boards, comments, claim_dir):
     for project, column in COLUMNS:
         for task in boards[project]:
             ticket = task["ticketNumber"]
-            if task["section"] != column or "do not touch" in task["title"].casefold():
+            if (task["section"] != column or "do not touch" in task["title"].casefold()
+                    or is_check_work(task)):
                 continue
             assignees = task.get("assignees") or []
             if (claims(comments[ticket]) or task.get("agents")
