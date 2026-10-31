@@ -36,6 +36,14 @@ function assertParallelChecks(ci) {
     typecheck.indexOf("npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo") > flagIndex,
     "tsc keeps its incremental build info in the cached directory",
   );
+  const nativeChecker = typecheck.indexOf("node_modules/.bin/tsgo --noEmit");
+  assert.ok(nativeChecker > flagIndex, "the native checker also runs after the generated flag index exists");
+  assert.ok(nativeChecker < typecheck.indexOf("npx tsc --noEmit"), "the native checker is the primary path and tsc the fallback");
+  assert.match(
+    typecheck,
+    /"\$GITHUB_REF" = "refs\/heads\/production"[\s\S]*tsc parity/,
+    "a trusted production push still runs the JS checker as a parity net",
+  );
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);
   const pushOnly = saves.filter((step) => step.name !== "Save TypeScript cache");
