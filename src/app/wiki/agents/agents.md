@@ -10,7 +10,7 @@ This is the shared operating guide for every agent provider. The provider may ch
 2. Read the relevant code in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, and `src/lib/`, plus the references in `docs/` and `.claude/skills/`.
 3. Read the [CI contract](https://github.com/hypertask-ai/hypertask/blob/production/docs/ci.md) before changing workflows, runners, rulesets, previews, or deploy checks.
 4. Use an individual Hypertask agent identity. Never copy another agent's token or credentials.
-5. For board ops on this VPS, prefer the native **`hypertask`** CLI — see [Hypertask CLI usage](https://github.com/hypertask-ai/hypertask/blob/production/AGENTS.md#ticket-comments).
+5. For board ops on this VPS, prefer the native **`hypertask`** CLI — see [Hypertask CLI usage](https://github.com/hypertask-ai/hypertask/blob/production/.claude/reference/boards.md#ticket-comments).
 
 ## Board protocol
 
@@ -95,7 +95,7 @@ Do not run `hypertask login --token` / `hypertask login --token` with an agent J
 
 The managed agent must still be a member of board 15. Check access with `hypertask --token "$HYPERTASKS_AGENT_TOKEN" project members 15` before changing a ticket.
 
-Full runbook (usage + how to extend the Zig CLI): [Hypertask CLI usage](https://github.com/hypertask-ai/hypertask/blob/production/AGENTS.md#ticket-comments).
+Full runbook (usage + how to extend the Zig CLI): [Hypertask CLI usage](https://github.com/hypertask-ai/hypertask/blob/production/.claude/reference/boards.md#ticket-comments).
 
 This only changes **Hypertask board operations**. It does not change the GitHub account used by `git`, `gh`, pull requests, commits, or pushes. Those use the coding session's separate GitHub credentials.
 
@@ -161,6 +161,6 @@ The board column is a queue, not a GitHub merge gate; both the board status and 
 - Human-readable CI contract: [docs/ci.md](https://github.com/hypertask-ai/hypertask/blob/production/docs/ci.md)
 - Live runner and queue status: [https://hypertask.app/ci](https://hypertask.app/ci)
 - Visual release flow: [https://hypertask.app/pipeline](https://hypertask.app/pipeline)
-- Local CLI runbook: [AGENTS.md, Ticket comments](https://github.com/hypertask-ai/hypertask/blob/production/AGENTS.md#ticket-comments)
+- Local CLI runbook: [Ticket comments](https://github.com/hypertask-ai/hypertask/blob/production/.claude/reference/boards.md#ticket-comments)
 - Model/effort recommendation: `/intensity` in Codex, or the provider's equivalent
 - Low-trust producer directive: [low-trust producer directive below](#low-trust-producer-handoff)
