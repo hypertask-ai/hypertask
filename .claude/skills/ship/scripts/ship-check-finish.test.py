@@ -60,6 +60,12 @@ else:
         path.write_text(text)
         path.chmod(0o755)
 
+    def guard(self, command):
+        result = subprocess.run([str(SCRIPT), 'guard'], env=self.env, cwd=self.repo,
+                                input=json.dumps({'tool_input': {'command': command}, 'cwd': str(self.repo)}),
+                                capture_output=True, text=True)
+        return result.returncode, result.stderr
+
     def comments(self, text):
         (self.root / 'comments.json').write_text(json.dumps({
             'success': True, 'comments': [{'text': text, 'createdAt': '2026-10-28T10:00:00Z'}]}))
@@ -109,6 +115,21 @@ else:
         self.check('move', 'HTPR-7950', 'Agent Blocked (Infra)')
         self.comments('Local tests got SIGKILL.')
         self.check('move', 'HTPR-7950', 'In Progress')
+
+    def test_board_outside_the_guard_moves_freely(self):
+        for ticket in ['IGSH-1335', 'HYCI-31', 'MARK-7']:
+            with self.subTest(ticket=ticket):
+                self.assertEqual(self.check('move', ticket, 'In Progress'), 'move ok\n')
+                self.assertEqual(self.check('move', ticket, 'Flag: Everyone'), 'move ok\n')
+
+    def test_hypertask_done_move_is_still_checked(self):
+        for ticket in ['HTPR-7950', 'YPER4-697']:
+            with self.subTest(ticket=ticket):
+                self.assertIn(ticket, self.check('move', ticket, 'Flag: Everyone', success=False))
+        code, message = self.guard('vcc task move HTPR-7950 --section "Done"')
+        self.assertEqual(code, 2, message)
+        self.assertIn('blocked moving HTPR-7950', message)
+        self.assertEqual(self.guard('vcc task move IGSH-1335 --section "Done"')[0], 0)
 
     def test_unreadable_handoff_fails_closed(self):
         (self.root / 'comments.json').write_text('{bad')
