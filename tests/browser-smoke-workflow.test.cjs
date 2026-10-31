@@ -6,9 +6,6 @@ async function source(path) {
   return readFile(path, "utf8");
 }
 
-// HYCI-32: the browser check is two parallel halves under one required summary
-// job named browser-smoke. "The browser job" means both halves; a rule that holds
-// for one half holds for the other, so every check below runs over both.
 function browserHalf(workflow, key) {
   const markers = ["  browser-smoke-desktop:", "  browser-smoke-mobile:", "  browser-smoke:\n"];
   const start = workflow.indexOf(`  ${key}:`);
@@ -148,9 +145,6 @@ test("required browser smoke runs the layout lock matrix in both flag runs and c
     source("e2e/smoke/layout-lock-matrix.spec.ts"),
     source("e2e/smoke/lib/layout-lock-matrix.ts"),
   ]);
-  // The matrix is the phone half's job: it sets its own window width and runs once
-  // per flag run there. Its approval guard stays in the desktop half, which owns
-  // the PR-body check, and its failure screenshots upload next to it.
   const job = browserHalf(workflow, "browser-smoke-mobile");
   const desktop = browserHalf(workflow, "browser-smoke-desktop");
   const runs = job.match(/npx playwright test[^\n]*e2e\/smoke\/layout-lock-matrix\.spec\.ts/g);
@@ -399,13 +393,11 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   const mobile = workflow.jobs["browser-smoke-mobile"];
 
   assert.deepEqual(aggregate.needs, ["browser-smoke-desktop", "browser-smoke-mobile"]);
-  // Two machines, not one queue: neither half may wait for the other.
   assert.equal(desktop.needs, undefined);
   assert.equal(mobile.needs, undefined);
   assert.equal(desktop.if, mobile.if);
   assert.match(desktop.if, /pull_request\.draft == false/);
   assert.ok(desktop["timeout-minutes"] <= 20 && mobile["timeout-minutes"] <= 20);
-  // The build and the contract stay in one place; the summary only reports.
   const desktopSteps = desktop.steps.map((step) => step.name);
   assert.ok(desktopSteps.includes("Upload the one build"));
   assert.ok(!mobile.steps.some((step) => step.name === "Upload the one build"));
@@ -415,7 +407,6 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.equal(workflow.jobs["mcp-cli-api-contract"].needs, "browser-smoke");
   assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-smoke"]);
 
-  // A red, cancelled or missing half can never read as a pass.
   const step = aggregate.steps[0];
   assert.equal(step.env.DESKTOP, "${{ needs.browser-smoke-desktop.result }}");
   assert.equal(step.env.MOBILE, "${{ needs.browser-smoke-mobile.result }}");
@@ -469,8 +460,6 @@ test("HYCI-32: the two halves split the browser projects with nothing lost and n
     }
   }
 
-  // The contract of the split: every project the old single job served, in the
-  // same state runs, and each one exactly once across the two halves.
   const expected = [
     "default/Desktop",
     "default/Mobile",
@@ -487,9 +476,6 @@ test("HYCI-32: the two halves split the browser projects with nothing lost and n
 });
 
 test("HYCI-32: the two halves never publish an artifact under one name", async () => {
-  // upload-artifact v4 refuses a second artifact with the same name in one run,
-  // so a shared failure-artifact name would hide the second half's screenshots
-  // exactly when both halves are red.
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const names = [];

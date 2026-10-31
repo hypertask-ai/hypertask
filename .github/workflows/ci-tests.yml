@@ -1035,7 +1035,12 @@ jobs:
             sleep 2
           done
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
-          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"
+          for attempt in {1..30}; do
+            if curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"; then break; fi
+            kill -0 "$search" 2>/dev/null || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search exited before it became ready'; exit 1; }
+            sleep 1
+          done
+          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health" || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search did not become ready'; exit 1; }
           node scripts/mcp-cli-api-contract.mjs
           # --project is what makes the halves halves: without it every run here
           # would serve every project and the split would save nothing. The
@@ -1324,7 +1329,12 @@ jobs:
             sleep 2
           done
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
-          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"
+          for attempt in {1..30}; do
+            if curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"; then break; fi
+            kill -0 "$search" 2>/dev/null || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search exited before it became ready'; exit 1; }
+            sleep 1
+          done
+          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health" || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search did not become ready'; exit 1; }
           npx playwright test -c playwright.config.smoke.ts --project=Mobile --project=Matrix e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
           # Keep the instant-open regression covered even while its live mode is OFF.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
