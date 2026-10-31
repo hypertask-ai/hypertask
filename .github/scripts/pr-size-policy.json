@@ -1,0 +1,7 @@
+{
+  "mode": "report-only",
+  "cap": 400,
+  "excludedFiles": ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Cargo.lock"],
+  "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/"],
+  "excludedSuffixes": [".snap", ".generated.ts", ".generated.tsx"]
+}
