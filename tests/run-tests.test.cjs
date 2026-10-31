@@ -175,6 +175,7 @@ test("passing todo fails the run and names the marker to remove", (t) => {
 test("known-bug todo that still fails keeps the run green", (t) => {
   const directory = fixture(t, {
     "failing.test.cjs": `require('node:test')('broken fixture', { todo: 'HTPR-1 known bug' }, () => { throw Error('still broken'); });`,
+    "healthy.test.cjs": `require('node:test')('ordinary case', () => {});`,
   });
   const { status, stderr } = run(directory);
   assert.equal(status, 0, stderr);
