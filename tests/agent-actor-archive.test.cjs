@@ -643,12 +643,32 @@ test("MCP updateTask signs the internal session with ctx.agentId", () => {
   );
 });
 
-test("Done guard checks current task sections only for archive or delete", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/mcp/tasks/agentDoneLifecycle.ts"),
-    "utf8",
+test("Done guard reads section roles only for Archive and Delete requests", async () => {
+  const calls = { findMany: 0 };
+  const tx = {
+    section: {
+      findMany: async ({ where }) => {
+        calls.findMany += 1;
+        assert.deepEqual(where.id.in, [DONE_SECTION_ID]);
+        return [{ id: DONE_SECTION_ID, section_title: "Done", isDone: true }];
+      },
+    },
+  };
+
+  await assertAgentMayLeaveDone(
+    tx,
+    { sectionId: DONE_SECTION_ID, status: "Normal" },
+    "Normal",
+    AGENT_ID,
   );
-  assert.match(source, /candidates\.map\(\(task\) => task\.sectionId as number\)/);
-  assert.match(source, /requestedStatus !== 'Archive' && requestedStatus !== 'Deleted'/);
-  assert.match(source, /requestedStatus !== task\.status/);
+  await assertAgentMayLeaveDone(
+    tx,
+    { sectionId: DONE_SECTION_ID, status: "Normal" },
+    "Deleted",
+    AGENT_ID,
+  ).then(
+    () => assert.fail("a Done ticket must still refuse agent delete"),
+    (error) => assert.equal(error.code, "agent_done_lifecycle_denied"),
+  );
+  assert.equal(calls.findMany, 1);
 });
