@@ -82,6 +82,17 @@ class DispatchTests(unittest.TestCase):
         self.assertEqual(m.free_tickets(self.boards, self.comments, self.claim_dir),
                          ["HTPR-1", "HTPR-3", "YPER4-1"])
 
+    def test_check_labelled_tickets_wait_for_the_ci_boss_runners(self):
+        self.boards[15] = [
+            {"ticketNumber": "HTPR-5", "title": "Flaky retry test", "section": "Bugs",
+             "assignees": [], "labels": [{"name": "CI"}]},
+            {"ticketNumber": "HTPR-6", "title": "Inbox rows skip a beat", "section": "Bugs",
+             "assignees": [], "labels": [{"name": "Bug"}]},
+        ]
+        self.boards[4060] = []
+        self.comments.update({"HTPR-5": [], "HTPR-6": []})
+        self.assertEqual(m.free_tickets(self.boards, self.comments, self.claim_dir), ["HTPR-6"])
+
     def dispatch(self, rows=None, load=1, go=False):
         return m.dispatch(self.rows if rows is None else rows, self.boards, self.comments,
                           load, self.now, go=go, claim_dir=self.claim_dir, loop=self.loop, state=self.state)
