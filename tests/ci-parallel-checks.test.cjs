@@ -30,8 +30,31 @@ function assertParallelChecks(ci) {
   assert.equal(boundary[0].if, undefined);
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);
-  for (const step of saves) {
+  const pushOnly = saves.filter((step) => step.name !== "Save TypeScript cache");
+  for (const step of pushOnly) {
     assert.match(step.if, /^needs\.ci-prepare\.outputs\.run_tests == 'true' && \(github\.event_name == 'push' && steps\.[\w-]+\.outputs\.cache-hit != 'true'\)$/);
+  }
+  assertTrustedTypeScriptCache(checks.steps);
+}
+
+// HTPR-8234: the TypeScript cache also fills from pull requests, so the branch
+// that pushes again reuses its own state. That is only safe while a PR write
+// stays in its own namespace and production can never read one back.
+function assertTrustedTypeScriptCache(steps) {
+  const restore = steps.find((step) => step.name === "Restore TypeScript cache");
+  const save = steps.find((step) => step.name === "Save TypeScript cache");
+  assert.ok(restore && save, "TypeScript cache steps exist");
+  assert.equal(save.if, "needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'");
+  assert.equal(save.with.key, "${{ steps.restore-tsc-cache.outputs.cache-primary-key }}");
+  const namespace = restore.env.TSC_CACHE_NAMESPACE;
+  assert.match(namespace, /github\.event_name == 'pull_request' && format\('pr-\{0\}', github\.event\.pull_request\.number\) \|\| 'prod'/);
+  assert.match(restore.with.key, /^tsc-\$\{\{ env\.TSC_CACHE_NAMESPACE \}\}-/);
+  const restoreKeys = restore.with["restore-keys"].trim().split("\n").map((line) => line.trim());
+  for (const key of restoreKeys) {
+    assert.ok(
+      key.startsWith("tsc-${{ env.TSC_CACHE_NAMESPACE }}-") || key.startsWith("tsc-prod-"),
+      `production must never restore a pull-request cache: ${key}`,
+    );
   }
 }
 
@@ -67,6 +90,11 @@ test("static checks and shards share preparation, not a serial dependency", () =
   const unsafeCache = structuredClone(ci);
   unsafeCache.jobs["ci-checks"].steps.find((step) => step.uses?.startsWith("actions/cache/save@")).if = "always()";
   assert.throws(() => assertParallelChecks(unsafeCache));
+  const leakedTypeScriptCache = structuredClone(ci);
+  leakedTypeScriptCache.jobs["ci-checks"].steps
+    .find((step) => step.name === "Restore TypeScript cache")
+    .with["restore-keys"] += "\n            tsc-pr-${{ runner.os }}-\n";
+  assert.throws(() => assertParallelChecks(leakedTypeScriptCache));
 });
 
 test("real summary shell rejects failed, cancelled, skipped or missing static checks", () => {
