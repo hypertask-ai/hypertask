@@ -222,7 +222,7 @@ case "$1" in
       if [ ! -f "$HOME/tool-phase" ]; then
         echo tool-phase >> "$HOME/events"; touch "$HOME/tool-phase"
       elif [ "${RECOVER_PROVIDER:-0}" != 1 ] || [ -f "$HOME/recovered" ]; then
-        printf '{"kind":"assistant","text":"%s"}\\n{"kind":"turn_usage"}\\n' "$FINAL_LINE" >> "$HOME/session.jsonl"
+        printf '{"kind":"assistant","text":"%s"}\\n{"kind":"turn_usage"}\\n%s\\n' "$FINAL_LINE" "${TRAILING_LINE}" >> "$HOME/session.jsonl"
         echo final-phase >> "$HOME/events"
       fi
     fi ;;
@@ -230,21 +230,23 @@ esac
 exec /bin/sleep 0.01
 """)
         session_ids = set()
-        for final_line, cooldown, recovery in [
-            ('RUNNER DONE YPER4-1 Done', 30, False),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30, False),
-            ('RUNNER DONE YPER4-1 Agent Blocked', 30, False),
-            ('RUNNER DONE YPER4-776 Done', 30, False),
-            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30, False),
-            ('• RUNNER IDLE no free tickets', 900, False),
-            ('RUNNER DONE YPER4-776 Done', 30, True),
+        user_turn = '{"type":"user_turn","elapsed_ms":1}'
+        for final_line, cooldown, recovery, trailing in [
+            ('RUNNER DONE YPER4-1 Done', 30, False, ''),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/1 Done', 30, False, ''),
+            ('RUNNER DONE YPER4-1 Agent Blocked', 30, False, user_turn),
+            ('RUNNER DONE YPER4-776 Done', 30, False, user_turn),
+            ('RUNNER DONE https://app.hypertask.ai/detail/project-4060/776 Done', 30, False, user_turn),
+            ('• RUNNER IDLE no free tickets', 900, False, user_turn),
+            ('RUNNER DONE YPER4-776 Done', 30, True, user_turn),
         ]:
-            with self.subTest(final_line=final_line):
+            with self.subTest(final_line=final_line, trailing=trailing):
                 self.events.write_text('')
                 for name in ['closed', 'started', 'tool-phase', 'recovered']:
                     (self.home / name).unlink(missing_ok=True)
                 self.env['FINAL_LINE'] = final_line
                 self.env['RECOVER_PROVIDER'] = '1' if recovery else '0'
+                self.env['TRAILING_LINE'] = trailing
                 records = [
                     {'type': 'session', 'version': 1, 'cwd': str(self.home / 'projects/hypertask')},
                     {'kind': 'user', 'text': final_line},
