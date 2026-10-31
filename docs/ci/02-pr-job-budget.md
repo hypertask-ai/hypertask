@@ -20,10 +20,11 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
-(YPER4-721 adds one tiny native scanner summary job). Path-specific evals, the
+Static normal non-draft app PR budget: **19 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes).
+Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
-extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted
+extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
 scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
