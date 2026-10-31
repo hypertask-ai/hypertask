@@ -157,10 +157,14 @@ test("flag off pauses key-only teams, while other teams remain unrestricted", as
 });
 
 
-test("funding failures refuse rather than falling back", async () => {
-  for (const options of [{ flagError: true }, { teamError: true }, { keyError: true }]) {
+test("funding failures never fall back to platform keys", async () => {
+  for (const [options, expected] of [
+    [{ flagError: true }, { message: "flag unavailable" }],
+    [{ teamError: true }, { message: "team unavailable" }],
+    [{ keyError: true }, { message: "keys unavailable" }],
+  ]) {
     const byok = loadByok(true, {}, options);
-    await assert.rejects(() => byok.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID }), { name: "TeamKeyOnlyRefusal" });
+    await assert.rejects(() => byok.getByokOrTeamGatewayApiKey("claude", undefined, { trustedTeamId: TEAM_ID }), expected);
   }
 });
 

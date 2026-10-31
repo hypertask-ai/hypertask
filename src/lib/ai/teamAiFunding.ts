@@ -192,48 +192,28 @@ export function modelOptionsForKeyOnlyTeam<T extends { modelKey: string }>(
 
 async function loadTeamAiFundingSnapshot(teamId: string): Promise<TeamAiFundingSnapshot | null> {
   if (!teamId) throw new TeamKeyOnlyRefusal();
-  let team: {
-    aiKeyOnly: boolean;
-    aiKeyOnlyPlatformServices: boolean;
-    aiProviderSettings: unknown;
-    googleAccount: { userId: number };
-  } | null;
-  try {
-    team = await prisma.team.findUnique({
-      where: { id: teamId },
-      select: {
-        aiKeyOnly: true,
-        aiKeyOnlyPlatformServices: true,
-        aiProviderSettings: true,
-        googleAccount: { select: { userId: true } },
-      },
-    });
-  } catch {
-    throw new TeamKeyOnlyRefusal();
-  }
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: {
+      aiKeyOnly: true,
+      aiKeyOnlyPlatformServices: true,
+      aiProviderSettings: true,
+      googleAccount: { select: { userId: true } },
+    },
+  });
   if (!team) throw new TeamKeyOnlyRefusal();
   if (team.aiKeyOnly === false) return null;
   if (team.aiKeyOnly !== true) throw new TeamKeyOnlyRefusal();
-  let flagOn: boolean;
-  try {
-    if (!Number.isSafeInteger(team.googleAccount?.userId) || team.googleAccount.userId <= 0) {
-      throw new Error("Team owner unavailable");
-    }
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    flagOn = await isFeatureEnabled("htpr-7844-team-ai-key-only", team.googleAccount.userId);
-  } catch {
+  if (!Number.isSafeInteger(team.googleAccount?.userId) || team.googleAccount.userId <= 0) {
     throw new TeamKeyOnlyRefusal();
   }
+  const { isFeatureEnabled } = await import("@/lib/flags");
+  const flagOn = await isFeatureEnabled("htpr-7844-team-ai-key-only", team.googleAccount.userId);
   if (flagOn !== true) return { flagOn: false, aiKeyOnly: true, keys: {} };
-  let rows: Array<{ provider: string; ciphertext: string | null }>;
-  try {
-    rows = await prisma.teamByokApiKey.findMany({
-      where: { teamId, enabled: true },
-      select: { provider: true, ciphertext: true },
-    });
-  } catch {
-    throw new TeamKeyOnlyRefusal();
-  }
+  const rows = await prisma.teamByokApiKey.findMany({
+    where: { teamId, enabled: true },
+    select: { provider: true, ciphertext: true },
+  });
   const keys: Partial<Record<string, string>> = {};
   for (const row of rows) {
     const ciphertext = row.ciphertext?.trim();
