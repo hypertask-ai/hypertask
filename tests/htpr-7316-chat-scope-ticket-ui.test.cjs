@@ -12,6 +12,7 @@ function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, s
   let recent = [], state;
   const value = (atom) => atom === atoms.currentProjectAtom ? board : atom === atoms.currentUserAtom ? { id: 7 } : atom === atoms.inViewObjectAtom ? { taskId, taskTicketNumber: "HTPR-42", taskTitle: "Ticket title" } : null;
   const source = loader({
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {}, useChatDraft() {} },
     "next/navigation": { usePathname: () => pathname },
     "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === chipFlag && reuseChip },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },

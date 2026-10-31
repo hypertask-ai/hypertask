@@ -222,6 +222,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   if (manualChat) historyTaskId = undefined;
 
   const {
+    navigationKey,
     startNewSession: createSession,
     activeSession,
     currentSession,
@@ -229,7 +230,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
     isSessionPending,
     sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
     selectSession: selectSessionInHistory,
-    isSuccess: chatHistoryReady,
+    isSuccess: sessionReady,
+    isHistoryReady,
     addMessageToSessionQuery,
     updateLastMessageInSessionCache,
     appendMessageToSessionCache,
@@ -244,6 +246,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   }, [sessionQueue, currentSession?.id]);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
+  const chatHistoryReady = navigationKey ? !!currentSession || (!activeSession && isHistoryReady && !isSessionPending) : sessionReady;
   const chatHistoryReadyRef = useRef(chatHistoryReady);
   chatHistoryReadyRef.current = chatHistoryReady;
   const sessionSetupRef = useRef<{
@@ -265,6 +268,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
     manualDockedChat ? "manual" : taskId ?? "no-task",
     ...(ticketScopeSelected ? ["ticket-scope"] : []),
     ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
+    ...(navigationKey ? [navigationKey] : []),
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {
@@ -305,7 +309,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
   editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
+  navigationKey, currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,

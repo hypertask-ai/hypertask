@@ -46,6 +46,7 @@ async function withSidebar(options, check) {
     aiChatEditTaskIdAtom: "edit", composeTaskChatIntroAtom: "intro", composeTaskQuestionsTaskIdAtom: "questionsTaskId", aiChatSidebarWidthPxAtom: "width",
   };
   const mocks = {
+    "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/hooks/useFlag": { useFlag: (key) => flags.has(key) },
