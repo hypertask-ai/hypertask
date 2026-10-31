@@ -1,3 +1,4 @@
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { useRouter } from "next/navigation";
 import { parseCookies } from "nookies";
 import nookies from "nookies";
@@ -16,12 +17,11 @@ import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 
 const useDarkMode = () => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const isMobile = useMobileView();
   const router = useRouter();
   const cookies = parseCookies();
-  const cookieTheme = roundedEnabled
-    ? normalizeThemePreference(cookies.theme, true)
-    : normalizeThemePreference(cookies.theme);
+  const cookieTheme = normalizeThemePreference(cookies.theme, roundedEnabled, graphite2Enabled);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">("light");
 
@@ -52,7 +52,7 @@ const useDarkMode = () => {
       : "light";
 
   const setTheme = (theme: ThemePreference) => {
-    nookies.set(null, "theme", normalizeThemePreference(theme, roundedEnabled) ?? "system", {
+    nookies.set(null, "theme", normalizeThemePreference(theme, roundedEnabled, graphite2Enabled) ?? "system", {
       maxAge: 600 * 60 * 24 * 7,
       path: "/",
     });

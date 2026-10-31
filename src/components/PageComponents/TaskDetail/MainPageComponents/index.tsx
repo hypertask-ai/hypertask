@@ -1,3 +1,5 @@
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { useFlag } from "@/hooks/useFlag";
 import Tooltip from "@/components/Common/Tooltip";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { IAgent, IUser } from "@/models/model";
@@ -79,10 +81,12 @@ export const LocalRightSideInfo = (
     showTooltip?: boolean
   }) => {
   const _mbl = useContext(MobileViewContext);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
 
   return (
     <>
       <span
+        data-task-property-label={graphite2Enabled ? true : undefined}
         onClick={onClick}
         className={cn(
           "cursor-pointer rounded-[5px] border-icon-dark-gray relative group text-[#8E9093] font-medium",

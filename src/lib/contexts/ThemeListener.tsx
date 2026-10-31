@@ -1,4 +1,5 @@
 "use client";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 
 import { useEffect } from "react";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
@@ -11,7 +12,9 @@ import {
 
 const ThemeListener = () => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const roundedLoaded = useFlagLoaded(HTPR_7328_ROUNDED_THEME_FLAG);
+  const graphite2Loaded = useFlagLoaded(HTPR_8054_GRAPHITE_2_FLAG);
   useEffect(() => {
     const match = window.matchMedia("(prefers-color-scheme: dark)");
     const desktop = window.matchMedia("(min-width: 768px)");
@@ -23,7 +26,8 @@ const ThemeListener = () => {
           ?.split("=")[1] || "system";
 
       if (stored === "rounded" && !roundedLoaded) return;
-      const theme = normalizeThemePreference(stored, roundedEnabled);
+      if (stored === "graphite-2" && !graphite2Loaded) return;
+      const theme = normalizeThemePreference(stored, roundedEnabled, graphite2Enabled);
       const resolved = resolveThemePreference(
         theme === "rounded" && !desktop.matches ? "system" : theme,
         match.matches ? "dark" : "light"
@@ -68,7 +72,7 @@ const ThemeListener = () => {
       desktop.removeEventListener("change", applyTheme);
       serverRenderedThemeObserver.disconnect();
     };
-  }, [roundedEnabled, roundedLoaded]);
+  }, [roundedEnabled, roundedLoaded, graphite2Enabled, graphite2Loaded]);
 
   return null;
 };

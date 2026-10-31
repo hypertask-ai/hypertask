@@ -201,3 +201,97 @@ export function IconoirSettings({ size = 18, strokeWidth = 1.5, className }: Ico
     </svg>
   );
 }
+
+export function IconoirNavArrowLeft({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M15 6L9 12L15 18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirNavArrowRight({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M9 6L15 12L9 18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirMailIn({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M5 9L9.5 12L14 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17 19H3C1.89543 19 1 18.1046 1 17V7C1 5.89543 1.89543 5 3 5H16C17.1046 5 18 5.89543 18 7V9" stroke="currentColor" strokeLinecap="round" />
+<path d="M23 14H17M17 14L20 11M17 14L20 17" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirPage({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M4 21.4V2.6C4 2.26863 4.26863 2 4.6 2H16.2515C16.4106 2 16.5632 2.06321 16.6757 2.17574L19.8243 5.32426C19.9368 5.43679 20 5.5894 20 5.74853V21.4C20 21.7314 19.7314 22 19.4 22H4.6C4.26863 22 4 21.7314 4 21.4Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M8 10L16 10" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M8 18L16 18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M8 14L12 14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M16 2V5.4C16 5.73137 16.2686 6 16.6 6H20" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirPlus({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M6 12H12M18 12H12M12 12V6M12 12V18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirCpu({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M8 15.4V8.6C8 8.26863 8.26863 8 8.6 8H15.4C15.7314 8 16 8.26863 16 8.6V15.4C16 15.7314 15.7314 16 15.4 16H8.6C8.26863 16 8 15.7314 8 15.4Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M20 4.6V19.4C20 19.7314 19.7314 20 19.4 20H4.6C4.26863 20 4 19.7314 4 19.4V4.6C4 4.26863 4.26863 4 4.6 4H19.4C19.7314 4 20 4.26863 20 4.6Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17 4V2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M12 4V2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M7 4V2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M7 20V22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M12 20V22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17 20V22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M20 17H22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M20 12H22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M20 7H22" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M4 17H2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M4 12H2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M4 7H2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirTimer({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M9 2L15 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M12 10L12 14" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M12 22C16.4183 22 20 18.4183 20 14C20 9.58172 16.4183 6 12 6C7.58172 6 4 9.58172 4 14C4 18.4183 7.58172 22 12 22Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirCreditCard({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M22 9V17C22 18.1046 21.1046 19 20 19H4C2.89543 19 2 18.1046 2 17V7C2 5.89543 2.89543 5 4 5H20C21.1046 5 22 5.89543 22 7V9ZM22 9H6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconoirLogIn({ size = 18, strokeWidth = 1.5, className }: IconoirIconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} width={size} height={size} className={className} aria-hidden="true">
+      <path d="M19 12H12M12 12L15 15M12 12L15 9" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M19 6V5C19 3.89543 18.1046 3 17 3H7C5.89543 3 5 3.89543 5 5V19C5 20.1046 5.89543 21 7 21H17C18.1046 21 19 20.1046 19 19V18" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
