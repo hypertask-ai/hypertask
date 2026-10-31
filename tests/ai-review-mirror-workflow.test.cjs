@@ -17,8 +17,6 @@ const REVIEW = `APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**
 const loadScript = async () => yaml.load(await readFile(WORKFLOW, "utf8")).jobs.mirror.steps
   .find(step => step.with?.script).with.script;
 
-// The board runs this TypeScript guard before it saves an agent's people
-// comment, so the test executes the real module instead of a copy of the rules.
 const loadWritingGuard = () => {
   const ts = require("typescript");
   const path = require("node:path");
@@ -143,8 +141,6 @@ test("the review verdict lands in the ticket thread with the reviewed commit", a
   assert.equal(people.ticket_number, "HTPR-1234");
   assert.equal(people.kind, "qa");
   assert.match(people.text, /APPROVE/);
-  // The findings carry paths, code and long sentences, and the board refuses
-  // that in the thread people read, so only a short plain line goes there.
   assert.doesNotMatch(people.text, /MINOR/);
   assert.ok(!people.text.includes(`reviewed-commit: ${SHA}`), "the marker stays out of the people line");
   assert.match(people.text, /agent log/);
@@ -166,7 +162,6 @@ test("the people line passes the board's voice guard, which the findings cannot 
     () => assertAgentWriting("agent-id", { text: JSON.parse(posts[0].init.body).text }),
     "the short plain verdict must survive the guard",
   );
-  // The same guard is why the findings moved: proof the old one-post shape fails.
   assert.throws(
     () => assertAgentWriting("agent-id", {
       text: `<p><strong>AI review:</strong> APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**</p>
