@@ -23,10 +23,9 @@ jobs:
           node-version: ^24.22.1
       - name: Validate pilot syntax
         run: |
-          node --check e2e/ai-pilot/e2e.config.js
-          node --check e2e/ai-pilot/layout.js
-          node --check e2e/ai-pilot/tests/smoke.e2e.js
-          node --check e2e/ai-pilot/measure.mjs
+          for file in e2e/ai-pilot/e2e.config.js e2e/ai-pilot/layout.js e2e/ai-pilot/tests/smoke.e2e.js e2e/ai-pilot/measure.mjs; do
+            node --check --input-type=module < "$file"
+          done
           node -e "JSON.parse(require('fs').readFileSync('e2e/ai-pilot/package.json')); JSON.parse(require('fs').readFileSync('e2e/ai-pilot/package-lock.json'))"
       - name: Install pilot dependencies
         run: npm ci --prefix e2e/ai-pilot --no-audit --no-fund
