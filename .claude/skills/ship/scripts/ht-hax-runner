@@ -162,6 +162,8 @@ try:
                         item = json.loads(line)
                     except json.JSONDecodeError:
                         continue
+                    if item.get('type') == 'user_turn':
+                        continue
                     tail = item
                     if item.get('kind') not in ('turn_usage', 'reasoning'):
                         last = item
