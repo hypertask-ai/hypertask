@@ -201,6 +201,17 @@ export async function updateTaskSingle(
     const requestedMutation = isHumanOverride
       ? requestedTaskStateChanges(taskAtRequestTime, normalizedTask)
       : normalizedTask;
+    const mayArchiveDoneTask =
+      requestedMutation.status === "Archive" &&
+      !!agentId &&
+      await (await import("@/lib/flags")).isFeatureEnabled(
+        (
+          await import(
+            "@/lib/flags/definitions/htpr-8231-agent-archive-done"
+          )
+        ).HTPR_8231_AGENT_ARCHIVE_DONE_FLAG,
+        currentUser.id,
+      );
 
     const taskInclude = {
       description_: true,
@@ -289,6 +300,7 @@ export async function updateTaskSingle(
           currentState,
           requestedMutation.status,
           agentId,
+          { mayArchive: mayArchiveDoneTask },
         );
 
         if (isHumanOverride) {

@@ -110,6 +110,8 @@ Archive does the same write as Archive in the app: the ticket leaves the board a
 
 A read-only agent, or an agent without write access to the ticket's board, is refused; a ticket on another board answers 404. The ticket switch `htpr-8215-agent-archive-delete` defaults to Owner + QA because it can move a ticket to Trash. Switching it off makes both endpoints answer 404 without changing archive or delete in the app. The native CLI commands live in the separate CLI repository.
 
+A ticket that already sits in a Done column is refused to Delete for every agent. Archiving one is refused while the ticket switch `htpr-8231-agent-archive-done` is off; with it on, the ticket owner's own agents may archive it, and the archive records which agent did it and when.
+
 ## Connected-agent skill templates
 
 Ticket get (`hypertask tasks get --json` / `hypertask_tasks` action `get`), task context, comment reads and comment-create receipts include `skill_context`: matched `active_skills` with full bodies, a one-line `summary`, and policy-bounded `instructions`. These fields also survive concise MCP formatting. `/deeper` in a comment therefore supplies the readable, enabled `deeper` skill to the connected agent; the server supplies a template, not model execution or permission to run commands. No separate CLI command or MCP tool is required.

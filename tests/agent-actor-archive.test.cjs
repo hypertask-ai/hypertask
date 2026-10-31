@@ -458,9 +458,8 @@ test("denied writes skip archive side effects when updateTaskSingle refuses", as
   assert.equal(sideEffects.cancelDueDate, 0);
 });
 
-test("authenticated agents cannot Archive or Delete a Done task", async () => {
-  const calls = { updates: 0, findMany: 0 };
-  const tx = {
+function doneSectionTx(calls) {
+  return {
     section: {
       findMany: async ({ where }) => {
         calls.findMany += 1;
@@ -479,6 +478,11 @@ test("authenticated agents cannot Archive or Delete a Done task", async () => {
       },
     },
   };
+}
+
+test("an agent without the archive setting cannot Archive a Done task", async () => {
+  const calls = { updates: 0, findMany: 0 };
+  const tx = doneSectionTx(calls);
 
   await assert.rejects(
     () =>
@@ -492,6 +496,29 @@ test("authenticated agents cannot Archive or Delete a Done task", async () => {
       error instanceof AgentDoneLifecycleDeniedError &&
       error.code === "agent_done_lifecycle_denied",
   );
+  assert.equal(calls.updates, 0);
+  assert.ok(calls.findMany >= 1);
+});
+
+test("an owner's agent may Archive a Done task when the archive setting is on", async () => {
+  const calls = { updates: 0, findMany: 0 };
+  const tx = doneSectionTx(calls);
+
+  await assertAgentMayLeaveDone(
+    tx,
+    { sectionId: DONE_SECTION_ID, status: "Normal" },
+    "Archive",
+    AGENT_ID,
+    { mayArchive: true },
+  );
+  assert.equal(calls.updates, 0);
+  assert.equal(calls.findMany, 0);
+});
+
+test("authenticated agents cannot Delete a Done task even with the archive setting on", async () => {
+  const calls = { updates: 0, findMany: 0 };
+  const tx = doneSectionTx(calls);
+
   await assert.rejects(
     () =>
       assertAgentMayLeaveDone(
@@ -499,6 +526,7 @@ test("authenticated agents cannot Archive or Delete a Done task", async () => {
         { sectionId: DONE_SECTION_ID, status: "Normal" },
         "Deleted",
         AGENT_ID,
+        { mayArchive: true },
       ),
     AgentDoneLifecycleDeniedError,
   );
