@@ -3,7 +3,7 @@
 
 Front door on 127.0.0.1:$RUNNER_WEBHOOK_PORT (default 8793, where the hooks.hypertask.ai tunnel points). Anything that is
 not POST /webhook/runner-<n> is proxied verbatim to 127.0.0.1:$RUNNER_WEBHOOK_FALLBACK_PORT (default 8795, the legacy
-agent-events receiver), 502 when it is down. POST /webhook/runner-<n> is handled here. The signing secret for runner n is the
+agent-events receiver), 502 when it is down. POST /webhook/runner-<n> and POST /github/notify (GitHub CI and PR events, see gh_event) are handled here. The signing secret for runner n is the
 file $RUNNER_WEBHOOK_SECRETS/runner-<n> (mode 600); it is never logged. Delivery goes through runner-deliver.
 The HT Product Lead route is /webhook/ht-product-lead, with /webhook/infra-manager kept as an alias.
 Both use the infra-manager signing config and state files.
@@ -291,6 +291,251 @@ def handle(n, p, delivery_id):
             return ok
 
 
+GH_NOTIFY_PATH = "/github/notify"
+GH_NOTIFY_DIR = os.environ.get("GH_NOTIFY_DIR", f"{HOME}/.local/state/gh-notify")
+GH_NOTIFY_HOOKS = os.environ.get("GH_NOTIFY_HOOKS", f"{HOME}/.config/hypertask-agents/github-notify-hooks")
+GH_NOTIFY_SECRET = os.environ.get("GH_NOTIFY_SECRET", f"{HOME}/.config/hypertask-agents/github-notify-secret")
+GH_NOTIFY_CLAIMS = os.environ.get("GH_NOTIFY_CLAIMS", f"{HOME}/.local/state/runner-queue/claims")
+SESSION_SAY = os.environ.get("GH_NOTIFY_SESSION_SAY", f"{HOME}/.local/bin/session-say")
+GH_BIN = os.environ.get("GH_NOTIFY_GH", f"{HOME}/.local/bin/gh")
+GH_VERIFY_CAP = 120  # GitHub read-backs per hour
+GH_VERIFIES = []
+GH_INFLIGHT = set()
+GH_EVENTS = {"workflow_run", "pull_request"}
+GH_PASS_WAKE = {"CI Tests"}  # a pass of these wakes an idle owner; any failure wakes it once per commit
+GH_FAIL = {"failure", "timed_out", "startup_failure"}
+GH_WAKE_CAP = 60  # wakes per hour across the fleet
+GH_WAKES = []
+GH_LOCK = threading.Lock()
+
+
+def gh_key(text):
+    return re.sub(r"[^A-Za-z0-9._-]", "_", str(text))[:200]
+
+
+GH_REPO_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-/")
+
+
+def gh_inside(path):
+    """Resolve path and refuse anything outside GH_NOTIFY_DIR."""
+    root = os.path.realpath(GH_NOTIFY_DIR)
+    full = os.path.realpath(path)
+    if not full.startswith(root + os.sep):
+        raise ValueError("path outside the notify dir")
+    return full
+
+
+def gh_hooks():
+    """{hook id: repo} from lines "<id> <owner/repo>"."""
+    hooks = {}
+    try:
+        with open(GH_NOTIFY_HOOKS) as fh:
+            for line in fh:
+                parts = line.split()
+                if len(parts) == 2 and parts[0].isdigit():
+                    hooks[parts[0]] = parts[1].lower()
+    except OSError:
+        pass
+    return hooks
+
+
+def gh_event(kind, p):
+    """Flatten a workflow_run or pull_request payload to the few fields the fleet uses, or None to ignore it."""
+    repo = str((p.get("repository") or {}).get("full_name") or "")
+    if len(repo) > 200 or repo.count("/") != 1 or not set(repo) <= GH_REPO_CHARS or "" in repo.split("/"):
+        return None
+    if kind == "workflow_run" and p.get("action") == "completed":
+        run = p.get("workflow_run") or {}
+        prs = run.get("pull_requests") or []
+        pr = prs[0].get("number") if prs and isinstance(prs[0], dict) else None
+        return {"repo": repo, "branch": str(run.get("head_branch") or ""), "kind": "ci", "workflow": gh_clean(run.get("name")),
+                "conclusion": gh_clean(run.get("conclusion")), "sha": gh_clean(run.get("head_sha"))[:40],
+                "pr": pr if isinstance(pr, int) else None, "run": run.get("id") if isinstance(run.get("id"), int) else None}
+    if kind == "pull_request" and p.get("action") == "closed":
+        pr = p.get("pull_request") or {}
+        num = pr.get("number")
+        return {"repo": repo, "branch": str((pr.get("head") or {}).get("ref") or ""), "kind": "merged" if pr.get("merged") else "closed",
+                "workflow": "", "conclusion": "", "sha": gh_clean(pr.get("merge_commit_sha"))[:40],
+                "pr": num if isinstance(num, int) else None, "run": None}
+    return None
+
+
+def gh_clean(text):
+    return re.sub(r"[^A-Za-z0-9 ._/()-]", "", str(text or ""))[:80].strip()
+
+
+def gh_branch_ok(branch):
+    return bool(re.fullmatch(r"[A-Za-z0-9._/-]{1,200}", branch)) and ".." not in branch
+
+
+def gh_url(ev):
+    if ev.get("run"):
+        return f"https://github.com/{ev['repo']}/actions/runs/{ev['run']}"
+    return f"https://github.com/{ev['repo']}/pull/{ev['pr']}" if ev.get("pr") else ""
+
+
+def gh_verify(ev):
+    """Read the event back from GitHub with one gh call; True only when GitHub agrees with the payload."""
+    with GH_LOCK:
+        now = time.time()
+        GH_VERIFIES[:] = [t for t in GH_VERIFIES if now - t < 3600]
+        if len(GH_VERIFIES) >= GH_VERIFY_CAP:
+            log("github notify: hourly read-back cap reached")
+            return False
+        GH_VERIFIES.append(now)
+    if ev["kind"] == "ci":
+        if not ev.get("run"):
+            return False
+        path, jq = f"repos/{ev['repo']}/actions/runs/{ev['run']}", "[.head_branch, .conclusion, .name, .head_sha, (.pull_requests[0].number // null)] | @json"
+        want = [ev["branch"], ev["conclusion"], ev["workflow"]]
+    else:
+        if not ev.get("pr"):
+            return False
+        path, jq = f"repos/{ev['repo']}/pulls/{ev['pr']}", "[.head.ref, .state, .merged, .merge_commit_sha, .number] | @json"
+        want = [ev["branch"], "closed", ev["kind"] == "merged"]
+    try:
+        out = subprocess.run([GH_BIN, "api", path, "--jq", jq], capture_output=True, text=True, timeout=30)
+        got = json.loads(out.stdout) if out.returncode == 0 else None
+    except Exception:
+        got = None
+    if not isinstance(got, list) or len(got) != 5:
+        got = [None] * 5
+    if ev["kind"] == "ci":
+        got[2] = gh_clean(got[2])
+    if got[:3] != want:
+        log(f"github notify: read-back did not match for {ev['repo']}")
+        return False
+    # The commit and PR number come from GitHub, never from the payload; they feed the message and the dedupe key.
+    ev["sha"] = gh_clean(got[3])[:40]
+    ev["pr"] = got[4] if isinstance(got[4], int) else None
+    return True
+
+
+def gh_write(ev):
+    """State file per repo and branch, written atomically; ci-wait watches its mtime."""
+    d = gh_inside(os.path.join(GH_NOTIFY_DIR, gh_key(ev["repo"].replace("/", "__"))))
+    os.makedirs(d, exist_ok=True)
+    path = gh_inside(os.path.join(d, gh_key(ev["branch"]) + ".json"))
+    tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+    with open(tmp, "w") as fh:
+        json.dump(dict(ev, at=time.time_ns()), fh)
+    os.replace(tmp, path)
+    log_path = os.path.join(GH_NOTIFY_DIR, "events.log")
+    with open(log_path, "a") as fh:
+        fh.write(json.dumps(dict(ev, at=int(time.time()))) + "\n")
+    try:
+        if os.path.getsize(log_path) > 2 * 1024 * 1024:
+            with open(log_path) as fh:
+                keep = fh.readlines()[-2000:]
+            with open(log_path + ".tmp", "w") as fh:
+                fh.writelines(keep)
+            os.replace(log_path + ".tmp", log_path)
+    except OSError:
+        pass
+
+
+def gh_waiting(ev):
+    """True when a live ci-wait already blocks on this branch; the file write wakes it, so no message is needed."""
+    d = os.path.join(GH_NOTIFY_DIR, "waiters")
+    try:
+        names = os.listdir(d)
+    except OSError:
+        return False
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            os.kill(int(name), 0)
+            with open(os.path.join(d, name)) as fh:
+                if fh.read().split() == [ev["repo"], ev["branch"]]:
+                    return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def gh_owner(ev):
+    """('runner', n) for an HT runner, ('session', name) for a Software Factory hax runner, or None.
+    The claim file for the ticket in the branch name wins; else an HT branch prefix runnerN/ or runner-N/ means Runner N."""
+    m = re.search(r"(?i)(?:^|[^a-z0-9])((?:yper4|igsh|htpr)-[0-9]{1,6})(?![0-9])", ev["branch"])
+    if m:
+        try:
+            with open(os.path.join(GH_NOTIFY_CLAIMS, m.group(1).upper() + ".json")) as fh:
+                who = str(json.load(fh).get("runner") or "")
+            c = re.fullmatch(r"(?i)\s*(hax )?runner ([1-9][0-9]?)\s*", who)
+            if c:
+                return ("session", f"hax-runner-{c.group(2)}") if c.group(1) else ("runner", c.group(2))
+        except (OSError, ValueError, AttributeError):
+            pass
+    m = re.match(r"(?i)runner-?([1-9][0-9]?)/", ev["branch"])
+    if m and ev["repo"].lower().startswith("hypertask-ai/") and int(m.group(1)) <= 50:
+        return ("runner", m.group(1))
+    return None
+
+
+def gh_message(ev):
+    pr = f"PR #{ev['pr']}" if ev.get("pr") else f"branch {ev['branch']}"
+    where = f"{ev['repo']}, branch {ev['branch']}"
+    if ev["kind"] == "merged":
+        return f"GitHub: {pr} merged ({where}). Finish the ship steps for it."
+    if ev["kind"] == "closed":
+        return f"GitHub: {pr} was closed without merging ({where}). Check why before you go on."
+    if ev["conclusion"] in GH_FAIL:
+        return f"GitHub: {ev['workflow']} failed on {pr} ({where}) {gh_url(ev)}. Read it with one gh call; wait with ci-wait, never --watch."
+    if ev["conclusion"] == "success" and ev["workflow"] in GH_PASS_WAKE:
+        return f"GitHub: {ev['workflow']} passed on {pr} ({where}). Confirm with ci-wait {ev.get('pr') or ''} --repo {ev['repo']}, then go on."
+    return None
+
+
+def gh_wake(ev, delivery):
+    if not gh_message(ev) or gh_waiting(ev):
+        return
+    owner = gh_owner(ev)
+    if not owner:
+        return
+    msg = gh_message(ev)
+    key = "gh|" + "|".join(str(ev.get(k) or "") for k in ("repo", "branch", "kind", "sha")) + ("|fail" if ev["conclusion"] in GH_FAIL else "|" + ev["workflow"])
+    with GH_LOCK:
+        if key in GH_INFLIGHT:
+            return
+        with Seen("gh-notify-seen") as seen:
+            if seen.has(key):
+                return
+        GH_INFLIGHT.add(key)
+    try:
+        if gh_verify(ev):
+            gh_send(ev, owner, gh_message(ev), key, delivery)
+    finally:
+        with GH_LOCK:
+            GH_INFLIGHT.discard(key)
+
+
+def gh_send(ev, owner, msg, key, delivery):
+    key = "gh|" + "|".join(str(ev.get(k) or "") for k in ("repo", "branch", "kind", "sha")) + ("|fail" if ev["conclusion"] in GH_FAIL else "|" + ev["workflow"])
+    with GH_LOCK:
+        with Seen("gh-notify-seen") as seen:
+            if seen.has(key):
+                return
+        now = time.time()
+        GH_WAKES[:] = [t for t in GH_WAKES if now - t < 3600]
+        if len(GH_WAKES) >= GH_WAKE_CAP:
+            log("github notify: hourly wake cap reached")
+            return
+        GH_WAKES.append(now)
+    try:
+        if owner[0] == "runner":
+            ok = deliver(owner[1], msg, "gh-" + gh_key(delivery or key))
+        else:
+            ok = subprocess.run([SESSION_SAY, owner[1], msg, "--from", "github"], stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=DELIVER_TIMEOUT).returncode == 0
+        if ok:  # mark seen only after it went out, so a failed delivery is retried by the next event for the commit
+            with Seen("gh-notify-seen") as seen:
+                seen.add(key)
+        log(f"github notify: {ev['kind']} {ev['repo']} -> {owner[0]} {owner[1]} {'sent' if ok else 'failed'}")
+    except Exception as exc:  # waking must never crash the receiver
+        log(f"github notify: wake failed: {type(exc).__name__}")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "RunnerWebhook/1"
     timeout = 10  # socket read timeout for every request, so a stalled client cannot hold a thread
@@ -334,11 +579,53 @@ class Handler(BaseHTTPRequestHandler):
     def _dispatch(self):
         if self.command == "GET" and self.path == "/runner-webhook/healthz":
             return self._reply(200)
+        if self.command == "POST" and self.path == GH_NOTIFY_PATH:
+            return self._github_post()
         if self.command == "POST" and ROUTE.match(self.path):
             return self._runner_post(ROUTE.match(self.path).group(1))
         self._proxy()
 
     do_GET = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = do_POST = _dispatch
+
+    def _github_post(self):
+        hook_repo = gh_hooks().get(self.headers.get("X-GitHub-Hook-ID", ""))
+        if not hook_repo:
+            return self._reply(404)
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = -1
+        if length < 0 or length > MAX_BODY:
+            return self._reply(413)
+        body = self.rfile.read(length)
+        try:
+            with open(GH_NOTIFY_SECRET, "rb") as fh:
+                secret = fh.read().strip()
+        except OSError:
+            secret = b""
+        signature = "sha256=" + hmac.new(secret, body, hashlib.sha256).hexdigest()
+        if not secret or not hmac.compare_digest(signature.encode(), self.headers.get("X-Hub-Signature-256", "").encode()):
+            return self._reply(401)
+        kind = self.headers.get("X-GitHub-Event", "")
+        if kind not in GH_EVENTS:
+            return self._reply(202, b"ignored")
+        try:
+            payload = json.loads(body)
+            assert isinstance(payload, dict)
+        except Exception:
+            return self._reply(400)
+        ev = gh_event(kind, payload)
+        if not ev or not gh_branch_ok(ev["branch"]):
+            return self._reply(202, b"ignored")
+        if ev["repo"].lower() != hook_repo:
+            return self._reply(403, b"repo does not match hook")
+        try:
+            gh_write(ev)
+        except OSError as exc:
+            log(f"github notify: state write failed: {type(exc).__name__}")
+            return self._reply(500)
+        threading.Thread(target=gh_wake, args=(ev, self.headers.get("X-GitHub-Delivery", "")), daemon=True).start()
+        self._reply(202)
 
     def _runner_post(self, segment):
         # Look the path segment up in a fixed table so every file name below comes from our own constants.
