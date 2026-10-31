@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
     }
 
     const commentText = decisionCommentHtml(question, options)
-    await enforceAgentWriting(ctx.agentId, { text: commentText })
+    await enforceAgentWriting(ctx.user.id, ctx.agentId, { text: commentText })
 
     const decisionRequestWrite = (tx: import('@prisma/client').Prisma.TransactionClient) => tx.decisionRequest.create({
       data: {

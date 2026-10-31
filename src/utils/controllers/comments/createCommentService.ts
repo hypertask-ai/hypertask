@@ -154,9 +154,9 @@ export async function createCommentService(params: CreateCommentParams) {
     throw new Error("Task not found or access denied");
   }
 
-  if (!agentRunActivity && !agentRunSelection && !agentRunReplayComment && await agentWritingPolicyEnabled()) {
-    if (agentId && !params.kind) throw new AgentWritingError("kind", "Untyped agent notes must use the agent log");
-    await enforceAgentWriting(agentId, { text });
+  if (agentId && !agentRunActivity && !agentRunSelection && !agentRunReplayComment && await agentWritingPolicyEnabled(creatorId)) {
+    if (!params.kind) throw new AgentWritingError("kind", "Untyped agent notes must use the agent log");
+    await enforceAgentWriting(creatorId, agentId, { text });
   }
 
   const existingInboundReceipt = inboundEmailId

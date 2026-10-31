@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        await enforceAgentWriting(ctx.agentId, { title, description });
+        await enforceAgentWriting(user.id, ctx.agentId, { title, description });
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
         if (projectCheck.error) {
             return NextResponse.json(

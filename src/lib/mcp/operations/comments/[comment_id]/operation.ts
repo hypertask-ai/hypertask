@@ -290,7 +290,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       }
     }
 
-    await enforceAgentWriting(ctx.agentId, { text: sanitizedText }, { text: comment.text })
+    await enforceAgentWriting(ctx.user.id, ctx.agentId, { text: sanitizedText }, { text: comment.text })
     const updatedComment = await updateCommentService({
       commentId,
       text: sanitizedText,

@@ -75,7 +75,7 @@ export const getUniqueTaskCount = async (
 
 const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
-            await enforceAgentWriting(agentId, { title, description });
+            await enforceAgentWriting(userId, agentId, { title, description });
             const allowedProject = await prisma.project.findFirst({
                 where: {
                     id: projectId,

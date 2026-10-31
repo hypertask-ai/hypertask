@@ -73,12 +73,9 @@ function setup(options = {}) {
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push({ key, userId })
         return (key === 'htpr-7341-agent-chatter-to-log' && options.flag !== false) ||
+          (key === 'yper4-910-agent-writing' && options.writing !== false) ||
           (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
           (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true)
-      },
-      featureFlagCandidateUserIds: async (key) => {
-        calls.flags.push({ key, userId: null })
-        return key === 'yper4-910-agent-writing' && options.writing === false ? [] : null
       },
     },
     '@/lib/mcp/listQuery': {},

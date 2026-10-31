@@ -75,7 +75,7 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         updateTeamActivity = true
     } = options;
 
-    await enforceAgentWriting(options.actingAgentId ?? agentId, { title, description });
+    await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description });
     const taskCount = await getUniqueTaskCount(projectId);
     const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;
 

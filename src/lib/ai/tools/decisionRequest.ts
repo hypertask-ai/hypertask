@@ -96,7 +96,7 @@ export function createDecisionRequestTool(context: ToolContext) {
           `<ol>${optionItems}</ol>` +
           "<p>Reply with your choice.</p>"
         );
-        await enforceAgentWriting(actingAgentId, { text: commentText });
+        await enforceAgentWriting(user.id, actingAgentId, { text: commentText });
         const decisionRequest = await prisma.decisionRequest.create({
           data: {
             taskId: task.id,

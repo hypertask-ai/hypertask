@@ -15,33 +15,44 @@ test("agent writing policy ships for everyone with release-risk metadata", () =>
   assert.ok(definition.default.description.trim());
 });
 
-function enforcement(candidates) {
-  return load("src/lib/agents/writingEnforcement.ts", {
-    "@/lib/flags": { featureFlagCandidateUserIds: async () => candidates },
+function enforcement(enabled) {
+  const reads = [];
+  const module = load("src/lib/agents/writingEnforcement.ts", {
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { reads.push([key, userId]); return enabled; } },
     "@/lib/flags/definitions/yper4-910-agent-writing": definition,
   });
+  return { module, reads };
 }
 
 const long = "This deliberately long sentence contains far too many words for a brief update that people can scan easily.";
+const agent = "85b985ac-afe8-41a3-a1ac-d9549a9310c7";
 
-test("policy is on for Everyone and every unrestricted mode, off only when the flag excludes everyone", async () => {
-  assert.equal(await enforcement(null).agentWritingPolicyEnabled(), true);
-  assert.equal(await enforcement([6]).agentWritingPolicyEnabled(), true);
-  assert.equal(await enforcement([]).agentWritingPolicyEnabled(), false);
+test("the policy reads the ticket flag for the acting user", async () => {
+  const { module, reads } = enforcement(true);
+  assert.equal(await module.agentWritingPolicyEnabled(6), true);
+  assert.deepEqual(reads, [["yper4-910-agent-writing", 6]]);
+  assert.equal(await enforcement(false).module.agentWritingPolicyEnabled(6), false);
 });
 
-test("flag on refuses the same text the guard refuses, flag off accepts it again", async () => {
-  await assert.rejects(enforcement(null).enforceAgentWriting("agent", { text: long }), /twelve/);
-  await assert.rejects(enforcement([6]).enforceAgentWriting("agent", { text: "Next: waiting for checks." }), /agent log/);
-  await enforcement([]).enforceAgentWriting("agent", { text: long });
-  await enforcement([]).enforceAgentWriting("agent", { text: "Next: waiting for checks." });
-  await enforcement(null).enforceAgentWriting(null, { text: long });
+test("flag on refuses what the guard refuses, flag off accepts the same text again", async () => {
+  const on = enforcement(true).module;
+  await assert.rejects(on.enforceAgentWriting(6, agent, { text: long }), /twelve/);
+  await assert.rejects(on.enforceAgentWriting(6, agent, { text: "Next: waiting for checks." }), /agent log/);
+  const off = enforcement(false).module;
+  await off.enforceAgentWriting(6, agent, { text: long });
+  await off.enforceAgentWriting(6, agent, { text: "Next: waiting for checks." });
+});
+
+test("human writes skip the flag read entirely", async () => {
+  const { module, reads } = enforcement(true);
+  await module.enforceAgentWriting(6, null, { text: long });
+  assert.deepEqual(reads, []);
 });
 
 test("standalone CLI switches count as technical text", () => {
   const { assertAgentWriting, AgentWritingError } = load("src/lib/agents/writing.ts", {});
   for (const text of ["Run --force now.", "Use --dry-run here."]) {
-    assert.throws(() => assertAgentWriting("agent", { text }), (error) => error instanceof AgentWritingError && error.field === "text");
+    assert.throws(() => assertAgentWriting(agent, { text }), (error) => error instanceof AgentWritingError && error.field === "text");
   }
-  assert.doesNotThrow(() => assertAgentWriting("agent", { text: "Saved views stay unchanged." }));
+  assert.doesNotThrow(() => assertAgentWriting(agent, { text: "Saved views stay unchanged." }));
 });

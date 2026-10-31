@@ -883,8 +883,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const writingPolicy = await agentWritingPolicyEnabled()
-    if (kind && writingPolicy) await enforceAgentWriting(ctx.agentId, { text: sanitizedText })
+    const writingPolicy = await agentWritingPolicyEnabled(user.id)
+    if (kind && writingPolicy) await enforceAgentWriting(user.id, ctx.agentId, { text: sanitizedText })
     const agentLogPrincipal = ctx.agentId
       ? {
           userId: user.id,

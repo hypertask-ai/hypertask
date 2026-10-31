@@ -1,7 +1,7 @@
 function enforcementFor(guard) {
   return {
     agentWritingPolicyEnabled: async () => true,
-    enforceAgentWriting: async (...writing) => guard.assertAgentWriting(...writing),
+    enforceAgentWriting: async (_userId, ...writing) => guard.assertAgentWriting(...writing),
   }
 }
 

@@ -163,7 +163,7 @@ export async function updateTaskSingle(
       }
     }
 
-    await enforceAgentWriting(agentId, newTask, { title: oldTask.title, description: oldTask.description_?.content ?? oldTask.description });
+    await enforceAgentWriting(currentUser.id, agentId, newTask, { title: oldTask.title, description: oldTask.description_?.content ?? oldTask.description });
     recordAgentBoardScopeMiss(oldTask.projectId, "write");
     let taskBeforeWrite = oldTask;
     let sectionChanged = false;

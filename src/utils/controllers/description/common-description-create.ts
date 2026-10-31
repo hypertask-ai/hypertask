@@ -50,7 +50,7 @@ const upsertTaskDescription = async (
     });
 
     const oldContent = existing?.content ?? data.previousContent ?? "";
-    await enforceAgentWriting(agentId, { description: content }, { description: oldContent });
+    await enforceAgentWriting(actingUserId, agentId, { description: content }, { description: oldContent });
     if (existing && oldContent !== content) {
       const priorVersions = await tx.docVersion.count({
         where: { entityType: "task_description", entityId: taskId },
