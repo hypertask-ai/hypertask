@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
+const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
@@ -12,7 +12,7 @@ function fixture(t, sources) {
   const directory = mkdtempSync(path.join(tmpdir(), "run-tests-timings-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const folder of ["scripts", "config", "tests/helpers", "node_modules/tsx/dist"]) mkdirSync(path.join(directory, folder), { recursive: true });
-  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs"]) {
+  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs"]) {
     copyFileSync(path.join(root, "scripts", file), path.join(directory, "scripts", file));
   }
   writeFileSync(path.join(directory, "tests/helpers/register-server-only.cjs"), "");
@@ -29,7 +29,8 @@ function run(directory, files = [], overrides = {}) {
     encoding: "utf8",
     timeout: 20000,
   });
-  return { ...result, report: JSON.parse(readFileSync(path.join(directory, "test-durations.json"), "utf8")), summary: readFileSync(path.join(directory, "summary.md"), "utf8") };
+  const reportFile = path.join(directory, "test-durations.json");
+  return { ...result, report: existsSync(reportFile) ? JSON.parse(readFileSync(reportFile, "utf8")) : null, summary: readFileSync(path.join(directory, "summary.md"), "utf8") };
 }
 
 test("runner publishes all files, descending top 20 and concurrency/serial accounting", (t) => {
@@ -78,6 +79,36 @@ test("runner honors selected files and overwrites previous timing JSON", (t) => 
   assert.equal(report.selectedFiles, 1);
   assert.deepEqual(report.files.map(({ file }) => file), ["tests/chosen.test.cjs"]);
   assert.equal(report.stale, undefined);
+});
+
+test("a selection whose tests all skip fails the run instead of showing green", (t) => {
+  const directory = fixture(t, {
+    "silently-skipped.test.cjs": `require('node:test')('hidden change', { skip: 'never runs' }, () => { throw Error('must not run'); });`,
+  });
+  const { status, stderr, report } = run(directory, ["tests/silently-skipped.test.cjs"]);
+  assert.equal(status, 1);
+  assert.match(stderr, /No test executed: 1 test file\(s\) selected, 1 skipped/);
+  assert.equal(report.exitCode, 1);
+  assert.equal(report.selectedFiles, 1);
+});
+
+test("the same all-skipped selection stays green outside CI", (t) => {
+  const directory = fixture(t, {
+    "silently-skipped.test.cjs": `require('node:test')('hidden change', { skip: 'never runs' }, () => { throw Error('must not run'); });`,
+  });
+  const { status, stderr } = run(directory, ["tests/silently-skipped.test.cjs"], { CI: undefined, GITHUB_ACTIONS: undefined });
+  assert.equal(status, 0, stderr);
+  assert.doesNotMatch(stderr, /No test executed/);
+});
+
+test("one executed test is enough to keep a partially skipped selection green", (t) => {
+  const directory = fixture(t, {
+    "silently-skipped.test.cjs": `require('node:test')('hidden change', { skip: 'never runs' }, () => { throw Error('must not run'); });`,
+    "healthy.test.cjs": `require('node:test')('ordinary case', () => {});`,
+  });
+  const { status, stderr } = run(directory, ["tests/silently-skipped.test.cjs", "tests/healthy.test.cjs"]);
+  assert.equal(status, 0, stderr);
+  assert.doesNotMatch(stderr, /No test executed/);
 });
 
 test("failed isolated files still publish partial evidence and preserve failure status", (t) => {
