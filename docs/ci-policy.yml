@@ -466,7 +466,7 @@ ci_tests:
     required_summary: ci-tests
     additional_required_context: false
   test_lanes:
-    shards: 3
+    shards: 4
     shard_constant: CI_TEST_SHARDS
     required_check: ci-tests
     split: measured work from config/test-duration-weights.json, one file on exactly one shard
