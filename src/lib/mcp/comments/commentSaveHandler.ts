@@ -16,8 +16,11 @@ type Dependencies<TContext extends CommentSaveContext> = {
 };
 
 export async function refuseWhenCommentMarkersOff(context: CommentSaveContext) {
-  if (await isFeatureEnabled(HTPR_8218_COMMENT_PIN_STAR_FLAG, context.user.id)) return null;
-  return NextResponse.json({ success: false, error: 'Comment pin and star are not enabled' }, { status: 404 });
+  const enabled = await isFeatureEnabled(HTPR_8218_COMMENT_PIN_STAR_FLAG, context.user.id);
+  if (!enabled) {
+    return NextResponse.json({ success: false, error: 'Comment pin and star are not enabled' }, { status: 404 });
+  }
+  return null;
 }
 
 export function createCommentSaveHandler<TContext extends CommentSaveContext>(dependencies: Dependencies<TContext>) {
