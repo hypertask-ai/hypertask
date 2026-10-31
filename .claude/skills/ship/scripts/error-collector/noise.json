@@ -144,5 +144,11 @@
     "service": "github-actions",
     "match": "^Outside PR guard failed\\b",
     "reason": "The guard runs on PRs, which this source never collects; on production it only runs as a manual dry run, whose failure the person who started it already sees (YPER4-364)."
+  },
+  {
+    "id": "ai-smoke-pilot-manual-run",
+    "service": "github-actions",
+    "match": "^AI smoke pilot failed\\b",
+    "reason": "The pilot is an optional experiment with no schedule and no required check, dispatched by hand on production; its summary artifact already reports the failing step, and the person who dispatched it sees the run (YPER4-967)."
   }
 ]

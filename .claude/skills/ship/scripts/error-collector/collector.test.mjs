@@ -714,6 +714,15 @@ check('reporting', 'outside PR guard dry runs are noise, other workflow failures
   assert.equal(h.state().days['2026-10-14']['github-actions'].errors, 1);
 }));
 
+check('reporting', 'an optional AI smoke pilot dispatch is noise, other AI smoke failures are errors (YPER4-967)', () => withHarness(async h => {
+  const ci = { service: 'github-actions', board: 4060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/2' };
+  h.events([event({ ...ci, message: 'AI smoke pilot failed: pilot' }), event({ ...ci, message: 'AI smoke failed: pilot' })]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14']['github-actions'].noise, 1);
+  assert.equal(h.state().days['2026-10-14']['github-actions'].errors, 1);
+}));
+
 check('reporting', 'an SSH client hanging up is noise, other sshd failures are errors (YPER4-406)', () => withHarness(async h => {
   const vps = { service: 'vps-journal', board: 4060, route: 'ssh.service', stack: '' };
   h.events([event({ ...vps, message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe' }), event({ ...vps, message: 'ssh.service: error: bind [127.0.0.1]:7979: Address already in use' })]);
