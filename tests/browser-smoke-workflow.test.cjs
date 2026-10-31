@@ -524,3 +524,32 @@ test("HYCI-32: the two halves never publish an artifact under one name", async (
   assert.deepEqual(new Set(names).size, names.length, `duplicate artifact names: ${names.join(", ")}`);
   assert.ok(names.includes("app-build"));
 });
+
+test("HYCI-32: a half that starts the fixture search server asks the seed for search rows", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const seed = await source("scripts/seed-browser-smoke.mjs");
+  const halves = ["browser-smoke-desktop", "browser-smoke-mobile"];
+  const searchRowSwitches = ["BROWSER_SMOKE_SEARCH_FIXTURES", "MCP_CLI_API_CONTRACT"];
+
+  const unaskedHalves = (jobs) => halves.filter((key) => {
+    const serve = jobs[key].steps.find((step) => step.id === "smoke").run;
+    if (!serve.includes("scripts/premerge-local-search.mjs")) return false;
+    const fixtures = jobs[key].steps.find((step) => step.id === "fixtures");
+    const env = fixtures.env ?? {};
+    return !searchRowSwitches.some((name) => env[name] === "1");
+  });
+
+  assert.deepEqual(unaskedHalves(workflow.jobs), []);
+  for (const key of halves) {
+    const serve = workflow.jobs[key].steps.find((step) => step.id === "smoke").run;
+    assert.match(serve, /premerge-local-search\.mjs e2e\/smoke\/\.state\/card-fixture\.json 53101/, key);
+  }
+  assert.equal(workflow.jobs["browser-smoke-desktop"].steps.find((step) => step.id === "fixtures").env.MCP_CLI_API_CONTRACT, "1");
+  assert.match(seed, /const searchFixtures = process\.env\.BROWSER_SMOKE_SEARCH_FIXTURES === "1"/);
+  assert.match(seed, /localPremerge \|\| contractEnabled \|\| visual \|\| searchFixtures/);
+
+  const stripped = structuredClone(workflow.jobs);
+  delete stripped["browser-smoke-mobile"].steps.find((step) => step.id === "fixtures").env.BROWSER_SMOKE_SEARCH_FIXTURES;
+  assert.deepEqual(unaskedHalves(stripped), ["browser-smoke-mobile"]);
+});

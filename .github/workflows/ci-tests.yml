@@ -993,6 +993,7 @@ jobs:
         env:
           BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
           MCP_CLI_API_CONTRACT: '1'
+          BROWSER_SMOKE_SEARCH_FIXTURES: '1'
         run: |
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs --qa-journeys
@@ -1317,6 +1318,7 @@ jobs:
         id: fixtures
         env:
           BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
+          BROWSER_SMOKE_SEARCH_FIXTURES: '1'
         run: |
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs --qa-journeys

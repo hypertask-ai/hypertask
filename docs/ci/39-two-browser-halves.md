@@ -36,3 +36,25 @@ as a pass. It passes `contract` and `docs_only` through from the desktop half, s
 The budget cost is two jobs per push: 17 becomes 19, under the plan's 20
 parallel-job limit. Docs-only PRs still start their heavy steps as skips and
 succeed, so their job count grows by the same two.
+
+Both halves start the fixture search server, so both seed steps must ask
+`scripts/seed-browser-smoke.mjs` for search rows: `BROWSER_SMOKE_SEARCH_FIXTURES: '1'`
+on the `fixtures` step. The desktop half keeps `MCP_CLI_API_CONTRACT: '1'` for the
+MCP contract fixtures. Before this was written down, the phone half started the
+search server against a `card-fixture.json` with no `searchRows`, and
+[run 41244897378](https://github.com/hypertask-ai/hypertask/actions/runs/41244897378)
+died in five seconds with `Missing search fixtures`. The switch used to be implied
+by the MCP contract or the visual seed, so a third consumer could forget it again;
+`tests/browser-smoke-workflow.test.cjs` now fails when a half starts the search
+server without asking for search rows.
+
+The desktop half's board-rail switch in `e2e/smoke/prod.spec.ts` opens the rail by
+its own state instead of pressing `Control+b` blind. `Control+b` toggles the rail
+(`src/components/ProviderGlobal/GloablProviders.tsx`), so the same keystroke closes
+an already-open rail, and a flyout row re-renders under the pointer because its
+`onMouseOver` sets the selected board. On
+[run 41244897378](https://github.com/hypertask-ai/hypertask/actions/runs/41244897378)
+the click landed, the rail closed through the row's own `setShowBoardManager(false)`,
+and the URL still named the board being viewed. The switch now presses the shortcut
+only when the rail is closed and retries the click inside a bounded `toPass`, so a
+lost click names the board it could not reach.
