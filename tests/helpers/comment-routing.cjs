@@ -40,6 +40,7 @@ function setup(options = {}) {
     },
     '@/utils/controllers/comments/agentInvocationCorrelation': { AgentInvocationNotPendingError: class extends Error {} },
     '@/lib/mcp/tasks/resolveTask': {
+      taskIdentifierErrorResponse: () => null,
       validateTaskIdentifier: () => ({ valid: true }),
       findTaskByIdentifier: async () => options.noTask ? null : ({ id: 99, projectId: 15 }),
     },
