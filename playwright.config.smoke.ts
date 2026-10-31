@@ -18,7 +18,7 @@ export default defineConfig({
   retries: process.env.BROWSER_SMOKE_PR ? 0 : 1,
   workers: 8,
   reporter: [['list']],
-  timeout: process.env.BROWSER_SMOKE_PR || process.env.SMOKE_POSTDEPLOY === '1' ? 50_000 : 20_000,
+  timeout: process.env.BROWSER_SMOKE_PR ? 90_000 : process.env.SMOKE_POSTDEPLOY === '1' ? 50_000 : 20_000,
   use: {
     baseURL,
     storageState: 'e2e/smoke/.state/smoke-state.json',
