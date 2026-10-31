@@ -1,6 +1,6 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
@@ -9,11 +9,13 @@ import {
 } from "./test-inventory.mjs";
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
+import { findPassingTodos, todoRemovalMessages } from "./todo-passing.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
 const durationReporter = fileURLToPath(new URL("./test-duration-reporter.mjs", import.meta.url));
 const fileDurations = [];
+const passingTodos = [];
 let timingDirectory;
 const testsRoot = path.join(root, "tests");
 const FILE_TIMEOUT = `--test-timeout=${process.env.TEST_FILE_TIMEOUT_MS ?? 20 * 60 * 1000}`;
@@ -33,9 +35,11 @@ const execution = { stdout: createExecutionCounter(), stderr: createExecutionCou
 function run(command, args, label, concurrency = 1) {
   const nodeTests = args[0] === "--test";
   const timingFile = path.join(timingDirectory, `${fileDurations.length}.jsonl`);
+  const todoFile = path.join(timingDirectory, `${fileDurations.length}.tap`);
   if (nodeTests) {
     args = [
       "--test-reporter=spec", "--test-reporter-destination=stdout",
+      `--test-reporter=tap`, `--test-reporter-destination=${todoFile}`,
       `--test-reporter=${durationReporter}`, `--test-reporter-destination=${timingFile}`,
       ...args,
     ];
@@ -64,6 +68,10 @@ function run(command, args, label, concurrency = 1) {
     child.on("error", reject);
     child.on("close", (status, signal) => {
       if (nodeTests) {
+        if (existsSync(todoFile)) {
+          passingTodos.push(...findPassingTodos(readFileSync(todoFile, "utf8")));
+          rmSync(todoFile, { force: true });
+        }
         for (const line of readFileSync(timingFile, "utf8").trim().split("\n").filter(Boolean)) {
           fileDurations.push({ ...JSON.parse(line), concurrency });
         }
@@ -133,6 +141,8 @@ console.log(
 
 timingDirectory = mkdtempSync(path.join(tmpdir(), "hypertask-test-durations-"));
 process.on("exit", (exitCode) => {
+  for (const message of todoRemovalMessages(passingTodos, root)) console.error(message);
+  if (passingTodos.length > 0) process.exitCode ||= 1;
   try {
     const durationMs = performance.now() - startedAt;
     fileDurations.sort((a, b) => b.durationMs - a.durationMs || a.file.localeCompare(b.file));

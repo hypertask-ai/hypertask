@@ -3,6 +3,7 @@ const { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, 
 const { tmpdir } = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
+const { pathToFileURL } = require("node:url");
 const test = require("node:test");
 const yaml = require("js-yaml");
 
@@ -12,7 +13,7 @@ function fixture(t, sources) {
   const directory = mkdtempSync(path.join(tmpdir(), "run-tests-timings-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const folder of ["scripts", "config", "tests/helpers", "node_modules/tsx/dist"]) mkdirSync(path.join(directory, folder), { recursive: true });
-  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs"]) {
+  for (const file of ["run-tests.mjs", "test-inventory.mjs", "test-duration-reporter.mjs", "test-quarantine.mjs", "test-execution-count.mjs", "todo-passing.mjs"]) {
     copyFileSync(path.join(root, "scripts", file), path.join(directory, "scripts", file));
   }
   writeFileSync(path.join(directory, "tests/helpers/register-server-only.cjs"), "");
@@ -159,3 +160,50 @@ for (const extraFailure of [false, true]) {
     assert.equal(report.exitCode, extraFailure ? 1 : 0);
   });
 }
+
+test("passing todo fails the run and names the marker to remove", (t) => {
+  const directory = fixture(t, {
+    "passing.test.cjs": `require('node:test')('repaired fixture', { todo: true }, () => {});`,
+    "healthy.test.cjs": `require('node:test')('ordinary case', () => {});`,
+  });
+  const { status, stderr, report } = run(directory);
+  assert.equal(status, 1, stderr);
+  assert.match(stderr, /remove the todo marker: not found in tests repaired fixture\n/);
+  assert.equal(report.exitCode, 1);
+});
+
+test("known-bug todo that still fails keeps the run green", (t) => {
+  const directory = fixture(t, {
+    "failing.test.cjs": `require('node:test')('broken fixture', { todo: 'known bug' }, () => { throw Error('still broken'); });`,
+  });
+  const { status, stderr } = run(directory);
+  assert.equal(status, 0, stderr);
+  assert.doesNotMatch(stderr, /remove the todo marker:/);
+});
+
+test("a real failure keeps its own exit status alongside a passing todo", (t) => {
+  const directory = fixture(t, {
+    "passing.test.cjs": `require('node:test')('repaired before failure', { todo: true }, () => {});`,
+    "typescript.test.ts": "",
+  });
+  writeFileSync(path.join(directory, "node_modules/tsx/dist/cli.mjs"), "process.exit(7);");
+  const { status, stderr } = run(directory);
+  assert.equal(status, 7, stderr);
+  assert.match(stderr, /remove the todo marker: not found in tests repaired before failure/);
+});
+
+test("the todo scan reads reason-bearing, indented and CRLF TAP lines only", async () => {
+  const { findPassingTodos } = await import(pathToFileURL(path.join(root, "scripts/todo-passing.mjs")).href);
+  assert.deepEqual(findPassingTodos([
+    "TAP version 13",
+    "ok 1 - repaired bug # TODO",
+    "ok 2 - repaired with reason # TODO fix later",
+    "not ok 3 - still broken # TODO known bug",
+    "ok 4 - skipped # SKIP",
+    "ok 5 - skipped todo # TODO # SKIP",
+    "ok 6 - ordinary test",
+    "# ok 7 - logged text # TODO",
+    "    ok 8 - nested bug # TODO  ",
+  ].join("\r\n")), ["repaired bug", "repaired with reason", "nested bug"]);
+  assert.deepEqual(findPassingTodos(""), []);
+});
