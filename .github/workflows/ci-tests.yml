@@ -623,19 +623,18 @@ jobs:
           name: ci-test-shards
           path: ci-test-shards
 
-      - name: Decide shard postgres
+      # A shard needs the registry login and the PostgreSQL image whenever one of
+      # its tests starts a container from a CI image. The `-postgres.test.cjs`
+      # name alone missed htpr-7038-model-reset (PostgreSQL) and mcp-transports
+      # (Redis), so a lane holding only those pulled nothing and its `docker run`
+      # died with exit 125.
+      - name: Decide shard container fixtures
         id: pg
         shell: bash
-        run: |
-          set -euo pipefail
-          if grep -q -- '-postgres.test.cjs' "ci-test-shards/shard-${{ matrix.shard }}.txt"; then
-            echo "need=1" >> "$GITHUB_OUTPUT"
-          else
-            echo "need=" >> "$GITHUB_OUTPUT"
-          fi
+        run: node .github/scripts/shard-containers.mjs "ci-test-shards/shard-${{ matrix.shard }}.txt" >> "$GITHUB_OUTPUT"
 
       - name: Authenticate CI image pulls
-        if: steps.pg.outputs.need == '1'
+        if: steps.pg.outputs.containers == '1'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
