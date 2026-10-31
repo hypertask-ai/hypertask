@@ -173,7 +173,7 @@ process.on("exit", (exitCode) => {
       );
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
         "\n## Slowest 20 test files",
-        `Recorded ${fileDurations.length}/${selected.length} selected files; runner exit code: ${exitCode}.`,
+        `Recorded ${fileDurations.length}/${selected.length} selected files; runner exit code: ${finalExitCode}.`,
         "",
         "| Rank | File | Duration (s) | Lane concurrency |",
         "| ---: | --- | ---: | ---: |",
