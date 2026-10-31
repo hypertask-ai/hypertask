@@ -36,13 +36,19 @@ async function main() {
   const pooled = [];
   for (const report of reports) {
     const parsed = JSON.parse(await readFile(report, "utf8"));
-    for (const file of parsed.files) {
+    for (const file of parsed.files.filter((row) => !row.lane)) {
       const concurrency = Number(file.concurrency) || 1;
       const value = Number(file.durationMs) / concurrency;
       if (!Number.isFinite(value) || value < 0) throw new Error(`bad duration in ${report}`);
       if (!work.has(file.file)) work.set(file.file, []);
       work.get(file.file).push(value);
       if (concurrency > 1) pooled.push(value);
+    }
+    for (const file of parsed.sharedFiles ?? []) {
+      const value = Number(file.testMs);
+      if (!Number.isFinite(value) || value < 0) throw new Error(`bad shared duration in ${report}`);
+      if (!work.has(file.file)) work.set(file.file, []);
+      work.get(file.file).push(value);
     }
   }
 
