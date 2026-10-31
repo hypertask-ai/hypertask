@@ -760,11 +760,35 @@ jobs:
         run: |
           git fetch --depth=1 origin "$BASE_SHA"
           node .github/scripts/layout-lock-approval.mjs
-      - name: Install dependencies and Chromium
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
-          npm ci --prefer-offline --no-audit --no-fund
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      # browser-smoke was the last install job outside the shared dependency cache,
+      # so every pull request rebuilt node_modules from the npm tarballs alone. It
+      # restores the same production-seeded key as ci-prepare and installs only on
+      # a miss.
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate client and install Chromium
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
           npx prisma generate
+          # A restored node_modules skipped the npm postinstall that writes this file.
+          npm run flags:generate
           printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
           npx playwright install --with-deps chromium
           sudo apt-get update

@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
 
 const workflow = yaml.load(fs.readFileSync('.github/workflows/ci-tests.yml', 'utf8'));
-const step = workflow.jobs['browser-smoke'].steps.find(step => step.name === 'Install dependencies and Chromium');
+const step = workflow.jobs['browser-smoke'].steps.find(step => step.run?.includes('npx playwright install'));
 
 test('browser dependency installation selects the official Ubuntu archive before apt downloads', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'smoke-mirror-'));
