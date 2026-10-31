@@ -22,11 +22,17 @@ concurrency:
   # test report and warning path.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# One knob for the Test step. 2 is the cap from YPER4-554 (HT Product Lead,
-# 2026-10-24): the free hosted pool is 20 jobs, and 3 or more shards queued
-# other pulls. The required check stays the aggregate job named ci-tests.
+# One knob for the Test step. YPER4-554 (HT Product Lead, 2026-10-24) capped it
+# at 2 because 3 or more count-split shards queued other pulls. YPER4-777 broke
+# that cap with measurements, not preference: once the shards are split by
+# measured run time each one carries half of 1713s of lane-adjusted work, so two
+# 4-vCPU runners cannot finish below 856s and CI cannot come under 15 min. A
+# third shard takes the critical path to 635s, while the queue cost it adds is
+# measured at 45s median and 82s p90 over the last 39 runs (shard jobs only;
+# every 20-min wait in that window was browser-smoke, never a shard).
+# The required check stays the aggregate job named ci-tests.
 env:
-  CI_TEST_SHARDS: "2"
+  CI_TEST_SHARDS: "3"
 
 jobs:
   ci-prepare:
