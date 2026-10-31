@@ -5,12 +5,17 @@ export class AgentDoneLifecycleDeniedError extends Error {
   readonly status = 403
   readonly code = 'agent_done_lifecycle_denied'
 
-  constructor(
-    message = 'Authenticated agents cannot archive or delete tasks in Done',
-  ) {
+  constructor(message = 'Authenticated agents cannot delete tasks in Done') {
     super(message)
     this.name = 'AgentDoneLifecycleDeniedError'
   }
+}
+
+type LeaveDoneOptions = { mayArchive?: boolean }
+
+function isDenied(requestedStatus: unknown, options: LeaveDoneOptions): boolean {
+  if (requestedStatus === 'Deleted') return true
+  return requestedStatus === 'Archive' && !options.mayArchive
 }
 
 export async function assertAgentMayLeaveDone(
@@ -18,8 +23,9 @@ export async function assertAgentMayLeaveDone(
   current: { sectionId: number | null; status: string },
   requestedStatus: unknown,
   agentId?: string | null,
+  options: LeaveDoneOptions = {},
 ): Promise<void> {
-  await assertAgentMayLeaveDoneForTasks(tx, [current], requestedStatus, agentId)
+  await assertAgentMayLeaveDoneForTasks(tx, [current], requestedStatus, agentId, options)
 }
 
 export async function assertAgentMayLeaveDoneForTasks(
@@ -27,9 +33,10 @@ export async function assertAgentMayLeaveDoneForTasks(
   tasks: Array<{ sectionId: number | null; status: string }>,
   requestedStatus: unknown,
   agentId?: string | null,
+  options: LeaveDoneOptions = {},
 ): Promise<void> {
   if (!agentId) return
-  if (requestedStatus !== 'Archive' && requestedStatus !== 'Deleted') return
+  if (!isDenied(requestedStatus, options)) return
 
   const candidates = tasks.filter(
     (task) =>
