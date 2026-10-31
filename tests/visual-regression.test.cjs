@@ -113,7 +113,8 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   for (const service of ["postgres", "redis"]) {
     const image = workflow.match(new RegExp(`image: (ghcr\\.io/hypertask-ai/ci-${service}:[^\\n]+)`))[1];
     assert.ok(smoke.includes(image));
-    assert.deepEqual(job.services[service], yaml.load(smoke).jobs["browser-smoke"].services[service]);
+    assert.deepEqual(job.services[service], yaml.load(smoke).jobs["browser-smoke-desktop"].services[service]);
+    assert.deepEqual(job.services[service], yaml.load(smoke).jobs["browser-smoke-mobile"].services[service]);
   }
   const credentials = text => text.slice(text.indexOf("      - name: Prepare disposable local credentials"), text.indexOf('          } >> "$GITHUB_ENV"') + '          } >> "$GITHUB_ENV"'.length)
     .split("\n").filter(line => !/^        if: /.test(line)).join("\n");

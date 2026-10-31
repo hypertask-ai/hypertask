@@ -1,8 +1,9 @@
 ## MCP, CLI and API contract
 
 `mcp-cli-api-contract` is a separately reported, fail-closed summary of a contract executed inside
-`browser-smoke`. It is not in the ruleset itself: it blocks merges because the contract step runs
-inside the required `browser-smoke` job, so a failing contract fails that job. It uses the disposable server before any layout flag reseed. The owner,
+`browser-smoke-desktop` (HYCI-32). It is not in the ruleset itself: it blocks merges because the
+contract step runs inside that half, so a failing contract fails the half and the required
+`browser-smoke` summary over it. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;

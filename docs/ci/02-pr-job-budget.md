@@ -20,10 +20,11 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
-(YPER4-721 adds one tiny native scanner summary job). Path-specific evals, the
+Static normal non-draft app PR budget: **19 jobs** per synchronize and opening event
+(YPER4-721 adds one tiny native scanner summary job; HYCI-32 adds the second
+browser half and its required summary job, see below). Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
-extra. Docs-only PRs start 15 jobs; Dependabot/fork PRs no longer add a trusted
+extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
 scan-publication job. Snapshot actual
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
@@ -32,3 +33,11 @@ Snapshot a job's checkout step with `scripts/ci-checkout-times.sh <run-id...>`,
 which splits setup, fetch and working-tree time from the run's own log.
 CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
+
+HYCI-32 spent two of the remaining three job slots on the browser check: the
+single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, which
+run in parallel, plus the small `browser-smoke` summary job that keeps the
+required context name and fails when either half fails. Both halves build the
+candidate themselves, because a shared build job would serialise them behind it
+and give back the wall clock the split removes. The plan's 20-parallel-job limit
+still holds at 19.
