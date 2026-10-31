@@ -23,8 +23,8 @@ interface CommentsProviderProps {
     return (
         <>
         {comments&&comments.map((comment:IComment, i:number) => (
-                      // eslint-disable-next-line react/jsx-key
                       <CommentsProvider 
+                        key={comment.id}
                         comment={comment} 
                         i={i}                
                         isStacked={stacked[i]}        

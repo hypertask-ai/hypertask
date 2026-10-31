@@ -6,7 +6,8 @@ const { join, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const root = resolve(__dirname, "..");
-const overlap = JSON.parse(readFileSync(join(root, ".oxlintrc.json"), "utf8")).rules;
+const oxlintConfig = JSON.parse(readFileSync(join(root, ".oxlintrc.json"), "utf8"));
+const overlap = Object.assign({}, ...[oxlintConfig, ...(oxlintConfig.overrides ?? [])].map((block) => block.rules ?? {}));
 const schema = JSON.parse(readFileSync(join(root, "node_modules/oxlint/configuration_schema.json"), "utf8"));
 const implemented = new Set(Object.keys(schema.definitions.DummyRuleMap.properties));
 const staysInEslint = /^(?:local|hypertask-ui|hypertask-style|hypertask-tests|tailwindcss|@next|react-hooks|@typescript-eslint)\//;
@@ -34,8 +35,8 @@ test("Oxlint catches the errors ESLint gave up", () => {
   try {
     const probe = join(directory, "probe.tsx");
     writeFileSync(probe, "export function Probe() {\n  const rows = [1].map((value) => <span>{value}</span>);\n  return <div>{rows}</div>;\n}\n");
-    const result = spawnSync(join(root, "node_modules/.bin/oxlint"), ["-c", join(root, ".oxlintrc.json"), probe], {
-      cwd: root,
+    const result = spawnSync(join(root, "node_modules/.bin/oxlint"), ["-c", join(root, ".oxlintrc.json"), "probe.tsx"], {
+      cwd: directory,
       encoding: "utf8",
     });
     const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;

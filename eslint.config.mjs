@@ -17,6 +17,13 @@ const __dirname = path.dirname(__filename);
 // whose rules call context.getFilename(). ESLint 10 removed those methods.
 const nextConfigs = fixupConfigRules(nextCoreWebVitals);
 
+const oxlintConfig = JSON.parse(readFileSync(new URL("./.oxlintrc.json", import.meta.url), "utf8"));
+
+function oxlintOwnedRules() {
+  const blocks = [oxlintConfig, ...(oxlintConfig.overrides ?? [])];
+  return [...new Set(blocks.flatMap((block) => Object.keys(block.rules ?? {})))];
+}
+
 export default defineConfig([
   {
     // Generated build artifacts (service worker, etc.) — never hand-authored, not lint targets.
@@ -107,8 +114,7 @@ export default defineConfig([
     // tests/oxlint-overlap.test.cjs fails if the two files disagree.
     files: ["**/*.{js,cjs,mjs,jsx,ts,tsx}"],
     rules: Object.fromEntries(
-      Object.keys(JSON.parse(readFileSync(new URL("./.oxlintrc.json", import.meta.url), "utf8")).rules)
-        .map((rule) => [rule, "off"]),
+      oxlintOwnedRules().map((rule) => [rule, "off"]),
     ),
   },
 ]);
