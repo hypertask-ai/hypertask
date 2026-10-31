@@ -125,7 +125,8 @@ else: sys.exit(9)
         self.assertEqual(self.items(1), ['HTPR-1'])
 
     def test_shared_conflicts_and_pagination_failure_keeps_lease(self):
-        a = self.task(1, 'HTPR-1')
+        a = self.task(1, 'HTPR-1', 'Commands')
+        a['labels'].append({'name': 'Domain: Search'})
         self.board(1, [a]); self.board(2, [self.task(2, 'HTPR-2', 'Search')])
         self.tick(1); self.tick(2)
         self.assertEqual(self.items(2), [])
@@ -366,7 +367,7 @@ else: sys.exit(9)
         changed = self.task(1, 'HTPR-1', 'Commands')
         self.board(1, [changed]); self.tick(1)
         self.board(2, [self.task(2, 'HTPR-2', 'Search')]); self.tick(2)
-        changed['labels'] = []
+        changed['labels'] = [{'name': 'Domain: Commands'}, {'name': 'Domain: Search'}]
         self.board(1, [changed]); self.tick(1); self.tick(2)
         self.assertEqual(self.items(1), [])
         self.assertEqual(self.items(2), ['HTPR-2'])
@@ -425,6 +426,37 @@ else: sys.exit(9)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout), [])
         self.assertEqual(json.loads((self.state / 'domain-ownership.json').read_text()), {})
+
+    def test_reassigned_ticket_ignores_the_old_owners_lease(self):
+        (self.state / 'domain-ownership.json').write_text(json.dumps(
+            {'1': {'HTPR-1': {'held': ['Commands'], 'current': 'Commands', 'pending': False}}}))
+        self.board(2, [self.task(2, 'HTPR-1', 'Flags')])
+        self.tick(2)
+        self.assertEqual(self.items(2), ['HTPR-1'])
+
+    def test_unscoped_ticket_assigned_to_two_runners_delivers_once(self):
+        shared_task = self.task(1, 'HTPR-1')
+        shared_task['assignees'] = [{'agent': {'displayName': 'Runner 1'}},
+                                    {'agent': {'displayName': 'Runner 2'}}]
+        self.board(1, [shared_task])
+        self.board(2, [shared_task])
+        self.tick(1)
+        self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), [])
+
+    def test_unscoped_lease_from_admission_keeps_ticking(self):
+        leases = {'1': {'HTPR-1': {'held': ['Unscoped'], 'current': 'Unscoped', 'pending': False, 'protected': True}},
+                  '2': {'HTPR-2': {'held': ['Unscoped'], 'current': 'Unscoped', 'pending': False}}}
+        (self.state / 'domain-ownership.json').write_text(json.dumps(leases))
+        self.board(1, [self.task(1, 'HTPR-1')])
+        self.board(2, [self.task(2, 'HTPR-2')])
+        self.tick(1)
+        self.tick(2)
+        self.assertEqual(self.items(1), ['HTPR-1'])
+        self.assertEqual(self.items(2), ['HTPR-2'])
+        lease = json.loads((self.state / 'domain-ownership.json').read_text())['1']['HTPR-1']
+        self.assertEqual(lease['current'], 'Unscoped')
 
     def test_malformed_missing_nonadmission_detail_retries_same_tick_time(self):
         task = self.task(1, 'HTPR-1', 'Flags')

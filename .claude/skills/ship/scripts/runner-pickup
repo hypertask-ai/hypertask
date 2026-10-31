@@ -37,7 +37,7 @@ install_units() {
   unit_dir=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
   settings=${RUNNER_PICKUP_SETTINGS:-$HOME/projects/hypertask/.claude/settings.local.json}
   mkdir -p "$lib" "$unit_dir"
-  install -m 0755 "$here/runner-pickup" "$here/runner-domain-pickup.py" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$here/user-unit-check" "$lib/"
+  install -m 0755 "$here/runner-pickup" "$here/runner-domain-pickup.py" "$here/runner_domains.py" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$here/user-unit-check" "$lib/"
   install -m 0755 "$repo/hooks/runner-inbox-stop.sh" "$lib/runner-inbox-stop.sh"
   install -m 0644 "$repo/systemd/runner-pickup@.service" "$repo/systemd/runner-pickup@.timer" "$unit_dir/"
   # Register the hooks in the runner checkout's untracked local settings (idempotent). YPER4-284: PostToolUse hands board
