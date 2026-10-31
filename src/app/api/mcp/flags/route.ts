@@ -8,6 +8,7 @@ import { NextRequest } from "next/server";
 import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
+  FEATURE_FLAG_KEYS,
   FEATURE_FLAG_MODES,
   FEATURE_FLAG_OWNER_USER_ID,
   FeatureFlagInputError,
@@ -96,7 +97,9 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.failure !== "string" || !body.failure.trim() || body.failure.length > 300) {
         return noStore({ error: "Failure must be a nonblank reason or URL (max 300 characters)" }, 400);
       }
-      if (body.mode !== "OFF") throw new FeatureFlagApprovalError("A failure record can only switch a flag Off");
+      if (body.mode !== "OWNER_AND_QA") {
+        throw new FeatureFlagApprovalError("A failure record can only hold a flag at Owner + QA");
+      }
       const role = ctx.agentRole ?? await getAgentRole(ctx);
       if (!roleMeets(role, "write")) {
         const refusal = insufficientScopeResponse(role, "write");
@@ -131,8 +134,13 @@ export async function PATCH(request: NextRequest) {
       }
       if (usesFailure) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
-        if ((stored?.mode ?? defaultFeatureFlagMode(body.key as string)) === body.mode) {
+        if (!stored && !(FEATURE_FLAG_KEYS as readonly string[]).includes(body.key as string)) return;
+        const current = stored?.mode ?? defaultFeatureFlagMode(body.key as string);
+        if (current === body.mode) {
           throw new FeatureFlagApprovalError("Flag is already in that mode");
+        }
+        if (current !== "EVERYONE") {
+          throw new FeatureFlagApprovalError("A failure hold only narrows a flag that is on for everyone");
         }
         return;
       }

@@ -73,7 +73,7 @@ Use one ticket-specific flag for new features, deliberate behavior/design change
 - Infra/plumbing work, including the Agent Kit, has no product flag. Product-visible work discovered on board 4060 needs a linked board-15 ticket and its flag.
 - Gate protected behavior on the server. A hidden client control is not authorization. API-only changes still need semantic flag review even when outside the mechanical gate.
 - Reused UI needs no wireframe. A new component file still needs Valentin's design approval naming it. Follow current house rules for Figma proposals.
-- Existing flag switches follow /ship approval rules. When flagged behavior fails, a flag-owner write/admin agent switches it Off with a failure reason first, then repairs. This emergency path includes high-risk and bugfix flags; never re-enable automatically after reverting.
+- Existing flag switches follow /ship approval rules. When flagged behavior fails, a flag-owner write/admin agent holds it at Owner + QA with a failure reason first, then repairs. Runners never switch a flag Off; Off is Valentin's own safety switch. This emergency path includes high-risk and bugfix flags; never re-enable automatically after a hold.
 - After release, post the flag's dedicated link, key, purpose, and required Valentin mention on the ticket. Keep its flag link in the description.
 - A flagged ticket reaches Done after live QA passes in its declared mode. Do not request release permission by parking it in Valentin Review.
 
