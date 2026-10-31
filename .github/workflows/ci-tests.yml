@@ -430,26 +430,9 @@ jobs:
             echo "next typegen $(( $(date +%s%3N) - typegen_started ))ms"
             node .github/scripts/ts-route-surface.mjs --write .cache/tsc/route-surface >/dev/null || true
           fi
-          check_started=$(date +%s%3N)
-          # HTPR-8234: the native TypeScript checker (tsgo) runs the same
-          # tsconfig.json program several times faster than the JS tsc. The JS
-          # checker stays the authority on trusted pushes to production, so any
-          # diagnostic the preview build misses still fails CI before release.
-          if [ -x node_modules/.bin/tsgo ]; then
-            check_status=0
-            node_modules/.bin/tsgo --noEmit || check_status=$?
-            echo "tsgo $(( $(date +%s%3N) - check_started ))ms status $check_status"
-            [ "$check_status" -eq 0 ]
-          else
-            echo "tsgo missing from node_modules: this is a defect in the install, run tsc instead"
-            npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
-            echo "tsc $(( $(date +%s%3N) - check_started ))ms"
-          fi
-          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/production" ]; then
-            tsc_started=$(date +%s%3N)
-            npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
-            echo "tsc parity $(( $(date +%s%3N) - tsc_started ))ms"
-          fi
+          tsc_started=$(date +%s%3N)
+          npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
+          echo "tsc $(( $(date +%s%3N) - tsc_started ))ms"
           echo "typecheck total $(( $(date +%s%3N) - started ))ms"
 
       - name: Save TypeScript cache
