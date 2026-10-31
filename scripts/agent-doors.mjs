@@ -114,7 +114,7 @@ const ACTIONS = [
     person: "Pin or star a comment",
     commands: /^(pinComment|starComment)$/,
     ai: "add_comment",
-    note: "Pin and star ride the add_comment tool actions; the CLI and REST doors are still missing",
+    note: "Pin and star ride the comments tool pin and star actions, which dispatch to add_comment; the CLI and REST doors are still missing",
   },
   {
     id: "inbox.archive",
