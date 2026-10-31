@@ -67,6 +67,30 @@ test("runner publishes all files, descending top 20 and concurrency/serial accou
   assert.match(summary, /npm\/heavy-job startup is outside/);
 });
 
+test("CI runs one lane per core unless TEST_CONCURRENCY overrides it", (t) => {
+  const directory = fixture(t, { "lane.test.cjs": `require('node:test')('lane fixture', () => {});` });
+  const { status, report, stdout, stderr } = run(directory, [], { TEST_CONCURRENCY: "" });
+  assert.equal(status, 0, stderr);
+  const cores = Math.max(1, require("node:os").availableParallelism());
+  assert.equal(report.cores, cores);
+  assert.equal(report.concurrency, cores);
+  assert.match(stdout, new RegExp(`Test lanes: ${cores} of ${cores} cores\\.`));
+});
+
+test("an invalid TEST_CONCURRENCY fails the run instead of guessing a lane count", (t) => {
+  const directory = fixture(t, { "lane.test.cjs": `require('node:test')('lane fixture', () => {});` });
+  for (const value of ["0", "-1", "two", "1.5"]) {
+    const result = spawnSync(process.execPath, ["scripts/run-tests.mjs"], {
+      cwd: directory,
+      env: { ...process.env, NODE_TEST_CONTEXT: undefined, NODE_OPTIONS: "", CI: "true", TEST_CONCURRENCY: value },
+      encoding: "utf8",
+      timeout: 20000,
+    });
+    assert.notEqual(result.status, 0, value);
+    assert.match(result.stderr, new RegExp(`TEST_CONCURRENCY must be a positive integer, got ${value.replace(".", "\\.")}`));
+  }
+});
+
 test("runner honors selected files and overwrites previous timing JSON", (t) => {
   const directory = fixture(t, {
     "chosen.test.cjs": `require('node:test')('chosen fixture', () => {});`,

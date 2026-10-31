@@ -1,7 +1,7 @@
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import {
   discoverTestFiles,
@@ -20,7 +20,15 @@ let timingDirectory;
 const testsRoot = path.join(root, "tests");
 const FILE_TIMEOUT = `--test-timeout=${process.env.TEST_FILE_TIMEOUT_MS ?? 20 * 60 * 1000}`;
 const isCi = process.env.CI === "true" || process.env.GITHUB_ACTIONS !== undefined;
-const TEST_CONCURRENCY = process.env.TEST_CONCURRENCY ?? (isCi ? 4 : 2);
+const cores = Math.max(1, availableParallelism());
+const TEST_CONCURRENCY = laneCount(process.env.TEST_CONCURRENCY);
+
+function laneCount(override) {
+  if (override === undefined || override === "") return isCi ? cores : Math.min(cores, 2);
+  const lanes = Number(override);
+  if (!Number.isInteger(lanes) || lanes < 1) throw new Error(`TEST_CONCURRENCY must be a positive integer, got ${override}`);
+  return lanes;
+}
 
 process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${path.join(testsRoot, "helpers/register-server-only.cjs")}`.trim();
 
@@ -135,6 +143,7 @@ const isolatedCjsTests = new Set([
   "tests/oauth-authorize-session-identity.test.cjs",
 ]);
 
+console.log(`Test lanes: ${TEST_CONCURRENCY} of ${cores} cores.`);
 console.log(
   `Test inventory: ${cjsTests.length} Node tests, ${tsTests.length} TypeScript tests.`,
 );
@@ -148,12 +157,13 @@ process.on("exit", (exitCode) => {
     const durationMs = performance.now() - startedAt;
     fileDurations.sort((a, b) => b.durationMs - a.durationMs || a.file.localeCompare(b.file));
     const totalFileDurationMs = fileDurations.reduce((total, file) => total + file.durationMs, 0);
-    const concurrencyAdjustedDurationMs = totalFileDurationMs / Number(TEST_CONCURRENCY);
+    const concurrencyAdjustedDurationMs = totalFileDurationMs / TEST_CONCURRENCY;
     const laneAdjustedDurationMs = fileDurations.reduce((total, file) => total + file.durationMs / file.concurrency, 0);
     const differencePercent = 100 * (concurrencyAdjustedDurationMs - durationMs) / durationMs;
     const report = {
       durationMs,
-      concurrency: Number(TEST_CONCURRENCY),
+      concurrency: TEST_CONCURRENCY,
+      cores,
       totalFileDurationMs,
       concurrencyAdjustedDurationMs,
       laneAdjustedDurationMs,
