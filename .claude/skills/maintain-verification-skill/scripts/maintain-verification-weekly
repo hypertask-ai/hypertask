@@ -154,7 +154,7 @@ if ((count > 0)); then
     defer=true
     echo "maintain-verification: already filed this ISO week; report: $run/description.html"
   else
-    SHIP_SESSION_NAME="RUNNER 8" vcc task create --project 4060 --title "Feature map drift $week: $count pages" --description-file "$run/description.html" --priority medium >/dev/null 2>&1
+    SHIP_SESSION_NAME="RUNNER 8" VCC_VOICE_BYPASS="weekly feature map report" vcc task create --project 4060 --title "Feature map drift $week: $count pages" --description-file "$run/description.html" --priority medium >/dev/null 2>&1
     printf '%s\n' "$run/description.html" > "$marker"
   fi
 else
