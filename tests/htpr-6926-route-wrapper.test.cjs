@@ -381,8 +381,8 @@ test('all adopted REST methods preserve unwrapped wire results and scaffold orde
       }
     }
   })
-  assert.equal(files.length, 113)
-  assert.equal(compared, 151)
+  assert.equal(files.length, 115)
+  assert.equal(compared, 153)
 })
 
 

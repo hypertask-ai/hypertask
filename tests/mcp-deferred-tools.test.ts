@@ -114,7 +114,8 @@ test('deferred tools/list stays far cheaper than the full catalog', () => {
     assert.equal(tool.inputSchema?.type, 'object', `${tool.name} is missing a protocol inputSchema`)
   }
   const deferredTokens = (tools: typeof catalog) => estimateTokens({ tools: listToolsDeferred(toolsForConnect(tools, true)) })
-  const withoutFollowTask = catalog.filter((tool) => tool.name !== 'hypertask_follow_task')
+  const withoutPutAway = catalog.filter((tool) => !['hypertask_archive_task', 'hypertask_delete_task'].includes(tool.name))
+  const withoutFollowTask = withoutPutAway.filter((tool) => tool.name !== 'hypertask_follow_task')
   const withoutWaitingOn = withoutFollowTask.filter((tool) => tool.name !== 'hypertask_set_task_waiting_on')
   const withoutFeatures = withoutWaitingOn.filter((tool) => tool.name !== 'hypertask_list_features')
   const baseline = withoutFeatures.filter((tool) => tool.name !== 'hypertask_report_feedback')
@@ -125,7 +126,8 @@ test('deferred tools/list stays far cheaper than the full catalog', () => {
   assert.ok(feedbackTokens < 60, `feedback discovery added ${feedbackTokens} tokens`)
   assert.ok(featureTokens < 60, `feature discovery added ${featureTokens} tokens`)
   assert.ok(deferredTokens(withoutFollowTask) - deferredTokens(withoutWaitingOn) < 60, `waiting-on tool added ${deferredTokens(withoutFollowTask) - deferredTokens(withoutWaitingOn)} tokens`)
-  assert.ok(tokens - deferredTokens(withoutFollowTask) < 60, `follow tool added ${tokens - deferredTokens(withoutFollowTask)} tokens`)
+  assert.ok(tokens - deferredTokens(withoutPutAway) < 120, `archive and delete tools added ${tokens - deferredTokens(withoutPutAway)} tokens`)
+  assert.ok(deferredTokens(withoutPutAway) - deferredTokens(withoutFollowTask) < 60, `follow tool added ${deferredTokens(withoutPutAway) - deferredTokens(withoutFollowTask)} tokens`)
   assert.ok(tokens * 2 < fullTokens, `full list ${fullTokens} should be more than twice deferred ${tokens}`)
 })
 

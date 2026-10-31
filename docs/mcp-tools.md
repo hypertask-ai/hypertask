@@ -46,7 +46,7 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 | `hypertask_attachments` | `attach` | `hypertask_attach_files` |
 | `hypertask_decisions` | `create`, `list`, `get`, `answer`, `cancel` | `hypertask_decision_request` |
 | `hypertask_views` | `list`, `get`, `create`, `update`, `delete`, `switch` | `hypertask_list_views`, `hypertask_get_view`, `hypertask_create_view`, `hypertask_update_view`, `hypertask_delete_view`, `hypertask_switch_view` |
-| `hypertask_tasks` | `list`, `get`, `context`, `tree`, `next`, `versions`, `restore`, `link`, `links`, `unlink`, `create`, `update`, `move`, `assign`, `waiting_on`, `follow` | `hypertask_list_tasks`, `hypertask_get_tasks`, `hypertask_task_context`, `hypertask_get_task_tree`, `hypertask_next_tasks`, `hypertask_task_description_history`, `hypertask_link_tasks`, `hypertask_create_task`, `hypertask_update_task`, `hypertask_move_task_between_boards`, `hypertask_assign_user`, `hypertask_set_task_waiting_on`, `hypertask_follow_task` |
+| `hypertask_tasks` | `list`, `get`, `context`, `tree`, `next`, `versions`, `restore`, `link`, `links`, `unlink`, `create`, `update`, `move`, `assign`, `waiting_on`, `follow`, `archive`, `delete` | `hypertask_list_tasks`, `hypertask_get_tasks`, `hypertask_task_context`, `hypertask_get_task_tree`, `hypertask_next_tasks`, `hypertask_task_description_history`, `hypertask_link_tasks`, `hypertask_create_task`, `hypertask_update_task`, `hypertask_move_task_between_boards`, `hypertask_assign_user`, `hypertask_set_task_waiting_on`, `hypertask_follow_task`, `hypertask_archive_task`, `hypertask_delete_task` |
 | `hypertask_tokens` | `mint`, `revoke` | `hypertask_mint_token`, `hypertask_revoke_token` |
 | `hypertask_webhooks` | `get`, `configure`, `test`, `replay`, `rotate`, `delete` | `hypertask_agent_webhook` |
 | `hypertask_skills` | `list`, `get`, `create`, `update`, `delete`, `import` | `hypertask_list_skills`, `hypertask_get_skill`, `hypertask_create_skill`, `hypertask_update_skill`, `hypertask_delete_skill`, `hypertask_import_skills` |
@@ -100,7 +100,15 @@ The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_
 
 Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
 
-This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Everyone. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.
+This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Owner + QA because it can move a ticket to Trash. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.
+
+### Archive or delete a ticket
+
+`POST /api/mcp/tasks/archive` and `POST /api/mcp/tasks/delete`, with the MCP tools `hypertask_archive_task` and `hypertask_delete_task` (consolidated `hypertask_tasks`, actions `archive` and `delete`), take one identifier: `task_id`, `ticket_number`, or `project_id` with `unique_index`.
+
+Archive does the same write as Archive in the app: the ticket leaves the board and stays in Archive. Delete does the same write as Delete in the app: the ticket and its sub-tasks move to Trash, `permanentlyDeleteAt` is 30 days out, and the ticket can be restored from Trash until then. Both answer `{ "success": true, "task": { "id", "ticketNumber", "projectId", "status", "archivedAt", "permanentlyDeleteAt" } }`.
+
+A read-only agent, or an agent without write access to the ticket's board, is refused; a ticket on another board answers 404. The ticket switch `htpr-8215-agent-archive-delete` defaults to Owner + QA because it can move a ticket to Trash. Switching it off makes both endpoints answer 404 without changing archive or delete in the app. The native CLI commands live in the separate CLI repository.
 
 ## Connected-agent skill templates
 

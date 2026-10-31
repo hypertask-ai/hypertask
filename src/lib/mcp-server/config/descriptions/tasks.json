@@ -88,6 +88,16 @@
       "read_only": false,
       "permission": "data"
     },
+    "archive": {
+      "tool": "hypertask_archive_task",
+      "read_only": false,
+      "permission": "data"
+    },
+    "delete": {
+      "tool": "hypertask_delete_task",
+      "read_only": false,
+      "permission": "data"
+    },
     "assign": {
       "tool": "hypertask_assign_user",
       "read_only": false,

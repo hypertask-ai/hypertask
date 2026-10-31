@@ -53,5 +53,15 @@
     "maxUsdPerDay": 1,
     "reason": "HTPR-8219 moves the board status update text generation out of its web route unchanged, so the web button pays exactly what it paid before. One generation is at most 900 output tokens on the board team's existing status update model; about ten agent or human drafts a day stays under 1 USD.",
     "source": "https://app.hypertask.ai/detail/project-15/8219"
+  },
+  "src/lib/mcp/tasks/internalTaskWrite.ts:1f85a692c97e7eb069e41aef6168a6315388f47a129e1bc9b7ad56c8ad745984": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8215 sends the archive write from an agent door to Hypertask's own same-origin app route with the agent's signed session. It calls no paid service and costs nothing.",
+    "source": "https://app.hypertask.ai/detail/project-15/8215"
+  },
+  "src/lib/mcp/tasks/internalTaskWrite.ts:6c052e599d5192821401c4ee7341740e5c8a6ed9eb4f3a028c6b749e8cf592de": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8215 sends the Trash write from an agent door to Hypertask's own same-origin app route with the agent's signed session. It calls no paid service and costs nothing.",
+    "source": "https://app.hypertask.ai/detail/project-15/8215"
   }
 }

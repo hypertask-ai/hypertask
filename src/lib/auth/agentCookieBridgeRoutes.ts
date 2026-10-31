@@ -3,6 +3,7 @@ export const AGENT_COOKIE_BRIDGE_ROUTES = [
   ['PUT', '/api/tasks/single'],
   ['PUT', '/api/tasks/moveTask'],
   ['POST', '/api/tasks/(un)archive'],
+  ['POST', '/api/queues/tasks/taskDeleteReminder'],
   ['POST', '/api/tasks/setDueDate'],
   ['POST', '/api/priority/setPriority'],
   ['POST', '/api/estimate/setEstimate'],

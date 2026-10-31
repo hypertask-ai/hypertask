@@ -88,7 +88,7 @@ test('legacy catalog retains allowed tools, annotations and management scope fil
   assert.ok(toolNamed(deferred, 'hypertask_list_features'))
   assert.ok((await rpc(deferred, 'tools/list')).result.tools.some(({ name }) => name === 'hypertask_list_features'))
   assert.equal(definitions.find(({ name }) => name === 'hypertask_user_context').actions.features.tool, 'hypertask_list_features')
-  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features', 'hypertask_set_task_waiting_on', 'hypertask_follow_task'].includes(tool.name))
+  const originalLegacy = legacy.filter((tool) => !['hypertask_report_feedback', 'hypertask_list_features', 'hypertask_set_task_waiting_on', 'hypertask_follow_task', 'hypertask_archive_task', 'hypertask_delete_task'].includes(tool.name))
   const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
   const listed = (await rpc(selected, 'tools/list')).result.tools
   assert.deepEqual(listed.map((tool) => tool.name), ['hypertask_list_agents', 'hypertask_list_connections', 'hypertask_search_tools', 'hypertask_describe_tool'])

@@ -435,6 +435,18 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
       'Follow, unfollow, star, unstar or set a reminder on a task, and read the tracking state back. follow and unfollow use the same follower write as the app Watch button; star and unstar write the same private star as the star control; remind sets one reminder that returns the task to the inbox at remindAt in ISO 8601 and replaces an earlier unsent reminder. Requires taskId (database ID). read returns following, starred, remindAt and reminderId.',
   },
 
+  ARCHIVE_TASK: {
+    name: buildToolName('archive_task'),
+    description:
+      'Archives a ticket, the same write as Archive in the app; the ticket leaves the board and stays in Archive. Identify it with task_id, ticket_number, or project_id + unique_index. Refuses boards the agent cannot write to. Restore it with update_task status=Normal.',
+  },
+
+  DELETE_TASK: {
+    name: buildToolName('delete_task'),
+    description:
+      'Moves a ticket and its sub-tasks to Trash, the same write as Delete in the app; Trash keeps it for 30 days and it can be restored there. Identify it with task_id, ticket_number, or project_id + unique_index. Returns permanentlyDeleteAt. Refuses boards the agent cannot write to.',
+  },
+
   MOVE_TASK_BETWEEN_BOARDS: {
     name: buildToolName('move_task_between_boards'),
     description:
