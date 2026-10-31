@@ -138,7 +138,7 @@ hold_check() {
         || { echo "ship-claim: HOLD. Cannot read RUNNER $rn assignments." >&2; return 4; }
       while IFS=$'\t' read -r ticket project number; do
         [ -n "$ticket" ] || continue
-        [[ $ticket =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
+        [[ $ticket =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ && $project =~ ^[1-9][0-9]*$ && $number =~ ^[1-9][0-9]*$ ]] \
           || { echo "ship-claim: HOLD. Invalid assigned ticket on board $board." >&2; return 4; }
         merged=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state merged --base production --search "$ticket in:title" --limit 100 --json number,title) \
           || { echo "ship-claim: HOLD. Cannot read merged PRs for $ticket." >&2; return 4; }
@@ -187,7 +187,7 @@ hold_check() {
 }
 
 if [ "${1:-}" = hold ]; then
-  [[ ${2:-} =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim hold <TICKET>" >&2; exit 2; }
+  [[ ${2:-} =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ ]] || { echo "usage: ship-claim hold <TICKET>" >&2; exit 2; }
   hold_check "$2"; rc=$?; [ "$rc" = 0 ] && echo "ship-claim: no hold for ${SHIP_SESSION_NAME:-this session} on $2"; exit "$rc"
 fi
 

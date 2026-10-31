@@ -258,6 +258,10 @@ eq "CI ticket claim in one command" "$rc" 0
 grep -q '^task assign HYCI-30 --self' "$D/log" && grep -q '^task move HYCI-30 --section In Progress' "$D/log" \
   && ok "CI ticket claims through the same steps" || bad "CI claim wrote nothing"
 
+# The read-only hold check reads a CI ticket too.
+out=$(SHIP_CLAIM_GH=$D/hold-gh HOLD_OPEN='[]' SHIP_CLAIM_HYPERTASK=$D/hold-ht HOLD_BOARD=$D/board.json ./ship-claim hold HYCI-30 2>&1); rc=$?
+[[ $out != *'usage: ship-claim hold'* ]] && ok "hold reads a CI ticket" || bad "hold refused a CI ticket: $out"
+
 # A board that refuses the member names the board and the member, and writes nothing else.
 mk
 : > "$D/log"; out=$(FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
