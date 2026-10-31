@@ -18,5 +18,7 @@ visual checks, preview deployments and external review are extra. Docs-only PRs 
 head check runs, including reruns but excluding skipped/unstarted runs, with
 `scripts/ci-jobs-per-push.sh <pr-number...>` before and after a push. Old check
 runs stay attached to their old commit; record both snapshots for comparison.
+Snapshot a job's checkout step with `scripts/ci-checkout-times.sh <run-id...>`,
+which splits setup, fetch and working-tree time from the run's own log.
 CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
