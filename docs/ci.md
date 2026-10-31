@@ -41,9 +41,9 @@ The public repository uses free `ubuntu-latest`, but the plan has 20 parallel jo
 Small guards share scanner work and trusted metadata:
 
 - `pr-guards.yml`: Gitleaks + TruffleHog (`secret-scan`) and `next-public-secrets`.
-- `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code.
+- `pr-guards-trusted.yml`: outside-PR, size and title only. The outside-PR guard shares `.github/scripts/outside-pr-guard.cjs` with manual dry runs; both check out production only, never candidate code. The size guard blocks agent PRs over the hand-written cap.
 - Scanner checks are native job conclusions for all PRs, including Dependabot and forks. Their read-only tokens need no trusted status-publication pass.
-- The trusted guard publishes one existing required `pr-title` context for outside and title results. Size stays advisory. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
+- The trusted guard publishes one existing required `pr-title` context for outside, size and title results. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. PR runs and fleet sweeps share the non-cancelling `feature-flag-gate-production` group, so an old sweep cannot overwrite a newer PR verdict. The shared group uses `queue: max`, preserving up to 100 pending runs instead of replacing the previous pending PR event. GitHub cancels new arrivals beyond that documented limit; scheduled sweeps recover missed events. See [GitHub concurrency syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency). The single-PR path still lists open heads to reject shared commits, but never reads or posts unrelated verdicts. Policy changes and closed/shared-head recovery reach other PRs at the next scheduled sweep; GitHub scheduling can delay that sweep. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group, which also uses `queue: max`, so a burst of PR events no longer cancels the waiting run (before this, 109 of 400 runs were cancelled). Its hourly schedule is a backstop only: GitHub ran it about every four hours at `*/10`, and the hourly `required-check-settings.yml` shows the same four to six hour gaps, so no cron line shortens the wait. Reactions are reread on each PR event. Their original semantic statuses and flag fingerprints are unchanged.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
@@ -84,19 +84,23 @@ and give back the wall clock the split removes. With HYCI-42's six pool lanes an
 HYCI-45's two serial lanes the merged count is 22 jobs per push; one of the extra
 two is the summary, which becomes ready only after both halves finish.
 
-## PR size observation (YPER4-711)
+## PR size check (HYCI-29)
 
 - Trusted production code counts additions and deletions.
 - One config excludes generated and fixture files.
 - Renames crossing exclusion boundaries still count.
-- Incomplete measurements produce errors, never passing counts.
-- First phase: reporting only; merging stays unchanged.
-- No automatic cutoff or `size-ok` approval exists.
+- Incomplete measurements produce errors, never passing counts. An error never blocks a merge.
+- Agent PRs over 400 hand-written lines fail with `Split it into smaller changes that each build green.`
+- Human PRs are measured and never blocked.
+- Dependabot PRs are measured and never blocked.
+- A human allows a big agent PR with the `size-ok` label plus a `size-ok: <reason>` comment from a human account.
+- A label alone, or an agent-written reason, never allows the change.
+- The blocked result publishes through the existing required `pr-title` context.
 - Artifacts preserve each head, count and verdict.
-- Artifact name: `pr-size-<PR>-<run>`; retention: 14 days.
-- Post seven full days of ticket observations.
-- Then independently review blocking and human approval.
-- Existing required checks stay unchanged.
+- Artifact name: `pr-size-<PR>-<run>-<attempt>`; retention: 14 days.
+- `pr-size-observation.yml` posts the week-one counts to the ticket before blocking starts.
+- Blocking starts at `blockFrom` in `.github/scripts/pr-size-policy.json`. Until then the check reports only.
+- Existing required check contexts stay unchanged.
 
 ## Review gate
 
@@ -784,7 +788,8 @@ summary job replaces the old status publisher and trusted completion workflow.
 
 The trusted workflow reads PR metadata once for outside, size and title
 checks. It publishes only the existing required `pr-title` status, combining
-outside and title outcomes. Size remains advisory. A fresh pending status
+outside, size and title outcomes. A size block reddens that context and sends no
+extra status write. A fresh pending status
 invalidates an earlier same-head success before metadata reevaluation, so an
 invalid title cannot keep its prior approval during later quota retries.
 Publication rereads the open PR, production base, exact head, event title

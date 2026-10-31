@@ -1,6 +1,12 @@
 {
-  "mode": "report-only",
   "cap": 400,
+  "blockFrom": "2026-11-08T00:00:00Z",
+  "exceptionLabel": "size-ok",
+  "observation": {
+    "startedAt": "2026-10-31T22:54:58Z",
+    "endsAt": "2026-11-07T22:54:58Z",
+    "ticket": "HYCI-29"
+  },
   "excludedFiles": ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Cargo.lock"],
   "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/"],
   "excludedSuffixes": [".snap", ".generated.ts", ".generated.tsx"]

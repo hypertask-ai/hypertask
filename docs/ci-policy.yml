@@ -66,6 +66,16 @@ pr_job_budget:
     workflow: .github/workflows/pr-guards-trusted.yml
     jobs: 1
     published_statuses: [pr-title]
+    size_check:
+      ticket: https://app.hypertask.ai/detail/project-11514/29
+      policy: .github/scripts/pr-size-policy.json
+      cap_hand_written_lines: 400
+      blocks: agent_pull_requests
+      never_blocks: [human_pull_requests, dependabot_pull_requests, measurement_errors]
+      exception_label: size-ok
+      exception_reason: human_size_ok_comment
+      triggers: [pull_request_target, labeled, unlabeled]
+      published_through: pr-title
     metadata_reads: 1
     publication_freshness_reads: 2
     status_writes: 2
@@ -111,6 +121,23 @@ required_checks:
   # ci-tests and browser-smoke report on every non-draft PR; a missing or
   # skipped result is not green. Docs-only PRs succeed via conditional steps,
   # not job skips; existing guards remain mandatory.
+
+pr_size_observation:
+  ticket: https://app.hypertask.ai/detail/project-11514/29
+  workflow: .github/workflows/pr-size-observation.yml
+  script: .github/scripts/pr-size-observation.cjs
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  cron_utc: "5,35 23 * * *"
+  trusted_code_ref: production
+  runs_on: ubuntu-latest
+  post_target: hypertask_ticket_comment
+  post_count: 1
+  idempotency_key: window_end
+  per_pr_settings_api_reads: 0
+  window_reads: window_pr_list_and_files
+  no_reads_before_window_close: true
+  fail_closed_on: [missing_board_token, unreadable_pull_requests, post_error]
 
 required_check_settings_monitor:
   ticket: https://app.hypertask.ai/detail/project-4060/780

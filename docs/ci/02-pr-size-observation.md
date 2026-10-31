@@ -1,14 +1,25 @@
-## PR size observation (YPER4-711)
+## PR size check (HYCI-29)
 
 - Trusted production code counts additions and deletions.
 - One config excludes generated and fixture files.
 - Renames crossing exclusion boundaries still count.
 - Incomplete measurements produce errors, never passing counts.
-- First phase: reporting only; merging stays unchanged.
-- No automatic cutoff or `size-ok` approval exists.
+- An error warns and never blocks a merge.
+- Agent PRs over 400 hand-written lines fail.
+- The failure says: split it into smaller changes that each build green.
+- Human PRs are measured and never blocked.
+- Dependabot PRs are measured and never blocked.
+- A human allows a big agent PR with the `size-ok` label and a reason.
+- The reason is a `size-ok: <reason>` comment written by a human account.
+- A label alone never allows the change, so an agent cannot approve itself.
+- The guard re-runs on `labeled` and `unlabeled`, so adding the label clears the block.
+- The block publishes through the existing required `pr-title` context.
 - Artifacts preserve each head, count and verdict.
-- Artifact name: `pr-size-<PR>-<run>`; retention: 14 days.
-- Post seven full days of ticket observations.
-- Then independently review blocking and human approval.
-- Existing required checks stay unchanged.
-
+- Artifact name: `pr-size-<PR>-<run>-<attempt>`; retention: 14 days.
+- `pr-size-observation.yml` runs daily and posts one comment to HYCI-29.
+- The comment holds the week-one counts: agent PRs measured, how many are over the cap, the biggest, and human PRs.
+- The window is `observation` in `.github/scripts/pr-size-policy.json`.
+- Blocking starts at `blockFrom` in the same file, after the window closes.
+- A run after a successful post does nothing, so the counts are posted once.
+- The job reads no pull request on days before the window closes.
+- Existing required check contexts stay unchanged.

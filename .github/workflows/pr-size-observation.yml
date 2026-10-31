@@ -1,0 +1,36 @@
+name: PR Size Observation
+
+on:
+  schedule:
+    - cron: "5,35 23 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: pr-size-observation
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  report:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Post the observation counts to the ticket
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node .github/scripts/pr-size-observation.cjs

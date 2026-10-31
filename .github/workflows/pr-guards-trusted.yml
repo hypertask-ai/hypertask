@@ -2,7 +2,7 @@ name: PR Guards Trusted
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -65,7 +65,8 @@ jobs:
             }), { log: core.warning });
             core.setOutput('pr', JSON.stringify({
               number: pr.number, state: pr.state, title: pr.title, user: pr.user,
-              head: pr.head, base: pr.base, additions: pr.additions, deletions: pr.deletions, changed_files: pr.changed_files,
+              labels: pr.labels, head: pr.head, base: pr.base,
+              additions: pr.additions, deletions: pr.deletions, changed_files: pr.changed_files,
             }));
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         id: outside
@@ -106,7 +107,7 @@ jobs:
             const pr = JSON.parse(process.env.PR_METADATA);
             core.setOutput('sha', pr.head.sha);
             await require('./.github/scripts/ci-runner-policy.cjs').checkPullRequest({ pr, core });
-      - name: Save report-only size measurement
+      - name: Save size measurement
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -124,7 +125,8 @@ jobs:
             const { retryGithubRequest } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
             const results = JSON.parse(process.env.RESULTS);
             const eventPr = context.payload.pull_request;
-            const passed = ['outside', 'title', 'runner-policy'].every(id =>
+            const sizeBlocked = results.size?.outputs?.blocked === 'true';
+            const passed = !sizeBlocked && ['outside', 'title', 'runner-policy'].every(id =>
               results[id]?.outcome === 'success' && results[id]?.outputs?.sha === eventPr.head.sha);
             await retryGithubRequest(async () => {
               const { data: current } = await github.rest.pulls.get({
@@ -139,10 +141,10 @@ jobs:
               await github.rest.repos.createCommitStatus({
                 ...context.repo, sha: current.head.sha, context: 'pr-title',
                 state: passed ? 'success' : 'failure',
-                description: passed ? 'Trusted guards passed' : 'A trusted guard failed or did not run',
+                description: passed ? 'Trusted guards passed' : sizeBlocked ? 'This change is over the hand-written size cap' : 'A trusted guard failed or did not run',
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               });
-              if (!passed) core.setFailed('A trusted guard failed or did not run.');
+              if (!passed) core.setFailed(sizeBlocked ? 'PR size over the cap; split it into smaller changes that each build green.' : 'A trusted guard failed or did not run.');
             }, { log: core.warning });
 
   bind-ticket:
