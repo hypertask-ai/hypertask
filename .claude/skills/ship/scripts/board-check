@@ -93,17 +93,24 @@ canonical() {
   done < "$work/renames"
   printf '%s\n' "$t"
 }
+jq -Rn '[inputs | split("\t") | {(.[0]): .[1]}] | add // {}' < "$work/renames" > "$work/aliases"
 while IFS= read -r ticket; do canonical "$ticket"; done < "$work/tickets" \
   | awk '!seen[$0]++' > "$work/canonical"
 mv "$work/canonical" "$work/tickets"
 total=$(wc -l < "$work/tickets")
-head -n "$scan_limit" "$work/tickets" > "$work/inspect"
+head -n "$scan_limit" "$work/tickets" | jq -R -s --slurpfile tasks "$work/tasks" '
+  split("\n") | map(select(length > 0))
+  | map(select(. as $ticket | any($tasks[0][]; .ticketNumber == $ticket))) | .[]' > "$work/inspect"
 
 seconds() { if [ -n "$1" ]; then date -u -d "$1" +%s 2>/dev/null || echo 0; else echo 0; fi; }
 recent() { [ "$1" -gt 0 ] && [ "$((now - $1))" -lt 21600 ]; }
 commit_time() {
-  jq -r --arg t "$1" '[.[] | select(.title | test("^" + $t + "( |$)"))
-    | .commits.nodes[].commit.committedDate] | max // ""' "$work/prs"
+  jq -r --arg t "$1" --slurpfile map "$work/aliases" '
+    ($map[0] // {}) as $m
+    | [.[] | .title as $title
+      | ([$m | to_entries[] | select(.key as $k | $title | startswith($k + " ")) | .value][0]) as $renamed
+      | select($renamed == $t or ($title | test("^" + $t + "( |$)")))
+      | .commits.nodes[].commit.committedDate] | max // ""' "$work/prs"
 }
 
 # A ticket shared by a PR and a column is read only once.

@@ -279,13 +279,15 @@ assert sum(c[0] == 'ht' and c[2].startswith('/mcp/tasks?') for c in calls) == 2,
 assert len(r.stdout.splitlines()) == 101, r.stdout
 renamed = dict(id=901, ticketNumber='HYCI-9', uniqueIndex=9, projectId=11514,
                title='Renamed ticket', section='Backlog', labels=[])
-f = dict(tasks=[task(1), renamed], comments={'HTPR-1':[comment()], 'HYCI-9':[comment()]},
-         activities={}, prs=[pr(31,'YPER4-692',8), pr(32,'HTPR-1',8)],
-         renamed={'YPER4-692':'HYCI-9'})
-r, calls = run(f)
+renamed_fixture = dict(tasks=[task(1), renamed], comments={'HTPR-1':[comment()], 'HYCI-9':[comment()]},
+                       activities={}, renamed={'YPER4-692':'HYCI-9'})
+r, calls = run(dict(renamed_fixture, prs=[pr(31,'YPER4-692',8)]))
 assert r.returncode == 0, r.stderr
-assert [line.split('\t')[1] for line in r.stdout.splitlines()] == ['HYCI-9','HTPR-1'], r.stdout
-print('ok a ticket renamed onto another board is read once and reported under its current number')
+assert [line.split('\t')[1] for line in r.stdout.splitlines() if line.startswith('PR\t')] == ['HYCI-9'], r.stdout
+r, calls = run(dict(renamed_fixture, prs=[pr(31,'YPER4-692',1)]))
+assert r.returncode == 0, r.stderr
+assert not [line for line in r.stdout.splitlines() if line.startswith('PR\t')], r.stdout
+print('ok a renamed ticket is read once, reported under its current number and keeps its PR recency')
 f['batch_missing'] = True
 r, _ = run(f)
 assert r.returncode != 0 and 'batch' in r.stderr and not r.stdout, r.stderr
