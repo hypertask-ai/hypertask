@@ -19,7 +19,8 @@ name: AI review verdict to ticket
 # guard (YPER4-910) refuses technical text in the thread people read, and the
 # findings carry paths, code and long sentences, so five real mirrors failed
 # with HTTP 400 while the skip runs stayed green. The thread now gets one short
-# plain verdict line and the findings go to the agent log.
+# plain verdict line that points at the pull request; the agent log answers this
+# token with HTTP 503, so the findings stay where they already are.
 on:
   issue_comment:
     types: [created, edited]
@@ -176,28 +177,15 @@ jobs:
               .replace(/</g, '&lt;')
               .replace(/>/g, '&gt;')
               .replace(/"/g, '&quot;');
-            const findings = body
-              .split('\n')
-              .slice(1)
-              .join('\n')
-              .split(/<!--/)[0]
-              .trim()
-              .slice(0, 4000);
-            const marker = `reviewed-commit: ${sha}`;
             // The board refuses technical text in a people comment: no paths, no
             // code, no sentence over twelve words (YPER4-910). Findings are all
-            // of that, so the thread gets one short plain line and the findings
-            // plus the reviewed-commit marker go to the agent log.
+            // of that, and the agent log answers this token with HTTP 503, so the
+            // ticket gets one short plain line that points at the pull request.
             const verdictWord = /^(APPROVE|CONCERNS)\b/.exec(verdict)?.[1] ?? 'APPROVE';
-            const peopleText = [
+            const text = [
               `<p><strong>AI review (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${verdictWord}.</p>`,
-              `<p>Findings are in the agent log.</p>`,
+              `<p>Findings are in the pull request.</p>`,
             ].join('\n');
-            const logText = [
-              `<p><strong>AI review findings (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${escapeHtml(verdict)}</p>`,
-              findings ? `<pre>${escapeHtml(findings)}</pre>` : '',
-              `<p><code>${marker}</code></p>`,
-            ].filter(Boolean).join('\n');
 
             const appRequest = (path, init = {}) => fetch(`${APP}${path}`, {
               ...init,
@@ -210,46 +198,20 @@ jobs:
               },
             });
 
-            // Re-reading the ticket keeps a re-run or an edited verdict comment
-            // from posting the same commit twice.
-            const existing = await appRequest(
-              `/api/mcp/comments?ticket_number=${encodeURIComponent(ticket)}&limit=100&include_activity=true`,
-              { method: 'GET' });
-            if (!existing.ok) {
-              core.setFailed(`Reading ${ticket} comments returned HTTP ${existing.status}.`);
+            // `kind: qa` keeps the line in the ticket thread people read: an
+            // agent comment without a kind is filed in the hidden agent log. The
+            // per-commit key makes a re-run or an edited verdict a no-op (YPER4-925).
+            const response = await appRequest('/api/mcp/comments', {
+              method: 'POST',
+              headers: { 'Idempotency-Key': `ai-review-mirror-${prNumber}-${sha}` },
+              body: JSON.stringify({ ticket_number: ticket, kind: 'qa', text }),
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || result.success !== true) {
+              core.setFailed(
+                `Posting the verdict to ${ticket} failed: HTTP ${response.status} ` +
+                `${result.error ?? result.message ?? 'no error text'}.`,
+              );
               return;
             }
-            const existingBody = await existing.json();
-            if (existingBody.success !== true || !Array.isArray(existingBody.comments)) {
-              core.setFailed(`Reading ${ticket} comments was not confirmed by the app.`);
-              return;
-            }
-            if (existingBody.comments.some(comment =>
-              `${comment.text ?? ''}${comment.commentText ?? ''}`.includes(marker))) {
-              core.info(`${ticket} already carries the verdict for ${sha.slice(0, 12)}; nothing to post.`);
-              return;
-            }
-
-            for (const post of [
-              { what: 'the verdict', key: `ai-review-mirror-${prNumber}-${sha}`, text: peopleText, kind: 'qa' },
-              { what: 'the findings', key: `ai-review-mirror-log-${prNumber}-${sha}`, text: logText, kind: undefined },
-            ]) {
-              const payload = { ticket_number: ticket, text: post.text };
-              // `kind: qa` keeps the plain line in the ticket thread people read:
-              // an agent comment without a kind is filed in the hidden agent log.
-              if (post.kind) payload.kind = post.kind;
-              const response = await appRequest('/api/mcp/comments', {
-                method: 'POST',
-                headers: { 'Idempotency-Key': post.key },
-                body: JSON.stringify(payload),
-              });
-              const result = await response.json().catch(() => ({}));
-              if (!response.ok || result.success !== true) {
-                core.setFailed(
-                  `Posting ${post.what} to ${ticket} failed: HTTP ${response.status} ` +
-                  `${result.error ?? result.message ?? 'no error text'}.`,
-                );
-                return;
-              }
-            }
-            core.info(`Mirrored ${verdictWord} for ${sha.slice(0, 12)} to ${ticket}; findings are in the agent log.`);
+            core.info(`Mirrored ${verdictWord} for ${sha.slice(0, 12)} to ${ticket}: ${result.url ?? 'saved'}`);
