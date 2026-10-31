@@ -10,12 +10,14 @@ import {
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 import { findPassingTodos, todoRemovalMessages } from "./todo-passing.mjs";
-import { isolatedCjsTests } from "./test-isolation.mjs";
+import { LANE_BATCH, batchLaneFiles, classifySuite, partitionSafeFiles } from "./test-lanes.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
 const durationReporter = fileURLToPath(new URL("./test-duration-reporter.mjs", import.meta.url));
 const fileDurations = [];
+const sharedFileDurations = [];
+let timingFiles = 0;
 const passingTodos = [];
 let timingDirectory;
 const testsRoot = path.join(root, "tests");
@@ -31,6 +33,13 @@ function laneCount(override) {
   return lanes;
 }
 
+const TEST_LANE_FILE_CAP = Number(process.env.TEST_LANE_FILE_CAP ?? LANE_BATCH.maxFiles);
+const TEST_LANE_BYTE_CAP = Number(process.env.TEST_LANE_BYTE_CAP ?? LANE_BATCH.maxBytes);
+const TEST_LANE_CONCURRENCY = Number(process.env.TEST_LANE_CONCURRENCY ?? LANE_BATCH.concurrentFiles);
+const TEST_ISOLATION = Number(process.versions.node.split(".")[0]) >= 23
+  ? "--test-isolation=none"
+  : "--experimental-test-isolation=none";
+
 process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${path.join(testsRoot, "helpers/register-server-only.cjs")}`.trim();
 
 function relative(absolute) {
@@ -41,10 +50,11 @@ const quarantineFile = process.env.QUARANTINE_CONFIG || path.join(root, "config/
 const quarantine = loadQuarantine(quarantineFile);
 const execution = { stdout: createExecutionCounter(), stderr: createExecutionCounter() };
 
-function run(command, args, label, concurrency = 1) {
+function run(command, args, label, { concurrency = 1, lane = 0, serial = false, deferred = false } = {}) {
   const nodeTests = args[0] === "--test";
-  const timingFile = path.join(timingDirectory, `${fileDurations.length}.jsonl`);
-  const todoFile = path.join(timingDirectory, `${fileDurations.length}.tap`);
+  const runIndex = timingFiles++;
+  const timingFile = path.join(timingDirectory, `${runIndex}.jsonl`);
+  const todoFile = path.join(timingDirectory, `${runIndex}.tap`);
   if (nodeTests) {
     args = [
       "--test-reporter=spec", "--test-reporter-destination=stdout",
@@ -54,7 +64,9 @@ function run(command, args, label, concurrency = 1) {
     ];
   }
   const runStartedAt = performance.now();
-  console.log(`\n> ${label}`);
+  const buffered = [];
+  const write = lane > 0 ? (chunk) => buffered.push(chunk) : (chunk) => process.stdout.write(chunk);
+  console.log(lane > 0 ? `\n> ${label} (started)` : `\n> ${label}`);
   const parser = createTapParser();
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
@@ -65,27 +77,34 @@ function run(command, args, label, concurrency = 1) {
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      process.stdout.write(chunk);
+      write(chunk);
       parser.push(chunk);
       execution.stdout.push(chunk);
     });
     child.stderr.on("data", (chunk) => {
-      process.stderr.write(chunk);
+      write(chunk);
       parser.push(chunk);
       execution.stderr.push(chunk);
     });
     child.on("error", reject);
     child.on("close", (status, signal) => {
+      const durationMs = performance.now() - runStartedAt;
+      if (lane > 0) for (const chunk of buffered) process.stdout.write(chunk);
       if (nodeTests) {
         if (existsSync(todoFile)) {
           passingTodos.push(...findPassingTodos(readFileSync(todoFile, "utf8")));
           rmSync(todoFile, { force: true });
         }
         for (const line of readFileSync(timingFile, "utf8").trim().split("\n").filter(Boolean)) {
-          fileDurations.push({ ...JSON.parse(line), concurrency });
+          const entry = JSON.parse(line);
+          if (entry.shared) sharedFileDurations.push({ file: entry.file, testMs: entry.durationMs });
+          else fileDurations.push({ ...entry, concurrency, serial });
+        }
+        if (lane > 0) {
+          fileDurations.push({ file: label, durationMs, concurrency, lane, fileCount: args.filter((arg) => arg.endsWith(".test.cjs")).length });
         }
       } else {
-        fileDurations.push({ file: args.at(-1), durationMs: performance.now() - runStartedAt, concurrency });
+        fileDurations.push({ file: args.at(-1), durationMs, concurrency, serial });
       }
       const outcome = checkOutcome(status ?? 1, parser.finish(), quarantine);
       if (signal) {
@@ -99,8 +118,10 @@ function run(command, args, label, concurrency = 1) {
           console.error(`- ${failure.name} (${entry?.owner || "unowned"} ${entry?.ticket || ""})`);
         }
       }
+      if (lane > 0) console.log(`\n< ${label} finished in ${(durationMs / 1000).toFixed(1)}s`);
+      if (outcome.failCheck && deferred) return resolve({ failed: status || 1 });
       if (outcome.failCheck) process.exit(status ?? 1);
-      resolve();
+      resolve({ failed: 0 });
     });
   });
 }
@@ -146,41 +167,56 @@ process.on("exit", (exitCode) => {
     const durationMs = performance.now() - startedAt;
     fileDurations.sort((a, b) => b.durationMs - a.durationMs || a.file.localeCompare(b.file));
     const totalFileDurationMs = fileDurations.reduce((total, file) => total + file.durationMs, 0);
-    const concurrencyAdjustedDurationMs = totalFileDurationMs / TEST_CONCURRENCY;
-    const laneAdjustedDurationMs = fileDurations.reduce((total, file) => total + file.durationMs / file.concurrency, 0);
-    const differencePercent = 100 * (concurrencyAdjustedDurationMs - durationMs) / durationMs;
+    const laneRows = fileDurations.filter((file) => file.lane);
+    const serialRows = fileDurations.filter((file) => !file.lane && file.serial);
+    const poolRows = fileDurations.filter((file) => !file.lane && !file.serial && !file.file.endsWith(".test.ts"));
+    const tsRows = fileDurations.filter((file) => !file.lane && !file.serial && file.file.endsWith(".test.ts"));
+    const poolWidth = poolRows.reduce((widest, file) => Math.max(widest, file.concurrency), 0);
+    const poolEstimatedMs = poolWidth > 0
+      ? poolRows.reduce((total, file) => total + file.durationMs, 0) / poolWidth
+      : 0;
+    const longestLaneMs = laneRows.reduce((longest, file) => Math.max(longest, file.durationMs), 0);
+    const serialDurationMs = serialRows.reduce((total, file) => total + file.durationMs, 0);
+    const tsSerialMs = tsRows.reduce((total, file) => total + file.durationMs, 0);
+    const laneAdjustedDurationMs = serialDurationMs + Math.max(poolEstimatedMs, longestLaneMs) + tsSerialMs;
+    const differencePercent = 100 * (laneAdjustedDurationMs - durationMs) / durationMs;
     const report = {
       durationMs,
       concurrency: TEST_CONCURRENCY,
       cores,
       totalFileDurationMs,
-      concurrencyAdjustedDurationMs,
+      serialDurationMs,
+      poolEstimatedMs,
+      longestLaneMs,
+      tsSerialMs,
       laneAdjustedDurationMs,
       differencePercent,
       selectedFiles: selected.length,
-      recordedFiles: fileDurations.length,
+      recordedRuns: fileDurations.length,
       exitCode: finalExitCode,
       files: fileDurations,
+      sharedFiles: sharedFileDurations,
     };
     if (isCi) {
       writeFileSync(path.join(root, "test-durations.json"), `${JSON.stringify(report, null, 2)}\n`);
     }
     if (process.env.GITHUB_STEP_SUMMARY) {
       const seconds = (ms) => (ms / 1000).toFixed(2);
+      const recordedFiles = fileDurations.reduce((total, file) => total + (file.fileCount ?? 1), 0);
       const rows = fileDurations.slice(0, 20).map((file, index) =>
-        `| ${index + 1} | ${file.file.replaceAll("|", "\\|")} | ${seconds(file.durationMs)} | ${file.concurrency} |`,
+        `| ${index + 1} | ${file.file.replaceAll("|", "\\|")} | ${seconds(file.durationMs)} | ${file.fileCount ?? 1} |`,
       );
       appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
-        "\n## Slowest 20 test files",
-        `Recorded ${fileDurations.length}/${selected.length} selected files; runner exit code: ${finalExitCode}.`,
+        "\n## Slowest 20 test processes",
+        `Recorded ${recordedFiles}/${selected.length} selected files in ${fileDurations.length} process runs; runner exit code: ${finalExitCode}.`,
         "",
-        "| Rank | File | Duration (s) | Lane concurrency |",
+        "| Rank | Process | Duration (s) | Files |",
         "| ---: | --- | ---: | ---: |",
         ...rows,
         "",
-        `Total file time: ${seconds(totalFileDurationMs)}s / concurrency ${TEST_CONCURRENCY} = ${seconds(concurrencyAdjustedDurationMs)}s; elapsed runner: ${seconds(durationMs)}s; difference: ${differencePercent.toFixed(1)}% (target: within 20%).`,
-        `Accounting for serial isolated/TypeScript lanes: ${seconds(laneAdjustedDurationMs)}s. Remaining elapsed time includes worker startup, scheduling/idle slots, inventory and reporter overhead; npm/heavy-job startup is outside this runner measurement.`,
-        "File durations are whole child-process wall time, not sums of nested test durations. TypeScript files are timed around their existing serial tsx invocation.",
+        `Expected wall time: serial fixtures ${seconds(serialDurationMs)}s, then the slower of own-process pool ${seconds(poolEstimatedMs)}s and longest shared lane ${seconds(longestLaneMs)}s, then serial TypeScript ${seconds(tsSerialMs)}s = ${seconds(laneAdjustedDurationMs)}s; elapsed runner: ${seconds(durationMs)}s; difference: ${differencePercent.toFixed(1)}% (target: within 20%).`,
+        `A shared lane is one process for every safe file it carried, so it reports one wall time for all of them. Remaining elapsed time includes lane startup, shard inventory and reporter overhead; npm/heavy-job startup is outside this runner measurement.`,
+        "Durations are whole child-process wall time, not sums of nested test durations. TypeScript files are timed around their existing serial tsx invocation.",
         "",
       ].join("\n"));
     }
@@ -190,14 +226,56 @@ process.on("exit", (exitCode) => {
 });
 
 if (cjsTests.length > 0) {
-  const isolated = cjsTests.filter((file) => isolatedCjsTests.has(file));
-  const shared = cjsTests.filter((file) => !isolatedCjsTests.has(file));
-  for (const file of isolated) {
-    await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`);
+  const { serial, pool, safe, weightOf } = await classifySuite({ root, files: cjsTests });
+  for (const file of serial) {
+    await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`, { serial: true });
   }
-  if (shared.length > 0) {
-    await run(process.execPath, ["--test", FILE_TIMEOUT, `--test-concurrency=${TEST_CONCURRENCY}`, ...shared], "Node test suite", Number(TEST_CONCURRENCY));
+  const width = Math.max(1, Number(TEST_CONCURRENCY));
+  const poolFiles = safe.length > 1 ? pool : [...pool, ...safe];
+  const sharedFiles = safe.length > 1 ? safe : [];
+  const weightOfClass = (files) => files.reduce((total, file) => total + weightOf(file), 0);
+  const poolWeight = weightOfClass(poolFiles);
+  const safeWeight = weightOfClass(sharedFiles);
+  const lanes = sharedFiles.length === 0 ? 0 : Math.max(
+    1,
+    Math.min(
+      poolFiles.length === 0 ? width : width - 1,
+      Math.round(width * safeWeight / Math.max(1, safeWeight + poolWeight)),
+    ),
+  );
+  const poolWidth = Math.max(1, width - lanes);
+  console.log(`Shared lanes: ${lanes} for ${sharedFiles.length} safe files; own-process files: ${poolFiles.length} at pool width ${poolFiles.length > 0 ? poolWidth : 0}.`);
+  const jobs = [];
+  if (poolFiles.length > 0) {
+    jobs.push(run(
+      process.execPath,
+      ["--test", FILE_TIMEOUT, `--test-concurrency=${poolWidth}`, ...poolFiles],
+      `Own-process Node tests (${poolFiles.length} files, ${poolWidth} wide)`,
+      { concurrency: poolWidth, deferred: true },
+    ));
   }
+  const laneGroups = partitionSafeFiles(sharedFiles, lanes, weightOf);
+  for (const [index, files] of laneGroups.entries()) {
+    const batches = batchLaneFiles(files, { maxFiles: TEST_LANE_FILE_CAP, maxBytes: TEST_LANE_BYTE_CAP, weightOf });
+    jobs.push((async () => {
+      for (const [batchIndex, batch] of batches.entries()) {
+        const label = batches.length === 1
+          ? `Shared Node lane ${index + 1}/${laneGroups.length} (${batch.length} files)`
+          : `Shared Node lane ${index + 1}/${laneGroups.length}, batch ${batchIndex + 1}/${batches.length} (${batch.length} files)`;
+        const result = await run(
+          process.execPath,
+          ["--test", FILE_TIMEOUT, `--test-concurrency=${TEST_LANE_CONCURRENCY}`, TEST_ISOLATION, ...batch],
+          label,
+          { concurrency: laneGroups.length, lane: index + 1, deferred: true },
+        );
+        if (result.failed) return result;
+      }
+      return { failed: 0 };
+    })());
+  }
+  const results = await Promise.all(jobs);
+  const failed = results.find((result) => result.failed);
+  if (failed) process.exit(failed.failed);
 }
 
 const tsxCli = path.join(root, "node_modules", "tsx", "dist", "cli.mjs");

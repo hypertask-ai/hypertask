@@ -293,7 +293,7 @@ test('the full suite uses one worker per core in CI and at most 2 locally', () =
   const runner = readFileSync(path.join(root, 'scripts/run-tests.mjs'), 'utf8');
   assert.match(runner, /const cores = Math\.max\(1, availableParallelism\(\)\)/);
   assert.match(runner, /return isCi \? cores : Math\.min\(cores, 2\)/);
-  assert.match(runner, /--test-concurrency=\$\{TEST_CONCURRENCY\}/);
+  assert.match(runner, /--test-concurrency=\$\{poolWidth\}/);
 });
 
 test('priority tools receive nice 19 then idle IO even when the test runner already has low priority', () => {
