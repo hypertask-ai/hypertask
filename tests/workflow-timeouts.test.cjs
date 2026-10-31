@@ -6,13 +6,9 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const dir = path.join(root, ".github/workflows");
 
-// CODEOWNERS-protected by @valentinyeo (HYCI-15): only he may change it.
-const allowlist = new Map([["parity-contract-trusted.yml", "CODEOWNERS-protected, Valentin's signoff"]]);
+const codeownersProtected = new Map([["parity-contract-trusted.yml", "CODEOWNERS-protected, Valentin's signoff"]]);
 
-// Pinned values for the jobs that had no limit before HYCI-15. The floor is
-// 10 minutes: three times their measured maximum (3-23 s) is under a minute,
-// which a queue spike or a cold hosted checkout would trip.
-const pinned = {
+const previouslyUnbounded = {
   "ci-images.yml": { inventory: 10 },
   "gitleaks.yml": { "secret-scan": 10 },
   "mcp-client-eval.yml": { "publish-eval-report": 10 },
@@ -23,24 +19,20 @@ const pinned = {
 
 const fix = 'add "timeout-minutes: <minutes>" to the job, about 3x its recent max duration (10 for anything under a minute)';
 
-// This lint reads YAML by indentation instead of js-yaml, because it runs in
-// ci-prepare on every pull request, where a workflow-only change installs no
-// node_modules at all. Anything it cannot read with certainty fails closed.
-function jobsIn(file, text) {
+function readJobsByIndentation(file, text) {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
   const jobs = [];
   const start = lines.findIndex((line) => /^jobs:\s*(#.*)?$/.test(line));
   if (start === -1) return jobs;
-  let blockScalar = -1;
+  let blockScalarIndent = -1;
   for (const line of lines.slice(start + 1)) {
     if (line.trim() === "" || /^\s*#/.test(line)) continue;
     if (/^\S/.test(line)) break;
     const indent = line.length - line.trimStart().length;
-    // A block scalar's body is data, not jobs, whatever its indentation.
-    if (blockScalar >= 0 && indent > blockScalar) continue;
-    blockScalar = -1;
+    if (blockScalarIndent >= 0 && indent > blockScalarIndent) continue;
+    blockScalarIndent = -1;
     if (/:\s*[|>][-+]?[0-9]*\s*$/.test(line)) {
-      blockScalar = indent;
+      blockScalarIndent = indent;
       continue;
     }
     assert.equal(indent % 2, 0, `${file}: odd indentation at "${line.trim()}" - rewrite it with 2-space indents`);
@@ -65,8 +57,8 @@ const read = (file) => readFileSync(path.join(dir, file), "utf8");
 test("every workflow job sets an explicit timeout-minutes", () => {
   const missing = [];
   for (const file of workflows) {
-    if (allowlist.has(file)) continue;
-    for (const job of jobsIn(file, read(file))) {
+    if (codeownersProtected.has(file)) continue;
+    for (const job of readJobsByIndentation(file, read(file))) {
       if (job.timeout === undefined) missing.push(`${file}: job "${job.id}" has no timeout-minutes - ${fix}`);
     }
   }
@@ -76,7 +68,7 @@ test("every workflow job sets an explicit timeout-minutes", () => {
 test("timeouts stay under GitHub's 360-minute default", () => {
   const tooLong = [];
   for (const file of workflows) {
-    for (const job of jobsIn(file, read(file))) {
+    for (const job of readJobsByIndentation(file, read(file))) {
       if (job.timeout >= 360) tooLong.push(`${file}: job "${job.id}" sets ${job.timeout} minutes - a job that needs 6 hours is a hang`);
     }
   }
@@ -84,15 +76,15 @@ test("timeouts stay under GitHub's 360-minute default", () => {
 });
 
 test("the jobs that hung without a limit keep their bound", () => {
-  for (const [file, jobs] of Object.entries(pinned)) {
-    const parsed = new Map(jobsIn(file, read(file)).map((job) => [job.id, job.timeout]));
+  for (const [file, jobs] of Object.entries(previouslyUnbounded)) {
+    const parsed = new Map(readJobsByIndentation(file, read(file)).map((job) => [job.id, job.timeout]));
     for (const [id, minutes] of Object.entries(jobs)) {
       assert.equal(parsed.get(id), minutes, `${file}: job "${id}" must keep timeout-minutes: ${minutes} - ${fix}`);
     }
   }
 });
 
-test("the workflow directory is still discovered by this lint", () => {
+test("the lint discovers the whole workflow directory", () => {
   assert.ok(workflows.includes("ci-tests.yml"), "the lint found no workflows, so it proves nothing");
   assert.ok(workflows.length > 20, `expected the whole workflow directory, found ${workflows.length} files`);
 });
@@ -108,7 +100,7 @@ test("the indentation reader agrees with a real YAML parser", (t) => {
     const text = read(file);
     const parsed = (yaml.load(text).jobs ?? {});
     const expected = Object.entries(parsed).map(([id, job]) => [id, job["timeout-minutes"]]);
-    const actual = jobsIn(file, text).map((job) => [job.id, job.timeout]);
+    const actual = readJobsByIndentation(file, text).map((job) => [job.id, job.timeout]);
     assert.deepEqual(actual, expected, `${file}: the indentation reader and js-yaml disagree`);
   }
 });
