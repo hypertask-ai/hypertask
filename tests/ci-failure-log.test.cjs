@@ -72,6 +72,8 @@ test('the cause marker travels with the filed ticket so a rerun finds it', async
   const { ticketHtml, ticketTitle } = await subject;
   const group = {
     cause: 'test|ci-tests|not-ok-4-rate-limit-wait-cap-exceeded',
+    job: 'ci-tests',
+    step: 'Test',
     lines: 3,
     runs: [1, 2, 3],
     branches: ['runner-1/a'],
@@ -83,7 +85,7 @@ test('the cause marker travels with the filed ticket so a rerun finds it', async
     last: '2026-10-21T00:00:00Z',
   };
   assert.match(ticketHtml(group), /<!-- ci-failure-cause:test\|ci-tests\|not-ok-4-rate-limit-wait-cap-exceeded -->/);
-  assert.equal(ticketTitle(group), '[INFRA] CI failure cause: test in ci tests');
+  assert.equal(ticketTitle(group), '[INFRA] CI failure cause: Test in ci-tests');
 });
 
 test('the CLI prints the fixture tokens the ticket gates read', async () => {

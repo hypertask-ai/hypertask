@@ -86,7 +86,7 @@ export function groupEntries(entries) {
   for (const entry of entries) {
     const cause = entry.cause || causeKey(entry);
     const group = groups.get(cause) ?? {
-      cause, lines: 0, runs: [], branches: [], errors: [], tests: [], prs: [], flaky: false, first: entry.at, last: entry.at,
+      cause, job: entry.job, step: entry.step, lines: 0, runs: [], branches: [], errors: [], tests: [], prs: [], flaky: false, first: entry.at, last: entry.at,
     };
     group.lines += 1;
     group.runs.push(entry.run);
@@ -127,8 +127,7 @@ export function ticketPlan(groups, existing = new Map()) {
 }
 
 export function ticketTitle(group) {
-  const [step, job] = group.cause.split('|');
-  return `[INFRA] CI failure cause: ${step.replace(/-/g, ' ')} in ${job.replace(/-/g, ' ')}`.slice(0, 140);
+  return `[INFRA] CI failure cause: ${group.step} in ${group.job}`.slice(0, 140);
 }
 
 export function escapeHtml(value) {
@@ -139,36 +138,38 @@ export function escapeHtml(value) {
     .replace(/"/g, '&quot;');
 }
 
+function runLinks(group, repo) {
+  return `<ul>${group.runs.map(id => `<li><a href="https://github.com/${repo}/actions/runs/${id}">run ${id}</a></li>`).join('')}</ul>`;
+}
+
 export function ticketHtml(group, repo = 'hypertask-ai/hypertask') {
-  const runLink = id => `<li><a href="https://github.com/${repo}/actions/runs/${id}">run ${id}</a></li>`;
   return [
-    `<p><strong>Repeated CI cause.</strong> ${group.lines} red runs share this cause.</p>`,
+    `<p><strong>Repeated CI failure.</strong></p>`,
     `<ul>`,
-    `<li><strong>Cause:</strong> <code>${escapeHtml(group.cause)}</code></li>`,
-    `<li><strong>Step:</strong> ${escapeHtml(group.cause.split('|')[0])}</li>`,
-    `<li><strong>First error:</strong> <code>${escapeHtml(group.errors[0] ?? 'unknown')}</code></li>`,
-    `<li><strong>Lines:</strong> ${group.lines}</li>`,
-    `<li><strong>Flaky (failed then passed on the same code):</strong> ${group.flaky ? 'yes' : 'no'}</li>`,
-    `<li><strong>First seen:</strong> ${escapeHtml(group.first)}</li>`,
-    `<li><strong>Last seen:</strong> ${escapeHtml(group.last)}</li>`,
-    `<li><strong>Branches:</strong> ${escapeHtml(group.branches.join(', '))}</li>`,
-    `<li><strong>Tests:</strong> ${escapeHtml(group.tests.join(', ') || 'none')}</li>`,
+    `<li>This cause has ${group.lines} red runs.</li>`,
+    `<li>A cause is flaky when the same code later passed. Flaky: ${group.flaky ? 'yes' : 'no'}.</li>`,
+    `<li>First seen on ${escapeHtml(String(group.first).slice(0, 10))}.</li>`,
+    `<li>Last seen on ${escapeHtml(String(group.last).slice(0, 10))}.</li>`,
+    `<li>${group.branches.length > 4
+      ? `Showing 4 of ${group.branches.length} branches: ${escapeHtml(group.branches.slice(0, 4).join(', '))}.`
+      : `Affected branches: ${escapeHtml(group.branches.join(', '))}.`}</li>`,
     `</ul>`,
-    `<p>Runs:</p><ul>${group.runs.map(runLink).join('')}</ul>`,
-    `<p>Auto-filed by the CI failure log job. Fix the shared cause, not one change at a time.</p>`,
+    `<p>Runs:</p>`,
+    runLinks(group, repo),
+    `<p>Fix the shared cause once, not one change at a time.</p>`,
     `<!-- ci-failure-cause:${escapeHtml(group.cause)} -->`,
   ].join('');
 }
 
 export function commentHtml(group, repo = 'hypertask-ai/hypertask') {
   return [
-    `<p><strong>Seen again.</strong> ${group.lines} red runs share this cause. Last seen ${escapeHtml(group.last)}.</p>`,
+    `<p><strong>Seen again.</strong></p>`,
     `<ul>`,
-    `<li><strong>First error:</strong> <code>${escapeHtml(group.errors[0] ?? 'unknown')}</code></li>`,
-    `<li><strong>Flaky:</strong> ${group.flaky ? 'yes' : 'no'}</li>`,
-    `<li><strong>Branches:</strong> ${escapeHtml(group.branches.join(', '))}</li>`,
+    `<li>This cause now has ${group.lines} red runs.</li>`,
+    `<li>Last seen on ${escapeHtml(String(group.last).slice(0, 10))}.</li>`,
+    `<li>Flaky: ${group.flaky ? 'yes' : 'no'}.</li>`,
     `</ul>`,
-    `<ul>${group.runs.map(id => `<li><a href="https://github.com/${repo}/actions/runs/${id}">run ${id}</a></li>`).join('')}</ul>`,
+    runLinks(group, repo),
   ].join('');
 }
 
@@ -181,7 +182,7 @@ async function jsonRequest(url, options, label) {
   } catch {
     body = {};
   }
-  if (!response.ok) throw new Error(`${label} failed with HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`${label} failed with HTTP ${response.status}: ${text.slice(0, 300)}`);
   return body;
 }
 
@@ -195,13 +196,13 @@ export async function fileTickets(groups, config) {
   const created = [];
   const commented = [];
   for (const group of create.slice(0, limit)) {
-    const marker = `ci-failure-cause:${group.cause}`;
+    const title = ticketTitle(group);
     const search = await jsonRequest(
-      `${APP_URL}/api/mcp/tasks?project_id=${PROJECT_ID}&search=${encodeURIComponent(marker)}&limit=10`,
+      `${APP_URL}/api/mcp/tasks?project_id=${PROJECT_ID}&search=${encodeURIComponent(title)}&limit=20`,
       { headers: mcpHeaders(config.token) },
       'CI failure cause search',
     );
-    const found = (search.tasks ?? []).find(task => String(task.description ?? '').includes(marker));
+    const found = (search.tasks ?? []).find(task => task.title === title);
     if (found) {
       commented.push({ group, task: found });
       continue;
@@ -214,10 +215,9 @@ export async function fileTickets(groups, config) {
         body: JSON.stringify({
           project_id: PROJECT_ID,
           section_id: SECTION_ID,
-          title: ticketTitle(group),
+          title,
           description: ticketHtml(group, config.repo),
-          content_type: 'html',
-          label_names: ['CI', 'Hypertask CI'],
+          labels: ['CI', 'Hypertask CI'],
         }),
       },
       'CI failure cause ticket creation',
@@ -231,7 +231,7 @@ export async function fileTickets(groups, config) {
       {
         method: 'POST',
         headers: { ...mcpHeaders(config.token), 'Idempotency-Key': `ci-failure-log-${group.cause}-${task.id}` },
-        body: JSON.stringify({ task_id: task.id, text: commentHtml(group, config.repo), content_type: 'html', kind: 'agent' }),
+        body: JSON.stringify({ task_id: task.id, text: commentHtml(group, config.repo) }),
       },
       'CI failure cause comment',
     );
