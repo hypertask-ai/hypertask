@@ -438,15 +438,10 @@ jobs:
             npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
           fi
 
-      - name: Lint probe single file (temporary)
+      - name: Lint changed-file timing (temporary)
         if: needs.ci-prepare.outputs.run_tests == 'true'
         run: |
-          time npx eslint --suppressions-location eslint-local-rules/style-guide-suppressions.json --pass-on-unpruned-suppressions src/components/Common/Tooltip.tsx
-
-      - name: Lint full profile (temporary)
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: |
-          time npx eslint . --suppressions-location eslint-local-rules/style-guide-suppressions.json --pass-on-unpruned-suppressions --stats --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
+          time npx eslint --suppressions-location eslint-local-rules/style-guide-suppressions.json --pass-on-unpruned-suppressions src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/index.tsx tests/oxlint-overlap.test.cjs scripts/lint-changed.mjs
 
       - name: Lint overlap guard
         if: needs.ci-prepare.outputs.run_tests == 'true'

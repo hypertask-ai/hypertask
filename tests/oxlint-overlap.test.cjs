@@ -34,15 +34,15 @@ test("Oxlint catches the errors ESLint gave up", () => {
   const directory = mkdtempSync(join(tmpdir(), "oxlint-overlap-"));
   try {
     const probe = join(directory, "probe.tsx");
-    writeFileSync(probe, "export function Probe() {\n  const rows = [1].map((value) => <span>{value}</span>);\n  return <div>{rows}</div>;\n}\n");
+    writeFileSync(probe, "export function Probe() {\n  return <div children=\"text\" />;\n}\n");
     const result = spawnSync(join(root, "node_modules/.bin/oxlint"), ["-c", join(root, ".oxlintrc.json"), "probe.tsx"], {
       cwd: directory,
       encoding: "utf8",
     });
     const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
     assert.notEqual(result.status, 0, output);
-    assert.match(output, /react\/jsx-key/, output);
-    console.log("oxlint probe: caught react/jsx-key");
+    assert.match(output, /react\/no-children-prop/, output);
+    console.log("oxlint probe: caught react/no-children-prop");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
