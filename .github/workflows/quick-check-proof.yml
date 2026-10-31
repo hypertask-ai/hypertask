@@ -1,0 +1,71 @@
+name: Quick check proof
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [production]
+    paths:
+      - 'scripts/quick-check.mjs'
+      - 'scripts/install-git-hooks.mjs'
+      - '.githooks/**'
+      - 'tests/quick-check.test.cjs'
+      - 'tests/install-git-hooks.test.cjs'
+      - '.github/workflows/quick-check-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quick-check-proof-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick-check-proof:
+    name: quick-check-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Hook wiring tests
+        run: node --test tests/quick-check.test.cjs tests/install-git-hooks.test.cjs
+
+      - name: Times the hook on a small change
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'export const quickCheckProof = (value: string): string => value.trim();\n' > src/lib/quick-check-proof.ts
+          node scripts/quick-check.mjs --files src/lib/quick-check-proof.ts
+          start=$(date +%s%3N)
+          node scripts/quick-check.mjs --files src/lib/quick-check-proof.ts
+          end=$(date +%s%3N)
+          warm=$((end - start))
+          echo "measured run: ${warm}ms"
+          if [ "$warm" -ge 10000 ]; then
+            echo "hook ran over the 10s budget: ${warm}ms" >&2
+            exit 1
+          fi
+          echo "quick check under 10s: ${warm}ms"
+
+      - name: Blocks a push with a type error
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'export const quickCheckProof: string = 7;\n' > src/lib/quick-check-proof-error.ts
+          if node scripts/quick-check.mjs --files src/lib/quick-check-proof-error.ts; then
+            echo "the hook let a type error through" >&2
+            exit 1
+          fi
+          echo "the hook refused the push with a type error"
