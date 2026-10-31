@@ -1,4 +1,5 @@
-import { test, expect, type Page, type Locator, type APIRequestContext, type Response } from '@playwright/test'
+import type { Page, Locator, APIRequestContext, Response } from '@playwright/test'
+import { test, expect } from './lib/appReady'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
