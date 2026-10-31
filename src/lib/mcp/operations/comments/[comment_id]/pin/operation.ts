@@ -12,7 +12,7 @@ export function commentSaveOperation(mode: 'pin' | 'star') {
     mode,
     checkRateLimit: checkMcpRouteRateLimit,
     validateAuth: validateMcpRouteAuth,
-    authorizeWrite: requireAgentWriteRole,
+    authorizeWrite: (ctx) => requireAgentWriteRole(ctx),
     enabled: (ctx) => isFeatureEnabled(HTPR_8218_COMMENT_PIN_STAR_FLAG, ctx.user.id),
     findTarget: async (ctx, commentId) => {
       const comment = await prisma.comment.findFirst({

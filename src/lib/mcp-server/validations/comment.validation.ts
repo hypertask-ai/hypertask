@@ -254,10 +254,10 @@ export function getAddCommentCrudBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
       action: z
-        .enum(['add', 'update', 'delete'])
+        .enum(['add', 'update', 'delete', 'pin', 'star'])
         .default('add')
         .describe(
-          "Operation: 'add' = create comment (requires task_id/ticket_number + text), 'update' = edit comment (requires comment_id + text), 'delete' = remove comment (requires comment_id only)"
+          "Operation: 'add' = create comment (requires task_id/ticket_number + text), 'update' = edit comment (requires comment_id + text), 'delete' = remove comment (requires comment_id only), 'pin' = pin or unpin a comment at the top of its thread (requires comment_id), 'star' = save or remove your own private star on a comment (requires comment_id)"
         ),
       comment_id: z
         .coerce.number()
@@ -397,6 +397,30 @@ export function getAddCommentCrudInputSchema() {
             code: z.ZodIssueCode.custom,
             message: 'For action delete: comment_id is required',
             path: ['comment_id'],
+          });
+        }
+      }
+
+      if (action === 'pin' || action === 'star') {
+        if (comment_id === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `For action ${action}: comment_id is required`,
+            path: ['comment_id'],
+          });
+        }
+        if (text !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `For action ${action}: text is not supported`,
+            path: ['text'],
+          });
+        }
+        if (content_type !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `For action ${action}: content_type is not supported`,
+            path: ['content_type'],
           });
         }
       }

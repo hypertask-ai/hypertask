@@ -108,3 +108,11 @@ test('write role refusal prevents changes', async () => {
   assert.equal((await POST(request(), props)).status, 403);
   assert.deepEqual(created, []);
 });
+
+test('the comment tool offers pin and star as actions', () => {
+  const { AddCommentCrudInputSchema } = jiti(path.join(root, 'src/lib/mcp-server/validations/comment.validation.ts'));
+  assert.equal(AddCommentCrudInputSchema.safeParse({ action: 'pin', comment_id: 7 }).success, true);
+  assert.equal(AddCommentCrudInputSchema.safeParse({ action: 'star', comment_id: 7 }).success, true);
+  assert.equal(AddCommentCrudInputSchema.safeParse({ action: 'pin' }).success, false);
+  assert.equal(AddCommentCrudInputSchema.safeParse({ action: 'star', comment_id: 7, text: 'hi' }).success, false);
+});

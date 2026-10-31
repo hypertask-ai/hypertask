@@ -57,6 +57,7 @@ const NEWLY_GUARDED = [
   `POST ${OPS}/view/[viewId]/apply/operation.ts`,
   `POST ${API}/tasks/session/route.ts`,
   `POST ${OPS}/tasks/follow/operation.ts`,
+  `POST ${OPS}/comments/[comment_id]/pin/operation.ts`,
 ];
 
 const EXISTING_GUARD_IN_IMPORTED_MODULE = {
@@ -67,6 +68,7 @@ const EXISTING_GUARD_IN_IMPORTED_MODULE = {
   [`PATCH ${OPS}/agents/[agentId]/operation.ts`]: "src/lib/mcp/agents/delegatedAccess.ts",
   [`POST ${OPS}/tasks/archive/operation.ts`]: "src/lib/mcp/tasks/putAwayTask.ts",
   [`POST ${OPS}/tasks/delete/operation.ts`]: "src/lib/mcp/tasks/putAwayTask.ts",
+  [`POST ${OPS}/comments/[comment_id]/star/operation.ts`]: `${OPS}/comments/[comment_id]/pin/operation.ts`,
 };
 
 const BOARD_ACCESS_REQUEST_GUARD = `POST ${OPS}/agents/board-access-requests/operation.ts`;

@@ -300,6 +300,34 @@ export class CommentService {
     }
   }
 
+  async saveComment(params: { commentId: number; action: 'pin' | 'star' }): Promise<{ success: boolean; state: string }> {
+    const correlationId = generateCorrelationId();
+
+    try {
+      const response = await this.apiClient.makeRequest<{ success: boolean; state: string }>(
+        `/mcp/comments/${params.commentId}/${params.action}`,
+        {
+          method: 'POST',
+        },
+        correlationId
+      );
+
+      logger.info('Comment marker saved', {
+        correlationId,
+        commentId: params.commentId,
+        action: params.action,
+      });
+
+      return response;
+    } catch (error) {
+      logger.failure('Failed to save comment marker', error, {
+        correlationId,
+        action: params.action,
+      });
+      throw error;
+    }
+  }
+
   async deleteComment(params: unknown): Promise<DeleteCommentResponse> {
     const correlationId = generateCorrelationId();
 

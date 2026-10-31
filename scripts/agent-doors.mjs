@@ -113,7 +113,8 @@ const ACTIONS = [
     id: "comment.marker",
     person: "Pin or star a comment",
     commands: /^(pinComment|starComment)$/,
-    note: "Gap HTPR-8218: no pin or star door",
+    ai: "add_comment",
+    note: "Pin and star ride the add_comment tool actions; the CLI and REST doors are still missing",
   },
   {
     id: "inbox.archive",
