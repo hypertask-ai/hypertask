@@ -609,3 +609,28 @@ paid_api_cost_notes:
   detection: changed_src_typescript_ast_named_network_calls
   semantic_review_required: [aliases, other_sdks, cost_estimates]
   paid_requests_from_check: 0
+
+bugfix_regression:
+  # Unit 1 only: report-only. Making it a required check is a later unit and
+  # needs Valentin's go (HYCI-14).
+  ticket: https://app.hypertask.ai/detail/project-11514/14
+  workflow: .github/workflows/bugfix-regression.yml
+  job: bugfix-regression
+  script: .github/scripts/bugfix-regression-check.mjs
+  mode: report_only
+  required: false
+  triggers: [pull_request]
+  pull_request_types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled]
+  pull_request_base: production
+  signal: bugfix_title_tag
+  exemption: [no-regression-test_label, written_reason_in_the_pull_request_body]
+  replay: changed_tests_in_tests_run_on_the_merge_base_and_the_pull_request_head
+  replay_scope: "tests/**.test.cjs, tests/**.test.ts"
+  unproven_not_pass: [dependency_or_lockfile_difference, prisma_schema_difference, base_setup_failure, test_outside_tests]
+  tests_outside_tests: reported_as_unreplayable
+  node_major: 24
+  timeout_minutes: 30
+  jobs_per_push: 1
+  new_dependency: false
+  paid_service: false
+  forks_trusted: false
