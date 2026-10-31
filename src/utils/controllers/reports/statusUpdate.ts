@@ -32,12 +32,31 @@ import type { AgentTokenTeamScope } from "@/lib/mcp/auth/types";
 
 const STATUS_SLUG = "status-update";
 
+const STATUS_HEADLINE_MAX_CHARACTERS = 300;
+const STATUS_BULLET_MAX_CHARACTERS = 400;
+const STATUS_BULLETS_PER_SECTION_MAX = 6;
+
 const statusSchema = z.object({
-  headline: z.string().min(1).max(300),
-  shipped: z.array(z.string().min(1).max(400)).max(6),
-  inFlight: z.array(z.string().min(1).max(400)).max(6),
-  risks: z.array(z.string().min(1).max(400)).max(6),
+  headline: z.string().min(1),
+  shipped: z.array(z.string()),
+  inFlight: z.array(z.string()),
+  risks: z.array(z.string()),
 });
+
+function fitStatusUpdate(update: z.infer<typeof statusSchema>) {
+  const bullets = (items: string[]) =>
+    items
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .slice(0, STATUS_BULLETS_PER_SECTION_MAX)
+      .map((item) => item.slice(0, STATUS_BULLET_MAX_CHARACTERS));
+  return {
+    headline: update.headline.trim().slice(0, STATUS_HEADLINE_MAX_CHARACTERS),
+    shipped: bullets(update.shipped),
+    inFlight: bullets(update.inFlight),
+    risks: bullets(update.risks),
+  };
+}
 
 function renderStatusHtml(
   update: z.infer<typeof statusSchema>,
@@ -267,7 +286,8 @@ Write the status update:
 - risks: tickets sitting still, piling up, or otherwise worth attention.`,
     });
 
-    const bodyHtml = renderStatusHtml(result.output, {
+    const statusUpdate = fitStatusUpdate(result.output);
+    const bodyHtml = renderStatusHtml(statusUpdate, {
       boardTitle,
       generatedAt: now,
       verdict,
@@ -285,7 +305,7 @@ Write the status update:
       projectId,
       slug: STATUS_SLUG,
       title,
-      description: result.output.headline,
+      description: statusUpdate.headline,
       bodyHtml,
     };
 
@@ -302,7 +322,7 @@ Write the status update:
 
     return {
       url: getReportUrl(projectId, STATUS_SLUG),
-      headline: result.output.headline,
+      headline: statusUpdate.headline,
       title,
     };
   } catch (error) {
