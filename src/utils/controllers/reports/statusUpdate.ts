@@ -308,6 +308,6 @@ Write the status update:
   } catch (error) {
     if (error instanceof StatusUpdateBoardNotFoundError || error instanceof StatusUpdatesDisabledError) throw error;
     console.log("🚀 ~ status-update ~ error:", error);
-    throw new StatusUpdateGenerationError("Could not generate the status update");
+    throw new StatusUpdateGenerationError("Could not generate the status update", { cause: error });
   }
 }

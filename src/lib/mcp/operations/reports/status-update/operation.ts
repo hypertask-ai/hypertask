@@ -76,7 +76,8 @@ export const POST = wrapMcpRoute(async (request: NextRequest) => {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 })
     }
     if (error instanceof StatusUpdateGenerationError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 500 })
+      reportMcpOperationCrash(request, error.cause ?? error)
+      return NextResponse.json({ success: false, error: error.message }, { status: 502 })
     }
     console.error('[MCP Status Update] Error:', error)
     reportMcpOperationCrash(request, error)
