@@ -774,15 +774,17 @@ jobs:
             # A build that failed, or is still running, is not drift: the health
             # job already alarms it (cause deploy-build) and the live site
             # correctly keeps the last good deploy. Reporting both filed two
-            # tickets for one broken build (YPER4-969).
+            # tickets for one broken build (YPER4-969). A canceled build has no
+            # other alarm, so it still counts as drift.
             TIP_STATE=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=20" \
               | jq -r --arg sha "$TIP" 'if (.deployments | type) == "array" then
-                    ([.deployments[] | select(.meta.githubCommitSha == $sha)] | .[0].state // "NOTFOUND")
+                    ([.deployments[] | select(.meta.githubCommitSha == $sha)]
+                      | (map(select(.state == "READY")) + .) | .[0].state // "NOTFOUND")
                   else "UNKNOWN" end') || TIP_STATE="UNKNOWN"
             echo "tip deploy state: $TIP_STATE"
             case "$TIP_STATE" in
-              ERROR|CANCELED)
-                echo "The production build for ${TIP:0:9} failed or was canceled; the build alarm covers it, so this is not drift."
+              ERROR)
+                echo "The production build for ${TIP:0:9} failed; the build alarm covers it, so this is not drift."
                 exit 0 ;;
               QUEUED|BUILDING|INITIALIZING)
                 echo "The production build for ${TIP:0:9} is still $TIP_STATE; a deploy is in flight."

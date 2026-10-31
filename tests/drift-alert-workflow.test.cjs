@@ -78,9 +78,9 @@ async function run({ state, deployJson }) {
         PATH: `${bin}:${process.env.PATH}`,
         NODE_LOG: join(directory, "node-invoked"),
         LIVE_JSON: JSON.stringify({ buildId: live }),
-        DEPLOY_JSON: deployJson ?? JSON.stringify({
-          deployments: [{ state, meta: { githubCommitSha: tip } }],
-        }),
+        DEPLOY_JSON: typeof deployJson === "function"
+          ? deployJson(tip)
+          : (deployJson ?? JSON.stringify({ deployments: [{ state, meta: { githubCommitSha: tip } }] })),
         PROJECT_ID: "prj_qa",
         TEAM_ID: "team_qa",
         VERCEL_TOKEN: "stub-vercel",
@@ -99,18 +99,35 @@ async function run({ state, deployJson }) {
 }
 
 test("a failed or in-flight build is not reported as deploy drift", async () => {
-  for (const state of ["ERROR", "CANCELED"]) {
-    const result = await run({ state });
-    assert.equal(result.status, 0, result.output);
-    assert.match(result.output, /failed or was canceled; the build alarm covers it, so this is not drift/);
-    assert.doesNotMatch(result.invoked, /production-alert\.mjs/);
-  }
+  const result = await run({ state: "ERROR" });
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /failed; the build alarm covers it, so this is not drift/);
+  assert.doesNotMatch(result.invoked, /production-alert\.mjs/);
   for (const state of ["BUILDING", "QUEUED"]) {
-    const result = await run({ state });
-    assert.equal(result.status, 0, result.output);
-    assert.match(result.output, /a deploy is in flight/);
-    assert.doesNotMatch(result.invoked, /production-alert\.mjs/);
+    const inFlight = await run({ state });
+    assert.equal(inFlight.status, 0, inFlight.output);
+    assert.match(inFlight.output, /a deploy is in flight/);
+    assert.doesNotMatch(inFlight.invoked, /production-alert\.mjs/);
   }
+});
+
+test("a canceled build and a READY retry both keep the drift alarm", async () => {
+  const canceled = await run({ state: "CANCELED" });
+  assert.equal(canceled.status, 1, canceled.output);
+  assert.match(canceled.output, /BEHIND the production tip/);
+  assert.match(canceled.invoked, /production-alert\.mjs setup deploy-drift/);
+
+  const retry = await run({
+    deployJson: (tip) => JSON.stringify({
+      deployments: [
+        { state: "ERROR", meta: { githubCommitSha: tip } },
+        { state: "READY", meta: { githubCommitSha: tip } },
+      ],
+    }),
+  });
+  assert.equal(retry.status, 1, retry.output);
+  assert.match(retry.output, /BEHIND the production tip/);
+  assert.match(retry.invoked, /production-alert\.mjs setup deploy-drift/);
 });
 
 test("a READY tip that an older deploy still shadows is still drift", async () => {
