@@ -164,6 +164,11 @@ jobs:
         if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      # Runs before the change scope, so a workflow-only pull request (which
+      # installs no node_modules) is still guarded (HYCI-15).
+      - name: Guard workflow job timeouts
+        run: node --test tests/workflow-timeouts.test.cjs
+
       - name: Agent scope debt needs a recorded approval
         if: github.event_name == 'pull_request'
         env:
