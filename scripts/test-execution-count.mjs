@@ -29,6 +29,14 @@ export function createExecutionCounter() {
   };
 }
 
+export function combineCounters(...counters) {
+  const totals = { tests: 0, pass: 0, fail: 0, cancelled: 0, skipped: 0, todo: 0, summaries: 0 };
+  for (const counted of counters) {
+    for (const key of Object.keys(totals)) totals[key] += counted[key] ?? 0;
+  }
+  return { ...totals, executed: totals.pass + totals.fail };
+}
+
 export function executionFailure(counted, selected) {
   if (counted.executed > 0) return null;
   return `No test executed: ${selected} test file(s) selected, ${counted.skipped} skipped, 0 passed or failed. Skipped tests cannot prove a code change.`;

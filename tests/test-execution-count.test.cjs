@@ -100,3 +100,26 @@ test("a lane that executed nothing fails, a lane with one pass does not", async 
   passed.push(SPEC_PASSED);
   assert.equal(executionFailure(passed.finish(), 2), null);
 });
+
+test("stdout and stderr counters stay separate and combine into one total", async () => {
+  const { combineCounters, createExecutionCounter } = await loadCounter();
+  const stdout = createExecutionCounter();
+  const stderr = createExecutionCounter();
+  stderr.push("warning: unfinished line");
+  stdout.push(SPEC_PASSED);
+  const counted = combineCounters(stdout.finish(), stderr.finish());
+  assert.equal(counted.executed, 3);
+  assert.equal(counted.skipped, 0);
+  assert.equal(counted.summaries, 1);
+});
+
+test("combining counters adds every field, executed included", async () => {
+  const { combineCounters } = await loadCounter();
+  const counted = combineCounters(
+    { tests: 2, pass: 1, fail: 1, cancelled: 0, skipped: 3, todo: 0, summaries: 1 },
+    { tests: 4, pass: 4, fail: 0, cancelled: 0, skipped: 0, todo: 1, summaries: 1 },
+  );
+  assert.deepEqual(counted, {
+    tests: 6, pass: 5, fail: 1, cancelled: 0, skipped: 3, todo: 1, summaries: 2, executed: 6,
+  });
+});

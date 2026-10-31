@@ -8,7 +8,7 @@ import {
   supportedTestSuffixes,
 } from "./test-inventory.mjs";
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
-import { createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
+import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
@@ -28,7 +28,7 @@ function relative(absolute) {
 
 const quarantineFile = process.env.QUARANTINE_CONFIG || path.join(root, "config/quarantined-tests.json");
 const quarantine = loadQuarantine(quarantineFile);
-const execution = createExecutionCounter();
+const execution = { stdout: createExecutionCounter(), stderr: createExecutionCounter() };
 
 function run(command, args, label, concurrency = 1) {
   const nodeTests = args[0] === "--test";
@@ -49,15 +49,17 @@ function run(command, args, label, concurrency = 1) {
       env: process.env,
       stdio: ["inherit", "pipe", "pipe"],
     });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
       process.stdout.write(chunk);
-      parser.push(chunk.toString());
-      execution.push(chunk.toString());
+      parser.push(chunk);
+      execution.stdout.push(chunk);
     });
     child.stderr.on("data", (chunk) => {
       process.stderr.write(chunk);
-      parser.push(chunk.toString());
-      execution.push(chunk.toString());
+      parser.push(chunk);
+      execution.stderr.push(chunk);
     });
     child.on("error", reject);
     child.on("close", (status, signal) => {
@@ -193,7 +195,7 @@ for (const file of tsTests) {
   await run(process.execPath, [tsxCli, file], `TypeScript test: ${file}`);
 }
 
-const counted = execution.finish();
+const counted = combineCounters(execution.stdout.finish(), execution.stderr.finish());
 const skippedRun = isCi && selected.length > 0 ? executionFailure(counted, selected.length) : null;
 if (skippedRun) {
   console.error(skippedRun);
