@@ -20,10 +20,10 @@ function setup(mode = 'pin', overrides = {}) {
     '@/lib/taskCardActions/writeLocks': { withTaskStarWriteLock: async (_id, operation) => operation(tx) },
     '@/utils/controllers/savedContent/helper': { includeSavedContentComment: () => ({}) },
   });
-  const context = { user: { id: 6 }, agentId: 'agent', teamScope: { teamId: 'team' } };
+  const context = { user: { id: 6 }, agentId: mode === 'pin' ? 'agent' : null, teamScope: { teamId: 'team' } };
   const POST = createCommentSaveHandler({
     mode, checkRateLimit: async () => null, validateAuth: async () => context,
-    authorizeWrite: async () => null, enabled: async () => true,
+    authorizeWrite: async () => null, refuse: async () => null,
     findTarget: async () => ({ commentId: 7, taskId: 42, projectId: 15 }),
     toggle: async (ctx, target, selectedMode) => (await toggleSavedContent({ ...target, userId: ctx.user.id, type: selectedMode === 'pin' ? 'Public' : 'Private' })).status === 200,
     ...overrides,
@@ -56,7 +56,7 @@ test('unauthenticated requests do not write', async () => {
 });
 
 test('disabled flag does not write', async () => {
-  const { POST, request, props, created } = setup('star', { enabled: async () => false });
+  const { POST, request, props, created } = setup('pin', { refuse: async () => Response.json({ success: false, error: 'Comment pin and star are not enabled' }, { status: 404 }) });
   const response = await POST(request(), props);
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { success: false, error: 'Comment pin and star are not enabled' });
@@ -101,6 +101,14 @@ test('operation applies agent, team, and user project scope', async () => {
     project: { scope: [6, 'agent', context.teamScope] },
     AND: [{ project: { scope: [6] } }],
   });
+});
+
+test('a managed agent cannot write a private comment star', async () => {
+  const { POST, request, props, created } = setup('star', { validateAuth: async () => ({ user: { id: 6 }, agentId: 'agent', teamScope: null }) });
+  const response = await POST(request(), props);
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { success: false, error: 'Private comment stars are available only to human accounts' });
+  assert.deepEqual(created, []);
 });
 
 test('write role refusal prevents changes', async () => {
