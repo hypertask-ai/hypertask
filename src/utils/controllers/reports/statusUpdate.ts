@@ -241,7 +241,7 @@ export async function generateStatusUpdateReport({
       model,
       output: Output.object({ schema: statusSchema }),
       maxRetries: 2,
-      maxOutputTokens: 900,
+      maxOutputTokens: 2600,
       providerOptions: providerOptionsForAiModel(model, "status-update", {
         teamId: project.team?.id ?? null,
         projectId,
