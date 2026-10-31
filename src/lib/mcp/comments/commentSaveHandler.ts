@@ -1,4 +1,6 @@
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_8218_COMMENT_PIN_STAR_FLAG } from '@/lib/flags/definitions/htpr-8218-comment-pin-star';
 import { NextRequest, NextResponse } from 'next/server';
 
 type Target = { commentId: number; taskId: number; projectId: number };
@@ -8,10 +10,15 @@ type Dependencies<TContext extends CommentSaveContext> = {
   checkRateLimit: (request: NextRequest) => Promise<Response | null>;
   validateAuth: (request: NextRequest) => Promise<TContext | null>;
   authorizeWrite: (context: TContext) => Promise<Response | null>;
-  refuse: (context: TContext) => Promise<Response | null>;
+  refuse?: (context: TContext) => Promise<Response | null>;
   findTarget: (context: TContext, commentId: number) => Promise<Target | null>;
   toggle: (context: TContext, target: Target, mode: 'pin' | 'star') => Promise<boolean>;
 };
+
+export async function refuseWhenCommentMarkersOff(context: CommentSaveContext) {
+  if (await isFeatureEnabled(HTPR_8218_COMMENT_PIN_STAR_FLAG, context.user.id)) return null;
+  return NextResponse.json({ success: false, error: 'Comment pin and star are not enabled' }, { status: 404 });
+}
 
 export function createCommentSaveHandler<TContext extends CommentSaveContext>(dependencies: Dependencies<TContext>) {
   return async function saveComment(request: NextRequest, props: { params: Promise<{ comment_id: string }> }) {
@@ -24,7 +31,7 @@ export function createCommentSaveHandler<TContext extends CommentSaveContext>(de
     if (dependencies.mode === 'star' && context.agentId) {
       return NextResponse.json({ success: false, error: 'Private comment stars are available only to human accounts' }, { status: 403 });
     }
-    const gateRefusal = await dependencies.refuse(context);
+    const gateRefusal = await (dependencies.refuse ?? refuseWhenCommentMarkersOff)(context);
     if (gateRefusal) return gateRefusal;
     const { comment_id } = await props.params;
     const commentId = Number(comment_id);
