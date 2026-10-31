@@ -132,6 +132,17 @@ test('another agent star stays separate from the owner and from other agents', a
   assert.deepEqual(store.map((row) => row.id), ['owner-star', 'other-agent-star', undefined]);
 });
 
+test('deleting an agent cannot hand its private stars to the person', () => {
+  const schema = require('node:fs').readFileSync(path.join(root, 'src/prisma/schema.prisma'), 'utf8');
+  const migration = require('node:fs').readFileSync(
+    path.join(root, 'src/prisma/migrations/20261031150000_add_saved_content_agent/migration.sql'),
+    'utf8',
+  );
+  assert.match(schema, /agent\s+Agent\?\s+@relation\(fields: \[agentId\], references: \[id\], onDelete: Cascade\)/);
+  assert.match(migration, /ON DELETE CASCADE/);
+  assert.doesNotMatch(migration, /ON DELETE SET NULL/);
+});
+
 test('write role refusal prevents changes', async () => {
   const { POST, request, props, created } = setup('pin', { authorizeWrite: async () => Response.json({}, { status: 403 }) });
   assert.equal((await POST(request(), props)).status, 403);

@@ -2254,10 +2254,11 @@ model SavedContent {
   projectId Int
   type      ViewVisibility @default(Private)
   agentId   String?
-  agent     Agent?         @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  agent     Agent?         @relation(fields: [agentId], references: [id], onDelete: Cascade)
 
   @@index([taskId, userId, commentId]) // For saved content lookup
   @@index([commentId, taskId, userId, type]) 
+  @@index([agentId])
 }
 
 model VerificationCode {
