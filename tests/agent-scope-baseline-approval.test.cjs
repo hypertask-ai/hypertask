@@ -156,24 +156,25 @@ for (const [name, kind] of [['baseline', 'debt'], ['exceptions', 'exception']]) 
 
 const source = file => readFileSync(path.join(__dirname, '..', file), 'utf8')
 
-test('agent scope runs after dependency restore/install even on a cache hit and before Prisma', () => {
+test('agent scope runs after dependency restore/install even on a cache hit, as one static gate', () => {
   const workflow = source('.github/workflows/ci-tests.yml')
   const job = workflow.slice(workflow.indexOf('  ci-checks:'), workflow.indexOf('  ci-test:'))
   const prepare = workflow.slice(workflow.indexOf('  ci-prepare:'), workflow.indexOf('  ci-checks:'))
-  const guard = job.match(/      - name: Guard agent board scope\n[\s\S]*?(?=\n      - )/)?.[0]
+  const launcher = job.slice(job.indexOf('      - name: Run independent static checks'), job.indexOf('      - name: Save agent scope pip cache'))
+  const guard = launcher.match(/^          lane_agent_board_scope\(\) \{\n[\s\S]*?\n          \}$/m)?.[0]
   assert.ok(guard)
-  assert.ok(job.indexOf('name: Restore node_modules cache') < job.indexOf(guard))
-  assert.ok(job.indexOf('name: Install dependencies') < job.indexOf(guard))
-  assert.ok(job.indexOf(guard) < job.indexOf('name: Generate Prisma client'))
+  assert.ok(job.indexOf('name: Restore node_modules cache') < job.indexOf('name: Run independent static checks'))
+  assert.ok(job.indexOf('name: Install dependencies') < job.indexOf('name: Run independent static checks'))
+  assert.ok(job.indexOf('name: Generate Prisma client') < job.indexOf('name: Run independent static checks'))
   assert.match(job, /^    if: needs\.ci-prepare\.outputs\.run_tests == 'true' \|\| needs\.ci-prepare\.outputs\.boundary_needed == 'true'$/m)
-  assert.deepEqual(guard.match(/^\s+if:.*$/gm), ["        if: needs.ci-prepare.outputs.run_tests == 'true'"])
+  assert.match(launcher, /if \[ "\$RUN_TESTS" = "true" \]; then\n(?:.*\n)*? *run_lane agent-board-scope\n/)
   assert.doesNotMatch(guard, /cache-hit|continue-on-error|setup-python/)
   assert.match(guard, /"\$PY312" -m venv "\$RUNNER_TEMP\/agent-scope-venv"/)
   assert.match(guard, /sys.version_info\[:2\] == \(3, 12\)/)
   assert.match(guard, /pip install --require-hashes -r .github\/scripts\/agent-scope\/requirements.txt/)
   assert.match(guard, /run.py --self-test\n\s+python .github\/scripts\/agent-scope\/run.py\n/)
-  assert.match(guard, /SEMGREP_SEND_METRICS: "off"/)
-  assert.match(guard, /SEMGREP_ENABLE_VERSION_CHECK: "0"/)
+  assert.match(launcher, /SEMGREP_SEND_METRICS: "off"/)
+  assert.match(launcher, /SEMGREP_ENABLE_VERSION_CHECK: "0"/)
   const approval = prepare.match(/      - name: Agent scope debt needs a recorded approval\n[\s\S]*?(?=\n      - )/)?.[0]
   assert.ok(approval)
   assert.match(approval, /if: github.event_name == 'pull_request'/)

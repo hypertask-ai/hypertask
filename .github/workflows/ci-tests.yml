@@ -319,13 +319,6 @@ jobs:
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
-      - name: Check board registration boundaries
-        run: |
-          npx depcruise --config .dependency-cruiser.cjs --output-type json src/components/Modals/commands/HTC/domains > "$RUNNER_TEMP/boundary-report.json"
-          jq '.summary | {error, violations, totalCruised, totalDependenciesCruised}' "$RUNNER_TEMP/boundary-report.json"
-          jq -e '.summary.error == 0 and any(.modules[]; .source == "src/components/Modals/commands/HTC/domains/boardCommands.ts" and any(.dependencies[]; .resolved == "src/models/enums.ts"))' "$RUNNER_TEMP/boundary-report.json"
-          node --test tests/domain-boundary.test.cjs
-
       - name: Restore ESLint cache
         if: needs.ci-prepare.outputs.run_tests == 'true'
         id: restore-eslint-cache
@@ -347,39 +340,6 @@ jobs:
         with:
           path: ${{ runner.temp }}/agent-scope-pip-cache
           key: agent-scope-pip-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.github/scripts/agent-scope/requirements.txt') }}
-
-      - name: Guard agent board scope
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        env:
-          PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
-          PIP_DISABLE_PIP_VERSION_CHECK: "1"
-          SEMGREP_SEND_METRICS: "off"
-          SEMGREP_ENABLE_VERSION_CHECK: "0"
-        run: |
-          set -euo pipefail
-          PY312=$(ls -d "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3 2>/dev/null | sort -V | tail -1 || true)
-          PY312=${PY312:-python3}
-          "$PY312" -c 'import sys; assert sys.version_info[:2] == (3, 12), "requirements.txt is locked for Python 3.12, got " + sys.version'
-          "$PY312" -m venv "$RUNNER_TEMP/agent-scope-venv"
-          export PATH="$RUNNER_TEMP/agent-scope-venv/bin:$PATH"
-          python -m pip install --require-hashes -r .github/scripts/agent-scope/requirements.txt
-          python .github/scripts/agent-scope/run.py --self-test
-          python .github/scripts/agent-scope/run.py
-
-      - name: Save agent scope pip cache
-        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true')
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/agent-scope-pip-cache
-          key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
-
-      - name: Generate Prisma client
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: npx prisma generate
-
-      - name: Board filter and sort contracts
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: node --test tests/board-filters/*.test.cjs
 
       - name: Restore TypeScript cache
         if: needs.ci-prepare.outputs.run_tests == 'true'
@@ -406,34 +366,171 @@ jobs:
             tsc-${{ env.TSC_CACHE_NAMESPACE }}-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-
             tsc-prod-${{ runner.os }}-${{ env.TSC_CACHE_FINGERPRINT }}-
 
-      - name: Typecheck
+      - name: Generate Prisma client and flag index
         if: needs.ci-prepare.outputs.run_tests == 'true'
-        # Next.js generates route-handler signature checks outside ordinary tsc, so
-        # they are generated before tsc runs and CI catches the same errors as the
-        # Vercel build. HTPR-8234: the generator step is skipped only when the
-        # restored types were produced from an identical route input digest, which
-        # makes a stale match impossible; any doubt regenerates. `next typegen` also
-        # writes the feature-flag index through next.config, so that index is built
-        # here directly and no check depends on the generator running at all.
+        # npm prelint hooks rebuild the flag index themselves. Building it once
+        # here leaves every lane reading the same file instead of three lanes
+        # writing it at the same time.
         run: |
-          set -euo pipefail
-          started=$(date +%s%3N)
+          npx prisma generate
           node scripts/generate-flag-index.mjs
-          surface="unavailable"
-          surface=$(node .github/scripts/ts-route-surface.mjs) || surface="unavailable"
-          if [ "$surface" != "unavailable" ] && [ -d .next/types ] \
-            && node .github/scripts/ts-route-surface.mjs --match .cache/tsc/route-surface; then
-            echo "Route types reused: route inputs unchanged ($surface)."
-          else
-            typegen_started=$(date +%s%3N)
-            npx next typegen
-            echo "next typegen $(( $(date +%s%3N) - typegen_started ))ms"
-            node .github/scripts/ts-route-surface.mjs --write .cache/tsc/route-surface >/dev/null || true
+
+      # Every static gate below reads the checkout or the caches and nothing
+      # produced by another gate, so none of them waits for another. Run one
+      # after another they cost their sum (about 150 s of the job); started
+      # together the job costs its slowest gate (HYCI-8). A gate that fails is
+      # named in its own log group and the step fails once every lane is done.
+      - name: Run independent static checks
+        if: needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'
+        shell: bash
+        timeout-minutes: 30
+        env:
+          RUN_TESTS: ${{ needs.ci-prepare.outputs.run_tests == 'true' }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          SEMGREP_SEND_METRICS: "off"
+          SEMGREP_ENABLE_VERSION_CHECK: "0"
+        run: |
+          set -uo pipefail
+          LOGS="$RUNNER_TEMP/static-gates"
+          mkdir -p "$LOGS"
+          : > "$LOGS/pids"
+          failed=0
+
+          # The board boundary gate also guards the boundary-only run, where no
+          # TypeScript or lint gate runs at all.
+          lane_board_registration_boundaries() {
+            npx depcruise --config .dependency-cruiser.cjs --output-type json src/components/Modals/commands/HTC/domains > "$RUNNER_TEMP/boundary-report.json"
+            jq '.summary | {error, violations, totalCruised, totalDependenciesCruised}' "$RUNNER_TEMP/boundary-report.json"
+            jq -e '.summary.error == 0 and any(.modules[]; .source == "src/components/Modals/commands/HTC/domains/boardCommands.ts" and any(.dependencies[]; .resolved == "src/models/enums.ts"))' "$RUNNER_TEMP/boundary-report.json"
+            node --test tests/domain-boundary.test.cjs
+          }
+
+          lane_agent_board_scope() {
+            PY312=$(ls -d "$RUNNER_TOOL_CACHE"/Python/3.12.*/x64/bin/python3 2>/dev/null | sort -V | tail -1 || true)
+            PY312=${PY312:-python3}
+            "$PY312" -c 'import sys; assert sys.version_info[:2] == (3, 12), "requirements.txt is locked for Python 3.12, got " + sys.version'
+            "$PY312" -m venv "$RUNNER_TEMP/agent-scope-venv"
+            export PATH="$RUNNER_TEMP/agent-scope-venv/bin:$PATH"
+            python -m pip install --require-hashes -r .github/scripts/agent-scope/requirements.txt
+            python .github/scripts/agent-scope/run.py --self-test
+            python .github/scripts/agent-scope/run.py
+          }
+
+          # Next.js generates route-handler signature checks outside ordinary tsc,
+          # so they are generated first and CI catches the same errors as the
+          # Vercel build. HTPR-8234: the generator is skipped only when the restored
+          # types came from an identical route input digest, which makes a stale
+          # match impossible; any doubt regenerates. `next typegen` also writes the
+          # feature-flag index through next.config, so that index is built here
+          # directly and no gate depends on the generator running at all.
+          lane_typescript() {
+            started=$(date +%s%3N)
+            node scripts/generate-flag-index.mjs
+            surface="unavailable"
+            surface=$(node .github/scripts/ts-route-surface.mjs) || surface="unavailable"
+            if [ "$surface" != "unavailable" ] && [ -d .next/types ] \
+              && node .github/scripts/ts-route-surface.mjs --match .cache/tsc/route-surface; then
+              echo "Route types reused: route inputs unchanged ($surface)."
+            else
+              typegen_started=$(date +%s%3N)
+              npx next typegen
+              echo "next typegen $(( $(date +%s%3N) - typegen_started ))ms"
+              node .github/scripts/ts-route-surface.mjs --write .cache/tsc/route-surface >/dev/null || true
+            fi
+            tsc_started=$(date +%s%3N)
+            npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
+            echo "tsc $(( $(date +%s%3N) - tsc_started ))ms"
+            echo "typecheck total $(( $(date +%s%3N) - started ))ms"
+          }
+
+          # Two linters read the same tree: Oxlint for the rules it can express,
+          # ESLint for the rest.
+          lane_oxlint() {
+            npm run lint:oxlint
+          }
+
+          lane_eslint() {
+            if [ -n "$BASE_SHA" ]; then
+              npm run lint:changed -- "$BASE_SHA"
+            else
+              npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
+            fi
+          }
+
+          lane_lint_overlap_guard() {
+            node --test tests/oxlint-overlap.test.cjs
+          }
+
+          # Directory discovery in the Ctrl+K coverage gate is broader than the PR
+          # selector's exact-path heuristic, so it runs even when another suite
+          # owns the diff. A PR that adds a source-text regex is exactly the PR the
+          # selector never routes to the regex gate, so that one reads the whole
+          # tests/ tree on every PR.
+          lane_contracts() {
+            node --test tests/board-filters/*.test.cjs
+            node --test tests/settings-cmdk-coverage.test.cjs
+            node --test tests/source-text-regex-lint.test.cjs
+          }
+
+          lane_changed_style_tokens() {
+            npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"
+          }
+
+          lane_paid_api_cost_notes() {
+            node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
+          }
+
+          run_lane() {
+            local name=$1
+            ( set -euo pipefail; "lane_${name//-/_}" ) > "$LOGS/$name.log" 2>&1 &
+            printf '%s %s\n' "$name" "$!" >> "$LOGS/pids"
+          }
+
+          run_lane board-registration-boundaries
+          if [ "$RUN_TESTS" = "true" ]; then
+            # Lanes that diff against the base share one fetch here, so no two
+            # lanes write to .git at the same time.
+            if [ -n "$BASE_SHA" ]; then
+              git fetch --no-tags --depth=1000 origin "$BASE_SHA" "$HEAD_SHA"
+            fi
+            run_lane agent-board-scope
+            run_lane typescript
+            run_lane oxlint
+            run_lane eslint
+            run_lane lint-overlap-guard
+            run_lane contracts
+            if [ -n "$BASE_SHA" ]; then
+              run_lane changed-style-tokens
+              run_lane paid-api-cost-notes
+            fi
           fi
-          tsc_started=$(date +%s%3N)
-          npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo
-          echo "tsc $(( $(date +%s%3N) - tsc_started ))ms"
-          echo "typecheck total $(( $(date +%s%3N) - started ))ms"
+
+          while read -r name pid; do
+            if wait "$pid"; then
+              printf 'static gate %s: passed\n' "$name"
+            else
+              printf 'static gate %s: FAILED\n' "$name"
+              failed=1
+            fi
+            printf '::group::static gate %s\n' "$name"
+            cat "$LOGS/$name.log"
+            printf '::endgroup::\n'
+          done < "$LOGS/pids"
+
+          if [ "$failed" -ne 0 ]; then
+            printf '::error::at least one static gate failed; the failing gate is named above\n'
+            exit 1
+          fi
+
+      - name: Save agent scope pip cache
+        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'push' && steps.agent-scope-pip-cache.outputs.cache-hit != 'true')
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/agent-scope-pip-cache
+          key: ${{ steps.agent-scope-pip-cache.outputs.cache-primary-key }}
 
       - name: Save TypeScript cache
         if: needs.ci-prepare.outputs.run_tests == 'true' && steps.restore-tsc-cache.outputs.cache-hit != 'true'
@@ -445,42 +542,6 @@ jobs:
             .next/dev/types
             next-env.d.ts
           key: ${{ steps.restore-tsc-cache.outputs.cache-primary-key }}
-
-      - name: Paid API cost notes
-        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'pull_request')
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node .github/scripts/paid-api-cost-notes.mjs "$BASE_SHA" "$HEAD_SHA"
-
-      - name: Changed style tokens
-        if: needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'pull_request')
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git fetch --no-tags origin "$BASE_SHA" "$HEAD_SHA"
-          npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"
-
-      - name: Lint (oxlint)
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: npm run lint:oxlint
-
-      - name: Lint (eslint, rules Oxlint lacks)
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if [ -n "$PR_BASE_SHA" ]; then
-            git fetch --no-tags --depth=1000 origin "$PR_BASE_SHA"
-            npm run lint:changed -- "$PR_BASE_SHA"
-          else
-            npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache
-          fi
-
-      - name: Lint overlap guard
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: node --test tests/oxlint-overlap.test.cjs
 
       - name: Save ESLint cache
         # PRs may restore the trusted base-branch cache, but only production pushes
@@ -495,17 +556,6 @@ jobs:
           path: .cache/eslint
           key: ${{ steps.restore-eslint-cache.outputs.cache-primary-key }}
 
-      # Directory discovery in this check is broader than the PR selector's
-      # exact-path heuristic, so run it even when another suite owns the diff.
-      - name: Settings Ctrl+K coverage
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: node --test tests/settings-cmdk-coverage.test.cjs
-
-      # A PR that adds the offending test is exactly the PR the selector never
-      # routes here, so this gate reads the whole tests/ tree on every PR.
-      - name: Source-text regex gate
-        if: needs.ci-prepare.outputs.run_tests == 'true'
-        run: node --test tests/source-text-regex-lint.test.cjs
 
   ci-test:
     name: test-shard

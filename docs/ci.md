@@ -49,6 +49,14 @@ Small guards share scanner work and trusted metadata:
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
+Static gates inside `ci-checks` share one job and run as concurrent lanes (HYCI-8):
+agent board scope, TypeScript, Oxlint, ESLint, the lint overlap guard, board
+registration boundaries, the board-filter/Ctrl+K/source-text contracts, changed
+style tokens and paid API cost notes.
+None reads another's output, so the job costs its slowest lane instead of their sum.
+A lane that fails is named in its own log group and the step fails once every lane
+has finished. Keeping them in one job holds the budget below unchanged.
+
 Static normal non-draft app PR budget: **17 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job). Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are

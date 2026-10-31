@@ -5,7 +5,34 @@ const test = require("node:test");
 const yaml = require("js-yaml");
 
 const workflow = () => yaml.load(readFileSync(".github/workflows/ci-tests.yml", "utf8"));
-const staticSteps = ["Guard agent board scope", "Typecheck", "Lint (oxlint)", "Lint (eslint, rules Oxlint lacks)"];
+const launcherName = "Run independent static checks";
+const lanes = [
+  "agent-board-scope",
+  "board-registration-boundaries",
+  "changed-style-tokens",
+  "contracts",
+  "eslint",
+  "lint-overlap-guard",
+  "oxlint",
+  "paid-api-cost-notes",
+  "typescript",
+];
+const formerSteps = [
+  "Board filter and sort contracts",
+  "Changed style tokens",
+  "Check board registration boundaries",
+  "Guard agent board scope",
+  "Lint (eslint, rules Oxlint lacks)",
+  "Lint (oxlint)",
+  "Lint overlap guard",
+  "Paid API cost notes",
+  "Settings Ctrl+K coverage",
+  "Source-text regex gate",
+  "Typecheck",
+];
+
+const laneFunctions = (run) => [...run.matchAll(/^ *lane_([a-z_]+)\(\) \{$/gm)].map((match) => match[1].replaceAll("_", "-")).sort();
+const laneLaunches = (run) => [...run.matchAll(/^ *run_lane (\S+)$/gm)].map((match) => match[1]).sort();
 
 function assertParallelChecks(ci) {
   const checks = ci.jobs["ci-checks"];
@@ -16,31 +43,52 @@ function assertParallelChecks(ci) {
   assert.equal(checks["runs-on"], "ubuntu-latest");
   assert.deepEqual(checks.permissions, { contents: "read" });
   assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test"]);
-  for (const name of staticSteps) {
-    assert.equal(checks.steps.filter((step) => step.name === name).length, 1, name);
-    assert.equal(checks.steps.find((step) => step.name === name).if, "needs.ci-prepare.outputs.run_tests == 'true'", name);
-    assert.equal(checks.steps.find((step) => step.name === name)["continue-on-error"], undefined, name);
-    for (const job of ["ci-prepare", "ci-test"]) {
-      assert.ok(!ci.jobs[job].steps.some((step) => step.name === name), `${name} blocks ${job}`);
+
+  const launchers = checks.steps.filter((step) => step.name === launcherName);
+  assert.equal(launchers.length, 1, "one launcher runs every static gate");
+  const [launcher] = launchers;
+  assert.equal(launcher.if, "needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'");
+  assert.equal(launcher["continue-on-error"], undefined);
+  for (const name of formerSteps) {
+    assert.equal(checks.steps.filter((step) => step.name === name).length, 0, `${name} is a lane, not a step`);
+  }
+  for (const job of ["ci-prepare", "ci-test"]) {
+    for (const name of lanes) {
+      assert.ok(!ci.jobs[job].steps.some((step) => String(step.name ?? "").includes(name)), `${name} blocks ${job}`);
     }
   }
-  assert.ok(checks.steps.findIndex((step) => step.name === "Generate Prisma client") < checks.steps.findIndex((step) => step.name === "Typecheck"));
-  const boundary = checks.steps.filter((step) => step.name === "Check board registration boundaries");
-  assert.equal(boundary.length, 1);
-  assert.equal(boundary[0].if, undefined);
-  const typecheck = checks.steps.find((step) => step.name === "Typecheck").run;
-  const flagIndex = typecheck.indexOf("node scripts/generate-flag-index.mjs");
-  assert.ok(flagIndex >= 0, "the Typecheck step builds the generated flag index itself");
-  assert.ok(flagIndex < typecheck.indexOf("npx tsc --noEmit"), "the flag index exists before tsc reads it");
+  const { run } = launcher;
+  const flagIndex = run.indexOf("node scripts/generate-flag-index.mjs");
+  assert.ok(flagIndex >= 0, "the typescript lane builds the generated flag index itself");
+  assert.ok(flagIndex < run.indexOf("npx tsc --noEmit"), "the flag index exists before tsc reads it");
   assert.ok(
-    typecheck.indexOf("npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo") > flagIndex,
+    run.indexOf("npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo") > flagIndex,
     "tsc keeps its incremental build info in the cached directory",
   );
+  assert.deepEqual(laneFunctions(run), lanes, "every gate is a lane");
+  assert.deepEqual(laneLaunches(run), lanes, "every lane is launched");
+  assert.match(run, /\) > "\$LOGS\/\$name\.log" 2>&1 &$/m, "lanes start in the background, they do not wait for each other");
+  assert.match(run, /^ *while read -r name pid; do$/m);
+  assert.match(run, /^ *if wait "\$pid"; then$/m);
+  assert.match(run, /^ *exit 1$/m);
+  assert.ok(
+    run.indexOf("run_lane board-registration-boundaries") < run.indexOf('if [ "$RUN_TESTS" = "true" ]'),
+    "the boundary gate also guards the boundary-only run",
+  );
+  for (const gated of lanes.filter((name) => name !== "board-registration-boundaries")) {
+    assert.ok(run.indexOf(`run_lane ${gated}`) > run.indexOf('if [ "$RUN_TESTS" = "true" ]'), `${gated} is a TypeScript or lint gate`);
+  }
+
+  const generated = checks.steps.findIndex((step) => step.name === "Generate Prisma client and flag index");
+  assert.ok(generated >= 0, "the generated sources are built before the lanes");
+  assert.ok(generated < checks.steps.indexOf(launcher), "generated sources exist before any lane reads them");
+  assert.match(launcher.run, /node scripts\/generate-flag-index\.mjs/, "the typescript lane rebuilds the flag index it reads");
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);
   const pushOnly = saves.filter((step) => step.name !== "Save TypeScript cache");
   for (const step of pushOnly) {
     assert.match(step.if, /^needs\.ci-prepare\.outputs\.run_tests == 'true' && \(github\.event_name == 'push' && steps\.[\w-]+\.outputs\.cache-hit != 'true'\)$/);
+    assert.ok(checks.steps.indexOf(step) > checks.steps.indexOf(launcher), `${step.name} waits for its lane`);
   }
   assertTrustedTypeScriptCache(checks.steps);
 }
@@ -66,6 +114,48 @@ function assertTrustedTypeScriptCache(steps) {
     );
   }
 }
+
+function mutated(change) {
+  const ci = workflow();
+  change(ci);
+  return ci;
+}
+
+test("static checks and shards share preparation, not a serial dependency", () => {
+  assertParallelChecks(workflow());
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    ci.jobs["ci-test"].needs = ["ci-prepare", "ci-checks"];
+  })));
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    ci.jobs["ci-tests"].needs = ["ci-prepare", "ci-test"];
+  })));
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    ci.jobs["ci-checks"].if = "needs.ci-prepare.outputs.run_tests == 'true'";
+  })));
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    ci.jobs["ci-checks"].steps.find((step) => step.uses?.startsWith("actions/cache/save@")).if = "always()";
+  })));
+});
+
+test("static gates run together, so a serialised gate fails the contract", () => {
+  assertParallelChecks(workflow());
+  const launcher = (ci) => ci.jobs["ci-checks"].steps.find((step) => step.name === launcherName);
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    launcher(ci).run = launcher(ci).run.replace(' 2>&1 &', " 2>&1");
+  })), "a gate that waits for the previous one");
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    launcher(ci).run = launcher(ci).run.replace("  run_lane eslint\n", "");
+  })), "a gate dropped from the launcher");
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    launcher(ci)["continue-on-error"] = true;
+  })), "a launcher that cannot fail");
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    ci.jobs["ci-checks"].steps.push({ name: "Typecheck", run: "npx tsc --noEmit" });
+  })), "a gate pulled back out into its own step");
+  assert.throws(() => assertParallelChecks(mutated((ci) => {
+    launcher(ci).run = launcher(ci).run.replace("  run_lane agent-board-scope\n", "");
+  })), "a TypeScript or lint gate lost");
+});
 
 function publish(ci, prepare, runTests, checks, shards, proof, boundaryNeeded = "false") {
   const step = ci.jobs["ci-tests"].steps.find((step) => step.name === "Publish ci-tests result");

@@ -125,12 +125,16 @@ test("required CI invokes the real command on exact PR commits, without a new jo
   const yaml = require("js-yaml");
   const root = path.resolve(__dirname, "..");
   const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8"));
-  const step = workflow.jobs["ci-checks"].steps.find((entry) => entry.name === "Changed style tokens");
-  assert.equal(step.if, "needs.ci-prepare.outputs.run_tests == 'true' && (github.event_name == 'pull_request')");
+  const launcher = workflow.jobs["ci-checks"].steps.find((entry) => entry.name === "Run independent static checks");
+  assert.equal(launcher.if, "needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'");
   assert.equal(workflow.jobs["ci-checks"].steps.find((entry) => entry.uses?.startsWith("actions/checkout@")).with["fetch-depth"], 0);
-  assert.equal(step.env.BASE_SHA, "${{ github.event.pull_request.base.sha }}");
-  assert.equal(step.env.HEAD_SHA, "${{ github.event.pull_request.head.sha }}");
-  assert.ok(step.run.includes('npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"'));
+  assert.equal(launcher.env.BASE_SHA, "${{ github.event.pull_request.base.sha }}");
+  assert.equal(launcher.env.HEAD_SHA, "${{ github.event.pull_request.head.sha }}");
+  const lane = launcher.run.match(/lane_changed_style_tokens\(\) \{[\s\S]*?\n *\}/)?.[0];
+  assert.ok(lane, "changed style tokens is a lane of the static gates");
+  assert.ok(lane.includes('npm run lint:styles -- "$BASE_SHA" "$HEAD_SHA"'));
+  assert.ok(!workflow.jobs["ci-checks"].steps.some((entry) => String(entry.name ?? "").includes("Changed style tokens")));
+  assert.equal(Object.values(workflow.jobs).filter((job) => JSON.stringify(job).includes("lint:styles")).length, 1);
   assert.equal(require("../package.json").scripts["lint:styles"], "node scripts/lint-changed-styles.mjs");
 });
 
