@@ -58,8 +58,8 @@ async function runTitleCheck(title) {
   return failures;
 }
 
-test("PR title accepts HTPR, HYFA and YPER4 tickets with every current work tag", async () => {
-  for (const prefix of ["HTPR", "HYFA", "YPER4"]) {
+test("PR title accepts HTPR, HYFA, YPER4 and HYCI tickets with every current work tag", async () => {
+  for (const prefix of ["HTPR", "HYFA", "YPER4", "HYCI"]) {
     for (const tag of TAGS) {
       assert.deepEqual(
         await runTitleCheck(`${prefix}-43 [${tag}] Keep the current title rule`),
@@ -81,7 +81,7 @@ test("PR title rejects foreign and lookalike ticket prefixes", async () => {
   ]) {
     const failures = await runTitleCheck(title);
     assert.equal(failures.length, 1, `${title} should fail`);
-    assert.match(failures[0], /expected: \(HTPR\|HYFA\|YPER4\)-<n>/);
+    assert.match(failures[0], /expected: \(HTPR\|HYFA\|YPER4\|HYCI\)-<n>/);
   }
 });
 

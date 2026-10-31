@@ -56,7 +56,7 @@ async function run({ title = 'YPER4-731 [INFRA] Bind tickets', head = repo, base
 
 test('trusted title guard binds each supported ticket without runner files', async () => {
   assert.equal(step.env?.HYPERTASK_MCP_TOKEN, '${{ secrets.HYPERTASK_MCP_TOKEN }}');
-  for (const prefix of ['HTPR', 'HYFA', 'YPER4']) {
+  for (const prefix of ['HTPR', 'HYFA', 'YPER4', 'HYCI']) {
     const result = await run({ title: `${prefix}-731 [INFRA] Bind tickets` });
     assert.deepEqual(result.failures, []);
     assert.equal(result.writes.length, 1);
