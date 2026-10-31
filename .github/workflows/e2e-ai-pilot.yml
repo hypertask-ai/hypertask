@@ -1,0 +1,204 @@
+name: AI smoke pilot
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/e2e-ai-pilot.yml
+      - e2e/ai-pilot/**
+env:
+  E2E_TELEMETRY_DISABLED: '1'
+permissions:
+  contents: read
+  packages: read
+jobs:
+  static:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+      - name: Validate pilot syntax
+        run: |
+          node --check e2e/ai-pilot/e2e.config.js
+          node --check e2e/ai-pilot/layout.js
+          node --check e2e/ai-pilot/tests/smoke.e2e.js
+          node --check e2e/ai-pilot/measure.mjs
+          node -e "JSON.parse(require('fs').readFileSync('e2e/ai-pilot/package.json')); JSON.parse(require('fs').readFileSync('e2e/ai-pilot/package-lock.json'))"
+      - name: Install pilot dependencies
+        run: npm ci --prefix e2e/ai-pilot --no-audit --no-fund
+      - name: Collect pilot cases without browsers or models
+        shell: bash
+        env:
+          BROWSER_SMOKE_STATE_FILE: ${{ runner.temp }}/ai-pilot-state/smoke-state.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$BROWSER_SMOKE_STATE_FILE")"
+          printf '%s\n' '{"cookies":[],"origins":[]}' > "$BROWSER_SMOKE_STATE_FILE"
+          printf '%s\n' '{"flags":{},"taskId":"synthetic","detailPath":"/synthetic"}' > "$(dirname "$BROWSER_SMOKE_STATE_FILE")/card-fixture.json"
+          (cd e2e/ai-pilot && ./node_modules/.bin/e2e list --reporter json) > "$RUNNER_TEMP/ai-pilot-list.json"
+          node - "$RUNNER_TEMP/ai-pilot-list.json" <<'NODE'
+          const { pairs } = require(process.argv[2])
+          const expected = ['ticket layout after AI board card entry', 'ticket layout after AI hovercard and comment expansion']
+          if (!Array.isArray(pairs) || pairs.length !== 2 || expected.some(name => pairs.filter(pair => pair.titlePath.join(' > ') === name && pair.kind === 'test' && pair.target === 'chromium' && pair.disposition === 'run').length !== 1)) {
+            throw new Error('Expected both runnable pilot cases')
+          }
+          NODE
+  pilot:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    services:
+      postgres:
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_DB: hypertask_smoke
+          POSTGRES_USER: browser_smoke
+          POSTGRES_PASSWORD: browser_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U browser_smoke -d hypertask_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      soketi:
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          SOKETI_DEFAULT_APP_ID: app-id
+          SOKETI_DEFAULT_APP_KEY: app-key
+          SOKETI_DEFAULT_APP_SECRET: app-secret
+        ports:
+          - 6001:6001
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:6001"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+      - name: Install isolated dependencies and browsers
+        run: |
+          npm ci --prefer-offline --no-audit --no-fund
+          npx prisma generate
+          npm ci --prefix e2e/ai-pilot --no-audit --no-fund
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          npx playwright install --with-deps chromium
+          (cd e2e/ai-pilot && npx @e2e-dev/web install chromium --with-deps)
+      - name: Prepare disposable local credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          session_secret=$(openssl rand -hex 32)
+          jwt_secret=$(openssl rand -hex 32)
+          better_auth_secret=$(openssl rand -hex 32)
+          printf '::add-mask::%s\n' "$session_secret"
+          printf '::add-mask::%s\n' "$jwt_secret"
+          printf '::add-mask::%s\n' "$better_auth_secret"
+          {
+            printf '%s\n' 'DATABASE_URL=postgresql://browser_smoke:browser_smoke@127.0.0.1:5432/hypertask_smoke'
+            printf '%s\n' 'REDIS_URL=redis://127.0.0.1:6379'
+            printf 'SESSION_SECRET=%s\n' "$session_secret"
+            printf 'JWT_SECRET=%s\n' "$jwt_secret"
+            printf 'BETTER_AUTH_SECRET=%s\n' "$better_auth_secret"
+            printf '%s\n' 'BETTER_AUTH_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100'
+            printf '%s\n' 'TURBOPUFFER_BASE_URL=http://127.0.0.1:53101'
+            printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
+            printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
+            printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_PORT=6001'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_USE_TLS=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_CLUSTER=mt1'
+            printf '%s\n' 'PUSHER_APP_ID=app-id'
+            printf '%s\n' 'PUSHER_KEY=app-key'
+            printf '%s\n' 'PUSHER_SECRET=app-secret'
+            printf '%s\n' 'PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'PUSHER_PORT=6001'
+            printf '%s\n' 'PUSHER_USE_TLS=false'
+            printf '%s\n' 'PUSHER_CLUSTER=mt1'
+          } >> "$GITHUB_ENV"
+      - name: Create isolated database and logged-in fixtures
+        id: fixtures
+        env:
+          BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
+          MCP_CLI_API_CONTRACT: '1'
+        run: |
+          npx prisma migrate deploy
+          node scripts/seed-browser-smoke.mjs --qa-journeys
+      - name: Build the local app (no migrations)
+        # YPER4-363: next/font downloads Google fonts at build time and about
+        # 6% of builds lost that download. Retry once, only for that failure.
+        run: |
+          set -o pipefail
+          for attempt in 1 2; do
+            npx next build --webpack 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
+            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
+            echo "::warning::Google font download failed during next build (attempt $attempt)"
+          done
+          exit 1
+      - name: Record and measure
+        env:
+          BASE_URL: http://127.0.0.1:3100
+          SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
+          SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
+          BROWSER_SMOKE_PR: '1'
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        run: |
+          set -euo pipefail
+          pilot_key="$OPENCODE_API_KEY"
+          unset OPENCODE_API_KEY
+          node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > "$RUNNER_TEMP/pilot-search.log" 2>&1 &
+          search=$!
+          npx next start -H 127.0.0.1 -p 3100 > "$RUNNER_TEMP/pilot-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS -o /dev/null "$BASE_URL/login"; then break; fi
+            kill -0 "$server" 2>/dev/null || exit 1
+            sleep 2
+          done
+          curl -fsS -o /dev/null "$BASE_URL/login"
+          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"
+          OPENCODE_API_KEY="$pilot_key" node e2e/ai-pilot/measure.mjs
+          unset pilot_key
+      - name: Upload safe summary only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ai-smoke-pilot-summary
+          path: e2e/ai-pilot/results/summary.json
+          if-no-files-found: warn
+          retention-days: 7
