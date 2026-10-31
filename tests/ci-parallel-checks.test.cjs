@@ -28,6 +28,14 @@ function assertParallelChecks(ci) {
   const boundary = checks.steps.filter((step) => step.name === "Check board registration boundaries");
   assert.equal(boundary.length, 1);
   assert.equal(boundary[0].if, undefined);
+  const typecheck = checks.steps.find((step) => step.name === "Typecheck").run;
+  const flagIndex = typecheck.indexOf("node scripts/generate-flag-index.mjs");
+  assert.ok(flagIndex >= 0, "the Typecheck step builds the generated flag index itself");
+  assert.ok(flagIndex < typecheck.indexOf("npx tsc --noEmit"), "the flag index exists before tsc reads it");
+  assert.ok(
+    typecheck.indexOf("npx tsc --noEmit --incremental --tsBuildInfoFile .cache/tsc/tsbuildinfo") > flagIndex,
+    "tsc keeps its incremental build info in the cached directory",
+  );
   const saves = checks.steps.filter((step) => step.uses?.startsWith("actions/cache/save@"));
   assert.equal(saves.length, 3);
   const pushOnly = saves.filter((step) => step.name !== "Save TypeScript cache");

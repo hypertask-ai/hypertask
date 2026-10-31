@@ -412,10 +412,13 @@ jobs:
         # they are generated before tsc runs and CI catches the same errors as the
         # Vercel build. HTPR-8234: the generator step is skipped only when the
         # restored types were produced from an identical route input digest, which
-        # makes a stale match impossible; any doubt regenerates.
+        # makes a stale match impossible; any doubt regenerates. `next typegen` also
+        # writes the feature-flag index through next.config, so that index is built
+        # here directly and no check depends on the generator running at all.
         run: |
           set -euo pipefail
           started=$(date +%s%3N)
+          node scripts/generate-flag-index.mjs
           surface="unavailable"
           surface=$(node .github/scripts/ts-route-surface.mjs) || surface="unavailable"
           if [ "$surface" != "unavailable" ] && [ -d .next/types ] \
