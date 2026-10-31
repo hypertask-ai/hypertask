@@ -87,10 +87,9 @@ test('operation applies agent, team, and user project scope', async () => {
   const calls = [];
   const context = { user: { id: 6 }, agentId: 'agent', teamScope: { teamId: 'team', accessBinding: 'binding' } };
   const { POST } = loadModule('src/lib/mcp/operations/comments/[comment_id]/pin/operation.ts', {
-    '@/lib/mcp/comments/commentSaveHandler': { createCommentSaveHandler },
+    '@/lib/mcp/comments/commentSaveHandler': { createCommentSaveHandler: (deps) => createCommentSaveHandler({ ...deps, refuse: async () => null }) },
     '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null },
     '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, validateMcpRouteAuth: async () => context, checkMcpRouteRateLimit: async () => null },
-    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/lib/prisma': { default: { comment: { findFirst: async (query) => { calls.push(query); return null; } } } },
     '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: (...args) => ({ scope: args }) },
     '@/utils/controllers/savedContent/toggleSavedContent': { toggleSavedContent: async () => { throw new Error('must not write'); } },
