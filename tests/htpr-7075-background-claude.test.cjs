@@ -239,7 +239,7 @@ const ENTRY_POINTS = [
   ["task and comment summaries", "src/app/api/ai/_lib/taskSummaries.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
   ["comment summaries", "src/app/api/ai/_lib/commentSummaries.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
   ["question suggestions", "src/app/api/ai/task-questions/route.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
-  ["status updates", "src/app/api/reports/status-update/route.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
+  ["status updates", "src/utils/controllers/reports/statusUpdate.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
   ["Slack thread summaries", "src/lib/slack/threadSummary.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
   ["Slack chat intent", "src/lib/slack/chat.ts", /resolveSystemModel\([\s\S]*?defaultContext/],
   ["Slack task drafts", "src/lib/slack/taskCreate.ts", /resolveSystemModel\([\s\S]*?defaultContext/],

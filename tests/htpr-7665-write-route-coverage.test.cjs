@@ -25,6 +25,7 @@ const NEWLY_GUARDED = [
   `POST ${OPS}/reports/create/operation.ts`,
   `POST ${OPS}/reports/delete/operation.ts`,
   `POST ${OPS}/reports/update/operation.ts`,
+  `POST ${OPS}/reports/status-update/operation.ts`,
   `POST ${OPS}/tasks/description-restore/operation.ts`,
   `POST ${API}/tasks/escalate/route.ts`,
   `POST ${API}/tasks/evidence/route.ts`,

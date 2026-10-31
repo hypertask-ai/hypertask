@@ -319,7 +319,7 @@ test("default sites use shared plan-aware policy on client and server", () => {
   }
   for (const file of [
     "src/app/api/ai/_lib/commentSummaries.ts", "src/app/api/ai/_lib/taskSummaries.ts", "src/app/api/ai/task-questions/route.ts",
-    "src/app/api/reports/status-update/route.ts", "src/lib/slack/chat.ts", "src/lib/slack/taskCreate.ts", "src/lib/slack/threadSummary.ts",
+    "src/utils/controllers/reports/statusUpdate.ts", "src/lib/slack/chat.ts", "src/lib/slack/taskCreate.ts", "src/lib/slack/threadSummary.ts",
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
@@ -409,7 +409,7 @@ test("all automatic Haiku sites use the shared unavailable-model fallback with o
     ["src/app/api/ai/_lib/commentSummaries.ts", "summary"],
     ["src/app/api/ai/_lib/taskSummaries.ts", "summary"],
     ["src/app/api/ai/task-questions/route.ts", "task-questions"],
-    ["src/app/api/reports/status-update/route.ts", "status-update"],
+    ["src/utils/controllers/reports/statusUpdate.ts", "status-update"],
     ["src/lib/ai/chatStream/title.ts", "chat"],
     ["src/lib/slack/chat.ts", "chat"],
     ["src/lib/slack/taskCreate.ts", "summary"],

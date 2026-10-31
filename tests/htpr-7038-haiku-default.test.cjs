@@ -167,7 +167,7 @@ async function main() {
     ["src/app/api/ai/_lib/taskSummaries.ts", "task.userId", 700],
     ["src/app/api/ai/_lib/commentSummaries.ts", "comment.creatorId ?? comment.task.userId", 300],
     ["src/app/api/ai/task-questions/route.ts", "viewer.id", 400],
-    ["src/app/api/reports/status-update/route.ts", "session.userId", 900],
+    ["src/utils/controllers/reports/statusUpdate.ts", "userId", 900],
     ["src/lib/slack/threadSummary.ts", "context.installedByUserId", 400],
     ["src/lib/slack/taskCreate.ts", "input.actorUserId", 1200],
     ["src/lib/slack/chat.ts", "actor.user.id", 600],
