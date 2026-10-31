@@ -34,7 +34,15 @@ concurrency:
 # 856s per leg at all. The queue cost this adds is measured at 45s median and
 # 82s p90 over the last 39 runs (shard jobs only; every 20-min wait in that
 # window was browser-smoke, never a shard). The required check stays ci-tests.
+#
+# HYCI-6 adds the serial lane: the TypeScript files and the isolated CJS files
+# hold one worker each, so a lane that mixed them with the pool left three of
+# its four workers idle for that whole stretch. Those files now share the last
+# lane, which runs beside the pool lanes. Measured on four production pushes the
+# serial stretch per lane was 26s to 183s; packed away, every pool lane plans
+# 337s instead of 406s.
 env:
+  # 4 pool lanes; the plan adds one serial lane, so CI Test is 5 lanes.
   CI_TEST_SHARDS: "4"
 
 jobs:
@@ -254,15 +262,18 @@ jobs:
           fi
           OUT="$RUNNER_TEMP/ci-shards"
           mkdir -p "$OUT"
+          # HYCI-6: the pool lanes plus one serial lane, so a lane never waits on
+          # a serial file with three workers idle.
+          LANES=$((CI_TEST_SHARDS + 1))
           if [ "$GITHUB_EVENT_NAME" = "push" ] || grep -qx ALL "$RUNNER_TEMP/selected-tests.txt"; then
-            node .github/scripts/shard-tests.mjs --discover --count "$CI_TEST_SHARDS" --out "$OUT"
+            node .github/scripts/shard-tests.mjs --discover --count "$LANES" --serial-lane --out "$OUT"
           elif ! grep -q '[^[:space:]]' "$RUNNER_TEMP/selected-tests.txt"; then
             echo "selected test list is empty; refusing to skip the suite" >&2
             exit 1
           else
-            node .github/scripts/shard-tests.mjs --count "$CI_TEST_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
+            node .github/scripts/shard-tests.mjs --count "$LANES" --serial-lane --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
           fi
-          node .github/scripts/shard-tests.mjs --check --out "$OUT"
+          node .github/scripts/shard-tests.mjs --check --serial-lane --out "$OUT"
           # State how much of the suite this run covers. A pick that quietly
           # widened back to everything is then visible in the run itself.
           TOTAL=$(node -e 'import("./scripts/test-inventory.mjs").then(async (m) => {
@@ -272,7 +283,7 @@ jobs:
           RUN=$(jq -r '.files' "$OUT/manifest.json")
           echo "test selection: ${RUN} of ${TOTAL} test files ($((RUN * 100 / TOTAL))%)" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "run_tests=true" >> "$GITHUB_OUTPUT"
-          indexes=$(node -e 'const n=Number(process.argv[1]); if (!Number.isInteger(n)||n<1) process.exit(1); process.stdout.write(JSON.stringify([...Array(n).keys()].map(String)))' "$CI_TEST_SHARDS")
+          indexes=$(node -e 'const n=Number(process.argv[1]); if (!Number.isInteger(n)||n<1) process.exit(1); process.stdout.write(JSON.stringify([...Array(n).keys()].map(String)))' "$LANES")
           echo "indexes=${indexes}" >> "$GITHUB_OUTPUT"
 
       - name: Upload test shard lists
@@ -717,7 +728,7 @@ jobs:
       - name: Prove every test file ran once
         id: prove
         if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        run: node .github/scripts/shard-tests.mjs --prove --out ci-test-shards --results ci-shard-results
+        run: node .github/scripts/shard-tests.mjs --prove --serial-lane --out ci-test-shards --results ci-shard-results
 
       - name: Combine shard logs
         if: always() && needs.ci-prepare.outputs.run_tests == 'true'

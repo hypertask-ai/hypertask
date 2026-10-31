@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { isSerialTestFile } from "../../scripts/test-isolation.mjs";
 
 const inventoryLine = /^Test inventory: (\d+) Node tests, (\d+) TypeScript tests\.$/gm;
 
@@ -49,12 +50,26 @@ function splitByWork(unique, shardCount, weights) {
   return shards.map((files) => files.sort());
 }
 
-export function partition(files, count, weights) {
+// HYCI-6: a serial file holds one worker for its whole run, so a lane that mixes
+// serial and pooled files leaves three of its four workers idle while it waits.
+// The last lane takes every serial file, so each earlier lane packs the pool and
+// the serial lane runs beside them.
+function splitWithSerialLane(unique, shardCount, weights) {
+  const pooled = unique.filter((file) => !isSerialTestFile(file));
+  const serial = unique.filter((file) => isSerialTestFile(file));
+  const lanes = weights ? splitByWork(pooled, shardCount - 1, weights) : splitByCount(pooled, shardCount - 1);
+  return [...lanes, serial.sort()];
+}
+
+export function partition(files, count, weights, options = {}) {
   const shardCount = Number(count);
   if (!Number.isInteger(shardCount) || shardCount < 1) {
     throw new Error(`CI_TEST_SHARDS must be a positive integer, got ${count}`);
   }
   const unique = uniqueFiles(files);
+  if (options.serialLane && shardCount > 1) {
+    return splitWithSerialLane(unique, shardCount, weights);
+  }
   return weights ? splitByWork(unique, shardCount, weights) : splitByCount(unique, shardCount);
 }
 
@@ -141,8 +156,8 @@ export async function readPartition(outDir) {
   return { all, shards };
 }
 
-export function assertPartition(all, shards, weights) {
-  const expected = partition(all, shards.length, weights);
+export function assertPartition(all, shards, weights, options = {}) {
+  const expected = partition(all, shards.length, weights, options);
   const flat = shards.flat();
   const seen = new Set();
   for (const file of flat) {
@@ -190,9 +205,9 @@ async function findShardArtifact(resultsDir, index) {
   return walk(resultsDir);
 }
 
-export async function proveResults(plannedDir, resultsDir, weights) {
+export async function proveResults(plannedDir, resultsDir, weights, options = {}) {
   const planned = await readPartition(plannedDir);
-  const summary = assertPartition(planned.all, planned.shards, weights);
+  const summary = assertPartition(planned.all, planned.shards, weights, options);
   for (let index = 0; index < planned.shards.length; index += 1) {
     const artifact = await findShardArtifact(resultsDir, index);
     if (!artifact) throw new Error(`missing shard ${index} artifact`);
@@ -234,18 +249,19 @@ function seconds(workMs) {
 async function main() {
   const argv = process.argv.slice(2);
   const outDir = argValue(argv, "--out");
-  if (!outDir) throw new Error("Usage: shard-tests.mjs --out DIR [--discover|--check|--prove --results DIR] [--count N] [--weights FILE]");
+  if (!outDir) throw new Error("Usage: shard-tests.mjs --out DIR [--discover|--check|--prove --results DIR] [--count N] [--weights FILE] [--serial-lane]");
   const weights = await loadDurationWeights(argValue(argv, "--weights") ?? DURATION_WEIGHTS_PATH);
+  const lanes = { serialLane: argv.includes("--serial-lane") };
   if (argv.includes("--check")) {
     const planned = await readPartition(outDir);
-    const summary = assertPartition(planned.all, planned.shards, weights);
+    const summary = assertPartition(planned.all, planned.shards, weights, lanes);
     console.log(`shard-check files=${summary.files} sizes=${summary.sizes.join(",")}`);
     return;
   }
   if (argv.includes("--prove")) {
     const results = argValue(argv, "--results");
     if (!results) throw new Error("--prove requires --results DIR");
-    const summary = await proveResults(outDir, results, weights);
+    const summary = await proveResults(outDir, results, weights, lanes);
     console.log(`shard-proof files=${summary.files} sizes=${summary.sizes.join(",")} union=full duplicates=0`);
     return;
   }
@@ -253,7 +269,7 @@ async function main() {
   const stdin = await readStdin();
   const discover = argv.includes("--discover") || stdin.trim() === "ALL";
   const files = discover ? await discoverSupportedTests() : stdin.split("\n");
-  const shards = partition(files, count, weights);
+  const shards = partition(files, count, weights, lanes);
   if (shards.every((shard) => shard.length === 0)) {
     throw new Error("refusing to shard an empty test list");
   }

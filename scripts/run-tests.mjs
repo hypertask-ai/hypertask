@@ -10,6 +10,7 @@ import {
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 import { findPassingTodos, todoRemovalMessages } from "./todo-passing.mjs";
+import { isolatedCjsTests } from "./test-isolation.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
@@ -130,18 +131,6 @@ if (requested.length > 0) {
 
 const cjsTests = selected.filter((file) => file.endsWith(".test.cjs"));
 const tsTests = selected.filter((file) => file.endsWith(".test.ts"));
-
-const isolatedCjsTests = new Set([
-  "tests/action-archive-cache.test.cjs",
-  "tests/agent-run-activities.test.cjs",
-  "tests/feature-flags.test.cjs",
-  "tests/htpr-6478-regressions.test.cjs",
-  "tests/management-key-route.test.cjs",
-  "tests/management-key-route-wiring.test.cjs",
-  "tests/mcp-usage-auth.test.cjs",
-  "tests/mcp-usage-route.test.cjs",
-  "tests/oauth-authorize-session-identity.test.cjs",
-]);
 
 console.log(`Test lanes: ${TEST_CONCURRENCY} of ${cores} cores.`);
 console.log(

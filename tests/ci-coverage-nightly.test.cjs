@@ -38,6 +38,14 @@ test("metadata changes cannot restart or skip required CI, and PR/push tests col
   assert.match(push.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/ci-shard-upload\/shard-\$\{SHARD\}\.log"/);
   assert.equal(ci.jobs["ci-test"].strategy["fail-fast"], false);
   assert.equal(String(ci.env.CI_TEST_SHARDS), "4");
+  const plan = ci.jobs["ci-prepare"].steps.find((step) => step.name === "Write test shards");
+  assert.match(plan.run, /LANES=\$\(\(CI_TEST_SHARDS \+ 1\)\)/);
+  assert.match(plan.run, /--count "\$LANES" --serial-lane --out "\$OUT"/);
+  assert.match(plan.run, /--check --serial-lane --out "\$OUT"/);
+  assert.match(plan.run, /' "\$LANES"\)$/m);
+  assert.equal(ci.jobs["ci-test"].strategy.matrix.shard, "${{ fromJSON(needs.ci-prepare.outputs.shard_indexes || '[\"0\"]') }}");
+  const prove = ci.jobs["ci-tests"].steps.find((step) => step.id === "prove");
+  assert.equal(prove.run, "node .github/scripts/shard-tests.mjs --prove --serial-lane --out ci-test-shards --results ci-shard-results");
 });
 
 test("nightly diagnostics run the full production suite without publishing a required check", () => {

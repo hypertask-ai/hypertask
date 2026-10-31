@@ -493,10 +493,13 @@ ci_tests:
     required_summary: ci-tests
     additional_required_context: false
   test_lanes:
-    shards: 4
+    pool_lanes: 4
+    serial_lanes: 1
+    lane_count: 5
     shard_constant: CI_TEST_SHARDS
     required_check: ci-tests
-    split: measured work from config/test-duration-weights.json, one file on exactly one shard
+    split: measured work from config/test-duration-weights.json, one file on exactly one lane
+    serial_lane: scripts/test-isolation.mjs lists the files that hold one worker for their whole run; the last lane runs only those, beside the pool lanes
     pull_request: scoped via .github/scripts/select-tests.mjs from the trusted base-branch commit; full suite on dependency/schema changes
     push_production:
       scope: full
