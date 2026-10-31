@@ -171,7 +171,7 @@ test('report-only mode records a production refusal as a warning and still exits
 test('browser-smoke runs report-only on the existing build and uploads evidence', () => {
   const workflow = fs.readFileSync('.github/workflows/ci-tests.yml', 'utf8')
   const policy = fs.readFileSync('docs/ci-policy.yml', 'utf8')
-  const job = workflow.slice(workflow.indexOf('\n  browser-smoke:'), workflow.indexOf('\n  mcp-cli-api-contract:'))
+  const job = workflow.slice(workflow.indexOf('\n  browser-smoke-desktop:'), workflow.indexOf('\n  browser-smoke-mobile:'))
   assert.ok(job.length > 0)
   assert.doesNotMatch(job, /continue-on-error:\s*true/)
   assert.match(policy, /premerge_verify_qa:[\s\S]*?required: false\n  report_only: true\n  blocks_merge: false\n/)

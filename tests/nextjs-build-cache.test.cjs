@@ -5,20 +5,28 @@ const { runInNewContext } = require("node:vm");
 const yaml = require("js-yaml");
 
 const workflow = yaml.load(readFileSync(".github/workflows/ci-tests.yml", "utf8"));
-const steps = workflow.jobs["browser-smoke"].steps;
-const restore = steps.find(step => step.id === "restore-nextjs-cache");
+// HYCI-32: each browser half restores and builds its own copy, so the cache
+// contract has to hold in both; only the desktop half saves and publishes.
+const halves = ["browser-smoke-desktop", "browser-smoke-mobile"].map(key => workflow.jobs[key]);
+const steps = workflow.jobs["browser-smoke-desktop"].steps;
 const save = steps.find(step => step.name === "Save Next.js build cache");
 const build = steps.find(step => step.name === "Build the local app (no migrations)");
+const restore = steps.find(step => step.id === "restore-nextjs-cache");
 
 test("browser-smoke restores only the matching Next.js incremental build cache before building", () => {
   const cacheSha = readFileSync(".github/actions/action-archive-cache-manifest.txt", "utf8")
     .match(/^actions\/cache ([a-f0-9]{40}) /m)[1];
-  assert.equal(restore.uses, `actions/cache/restore@${cacheSha}`);
-  assert.equal(restore.with.path, ".next/cache");
-  assert.equal(restore.if, build.if);
-  assert.ok(steps.indexOf(restore) < steps.indexOf(build));
-  assert.equal(restore.with.key, "nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}");
-  assert.equal(restore.with["restore-keys"].trim(), restore.with.key.replace("${{ github.sha }}", ""));
+  for (const half of halves) {
+    const halfSteps = half.steps;
+    const halfRestore = halfSteps.find(step => step.id === "restore-nextjs-cache");
+    const halfBuild = halfSteps.find(step => step.name === "Build the local app (no migrations)");
+    assert.equal(halfRestore.uses, `actions/cache/restore@${cacheSha}`);
+    assert.equal(halfRestore.with.path, ".next/cache");
+    assert.equal(halfRestore.if, halfBuild.if);
+    assert.ok(halfSteps.indexOf(halfRestore) < halfSteps.indexOf(halfBuild));
+    assert.equal(halfRestore.with.key, "nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}");
+    assert.equal(halfRestore.with["restore-keys"].trim(), halfRestore.with.key.replace("${{ github.sha }}", ""));
+  }
   assert.equal(workflow.on.push.branches.includes("production"), true);
 });
 
@@ -30,11 +38,14 @@ test("browser-smoke runs on pushes and on ready pull requests, never on drafts",
     [{ event_name: "pull_request", event: { pull_request: { draft: false } } }, true],
     [{ event_name: "pull_request", event: { pull_request: { draft: true } } }, false],
   ]) {
-    assert.equal(runInNewContext(workflow.jobs["browser-smoke"].if, { github }), expected, JSON.stringify(github));
+    for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
+      assert.equal(runInNewContext(workflow.jobs[key].if, { github }), expected, `${key} ${JSON.stringify(github)}`);
+    }
   }
 });
 
-test("browser-smoke saves the rebuilt cache under the restore primary key, only after a successful build", () => {
+test("only the desktop half saves the rebuilt cache under the restore primary key, after a successful build", () => {
+  assert.ok(!workflow.jobs["browser-smoke-mobile"].steps.some(step => step.uses?.startsWith("actions/cache/save@")));
   assert.equal(save.uses, restore.uses.replace("/restore@", "/save@"));
   assert.equal(save.with.path, ".next/cache");
   assert.equal(save.with.key, "${{ steps.restore-nextjs-cache.outputs.cache-primary-key }}");

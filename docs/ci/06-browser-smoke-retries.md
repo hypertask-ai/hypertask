@@ -1,8 +1,9 @@
 ## Browser smoke retries (YPER4-696)
 
 `playwright.config.smoke.ts` uses **zero retries** when `BROWSER_SMOKE_PR` is set.
-The disposable `browser-smoke` build sets this mode on both PR runs and
-production pushes, so all its projects expose the first failure. Inbox already
+The disposable builds in `browser-smoke-desktop` and `browser-smoke-mobile` set
+this mode on both PR runs and production pushes, so all their projects expose the
+first failure. Inbox already
 has zero retries. We choose zero rather than retaining retry-passes: a required
 PR check should not hide an intermittent failure behind a green second attempt.
 The existing list reporter names failed tests in the Actions job log.
@@ -23,9 +24,10 @@ gh api --paginate --slurp "repos/hypertask-ai/hypertask/actions/workflows/ci-tes
   | jq '[.[].workflow_runs[]] | sort_by(.created_at, .id) | .[:20]' > first-20-pr-runs.json
 ```
 
-For each run, retain its URL, head SHA, run attempt, browser-smoke job conclusion
-and named test failures from `gh run view <run-id> --repo hypertask-ai/hypertask
---job <browser-smoke-job-id> --log`. Confirm the run's checked-out config has the
+For each run, retain its URL, head SHA, run attempt, the conclusion of both
+browser halves and the `browser-smoke` summary, and named test failures from
+`gh run view <run-id> --repo hypertask-ai/hypertask --job <browser-half-job-id>
+--log`. Confirm the run's checked-out config has the
 new policy; mark older-base runs separately. Preserve cancelled, skipped,
 setup-failed and unavailable-log entries as incomplete evidence, not passes.
 Record original attempts before reruns overwrite the default view (use
