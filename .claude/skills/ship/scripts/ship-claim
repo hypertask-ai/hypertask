@@ -199,7 +199,10 @@ if [ "${1:-}" = decide ]; then
 fi
 
 T=${1:-}
-[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN> [\"<resume command>\"]" >&2; exit 2; }
+[[ $T =~ ^(HTPR|HYFA|YPER4|HYCI)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4|HYCI-NNNN> [\"<resume command>\"]" >&2; exit 2; }
+# The board a ticket lives on, so a refusal can name it. HYCI is the CI board (11514), owned by CI Boss.
+case "$T" in HTPR-*|HYFA-*) TICKET_BOARD=15 ;; YPER4-*) TICKET_BOARD=4060 ;; HYCI-*) TICKET_BOARD=11514 ;; *) TICKET_BOARD='' ;; esac
+ticket_board_name() { case "$1" in 15) echo "Hypertask" ;; 4060) echo "Fleet Infra" ;; 11514) echo "Hypertask CI" ;; *) echo "its own" ;; esac; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}
 SID=${CLAUDE_CODE_SESSION_ID:-}
 case "${2:-}" in
@@ -232,7 +235,15 @@ if [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
     || { echo "ship-claim: HOLD. Domain admission failed." >&2; exit 4; }
 fi
 
-"$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
+assigned=$("$VCC" task assign "$T" --self 2>&1 >/dev/null) || {
+  if grep -qi 'not a member' <<< "$assigned"; then
+    me=${SHIP_SESSION_NAME:-$("$(dirname "$(readlink -f "$0")")/ship-identity" | cut -f1)}
+    echo "ship-claim: REFUSED. board $TICKET_BOARD ($(ticket_board_name "$TICKET_BOARD")) does not list member \"$me\" for $T." >&2
+    echo "ship-claim: the board decides who may join it; ask its owner to add \"$me\". Do NOT start work." >&2
+    exit 4
+  fi
+  echo "ship-claim: assign failed: $assigned" >&2; exit 2
+}
 "$VCC" activity add "$T" "Claimed. Session working it now. Claim id: [$RID]
 Next: I examine and fix it. Resume: $RESUME" >/dev/null \
   || { echo "ship-claim: claim activity failed" >&2; exit 2; }

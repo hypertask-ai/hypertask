@@ -181,6 +181,7 @@ cat > "$D/vcc" <<'EOF'
 echo "$*" >> "$FAKE_LOG"
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
+if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_NOT_MEMBER:-}" ]; then echo "Agent is not a member of this board" >&2; exit 1; fi
 if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
   jq --arg id "new-activity-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
   mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
@@ -203,7 +204,7 @@ EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
-[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* ]] || exit 1
+[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HYCI-30/agent-activity?limit=100'* ]] || exit 1
 if [ -n "${FAKE_AGENT_LOG:-}" ]; then
   offset=0; [[ "$2" == *'&offset='* ]] && offset=${2##*&offset=}
   [ -z "${FAKE_REPEAT_ACTIVITY:-}" ] || offset=0
@@ -249,6 +250,21 @@ if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 out=$(FAKE_ASSIGN_FAIL=1 ./ship-claim YPER4-999 2>&1); rc=$?
 eq "assignment failure stops the claim" "$rc" 2
 if grep -qE '^(comment|activity) add |^task move ' "$D/log"; then bad "failed assignment published a claim"; else ok "failed assignment leaves comments and log untouched"; fi
+
+# A CI ticket (HYCI) claims in one command when the board accepts the member.
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+: > "$D/log"; out=$(./ship-claim HYCI-30); rc=$?
+eq "CI ticket claim in one command" "$rc" 0
+grep -q '^task assign HYCI-30 --self' "$D/log" && grep -q '^task move HYCI-30 --section In Progress' "$D/log" \
+  && ok "CI ticket claims through the same steps" || bad "CI claim wrote nothing"
+
+# A board that refuses the member names the board and the member, and writes nothing else.
+mk
+: > "$D/log"; out=$(FAKE_NOT_MEMBER=1 ./ship-claim HYCI-30 2>&1); rc=$?
+eq "member refusal stops the claim" "$rc" 4
+[[ $out == *'board 11514 (Hypertask CI)'* && $out == *'does not list member'* ]] \
+  && ok "refusal names the board and the missing member" || bad "unclear refusal: $out"
+grep -qE '^(comment|activity) add |^task move ' "$D/log" && bad "member refusal published a claim" || ok "member refusal writes nothing"
 
 # Hand-over replay through the full flow (task read via the stub).
 cp fixtures/ship-claim-y243-comments.json "$D/c.json"
