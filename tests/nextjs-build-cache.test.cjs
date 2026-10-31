@@ -5,8 +5,6 @@ const { runInNewContext } = require("node:vm");
 const yaml = require("js-yaml");
 
 const workflow = yaml.load(readFileSync(".github/workflows/ci-tests.yml", "utf8"));
-// HYCI-32: each browser half restores and builds its own copy, so the cache
-// contract has to hold in both; only the desktop half saves and publishes.
 const halves = ["browser-smoke-desktop", "browser-smoke-mobile"].map(key => workflow.jobs[key]);
 const steps = workflow.jobs["browser-smoke-desktop"].steps;
 const save = steps.find(step => step.name === "Save Next.js build cache");

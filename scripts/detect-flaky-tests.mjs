@@ -203,10 +203,6 @@ function latestNamedJobs(run, jobName) {
   }));
 }
 
-// HYCI-32 split the browser check into two halves; runs from before the split
-// still carry the single job, so the prefix covers the summary and both halves.
-// Playwright names begin with the project, `[Mobile] › e2e/smoke/...`, so the e2e
-// lane is matched by the path inside the name, not by its first characters.
 function testsForJob(jobName, classified) {
   if (jobName.startsWith("browser-smoke")) return classified.tests.filter((name) => name.includes("e2e/"));
   return classified.tests.filter((name) => !name.includes("e2e/"));
