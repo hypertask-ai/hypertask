@@ -505,6 +505,7 @@ prs 20; eq "queue exactly 20 -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, app ticket -> hold" "$(holdrc 'RUNNER 6' HTPR-1)" 4
 grep -q 'queue full: infra only (21 open non-draft PRs > 20)' "$D/hold-out" && ok "queue brake message" || bad "queue brake message: $(cat "$D/hold-out")"
 prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
+prs 21; eq "queue 21, CI ticket -> allowed" "$(holdrc 'RUNNER 6' HYCI-30)" 0
 prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "no runner name -> no brake" "$(SHIP_SESSION_NAME= ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 0
 prs 5; free_infra YPER4-4 free
@@ -543,5 +544,12 @@ prs_own 5 runner16/htpr-7-x HTPR-7
 eq "runner 1 never matches runner 16 branch names" "$(holdrc 'RUNNER 1' HTPR-1)" 0
 eq "runner 16 own PR holds runner 16" "$(holdrc 'RUNNER 16' HTPR-1)" 4
 printf '[]' > "$HOLD_OPEN"; empty_infra
+
+# A runner claims a CI ticket: no working-area check, so no usage error (YPER4-980).
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
+: > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim HYCI-30 2>&1); rc=$?
+eq "a runner claims a CI ticket" "$rc" 0
+[[ $out != *'Domain admission failed'* ]] && ok "a CI claim skips the working-area check" || bad "a CI claim hit the area check: $out"
+grep -q '^task move HYCI-30 --section In Progress' "$D/log" && ok "a runner's CI claim reaches the move" || bad "a runner's CI claim wrote nothing"
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]
