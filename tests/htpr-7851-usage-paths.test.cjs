@@ -109,7 +109,7 @@ test('status-update POST configures its own feature without changing the status 
   assert.equal(response.status, 200);
   await h.flush();
   assertRow(h, { userId, teamId, projectId, feature: 'status-update', provider: 'gateway', totalTokens: 50 });
-  assert.equal(h.calls[0].maxOutputTokens, 900);
+  assert.equal(h.calls[0].maxOutputTokens, 2800);
   assert.equal(h.calls[0].providerOptions.gateway.tags[0], 'status-update');
 });
 
