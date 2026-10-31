@@ -967,7 +967,7 @@ export async function POST(request: NextRequest) {
               activity: { id, runId, type, text, createdAt },
             }
           }
-          throw new AgentLogUnavailableError('Agent log unavailable. Retry later; no comment was published.')
+          if (writingPolicy) throw new AgentLogUnavailableError('Agent log unavailable. Retry later; no comment was published.')
         }
 
         const comment = await createCommentService({
