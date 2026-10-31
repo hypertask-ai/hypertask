@@ -65,15 +65,39 @@ scan_limit=500
 head -n "$scan_limit" "$work/tickets" > "$work/inspect"
 jq -Rn --slurpfile tasks "$work/tasks" '[inputs | . as $t | select(any($tasks[0][]; .ticketNumber == $t) | not)]
   | . as $tickets | range(0; length; 100) | $tickets[.:.+100] | join(",")' < "$work/inspect" > "$work/batches"
+: > "$work/renames"
 while IFS= read -r batch; do
   batch=$(jq -r . <<< "$batch")
   ht GET "/mcp/tasks?ticket_number=$batch&limit=100" > "$work/batch" || fail 'cannot read task batch'
-  jq -e --arg tickets "$batch" '.success == true and (.tasks | type) == "array"
-    and ([.tasks[].ticketNumber] | sort) == ($tickets | split(",") | sort)' "$work/batch" >/dev/null \
-    || fail 'task batch incomplete; no stale-work report'
+  jq -e --arg tickets "$batch" '.success == true and (.tasks | type) == "array"' "$work/batch" >/dev/null \
+    || fail 'cannot read task batch'
   jq -s '.[0] + .[1].tasks' "$work/tasks" "$work/batch" > "$work/rows"
   mv "$work/rows" "$work/tasks"
+  comm -23 <(tr ',' '\n' <<< "$batch" | sort) <(jq -r '.tasks[].ticketNumber' "$work/batch" | sort) \
+    > "$work/missing"
+  while IFS= read -r stale; do
+    [ -n "$stale" ] || continue
+    ht GET "/mcp/tasks?ticket_number=$stale&limit=100" > "$work/single" || fail "cannot read $stale"
+    jq -e --arg ticket "$stale" '.success == true and (.tasks | type) == "array"
+      and (.tasks | length) == 1 and .tasks[0].ticketNumber != $ticket' "$work/single" >/dev/null \
+      || fail 'task batch incomplete; no stale-work report'
+    printf '%s\t%s\n' "$stale" "$(jq -r '.tasks[0].ticketNumber' "$work/single")" >> "$work/renames"
+    jq -s '.[0] + [.[1].tasks[0]]' "$work/tasks" "$work/single" > "$work/rows"
+    mv "$work/rows" "$work/tasks"
+  done < "$work/missing"
 done < "$work/batches"
+canonical() {
+  local t=$1 old new
+  while IFS=$'\t' read -r old new; do
+    [ "$t" != "$old" ] || t=$new
+  done < "$work/renames"
+  printf '%s\n' "$t"
+}
+while IFS= read -r ticket; do canonical "$ticket"; done < "$work/tickets" \
+  | awk '!seen[$0]++' > "$work/canonical"
+mv "$work/canonical" "$work/tickets"
+total=$(wc -l < "$work/tickets")
+head -n "$scan_limit" "$work/tickets" > "$work/inspect"
 
 seconds() { if [ -n "$1" ]; then date -u -d "$1" +%s 2>/dev/null || echo 0; else echo 0; fi; }
 recent() { [ "$1" -gt 0 ] && [ "$((now - $1))" -lt 21600 ]; }
@@ -86,7 +110,7 @@ commit_time() {
 inspect_ticket() {
   local t=$1 comments claim claim_id has_resume stamp line rc last_commit offset suffix count
   local cursor='' pages=0 next
-  [[ $t =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || fail "invalid ticket number: $t"
+  [[ $t =~ ^[A-Z][A-Z0-9]*-[0-9]+$ ]] || fail "invalid ticket number: $t"
   jq --arg t "$t" '[.[] | select(.ticketNumber == $t)][0] // empty' "$work/tasks" > "$work/$t.task"
   if [ ! -s "$work/$t.task" ]; then
     fail "task batch has no row for $t"
@@ -222,6 +246,7 @@ wait_reads
 while IFS= read -r pr; do
   title=$(jq -r .title <<< "$pr")
   ticket='-'; [[ $title =~ ^((HTPR|HYFA|YPER4)-[0-9]+)([[:space:]]|$) ]] && ticket=${BASH_REMATCH[1]}
+  [ "$ticket" = '-' ] || ticket=$(canonical "$ticket")
   stamp=$(seconds "$(jq -r '.commits.nodes[0].commit.committedDate // ""' <<< "$pr")")
   if [ "$ticket" != '-' ]; then
     [ "$(cat "$work/$ticket.state")" = IDLE ] || continue

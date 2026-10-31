@@ -50,6 +50,8 @@ elif name == 'ht':
     tickets = args[1].split('ticket_number=')[1].split('&')[0].split(',')
     rows = [t for t in f['tasks'] if t['ticketNumber'] in tickets]
     if f.get('batch_missing'): rows = rows[:-1]
+    if len(tickets) == 1 and tickets[0] in f.get('renamed', {}):
+        rows = [t for t in f['tasks'] if t['ticketNumber'] == f['renamed'][tickets[0]]]
     print(json.dumps(dict(success=True,tasks=rows)))
 elif name == 'date':
     if args == ['-u', '+%s']: print('1790856000')
@@ -275,6 +277,15 @@ r, calls = run(f)
 assert r.returncode == 0, r.stderr
 assert sum(c[0] == 'ht' and c[2].startswith('/mcp/tasks?') for c in calls) == 2, calls
 assert len(r.stdout.splitlines()) == 101, r.stdout
+renamed = dict(id=901, ticketNumber='HYCI-9', uniqueIndex=9, projectId=11514,
+               title='Renamed ticket', section='Backlog', labels=[])
+f = dict(tasks=[task(1), renamed], comments={'HTPR-1':[comment()], 'HYCI-9':[comment()]},
+         activities={}, prs=[pr(31,'YPER4-692',8), pr(32,'HTPR-1',8)],
+         renamed={'YPER4-692':'HYCI-9'})
+r, calls = run(f)
+assert r.returncode == 0, r.stderr
+assert [line.split('\t')[1] for line in r.stdout.splitlines()] == ['HYCI-9','HTPR-1'], r.stdout
+print('ok a ticket renamed onto another board is read once and reported under its current number')
 f['batch_missing'] = True
 r, _ = run(f)
 assert r.returncode != 0 and 'batch' in r.stderr and not r.stdout, r.stderr
