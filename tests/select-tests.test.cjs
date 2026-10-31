@@ -47,7 +47,6 @@ test("the selector, the sharding and the scope detector run the whole suite", as
 });
 
 test("a workflow no test names still runs the whole suite", async () => {
-  // Built at runtime so this file's own text cannot match the needle.
   assert.equal(await select([`.github/workflows/${"no"}${"-test-names-this-qz"}.yml`]), "ALL");
 });
 
