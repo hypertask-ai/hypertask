@@ -113,8 +113,8 @@ const ACTIONS = [
     id: "comment.marker",
     person: "Pin or star a comment",
     commands: /^(pinComment|starComment)$/,
-    ai: "add_comment",
-    note: "Pin and star ride the add_comment tool actions; the CLI and REST doors are still missing",
+    ai: "hypertask_comments",
+    note: "Pin and star ride the hypertask_comments pin and star actions; the CLI and REST doors are still missing",
   },
   {
     id: "inbox.archive",

@@ -12,7 +12,7 @@ comment.create	Reply to a ticket or write a comment	comment add	/mcp/comments	ad
 comment.update	Edit a comment	comment update	/mcp/comments/([^/]+)	update_comment	
 comment.delete	Delete a comment	comment delete	/mcp/comments/([^/]+)	delete_comment	
 comment.react	React to a comment or like it	comment react	/mcp/comments/([^/]+)/reactions	no	
-comment.marker	Pin or star a comment	no	no	add_comment	Pin and star ride the add_comment tool actions; the CLI and REST doors are still missing
+comment.marker	Pin or star a comment	no	no	hypertask_comments	Pin and star ride the hypertask_comments pin and star actions, which dispatch to the add_comment tool; the CLI and REST doors are still missing
 inbox.archive	Archive inbox items, triage or clear the inbox	inbox archive	/mcp/inbox/archive	inbox_archive	One task per call; no bulk inbox archive door
 board.create	Create a board or team	project create-board	/mcp/teams/([^/]+)/boards	create_board	Creating a team has no door
 board.update	Rename, archive or delete a board, change its settings	project update	/mcp/projects/([^/]+)	rename_board	Join-link copy and reset have no door; delete goes through the CLI only

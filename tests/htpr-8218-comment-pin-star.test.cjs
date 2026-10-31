@@ -132,6 +132,16 @@ test('another agent star stays separate from the owner and from other agents', a
   assert.deepEqual(store.map((row) => row.id), ['owner-star', 'other-agent-star', undefined]);
 });
 
+test('the live comment catalog carries pin and star', () => {
+  const { CONSOLIDATED_TOOL_DESCRIPTIONS } = loadModule('src/lib/mcp-server/config/consolidated-descriptions.ts', {});
+  const comments = CONSOLIDATED_TOOL_DESCRIPTIONS.find((tool) => tool.name === 'hypertask_comments');
+  assert.ok(comments, 'hypertask_comments is in the catalog');
+  for (const action of ['pin', 'star']) {
+    assert.equal(comments.actions[action].tool, 'hypertask_add_comment_to_task', action);
+    assert.equal(comments.actions[action].legacy_action, action, action);
+  }
+});
+
 test('the person starred list shows only person markers', async () => {
   const queries = [];
   const { getAllStarred } = loadModule('src/utils/controllers/savedContent/getAllStarred.ts', {
