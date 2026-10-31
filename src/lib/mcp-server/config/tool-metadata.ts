@@ -433,6 +433,8 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
     name: buildToolName('follow_task'),
     description:
       'Follow, unfollow, star, unstar or set a reminder on a task, and read the tracking state back. follow and unfollow use the same follower write as the app Watch button; star and unstar write the same private star as the star control; remind sets one reminder that returns the task to the inbox at remindAt in ISO 8601 and replaces an earlier unsent reminder. Requires taskId (database ID). read returns following, starred, remindAt and reminderId.',
+  },
+
   ARCHIVE_TASK: {
     name: buildToolName('archive_task'),
     description:
