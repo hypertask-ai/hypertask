@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test'
+import type { Page } from '@playwright/test'
+import { test, expect } from './lib/appReady'
 import { readFileSync, existsSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { layoutDifferences, validateFlagChanges, verticalOrder, LAYOUT_CHANGE_MESSAGE, type Box, type Screen, type FlagChange } from './lib/layout-lock'
