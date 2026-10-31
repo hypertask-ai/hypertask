@@ -70,9 +70,10 @@ test("a clean change lints the changed file and then checks types", () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const calls = stubs.calls();
   assert.equal(calls.length, 2);
-  assert.match(calls[0], /^eslint .*--fix.* src\/one\.ts$/);
-  assert.doesNotMatch(calls[0], /src\/two\.ts/);
-  assert.match(calls[1], /^tsc -p .*\.cache\/tsc\/quick-check\.json$/);
+  const lint = calls.find((call) => call.startsWith("eslint"));
+  assert.match(lint, /^eslint .*--fix.* src\/one\.ts$/);
+  assert.doesNotMatch(lint, /src\/two\.ts/);
+  assert.match(calls.find((call) => call.startsWith("tsc")), /^tsc -p .*\.cache\/tsc\/quick-check\.json$/);
   assert.match(result.stdout, /quick check: format, lint and types passed in \d+\.\d+s/);
 });
 
@@ -114,7 +115,7 @@ test("a killed type check warns instead of blocking the push", () => {
   const result = run(repository, stubs);
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /tsc was killed, so this push skips the type gate/);
+  assert.match(result.stdout, /tsc was killed, so this push skips it/);
   assert.match(result.stdout, /skipped types/);
 });
 
@@ -122,11 +123,14 @@ test("a type check over its budget is skipped instead of blocking", () => {
   const repository = makeRepository(TWO_FILES);
   commit(repository, "src/one.ts", "export const one = 11;\n");
   const stubs = makeStubs({ tscSleeps: 10 });
+  const started = Date.now();
   const result = run(repository, stubs, { env: { QUICK_CHECK_TYPE_BUDGET_MS: "300" } });
+  const waited = Date.now() - started;
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /passed its 0\.3s budget/);
+  assert.match(result.stdout, /tsc passed its time budget/);
   assert.match(result.stdout, /skipped types/);
+  assert.ok(waited < 5000, `the hook waited ${waited}ms on a 300ms budget`);
 });
 
 test("the skip variable passes the push without running any tool", () => {
@@ -141,15 +145,39 @@ test("the skip variable passes the push without running any tool", () => {
 });
 
 test("a lint configuration change runs the full lint without rewriting files", () => {
-  const repository = makeRepository({ ...TWO_FILES, "package.json": '{ "name": "fixture" }\n' });
-  commit(repository, "package.json", '{ "name": "fixture", "version": "1.0.0" }\n');
+  const repository = makeRepository({ ...TWO_FILES, "eslint.config.mjs": "export default [];\n" });
+  commit(repository, "eslint.config.mjs", "export default [{ rules: {} }];\n");
   const stubs = makeStubs();
   const result = run(repository, stubs);
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /lint configuration changed, running the full lint/);
-  assert.match(stubs.calls()[0], /^eslint --cache .* \.$/);
-  assert.doesNotMatch(stubs.calls()[0], /--fix/);
+  const lint = stubs.calls().find((call) => call.startsWith("eslint"));
+  assert.match(lint, /^eslint --cache .* \.$/);
+  assert.doesNotMatch(lint, /--fix/);
+});
+
+test("a compiler configuration change runs the full type check", () => {
+  const repository = makeRepository({ ...TWO_FILES, "tsconfig.json": '{ "compilerOptions": {} }\n' });
+  commit(repository, "tsconfig.json", '{ "compilerOptions": { "strict": true } }\n');
+  const stubs = makeStubs();
+  const result = run(repository, stubs);
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /the compiler configuration changed, running the full type check/);
+  assert.match(stubs.calls().find((call) => call.startsWith("tsc")), /-p .*full\.json$/);
+});
+
+test("a dirty checked file blocks the push until it is committed", () => {
+  const repository = makeRepository(TWO_FILES);
+  commit(repository, "src/one.ts", "export const one = 11;\n");
+  writeFileSync(path.join(repository, "src/one.ts"), "export const one = 12;\n");
+  const stubs = makeStubs();
+  const result = run(repository, stubs);
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /uncommitted changes to src\/one\.ts; commit them/);
+  assert.deepEqual(stubs.calls(), []);
 });
 
 test("explicit files skip the changed-file lookup", () => {
@@ -159,7 +187,7 @@ test("explicit files skip the changed-file lookup", () => {
   const result = run(repository, stubs, { args: ["--files", "src/two.ts"] });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(stubs.calls()[0], / src\/two\.ts$/);
+  assert.match(stubs.calls().find((call) => call.startsWith("eslint")), / src\/two\.ts$/);
 });
 
 test("the check works from a subdirectory", () => {
@@ -169,7 +197,7 @@ test("the check works from a subdirectory", () => {
   const result = run(repository, stubs, { cwd: path.join(repository, "src") });
 
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(stubs.calls()[0], / src\/one\.ts$/);
+  assert.match(stubs.calls().find((call) => call.startsWith("eslint")), / src\/one\.ts$/);
 });
 
 test.after(() => console.log("quick-check tests passed"));
