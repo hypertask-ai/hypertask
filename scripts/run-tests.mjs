@@ -8,6 +8,7 @@ import {
   supportedTestSuffixes,
 } from "./test-inventory.mjs";
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
+import { createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
@@ -27,6 +28,7 @@ function relative(absolute) {
 
 const quarantineFile = process.env.QUARANTINE_CONFIG || path.join(root, "config/quarantined-tests.json");
 const quarantine = loadQuarantine(quarantineFile);
+const execution = createExecutionCounter();
 
 function run(command, args, label, concurrency = 1) {
   const nodeTests = args[0] === "--test";
@@ -50,10 +52,12 @@ function run(command, args, label, concurrency = 1) {
     child.stdout.on("data", (chunk) => {
       process.stdout.write(chunk);
       parser.push(chunk.toString());
+      execution.push(chunk.toString());
     });
     child.stderr.on("data", (chunk) => {
       process.stderr.write(chunk);
       parser.push(chunk.toString());
+      execution.push(chunk.toString());
     });
     child.on("error", reject);
     child.on("close", (status, signal) => {
@@ -187,4 +191,11 @@ if (cjsTests.length > 0) {
 const tsxCli = path.join(root, "node_modules", "tsx", "dist", "cli.mjs");
 for (const file of tsTests) {
   await run(process.execPath, [tsxCli, file], `TypeScript test: ${file}`);
+}
+
+const counted = execution.finish();
+const skippedRun = isCi && selected.length > 0 ? executionFailure(counted, selected.length) : null;
+if (skippedRun) {
+  console.error(skippedRun);
+  process.exit(1);
 }
