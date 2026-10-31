@@ -20,6 +20,7 @@ let viewedTaskId = null;
 let originalNote = null;
 let session = null;
 const mocks = {
+  "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} },
   "@/store": { composeTaskQuestionsTaskIdAtom: "questionsTaskId", inViewObjectAtom: "inView", composeTaskOriginalNoteAtom: "originalNote" },
   "@/lib/state": {
     useRecoilValue: (atom) => (atom === "inView" ? { taskId: viewedTaskId } : atom === "originalNote" ? originalNote : null),

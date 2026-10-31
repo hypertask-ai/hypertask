@@ -36,6 +36,7 @@ export interface Message {
 }
 
 export interface ChatContextType {
+  navigationKey?: string | null;
   runningSessionIds: string[];
   isTyping: boolean;
   sendSettledVersion: number;
@@ -195,7 +196,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
       contextProps.isTyping ||
-      !contextProps.sessions.length ||
+      (!contextProps.sessions.length && !(contextProps.navigationKey && contextProps.chatHistoryReady)) ||
       (contextProps.sessionPagingEnabled && !contextProps.chatHistoryReady)
     ) {
       return;
@@ -256,7 +257,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       editor.commands.focus("end");
     }
   }, [
-    pendingAiChatPrompt, contextProps.sessionPagingEnabled,
+    pendingAiChatPrompt, contextProps.sessionPagingEnabled, contextProps.navigationKey,
     askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,
