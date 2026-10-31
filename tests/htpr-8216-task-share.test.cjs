@@ -23,8 +23,8 @@ function fixture(options = {}) {
     taskSharing: {
       findFirst: async ({ where }) => {
         assert.equal(where.taskId, 42);
-        assert.equal(where.userId, 7);
-        const matches = rows.filter((row) => row.taskId === 42 && row.userId === 7);
+        assert.ok(where.userId === 7 || where.userId === undefined);
+        const matches = rows.filter((row) => row.taskId === 42 && (where.userId === undefined || row.userId === where.userId));
         const newest = (list) =>
           [...list].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)).at(-1) ?? null;
         if (where.expired === false) {
@@ -153,4 +153,21 @@ test("read-back agrees with the write door when an expired row is newer", async 
   assert.equal(read.body.link, write.body.link);
   assert.match(read.body.link, /share\?id=share-live$/);
   assert.equal(share.created.length, 0);
+});
+
+test("readTaskShare reports a ticket shared by someone else as public", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-other", taskId: 42, userId: 8, expired: false, expiredAt: null, shareType: "Anyone" });
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.body.isPublic, true);
+  assert.equal(result.body.link, "https://app.hypertask.ai/share?id=share-other");
+  assert.equal(share.created.length, 0);
+});
+
+test("readTaskShare prefers the caller's own live link when another owner also shared", async () => {
+  const share = fixture();
+  share.rows.push({ id: "share-mine", taskId: 42, userId: 7, expired: false, expiredAt: null, shareType: "Anyone", createdAt: 1 });
+  share.rows.push({ id: "share-other", taskId: 42, userId: 8, expired: false, expiredAt: null, shareType: "Anyone", createdAt: 2 });
+  const result = await share.readTaskShare(actor);
+  assert.equal(result.body.link, "https://app.hypertask.ai/share?id=share-mine");
 });

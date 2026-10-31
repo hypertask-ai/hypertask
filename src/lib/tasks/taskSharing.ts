@@ -6,9 +6,9 @@ const baseURL = process.env.NEXT_PUBLIC_BASEURL || "https://app.hypertask.ai";
 
 export const shareLinkFor = (shareId: string) => `${baseURL}/share?id=${shareId}`;
 
-const liveShareWhere = (taskId: number, userId: number) => ({
+const liveShareWhere = (taskId: number, userId?: number) => ({
   taskId,
-  userId,
+  ...(userId == null ? {} : { userId }),
   expired: false,
   OR: [{ expiredAt: null }, { expiredAt: { gt: new Date() } }],
 });
@@ -97,8 +97,13 @@ export async function readTaskShare({
     return { status: 404, body: { message: "Task not found, or you cannot read its sharing" } };
   }
 
-  const live = await prisma.taskSharing.findFirst({
+  const ownLive = await prisma.taskSharing.findFirst({
     where: liveShareWhere(task.id, currentUser.id),
+    orderBy: { createdAt: "desc" },
+    select: { id: true, shareType: true },
+  });
+  const live = ownLive ?? await prisma.taskSharing.findFirst({
+    where: liveShareWhere(task.id),
     orderBy: { createdAt: "desc" },
     select: { id: true, shareType: true },
   });
