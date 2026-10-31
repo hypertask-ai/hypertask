@@ -33,6 +33,7 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 |---|---|---|
 | Claim | `ship-claim`, then [vcc](../vcc/SKILL.md) | Own claim activity won, own agent assigned, In Progress |
 | Sharpen the approach | Deeper activity and extra gate | `ship-check deeper` passes |
+| Plan big work | Read `~/.agents/skills/poteto-mode/SKILL.md` and follow its matching playbook; skip for one-file fixes | One `Plan:` activity; every planned outcome has a gate in the ledger |
 | Plan visible work | [reuse-existing-ui](../reuse-existing-ui/SKILL.md); current design policy | Existing components identified; new component approval recorded |
 | Review high-risk design | [interrogate](../interrogate/SKILL.md), only for the valentin-review lane | Review blockers resolved; required human decision recorded |
 | Implement | [fix-bug](../fix-bug/SKILL.md), [fix-slow-page](../fix-slow-page/SKILL.md), or [ship-feature-behind-flag](../ship-feature-behind-flag/SKILL.md) | Smallest complete change; targeted behavior checks pass in CI |
