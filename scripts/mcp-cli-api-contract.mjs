@@ -254,7 +254,7 @@ export async function runContract() {
     requireThat(Number.isInteger(created.task?.id) && created.task.title === title, `${role}: invalid created task`);
     const id = created.task.id;
     taskRow(await rest(`/tasks?task_id=${id}`, token), id, title);
-    const text = `${role} comment ${randomUUID()}`;
+    const text = `${role} comment ${Date.now()}`;
     const added = await call(token, "comments", "add", { task_id: id, text, ...(role === "write-agent" ? { kind: "qa" } : {}) });
     requireThat(Number.isInteger(added.comment?.id), `${role}: invalid comment receipt`);
     requireThat(added.routedTo === "comments" && added.visibleToPeople === true, `${role}: comment visibility receipt missing`);

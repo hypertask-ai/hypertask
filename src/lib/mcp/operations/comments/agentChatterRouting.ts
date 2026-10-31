@@ -15,8 +15,8 @@ export function routeComment({ agentId, kind, legacy }: {
   kind?: CommentKind
   legacy?: { flagEnabled: boolean; replyToCommentId?: number; replyToInvocationId?: number; mentionsPerson: boolean; hasImages: boolean }
 }): 'comments' | 'log' {
-  if (legacy?.flagEnabled) {
-    return agentId && kind === undefined && legacy.replyToCommentId === undefined &&
+  if (legacy) {
+    return legacy.flagEnabled && agentId && kind === undefined && legacy.replyToCommentId === undefined &&
       legacy.replyToInvocationId === undefined && !legacy.mentionsPerson && !legacy.hasImages
       ? 'log'
       : 'comments'
