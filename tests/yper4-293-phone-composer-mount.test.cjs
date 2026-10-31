@@ -60,7 +60,6 @@ test("phone cached composer keeps its draft and focus when Next publishes the de
       panels: React.createElement("aside", { "data-testid": "chat-panels" }),
     }, React.createElement(Composer))));
   try {
-    // Native history exposes the cached ticket while Next still holds the board pathname.
     await React.act(async () => render());
     const composer = document.querySelector('[data-testid="comment-composer"]');
     composer.focus();

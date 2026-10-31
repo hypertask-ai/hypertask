@@ -5,7 +5,6 @@ const path = require("node:path");
 const ts = require("typescript");
 const Module = require("node:module");
 
-// Loads a TS source file with the "@/..." aliases resolved back to src/.
 function loadTsModule(relativePath) {
   const filename = path.join(__dirname, "..", relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -46,7 +45,6 @@ test("built-in views default to the end of the bar, in declaration order", () =>
 
   assert.deepEqual(ids(sortViewsByOrder(views, undefined, "default")), [
     "default",
-    // HTPR-7092: Decisions sits right after the home tab.
     BUILTIN_VIEW_IDS.decisions,
     "saved-a",
     "saved-b",
@@ -61,7 +59,6 @@ test("a dragged built-in keeps its new position ahead of saved views", () => {
     savedView("saved-a", "2024-02-01"),
     savedView("saved-b", "2024-03-01"),
   ];
-  // What the tab bar persists after dragging Overdue up onto the first row.
   const order = [
     "default",
     BUILTIN_VIEW_IDS.overdue,

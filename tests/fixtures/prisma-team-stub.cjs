@@ -1,4 +1,3 @@
-// Minimal prisma stand-in for the plan gate: one team, whatever the test sets.
 const state = { team: null };
 module.exports = {
   __esModule: true,

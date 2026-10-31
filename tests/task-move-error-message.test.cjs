@@ -1,7 +1,4 @@
 const { withStubs } = require("./helpers/stub-map.cjs")
-// HTPR-5478: the CLI printed "Failed to update 1 task(s). [object Object]"
-// whenever a hop dropped an error object into a string slot. Two halves:
-// every relay unwraps the payload, and no controller hands back a raw Error.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -67,14 +64,11 @@ test("toErrorMessage unwraps nested API error payloads to a printable string", (
   assert.equal(toErrorMessage({}, "fallback"), "fallback");
   assert.equal(toErrorMessage(null, "fallback"), "fallback");
   assert.equal(toErrorMessage({ message: "   " }, "fallback"), "fallback");
-  // `new Error(someObject)` stringifies to "[object Object]"; a hop that
-  // receives one must fall back instead of printing the placeholder.
   assert.equal(
     toErrorMessage(new Error("[object Object]"), "fallback"),
     "fallback",
   );
   assert.equal(toErrorMessage("[object Object]", "fallback"), "fallback");
-  // A cycle must not hang the relay that is trying to report a failure.
   const cyclic = { message: {} };
   cyclic.message.message = cyclic;
   assert.equal(toErrorMessage(cyclic, "fallback"), "fallback");
@@ -84,7 +78,6 @@ test("a nested move payload no longer reaches the caller as [object Object]", ()
   const nested = {
     message: { message: "Caller holds no agent mutation lease for this task." },
   };
-  // What the MCP relay used to do: `new Error(errorData.message)`.
   assert.match(
     `Failed to update 1 task(s). ${new Error(nested.message).message}`,
     /\[object Object\]/,
@@ -98,8 +91,6 @@ test("a nested move payload no longer reaches the caller as [object Object]", ()
   assert.doesNotMatch(fixed, /\[object Object\]/);
 });
 
-// The delete route hands `response.json` straight to the client, so a raw
-// Error there serialised to `{"message":{}}` and printed "[object Object]".
 function loadDeleteController(deleteOutcome) {
   const stubs = {
     "@/lib/tasks/sameBoardRelations": execute(compile("src/lib/tasks/sameBoardRelations.ts"), {}),
@@ -184,12 +175,10 @@ test("a failed delete answers with printable text, not a serialised Error", asyn
   const result = await deleteTaskSingle(101, 6);
 
   assert.equal(result.status, 500);
-  // What a client actually receives over the wire.
   const wireBody = JSON.parse(JSON.stringify(result.json));
   assert.equal(typeof wireBody.message, "string");
   assert.equal(`${wireBody.message}`, "Failed to delete task");
   assert.doesNotMatch(`${wireBody.message}`, /\[object Object\]/);
-  // The internal Prisma detail belongs in the server log, not the response.
   assert.doesNotMatch(wireBody.message, /secret_column/);
 });
 

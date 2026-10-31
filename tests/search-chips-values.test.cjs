@@ -16,7 +16,7 @@ const matches = (row, filter) => {
   }
   if (filter.id?.in) return filter.id.in.includes(row.id)
   if (filter.id !== undefined) return filter.id === row.id
-  return true // Board visibility is asserted separately below.
+  return true
 }
 const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   .sort((a, b) => {

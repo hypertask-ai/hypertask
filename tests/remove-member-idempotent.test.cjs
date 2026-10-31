@@ -1,10 +1,3 @@
-// HTPR-4162: removeMember returned HTTP 400 even when it had done the work.
-//
-// The board-member delete was written as `where: { id: member?.id }`. When no
-// non-agent member row existed (already removed, or the user was on the board
-// only through agents), that is `id: undefined`, which Prisma rejects. The throw
-// landed in the catch, which returns 400 — after the loop above had already
-// deleted the user's agent rows. Callers saw a failure and a half-applied change.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -27,9 +20,6 @@ const prisma = prismaModule.default ?? prismaModule;
 const removeMemberModule = loadTs("src/utils/controllers/projects/removeMember.ts");
 const membersRemove = removeMemberModule.default ?? removeMemberModule;
 
-// Minimal stand-ins: the point is the control flow, not the database.
-// project.findFirst is what isProjectAdmin uses, so returning a row there makes
-// the caller an admin without stubbing the module itself.
 function stubPrisma({ member, admin = true }) {
   const deleted = [];
   prisma.project.findFirst = async () => (admin ? { id: 3 } : null);
@@ -38,7 +28,6 @@ function stubPrisma({ member, admin = true }) {
   prisma.member.findFirst = async () => member;
   prisma.member.findMany = async () => [];
   prisma.member.delete = async ({ where }) => {
-    // Mirror Prisma's real behaviour: an undefined id is a validation error.
     if (where.id === undefined) {
       throw new Error("Argument `id` is missing.");
     }

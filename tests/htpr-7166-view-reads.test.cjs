@@ -29,7 +29,6 @@ for (const [name, options] of Object.entries({ Public: {}, 'own Private': { visi
     assert.equal(pv.user_project_views[0].unsavedView, null);
     assert.equal(h.queries.length, 2);
     h.queries.length = 0;
-    // Execute ExtraMinimal with its real select, isolating only the unrelated board-list scope.
     const includes = h.load('src/utils/controllers/projects/getAllIncludes.ts');
     h.mocks['@/utils/controllers/projects/getAllIncludes'] = { ...includes, getProjectWhere: () => ({ ownerId: 42 }) };
     h.board.googleAccount = { id: 1 };

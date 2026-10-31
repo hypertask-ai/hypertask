@@ -245,7 +245,6 @@ test("flag Off agent release frees both active keys and its cancellable identity
   for (const key of keys) assert.equal(h.redis.values.has(key), false);
   assert.equal((await h.send(taskSession)).status, 200);
   h.setEnabled(true);
-  // An isolated agent reply waits while the owner's reply holds the user key.
   assert.equal((await h.send(agentSession)).status, 409);
   await h.leases.releaseAiChatStreamLease(lease);
   assert.equal((await h.send(taskSession)).status, 409);

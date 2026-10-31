@@ -101,7 +101,6 @@ test('compose end to end: an improvement lands in the Improvements column, not t
     await createComposedTask({ text: 'Agents react with emoji', files: [], project, userId: 985 });
     assert.equal(creates[0].sectionId, 13);
     assert.equal(creates[0].section_title, 'Improvements');
-    // Same top-of-column ranking lookup the default column uses, for the typed column.
     assert.deepEqual(defaults, [{ projectId: 7, position: 'top' }, { projectId: 7, sectionId: 13, position: 'top' }]);
     assert.equal(creates[0].ranking, 'top-of-13');
     assert.equal(creates[0].description, '<p>Agents should react.</p>');

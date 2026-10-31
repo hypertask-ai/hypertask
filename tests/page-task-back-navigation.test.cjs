@@ -266,8 +266,6 @@ test("the marker survives a Page reload in the same tab", () => {
     true,
   );
 
-  // A reload creates a new Window runtime but keeps this tab's URL,
-  // sessionStorage, and entry-scoped history.state marker.
   const reloadedRuntime = makeRuntime();
   assert.equal(hasPageReturnRuntimeProof(reloadedRuntime, nonce), false);
   assert.equal(
@@ -324,8 +322,6 @@ test("cross-origin, stale, wrong-Page, and copied/new-tab contexts are rejected"
     const result = returnWithoutNavigationApi(
       storage,
       currentHref,
-      // sessionStorage may be copied by an opener, but history.state is scoped
-      // to the newly-created entry and cannot authorize it.
       scenario === "new-tab" ? { __NA: true } : null,
       {
         ...(scenario === "stale"
@@ -359,8 +355,6 @@ test("a valid marked URL replayed in the same tab cannot authorize Back", () => 
     true,
   );
 
-  // The same URL is revisited after another navigation. It still has the
-  // nonce and sessionStorage context, but this is a different history entry.
   const replay = returnWithoutNavigationApi(
     storage,
     `${origin}${markedHref}`,
@@ -405,9 +399,6 @@ test("Navigation API direct, copied, and replayed entries cannot bypass binding"
         `${origin}${taskHref}?inboxFlow=true#comment-177928`,
         `${origin}${markedHref}`,
       ]),
-      // A copied/new-tab or replayed entry does not own the original entry's
-      // classic history-state marker, even if sessionStorage was copied or the
-      // marked URL remains available in this tab.
       historyState: { __NA: true },
       currentHref: `${origin}${markedHref}`,
       taskHref,

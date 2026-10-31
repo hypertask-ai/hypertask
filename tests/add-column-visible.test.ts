@@ -1,13 +1,3 @@
-// HTPR-5527. Add Column: typing a name and pressing Enter closed the dialog and
-// left the board unchanged, with no error.
-//
-// Two things caused it. The section was written to the database and then hidden:
-// appendSectionToAllViews stored `visibility: <is this view mine?>` on the new
-// column, and the board only renders view columns with `visibility: true`, so a
-// board whose active view belongs to anyone else (its default view, a shared
-// public view) swallowed the column. And the dialog computed the new column's
-// rank from /api/section/getProjectSections first, an endpoint that answers 200
-// with an error body, so a bad read made Enter do nothing at all.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "./refactored-module-source.cjs";
@@ -18,8 +8,6 @@ import { buildViewColumnEntry } from "../src/utils/controllers/section/viewColum
 const read = (relativePath: string) =>
   readFileSync(path.join(process.cwd(), relativePath), "utf8");
 
-// What getCurrentProject does with a view's board_columns_view before the board
-// renders it: hidden columns never reach the screen.
 const renderedColumns = (columns: Array<{ visibility?: boolean; section_title?: string }>) =>
   columns.filter((column) => column.visibility).map((column) => column.section_title);
 
@@ -39,7 +27,6 @@ test("a new column renders in a view owned by someone else", () => {
     { id: 2, section_title: "Doing", visibility: true },
     { id: 3, section_title: "Done", visibility: true },
   ];
-  // The board's default view, created by whoever made the board.
   const defaultViewColumns = [...existing, buildViewColumnEntry(newSection)];
 
   assert.deepStrictEqual(renderedColumns(defaultViewColumns), [

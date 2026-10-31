@@ -177,8 +177,6 @@ test("chat.message persists a board-free chat payload", async () => {
 test("chat.message accepts a null project when the agent sits on any owner board", async () => {
   const { persistAgentWebhookEvent } = loadOutbox();
 
-  // Membership cannot be narrowed to a board for a chat event; the where
-  // clause must not demand projectId null.
   const accepted = fakeSingleEventTransaction(chatSubscription());
   const deliveryId = await persistAgentWebhookEvent(accepted, {
     event: "chat.message",
@@ -193,7 +191,6 @@ test("chat.message accepts a null project when the agent sits on any owner board
   assert.equal(typeof deliveryId, "string");
   assert.deepEqual(accepted.membersWhere[0], {});
 
-  // Board events keep the board-narrowed grant.
   const scoped = fakeSingleEventTransaction(
     chatSubscription({ events: ["comment.created"] })
   );
@@ -210,7 +207,6 @@ test("chat.message accepts a null project when the agent sits on any owner board
   });
   assert.deepEqual(scoped.membersWhere[0], { projectId: 15 });
 
-  // An agent on no board of the owner is still skipped for chat events.
   const noBoards = fakeSingleEventTransaction(
     chatSubscription({ members: [] })
   );

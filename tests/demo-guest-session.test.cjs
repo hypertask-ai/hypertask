@@ -87,8 +87,6 @@ stubModule("src/lib/demo/guest.ts", {
   GUEST_SESSION_TTL_SECONDS: 86_400,
   isGuestUser: (user) => user?.uid?.startsWith("guest_") ?? false,
 });
-// The route resolves identity through getSessionUser so a Better Auth session
-// outliving ht_session still counts as signed in; mirror that in the stub.
 stubModule("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () =>
     currentSession ? { userId: currentSession.id, source: "legacy" } : null,

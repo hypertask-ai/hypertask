@@ -95,7 +95,6 @@ test("flag off renders production tooltips and flag on renders the top-layer por
       const clone = element.cloneNode(true);
       for (const node of [clone, ...clone.querySelectorAll("*")]) {
         if (node.hasAttribute("class")) node.setAttribute("class", [...node.classList].sort().join(" "));
-        // React-generated IDs differ between independent mounts, not between behaviors.
         node.removeAttribute("id");
         node.removeAttribute("aria-labelledby");
       }

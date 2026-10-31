@@ -514,9 +514,6 @@ test("late subscription callbacks cannot refresh after cleanup", async () => {
   });
 });
 
-// HTPR-5594: realtime events must start their refetch immediately. The speed
-// rules ban any timer between a realtime event and its authoritative request,
-// so a reintroduced debounce default is a regression, not a tuning choice.
 test("realtime events still refetch without a timeout (HTPR-5594)", () => {
   const src = fs.readFileSync(
     require.resolve("../src/hooks/realtime/useTaskCommentsRealtime.ts"),

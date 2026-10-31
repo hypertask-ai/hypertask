@@ -1,6 +1,3 @@
-// HTPR-6509: comment notification fan-out must cost a fixed number of database
-// round trips, whatever the recipient count, while keeping the per-recipient
-// dedupe, board mute and reminder rules exactly as before.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -25,8 +22,6 @@ function matchesId(filter, value) {
   return filter === value;
 }
 
-// A counting Prisma double. The transaction client is a distinct object so a
-// test can prove inbox writes ran inside the task lock.
 function createDatabase({
   mutedUserIds = [],
   reminders = [],
@@ -292,8 +287,6 @@ test("fan-out costs a fixed number of queries per chunk of ten recipients", asyn
     assert.equal(ten.length, five.length);
     assert.equal(transactions(ten), 1);
     assert.equal(transactions(twenty), 2);
-    // A second chunk adds exactly: transaction, lock, mute read, reminder
-    // read, createMany. Nothing per recipient.
     assert.equal(twenty.length - ten.length, 5);
   }
 });
@@ -326,7 +319,6 @@ test("a 50-recipient comment with reminders holds the lock per chunk of ten", as
     writes.map((call) => call.size),
     [10, 10, 10, 10, 10],
   );
-  // Every reminder release runs inside the lock of the chunk holding its user.
   const releases = database.calls.filter((call) => call.name === "invokeReminder");
   assert.deepEqual(
     releases.map(({ userId, transactionIndex }) => [userId, transactionIndex]),
@@ -340,7 +332,6 @@ test("a 50-recipient comment with reminders holds the lock per chunk of ten", as
     ],
   );
   assert.ok(invoked.every(({ client }) => client === "tx"));
-  // Mute and reminder reads are per chunk, never per recipient.
   assert.equal(
     database.calls.filter((call) => call.name === "reminder.findMany").length,
     5,
@@ -378,7 +369,6 @@ test("dedupe, board mute and reminder rules pick the same recipients as before",
     reminders: [
       { id: 1, userId: 13, status: "Normal", invokeCondition: "DurationComplete" },
       { id: 2, userId: 14, status: "Normal", invokeCondition: "NewNotification" },
-      // A second open reminder must not invoke twice for the same comment.
       { id: 3, userId: 14, status: "Normal", invokeCondition: "NewNotification" },
     ],
     existing: [
@@ -386,9 +376,6 @@ test("dedupe, board mute and reminder rules pick the same recipients as before",
       { id: 2, type: "Comment", commentId: 501, userId: 40, agentId: "agent-a" },
     ],
     agentAssignees: [agent("agent-a", 40), agent("agent-b", 41)],
-    // agent-a is an assignee already handled above, even though it was deduped.
-    // Follower rows have no unique index, so one agent can appear twice; a
-    // replay still writes a single row for it.
     agentFollowers: [
       agent("agent-a", 40),
       agent("agent-c", 42),
@@ -431,16 +418,12 @@ test("dedupe, board mute and reminder rules pick the same recipients as before",
     ].sort((a, b) => sortKey(a).localeCompare(sortKey(b))),
   );
 
-  // The NewNotification reminder is released inside the same task lock.
   assert.deepEqual(invoked, [{ reminderId: 2, client: "tx" }]);
-  // Mute and reminder reads plus human inserts all run under the inbox lock.
   for (const call of database.calls) {
     if (/^(projectMute|reminder)\./.test(call.name)) {
       assert.equal(call.client, "tx", call.name);
     }
   }
-  // Snoozed-to-archive, muted and deduped users get no live inbox push; agent
-  // followers never did.
   assert.deepEqual(
     broadcasts.map(({ userId }) => userId).sort(),
     [11, 14, 41],

@@ -17,11 +17,6 @@ import axios, {
     };
   }
   
-  /**
-   * Standardized response format returned by ApiClient methods.
-   *
-   * @template T The type of the `data` field.
-   */
   export interface ApiResponse<T = any> {
     data: T;
     status: number;
@@ -31,11 +26,6 @@ import axios, {
     duration?: number;
   }
   
-  /**
-   * Standardized error format returned from ApiClient methods on failure.
-   *
-   * @template T The type of the error `response` data.
-   */
   export interface ApiError<T = any> extends AxiosError<T> {
     duration?: number;
   }
@@ -161,44 +151,16 @@ import axios, {
       return cancelCount;
     }
   
-    /**
-     * Performs a generic Axios request.
-     *
-     * @template T - Type of the expected response data.
-     * @param config - Axios request config.
-     * @returns The full ApiResponse object.
-     */
     public async request<T = any>(config: AxiosRequestConfig): Promise<ApiResponse<T>> {
       const response = await this.instance.request<T>(config);
       return response as unknown as ApiResponse<T>;
     }
   
-    /**
-     * Sends a GET request.
-     *
-     * @template T - Type of the expected response data.
-     * @param url - URL path.
-     * @param config - Optional Axios config.
-     * @returns ApiResponse containing `data` and metadata.
-     *
-     * @example
-     * const res = await api.get<User[]>('/users');
-     */
     public async get<T = any>(url: string, config: AxiosRequestConfig = {}): Promise<ApiResponse<T>> {
       const response = await this.instance.get<T>(url, config);
       return response as unknown as ApiResponse<T>;
     }
   
-    /**
-     * Sends a POST request.
-     *
-     * @template T - Type of the expected response data.
-     * @template D - Type of the request payload.
-     * @param url - URL path.
-     * @param data - Request body.
-     * @param config - Optional Axios config.
-     * @returns ApiResponse
-     */
     public async post<T = any, D = any>(url: string, data?: D, config: AxiosRequestConfig = {}): Promise<ApiResponse<T>> {
       const response = await this.instance.post<T>(url, data, config);
       return response as unknown as ApiResponse<T>;

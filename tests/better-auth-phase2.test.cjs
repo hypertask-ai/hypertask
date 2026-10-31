@@ -46,8 +46,6 @@ const useFcmTokenSrc = fs.readFileSync(
 );
 
 test("magicLink enables provisioned sign-up while emailOTP remains existing-user-only", () => {
-  // HTPR-4166: verified magic-link users may self-register now that the Better
-  // Auth create hook performs the legacy provisioning side effects.
   const magicLinkStart = betterAuthSrc.indexOf("magicLink(");
   const emailOtpStart = betterAuthSrc.indexOf("emailOTP(");
   assert.ok(magicLinkStart !== -1 && emailOtpStart !== -1, "both plugin calls must be present");
@@ -89,9 +87,6 @@ test("passkey sign-in stays production-bound and bridges into the legacy session
 });
 
 test("legacy cookie bridge mints every cookie the legacy app reads directly", () => {
-  // HTPR-4146: 140+ files still read nookies_user/ht_session directly, bypassing
-  // Better Auth's own session. If this plugin stops setting one of them, those
-  // call sites silently see a logged-out user after a native BA login.
   for (const cookieName of ["nookies_user", "SESSION_COOKIE", "signup_source"]) {
     assert.match(
       legacyCookieSrc,

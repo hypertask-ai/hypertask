@@ -236,7 +236,6 @@ test("title autosizing reads the attached ref during layout, without waiting for
   layouts.forEach((effect) => effect());
   assert.equal(ref.current.style.height, "72px", "height must be correct in the first layout phase");
   assert.equal(ref.current.style.overflowY, "hidden");
-  // A subsequent sidebar reflow still measures the current element and wrap width.
   layouts.length = 0;
   ref.current.scrollHeight = 108;
   useAutosize(ref, "A title wrapping across two lines", undefined, "open:600");
@@ -492,7 +491,6 @@ test("desktop description is in normal flow on the first paint, while comments a
   assert.equal(phone.querySelector("[data-description]").parentElement.parentElement.style.height, "711px");
 });
 
-// CI runs unit tests without a Playwright browser; the source checks above still guard it there.
 const browserInstalled = (() => {
   try { return require("node:fs").existsSync(require("playwright").chromium.executablePath()); } catch { return false; }
 })();

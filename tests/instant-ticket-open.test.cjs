@@ -47,7 +47,6 @@ mocks["@/utils/helperFunctions/helperFunctions"] = { returnIfModalOrInputActive:
 mocks["@/lib/constants/constants"] = { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } };
 const CachedTaskDetailNavigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx").default;
 
-// Execute the production shell's JSX, not a copy of its route/loading policy.
 const globalSource = ts.createSourceFile("GloablProviders.tsx", fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 let shell;
 let mountPolicy;

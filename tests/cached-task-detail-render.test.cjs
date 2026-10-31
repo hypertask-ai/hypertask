@@ -197,7 +197,6 @@ test("description paints cached content and drafts before constructing the rich 
     "../ContextMenu": { HighlightMenu: noop },
     "../ContextMenu/QuoteButton": { __esModule: true, default: noop },
     "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
-    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
     "./DescriptionEditorSlot": { __esModule: true, default: Editor },
     "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": { __esModule: true, default: noop },
@@ -227,7 +226,6 @@ test("pending cached details paint property geometry immediately but defer edito
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
   assert.match(state, /useState\(!initialCommentsPayload\.pending\)/);
-  // HTPR-7116: `reveal` sets the panels ready (in a transition when its flag is on).
   assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(reveal\)/);
   assert.match(state, /: \(\) => setSecondaryPanelsReady\(true\);/);
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);

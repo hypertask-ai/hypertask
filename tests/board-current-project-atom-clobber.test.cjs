@@ -1,6 +1,3 @@
-// The board publishes currentProjectAtom before paint. The keyboard hook once
-// wrote its own render-time value back in a later effect, so an initial null
-// could overwrite the loaded board and leave Manage board columns empty.
 const assert = require("node:assert/strict");
 const test = require("node:test");
 const { readFileSync } = require("node:fs");

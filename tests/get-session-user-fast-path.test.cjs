@@ -6,10 +6,6 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 
-// getSessionUser.ts transpiled once; a mock `require` is injected per load so
-// @/lib/auth/betterAuth's `auth.api.getSession` is fully controllable while
-// better-auth/cookies and @/lib/auth/session stay real — verifySession and
-// cookie parsing are genuinely exercised, not mocked (HTPR-5453).
 const source = fs.readFileSync(
   path.join(root, "src/lib/auth/getSessionUser.ts"),
   "utf8",
@@ -72,9 +68,6 @@ const headersWithCookies = (pairs) =>
       .join("; "),
   });
 
-// These tests read process-wide env (SESSION_SECRET, BETTER_AUTH_ENABLED,
-// AUTH_LEGACY_FAST_PATH). Serialize so concurrent test-runner scheduling
-// can't leak env between cases.
 let envQueue = Promise.resolve();
 const withEnv = async (env, callback) => {
   const previous = envQueue;
@@ -102,7 +95,6 @@ const neverCalled = async () => {
   throw new Error("Better Auth should not have been called");
 };
 
-// --- The 10-row precedence matrix -----------------------------------------
 
 test("row 1: legacy absent, Better Auth valid -> Better Auth wins, unaffected by the flag", async () => {
   for (const flag of ["0", "1"]) {
@@ -146,8 +138,6 @@ test("row 3: legacy and Better Auth agree -> same userId, flag skips the DB call
         headersWithCookies({ [SESSION_COOKIE]: signSession({ id: 6 }) }),
       );
       assert.equal(result.userId, 6);
-      // Documented divergence: full lookup would say source:'better-auth'
-      // here. Nothing reads .source/.needsBridge today (grepped repo-wide).
       assert.equal(result.source, "legacy");
     },
   );
@@ -176,18 +166,12 @@ test("row 4: legacy and Better Auth disagree (account switch, HTPR-4170) -> lega
 });
 
 test("row 5: a valid guest legacy cookie plus a valid, different real Better Auth session -> legacy wins in both modes, unchanged by this ticket", async () => {
-  // This is HTPR-4170's existing, pre-existing precedence (legacy wins on
-  // mismatch) — not something this ticket introduces or can make worse. The
-  // actual guard against a guest cookie shadowing a real session lives in
-  // /api/demo/guest (HTPR-5460), which depends on getSessionUser NEVER
-  // returning null for an otherwise-signed-in user — proven in rows 1/9/10,
-  // not on this precedence rule.
   for (const flag of ["0", "1"]) {
     await withEnv(
       { BETTER_AUTH_ENABLED: "1", AUTH_LEGACY_FAST_PATH: flag },
       async () => {
         const getSessionUser = loadGetSessionUser(async () => ({
-          user: { id: "500" }, // real user
+          user: { id: "500" },
         }));
         const guestId = 900;
         const result = await getSessionUser(
@@ -230,8 +214,6 @@ test("row 7: tampered legacy signature -> falls through to the unchanged full lo
       const result = await getSessionUser(
         headersWithCookies({ [SESSION_COOKIE]: forged }),
       );
-      // legacySession is null (tampered), so the fast-path gate never fires;
-      // Better Auth resolves it, exactly like today.
       assert.deepEqual(result, { userId: 8, source: "better-auth", teamScope: null });
     },
   );
@@ -319,10 +301,6 @@ test("the kill switch is off by default: unset AUTH_LEGACY_FAST_PATH runs the fu
   });
 });
 
-// --- Differential harness: fast path vs full lookup must agree on userId ---
-//
-// Same cookie input, same Better Auth mock, run once per flag value; the
-// only permitted divergence is the row-3 source label (dead field today).
 
 const differentialCells = [
   {

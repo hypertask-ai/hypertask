@@ -13,7 +13,6 @@ import {
   parseMyTasksViewConfig,
 } from "../src/models/MyTasksView";
 
-// Monday 14 Sep 2026, midday local — week is Mon–Sun.
 const NOW = new Date(2026, 8, 14, 12, 0, 0);
 
 test("due-time grouping is permanent and saved board grouping is preserved", () => {

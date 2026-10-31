@@ -151,7 +151,6 @@ test("remounted attachments remain removable and an empty snapshot stays empty",
 });
 
 test("removing the second reloaded description attachment saves the remaining file once", async () => {
-  // Task-detail responses omit createdAt and taskId on stored attachments.
   const first = { id: 23, name: "first.txt", type: "text/plain", size: "5", source: "https://example.com/first.txt" };
   const second = { id: 24, name: "second.txt", type: "text/plain", size: "6", source: "https://example.com/second.txt" };
   const { snapshot, callback, getSnapshot } = roundTrip([

@@ -38,7 +38,6 @@ const renderRow = (isMobile, statusText = "Saved") => renderToStaticMarkup(evalu
 const checkNoUtilityActions = (markup) => assert.doesNotMatch(markup, /Version|Delete|Trash2/);
 
 test("the Settings-style row renders only on mobile, using the original return flow", () => {
-  // Settings "Back to app" look, with the shared 44px phone target and 4px corners.
   assert.match(mobileRow, /MOBILE_TARGET,/);
   assert.match(mobileRow, /min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black/);
   assert.match(mobileRow, /<ArrowLeft strokeWidth=\{1\.75\} className="h-4 w-4 shrink-0" \/>/);

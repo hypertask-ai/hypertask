@@ -1,11 +1,3 @@
-// HTPR-4504: tapping the boards icon on a task detail page opened a thin,
-// unusable strip at the bottom instead of a Boards panel.
-//
-// Cause: MobileTitleSheet read the boards list from the React Query CACHE only.
-// That cache is warmed on inbox and filled on the board page, but nothing loads
-// it on task detail — so the list was empty, the sheet had no rows, and it
-// collapsed to its own padding. Nothing was broken about the slide-out itself,
-// which is why it looked like a CSS bug.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -55,8 +47,6 @@ test("the sheet fetches an independent account-scoped accessible board list", ()
 });
 
 test("the sheet never renders an empty body", () => {
-  // A zero-height list reads as a broken control. A line of text is a state the
-  // user can understand.
   assert.ok(
     /boards\.length === 0/.test(sheet),
     "the sheet must handle the empty case explicitly",
@@ -191,8 +181,6 @@ test("a failed refresh retains an already-authorized local board", async () => {
     queryClient.fetchQuery({
       queryKey,
       queryFn: async () => {
-        // Fresh authorization publishes the prepared snapshot while this
-        // network query is still in flight.
         queryClient.setQueryData(queryKey, localBoard, { updatedAt: 0 });
         await Promise.resolve();
         throw new Error("Active board payload unavailable");

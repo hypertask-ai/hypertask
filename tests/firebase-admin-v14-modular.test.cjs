@@ -1,8 +1,3 @@
-// HTPR-6544: firebase-admin 12.7.0 -> 14.4.0. v14 removed the namespaced
-// default-import API (admin.app / admin.apps / admin.credential / admin.messaging),
-// which is what made Dependabot's lockfile-only PR fail typecheck. This test
-// pins 14.x and drives the real wrapper through the modular entry points so the
-// next npm install cannot silently restore the old call sites.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

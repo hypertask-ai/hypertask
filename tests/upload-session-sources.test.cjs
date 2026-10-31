@@ -6,15 +6,6 @@ const Module = require("node:module");
 const { Readable } = require("node:stream");
 const ts = require("typescript");
 
-// HTPR-5520: /api/tasks/n8nUpload authenticated against the legacy ht_session
-// cookie only. That cookie is minted once at login with a fixed expiry and is
-// never refreshed, while the Better Auth session rolls forward on each day of
-// use. A user active past the legacy lifetime therefore stayed signed in
-// everywhere except uploads, which returned 401 — attachments failed in
-// comments and descriptions while text-only comments still posted.
-//
-// The session resolver and storage are injected so this exercises the route's
-// real auth branch without loading Prisma or reaching S3.
 
 process.env.SESSION_SECRET ||= "upload-session-test-secret";
 
@@ -112,8 +103,6 @@ function responseRecorder() {
   };
 }
 
-// One small text file over a real Readable, so raw-body consumes the request
-// exactly as it does in production.
 function uploadRequest({ cookies = {}, cookieHeader, purpose } = {}) {
   const boundary = "upload-boundary";
   const body = Buffer.concat([
@@ -148,7 +137,6 @@ test("upload accepts a Better Auth session when ht_session has expired", async (
   assert.deepEqual(res.body.fileUrls, [UPLOADED_URL]);
   assert.equal(uploaded.length, 1);
   assert.equal(uploaded[0].fileName, "t.txt");
-  // The resolver must receive the request's real headers, not an empty set.
   assert.equal(seenHeaders.length, 1);
   assert.match(seenHeaders[0].get("content-type"), /multipart\/form-data/);
 });

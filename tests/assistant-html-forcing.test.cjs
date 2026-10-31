@@ -17,11 +17,6 @@ const { normalizeAssistantHtml } = loadTs(
   "src/utils/helperFunctions/normalizeAssistantHtml.ts"
 );
 
-// WHY: the AI chat writes comments, drafts and descriptions straight into Tiptap, which
-// renders stored HTML verbatim. Any markdown that survives is shown to the user as literal
-// asterisks and dashes. Telling the model "reply in HTML" does not hold — it drifts back to
-// markdown mid-answer — so conversion has to be guaranteed here, not requested upstream.
-// Ref HTPR-4687.
 
 test("markdown is converted, not passed through as literal asterisks", () => {
   const html = normalizeAssistantHtml(
@@ -32,9 +27,6 @@ test("markdown is converted, not passed through as literal asterisks", () => {
   assert.ok(!html.includes("**"), `raw markdown survived: ${html}`);
 });
 
-// The regression that made this necessary: the old implementation returned early as soon as
-// it saw one block tag, so a response that opened in HTML and continued in markdown kept the
-// markdown raw. Models mix the two constantly, so this is the normal case, not an edge case.
 test("a mixed HTML + markdown response converts the markdown and keeps the HTML", () => {
   const html = normalizeAssistantHtml(
     "<p>Thanks Hicham!</p>\n\nHere are the tests:\n- **INNE-1447**: offer call"
@@ -49,17 +41,12 @@ test("HTML that is already correct is left alone", () => {
   assert.equal(normalizeAssistantHtml(source), source);
 });
 
-// A fenced answer must not become a visible code block: the user asked for a comment, not a
-// listing of its markup.
 test("a whole-string ```html fence is unwrapped rather than rendered as code", () => {
   const html = normalizeAssistantHtml("```html\n<p>hello</p>\n```");
   assert.equal(html, "<p>hello</p>");
   assert.ok(!html.includes("<code"), `fence was rendered as code: ${html}`);
 });
 
-// The forcing pass must not eat the thing the user actually asked for. "Give me the
-// command" is the most common request an AI chat gets, and an unanchored fence rule
-// stripped the fences off a whole answer and swallowed the prose between two code blocks.
 test("a message containing two code blocks keeps both, and the prose between them", () => {
   const html = normalizeAssistantHtml(
     "```bash\nnpm install\n```\n\nThen run:\n\n```bash\nnpm test\n```"
@@ -74,8 +61,6 @@ test("a non-html fence stays a code block instead of being unwrapped", () => {
   assert.match(html, /<pre><code class="language-bash">npm i/);
 });
 
-// Models pretty-print nested HTML. Four leading spaces is markdown's indented-code-block
-// syntax, which would turn the model's own markup into tags the user can read.
 test("indented HTML is not escaped into a visible code block", () => {
   const html = normalizeAssistantHtml("<p>intro</p>\n\n    <p>indented</p>");
   assert.ok(!html.includes("&lt;p&gt;"), `HTML was escaped into text: ${html}`);
@@ -88,8 +73,6 @@ test("task-list checkboxes survive as checkboxes", () => {
   assert.match(html, /<input checked/);
 });
 
-// Mentions are resolved to spans before this runs, and a mangled span means a silently
-// missing notification rather than a visibly wrong comment.
 test("an already-resolved @mention span passes through untouched", () => {
   const span =
     '<span data-type="mention" class="mention" data-id="42" data-label="O\'Brien">O\'Brien</span>';
@@ -99,8 +82,6 @@ test("an already-resolved @mention span passes through untouched", () => {
   assert.match(html, /<strong>item<\/strong>/);
 });
 
-// The chat bubble path (MessageItem) calls this directly with whatever the model streamed,
-// so newline normalisation has to live here rather than at the storage call site.
 test("a CRLF ```html fence is still unwrapped", () => {
   assert.equal(normalizeAssistantHtml("```html\r\n<p>hi</p>\r\n```"), "<p>hi</p>");
 });

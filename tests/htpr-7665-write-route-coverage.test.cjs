@@ -1,4 +1,3 @@
-// HTPR-7665: every non-GET MCP handler must be role-guarded, on an allowlist with a reason, or refuse agent tokens before any write.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { writeHandlers, GUARD_CALL, WRITE_GUARD_CALL, exists, read } = require("./helpers/mcp-write-handlers.cjs");

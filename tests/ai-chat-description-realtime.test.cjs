@@ -35,7 +35,6 @@ function findNode(predicate) {
   return found;
 }
 
-// Execute the route's actual tool closure without loading unrelated chat providers.
 function loadExecute(toolName, dependencies) {
   const tool = findNode((node) =>
     ts.isPropertyAssignment(node) && node.name.getText(route) === toolName,

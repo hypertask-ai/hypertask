@@ -10,7 +10,6 @@ const jiti = require('jiti')(__filename, {
 })
 const { parsePriorityFilter } = jiti(path.join(root, 'src/lib/mcp/priorityFilter.ts'))
 
-// HTPR-6799: `hypertask tasks list --priority urgent` sends priority=1 and got nothing.
 test('priority numbers from the CLI resolve to the stored index', () => {
   assert.deepEqual(parsePriorityFilter(['1']), [1])
   assert.deepEqual(parsePriorityFilter(['1', '2']), [1, 2])

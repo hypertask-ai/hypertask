@@ -1,7 +1,3 @@
-// HTPR-5113: AI chat must expose the same task-description history behavior
-// as MCP without calling the app's own authenticated MCP endpoints. This repo
-// has no database test harness, so these assertions guard the route wiring and
-// authorization order at the source level.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

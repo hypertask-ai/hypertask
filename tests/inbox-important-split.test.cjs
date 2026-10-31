@@ -37,7 +37,6 @@ const tabIndices = (notifications, splitsNoImportant = []) => {
   return Object.fromEntries(tabs.map((tab) => [tab.project, data[tab.idx]]));
 };
 
-// HTPR-4940: per-split duplication into Important defaults on and can be muted.
 test("mention in a muted project split stays in its home split only", () => {
   const mention = notif({ type: "Mentioned" });
   const projectKey = getInboxSplitKey({ project: "Product", projectId: 15 });
@@ -82,7 +81,6 @@ test("muting one project split does not affect another", () => {
   assert.deepEqual(tabs.Important, [1]);
 });
 
-// HTPR-4712: Important is only for things waiting on you.
 test("agent property change lands in the Agents split, not Important", () => {
   assert.deepEqual(
     splitOf(notif({ type: "TaskDueDate", fromAgentId: "agent-1", agentOnlyTypes: ["TaskDueDate"] })),
@@ -250,8 +248,6 @@ test("human comment stays Important", () => {
   assert.deepEqual(splitOf(notif({ type: "Comment", agentOnlyTypes: [] })), ["Important"]);
 });
 
-// The agent's comment outranks Assigned in split order, but demoting on it would bury a
-// real human assignment, so the chore must be skipped when picking the effective type.
 test("agent comment does not drag a human event out of Important", () => {
   assert.deepEqual(
     splitOf(
@@ -266,7 +262,6 @@ test("agent comment does not drag a human event out of Important", () => {
   );
 });
 
-// HTPR-4769: Important = names you, on a task still alive.
 const aliveTask = (over) => ({
   status: "Normal",
   section: "Doing",
@@ -321,7 +316,6 @@ test("stale task (22 days without human activity) demotes Important to Updates",
         agentOnlyTypes: [],
         userId: 6,
         task: aliveTask({
-          // bot bumps keep updatedAt fresh; the clock ignores it
           updatedAt: new Date().toISOString(),
           sectionChangedAt: new Date(Date.now() - 22 * 864e5).toISOString(),
           assignees: [{ userId: 6 }],
@@ -374,7 +368,6 @@ test("Done column demotes Important, but a mention newer than the move survives"
   );
 });
 
-// Stale split: only on boards with staleness tracking on; Updates elsewhere.
 test("stale task on a staleness-enabled board lands in Stale", () => {
   assert.deepEqual(
     splitOf(
@@ -442,7 +435,6 @@ test("rows without task data behave exactly as before (agent inbox fallback)", (
   assert.deepEqual(splitOf(notif({ type: "Comment", agentOnlyTypes: [], userId: 6 })), ["Important"]);
 });
 
-// The agent touched the same task, but a human wrote the comment: it must not be demoted.
 test("human comment is not demoted when an agent also touched the task", () => {
   assert.deepEqual(
     splitOf(

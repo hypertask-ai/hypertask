@@ -1,10 +1,3 @@
-// Assert-based test because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx tests/task-move-opaque-error.test.ts
-//
-// HTPR-6224: a failed internal moveTask call reached the CLI as a bare
-// "Failed to move task" (or "Failed to update task") with no reason. When the
-// internal response carries no readable JSON body, the surfaced error must
-// name the HTTP status instead; when it carries a message, that message wins.
 import assert from 'node:assert/strict'
 import { generateKeyPairSync } from 'node:crypto'
 import { NextRequest } from 'next/server'
@@ -72,8 +65,6 @@ async function main() {
       projectId: 20,
     })
 
-    // Case 1: the internal move endpoint dies without a readable JSON body.
-    // The error must carry the HTTP status, not a fabricated bare message.
     globalThis.fetch = async (input) => {
       const url = typeof input === 'string' ? input : input.toString()
       assert.ok(
@@ -92,7 +83,6 @@ async function main() {
       'Failed to update 1 task(s). Move task failed: 500'
     )
 
-    // Case 2: a readable failure reason must survive every hop untouched.
     globalThis.fetch = async () =>
       new Response(JSON.stringify({ message: 'Section locked by a QA hold' }), {
         status: 409,

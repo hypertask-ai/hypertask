@@ -30,7 +30,6 @@ const revokedAccessTokens = []
 let authorizationCodeUsed = false
 let claimedOwnerId = null
 const clientLocks = []
-// Runs once after a refresh-row read is snapshotted, to race another request in.
 let afterNextRefreshRead = null
 
 const authCode = {
@@ -220,8 +219,6 @@ function formRequest(pathname, values) {
 }
 
 test('Android receives a hashed, rotating, revocable OAuth session', async () => {
-  // Set the fixture when the exchange begins: top-level route imports can be
-  // queued behind other test workers for longer than an OAuth code lifetime.
   authCode.expires_at = new Date(Date.now() + 10 * 60_000)
   const initialResponse = await exchangeToken(formRequest('/oauth/token', {
     grant_type: 'authorization_code',
@@ -356,7 +353,6 @@ test('a refresh token replayed concurrently still revokes the winning successor'
   })
 
   let winner
-  // The loser reads the row while it is still active, then the winner rotates it.
   afterNextRefreshRead = async () => {
     const response = await exchangeToken(formRequest('/oauth/token', {
       grant_type: 'refresh_token',

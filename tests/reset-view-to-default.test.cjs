@@ -117,7 +117,6 @@ function loadRoute({
       cache: false,
     },
   );
-  // The Pages file is a thin adapter over the shared handler, which owns the helpers.
   const adapter = jiti(
     path.join(root, "src/pages/api/projects/views/reset-to-default.ts"),
   );

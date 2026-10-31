@@ -347,7 +347,6 @@ test("failed task create traces are explicitly incomplete", () => {
 });
 
 test("the global task route keeps noncritical work out of the response path", () => {
-  // The deferred work moved into create-global-effects.ts with the shared handler.
   const source = [
     "src/lib/api/task-writes/create-global.ts",
     "src/lib/api/task-writes/create-global-effects.ts",
@@ -419,7 +418,6 @@ test("the global task route validates the claimed agent actor", () => {
   );
 
   assert.match(source, /agentId: requestedAgentId/);
-  // The shared route wrapper authenticates and passes the session in.
   assert.match(source, /operation: async \(body, session, request\)/);
   assert.match(source, /userId: requestedUserId/);
   assert.match(source, /const userId = session\.userId/);

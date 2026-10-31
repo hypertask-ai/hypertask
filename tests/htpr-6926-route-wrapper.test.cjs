@@ -96,7 +96,6 @@ function harness({ legacy = false, count = 1, revoked = false, agent = false, us
     counts: () => ({ authCalls, verifyCalls, connections }) }
 }
 
-// HTPR-6965: Server-Timing carries live durations, so wire comparisons leave it out.
 const withoutTiming = headers => [...headers].filter(([name]) => name !== 'server-timing')
 
 async function quiet(run) {

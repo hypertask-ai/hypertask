@@ -14,7 +14,6 @@ function stub(relativePath, exports) {
 
 stub("src/lib/prisma.ts", { default: { project: { findUnique: async ({ where }) => {
   projectLookups++;
-  // Prisma rejects a NaN id with PrismaClientValidationError, which the route turned into a 500.
   if (!Number.isInteger(where.id)) throw new Error("PrismaClientValidationError");
   return null;
 } } } });

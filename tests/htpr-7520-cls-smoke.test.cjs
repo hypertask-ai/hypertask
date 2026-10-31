@@ -27,7 +27,7 @@ test('in-flow desktop composer measurement compensates for scrolling but catches
 });
 
 test('first-load smoke attaches shift evidence before asserting unchanged budgets', () => {
-  const firstLoad = spec.slice(spec.indexOf("test('layout lock: ticket page first load"), spec.indexOf('// HTPR-7116:'));
+  const firstLoad = spec.slice(spec.indexOf("test('layout lock: ticket page first load"), spec.indexOf("test('layout lock: phone ticket opened from a board card"));
   assert.match(spec, /const CLS_BUDGET = 0\.05/);
   assert.match(firstLoad, /toBeLessThanOrEqual\(24\)/);
   assert.match(firstLoad, /toBeLessThanOrEqual\(CLS_BUDGET\)/);

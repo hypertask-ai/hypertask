@@ -1,5 +1,3 @@
-// HTPR-7177: a signed-in user who is not a member or owner of a board must
-// not be able to add labels to it or change labels on its tasks.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

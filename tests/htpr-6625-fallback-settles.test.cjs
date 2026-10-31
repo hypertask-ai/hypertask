@@ -1,5 +1,3 @@
-// HTPR-6625: a failed planning refresh must not release the poll guard
-// while the board refresh is still running.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");

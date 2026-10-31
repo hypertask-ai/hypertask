@@ -16,9 +16,6 @@ test("tasks/move adopts a mutation lease and releases it after the write (HTPR-6
   );
   assert.doesNotMatch(source, /withAgentMutationLeaseAdoption/);
 
-  // The move write must be the direct callback of withAdoptedAgentMutationLease.
-  // That helper adopts for the request and releases the exact token afterward,
-  // so a following exclusive claim does not wait for TTL expiry after assign+move.
   const wrappedCallPattern =
     /withAdoptedAgentMutationLease\(\s*prisma,\s*\{ agentId: ctx\.agentId, userId: currentUser\.id \},\s*\(\)\s*=>[\s\S]{0,40}?moveTaskToDifferentBoard\(/g;
   const moveCalls = source.match(/moveTaskToDifferentBoard\(/g) ?? [];

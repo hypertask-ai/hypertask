@@ -23,10 +23,6 @@ const persistFrequentEmojis = () => {
   }, 800);
 };
 
-/**
- * Singleton loader that ensures emoji data is only loaded once across the application
- * @returns {Promise} Promise that resolves when emoji data is loaded
- */
 export const loadEmojiData = () => {
   if (!emojiDataPromise) {
     emojiDataPromise = import('@emoji-mart/data').then(module => module.default);
@@ -34,10 +30,6 @@ export const loadEmojiData = () => {
   return emojiDataPromise;
 };
 
-/**
- * Singleton loader for emoji picker component
- * @returns {Promise} Promise that resolves when emoji picker is loaded
- */
 export const loadEmojiPicker = () => {
   if (!emojiPickerPromise) {
     emojiPickerPromise = import('@emoji-mart/react').then(module => module.default);

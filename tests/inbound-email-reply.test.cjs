@@ -49,9 +49,6 @@ test("reply addresses bind one task and user without exceeding the local-part li
   assert.ok(address.split("@")[0].length <= 64);
 
   const [localPart, domain] = address.split("@");
-  // Flip the FIRST signature character, not the last: a base64url tail
-  // character carries unused low bits, so changing it can decode to the same
-  // bytes and leave the tamper undetected.
   const signatureAt = localPart.length - 22;
   const tampered = `${localPart.slice(0, signatureAt)}${localPart[signatureAt] === "a" ? "b" : "a"}${localPart.slice(signatureAt + 1)}@${domain}`;
   assert.equal(verifyInboundReplyAddress(tampered), null);
@@ -552,8 +549,6 @@ test("reply addresses expire so a leaked notification cannot impersonate forever
     Date.now = realNow;
   }
 
-  // A notification forwarded out of the mailbox stops working once the stamp
-  // ages out, and a forged future stamp cannot buy a longer-lived credential.
   assert.equal(verifyInboundReplyAddress(stale), null);
   assert.equal(verifyInboundReplyAddress(future), null);
   assert.deepEqual(verifyInboundReplyAddress(recent), {

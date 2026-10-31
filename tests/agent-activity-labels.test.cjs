@@ -10,12 +10,6 @@ const source = fs.readFileSync(
 );
 const detailSource = readAgentDetailSource();
 
-// Activity rows are read by board owners, not by agent authors, so the label
-// has to name the event in product language. "Ran a turn" (HTPR-5473) is
-// internal agent-loop vocabulary and told the reader nothing.
-// Its first replacement, "Called the model", was the same mechanism jargon.
-// The column header is "Did", so every label reads as a plain past-tense
-// action the agent took.
 test("model-usage rows are labelled in user-facing language", () => {
   assert.match(source, /did: "Thought about the work"/);
   assert.doesNotMatch(source, /Ran a turn/);

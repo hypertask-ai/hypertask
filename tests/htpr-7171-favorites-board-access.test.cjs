@@ -1,4 +1,3 @@
-// HTPR-7171: favorites can only hold, and only show, boards the user can open.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -20,7 +19,6 @@ function load(relPath, stubs) {
   return mod.exports;
 }
 
-// Stand-in for the real board ACL: user 7 can open boards 1 and 2 only.
 const ACCESS = { 7: new Set([1, 2]) };
 const projectWhere = { getProjectWhere: (userId) => ({ acl: userId }) };
 

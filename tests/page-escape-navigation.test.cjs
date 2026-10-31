@@ -42,7 +42,6 @@ const mocks = {
   }) },
 };
 
-// Run the real page component and navigation helpers, mocking only external UI/hooks.
 function load(relativePath) {
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const target = { exports: {} };

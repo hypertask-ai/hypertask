@@ -1,8 +1,3 @@
-// HTPR-5568: a client that interpolated an undefined variable into a JSON
-// template sent `{"task_id":,"title":""}` to /api/mcp/tasks/update. The route
-// called request.json() unguarded, so the SyntaxError escaped as a server
-// error instead of telling the caller its payload was malformed. Every MCP
-// write route now reads its body through readJsonBody, which answers 400.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -31,7 +26,6 @@ test('the exact malformed payload from production answers 400, not a crash', asy
   const payload = await result.response.json();
   assert.equal(payload.success, false);
   assert.equal(payload.field, 'body');
-  // The caller has to be able to tell a malformed payload from a rejected one.
   assert.match(payload.error, /not valid JSON/i);
 });
 
@@ -56,11 +50,6 @@ test('a well-formed object still reaches the route unchanged', async () => {
 });
 
 test('every MCP route body parse is guarded, and every guard is returned', () => {
-  // A regex sweep misses a multiline or aliased parse, so the source is walked
-  // with the TypeScript AST the build already depends on. Invoking the real
-  // route handlers is not viable here: importing any /api/mcp route pulls in
-  // the Firebase admin client, which refuses to load without a real
-  // service-account key.
   const ts = require('typescript');
   const unguardedParses = [];
   const unreturnedGuards = [];
@@ -94,7 +83,6 @@ test('every MCP route body parse is guarded, and every guard is returned', () =>
       ts.isIdentifier(node.expression.expression) &&
       /^(request|req)$/.test(node.expression.expression.text);
 
-    // `request.json().catch(...)` never throws, so it is already guarded.
     const isCaught = (node) => {
       let current = node.parent;
       while (current) {
@@ -110,8 +98,6 @@ test('every MCP route body parse is guarded, and every guard is returned', () =>
       return false;
     };
 
-    // A guard nobody returns is not a guard: the malformed body would fall
-    // through into the handler with an undefined payload.
     const guardIsReturned = (call) => {
       const declaration = ts.isAwaitExpression(call.parent)
         ? call.parent.parent

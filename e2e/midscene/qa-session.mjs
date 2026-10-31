@@ -11,7 +11,6 @@ export async function api(page, route, method = 'GET', body, { retryNetworkError
   if (new URL(page.url()).origin !== APP_ORIGIN || !route.startsWith('/api/')) {
     throw new Error('QA API requests must stay on the production app origin');
   }
-  // Omit query strings and bodies: upload grants and auth responses can contain secrets.
   const request = `${method} ${APP_ORIGIN}${route.split('?')[0]}`;
   const attempts = retryNetworkErrors ? 3 : 1;
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -26,7 +25,6 @@ export async function api(page, route, method = 'GET', body, { retryNetworkError
             ...(body === undefined ? {} : { body: JSON.stringify(body) }),
           });
         } catch (err) {
-          // Chromium's fetch rejection is distinct from evaluation/application errors.
           if (err instanceof TypeError && err.message === 'Failed to fetch') {
             return { networkError: err.message };
           }
@@ -41,7 +39,6 @@ export async function api(page, route, method = 'GET', body, { retryNetworkError
     if (response.networkError) {
       const message = `${request} failed: status unavailable (${response.networkError}), attempt ${attempt}/${attempts}`;
       console.warn(message);
-      // A lost response may follow a successful delete; do not delete again or mask HTTP errors.
       if (retryNetworkErrors && confirmAbsent && await confirmAbsent()) return;
       if (attempt === attempts) throw new Error(message);
       await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (attempt - 1)));
@@ -67,15 +64,12 @@ export function assertQaBoard(identity, project, members) {
 export async function signIn(page) {
   const statePath = process.env.MIDSCENE_STORAGE_STATE || path.join(homedir(), '.config/hypertask-videos/storageState-qa-normal.json');
   const state = JSON.parse(await readFile(statePath, 'utf8'));
-  // Never import Google cookies, MCP tokens, or persisted account-switcher state.
   const cookies = state.cookies.filter((c) =>
     ['app.hypertask.ai', '.hypertask.ai'].includes(c.domain) && c.name !== 'mcp_token');
   await page.setCookie(...cookies);
-  // A static same-origin page lets us validate identity before the app can create chat sessions.
   await page.goto(`${APP_ORIGIN}/favicon.ico`, { waitUntil: 'load', timeout: 60_000 });
   const bootstrap = await api(page, '/api/app-shell/bootstrap', 'POST');
   if (bootstrap.accountId !== QA_USER_ID) throw new Error('Storage state is not the plain QA account (2343)');
-  // The bootstrap's teams slice may time out. Use the app's normal fallback.
   const teams = bootstrap.slices?.teams?.ok
     ? bootstrap.slices.teams.data
     : await api(page, '/api/teams/getAll', 'POST');
@@ -121,7 +115,6 @@ export async function cleanupQa(page, fixture) {
   const errors = pending.filter((r) => r.status === 'rejected').map(() => 'Could not capture upload cleanup grant');
   const members = await api(page, `/api/members/getAllForAssignees?projectId=${fixture.project.id}`);
   assertQaBoard(QA_USER_ID, fixture.project, members);
-  // Exact run-unique title recovers creates whose HTTP response was lost.
   const matches = await findCreatedTask(page, fixture);
   if (fixture.tasks.some((id) => !matches.some((task) => task.id === id))) {
     throw new Error('Refusing cleanup of a task not matching this run on the private QA board');
@@ -133,12 +126,10 @@ export async function cleanupQa(page, fixture) {
     try {
       await api(page, `/api/tasks/deleteTask?taskId=${id}`, 'DELETE', undefined, {
         retryNetworkErrors: true,
-        // The board excludes soft-deleted tasks, so query the owned id directly.
         confirmAbsent: async () => await api(page, '/api/tasks/getTaskMinimal', 'POST', { id }) === null,
       });
     } catch (err) { errors.push(err.message); }
   }
-  // Permanent task deletion clears attachment rows but not storage objects.
   for (const upload of fixture.uploads) {
     try {
       await api(page, '/api/tasks/uploadFinalize', 'POST', { grant: upload.grant, discard: upload.keys }, { retryNetworkErrors: true });
@@ -170,7 +161,6 @@ export async function cleanupQaAfterFlow(page, fixture, stopObserving) {
     await page.goto(`${APP_ORIGIN}/favicon.ico`, { waitUntil: 'load', timeout: 30_000 });
   } catch (err) {
     errors.push(err.message);
-    // Closing React prevents deletion of a chat from creating its replacement.
     const context = page.browserContext();
     await page.close().catch((closeError) => errors.push(closeError.message));
     try {
@@ -194,11 +184,9 @@ export function observeFixtures(page, fixture) {
       }
       if (route === '/api/ai-chat/create-session' && body.session?.id) {
         const request = JSON.parse(response.request().postData() || '{}');
-        // Agent create-session is an upsert, not necessarily a new session we own.
         if (!request.agentId) fixture.sessions.push(body.session.id);
       }
     });
-    // Handle rejection now, but retain it so cleanup still fails closed.
     pending.catch(() => {});
     fixture.pending.push(pending);
   };
@@ -207,7 +195,6 @@ export function observeFixtures(page, fixture) {
 }
 
 export async function uploadFixture(page, fixture, selector) {
-  // The buffered fallback has no discard grant and would leave an unremovable QA object.
   const session = await page.createCDPSession();
   await session.send('Network.enable');
   await session.send('Network.setBlockedURLs', { urls: [`${APP_ORIGIN}/api/tasks/n8nUpload*`] });

@@ -1,16 +1,3 @@
-// HTPR-5090. Pressing A then Enter on an already-assigned agent did nothing.
-//
-// The board payload selects only { id, displayName, photoURL } for an
-// assignee's agent, so the assignee modal has no userId to send when the agent
-// is already on the task. /api/assignees/assign required userId and answered
-// 400, the optimistic toggle rolled back, and the chip stayed put.
-//
-// Assigning worked because an UNASSIGNED agent comes from boardAgents, which is
-// the full row and does carry userId. That asymmetry is the whole bug.
-//
-// HTPR-5381: this used to re-implement the guard in the test file, which could
-// pass while the route said something else. It now calls the real route handler
-// and also pins that a denied call performs no assignment.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -25,9 +12,6 @@ function stubModule(relativePath, exports) {
 const owner = { id: 6, email: "owner@example.test", displayName: "Owner" };
 const agentId = "ca30964f-b1a9-4164-84b7-39e91319a1ec";
 
-// Board 15 is the caller's; board 99 belongs to someone else. Which of the two
-// the route may see is decided by running its own project predicate against
-// these rows, so neither the fixture nor a restated copy of the rule decides it.
 const ownedTask = { id: 25995, projectId: 15 };
 const foreignTask = { id: 40001, projectId: 40 };
 const projects = [
@@ -35,9 +19,6 @@ const projects = [
   { id: foreignTask.projectId, teamId: "team-2", ownerId: 7, members: [] },
 ];
 
-// Just enough of Prisma's filter language to evaluate getProjectWhere: the
-// operators it actually emits, and nothing else. An unknown operator throws
-// rather than being quietly treated as a match.
 function projectMatches(project, where) {
   return Object.entries(where).every(([key, condition]) => {
     if (key === "OR") return condition.some((c) => projectMatches(project, c));
@@ -65,10 +46,6 @@ stubModule("src/lib/auth/getSessionUser.ts", {
 stubModule("src/lib/prisma.ts", {
   default: {
     user: { findUnique: async () => ({ ...owner, photoURL: null }) },
-    // HTPR-5381: honour the real `where` instead of answering from a flag. If
-    // the route ever drops `project: getProjectWhere(callerId)`, or scopes it
-    // to somebody else, this stub stops matching and the foreign-board test
-    // fails, which is the whole point of the guard.
     task: {
       findFirst: async ({ where }) => {
         assert.deepEqual(where.project, getProjectWhere(state.session.userId));
@@ -112,7 +89,6 @@ const { getProjectWhere } = jiti(
 );
 
 const route = jiti(path.join(root, "src/pages/api/assignees/assign.ts"));
-// jiti hands back the module namespace here, not the callable default.
 const handler = typeof route === "function" ? route : route.default;
 
 function mockResponse() {
@@ -139,15 +115,12 @@ async function post(body, { method = "POST" } = {}) {
   return result;
 }
 
-// What AssigneesContainer builds for an agent already on the task: the board
-// payload's agent select, with no userId.
 const assignedAgentFromBoardPayload = {
   id: agentId,
   displayName: "HT Desktop Developer",
   photoURL: null,
 };
 
-// What useAssignTaskUser posts for it.
 const bodyFor = (agentOrUser, taskId) =>
   typeof agentOrUser.id === "string"
     ? { agentId: agentOrUser.id, userId: agentOrUser.userId, taskId }

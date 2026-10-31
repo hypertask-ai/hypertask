@@ -1,6 +1,3 @@
-// HTPR-5197: holding Ctrl/Cmd+E on a kanban card repeatedly archived every
-// task the advancing focus selected. Browser key repeat must never repeat a
-// destructive shortcut, while a fresh press must still archive one task.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -28,8 +25,6 @@ test("Ctrl/Cmd+E archives only on the initial keydown", () => {
   );
 
   const preventDefaultAt = ctrlEBranch.indexOf("e.preventDefault()");
-  // The repeat check lives in the shared archive key-state guard, which also
-  // blocks platforms that deliver a held key as discrete presses.
   const repeatGuardAt = ctrlEBranch.indexOf("shouldRunArchiveShortcut(");
   const archiveAt = ctrlEBranch.indexOf("markAsDone(");
 

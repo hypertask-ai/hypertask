@@ -7,9 +7,6 @@ const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 
-// HTPR-6751: the AI chat auto-opens on desktop boards. Loading the chat used to
-// swap the frame around the page, so React remounted the whole board and its
-// columns vanished until the board data was fetched again.
 const root = path.resolve(__dirname, "..");
 const chatContextModule = { exports: {} };
 const frameModule = { exports: {} };

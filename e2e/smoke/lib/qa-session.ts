@@ -6,7 +6,6 @@ export async function renewQaSession(baseURL: string, storageState: string) {
   const email = process.env.QA_LOGIN_EMAIL
   const password = process.env.QA_LOGIN_PASSWORD
   if (!email || !password) throw new Error('QA login credentials are missing')
-  // No saved cookies: this flow can only issue the server-pinned QA identity.
   const context = await request.newContext({ baseURL })
   try {
     const login = await context.post('/api/auth/qa-login', { data: { email, password }, timeout: 20_000 })

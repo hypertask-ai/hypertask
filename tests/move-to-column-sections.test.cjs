@@ -28,9 +28,6 @@ const boardColumns = [
 const titles = (columns) => columns.map((column) => column.section_title);
 
 test("a saved view with no stored columns still lists the board's columns", () => {
-  // The production incident: the applied view "Tracking" was created with a
-  // null board_columns_view, so every column of that board disappeared from
-  // the move dialog. A view that stores no columns overrides nothing.
   const columns = resolveMoveToColumnSections({
     defaultColumns: boardColumns,
     activeColumns: null,
@@ -43,8 +40,6 @@ test("a saved view with no stored columns still lists the board's columns", () =
 });
 
 test("the active view decides which of the board's columns read as hidden", () => {
-  // This is the reason the reconciliation exists at all: a column the active
-  // view does not carry is offered as a move target, marked hidden.
   const columns = resolveMoveToColumnSections({
     defaultColumns: boardColumns,
     activeColumns: [
@@ -77,8 +72,6 @@ test("the board default view is used as-is, with no reconciliation", () => {
 });
 
 test("a board whose default view stores no columns falls back to its sections", () => {
-  // A board with no project_view or no default view row at all: the Section
-  // table is the only remaining truth about which columns exist.
   for (const defaultColumns of [null, undefined, [], { corrupted: true }]) {
     const columns = resolveMoveToColumnSections({
       defaultColumns,
@@ -91,8 +84,6 @@ test("a board whose default view stores no columns falls back to its sections", 
     });
 
     assert.deepEqual(titles(columns), ["Backlog", "Shipped"]);
-    // Visibility is unknowable without a view, and a column the dialog cannot
-    // offer is worse than one wrongly drawn without the hidden-eye marker.
     assert.ok(columns.every((column) => column.visibility === true));
   }
 });

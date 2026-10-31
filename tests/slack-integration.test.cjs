@@ -460,16 +460,11 @@ test("Slack project scope keeps the install's team even though getProjectWhere c
 
   const where = slackAccessibleProjectWhere("team-a", 42);
 
-  // The install's team must survive composition. A spread would replace
-  // `teamId: "team-a"` with getProjectWhere's `teamId: { not: null }`,
-  // exposing every other team this user belongs to.
   assert.ok(Array.isArray(where.AND), "composition must use AND, not a spread");
   const teamClause = where.AND.find((clause) => clause.teamId === "team-a");
   assert.ok(teamClause, "the install's teamId must still be enforced");
   assert.equal(teamClause.status, "Normal");
 
-  // Under Prisma AND semantics every clause applies, so the pinned team is
-  // enforced regardless of the "any team" clause getProjectWhere contributes.
   assert.equal(
     where.AND.filter((clause) => clause.teamId === "team-a").length,
     1,
@@ -681,8 +676,6 @@ test("truncates Slack transcripts from the head and keeps recent messages", () =
 });
 
 test("Slack manifest covers commands, chat events, and required scopes", () => {
-  // HTPR-4857: the scope list now lives in the shared authorize module used by
-  // both the Settings install route and the public /add-to-slack page.
   const authorizeModule = fs.readFileSync(
     path.join(root, "src/lib/slack/authorize.ts"),
     "utf8",

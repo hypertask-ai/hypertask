@@ -85,7 +85,6 @@ for (const enabled of [false, true]) {
     assert.deepEqual(payload.linkedTasks.map((task) => task.id), enabled ? [10, 11] : [10]);
     assert.deepEqual(payload.subPages.map((page) => page.publicId).sort(), enabled ? ['legacy-child', 'visible-child'] : ['legacy-child']);
     assert.equal(flagReads, 1);
-    // Exercise the explicit raw-origin redirect with a sanitized non-null legacy task response.
     h.prisma.page.findUnique = async () => ({ taskId: null });
     rawOriginOnly = true;
     flagReads = 0;

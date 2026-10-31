@@ -114,7 +114,6 @@ test('review discovery uses a conditional list request and rescans only changed 
   await mkdir(stateRoot)
   await Promise.all([writeFile(curlConfig, 'silent\n'), writeFile(listFile, listOf('2026-10-11T07:01:00Z'))])
 
-  // Fake GitHub: serves the list from LIST_FILE with ETag "v1"; answers 304 when If-None-Match matches.
   const curlStub = join(bin, 'curl')
   await writeFile(
     curlStub,
@@ -156,26 +155,22 @@ cat "$LIST_FILE"
   const dispatched = async () => (await readFile(dispatchLog, 'utf8').catch(() => '')).trim().split('\n').filter(Boolean)
   const curlCalls = async () => (await readFile(curlLog, 'utf8')).trim().split('\n').length
 
-  // Scan 1: full list (200), both PRs are new.
   let { stdout } = await execFileAsync(dispatchScan, { env })
   assert.match(stdout, /list_status=200 rescanned_prs=2 skipped_prs=0 ratelimit_remaining=4991/)
   assert.equal((await dispatched()).length, 2)
   assert.doesNotMatch(await readFile(curlLog, 'utf8'), /If-None-Match/)
 
-  // Scan 2: nothing changed. The list call answers 304 and no PR is rescanned.
   ;({ stdout } = await execFileAsync(dispatchScan, { env }))
   assert.match(stdout, /list_status=304 rescanned_prs=0 skipped_prs=2 ratelimit_remaining=4990/)
   assert.equal((await dispatched()).length, 2)
   assert.equal(await curlCalls(), 2)
   assert.match(await readFile(curlLog, 'utf8'), /If-None-Match: \S+/)
 
-  // Scan 3: PR 202 got an update. Only that PR is rescanned.
   await writeFile(listFile, listOf('2026-10-11T07:05:00Z'))
   ;({ stdout } = await execFileAsync(dispatchScan, { env }))
   assert.match(stdout, /list_status=200 rescanned_prs=1 skipped_prs=1/)
   assert.deepEqual((await dispatched()).slice(2), [`202\t${shaB}`])
 
-  // Scan 4: unchanged again but the recheck window has passed (0 seconds), so retries still happen.
   ;({ stdout } = await execFileAsync(dispatchScan, { env: { ...env, HYPERTASK_REVIEW_RECHECK_SECONDS: '0' } }))
   assert.match(stdout, /list_status=304 rescanned_prs=2 skipped_prs=0/)
   assert.doesNotMatch(stdout + (await readFile(curlLog, 'utf8')), /ghp_|Bearer/)

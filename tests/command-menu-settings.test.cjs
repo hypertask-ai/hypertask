@@ -14,7 +14,6 @@ const { areGlobalShortcutsEnabled } = jiti(path.join(root, "src/lib/keyboard/glo
 const { CommandMode } = jiti(path.join(root, "src/models/enums.ts"));
 const provider = "src/components/ProviderGlobal/GloablProviders.tsx";
 
-// Execute the actual JSX and effect callbacks without booting unrelated API/auth providers.
 function findNode(file, predicate) {
   const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let found;
@@ -92,7 +91,6 @@ for (const [name, isApple, modifiers] of [["Ctrl", false, { ctrlKey: true }], ["
   test(`${name}+K works from settings search once, consumes competing handlers, and toggles closed`, () => {
     const page = keyboardFixture("/settings/profile", isApple);
     try {
-      // A route's bubble listener may register before the shell's listener.
       let competingCalls = 0;
       page.document.addEventListener("keydown", () => { competingCalls++; });
       const first = page.press("k", modifiers);

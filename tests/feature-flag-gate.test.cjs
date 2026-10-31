@@ -28,7 +28,6 @@ function flagsSource(definitions = ["OTHER_FLAG"], mode = "OWNER_AND_QA", suffix
 function makeRepo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  // Synthetic commits test gate semantics, not workstation Git configuration.
   const git = (args) => execFileSync("git", args, {
     cwd: dir, encoding: "utf8",
     env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: os.devNull },
@@ -1465,7 +1464,6 @@ test("bugfix registry kind permits Everyone while feature and improvement defaul
     writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
     const head = commit(git, "kind defaults");
     assert.equal((await evaluate("HTPR-1 [FEATURE] gated widget", base, head, dir)).pass, true, kind);
-    // Neither a feature nor an exempt bugfix title may widen the feature default.
     writeFile(dir, "src/lib/flags.ts", source.replace('DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"', 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE"'));
     const widened = commit(git, "invalid feature default");
     for (const tag of ["FEATURE", "BUGFIX", "INFRA"]) {
@@ -1515,7 +1513,6 @@ test("extracted definitions accept new flags for COST UI PRs and legacy rebases"
     const head = commit(git, "flagged cost UI");
     const result = await evaluate("HTPR-7038 [COST] change widget", base, head, dir);
     assert.equal(result.pass, true, result.reason);
-    // Resolve a rebase by keeping the definitions in the legacy location instead.
     writeFile(dir, "src/lib/flags/definitions.ts", 'export type FeatureFlagKind = "feature";\n');
     writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", "COST_FLAG"]).replace("{ OTHER_FLAG }", "{ OTHER_FLAG, COST_FLAG }"));
     const rebased = commit(git, "legacy conflict resolution");

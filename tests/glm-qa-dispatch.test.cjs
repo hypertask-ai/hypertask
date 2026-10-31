@@ -1,8 +1,3 @@
-// HTPR-6239 — focused checks for the GLM post-deploy QA dispatch: the script's
-// pure helpers (ticket parsing, screen mapping, brief construction, escaping)
-// exercised via import of the .mjs module, plus source-level guards that the
-// workflow's glm-qa job stays exploratory (gated on smoke, never rolls back).
-
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
@@ -18,7 +13,6 @@ test("the pull request title yields the deploy ticket number", async () => {
     6197,
   );
   assert.equal(parseTicketNumber("Revert \"accidental push\" (#401)"), null);
-  // Token boundaries: lookalikes and glued text must never match.
   assert.equal(parseTicketNumber("XHTPR-123 fix the thing"), null);
   assert.equal(parseTicketNumber("HTPR-123abc fix the thing"), null);
   assert.equal(parseTicketNumber(""), null);
@@ -30,17 +24,13 @@ test("changed files map to at most 3 known screens and never to lookalike names"
     mapScreens("src/app/inbox/page.tsx src/app/inbox/InboxList.tsx src/components/search/SearchBar.tsx"),
     ["inbox", "AI search"],
   );
-  // Prefixes are path-segment matches: a lookalike inside another word never
-  // maps to a screen and falls back to its top-level area instead.
   assert.deepEqual(mapScreens("src/lib/browser-search-helper.ts"), ["the src area"]);
   assert.deepEqual(mapScreens("src/lib/graphql-api/foo.ts"), ["the src area"]);
   assert.deepEqual(mapScreens("src/app/notdetail/page.tsx"), ["the src area"]);
-  // Capped at 3.
   const six = mapScreens(
     "src/app/inbox/x.tsx src/app/calendar/x.tsx src/app/search/x.tsx src/app/settings/x.tsx src/app/new/x.tsx",
   );
   assert.equal(six.length, 3);
-  // Fallback names the unmatched top-level areas instead of nothing.
   assert.deepEqual(mapScreens("packages/shared/x.ts scripts/tool.mjs"), [
     "the packages area",
     "the scripts area",
@@ -59,15 +49,11 @@ test("the brief names the agent, the screens, the marker, and the read-only rule
     agentId: "1e03aa38-86b6-47fe-acb3-ff14344d8978",
   });
 
-  // The mention span the server-side agent extraction matches on.
   assert.match(text, /data-label="agent-1e03aa38-86b6-47fe-acb3-ff14344d8978"/);
-  // Everything dynamic is escaped.
   assert.match(text, /&quot;GLM&quot; &lt;pass&gt; &amp; friends/);
   assert.doesNotMatch(text, /<pass>/);
-  // The duplicate-run marker and the smoke context are present.
   assert.match(text, new RegExp(`glm-qa-brief:${"a".repeat(40)}`));
   assert.match(text, /smoke check passed/);
-  // The agent is ordered to report and never to touch deploy state.
   assert.match(text, /never roll back/i);
   assert.match(text, /never submit forms/i);
 
@@ -81,7 +67,6 @@ test("the brief names the agent, the screens, the marker, and the read-only rule
   });
   assert.match(failed, /smoke check failed without a confirmed break/);
 
-  // An absent smoke verdict must read as unknown, never as a pass.
   const unknown = buildBriefText({
     sha: "c".repeat(40),
     prTitle: "HTPR-1 x",
@@ -93,8 +78,6 @@ test("the brief names the agent, the screens, the marker, and the read-only rule
   assert.match(unknown, /no clear verdict/);
   assert.doesNotMatch(unknown, /smoke check passed/);
 
-  // The brief demands a live-build check before exploring: a worker waking on
-  // an old mention must not file bugs against a newer UI (HTPR-5781 review).
   const any = buildBriefText({
     sha: "d".repeat(40),
     prTitle: "HTPR-1 x",
@@ -110,7 +93,6 @@ test("the liveness probe retries transient failures, then fails closed", async (
   const { fetchLiveBuildId } = await import(SCRIPT);
   const realFetch = globalThis.fetch;
   try {
-    // Two transient failures, then success: the third attempt wins.
     let calls = 0;
     globalThis.fetch = async () => {
       calls += 1;
@@ -120,7 +102,6 @@ test("the liveness probe retries transient failures, then fails closed", async (
     assert.equal(await fetchLiveBuildId("https://base", { attempts: 3, delayMs: 1 }), "build-1");
     assert.equal(calls, 3);
 
-    // Exhausted retries throw (main() turns that into a refusal).
     calls = 0;
     globalThis.fetch = async () => {
       calls += 1;
@@ -132,7 +113,6 @@ test("the liveness probe retries transient failures, then fails closed", async (
     );
     assert.equal(calls, 2);
 
-    // A buildId-less answer reads as null, never as an affirmative verdict.
     globalThis.fetch = async () => ({ ok: true, json: async () => ({}) });
     assert.equal(await fetchLiveBuildId("https://base", { attempts: 1 }), null);
   } finally {
@@ -147,25 +127,18 @@ test("the glm-qa job is exploratory: gated on smoke, wired to the dispatcher, an
   const end = workflow.indexOf("\n  drift:", start);
   const job = workflow.slice(start, end);
 
-  // Runs for every real deploy in alert-only mode, with or without the
-  // smoke suite (HTPR-5781): smoke stays skipped while its session secret is
-  // unprovisioned, and gating the brief on it kept the pass permanently dead.
   assert.match(job, /needs: \[health, smoke\]/);
   assert.match(job, /needs\.health\.outputs\.live == 'true'/);
   assert.doesNotMatch(job, /needs\.smoke\.outputs\.ran == 'true'/);
   assert.match(job, /needs\.smoke\.outputs\.rollback != 'true'/);
   assert.match(job, /github\.event_name == 'push'/);
-  // Dispatches the committed script and alerts without failing the deploy.
   assert.match(job, /dispatch-glm-qa\.mjs/);
   assert.match(job, /continue-on-error: true/);
-  // A skipped smoke suite reaches the brief as "no verdict", never as a
-  // failure: --smoke-ok only when smoke ran, --smoke-unknown otherwise.
   assert.match(job, /--smoke-unknown/);
   assert.match(
     job,
     /\[ "\$\{\{ needs\.smoke\.outputs\.ran \}\}" = "true" \].*--smoke-ok \$\{\{ needs\.smoke\.outputs\.ok \}\}/s,
   );
-  // Exploratory: no rollback, no promote, no Vercel write in this job.
   assert.doesNotMatch(job, /emergency-rollback|\/promote\/|api\.vercel\.com/);
 });
 

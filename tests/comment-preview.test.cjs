@@ -32,8 +32,6 @@ test("collapses whitespace", () => {
   assert.equal(commentPreview("  Hello\n\t  busy   world  "), "Hello busy world");
 });
 
-// Tiptap always emits block elements, so the preview of a real comment is
-// unreadable if these boundaries do not become spaces.
 test("keeps words apart across block boundaries", () => {
   assert.equal(
     commentPreview("<p>Hello there</p><p>World again</p>"),

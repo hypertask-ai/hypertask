@@ -1,7 +1,3 @@
-// HTPR-5112: AI chat must expose the MCP board_config capability without
-// making an authenticated HTTP request back into the same app. This repository
-// has no database-backed node:test harness, so the direct-data and authorization
-// invariants use source inspection, matching the convention in neighboring tests.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

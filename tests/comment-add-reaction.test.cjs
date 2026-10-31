@@ -1,6 +1,3 @@
-// HTPR-5522: POST /api/comments/addReaction answered every bad input and every
-// notification hiccup with a bare 500. These lock in the real status codes and
-// that a stored reaction survives a failing notification.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -29,7 +26,6 @@ function loadTs(relativePath) {
     },
   );
   const loaded = jiti(path.join(root, relativePath));
-  // jiti only unwraps the default export when the module has no other bindings.
   return typeof loaded === "function" ? loaded : loaded.default;
 }
 
@@ -63,7 +59,6 @@ function loadHandler({
     "src/lib/agentWebhooks/outbox.ts",
   ]);
 
-  // HTPR-7095: the agent webhook has its own tests; here no agent wrote the comment.
   stubModule("src/lib/agentWebhooks/commentReaction.ts", {
     prepareCommentReactionWebhook: async () => null,
     persistCommentReactionWebhook: async () => [],

@@ -213,7 +213,6 @@ test("the rendered table create control follows live selection and project scope
     await act(async () => emptyButton.click());
     assert.equal(createCalls.length, 2);
 
-    // Quick entry saves repeatedly, keeps failed drafts, and stays in its project.
     dom.window.Element.prototype.scrollIntoView = () => {};
     const quickCalls = [];
     let quickResult = true;

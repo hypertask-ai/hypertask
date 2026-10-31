@@ -19,8 +19,6 @@ const { sanitizeTableSort } = jiti(
 
 const thisYear = new Date().getFullYear();
 
-// The whole point of the column is telling an old ticket from a recent one, so
-// a date that silently drops its year is worse than no column at all.
 test("a date outside the current year keeps its year", () => {
   const formatted = formatDateWithYearIfPast(new Date(2025, 8, 12));
   assert.match(formatted, /2025/);
@@ -78,9 +76,6 @@ test("an unsaved null table sort clears the applied view's old sort", () => {
   assert.equal(getActiveTableSortFromProject(project), null);
 });
 
-// The bug this guards: the sort-key allowlist used to be a hand-maintained copy
-// of TABLE_COLUMN_KEYS, so "created" was added to one and not the other and every
-// Created sort was sanitized away. They are one list now; this fails if they part.
 test("every table column key is accepted as a sort key", () => {
   const { getActiveTableSortFromProject } = jiti(
     path.join(root, "src/utils/helperFunctions/Views/ViewsHelperFunctions.ts")

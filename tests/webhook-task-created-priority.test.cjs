@@ -45,10 +45,6 @@ function txWithPriority(priority) {
   }
 }
 
-// A task created with a priority must say so in its own task.created payload.
-// The webhook contract exposes the creation state, and no later event corrects
-// a null priority, so a task born Urgent that reports priority: null is a lie
-// subscribers cannot recover from (HTPR-4530).
 test('task.created carries the priority the task was created with', async () => {
   const { tx, task, created } = txWithPriority({
     id: 99,
@@ -69,9 +65,6 @@ test('task.created reports no priority when the task was created without one', a
   assert.match(body, /"priority":null/)
 })
 
-// The payload above is frozen inside the creation transaction, so the priority
-// row has to be written there too. If priority creation drifts back out to the
-// post-commit path this ordering breaks and the payload silently loses it.
 test('the global create path writes the priority inside the creation transaction', () => {
   const source = fs.readFileSync(
     path.join(root, 'src/lib/api/task-writes/create-global.ts'),
@@ -94,9 +87,6 @@ test('the global create path writes the priority inside the creation transaction
   )
 })
 
-// HTPR-5928 review: section_title in the request body is client-supplied, not
-// DB truth. The webhook payload's section title must come from a Section row
-// fetched from the database (sectionRow), never from the raw request field.
 test('the global create path builds the webhook section title from a fetched Section row', () => {
   const source = fs.readFileSync(
     path.join(root, 'src/lib/api/task-writes/create-global.ts'),

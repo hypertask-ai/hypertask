@@ -8,11 +8,9 @@ const stream = (text) =>
   new Response(`event: content\ndata: {"content":"${text}"}\n\nevent: done\ndata: {"status":"complete","assistant_persisted":true}\n\n`);
 const refusal = (status, text) =>
   new Response(`event: error\ndata: {"content":"${text}"}\n\n`, { status });
-// A response whose body dies after the headers arrive, as a dropped connection does.
 const brokenBody = () =>
   new Response(new ReadableStream({ pull(controller) { controller.error(new TypeError("network error")); } }));
 
-// responses: one entry per fetch call: a Response, or an Error to reject with.
 async function runTurn({ enabled, responses, stopAfterFirstFailure = false }) {
   const original = { fetch: global.fetch, log: console.log, error: console.error, setTimeout: global.setTimeout };
   const refs = { current: null };

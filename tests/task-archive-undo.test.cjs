@@ -100,8 +100,6 @@ test("global Ctrl or Cmd+Z invokes the latest undo outside text editors", () => 
     undoSource,
     /expiresAt: Date\.now\(\) \+ undoWindowMs/,
   );
-  // The visible UNDO button is honoured for as long as it is on screen; only
-  // the affordance-free Ctrl+Z path is bounded by the action window (HTPR-5528).
   assert.match(
     undoSource,
     /if \(!canRunUndo\(pendingUndoData, source, Date\.now\(\)\)\)/,

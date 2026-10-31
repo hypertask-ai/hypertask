@@ -13,9 +13,6 @@ const { createRealtimeLatencyCanary } = jiti(
   path.join(root, "src/lib/realtime/latencyCanary.ts"),
 );
 
-// HTPR-6166: network_ms/long_task_ms split receipt_to_render_ms into fetch
-// time vs main-thread blocking, so field data can tell a network problem
-// from a render problem without another manual dig.
 
 test("emits network_ms, long_task_ms, realtime_project_id on a rendered record", async () => {
   const emitted = [];
@@ -38,9 +35,6 @@ test("emits network_ms, long_task_ms, realtime_project_id on a rendered record",
     "networkMs" in record && "longTaskMs" in record && "projectId" in record,
     "record must carry the three new fields",
   );
-  // Node's performance.getEntriesByType("resource") exists but never has
-  // entries here, so network_ms is a real, honest 0 (no matching fetch
-  // happened in this process), not null - the API itself is measurable.
   assert.equal(record.networkMs, 0);
   assert.equal(record.projectId, 15);
   assert.equal(emitted.length, 1);

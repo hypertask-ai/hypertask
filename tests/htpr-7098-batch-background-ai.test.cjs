@@ -1,4 +1,3 @@
-// HTPR-7098: Slack summaries and smart label backfills wait in a half-price gateway batch.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -26,7 +25,7 @@ test("flag: feature kind, release risk, default Owner + QA, key exported", () =>
   assert.match(source, /kind: "feature"/);
   assert.match(source, /shippedOn: "2026-10-11"/);
   assert.match(source, /releaseRisk/);
-  assert.doesNotMatch(source, /defaultMode/); // no override: the registry default applies
+  assert.doesNotMatch(source, /defaultMode/);
   assert.match(read("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });
 
@@ -48,7 +47,6 @@ test("slack request: same prompt as the instant path plus a JSON instruction, no
   assert.equal(request.prompt, slackSummaryPrompt("[1] Ann: hi"));
   assert.ok(request.instructions.startsWith(SLACK_SUMMARY_SYSTEM));
   assert.match(request.instructions, /ONLY a JSON object/);
-  // Async batches reject per-request gateway options other than safetyIdentifier (live error 2026-10-11).
   assert.equal(request.providerOptions, undefined);
 });
 
@@ -62,9 +60,8 @@ test("label request: same prompt as classifyTaskAgainstLabels, no per-request ga
   assert.equal(request.instructions, LABEL_CLASSIFIER_INSTRUCTIONS);
   assert.equal(request.prompt, labelClassifierPrompt(task, definitions));
   assert.equal(request.maxOutputTokens, 500);
-  assert.ok(request.prompt.length < 5000 + 400); // description still cut at 2,000 characters
+  assert.ok(request.prompt.length < 5000 + 400);
   assert.equal(request.providerOptions, undefined);
-  // The instant path sends the same text.
   const classifier = read("src/lib/ai/labelClassifier.ts");
   assert.match(classifier, /prompt: labelClassifierPrompt\(task, definitions\)/);
 });
@@ -120,7 +117,6 @@ test("label apply mapping: verdict keeps the stored prompt, failures and unparsa
   for (const status of ["failed", "expired", "cancelled"]) {
     assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status }, item), { type: "instant", definitions: [{ labelId: "L1", prompt: "Billing" }] });
   }
-  // The collector hands the stored snapshot time to the same verdict function, so its stale check stays intact.
   const collector = read("src/lib/ai/batch/collectBatches.ts");
   assert.match(collector, /contentHash: item\.contentHash/);
   assert.match(read("src/lib/ai/labelClassifier.ts"), /export async function applyAiLabelVerdict/);
@@ -175,15 +171,12 @@ test("a bad Slack item runs the instant path once and is not batched again", asy
     assert.deepEqual(result, { type: "comment", html: "<p>instant</p>", via: "instant" });
     assert.equal(calls, 1);
   }
-  // A good item never touches the instant path.
   let goodCalls = 0;
   const good = await jobs.slackHtmlWithInstantFallback({ id: "a", status: "succeeded", text: SUMMARY_JSON, usage: {} }, item, async () => { goodCalls += 1; return "x"; });
   assert.equal(good.via, "batch");
   assert.equal(goodCalls, 0);
-  // Instant failure: reported as failed (the cron's behavior), nothing thrown, nothing posted.
   assert.deepEqual(await jobs.slackHtmlWithInstantFallback(bad[0], item, async () => { throw new Error("boom"); }), { type: "failed" });
   assert.deepEqual(await jobs.slackHtmlWithInstantFallback(bad[0], item, async () => null), { type: "empty" });
-  // The collector uses the normal instant builder and never re-queues a batch.
   const collector = read("src/lib/ai/batch/collectBatches.ts");
   assert.match(collector, /buildSlackThreadSummaryComment\(/);
   assert.doesNotMatch(collector, /threadSummaryBatch|submitBatch|prepareSlackSummaryForBatch/);
@@ -191,18 +184,14 @@ test("a bad Slack item runs the instant path once and is not batched again", asy
 
 test("stuck batches rotate and stale errors are final (review 1)", () => {
   const collector = read("src/lib/ai/batch/collectBatches.ts");
-  // Least recently checked first, never-checked first, and the look is recorded before any gateway call.
   assert.match(collector, /orderBy: \{ lastCheckedAt: \{ sort: "asc", nulls: "first" \} \}/);
   assert.ok(collector.indexOf("data: { lastCheckedAt: new Date() }") < collector.indexOf("await planBatch(batch, itemIds, stale)"));
-  // Any error from the key, status or results calls is rethrown only while the batch is fresh.
   assert.match(collector, /catch \(error\) \{\s*if \(!stale\) throw error;[\s\S]*?finalStatus: "cancelled"/);
-  // A cancelled stale batch still runs the apply step, which clears every thread's summaryBatchId.
   assert.match(collector, /await applySlackBatch\(batch, items, plan\.outcomes\)/);
   assert.match(read("src/prisma/schema.prisma"), /lastCheckedAt\s+DateTime\?/);
   const sql = read("src/prisma/migrations/20261011120000_htpr_7098_ai_batch/migration.sql");
   assert.match(sql, /"lastCheckedAt" TIMESTAMP\(3\)/);
   assert.match(sql, /"claimedAt" TIMESTAMP\(3\)/);
-  // The index is its own migration, built CONCURRENTLY like the other big-table indexes (review 5).
   assert.doesNotMatch(sql, /SlackWatchedThread_summaryBatchId_idx/);
   const indexDirs = fs.readdirSync(path.join(root, "src/prisma/migrations")).filter((name) => name.includes("htpr_7098_slack_summary_batch_index"));
   assert.equal(indexDirs.length, 1);
@@ -218,14 +207,13 @@ test("failed or unparsable label items are classified once, instantly (review 1)
   }
   assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "{}", usage: {} }, item), instant);
   assert.equal(jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "[]", usage: {} }, item).type, "verdict");
-  // A missing result is a failed one, so it reaches the same fallback.
   const [missing] = jobs.outcomesForItems(["t1"], []);
   assert.equal(jobs.labelActionForOutcome(missing, item).type, "instant");
   const collector = read("src/lib/ai/batch/collectBatches.ts");
   assert.match(collector, /action\.type === "instant"\) \{\s*await classifyLabelItemInstantly\(item\.taskId, item\.projectId, action\.definitions\)/);
   const classifier = read("src/lib/ai/labelClassifier.ts");
   const fn = classifier.slice(classifier.indexOf("export async function classifyLabelItemInstantly"), classifier.indexOf("async function classifyTaskWithDefinitions"));
-  assert.match(fn, /classifyTaskWithDefinitions\(\{[\s\S]*snapshotAt: task\.updatedAt/); // same prompt and freshness check as the instant path
+  assert.match(fn, /classifyTaskWithDefinitions\(\{[\s\S]*snapshotAt: task\.updatedAt/);
 });
 
 test("stale label batch verdicts reclassify current content once (live QA run 2)", () => {
@@ -300,8 +288,7 @@ test("threads are claimed in the same transaction that creates the batch row (re
   const claim = submit.indexOf("args.claim(tx, id)");
   const create = submit.indexOf("tx.aiBatch.create");
   assert.ok(startAt > 0 && startAt < tx && tx < claim && claim < create);
-  assert.equal(submit.includes("prisma.aiBatch.create"), false); // no row outside the transaction
-  // Only items that were actually claimed go into the row.
+  assert.equal(submit.includes("prisma.aiBatch.create"), false);
   assert.match(submit, /filter\(\(\[key\]\) => !claimed \|\| claimed\.has\(key\)\)/);
   const slack = read("src/lib/slack/threadSummaryBatch.ts");
   assert.match(slack, /tx\.slackWatchedThread\.updateMany\(\{\s*where: \{ id: \{ in: [^}]*\}, summaryBatchId: null \}/);
@@ -316,7 +303,7 @@ test("delivered tasks are recorded per item and skipped on re-apply (review 4)",
   const post = slack.indexOf("await createCommentService");
   const record = slack.indexOf("await prisma.aiBatch.update", post);
   assert.ok(post > 0 && record > post);
-  assert.ok(slack.indexOf("delivered.add(task.id)", post) < record); // recorded right after each comment
+  assert.ok(slack.indexOf("delivered.add(task.id)", post) < record);
   assert.match(slack, /data: \{ items: items as object \}/);
 });
 
@@ -326,7 +313,6 @@ test("label batch verdicts are judged by content, not updatedAt (review 2)", () 
   assert.notEqual(same, jobs.labelTaskContentHash({ title: "Fix invoice!", description: "Customer asks" }));
   assert.notEqual(same, jobs.labelTaskContentHash({ title: "Fix invoice", description: "Customer asks more" }));
   const classifier = read("src/lib/ai/labelClassifier.ts");
-  // Hash mode skips the updatedAt comparison and the updatedAt lock clause; instant mode keeps both.
   assert.match(classifier, /if \(currentHash !== contentHash\) return "stale";\s*\} else if \(currentTask\.updatedAt\.getTime\(\) > snapshotAt\.getTime\(\)\) return;/);
   assert.match(classifier, /const lockedTasks = contentHash\s*\?[\s\S]*?:[\s\S]*?"updatedAt" <= \$\{snapshotAt\}/);
   assert.match(read("src/lib/ai/labelClassifierBatch.ts"), /contentHash: labelTaskContentHash\(task\)/);
@@ -339,20 +325,20 @@ test("slack comment is checked against the batch mark before posting (review 4)"
   assert.ok(check > 0);
   assert.ok(check < slack.indexOf("createCommentService({"));
   assert.ok(check < slack.indexOf("await logUsage"));
-  assert.equal(slack.includes("thread?.summaryBatchId !== batch.id"), false); // no late check left
+  assert.equal(slack.includes("thread?.summaryBatchId !== batch.id"), false);
 });
 
 test("submit is idempotent per chunk (review 5)", () => {
   const requests = [{ id: "b", prompt: "two" }, { id: "a", prompt: "one" }];
   const key = jobs.batchIdempotencyKey("slack-summary", "team-1", requests);
-  assert.equal(key, jobs.batchIdempotencyKey("slack-summary", "team-1", [...requests].reverse())); // order independent
+  assert.equal(key, jobs.batchIdempotencyKey("slack-summary", "team-1", [...requests].reverse()));
   assert.match(key, /^htpr-7098:slack-summary:team-1:[0-9a-f]{32}$/);
   assert.notEqual(key, jobs.batchIdempotencyKey("smart-label", "team-1", requests));
   assert.notEqual(key, jobs.batchIdempotencyKey("slack-summary", "team-2", requests));
   assert.notEqual(key, jobs.batchIdempotencyKey("slack-summary", "team-1", [{ id: "a", prompt: "one grew" }, requests[0]]));
   assert.match(read("src/lib/ai/batch/gatewayBatch.ts"), /providerOptions: \{ gateway: \{ idempotencyKey \} \}/);
   assert.match(read("src/lib/ai/batch/submitBatch.ts"), /batchIdempotencyKey\(args\.kind, args\.teamId, args\.requests\)/);
-  assert.match(read("src/lib/ai/batch/submitBatch.ts"), /tx\.aiBatch\.findUnique/); // a replayed start reuses the recorded row
+  assert.match(read("src/lib/ai/batch/submitBatch.ts"), /tx\.aiBatch\.findUnique/);
 });
 
 test("applying claim, time budget and partial results of a failed batch (review 3, 6)", () => {
@@ -379,7 +365,6 @@ test("needsSlackThreadSummary skips threads already waiting in a batch", () => {
   assert.equal(needsSlackThreadSummary({ lastMessageTs: old, lastSummarizedTs: null }, now), true);
   assert.equal(needsSlackThreadSummary({ lastMessageTs: old, lastSummarizedTs: null, summaryBatchId: null }, now), true);
   assert.equal(needsSlackThreadSummary({ lastMessageTs: old, lastSummarizedTs: null, summaryBatchId: "batch-1" }, now), false);
-  // The cron also leaves pending threads out of its 50-thread page.
   assert.match(read("src/app/api/cron/slack-thread-summaries/route.ts"), /summaryBatchId: null/);
 });
 
@@ -392,8 +377,8 @@ test("schema, migration and cron are wired", () => {
   const sql = read(`src/prisma/migrations/${dirs[0]}/migration.sql`);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS "AiBatch"/);
   assert.match(sql, /ADD COLUMN IF NOT EXISTS "summaryBatchId"/);
-  assert.match(sql, /lock_timeout/); // does not queue Slack queries behind the ALTER (HTPR-7076 lesson)
-  assert.doesNotMatch(sql, /^ALTER TABLE/m); // only inside the guarded block
+  assert.match(sql, /lock_timeout/);
+  assert.doesNotMatch(sql, /^ALTER TABLE/m);
   const cron = JSON.parse(read("vercel.json")).crons.find((entry) => entry.path === "/api/cron/ai-batches");
   assert.equal(cron.schedule, "*/5 * * * *");
   assert.match(read("src/app/api/cron/ai-batches/route.ts"), /hasValidCronAuthorization/);

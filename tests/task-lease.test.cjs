@@ -302,9 +302,6 @@ test('restoring a task clears both terminal lifecycle timestamps', () => {
   });
 });
 
-// The fence and the adoption store must come from ONE jiti instance: each
-// instance has its own module registry, so a separately loaded adoption module
-// would hold a different AsyncLocalStorage and never reach the fence.
 function loadTsTogether(relativePaths) {
   const jiti = require('jiti')(
     path.join(root, `tests/task-lease-jiti-entry-${++jitiEntryId}.cjs`),
@@ -327,8 +324,6 @@ const {
 const assertFencedWriteAllowed = adoptionFence.assertAgentAssignmentChangeAllowed;
 const { withAgentMutationLeaseAdoption } = leaseAdoption;
 
-// A transaction mock that can also serve the adoption insert, so the fence's
-// implicit claim is exercised end to end rather than by source text.
 function adoptingTx({ lease = null, status = 'Normal', ownedAgent = 'agent-a' } = {}) {
   const state = { lease, status };
   return {
@@ -342,7 +337,6 @@ function adoptingTx({ lease = null, status = 'Normal', ownedAgent = 'agent-a' } 
       }
       if (sql.includes('INSERT INTO "TaskLease"')) {
         if (state.lease && state.lease.expiresAt > new Date()) return [];
-        // Columns: taskId, holder, agentId, lease token, reference token, TTL.
         const [taskId, holder, agentId, , , ttlSeconds] = values;
         state.ttlSeconds = ttlSeconds;
         state.lease = {
@@ -376,8 +370,6 @@ test('an opted-in agent request adopts a lease on its first fenced write', async
 
   await withAgentMutationLeaseAdoption({ agentId: 'agent-a', userId: 7 }, async () => {
     await assertFencedWriteAllowed(tx, 42, 'agent-a', 7);
-    // The second transaction of the same request passes on the adopted lease,
-    // not on a second adoption.
     await assertFencedWriteAllowed(tx, 42, 'agent-a', 7);
   });
 
@@ -386,9 +378,6 @@ test('an opted-in agent request adopts a lease on its first fenced write', async
 });
 
 test('one request may adopt a lease for each task it legitimately touches', async () => {
-  // A compound agent request (a move that also touches a sibling, say) fences
-  // more than one task. Adoption is keyed per task, so the second task is not
-  // rejected as though a human had cancelled a lease it never had.
   const first = adoptingTx();
   const second = adoptingTx();
 
@@ -407,7 +396,7 @@ test('a cancellation on one task does not spend the other task\'s adoption', asy
 
   await withAgentMutationLeaseAdoption({ agentId: 'agent-a', userId: 7 }, async () => {
     await assertFencedWriteAllowed(first, 42, 'agent-a', 7);
-    first.state.lease = null; // a human cancelled task 42 mid-request
+    first.state.lease = null;
     await assertFencedWriteAllowed(second, 43, 'agent-a', 7);
     await assert.rejects(
       assertFencedWriteAllowed(first, 42, 'agent-a', 7),
@@ -421,7 +410,7 @@ test('adoption happens once, so a mid-request human cancellation still blocks th
 
   await withAgentMutationLeaseAdoption({ agentId: 'agent-a', userId: 7 }, async () => {
     await assertFencedWriteAllowed(tx, 42, 'agent-a', 7);
-    tx.state.lease = null; // cancelAgentMutationLeaseForHumanOverride deletes the row
+    tx.state.lease = null;
     await assert.rejects(
       assertFencedWriteAllowed(tx, 42, 'agent-a', 7),
       AgentMutationLeaseMissingError,
@@ -432,9 +421,6 @@ test('adoption happens once, so a mid-request human cancellation still blocks th
 });
 
 test('an explicitly claimed lease still spends its adoption, so cancellation blocks the rest of the request', async () => {
-  // The worker claimed the lease itself, so the first fenced write passes on
-  // the live lease and never needs adoption. If the grant survived, a human
-  // cancelling mid-request would just hand the next transaction a fresh lease.
   const tx = adoptingTx({
     lease: {
       agentId: 'agent-a',
@@ -445,7 +431,7 @@ test('an explicitly claimed lease still spends its adoption, so cancellation blo
 
   await withAgentMutationLeaseAdoption({ agentId: 'agent-a', userId: 7 }, async () => {
     await assertFencedWriteAllowed(tx, 42, 'agent-a', 7);
-    tx.state.lease = null; // a human cancelled the claimed lease mid-request
+    tx.state.lease = null;
     await assert.rejects(
       assertFencedWriteAllowed(tx, 42, 'agent-a', 7),
       AgentMutationLeaseMissingError,
@@ -550,7 +536,5 @@ test('an adopted lease uses the shortest TTL, since nothing will release it', as
     assertFencedWriteAllowed(tx, 42, 'agent-a', 7),
   );
 
-  // Assert the TTL the insert was given, not wall-clock arithmetic: a loaded
-  // test run can put seconds between the call and the assertion.
   assert.equal(tx.state.ttlSeconds, MIN_LEASE_TTL_SECONDS);
 });

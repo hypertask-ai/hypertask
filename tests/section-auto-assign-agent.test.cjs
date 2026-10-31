@@ -520,8 +520,6 @@ test("creating a task in an agent-configured column auto-assigns the agent", asy
         autoAssignUserId: null,
       }),
     },
-    // Creation paths carry only the acting user's id, so the controller has to
-    // load the real record before assign writes the activity and notification.
     user: {
       findUnique: async ({ where }) =>
         where.id === 6
@@ -588,7 +586,6 @@ test("creating a task in an agent-configured column auto-assigns the agent", asy
     "pending",
   );
 
-  // An unknown acting user must not fall through to assign with a stub record.
   assignCalls.length = 0;
   await autoAssignForSection({
     taskId: 5488,
@@ -722,8 +719,6 @@ test("every task creation path runs the column auto-assign rule", () => {
     assert.match(source, /autoAssignForSection/);
     assert.match(source, /currentUserId/);
   }
-  // The board broadcast waits for the assignment so other viewers receive the
-  // task with its auto-assignee already attached.
   assert.match(
     globalCreate,
     /const autoAssignWork = import\("@\/utils\/controllers\/assignees\/autoAssignForSection"\)[\s\S]*?autoAssignWork\.then\(async \(\) => \{[\s\S]*?broadcastBoardChange/,

@@ -329,7 +329,6 @@ for (const enabled of [false, true]) {
   test(`ticket create flag ${enabled}: unrelated parent refused / legacy or linked same-ticket parent allowed`, async () => {
     for (const [kind, parentId, allowed] of [['unrelated', 22, false], ['legacy', 26, true], ['linked', 20, true], ['foreign-board linked', 21, false]]) {
       const h = harness({ flag: enabled });
-      // A link to this ticket does not override the same-board requirement.
       if (parentId === 21) h.state.links.push({ id: 9, pageId: 21, taskId: 11 });
       const before = plain(h.state);
       const result = await h.request('create', 'POST', { task_id: 11, parent_page_id: parentId, content: '' });

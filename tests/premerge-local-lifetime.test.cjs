@@ -30,7 +30,6 @@ test('EXIT always cleans both PID records and containers, preserving run status'
     try {
       for (const name of ['server.pid', 'search.pid']) writeFileSync(path.join(f.state, name), `${process.pid} ${started}\n`);
       writeFileSync(path.join(f.state, 'credentials.env'), 'private-fixture');
-      // All signal and Docker operations are shell functions, never live operations.
       const result = spawnSync('bash', ['-c', `set -euo pipefail\n${f.mocks}\n${stop}\n${cleanup}\nexit ${status}`], {
         env: { ...process.env, state: f.state, log: f.log, prefix: 'ht-premerge-fixture' }, encoding: 'utf8',
       });

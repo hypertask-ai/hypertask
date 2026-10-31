@@ -1,6 +1,3 @@
-// HTPR-5516: an oversized attachment produced an opaque axios 413 and an
-// unhandled rejection. Uploads must be size-checked in the browser and any 413
-// must arrive as a plain-language message.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -32,7 +29,6 @@ const {
 
 const { DIRECT_UPLOAD_MAX_FILE_BYTES } = direct;
 
-// The browser reaches storage over XHR, which Node does not provide.
 function stubXhr(behaviour) {
   const original = global.XMLHttpRequest;
   const sent = [];
@@ -65,7 +61,6 @@ function stubXhr(behaviour) {
 test("the browser upload cap stays under Vercel's 4.5 MB body limit", () => {
   assert.ok(UPLOAD_MAX_REQUEST_BYTES <= 4.5 * 1024 * 1024);
   assert.ok(UPLOAD_MAX_FILE_BYTES < UPLOAD_MAX_REQUEST_BYTES);
-  // The server must never advertise more than the platform actually accepts.
   assert.equal(
     uploadRoute.LEGACY_UPLOAD_MAX_REQUEST_BYTES,
     UPLOAD_MAX_REQUEST_BYTES
@@ -165,10 +160,6 @@ test("a platform 413 with no JSON body still yields a readable message", async (
   }
 });
 
-// HTPR-5524: a video could not be attached anywhere, because every upload
-// transited a Vercel function capped at ~4.5 MB. Large files must now go
-// straight to storage with a signed PUT, and the buffered route must remain as
-// the fallback for small files.
 
 const uploadUrlRoute = jiti(
   path.join(root, "src/lib/api/task-writes/upload-url.ts")
@@ -215,14 +206,12 @@ test("a file far above the buffered cap uploads straight to storage", async () =
     assert.deepEqual(urls, [
       "https://files.hypertask.app/tasks/attachments/1_demo.mp4",
     ]);
-    // Only small JSON handshakes crossed the serverless function.
     assert.deepEqual(
       calls.map((call) => call.url),
       ["/api/tasks/uploadUrl", "/api/tasks/uploadFinalize"]
     );
     assert.equal(calls[0].url, "/api/tasks/uploadUrl");
     assert.equal(calls[0].body.files[0].size, 120 * 1024 * 1024);
-    // The signature covers Content-Type, so it must be sent exactly as issued.
     assert.equal(xhr.sent.length, 1);
     assert.equal(xhr.sent[0].headers["Content-Type"], "video/mp4");
     assert.match(xhr.sent[0].url, /^https:\/\/storage\.example\//);
@@ -281,8 +270,6 @@ test("a small file falls back to the buffered route when storage is unreachable"
   try {
     const urls = await uploadFilesViaApi([tinyFile("ok.png")]);
     assert.deepEqual(urls, ["https://files.hypertask.app/x/ok.png"]);
-    // The direct object may have landed before the connection dropped, so it is
-    // discarded rather than left beside the buffered copy.
     assert.deepEqual(urlsCalled, [
       "/api/tasks/uploadUrl",
       "/api/tasks/n8nUpload",
@@ -419,8 +406,6 @@ test("the presign route rejects input the client should never send", () => {
   ]);
 });
 
-// HTPR-5524 review: the signed PUT must not trust the size the client declared
-// in JSON, or a ticket for a tiny file could carry an unbounded body.
 test("the signed PUT is bound to one exact byte length", async () => {
   process.env.S3_UPLOAD_KEY = process.env.S3_UPLOAD_KEY || "test-key";
   process.env.S3_UPLOAD_SECRET = process.env.S3_UPLOAD_SECRET || "test-secret";
@@ -432,8 +417,6 @@ test("the signed PUT is bound to one exact byte length", async () => {
   const signed = decodeURIComponent(
     new URL(url).searchParams.get("X-Amz-SignedHeaders")
   );
-  // content-length inside the signature is what makes storage reject a body of
-  // any other size, so a ticket for a small file cannot carry a large one.
   assert.ok(signed.split(";").includes("content-length"), signed);
   assert.ok(signed.split(";").includes("content-type"), signed);
 });
@@ -445,7 +428,6 @@ test("finalize only accepts keys inside the attachments prefix", () => {
   ]);
   assert.deepEqual(parseKeys(undefined, "keep"), []);
   assert.throws(() => parseKeys(["secrets/env"], "keep"), /Invalid/);
-  // A key the caller was never issued is refused even though it fits the prefix.
   assert.throws(
     () =>
       parseKeys(["tasks/attachments/1_someone-else.png"], "keep", [
@@ -460,8 +442,6 @@ test("finalize only accepts keys inside the attachments prefix", () => {
   assert.throws(() => parseKeys("nope", "keep"), /Invalid/);
 });
 
-// HTPR-5524 review: a partial failure must not re-upload the file that already
-// reached storage, which would orphan the first object and pay for it twice.
 test("only the failed file falls back, the successful one is not sent again", async () => {
   const originalPost = axios.post;
   const bufferedBodies = [];
@@ -494,12 +474,9 @@ test("only the failed file falls back, the successful one is not sent again", as
       "https://files.hypertask.app/tasks/attachments/1_good.png",
       "https://files.hypertask.app/x/bad.png",
     ]);
-    // One buffered retry, carrying one file: the successful direct upload is
-    // reused rather than repeated.
     assert.equal(bufferedBodies.length, 1);
     assert.equal(bufferedBodies[0].getAll("files").length, 1);
     assert.equal(bufferedBodies[0].getAll("files")[0].name, "bad.png");
-    // Only the object that really reached storage is verified server-side.
     assert.deepEqual(finalizeBodies, [
       {
         grant: "g",
@@ -513,8 +490,6 @@ test("only the failed file falls back, the successful one is not sent again", as
   }
 });
 
-// HTPR-5524 review: a batch that fails outright must not leave the object that
-// already uploaded sitting in public storage with nothing pointing at it.
 test("a failed batch asks the server to delete what already uploaded", async () => {
   const originalPost = axios.post;
   const finalizeBodies = [];
@@ -527,7 +502,6 @@ test("a failed batch asks the server to delete what already uploaded", async () 
   };
   const xhr = stubXhr((request) => {
     if (request.url.includes("bad.png")) {
-      // A real HTTP rejection, not a network failure: nothing to retry.
       request.status = 403;
       request.onload();
       return;
@@ -549,8 +523,6 @@ test("a failed batch asks the server to delete what already uploaded", async () 
   }
 });
 
-// HTPR-5524 review: finalization must be a capability handed back to the caller
-// who was issued those keys, not a permission over the whole attachment prefix.
 test("an upload grant only covers the keys it was minted for", () => {
   const grant = uploadGrant.signUploadGrant(
     { userId: 6, keys: ["tasks/attachments/1_ok.png"] },

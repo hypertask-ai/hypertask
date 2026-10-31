@@ -98,10 +98,6 @@ export async function assertAgentVisibilitySources() {
   assert.doesNotMatch(createSessionRoute, /prisma\.agent\.findFirst\(/);
   assert.match(chatServiceModule, /\.\.\.accessibleAgentWhere\(userId\)/);
   assert.match(chatServiceModule, /loadUserAgentChatSession\(/);
-  // HTPR-6002 moved this rule out of each route into one shared module, so the
-  // routes are checked for delegation and the rule itself is checked once,
-  // where it now lives. revokedAt must come after the spread: the other order
-  // lets a future key in accessibleAgentWhere overwrite the revocation guard.
   for (const existingSessionSurface of [
     existingSessionRoute,
     existingSessionMessagesRoute,

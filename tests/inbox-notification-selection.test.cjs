@@ -31,12 +31,6 @@ test("the visible Inbox scope intentionally requires a live task", () => {
   ]);
 });
 
-// Minimal Prisma-where evaluator covering only the operators
-// visibleUserInboxWhere actually emits (AND/OR/NOT, `in`, `not`, `every`,
-// `some`, and the `task`/`Reminders`/`project`/`members` relation filters).
-// This runs the real,
-// unmodified where clause against fixture rows instead of re-describing its
-// logic, so a regression in the clause itself fails the test.
 function fieldMatches(value, condition) {
   if (condition && typeof condition === "object" && !Array.isArray(condition)) {
     if ("in" in condition) return condition.in.includes(value);
@@ -72,7 +66,6 @@ function whereMatches(where, row) {
   });
 }
 
-// A board owned by someone else, with the recipient (6) as a current member.
 const memberProject = { ownerId: 1, members: [{ userId: 6, agentId: null }] };
 
 function baseNotification(overrides = {}) {
@@ -101,12 +94,10 @@ test("HTPR-7182: a removed member's old notifications stop returning the task", 
 
   assert.equal(whereMatches(where, baseNotification()), true);
   assert.equal(whereMatches(where, withProject({ ownerId: 6, members: [] })), true);
-  // Removed: only other people are still members.
   assert.equal(
     whereMatches(where, withProject({ ownerId: 1, members: [{ userId: 9, agentId: null }] })),
     false,
   );
-  // An agent membership row is not human access.
   assert.equal(
     whereMatches(where, withProject({ ownerId: 1, members: [{ userId: 6, agentId: "agent-1" }] })),
     false,
@@ -194,12 +185,9 @@ test("Inbox relations load only for database-selected response rows", async () =
   assert.match(sql, /INNER JOIN "Task"/);
   assert.match(sql, /n\."createdAt" DESC, n\.id DESC/);
   assert.match(sql, /t\."status" = 'Normal'/);
-  // HTPR-5683: the raw-SQL selection query mirrors visibleUserInboxWhere's
-  // archived-task-plus-returned-reminder exception.
   assert.match(sql, /t\."status" = 'Archive'::"Status"/);
   assert.match(sql, /n\."returnedFromReminders" = true/);
   assert.match(sql, /NOT EXISTS \(/);
-  // HTPR-7182: selection also requires current board access.
   assert.match(sql, /p\."ownerId" = \?/);
   assert.match(sql, /FROM "Member" AS m/);
   assert.match(sql, /m\."agentId" IS NULL/);

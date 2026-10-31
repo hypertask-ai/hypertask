@@ -68,22 +68,12 @@ test("mobile prompt focuses with a visible caret as the writer opens", () => {
 
 test("mobile controls sit in a left-aligned row with the primary pushed right", () => {
   assert.match(container, /data-mobile-task-writer-composer/);
-  // Superseded 2026-08-19 (HTPR-5517): the centred dock was the only
-  // centred control row in the app. It now aligns left with the filled
-  // primary pushed right, so every composer row reads the same way.
   assert.match(container, /isMobile \? "justify-start gap-1" : "justify-end"/);
-  // Approved wireframe (HTPR-5517): empty composer = clip, spacer, filled mic
-  // far right; typed = mic joins the clip, Send takes the far-right slot. The
-  // ml-auto must ride wrapperClassName (the .audio-recorder root is the flex
-  // child; classes on className land on an inner div where order/margin are
-  // ignored by the row).
   assert.match(
     container,
     /wrapperClassName=\{\s*isMobile && !userPrompt\.trim\(\) \? "ml-auto" : undefined\s*\}/,
   );
   assert.match(audio, /isMobileTaskWriter[\s\S]*?ai-writer-audio-button/);
-  // New-task and AI-chat mics share the prominent system so each can hold the
-  // filled primary slot on an empty mobile composer.
   assert.match(
     audio,
     /import \{ mobileMicPresentation \} from "\.\/mobileAudioButtonPresentation"/,
@@ -120,8 +110,6 @@ test("mobile controls sit in a left-aligned row with the primary pushed right", 
     assert.doesNotMatch(presentation.className, /bg-shadcn-primary/);
     assert.match(presentation.className, /text-white-black-inverted/);
   }
-  // One glyph size (HTPR-5517): the writer and new-task mics are 20px like
-  // every other icon in the row, no longer a 24px outlier.
   assert.match(audio, /size=\{isMobileTaskWriter \|\| isMobileNewTask \? 20 : 18\}/);
   assert.match(audio, /aria-label=\{isMobileTaskWriter \? "Start dictation"/);
   assert.match(container, /aria-label=\{isMobile \? "Send prompt"/);

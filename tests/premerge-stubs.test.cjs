@@ -1,5 +1,4 @@
 const test = require("node:test");
-// Built at runtime so secret scanners do not read the disposable fixtures as credentials.
 const PGQL = ["postgresql", "//"].join(":");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

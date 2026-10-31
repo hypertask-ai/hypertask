@@ -1,6 +1,3 @@
-// HTPR-7122: the hello directive tells agents to react instead of posting ack
-// comments, to use every Hypertask ability, and that an agent's reaction never
-// counts as an approval. It is served only while htpr-7122-agent-reactions is on.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -56,7 +53,6 @@ test("flag on: the directive asks for reactions instead of ack comments", async 
   assert.match(capabilities.reactions, /hypertask comment react <comment_id> --emoji/);
   assert.match(capabilities.reactions, /never counts as an approval or decision/);
   assert.match(capabilities.abilities, /Use all of Hypertask's abilities/);
-  // Every other capability stays as it was.
   for (const [key, value] of Object.entries(mod.HELLO_CAPABILITIES)) {
     if (key !== "comments") assert.equal(capabilities[key], value, key);
   }

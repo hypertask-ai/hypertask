@@ -82,7 +82,6 @@ test("applyFilters passes match through when the condition is missing", () => {
 test("assignee ALL does not let one agent row satisfy both its owner and itself", () => {
   const owner = { id: 6, uid: "user-6" };
   const agent = { id: "agent-a" };
-  // An agent assignment stores the agent AND its owner's userId on the same row.
   const onlyTheAgent = { assignees: [{ userId: 6, agentId: "agent-a" }] };
   const bothSeparately = {
     assignees: [
@@ -100,7 +99,6 @@ test("only tags and assignees offer the ALL mode", () => {
   const { supportsMatchMode } = require("./filter-match-mode-entry.cjs");
   assert.equal(supportsMatchMode("Labels"), true);
   assert.equal(supportsMatchMode("Assignees"), true);
-  // A task has one priority and one creating agent, so ALL there is always empty.
   assert.equal(supportsMatchMode("Priority"), false);
   assert.equal(supportsMatchMode("UpdatedBy"), false);
 });
@@ -108,8 +106,6 @@ test("only tags and assignees offer the ALL mode", () => {
 test("assignee ALL is independent of assignee order", () => {
   const owner = { id: 6, uid: "user-6" };
   const agent = { id: "agent-a" };
-  // The agent row carries the owner's userId, so a greedy row-claiming match would answer
-  // differently depending on which row Prisma returned first.
   const agentRowFirst = {
     assignees: [
       { userId: 6, agentId: "agent-a" },

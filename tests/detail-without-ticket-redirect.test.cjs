@@ -1,5 +1,3 @@
-// HTPR-6818: /detail URLs without a ticket number redirect in the proxy, before
-// the page streams, so React never reports error #419 for them.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

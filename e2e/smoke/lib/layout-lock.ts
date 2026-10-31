@@ -1,7 +1,6 @@
 export type Box = { x: number; y: number; width: number; height: number }
 export type Landmark = { selector: string; box: Box; contentHeight?: boolean }
 export type Screen = { landmarks: Record<string, Landmark>; order: string[][] }
-// bug: set when the flag's ticket never asked for this move; the entry is tracked debt, removed by that bug's fix.
 export type FlagChange = { flag: string; ticket: string; screen: string; landmarks: string[]; reason: string; bug?: string }
 type FlagChanges = { entries: readonly FlagChange[]; registry: readonly string[]; flags: Record<string, boolean> }
 
@@ -9,7 +8,6 @@ export const LAYOUT_CHANGE_MESSAGE = "Layout changed. Only change e2e/smoke/layo
 export const POSITION_TOLERANCE = 24
 export const SIZE_TOLERANCE_RATIO = 0.1
 
-// Same-row landmarks have no vertical relationship; keep their names deterministic.
 export function verticalOrder(boxes: Record<string, Box>): string[][] {
   const rows: string[][] = []
   let rowY = -Infinity

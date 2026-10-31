@@ -1,7 +1,3 @@
-// HTPR-4465: these routes previously trusted req.body.userId. A signed-in
-// attacker could mark another user's notifications read and silence their
-// unread-aware digest. Exercise the handlers so equivalent insecure code fails
-// even if the implementation is renamed or reformatted.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");

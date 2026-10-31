@@ -1,9 +1,3 @@
-/**
- * HTPR-6376: authentication-bound agent actor on MCP archive path, plus
- * Done → Archive/Deleted denial for authenticated agents.
- *
- * Run: npm run test:file -- tests/agent-actor-archive.test.cjs
- */
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const Module = require("node:module");

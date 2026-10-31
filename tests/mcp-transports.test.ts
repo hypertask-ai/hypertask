@@ -34,8 +34,6 @@ const feedbackTool = {
   execute: async () => { feedbackCalls++; return JSON.stringify({ success: true }) },
 }
 
-// Exercise the actual route, auth wrapper and transports; only product data,
-// credential validation and flag storage are replaced with local fixtures.
 function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
   const cache = new Map<string, any>()
   function load(file: string): any {

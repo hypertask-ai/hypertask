@@ -3,12 +3,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// HTPR-5513: the desktop properties rail is `position: sticky` inside the
-// comments + rail row. A sticky element can never be painted below its
-// containing block, so any trailing space that sits BELOW that row (page
-// bottom padding) drags the rail up by exactly that height once you scroll to
-// the end of a long thread — the properties scroll out of view and cannot be
-// scrolled back independently. The trailing space must live inside the row.
 
 const mainContainerSource = fs.readFileSync(
   path.resolve(

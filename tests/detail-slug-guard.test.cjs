@@ -12,10 +12,6 @@ const { parseDetailSlug } = jiti(
   path.join(root, "src/utils/controllers/taskDetail/load.ts")
 );
 
-// A detail URL missing its ticket number used to reach Prisma as
-// `uniqueIndex: NaN`, which Prisma rejects outright rather than matching
-// nothing — so /detail/project-15 answered 500 instead of showing anything
-// (HTPR-4838). Nothing may reach the query without both ids.
 test("a slug with no ticket number never becomes a query", () => {
   assert.equal(parseDetailSlug(["project-15"]), null);
   assert.equal(parseDetailSlug(["project-15", ""]), null);

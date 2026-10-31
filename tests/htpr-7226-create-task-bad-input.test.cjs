@@ -1,6 +1,3 @@
-// HTPR-7226: POST /api/mcp/tasks/create answered 500 for caller mistakes:
-// description null or not text, and ids too large or fractional for Postgres int4.
-// Drives the real create handler with the real validator; only the database layer is stubbed.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

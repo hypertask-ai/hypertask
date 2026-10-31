@@ -1,11 +1,3 @@
-// HTPR-5542. Add Column: the dialog closed, the section was created, and the
-// board still showed only Todo / Doing / Done until a reload.
-//
-// A board that has never saved a view has no Project_View row, so
-// /api/section/create answers `project_view: null`. The client only wrote the
-// refreshed view back into the cache, so a null view meant no cache update at
-// all. The board falls back to `project.section` when there is no view, and
-// that list was never given the new column.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "./refactored-module-source.cjs";
@@ -17,9 +9,6 @@ import { appendCreatedSectionToProject } from "../src/utils/helperFunctions/View
 const read = (relativePath: string) =>
   readFileSync(path.join(process.cwd(), relativePath), "utf8");
 
-// The column source the board resolves, mirroring getActiveColumnsViewFromProject:
-// the unsaved view, else the applied view, else the default view, else the
-// project's own sections. A board with no saved view lands on that last branch.
 const resolvedColumns = (project: IProject): ISection[] => {
   const view = project.project_view?.user_project_views?.[0];
   return (
@@ -39,8 +28,6 @@ const column = (id: number, title: string, ranking: string): ISection => ({
   items: [],
 });
 
-// A board with no saved view: project_view is absent, project.section is the
-// only source the board can render from.
 const boardWithNoView = (): IProject =>
   ({
     id: 15,

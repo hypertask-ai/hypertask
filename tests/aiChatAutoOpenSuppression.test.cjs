@@ -32,7 +32,6 @@ function read(relative) {
   return fs.readFileSync(path.join(root, relative), "utf8");
 }
 
-// Run the actual route effects without loading board/network/editor dependencies.
 function effectFrom(relative, identifies, extraNames = []) {
   const source = read(relative);
   const ast = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

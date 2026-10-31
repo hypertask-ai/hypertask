@@ -1,7 +1,3 @@
-// HTPR-6279 — `hypertask tasks get` must report `assigneeCount` like
-// `tasks list` does. The single-task mapper builds the visible assignee list
-// and its count from the same filtered array, so a hidden agent assignee must
-// not be counted either.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -61,8 +57,6 @@ test("an agent assignment lists the agent name, not the owner's", () => {
 });
 
 test("assigneeCount counts only the assignees the response actually lists", () => {
-  // An agent assignee the caller cannot see is filtered out of `assignees`;
-  // the count must not diverge from the list it is a count of.
   const task = {
     ...baseTask,
     assignees: [

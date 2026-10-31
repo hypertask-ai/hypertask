@@ -394,7 +394,6 @@ test('Ask AI fullscreen flag sends click and keyboard selections to /chat and Ba
         dom.window.history.back()
       })
       assert.equal(dom.window.location.href, returnUrl.href)
-      // Back reuses the server props cached before the native replaceState.
       await render('', true)
       assert.equal(input().value, question)
       assert.equal(requests.length, 1)
@@ -741,7 +740,6 @@ test('generic value suggestions become the right entity chip without dropping pr
       assert.ok(option, query)
       await React.act(async () => option.click())
       assert.equal(requests.at(-1).body.searchQuery, canonical)
-      // Start a fresh draft without carrying the accepted filter into the next fixture.
       await React.act(async () => document.querySelector('[aria-label^="Remove"]').click())
     }
   })
@@ -1038,7 +1036,6 @@ test('shared highlight uses inbox theme tokens and extends behind both tip colum
   assert.equal(rule('[data-search-layout-row] > *')['z-index'], '1')
   const gutters = []
   css.walkDecls('--search-row-gutter', (node) => gutters.push([node.value, node.parent.parent.params]))
-  // The list uses px-4, which Bootstrap forces to 1.5rem at every width.
   const bootstrap = fs.readFileSync(require.resolve('bootstrap/dist/css/bootstrap.css'), 'utf8')
   assert.match(bootstrap, /\.px-4 \{\s*padding-right: 1\.5rem !important;\s*padding-left: 1\.5rem !important;/)
   assert.deepEqual(gutters, [['1.5rem', undefined]])
@@ -1080,8 +1077,6 @@ test('phone layout keeps board tabs in scrollable flow under the search input an
     assert.ok(!scroller.classList.contains('hidden'), 'phone row is visible')
     assert.equal(document.querySelector('.inbox_footer, .inbox_title'), null, 'tabs avoid fixed footer CSS')
     assert.ok(row.classList.contains('[flex-wrap:nowrap]'))
-    // Viewport breakpoint, not @md: the @container only exists while the AI chat is closed.
-    // Arbitrary properties avoid Bootstrap's !important .flex-wrap and .flex-nowrap classes.
     assert.ok(!row.classList.contains('flex-wrap') && !row.classList.contains('flex-nowrap'))
     assert.ok(row.classList.contains('md:[flex-wrap:wrap]'), 'desktop wrapping is preserved')
     assert.ok(row.classList.contains('min-h-[44px]'), 'phone tabs retain a tappable height')

@@ -1,7 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Lives outside src/pages/api/ because Next's Pages Router treats every file
-// under pages/api/ as a route, and would try to compile this test as one.
-// Run after installing dependencies: npx tsx tests/security/generatePublicInvite.test.ts
 import assert from 'node:assert/strict'
 
 type Project = {

@@ -34,7 +34,6 @@ const modules = {
   ],
 };
 
-// Source contract tests inspect the implementation, including its moved modules.
 /** @type {typeof import("node:fs").readFileSync} */
 const readFileSync = (file, options) => {
   const contents = fs.readFileSync(file, options);

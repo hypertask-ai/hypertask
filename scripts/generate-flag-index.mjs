@@ -9,7 +9,6 @@ const { FLAG_DEFINITIONS_DIRECTORY, parseFlagFiles } = await import("../.github/
 export function generateFlagIndex(root = process.cwd()) {
   const directory = path.join(root, FLAG_DEFINITIONS_DIRECTORY);
   const output = path.join(directory, "index.generated.ts");
-  // Trusted CI runs this on a pull request checkout: read regular files only, never follow links.
   const ancestors = FLAG_DEFINITIONS_DIRECTORY.split("/").filter(Boolean)
     .map((_, index, parts) => path.join(root, ...parts.slice(0, index + 1)));
   for (const ancestor of ancestors) {

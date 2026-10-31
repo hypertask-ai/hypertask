@@ -162,7 +162,6 @@ async function main() {
   assert.equal(fallback.previousModelForFailedStream("claude-haiku-5-5", { status: 404 }, false, false, true).model, "gpt-6-luna");
   assert.equal(fallback.previousModelForFailedStream("claude-haiku-5-5", { status: 404 }, true, false, true), null);
 
-  // Audit each caller's real model-construction block against the shared resolver.
   const callers = [
     ["src/app/api/ai/_lib/taskSummaries.ts", "task.userId", 700],
     ["src/app/api/ai/_lib/commentSummaries.ts", "comment.creatorId ?? comment.task.userId", 300],

@@ -14,10 +14,8 @@ test("browser smoke exposes no repository or production credentials to PR code",
   );
 
   assert.ok(job.length > 0);
-  // HR-04: agent (bot) PRs run the customer test too; no author exemption.
   assert.doesNotMatch(job, /user\.login/);
   assert.doesNotMatch(job, /\[bot\]/);
-  // HR-04: no label gate either; a label-gated run shows SKIPPED, which counts as passing.
   assert.doesNotMatch(job, /full-ci/);
   assert.doesNotMatch(job, /\$\{\{\s*secrets\./);
   assert.doesNotMatch(job, /\$\{\{\s*vars\./);
@@ -176,7 +174,6 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
 });
 
 test("MCP CLI API contract stays fatal inside the required browser-smoke job", async () => {
-  // YPER4-352: the contract blocks merges only because browser-smoke is required and fails with it.
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const policy = yaml.load(await source("docs/ci-policy.yml"));
@@ -251,7 +248,6 @@ test("required contract summary needs successful smoke and explicit contract or 
 });
 
 test("browser smoke retries its build once, only after a Google font download failure", async () => {
-  // YPER4-363: next/font fetches Google fonts at build time and that download flaked.
   const yaml = require("js-yaml");
   const fs = require("node:fs");
   const os = require("node:os");
@@ -261,7 +257,6 @@ test("browser smoke retries its build once, only after a Google font download fa
   const step = workflow.jobs["browser-smoke"].steps.find((s) => s.name === "Build the local app (no migrations)");
   const run = (outcomes) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
-    // Fake npx: each call takes the next outcome (ok, font, other) and counts calls.
     fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
 n=$(( $(cat "${dir}/calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/calls"
 case "$(sed -n "\${n}p" "${dir}/outcomes")" in

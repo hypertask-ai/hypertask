@@ -16,9 +16,6 @@ function transpile(filePath) {
   }).outputText;
 }
 
-// Loads the real (unstubbed) visibility + mcp/agents modules so cross-team
-// scoping tests exercise production logic, not a re-implementation of it.
-// Only `@/lib/prisma` is stubbed, since these two modules never call it.
 function loadReal(relativePath) {
   const filePath = path.join(root, relativePath);
   const javascript = transpile(filePath);

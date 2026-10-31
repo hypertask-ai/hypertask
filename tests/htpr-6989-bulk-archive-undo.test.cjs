@@ -71,7 +71,6 @@ function fixture(api, original = false) {
   };
   const web = original ? compileOriginal(bulkWeb, mocks).POST : load(bulkWeb, mocks).POST;
   mocks["@/lib/api/notification-writes/archive-bulk"] = { POST: web };
-  // The unfixed variant swaps only the shared Web handler, which holds the bug; the Pages adapter is always current.
   const page = load(bulkPage, mocks).default;
   const markPage = load("src/pages/api/notifications/markAsDone.ts", mocks).default;
   const markWeb = load("src/lib/api/notification-writes/mark-done.ts", mocks).GET;
@@ -79,7 +78,6 @@ function fixture(api, original = false) {
     "@/lib/realtime/client": { realtimeEchoHeaders: () => ({ "x-socket-id": "123.456" }) },
     "../api/global": { default: {} },
   }).UndoInboxArchive;
-  // These task-backed, non-self-triggered fixture rows otherwise qualify for All.
   const scope = load("src/utils/controllers/notifications/visibleInboxScope.ts", {}).visibleUserInboxWhere(985);
   const inboxIds = () => rows.filter(row => ["userId", "agentId", "status", "archivedAt"].every(key => row[key] === scope[key])).map(row => row.id);
   async function invoke(body, single = false) {
@@ -135,7 +133,6 @@ async function bulkRoundTrip(api, original = false) {
   assert.equal(fx.rows[4].status, "Deleted", "Deleted notifications must not change");
   assert.equal(fx.broadcasts.length, 2);
   assert.deepEqual(fx.broadcasts[1], [985, { originUserId: 985 }, "123.456"]);
-  // A fresh read of persisted rows, rather than an optimistic cache, models reload.
   assert.deepEqual(fx.inboxIds(), [101, 102, 103], `${api}: bulk undo must restore the persisted inbox`);
   assert.ok(fx.rows.slice(0, 3).every(row => row.archivedAt === null));
 }

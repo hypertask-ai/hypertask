@@ -84,7 +84,6 @@ test('hidden, Deleted and archived-board links refused / first active visible li
     { id: 3, pageId: 20, taskId: 14, createdAt: new Date(1), removedAt: null },
     { id: 4, pageId: 20, taskId: 15, createdAt: new Date(0), removedAt: null },
   );
-  // Shuffle storage order so the fixture must honor the ORM order, not insertion order.
   h.state.links.reverse();
   let result = await h.service.getPage({ publicId: 'page', userId: 1, standalonePagesEnabled: true });
   assert.equal(result.task.id, 11, 'equal timestamps use the lower link id');

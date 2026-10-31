@@ -12,7 +12,6 @@ const files = [
 ];
 const touchedErrors = (output) => output.split("\n").filter((line) =>
   files.some((file) => line.startsWith(`${file}(`)) && line.includes("error TS"));
-// Positive control: never certify a touched diagnostic as external type debt.
 assert.equal(touchedErrors(`${files[0]}(1,1): error TS2322: control`).length, 1);
 assert.equal(touchedErrors("src/unrelated.ts(1,1): error TS2322: control").length, 0);
 const result = spawnSync(process.execPath, [

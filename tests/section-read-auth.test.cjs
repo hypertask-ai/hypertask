@@ -35,7 +35,6 @@ function harness({ userId = 42 } = {}) {
       calls.push(["session"]);
       return userId === null ? null : { userId, source: "better-auth" };
     } },
-    // Load the real read-access predicate; mock only its unrelated dependencies.
     "@/lib/agents/publicAgent": {},
     "@/lib/cycles": {},
     "@/lib/agents/visibility": {},
@@ -64,7 +63,6 @@ for (const route of ["getAll", "getByTaskId"]) {
       const res = await h.request(route, body);
       assert.equal(res.statusCode, 401);
       assert.deepEqual(res.body, { message: "Unauthorized" });
-      // The adapter looks the user up, then the shared route retries it before the 401.
       assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"));
     }
   });

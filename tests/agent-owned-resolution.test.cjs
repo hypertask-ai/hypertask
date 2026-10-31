@@ -1,9 +1,3 @@
-// HTPR-5381. Agent routes resolve /agents/<ref> before they read or write the
-// agent, so that resolution is the ownership boundary: a foreign id or slug
-// must not resolve for a caller who does not own it.
-//
-// Behavioural, not source-text — the query filter is the whole guard, and a
-// dropped `userId` in the where clause is exactly what this catches.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

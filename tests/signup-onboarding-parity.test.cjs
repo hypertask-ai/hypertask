@@ -1,8 +1,3 @@
-// HTPR-5639: a new account must land on its board no matter which sign-up door
-// it came through. Better Auth (Google, passkey, magic link, email+password)
-// hardcoded the onboarding flags to false while the email-code path passed the
-// shared config, so one real customer got the /onboarding wizard and the next
-// test signup did not. These tests pin both halves of that split.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -59,8 +54,6 @@ test("a user provisioned with the config lands on the board, not the wizard", ()
   if (typeof getRedirectUrl !== "function") {
     throw new Error("getRedirectUrl not exported from authService");
   }
-  // onboardingTourStatus is written straight from skipOnboarding by
-  // provisionNewUser, so the config value IS what routing sees.
   const onboarded = {
     UserSetting: { onboardingTourStatus: authConfig.onboarding.skipOnboarding },
   };

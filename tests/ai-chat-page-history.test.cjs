@@ -1,7 +1,3 @@
-// HTPR-5119: AI chat must expose the MCP page_history capability without
-// calling the app's own authenticated endpoints. This repository has no
-// database-backed node:test harness, so these assertions protect the direct
-// controller wiring, access-check order, and read-only versions branch.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

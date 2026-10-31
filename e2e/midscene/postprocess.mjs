@@ -41,14 +41,12 @@ export function processResults(results, state, { listTickets, createTicket, ensu
     try {
       if (!result.ok && entry.consecutiveFails >= threshold) {
         const plan = ticketPlan(result);
-        // Check the board on every failure, including after a green night or a lost state file.
         const existing = listTickets(plan.title).find((task) => task.title === plan.title && isOpenTicket(task));
         if (existing || (dryRun && entry.dryRunPlanned)) {
           if (existing && !dryRun) ensureScreenshot(existing, plan);
           log(`SUPPRESSED: ${result.flow} already has one open${existing ? '' : ' simulated'} Bugs ticket`);
         } else if (dryRun) {
           log(`DRY RUN: would create ONE Bugs ticket on board 15: ${JSON.stringify(plan)}`);
-          // Persist only in the separate dry-run state, never suppress real filing.
           entry.dryRunPlanned = true;
         } else {
           createTicket(plan);
@@ -77,7 +75,6 @@ function cliJson(args) {
 function listTickets(title) {
   const tasks = [];
   for (let offset = 0; ; offset += 100) {
-    // The list route is authoritative; vector-search indexing can lag a newly filed ticket.
     const payload = cliJson(['tasks', 'list', '--project', '15', '--status', 'Normal', '--query', title, '--limit', '100', '--offset', String(offset)]);
     if (!Array.isArray(payload.tasks)) throw new Error('Board CLI returned no tasks array');
     tasks.push(...payload.tasks);
@@ -98,7 +95,6 @@ export function main(argv) {
   if (!Number.isFinite(startedAt) || startedAt < runStartUnix - 5 || !Array.isArray(payload.results) || !payload.results.length) {
     throw new Error('Missing, invalid or STALE results; refusing to reprocess an earlier nightly run');
   }
-  // Older runners stored paths relative to e2e/midscene, not the reporter's cwd.
   for (const result of payload.results) {
     if (result.screenshotPath && !path.isAbsolute(result.screenshotPath)) {
       result.screenshotPath = path.resolve(path.dirname(resultsPath), '..', result.screenshotPath);
@@ -114,7 +110,6 @@ export function main(argv) {
         const task = cliJson(['tasks', 'get', String(existing.id)]).tasks?.[0];
         if (!Array.isArray(task?.attachments)) throw new Error('Cannot verify existing failure screenshot');
         if (!task.attachments.some((attachment) => attachment.fileName?.startsWith(`${plan.flow}-`) && /\.png$/i.test(attachment.fileName))) {
-          // A create can succeed before its attachment fails. Repair the same ticket, never create another.
           cliJson(['comment', 'add', String(existing.id), '--text', plan.description, '--attach', plan.screenshotPath]);
         }
       },

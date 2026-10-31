@@ -2,8 +2,6 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { load } = require('./task-route-loader.cjs');
 
-// HTPR-7073: loadCurrentUser(headers, true) must not answer null for a signed-in person
-// whose old profile cookie is missing or stale. Identity comes only from the signed session.
 async function run({ cookie, session = { userId: 985 }, row = 'row', queryThrows = false }) {
   const queries = [];
   const mod = load('src/lib/auth/currentUser.ts', {

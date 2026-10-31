@@ -28,7 +28,6 @@ test("a label-scoped pool counts only labelled, unowned intake work", () => {
     { projectId: 15, section: "Bugs" },
     { projectId: 15, section: "Improvements" },
   ]);
-  // Tickets another agent already owns are not this agent's to pick up.
   assert.deepEqual(scope.eligiblePoolWhere.AND[1], {
     assignees: { none: { agentId: { not: null, notIn: ["agent-speed"] } } },
   });

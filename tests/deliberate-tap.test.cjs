@@ -34,8 +34,6 @@ test("a tap that stays put opens the control", () => {
 });
 
 test("a flick that starts on the control is not a tap", () => {
-  // The summary teaser sits above the scroll body: dragging off it must not open
-  // the sheet, which is the whole point of the guard.
   const guard = createTapGuard();
   guard.start(100, 200);
   guard.move(104, 260);
@@ -43,8 +41,6 @@ test("a flick that starts on the control is not a tap", () => {
 });
 
 test("a click with no touch of its own is stray once the device has shown touch", () => {
-  // Send collapses the composer and the mic lands in its slot, so the click from
-  // the tap on Send arrives at a mic that never saw a touchstart.
   const guard = createTapGuard();
   guard.start(100, 200);
   guard.isStray();

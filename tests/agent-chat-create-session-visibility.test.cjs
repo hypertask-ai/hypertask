@@ -1,14 +1,3 @@
-// HTPR-6039 acceptance criterion: "a teammate who guesses a private agent's id
-// still cannot read its chat or send it a message". Reading and writing an
-// existing thread is already covered behaviourally by the shared rule in
-// agent-chat-durable-conversation.test.cjs. The remaining door is this route:
-// it is where a first message to a guessed agent id would open a thread, and
-// until now it was only checked by matching its source text, which passes even
-// if the guard sits in the wrong place.
-//
-// The real accessibleAgentWhere is used here, not a stub, and the fake database
-// throws on any filter key it does not understand, so widening the rule fails
-// this test instead of quietly widening access.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -24,13 +13,9 @@ function stub(relativePath, exports) {
 const OWNER = 6;
 const TEAMMATE = 7;
 const OUTSIDER = 99;
-// On the board, but not in the board's team.
 const BOARD_ONLY = 8;
 const TEAM = "team-1";
 
-// One board, owned by the agent owner, with the teammate as a member. The board
-// belongs to a team because the route asks which team an agent's board is in
-// (getAgentTeamIds) and refuses to open a thread otherwise.
 const SHARED_BOARD = {
   id: 15,
   status: "Normal",
@@ -42,8 +27,6 @@ const SHARED_BOARD = {
   ],
 };
 
-// Being on a board and being in its team are two different things, and the
-// route needs both. The outsider is in neither.
 const TEAM_MEMBERSHIPS = [
   { userId: OWNER, teamId: TEAM },
   { userId: TEAMMATE, teamId: TEAM },
@@ -80,19 +63,12 @@ const AGENTS = [
   },
 ];
 
-// The `Member` rows that put each agent on the shared board, which is how the
-// route works out an agent's team.
 const AGENT_BOARD_MEMBERS = AGENTS.map((agent, index) => ({
   id: index + 1,
   agentId: agent.id,
   project: { teamId: SHARED_BOARD.teamId },
 }));
 
-// Every filter this fake understands is spelled out, and anything else throws:
-// an unknown key name, an unknown key inside a relation filter, and an operator
-// object such as `{ not: null }` on a key it only knows how to compare. Reading
-// `where.members.some.userId` by name, or comparing an operator object with
-// `===`, would let a widened rule pass unnoticed.
 function scalar(actual, value, key) {
   if (value !== null && typeof value === "object") {
     throw new Error(`unhandled operator filter on ${key}`);
@@ -180,10 +156,6 @@ function matchAgent(agent, where) {
   });
 }
 
-// The route re-reads the thread it just opened through the shared rule in
-// chatAccess, so the fake has to store sessions rather than pretend one exists.
-// Same discipline as the agent filters above: only the keys the rule really uses
-// are understood, and anything else throws instead of silently matching.
 function inFilter(value, kind) {
   const keys = Object.keys(value);
   if (keys.length !== 1 || keys[0] !== "in" || !Array.isArray(value.in)) {
@@ -218,8 +190,6 @@ function matchSession(session, where) {
       case "AND":
         return value.every((branch) => matchSession(session, branch));
       case "agent": {
-        // The same agent rule, applied to the thread's agent: a thread whose
-        // agent this caller may no longer see must not come back.
         const agent = AGENTS.find((row) => row.id === session.agentId);
         return agent != null && matchAgent(agent, value);
       }
@@ -336,11 +306,8 @@ test("a teammate who guesses a private agent's id cannot open its chat", async (
 });
 
 test("a teammate on the same board can open a team agent's chat", async () => {
-  // Without this the denial above could pass for the wrong reason.
   const result = await openChat(TEAMMATE, TEAM_ID);
   assert.equal(result.status, 200);
-  // Keyed on the agent's owner, not on whoever opened it: everyone the agent is
-  // shared with lands in one thread rather than a private copy each.
   assert.deepEqual(upserts, [{ userId: OWNER, agentId: TEAM_ID, agentSessionKey: "default" }]);
   assert.deepEqual(participants, [
     { sessionId: "session-1", userId: TEAMMATE },
@@ -348,9 +315,6 @@ test("a teammate on the same board can open a team agent's chat", async () => {
 });
 
 test("a board member outside the agent's team cannot open its chat", async () => {
-  // Seeing the agent on a shared board is not the same as being in its team.
-  // Refused before anything is written: without this the route would open a
-  // thread and then refuse the caller who asked for it.
   const result = await openChat(BOARD_ONLY, TEAM_ID);
   assert.equal(result.status, 404);
   assert.deepEqual(upserts, [], "a denied request must not create a thread");

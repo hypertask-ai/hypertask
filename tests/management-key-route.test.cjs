@@ -44,8 +44,6 @@ const serial = { concurrency: false };
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => rateLimitResponse,
   MANAGEMENT_KEY_PREFIX: "htmk_",
-  // The sibling integration suite drives the real validator while this suite
-  // isolates provider and route behavior.
   validateManagementOrSessionAuth: async () => context,
   createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }),
 });

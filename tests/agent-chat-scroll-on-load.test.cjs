@@ -1,11 +1,4 @@
 const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
-// HTPR-6099: after a page reload, the agent chat kept requiring a manual
-// scroll to reach the newest message. Root cause: the auto-follow effect
-// gated every scroll behind "the user hasn't scrolled away" -- but on a
-// session's very first content paint (right after a reload) that scroll
-// state can be mis-measured before the container has real content, latching
-// it stuck "scrolled away" forever, since nothing else can ever clear it
-// without a manual scroll from the user.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -60,12 +53,6 @@ test("an unchanged feed never triggers a scroll", () => {
   );
 });
 
-// HTPR-6291: the queued-follow-up strip and the "is working" typing row
-// render inside the same scroll container as the feed but aren't part of it
-// (mergeAgentChatFeed only knows about real messages and activity events),
-// so a queued send or the typing row appearing grew the container with no
-// scroll to follow it. agentChatExtraRowsRevision feeds that content into
-// the same feedChanged check shouldAutoScrollToBottom already gates on.
 test("a new queued message changes the revision", () => {
   assert.notEqual(
     agentChatExtraRowsRevision({

@@ -663,7 +663,6 @@ const useCreateTaskModalGlobalStates = () => {
     ]
   );
 
-  /** Function for creating a new task @type {*} */
   const CreateTaskAndDescription = useCallback(async (
     descriptionOverride?: string,
     titleOverride?: string,

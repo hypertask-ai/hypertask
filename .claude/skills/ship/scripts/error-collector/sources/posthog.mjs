@@ -2,9 +2,6 @@ import { key, query } from '../io.mjs';
 
 export const name = 'posthog';
 
-// Summary-only for browser and server alike: PostHog's issue_created alert
-// (.github/workflows/posthog-error-alert.yml) already files one Bugs ticket per new issue
-// from both. Ticketing here duplicates it (YPER4-377: HTPR-7223 next to HTPR-7224).
 export function parseExceptions(data) {
   if (data.error || data.hasMore || !Array.isArray(data.results) || data.results.length >= 10000) throw new Error('PostHog query incomplete');
   return data.results.map(row => {

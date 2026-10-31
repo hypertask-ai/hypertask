@@ -5,7 +5,6 @@ const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
-// TypeScript 7 compiles the app; API consumers still require the TypeScript 6 API.
 test("the default tsc binary uses the native TypeScript 7 compiler", () => {
   const compiler = path.resolve("node_modules/.bin/tsc");
   assert.match(execFileSync(compiler, ["--version"], { encoding: "utf8" }), /^Version 7\./);

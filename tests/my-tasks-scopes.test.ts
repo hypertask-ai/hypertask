@@ -51,7 +51,6 @@ test("parseMyTasksViewConfig keeps scopes when present and defaults when missing
     JSON.stringify(parseMyTasksViewConfig({ scopes: ["created"] }).scopes),
     JSON.stringify(["created"]),
   );
-  // Flag-off saves still round-trip scopes through parse so rollout does not wipe them.
   assert.deepEqual(DEFAULT_MY_TASKS_VIEW_CONFIG.scopes, DEFAULT_MY_TASKS_SCOPES);
 });
 

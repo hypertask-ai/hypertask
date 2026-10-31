@@ -1,14 +1,3 @@
-// Coverage contract: only SettingsToggle label props count, including
-// ToggleComponent labels when the section explicitly injects SettingsToggle.
-// Follow rendered section-content components, not modal/dialog/form/editor
-// subtrees or entity list items (.map containers keyed by a runtime item's .id).
-// SettingsCard/SettingsSectionShell headings, BillingRow status values,
-// BillingActionRow/BoardActionRow actions, SettingsMemberRow list items,
-// SettingsCodeRow editors, buttons and native form fields do not count.
-// BoardTicketPrefixSetting is the one native-row exception: its labelled
-// settings-ticket-prefix control predates SettingsToggle and is collected
-// explicitly. New settings toggles using the shared
-// component are collected automatically; unresolved labels fail closed.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -145,7 +134,6 @@ function collect(file, section, name = "default", injectedToggle = false, seen =
   }
   const isToggle = (tag) => imports.get(tag)?.file === `${settingsDir}/SettingsToggle.tsx` || (injectedToggle && tag === "ToggleComponent");
   function visit(node) {
-    // UserPreference renders a different slice when used by InboxSection.
     if (file.endsWith("UserPreference.tsx") && ts.isIfStatement(node) && node.expression.getText() === 'variant === "inbox"') {
       if (section === "inbox") visit(node.thenStatement);
       return;

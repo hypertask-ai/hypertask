@@ -1,7 +1,3 @@
-// HTPR-7209, HTPR-7210: the hourly guest sweep failed for every guest whose
-// tasks had a Drafts or Task_Summary row, because those rows block
-// task.deleteMany (foreign key, no cascade). Every table with a plain foreign
-// key to Task must be cleared before the tasks go, on both cascade paths.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -14,7 +10,6 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
-// Models whose relation to Task blocks a task delete (no onDelete action).
 function blockingTaskChildren() {
   const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
   const models = [];
@@ -82,7 +77,6 @@ test("every blocking task child is deleted before tasks, on both paths", async (
     for (const child of blockingTaskChildren()) {
       assert.ok(before.includes(`${child}.deleteMany`), `${child} rows must go before task.deleteMany`);
     }
-    // ReadStatus points at notifications, so it must go before them.
     const readStatus = before.indexOf("readStatus.deleteMany");
     const notification = before.indexOf("notification.deleteMany");
     assert.ok(readStatus < notification, "readStatus before notification");

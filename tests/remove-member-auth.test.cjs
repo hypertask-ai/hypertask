@@ -29,8 +29,6 @@ function transpile(file, stubs) {
   return loadedModule.exports;
 }
 
-// Loads the shared handler that the Pages adapter delegates to, behind the real
-// taskWriteRoute wrapper. Returns a Pages-style (req, res) handler around it.
 function loadRoute(verifySession) {
   const controllerCalls = [];
   const nextServer = { NextResponse: Response };

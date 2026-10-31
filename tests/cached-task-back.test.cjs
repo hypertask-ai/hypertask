@@ -117,7 +117,6 @@ function fixture(t, { cachedParent = true, coldViewer = false, stableChildren = 
     await React.act(async () => server(parent));
     if (cachedParent) client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parent);
     await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: child.projectId, uniqueIndex: child.uniqueIndex, href: href(child), task: child }));
-    // The background Next refresh has replaced the original server tree with the child.
     if (refreshChild) await React.act(async () => server(child));
     if (!coldViewer) assert.equal(observed().title, child.title);
     observeMount = true;
@@ -151,7 +150,6 @@ function fixture(t, { cachedParent = true, coldViewer = false, stableChildren = 
       }
     }),
     pastBoardFallback: () => React.act(async () => {
-      // Advance past the six-second deadline while away, without a real-time test delay.
       const callback = boardRecoveryTimer;
       boardRecoveryTimer = undefined;
       callback?.();
@@ -229,7 +227,6 @@ for (const cachedParent of [true, false]) {
       assert.equal(f.checkpoints.at(-1).loading, undefined);
     } else {
       assert.equal(f.observed().loading, href(parent));
-      // A URL update alone is not proof that the old route content was replaced.
       await f.nextPath(parent); assertDestination(f.observed(), parent);
       assert.equal(f.observed().loading, href(parent));
       await f.server(parent); assert.equal(f.observed().title, parent.title);

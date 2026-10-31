@@ -15,10 +15,6 @@ function loadTs(relativePath) {
 
 const { toStoredHtml } = loadTs("src/utils/helperFunctions/toStoredHtml.ts");
 
-// WHY: this is what the AI chat actually persists into comments, drafts and task
-// descriptions, all of which render through dangerouslySetInnerHTML. It has two jobs that
-// pull against each other: force markdown into HTML, and do it without becoming an
-// injection route. Ref HTPR-4687, and HTPR-4004 for the sanitizer.
 
 test("markdown is converted on the way into storage", () => {
   const html = toStoredHtml("Thanks!\n\n- **INNE-1447**: offer call");
@@ -26,9 +22,6 @@ test("markdown is converted on the way into storage", () => {
   assert.ok(!html.includes("**"), `raw markdown was stored: ${html}`);
 });
 
-// Converting markdown turns [text](url) into a live anchor. Before conversion a
-// javascript: URL was inert text, so the conversion itself is what makes sanitizing
-// mandatory here rather than merely nice to have.
 test("a javascript: markdown link cannot become a live href", () => {
   const html = toStoredHtml("[click](javascript:alert(1))");
   assert.ok(!html.includes("javascript:"), `javascript: URL survived: ${html}`);
@@ -41,9 +34,6 @@ test("raw model HTML is sanitized before storage", () => {
   assert.equal(html, "<p>Safe<a>link</a></p>");
 });
 
-// This server route must use only the server-safe sanitizer. isomorphic-dompurify reaches
-// jsdom, and pulling that into the chat route killed it at module load in production while
-// every local check passed. The guard is the import graph itself, asserted below.
 test("no browser-only dependency reaches the server route", () => {
   const fs = require("node:fs");
   const importsOf = (file) =>
@@ -68,7 +58,6 @@ test("ordinary links still work", () => {
   assert.match(toStoredHtml("[docs](https://example.com)"), /href="https:\/\/example\.com"/);
 });
 
-// Sanitizing must preserve both structures produced by the markdown converter.
 test("code blocks are not escaped into visible tags", () => {
   const html = toStoredHtml("```bash\nnpm i\n```");
   assert.match(html, /<pre><code class="language-bash">npm i/);
@@ -79,8 +68,6 @@ test("task-list checkboxes survive", () => {
   assert.match(toStoredHtml("- [ ] todo"), /<input[^>]*type="checkbox"/);
 });
 
-// Mentions are resolved to spans before this runs. A stripped attribute here means a
-// silently missing notification, which is worse than a visibly wrong comment.
 test("mention spans keep the attributes the mention pipeline reads", () => {
   const html = toStoredHtml(
     '<span data-type="mention" class="mention" data-id="42" data-label="name-42">Val</span> hi'

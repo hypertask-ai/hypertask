@@ -69,8 +69,6 @@ function projectRow(modelName, data, args) {
   }));
 }
 
-// The generated Prisma planner runs against a read-only synthetic adapter.
-// No connection string, database connection, or real row is used.
 function fixtureAdapter(name, queryArgs, empty = false) {
   const queries = [];
   const roots = empty ? [] : graph(name);

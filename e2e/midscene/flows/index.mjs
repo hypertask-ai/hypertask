@@ -1,4 +1,3 @@
-// Flow exports remain declarative so the QA dashboard can render their steps.
 import boardDemo from './board-demo.mjs';
 import taskDetailDemo from './task-detail-demo.mjs';
 import taskCreateDemo from './task-create-demo.mjs';

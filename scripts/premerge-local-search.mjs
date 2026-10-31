@@ -2,7 +2,6 @@ import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
-// Fixture-only search boundary. This is not a Turbopuffer ranking/embedding test.
 export function queryFixtureRows(rows, query) {
   function matches(row, filter) {
     if (!filter) return true;

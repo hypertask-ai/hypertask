@@ -34,12 +34,6 @@ const useFakeLocalStorage = () => {
   };
 };
 
-// HTPR-5927: a board-read-model database whose object store cannot be found
-// on this key exercises the same open()/get()/put() path both writes and
-// clears go through, without needing a real IndexedDB. put/delete are queued
-// synchronously (matching real IndexedDB request semantics) and settle on the
-// next microtask so cursor/get callbacks that queue further work still run
-// before the transaction completes.
 function fakeIndexedDb({ existingByKey = new Map() } = {}) {
   const puts = [];
   let deleteDatabaseCalled = false;
@@ -49,11 +43,6 @@ function fakeIndexedDb({ existingByKey = new Map() } = {}) {
     close: () => {},
     transaction: () => {
       const transaction = { oncomplete: null, onabort: null, onerror: null };
-      // Pending starts at 1, released only once the caller has finished
-      // issuing every op for this tick (see release() below) -- otherwise a
-      // transaction with zero ops still outstanding at creation time (before
-      // get()/put()/openCursor() are even called) would complete instantly,
-      // firing oncomplete before those ops get a chance to run.
       let pending = 1;
       const maybeComplete = () => {
         if (pending === 0) queueMicrotask(() => transaction.oncomplete?.());
@@ -82,7 +71,6 @@ function fakeIndexedDb({ existingByKey = new Map() } = {}) {
           openCursor: () => {
             const request = {};
             pending += 1;
-            // No other records for this account -- nothing to evict.
             queueMicrotask(() => {
               request.result = null;
               request.onsuccess?.();
@@ -92,10 +80,6 @@ function fakeIndexedDb({ existingByKey = new Map() } = {}) {
           },
         }),
       });
-      // Every op above is issued synchronously in the same tick as
-      // transaction(), so releasing this placeholder on the next microtask
-      // (after they've all incremented pending) is what lets a real op count
-      // decide when the transaction is actually done.
       queueMicrotask(release);
       return transaction;
     },
@@ -129,8 +113,6 @@ function withFakeIndexedDb(setup, run) {
   const originalBroadcastChannel = global.BroadcastChannel;
   const originalIdbKeyRange = global.IDBKeyRange;
   global.BroadcastChannel = undefined;
-  // Node has no IDBKeyRange global; writeBoardReadModel only uses .only() to
-  // scope the retention-eviction cursor, which our fake cursor ignores.
   global.IDBKeyRange = { only: (value) => value };
   const fake = fakeIndexedDb(setup);
   global.indexedDB = fake.indexedDb;
@@ -158,10 +140,6 @@ test("readModelMarker: absent by default, set/read/clear round-trips", () => {
 });
 
 test("readModelMarker: a denied localStorage (private browsing) falls through to the local read, never throws", () => {
-  // localStorage and IndexedDB are separately gated permissions. A browser
-  // that denies localStorage but still allows IndexedDB (private mode is not
-  // all-or-nothing) must keep running the keyed open -- "unknown" reads as
-  // "may exist", matching today's behavior when databases() itself is denied.
   const originalLocalStorage = globalThis.localStorage;
   globalThis.localStorage = {
     getItem: () => {
@@ -191,12 +169,6 @@ test("readModelMarker: a denied localStorage (private browsing) falls through to
 });
 
 test("HTPR-5927: usePreparedBoardReadModel skips both indexedDB.databases() and the keyed open when the marker is absent", () => {
-  // usePreparedBoardReadModel is a React hook; unit-testing its closure
-  // without a renderer isn't practical, so this pins the structural
-  // guarantee instead: the marker check returns before the dynamic import
-  // that would otherwise reach indexedDbReadModel.ts's openDatabase(), so a
-  // missing marker makes both indexedDB.databases() and indexedDB.open()
-  // physically unreachable, not just untaken in some code path.
   const hook = read("src/hooks/Homepage/useSyncedBoardReadModel.ts");
   const prepareLocalRead = hook.slice(
     hook.indexOf("const promise = (async () => {"),

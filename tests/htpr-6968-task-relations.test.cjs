@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
-// Responses and effects are pinned by digest from the pre-retirement handlers (HTPR-6992).
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const pin = pins("a1-relations");
 const slice3Routes = {

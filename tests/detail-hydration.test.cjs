@@ -124,7 +124,6 @@ for (const mobile of [false, true]) {
       assert.deepEqual([...fixture.container.querySelectorAll("[data-index]")].map((row) => row.textContent), ["Cached ticket body"],
         "the description must be in the server HTML, not wait for every lazy chunk to hydrate");
       const serverSection = fixture.container.firstChild;
-      // TasksProvider is outside page.tsx's Suspense: it may commit before this child hydrates.
       fixture.populateRows();
       fixture.installBrowser();
       const errors = [];

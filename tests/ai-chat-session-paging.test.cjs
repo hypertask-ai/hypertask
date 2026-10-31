@@ -65,7 +65,6 @@ test('concurrent updates cannot skip unseen sessions or duplicate already return
   const expected = [...f.rows].sort((a, b) => +b.updatedAt - +a.updatedAt || b.id.localeCompare(a.id)).map((row) => row.id);
   const first = await (await f.get('compat=htpr-6924&limit=2')).json();
   const seen = first.sessions.map((row) => row.id);
-  // Move an unseen session above the old keyset and a seen one below it.
   f.rows[0].updatedAt = new Date('2027-01-01T00:00:00.000Z');
   f.rows[7].updatedAt = new Date('2025-01-01T00:00:00.000Z');
   f.rows.push(session(50));

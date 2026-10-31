@@ -42,8 +42,6 @@ async function checkExpansion({ mobile }) {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   dom.window.HTMLElement.prototype.attachEvent = noop;
   dom.window.HTMLElement.prototype.detachEvent = noop;
-  // JSDOM has no layout: model only the browser measurement boundary. The real
-  // component and real autosize hook must react to the visibility transition.
   Object.defineProperty(dom.window.HTMLTextAreaElement.prototype, 'scrollHeight', {
     get() { return this.closest('[data-title-wrapper]').style.display === 'none' ? 0 : (this.value.length > 40 ? 81 : 37); },
   });
@@ -54,7 +52,6 @@ async function checkExpansion({ mobile }) {
       React.createElement(TaskTitleModal, { mobileCompact: mobile, mobileTitleVisible: visible })));
   try {
     await act(async () => reactRoot.render(render(false)));
-    // Mirror the context rerender during modal initialization, attaching the legacy ref.
     await act(async () => reactRoot.render(render(false)));
     const textarea = document.querySelector('textarea');
     assert.equal(textarea.style.height, '0px', 'hidden mount measures zero');

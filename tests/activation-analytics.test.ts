@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
 
-// Every client is replaced before loading production telemetry modules.
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 const events = ["board_created", "agent_connected", "agent_task_completed", "lifecycle_email_sent"];

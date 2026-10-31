@@ -6,7 +6,6 @@ function required(name) {
   return value;
 }
 
-// Creating the alert needs write access: prefer the full-access key (YPER4-241).
 export function postHogApiKey(env = process.env) {
   const full = env.POSTHOG_FULL_API_KEY?.trim();
   if (full) return full;

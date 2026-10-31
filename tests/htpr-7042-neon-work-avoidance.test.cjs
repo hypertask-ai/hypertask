@@ -80,7 +80,6 @@ class MemoryRedis {
   async eval(script, keyCount, ...args) {
     assert.equal(keyCount, 3);
     const [writers, generation, cache, expectedGeneration, modes] = args;
-    // No awaits: each script must observe and mutate the store atomically.
     if (script === invalidationScript) {
       this.set(writers, "1", "EX", 5);
       this.incr(generation);

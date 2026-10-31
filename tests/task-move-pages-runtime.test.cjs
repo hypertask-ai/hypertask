@@ -1,6 +1,3 @@
-// A Pages Router task move must stay loadable in the plain Node runtime.
-// Importing Next's `server-only` marker anywhere in this dependency graph
-// crashes the route before it can handle a request.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { generateKeyPairSync } = require("node:crypto");

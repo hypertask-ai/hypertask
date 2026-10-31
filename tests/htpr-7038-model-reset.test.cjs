@@ -80,8 +80,6 @@ test("reset oracle rejects changed unrelated keys and missed picker choices", ()
 });
 
 
-// psql stays in one session per transaction over a network-disabled Unix socket.
-// Its output is synthetic test data only and is never included in diagnostics.
 function session(container) {
   const child = spawn("docker", ["exec", "-i", container, "sh", "-c",
     "exec psql -X -h /tmp -U postgres -At 2>&1"], { stdio: ["pipe", "pipe", "ignore"] });
@@ -315,7 +313,6 @@ test("released server reset, migration history, exact backups, once-only executi
     for (let id = 1; id <= fixtures.length; id++) await reset(id);
     assert.deepEqual(await snap(), undone, "undo and subsequent reads never reset again");
 
-    // Separate sessions exercise simultaneous first reads of one new user.
     await admin.query(`INSERT INTO "User" (id, uid, email) VALUES (11, 'later-user', 'later@example.test');
       INSERT INTO "UserSetting" (id, "userId", notification, "aiModelPreferences") VALUES ('later-setting', 11, true, '{"aiChat":"luna"}')`);
     const otherAdmin = session(container);
@@ -329,7 +326,6 @@ test("released server reset, migration history, exact backups, once-only executi
       assert.equal(concurrent.backup.find((row) => row.user_id === 11).previous_value, "luna");
       assert.equal(concurrent.done.filter((row) => row.user_id === 11).length, 1);
     } finally { otherAdmin.close(); }
-    // Execute the real preferences POST against the disposable database.
     await admin.query(`INSERT INTO "User" (id, uid, email) VALUES (13, 'save-user', 'save@example.test');
       INSERT INTO "UserSetting" (id, "userId", notification, "aiModelPreferences") VALUES ('save-setting', 13, true, '{"aiChat":"luna"}')`);
     let saves = 0;
@@ -363,7 +359,6 @@ test("released server reset, migration history, exact backups, once-only executi
     assert.equal((await snap()).settings.find((row) => row.userId === 13).value.aiChat, "gemini-3.8-flash", "recovery resets before saving and later reads preserve the subsequent pick");
     assert.equal((await snap()).backup.find((row) => row.user_id === 13).previous_value, "luna");
 
-    // Pause after reset's row lock, then let undo block before reset's UPDATE.
     for (const userId of [11, 14]) {
       if (userId === 14) {
         await admin.query(`INSERT INTO "User" (id, uid, email) VALUES (14, 'undo-user', 'undo@example.test');

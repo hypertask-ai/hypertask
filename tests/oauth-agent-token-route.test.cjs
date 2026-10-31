@@ -185,14 +185,11 @@ function managedToken(
   )
 }
 
-/** The row shape a stored credential leaves behind (HTPR-4671: no plaintext). */
 function storedCredential(token) {
   return agentTokenCredentialFields(token)
 }
 
 function tokenRequest() {
-  // Keep the authorization-code fixture live relative to each assertion. On
-  // loaded self-hosted runners, this test file can wait over a minute to run.
   authCode.expires_at = new Date(Date.now() + 60_000)
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -403,8 +400,6 @@ test('OAuth exchange rejects stale team-bound agent grants', async (t) => {
 })
 
 test('OAuth exchange rejects an agent row carrying no generation', async (t) => {
-  // HTPR-4671. The row used to hold a JWT this route re-verified. It now holds
-  // a generation, so "unusable credential" means empty rather than malformed.
   for (const stored of [
     { mcpTokenJti: null },
     { mcpTokenJti: '' },
@@ -418,9 +413,6 @@ test('OAuth exchange rejects an agent row carrying no generation', async (t) => 
 })
 
 test('OAuth exchange never reads a generation belonging to another owner', async (t) => {
-  // This is what replaced re-verifying the stored plaintext: the lookup is
-  // scoped to this owner and a live agent, so a foreign or switched-off agent
-  // returns nothing and there is no generation to donate.
   for (const state of ['revoked', 'cross-owner', 'no-token']) {
     await t.test(state, async () => {
       const lookup = await expectInvalidAgentGrant(

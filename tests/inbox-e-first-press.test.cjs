@@ -494,7 +494,6 @@ test("phone route commit: early E survives the real workspace frame route change
   flow.press();
   pathname = window.location.pathname;
   act(() => renderer.render(React.createElement(Provider)));
-  // YPER4-293: the phone Inbox-to-detail switch keeps the same workspace ancestors, so navigation is not remounted.
   assert.equal(mounts, 1, "the phone Inbox-to-detail switch keeps navigation mounted");
   flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
   flow.mountKeyboard(); flow.poll();

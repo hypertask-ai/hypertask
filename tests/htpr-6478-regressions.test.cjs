@@ -14,7 +14,6 @@ const suites = [...new Set([
 test('existing MCP and extracted REST operation regressions pass with their original behavioral assertions', () => {
   const env = { ...process.env }
   delete env.NODE_TEST_CONTEXT
-  // Registry migrations touch many existing consumers, so the nested suite budget scales with its inventory.
   const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', '--test-concurrency=4', ...suites], {
     cwd: root, env, encoding: 'utf8', timeout: Math.max(300000, suites.length * 10000), maxBuffer: 32 * 1024 * 1024,
   })

@@ -1,4 +1,3 @@
-// HTPR-7665 (closes 7664 to 7673): agents with the read role must not change shared data.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

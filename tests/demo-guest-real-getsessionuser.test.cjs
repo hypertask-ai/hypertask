@@ -1,9 +1,3 @@
-// End-to-end proof for HTPR-5453: /api/demo/guest must never provision a
-// real signed-in user as a guest, with the getSessionUser fast path ON. This
-// is the exact shape of the Aug 21 incident: the demo route decides "already
-// signed in?" purely from getSessionUser's non-null/null answer (HTPR-5460),
-// so this test runs the REAL getSessionUser (not stubbed, unlike
-// demo-guest-session.test.cjs) against a real signed ht_session cookie.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -60,8 +54,6 @@ require.cache[nextServerPath] = {
   exports: { NextRequest, NextResponse },
 };
 
-// betterAuth.ts is stubbed (no real adapter/DB) — irrelevant here since the
-// fast path never reaches it when the legacy cookie is valid.
 stubModule("src/lib/auth/betterAuth.ts", {
   auth: {
     handler: async () => new Response(null, { status: 204 }),
@@ -115,8 +107,6 @@ test.after(() => {
   }
 });
 
-// getSessionUser.ts, session.ts, and better-auth/cookies load for real — only
-// betterAuth.ts (the DB-backed adapter) is stubbed above.
 const jiti = require("jiti")(
   path.join(root, "tests/demo-guest-real-getsessionuser-jiti.cjs"),
   { interopDefault: true, alias: { "@": path.join(root, "src") }, cache: false },

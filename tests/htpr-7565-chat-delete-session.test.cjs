@@ -277,7 +277,6 @@ test('deletion while a finishing stream is linkifying cannot return a server err
   await entered.promise;
   const deleted = await f.remove();
   release.resolve();
-  // The stream caller already catches persistence errors; the FK prevents resurrection.
   await assert.rejects(finishing, { code: 'P2003' });
   assert.equal(deleted.status, 200);
   assert.equal(f.rows.some((row) => row.id === id(1)), false);

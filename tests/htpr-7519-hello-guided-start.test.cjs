@@ -1,5 +1,3 @@
-// HTPR-7519: hello adds the signed-in agent, a start board and 3 next steps
-// while htpr-7519-login-guided-start is on; off, the payload is unchanged.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

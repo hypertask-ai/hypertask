@@ -122,6 +122,5 @@ test('CI failure naming recognizes actual spec output and TAP, including a start
   const report = warning.steps.find((s) => s.name === 'Warn about failed production tests');
   assert.match(report.run, /production-alert\.mjs setup production-tests/);
   assert.doesNotMatch(JSON.stringify(warning), /TELEGRAM|api\.telegram\.org/);
-  // Positive control: the same assertion rejects the former raw alert.
   assert.throws(() => assert.doesNotMatch('api.telegram.org', /TELEGRAM|api\.telegram\.org/));
 });

@@ -139,10 +139,8 @@ async function run(operation, requestedMode = 'OFF', options = {}) {
     return { status: response.status, text: await response.text(), headers: [...response.headers], calls: JSON.parse(JSON.stringify(calls)), probes, limits, readers, jsonReads, requestHeaders: request.headers };
   } finally { global.Date = RealDate; console.error = originalError; console.log = originalLog; }
 }
-// The session-profile query (HTPR-7073) is asserted explicitly; the frozen baselines cover the route's own calls.
 const contract = ({ status, text, headers, calls }) => ({ status, text, headers, calls: calls.filter(([name]) => name !== 'userFind') });
 
-// Frozen before PR 2 edits; no Git or runtime baseline rewrite in CI.
 const baseline = {
   "taskSessions": {
     "status": 200,
@@ -2150,7 +2148,6 @@ if (require.main === module) {
     test(`${operation}: a signed session loads the profile of the signed session user when the profile cookie is missing, invalid or mismatched`, async () => {
       for (const options of [{ noProfile: true }, { badCookie: true }, { profileId: 7 }]) {
         const result = await run(operation, 'ON', { ...options, raw: JSON.stringify(operations[operation][2] ?? {}) });
-        // A mismatched cookie (profileId 7) also moves the fixture owner, so only the lookup is compared there.
         if (!options.profileId) assert.deepEqual(contract(result), baseline[operation]);
         assert.equal(result.calls.filter(([name]) => name === 'userFind').length, 1);
         assert.deepEqual(result.calls.find(([name]) => name === 'userFind')[1], [{ where: { id: 985 }, include: { UserSetting: true, userPicture: true } }]);

@@ -162,9 +162,12 @@ test('phone title hit-target invariant is independent of allowed landmark drift'
 
 test('spec covers six screens, updates serially from live-like flags, and never changes the baseline on ordinary runs', () => {
   const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
+  const docs = fs.readFileSync(path.join(__dirname, '../docs/ci.md'), 'utf8');
   assert.match(spec, /\['ticket', 'board', 'inbox', 'my-tasks', 'new-task', 'app-shell'\]/);
-  assert.match(spec, /LAYOUT_LOCK_UPDATE=1/);
-  assert.match(spec, /--workers=1 --retries=0/);
+  assert.match(spec, /process\.env\.LAYOUT_LOCK_UPDATE === '1'/);
+  assert.match(docs, /LAYOUT_LOCK_UPDATE=1 LAYOUT_LOCK_SOURCE_COMMIT=\$\(git rev-parse origin\/production\)/);
+  assert.match(docs, /--workers=1 --retries=0/);
+  assert.match(docs, /never `--all-flags-on`/);
   assert.match(spec, /if \(update && !fromBoard\) \{[\s\S]*testInfo\.config\.workers/);
   assert.match(spec, /baseline update requires live-like flags, not all-flags-on/);
   assert.match(spec, /modes\[key\] === 'EVERYONE'/);
@@ -179,7 +182,6 @@ test('stable cached phone opens allow the intentional unscrolled viewport only w
   const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.flag-changes.json'), 'utf8'));
   const expected = committed.viewports.Mobile.screens.ticket;
   const stable = 'htpr-6899-stable-layout';
-  // PR 1074 browser-smoke failure: the old baseline had already scrolled past properties.
   const measured = {
     title: { x: 18, y: 64, width: 274, height: 37 },
     description: { x: 10, y: 534, width: 370, height: 274 },

@@ -33,8 +33,6 @@ const { getActiveStalenessFromProject, getActiveStalenessOverrideFromProject } =
 
 const daysAgo = (n) => new Date(Date.now() - n * 86_400_000);
 
-// A task that has not moved or been discussed is the whole point of the feature:
-// the age must keep growing, so a wrong sign or unit here silently hides stale work.
 test("daysSince counts whole days elapsed and never goes negative", () => {
   assert.equal(daysSince(daysAgo(0)), 0);
   assert.equal(daysSince(daysAgo(9)), 9);
@@ -52,8 +50,6 @@ test("daysSince is null for a task that has never been commented on", () => {
   assert.equal(daysSince("not-a-date"), null);
 });
 
-// Thresholds decide whether a card shows anything at all. If "none" leaked past
-// the warn boundary, every fresh board would grow noise it never opted into.
 test("stalenessLevel stays silent below the warn threshold", () => {
   assert.equal(stalenessLevel(0), "none");
   assert.equal(stalenessLevel(STALE_WARN_DAYS - 1), "none");
@@ -74,8 +70,6 @@ test("stalenessLevel uses per-board thresholds when supplied", () => {
   assert.equal(stalenessLevel(9, thresholds), "hot");
 });
 
-// Agent surfaces (MCP/CLI/API/AI chat) attach this payload to a ticket. It must
-// match the board UI, or a card and an MCP fetch would disagree about staleness.
 test("taskStaleness reports all three ages and the worst level", () => {
   const s = taskStaleness({
     createdAt: daysAgo(40),
@@ -85,7 +79,7 @@ test("taskStaleness reports all three ages and the worst level", () => {
   assert.equal(s.daysOnBoard, 40);
   assert.equal(s.daysInColumn, 9);
   assert.equal(s.daysSinceLastComment, 25);
-  assert.equal(s.level, "hot"); // comment age (25) crosses the hot threshold
+  assert.equal(s.level, "hot");
 });
 
 test("taskStaleness stays 'none' for a fresh, active task", () => {
@@ -171,8 +165,6 @@ const commandNamed = (options, key) =>
     .flatMap((group) => group.commandLists)
     .find((command) => command.key === key);
 
-// The board opt-in has no UI chrome: Ctrl+K is the only way to reach it, so a
-// context-gating mistake would make the feature unreachable rather than broken.
 test("staleness commands are offered on the board and on a task", () => {
   for (const context of ["Kanban", "Task"]) {
     const keys = commandKeys({ context });
@@ -189,8 +181,6 @@ test("staleness commands stay out of unrelated contexts", () => {
   }
 });
 
-// The point of the filter is building a view of only stale work: a task that
-// slips through leaves stale work invisible in exactly the view meant to find it.
 test("the no-comment filter matches tasks whose last comment is old", () => {
   const match = defaultConditions.NoRecentComment;
   assert.equal(match({ lastCommentAt: daysAgo(21), createdAt: daysAgo(90) }), true);
@@ -198,8 +188,6 @@ test("the no-comment filter matches tasks whose last comment is old", () => {
   assert.equal(match({ lastCommentAt: daysAgo(2), createdAt: daysAgo(90) }), false);
 });
 
-// A task nobody ever commented on is the most neglected case there is, so it
-// must match rather than fall through a null check.
 test("the no-comment filter treats a never-commented task as aging from creation", () => {
   const match = defaultConditions.NoRecentComment;
   assert.equal(match({ lastCommentAt: null, createdAt: daysAgo(30) }), true);
@@ -218,8 +206,6 @@ test("the stale-on-board filter matches on time since creation, not activity", (
   assert.equal(match({ createdAt: daysAgo(1), sectionChangedAt: daysAgo(60), lastCommentAt: daysAgo(60) }), false);
 });
 
-// All three filters share the card line's threshold. If they drifted apart, a board
-// could show an amber card the "stale" view hides, or vice versa.
 test("all staleness filters fire at exactly the threshold that shows a card age line", () => {
   assert.equal(defaultConditions.NoRecentComment({ lastCommentAt: daysAgo(STALE_WARN_DAYS) }), true);
   assert.equal(defaultConditions.NoRecentComment({ lastCommentAt: daysAgo(STALE_WARN_DAYS - 1) }), false);
@@ -247,7 +233,6 @@ test("not-stale requires both activity dimensions to be fresh", () => {
   assert.equal(match({ sectionChangedAt: daysAgo(2), lastCommentAt: daysAgo(12) }, [], project), false);
 });
 
-// A filter absent from this list is unreachable: the modal renders only what is here.
 test("all staleness filters are offered in the filter modal", () => {
   const byKey = Object.fromEntries(filterCommandLists.map((f) => [f.key, f]));
   assert.equal(byKey.NoRecentComment?.name, "Stale without comment");
@@ -260,9 +245,6 @@ test("all staleness filters are offered in the filter modal", () => {
   assert.equal(byKey.NotStale?.type, "NotStale");
 });
 
-// Per-view staleness resolves unsaved > applied > default view > board setting.
-// The chain must treat an explicit false as an answer, not fall through it:
-// "this private view hides ages" is the whole feature.
 const projectWith = (views, stalenessEnabled = true) => ({
   stalenessEnabled,
   project_view: {
@@ -299,8 +281,6 @@ test("an unsaved tweak beats the applied view, which beats the default view", ()
   assert.equal(getActiveStalenessFromProject(project), false);
 });
 
-// Save bodies persist the override; resolving the board default into it would
-// permanently detach the view from later board-level changes.
 test("the override stays null while every view inherits, even when the board is on", () => {
   assert.equal(getActiveStalenessOverrideFromProject(projectWith({}, true)), null);
   assert.equal(getActiveStalenessOverrideFromProject(projectWith({ applied: { board_staleness: false } }, true)), false);
@@ -320,8 +300,6 @@ test("the view toggle is offered alongside the board toggle", () => {
   );
 });
 
-// Auto-archive is reachable only through Ctrl+K; a gating mistake makes the
-// feature unreachable rather than broken.
 test("the auto-archive toggle is offered and names the action it will take", () => {
   for (const context of ["Kanban", "Task"]) {
     assert.ok(commandKeys({ context }).includes("toggleAutoArchive"), `missing in ${context}`);

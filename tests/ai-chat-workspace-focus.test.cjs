@@ -9,7 +9,6 @@ const read = (relativePath) =>
 
 test("Control+Q switches between docked AI chat and the active workspace", () => {
   const hook = read("src/hooks/MultiPages/AIChat/useAiChat.ts");
-  // The workspace frame is the closed layout before and after chat loads (HTPR-6751).
   const layout = read("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx");
   const sidebar = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
   const shortcuts = read("src/lib/constants/shortcuts.ts");

@@ -128,7 +128,6 @@ test("caches a successful response for 24 hours and flags replays", async () => 
     idempotent_replayed: true,
   });
   assert.equal(producerCalls, 1);
-  // Two-phase: an NX pending claim (EX 60) then the published result (EX 86400).
   const publish = setCalls.find((c) => c.options.includes(86_400));
   assert.ok(publish, "expected a 24h publish SET");
   assert.equal(publish.value, JSON.stringify({ task: { id: 42 } }));
@@ -136,8 +135,6 @@ test("caches a successful response for 24 hours and flags replays", async () => 
   assert.ok(claim, "expected an NX pending-claim SET");
 });
 
-// NX-aware in-memory Redis: SET with 'NX' only writes if the key is absent.
-// This models the atomic claim the concurrency guarantee depends on.
 function makeNxRedis() {
   const values = new Map();
   return {
@@ -145,7 +142,7 @@ function makeNxRedis() {
     get: async (key) => values.get(key) ?? null,
     set: async (key, value, ...options) => {
       const nx = options.includes("NX");
-      if (nx && values.has(key)) return null; // claim already held
+      if (nx && values.has(key)) return null;
       values.set(key, value);
       return "OK";
     },
@@ -165,8 +162,6 @@ test("concurrent same-key requests run the producer exactly once", async () => {
   const gate = new Promise((resolve) => {
     releaseProducer = resolve;
   });
-  // First producer is held open so the second request lands while the first
-  // still holds the pending claim — the exact GET/GET → miss/miss race.
   const slowProducer = async () => {
     producerCalls += 1;
     await gate;
@@ -178,10 +173,8 @@ test("concurrent same-key requests run the producer exactly once", async () => {
   };
 
   const first = withIdempotency("create_task", 6, "k", { t: "x" }, slowProducer);
-  // Let the first claim the key before the second starts.
   await new Promise((r) => setTimeout(r, 20));
   const secondP = withIdempotency("create_task", 6, "k", { t: "x" }, fastProducer);
-  // Release the first so it publishes its result while the second is waiting.
   setTimeout(() => releaseProducer(), 50);
 
   const [firstRes, secondRes] = await Promise.all([first, secondP]);

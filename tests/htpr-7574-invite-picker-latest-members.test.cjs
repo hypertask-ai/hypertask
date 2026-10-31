@@ -127,7 +127,6 @@ async function withInvitePicker(flagEnabled, run) {
     });
 
     const componentPath = path.join(root, "src/components/Modals/commands/inviteMember.tsx");
-    // Each test must import against its own flag and owned-agent closures.
     delete require.cache[componentPath];
     const jiti = createJiti(__filename, {
       interopDefault: true,

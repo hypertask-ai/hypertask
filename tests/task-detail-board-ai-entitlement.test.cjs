@@ -39,8 +39,6 @@ test("task detail SSR sends the board's subscription and BYOK state", () => {
 });
 
 test("a paid board opened from a board-agnostic view keeps its premium models", () => {
-  // Shaped exactly like the SSR payload the detail page writes into
-  // currentProjectAtom, with no board page visited first.
   const ssrProject = {
     id: 339,
     teamId: "paid-team",

@@ -1,11 +1,3 @@
-// Regenerates the repository's shared lists from one small file per entry, so two authors adding
-// or retiring different entries never touch the same file (HTPR-8194).
-//
-//   node scripts/shared-lists/build.mjs --write   rewrite every built file from its entries
-//   node scripts/shared-lists/build.mjs --check   fail when a built file differs from its entries
-//
-// Each built file keeps its path, so every existing reader keeps working. Entries are ordered by
-// file name, never by insertion into the built file.
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

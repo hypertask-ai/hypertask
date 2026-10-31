@@ -1,8 +1,3 @@
-// HTPR-5521 (duplicate HTPR-5519): a failed attachment upload crashed with
-// "m is not a function". SingleFileInputPreview's catch handler calls the
-// gallery's remove handler, which called the optional handleRemove prop
-// unguarded. The comment and description composers both mount the gallery with
-// handleRemove={null}, so the rejection went unhandled and wedged the composer.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -32,9 +27,6 @@ test("a failed upload does not leave an unhandled rejection on a null handler", 
     setUploadedFiles: () => {},
     handleRemove: null,
   });
-  // Mirrors SingleFileInputPreview: the upload rejects, the catch handler calls
-  // back into the gallery. Before the fix this threw inside the catch and the
-  // rejection escaped to window.onunhandledrejection.
   const onUploadFailed = () => removeHandler("screenshot.png");
   await assert.doesNotReject(() =>
     Promise.reject(new Error("upload failed")).catch(onUploadFailed)

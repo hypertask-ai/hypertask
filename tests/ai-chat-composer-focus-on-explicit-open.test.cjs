@@ -1,7 +1,3 @@
-// HTPR-6317: the AI chat composer's mount-time focus loop must run only for
-// explicit opens. Auto-open ("Open AI chat by default") and reload restore
-// mount the panel at page load; if it focuses then, board keyboard shortcuts
-// (c, j, k, Tab, /) silently type into the chat composer.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
@@ -29,8 +25,6 @@ const stubModule = (filename, exports) => {
 const stubSourceModule = (relativePath, exports) =>
   stubModule(path.join(root, relativePath), exports);
 
-// In-memory stand-in for the aiChatExplicitOpenAtAtom write path, so each case
-// can prime the timestamp the container's mount effect reads.
 const EXPLICIT_OPEN_AT = { key: "aiChatExplicitOpenAt" };
 let explicitOpenAt = null;
 let explicitOpenAtWrites = [];
@@ -164,16 +158,11 @@ const chatContextValue = {
   removeFile: () => {},
 };
 
-// Mounts the composer in a fresh JSDOM, lets the 60ms focus loop run, and
-// reports where the cursor ended up.
 const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
   const dom = new JSDOM(
     "<!doctype html><html><body><input id='other-field'><div id='root'></div></body></html>",
     { url: "https://app.hypertask.ai/" },
   );
-  // React's async act() holds jsdom's own timer queue back, while Node timers
-  // keep firing. Shim the window timer pair onto Node timers so the
-  // composer's 60ms focus-retry loop actually ticks during the await.
   const nodeIntervalHandles = new Map();
   let nextIntervalId = 1;
   dom.window.setInterval = (fn, ms) => {
@@ -207,7 +196,6 @@ const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
     MouseEvent: dom.window.MouseEvent,
     IS_REACT_ACT_ENVIRONMENT: true,
     localStorage: dom.window.localStorage,
-    // jiti compiles the container's JSX to the classic runtime.
     React,
   });
 
@@ -217,7 +205,6 @@ const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
   if (focusAnotherField) otherField.focus();
   const reactRoot = createRoot(dom.window.document.getElementById("root"));
   try {
-    // Mount effects flush here; the retry loop is scheduled.
     await act(async () => {
       reactRoot.render(
         React.createElement(
@@ -231,8 +218,6 @@ const mountComposer = async (primedOpenAt, focusAnotherField = false) => {
         ),
       );
     });
-    // React 19's act defers timer callbacks until it exits, so the loop can
-    // only tick in this plain await. The loop touches nothing but the DOM.
     await new Promise((resolve) => setTimeout(resolve, 200));
     const composer = dom.window.document.querySelector(".ProseMirror");
     return {

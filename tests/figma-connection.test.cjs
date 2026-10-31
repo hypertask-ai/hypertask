@@ -386,14 +386,9 @@ test("a refresh queue that keeps reclaiming the slot still gives up at the calle
     figmaUserName: null,
   }));
 
-  // The token is stale, so every entry into getFigmaAccessToken must refresh.
   const nowMs = Date.now();
   rows.set(6, { ...rows.get(6), expiresAt: new Date(nowMs) });
 
-  // Stand in for a queue of workers: the slot lapses (so waitForPendingRefresh
-  // recurses into getFigmaAccessToken) and is immediately reclaimed by the next
-  // worker (so that recursion waits again). Without one shared deadline each
-  // recursion started a fresh 60s budget and this never returned.
   let lapse = true;
   onPendingOperationRead = () => {
     operationRows.set(6, {

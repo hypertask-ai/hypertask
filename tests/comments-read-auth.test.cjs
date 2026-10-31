@@ -92,7 +92,6 @@ function harness({ userId = 42 } = {}) {
     "./processMentions": { processMentionsFromCommentText: async () => {} },
     "@/lib/ai/hyperAiConfirmation": { invalidateHyperAiCommentOrigin: async () => { calls.push(["invalidation"]); } },
     "@/lib/mcp/normalizeBlockHtml": { normalizeBlockHtml: text => text },
-    // Exercise the real board predicate, mocking only unrelated imports.
     "@/lib/agents/publicAgent": {},
     "@/lib/cycles": {},
     "@/lib/agents/visibility": {},

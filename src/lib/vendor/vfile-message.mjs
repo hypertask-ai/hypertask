@@ -1,79 +1,6 @@
-
-/**
- * @typedef {object & {type: string, position?: Position | undefined}} NodeLike
- *
- * @typedef Options
- *   Configuration.
- * @property {Array<Node> | null | undefined} [ancestors]
- *   Stack of (inclusive) ancestor nodes surrounding the message (optional).
- * @property {Error | null | undefined} [cause]
- *   Original error cause of the message (optional).
- * @property {Point | Position | null | undefined} [place]
- *   Place of message (optional).
- * @property {string | null | undefined} [ruleId]
- *   Category of message (optional, example: `'my-rule'`).
- * @property {string | null | undefined} [source]
- *   Namespace of who sent the message (optional, example: `'my-package'`).
- */
-
 import {stringifyPosition} from 'unist-util-stringify-position'
 
 export class VFileMessage extends Error {
-  /**
-   * Create a message for `reason`.
-   *
-   * > 🪦 **Note**: also has obsolete signatures.
-   *
-   * @overload
-   * @param {string} reason
-   * @param {Options | null | undefined} [options]
-   * @returns
-   *
-   * @overload
-   * @param {string} reason
-   * @param {Node | NodeLike | null | undefined} parent
-   * @param {string | null | undefined} [origin]
-   * @returns
-   *
-   * @overload
-   * @param {string} reason
-   * @param {Point | Position | null | undefined} place
-   * @param {string | null | undefined} [origin]
-   * @returns
-   *
-   * @overload
-   * @param {string} reason
-   * @param {string | null | undefined} [origin]
-   * @returns
-   *
-   * @overload
-   * @param {Error | VFileMessage} cause
-   * @param {Node | NodeLike | null | undefined} parent
-   * @param {string | null | undefined} [origin]
-   * @returns
-   *
-   * @overload
-   * @param {Error | VFileMessage} cause
-   * @param {Point | Position | null | undefined} place
-   * @param {string | null | undefined} [origin]
-   * @returns
-   *
-   * @overload
-   * @param {Error | VFileMessage} cause
-   * @param {string | null | undefined} [origin]
-   * @returns
-   *
-   * @param {Error | VFileMessage | string} causeOrReason
-   *   Reason for message, should use markdown.
-   * @param {Node | NodeLike | Options | Point | Position | string | null | undefined} [optionsOrParentOrPlace]
-   *   Configuration (optional).
-   * @param {string | null | undefined} [origin]
-   *   Place in code where the message originates (example:
-   *   `'my-package:my-rule'` or `'my-rule'`).
-   * @returns
-   *   Instance of `VFileMessage`.
-   */
-
   constructor(causeOrReason, optionsOrParentOrPlace, origin) {
     super()
 
@@ -145,133 +72,42 @@ export class VFileMessage extends Error {
         ? options.place.start
         : options.place
 
-    /**
-     * Stack of ancestor nodes surrounding the message.
-     *
-     * @type {Array<Node> | undefined}
-     */
     this.ancestors = options.ancestors || undefined
 
-    /**
-     * Original error cause of the message.
-     *
-     * @type {Error | undefined}
-     */
     this.cause = options.cause || undefined
 
-    /**
-     * Starting column of message.
-     *
-     * @type {number | undefined}
-     */
     this.column = start ? start.column : undefined
 
-    /**
-     * State of problem.
-     *
-     * * `true` — error, file not usable
-     * * `false` — warning, change may be needed
-     * * `undefined` — change likely not needed
-     *
-     * @type {boolean | null | undefined}
-     */
     this.fatal = undefined
 
-    /**
-     * Path of a file (used throughout the `VFile` ecosystem).
-     *
-     * @type {string | undefined}
-     */
     this.file = ''
 
-    /**
-     * Reason for message.
-     *
-     * @type {string}
-     */
     this.message = reason
 
-    /**
-     * Starting line of error.
-     *
-     * @type {number | undefined}
-     */
     this.line = start ? start.line : undefined
 
     this.name = stringifyPosition(options.place) || '1:1'
 
-    /**
-     * Place of message.
-     *
-     * @type {Point | Position | undefined}
-     */
     this.place = options.place || undefined
 
-    /**
-     * Reason for message, should use markdown.
-     *
-     * @type {string}
-     */
     this.reason = this.message
 
-    /**
-     * Category of message (example: `'my-rule'`).
-     *
-     * @type {string | undefined}
-     */
     this.ruleId = options.ruleId || undefined
 
-    /**
-     * Namespace of message (example: `'my-package'`).
-     *
-     * @type {string | undefined}
-     */
     this.source = options.source || undefined
 
-    /**
-     * Stack of message.
-     *
-     * This is used by normal errors to show where something happened in
-     * programming code, irrelevant for `VFile` messages,
-     *
-     * @type {string}
-     */
     this.stack =
       legacyCause && options.cause && typeof options.cause.stack === 'string'
         ? options.cause.stack
         : ''
 
 
-    /**
-     * Specify the source value that’s being reported, which is deemed
-     * incorrect.
-     *
-     * @type {string | undefined}
-     */
     this.actual = undefined
 
-    /**
-     * Suggest acceptable values that can be used instead of `actual`.
-     *
-     * @type {Array<string> | undefined}
-     */
     this.expected = undefined
 
-    /**
-     * Long form description of the message (you should use markdown).
-     *
-     * @type {string | undefined}
-     */
     this.note = undefined
 
-    /**
-     * Link to docs for the message.
-     *
-     * > 👉 **Note**: this must be an absolute URL that can be passed as `x`
-     * > to `new URL(x)`.
-     *
-     * @type {string | undefined}
-     */
     this.url = undefined
   }
 }

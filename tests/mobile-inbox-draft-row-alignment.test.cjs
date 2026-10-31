@@ -18,9 +18,6 @@ const notificationRow = fs.readFileSync(
   "utf8",
 );
 
-// Inbox rows share the outer `sm:p-inbox-horizontal` inset. Their clickable
-// content then adds 20px on mobile and clears it at the desktop breakpoint.
-// Keep the draft's Tailwind equivalent (`px-5`) aligned with notification rows.
 
 const openButton = source.match(
   /<button[\s\S]*?data-inbox-draft-control="true"[\s\S]*?className="([^"]*)"/,

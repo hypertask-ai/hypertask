@@ -76,8 +76,6 @@ test("quick-entry Escape cancels only the card, discards its text, and never sub
       ...items.map((item) => React.createElement("div", { key: item.id, id: `task-${item.id}`, tabIndex: 0 }, "Existing card")),
     );
   };
-  // This is the external boundary: global handlers see the refocused card,
-  // not the input, unless the local cancellation consumes its own Escape.
   const globalKeydown = (event) => { if (event.key === "Escape") globalEscapes++; };
   document.addEventListener("keydown", globalKeydown);
   const { createRoot } = require("react-dom/client");

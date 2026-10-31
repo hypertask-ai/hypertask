@@ -292,9 +292,6 @@ test("time reports limit plain members to their own entries (HTPR-4228)", async 
       timeEntry: {
         findMany: async ({ where }) => {
           reportWhere = where;
-          // The database would apply the visibility OR itself and return
-          // rows newest-first; mirror both so the assertions test what the
-          // query selects.
           const adminIds = where.OR?.[1]?.task?.projectId?.in ?? [];
           return rows
             .filter(
@@ -312,8 +309,6 @@ test("time reports limit plain members to their own entries (HTPR-4228)", async 
     () => {}
   );
 
-  // Caller 6 is a plain member of board 15 and admin of board 16, so
-  // the query itself must keep their rows plus board 16's, newest first.
   const visible = await loaded.exports.listReport(6);
 
   assert.deepEqual(visible.map((entry) => entry.id), [3, 1]);
@@ -361,7 +356,6 @@ test("without other-user scope the report query is pinned to the caller", async 
     () => 0
   );
 
-  // Even a caller-supplied user filter cannot pull in someone else's rows.
   await loaded.exports.listReport(6, { filterUserId: 7 });
 
   assert.deepEqual(reportWhere.userId, 6);

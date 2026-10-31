@@ -41,7 +41,6 @@ async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = f
     previous.set(key, Object.getOwnPropertyDescriptor(global, key));
     Object.defineProperty(global, key, { configurable: true, writable: true, value });
   }
-  // React's input-event support is detected when react-dom/client is loaded.
   const { createRoot, hydrateRoot } = require("react-dom/client");
   let mounted;
   t.after(async () => {

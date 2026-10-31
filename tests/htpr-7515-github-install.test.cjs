@@ -1,4 +1,3 @@
-// HTPR-7515 PR 2: GitHub install and adoption API, behind htpr-7515-connect-github-per-board.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");

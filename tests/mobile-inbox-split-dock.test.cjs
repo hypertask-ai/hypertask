@@ -133,9 +133,6 @@ test("the split dock is reachable, scrollable, and owns shell spacing safely", (
   );
 });
 
-// HTPR-5555: the split labels sat far apart on mobile because each tab carried
-// 16px of side padding on top of the scroller's own inset. Keep them tight
-// while the 44px touch target still holds.
 test("split tabs stay close together without losing their touch target", () => {
   assert.match(splitDock, /min-h-\[44px\] min-w-\[44px\][^"]*px-2 text-dense/);
   assert.doesNotMatch(splitDock, /px-4 text-dense/);

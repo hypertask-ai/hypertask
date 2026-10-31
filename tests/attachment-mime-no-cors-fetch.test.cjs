@@ -18,11 +18,6 @@ const { getFileTypeFromUrl, IMAGE_FALLBACK_MIME } = loadTs(
   "src/utils/helperFunctions/getFileTypeFromUrl.ts"
 );
 
-// WHY: attachments are served from files.hypertask.app, which sends no CORS header. An
-// image tag still renders them, so the app looked fine, but the AI paths first fetch()ed
-// the file just to read blob.type, and that fetch throws "Failed to fetch" in the browser.
-// Task Writer and Write With AI therefore died before reaching the API on any task holding
-// a pasted image. The MIME type has to come from the file name. Ref HTPR-4735.
 
 test("MIME type comes from the extension, so no network call is needed", () => {
   assert.equal(
@@ -46,11 +41,6 @@ test("query strings and fragments do not hide the extension", () => {
   assert.equal(getFileTypeFromUrl("https://files.hypertask.app/a/b.png#frag"), "image/png");
 });
 
-// Uploads keep the caller's file name verbatim, so an extensionless or exotic file really
-// can reach here. Measured against production: a part declared application/octet-stream
-// comes back as an EMPTY completion, and callers drop it even earlier by filtering on
-// mimeType.startsWith("image/"). A wrong image subtype costs nothing by the same
-// measurement, so an img-tag URL must never fall back below an image type.
 test("an img-tag URL with no usable extension still claims an image type", () => {
   assert.equal(IMAGE_FALLBACK_MIME.startsWith("image/"), true);
   for (const url of [
@@ -72,10 +62,6 @@ test("without an explicit fallback an unknown extension degrades, it does not th
   assert.equal(getFileTypeFromUrl("https://x/a/noextension"), "application/octet-stream");
 });
 
-// The CORS failure itself needs a browser to reproduce, so the source guard below stands in
-// for it. Assert positively that the hosted-attachment branch resolves its MIME type from
-// the URL, not merely that one helper name is absent: a rename or a bare fetch() would slip
-// past a negative-only check.
 const HOSTED_ATTACHMENT_CALLERS = [
   "src/hooks/MultiPages/AiWriter/useAiTaskWriter.ts",
   "src/utils/helperFunctions/helperFunctions.ts",

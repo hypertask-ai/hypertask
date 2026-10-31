@@ -19,8 +19,6 @@ const {
 
 const serverUrl = "https://mcp.hypertask.ai/mcp";
 
-// The settings components rely on the classic JSX runtime, so React has to be
-// reachable as a global for the whole render, including React's own microtasks.
 global.React = React;
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -41,8 +39,6 @@ test("each provider journey opens in a new tab and ends at the server link", () 
 });
 
 test("ChatGPT tells you to switch on Developer mode before Create", () => {
-  // ChatGPT hides the Create control until Developer mode is on, so a person
-  // following these steps in order has to reach Developer mode first.
   const developerMode = stepIndex("chatgpt", /Developer mode/);
   const create = stepIndex("chatgpt", /\bCreate\b/);
 
@@ -100,8 +96,6 @@ test("Add to Claude opens Claude before it waits on the clipboard", async () => 
   const opened = [];
   let releaseClipboard;
   const clipboardWrote = [];
-  // Hold the clipboard promise open so the assertion below can prove the tab
-  // was opened while the click gesture was still live, not after an await.
   const clipboardPending = new Promise((resolve) => {
     releaseClipboard = resolve;
   });
@@ -109,7 +103,6 @@ test("Add to Claude opens Claude before it waits on the clipboard", async () => 
   try {
     global.window = dom.window;
     global.document = dom.window.document;
-    // Node ships its own read-only navigator, so plain assignment is ignored.
     Object.defineProperty(globalThis, "navigator", {
       configurable: true,
       value: dom.window.navigator,
@@ -151,7 +144,6 @@ test("Add to Claude opens Claude before it waits on the clipboard", async () => 
       new dom.window.MouseEvent("click", { bubbles: true }),
     );
 
-    // No await between the click and here: the tab must already be open.
     assert.deepEqual(opened, [
       {
         url: CONNECT_PROVIDER_SETUP_URLS.claude,

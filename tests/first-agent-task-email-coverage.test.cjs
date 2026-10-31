@@ -74,7 +74,6 @@ function fixture(options = {}) {
       return { displayName: "Release agent", userId };
     } },
     $transaction: async (callback) => {
-      // The email's durable claim is isolated from the task mutation transaction.
       if (calls.committed) {
         const previous = claimTail;
         let release;

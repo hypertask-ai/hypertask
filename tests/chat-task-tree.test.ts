@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 
-// HTPR-6509: the AI chat task-tree tool now loads the ancestor chain in one
-// recursive query and the subtree in one authorized recursive read. These tests pin the
-// output the per-node version produced: tree shape, sibling order, pruning of
-// deleted and inaccessible subtrees, depth limits, and the ancestor-walk
-// errors, plus the query budget that motivated the change.
 
 type Row = {
   id: number;
@@ -44,8 +39,6 @@ function pick(task: Row, select: Record<string, boolean>) {
   );
 }
 
-// Applies only the filters a call actually passes, so a dropped status, access
-// or ordering clause changes the result and fails the assertions below.
 function fakeDb(rows: Row[], expectedProjectWhere: unknown) {
   const calls = { findFirst: 0, findMany: 0, queryRaw: 0 };
 
@@ -90,9 +83,6 @@ function fakeDb(rows: Row[], expectedProjectWhere: unknown) {
         return [{ id: 15 }];
       },
     },
-    // Mirrors the recursive CTE: walk up from the anchor, at most 256 rows,
-    // stop at a missing parent or before revisiting a task. The SQL itself was
-    // checked against PostgreSQL 16 for the same cases.
     async $queryRaw(sql: { text: string; values: unknown[] }) {
       calls.queryRaw++;
       if (sql.text.includes("bounds")) {
@@ -128,7 +118,6 @@ function fakeDb(rows: Row[], expectedProjectWhere: unknown) {
 }
 
 function chainRows(length: number) {
-  // id 1 is the root, id `length` is the deepest task.
   return Array.from({ length }, (_, index) =>
     row(index + 1, index === 0 ? null : index, index + 1)
   );
@@ -144,9 +133,6 @@ async function main() {
     ]);
   const projectWhere = getProjectWhere(USER_ID);
 
-  // Tree: root 1 -> [2, 3] (seeded out of order, children of 2 and 3
-  // interleaved in one level), plus a deleted and an inaccessible child whose
-  // own subtrees must disappear with them.
   const treeRows: Row[] = [
     row(3, 1, 30),
     row(1, null, 10),
@@ -193,7 +179,6 @@ async function main() {
             },
           ],
         },
-        // Archived children stay in the tree, as before. No ticket number, no key.
         { id: 6, task_id: 6, title: "Task 6", uniqueIndex: 25, children: [] },
         {
           id: 3,
@@ -208,9 +193,7 @@ async function main() {
         },
       ],
     });
-    // Key order is part of the JSON the model sees.
     assert.deepEqual(Object.keys(tree), ["id", "task_id", "title", "ticketNumber", "uniqueIndex", "children"]);
-    // Root lookup and one recursive subtree read with statement-time board access.
     assert.deepEqual(db.calls, { findFirst: 1, findMany: 0, queryRaw: 1 });
   }
 
@@ -236,7 +219,6 @@ async function main() {
     await assert.rejects(buildTaskTree(1, USER_ID, undefined, db as any), /Task not found in tree build/);
   }
 
-  // 50 nodes, four levels: root, 7 children, 21 grandchildren, 21 great-grandchildren.
   {
     const rows: Row[] = [row(1, null, 1)];
     let nextId = 2;
@@ -259,7 +241,6 @@ async function main() {
     assert.equal(db.calls.findFirst + db.calls.findMany + db.calls.queryRaw, 2, "50-node tree loads in 2 queries");
   }
 
-  // Ancestor walk.
   {
     const db = fakeDb(chainRows(11), projectWhere);
     assert.deepEqual(await findRootTaskIdForTree(11, USER_ID, db as any), { rootId: 1 });
@@ -294,7 +275,6 @@ async function main() {
   }
 
   {
-    // An inaccessible task before the cycle is reported as access denied.
     const db = fakeDb([row(3, 1, 3), row(1, 2, 1, { accessible: false }), row(2, 1, 2)], projectWhere);
     assert.deepEqual(await findRootTaskIdForTree(3, USER_ID, db as any), {
       error: "Task not found or access denied",
@@ -302,7 +282,6 @@ async function main() {
   }
 
   {
-    // Inaccessible ancestor in the middle of the chain.
     const rows = chainRows(5);
     rows[1] = { ...rows[1], accessible: false };
     const db = fakeDb(rows, projectWhere);
@@ -312,7 +291,6 @@ async function main() {
   }
 
   {
-    // Dangling parent id.
     const db = fakeDb([row(2, 1, 2)], projectWhere);
     assert.deepEqual(await findRootTaskIdForTree(2, USER_ID, db as any), {
       error: "Task not found or access denied",
@@ -320,7 +298,6 @@ async function main() {
   }
 
   {
-    // Root reached on the last allowed hop (hop 255).
     const db = fakeDb(chainRows(MAX_TREE_ANCESTOR_HOPS), projectWhere);
     assert.deepEqual(await findRootTaskIdForTree(MAX_TREE_ANCESTOR_HOPS, USER_ID, db as any), {
       rootId: 1,

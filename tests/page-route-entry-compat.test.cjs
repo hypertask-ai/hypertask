@@ -103,7 +103,6 @@ function error(result, status, message) {
   });
 }
 
-// Frozen synthetic contracts captured from fdb5e4e4c84d906dc061b51811b5a80179aa5192 before editing routes.
 const baseline = {
   "create": {
     "status": 200,

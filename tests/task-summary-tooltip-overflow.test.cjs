@@ -79,7 +79,6 @@ test("collapsed summary tooltip escapes the clipped teaser header", async () => 
     assert.match(header.className, /\boverflow-hidden\b/);
 
     await React.act(async () => {
-      // jsdom does not derive native mouseenter from the bubbling mouseover.
       tooltipAnchor.dispatchEvent(
         new window.MouseEvent("mouseover", { bubbles: true }),
       );

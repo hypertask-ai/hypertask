@@ -46,8 +46,6 @@ for (const haiku55Enabled of [true]) {
   test(`one model per class in every picker with ${state}`, () => {
     const isVisible = (option) => catalog.isAiModelOptionVisible(option, haiku55Enabled);
     const visibleOptions = catalog.aiModelOptions.filter(isVisible);
-    // Web pickers can show locked rows. Providers, guest access, caller lists,
-    // and custom endpoint setup only restrict this maximum visible catalog.
     assertUniqueModelClasses(catalog.aiModelOptions, isVisible);
     assert.equal(visibleOptions.some((option) => option.modelKey === "claude-haiku-4.5"), !haiku55Enabled);
     assert.equal(visibleOptions.some((option) => option.modelKey === "claude-haiku-5-5"), haiku55Enabled);
@@ -103,8 +101,6 @@ test("the same checker rejects Haiku 4.5 and 5.5 when both are visible", () => {
   );
 });
 
-// HTPR-7075: a saved pick of a removed older Claude model reads as the 5.5
-// model of the same class, so each class keeps exactly one visible model.
 test("saved picks of older Claude models resolve to the 5.5 model of the same class", () => {
   const saved = {
     "claude-haiku-4.5": "claude-haiku",

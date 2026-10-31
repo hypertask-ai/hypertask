@@ -7,12 +7,10 @@ const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-slice-11");
-// Pins group by route so the fixture holds one digest per route.
 const SPECIAL = { "matrix save": "matrix/POST", "splits save": "splits/POST", "archive meta": "getAllInbox/GET", "archived list": "getAllInbox/GET", mute: "mute/POST", unmute: "mute/POST", "304 getPushNotificationStatus": "getPushNotificationStatus/GET", "304 changePushNotificationStatus": "changePushNotificationStatus/POST" };
 const groupOf = key => SPECIAL[key] ?? key.match(/([A-Za-z]+\/(?:GET|POST))/)?.[1] ?? key;
 const pin = (key, value) => rawPin(groupOf(key), key, value);
 const root = path.resolve(__dirname, "..");
-// Route map: shared module, methods served and Pages file per endpoint; anyMethod endpoints answer every HTTP method.
 const routes = {
   access: { module: "access", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/access.ts" },
   changePushNotificationStatus: { module: "push-status-write", methods: ["POST"], anyMethod: false, path: "src/pages/api/notifications/changePushNotificationStatus.ts" },
@@ -93,7 +91,6 @@ function fixture(endpoint, scenario = {}) {
     },
     task: { findMany: async args => {
       step("inbox-task-boards", args);
-      // Task 44 moved out of accessible scope between grouping and lookup.
       return [{ id: 42, projectId: 15, project: { title: "Alpha", name: "old" } }, { id: 43, projectId: 16, project: scenario.noProjectName ? null : { title: null, name: "Beta" } }];
     } },
     $transaction: async (callback) => callback(db),
@@ -118,7 +115,6 @@ function fixture(endpoint, scenario = {}) {
     "@/utils/controllers/notifications/getCount": { default: async id => { step("inbox-count", id); return { status: scenario.controllerStatus ?? 200, json: { all: 3, unseen: 1 } }; } },
     "@/utils/controllers/notifications/getAccessibleProjectIds": { getInboxAccessibleProjectIds: async id => { step("inbox-access", id); return scenario.noRows ? [] : [15, 16]; } },
   };
-  // HTPR-7092: all-read reads through the Decisions wrapper, a pass-through while its flag is off.
   mocks["@/utils/controllers/notifications/getAllWithDecisions"] = mocks["@/utils/controllers/notifications/getAll"];
   mocks["@/utils/controllers/notifications/getCountWithBoardAccessRequests"] = mocks["@/utils/controllers/notifications/getCount"];
   mocks["@/lib/inboxSplitSettings"] = load("src/lib/inboxSplitSettings.ts", mocks);
@@ -170,12 +166,10 @@ async function invoke(fx, endpoint, scenario = {}, target = "current") {
     return result;
   });
 }
-// Runs the Pages adapter, pins wire, effects and stored state, then checks the shared Web handler agrees.
 async function parity(endpoint, scenario = {}, key = `${endpoint.name}/${endpoint.method}: ${JSON.stringify(scenario)}`) {
   const old = fixture(endpoint, scenario), expected = await invoke(old, endpoint, scenario, "current");
   pin(key, { expected, effects: old.effects, state: old.state, realtime: old.realtime });
   assert.equal(old.loads.length, 1, "listed method always loads the shared route");
-  // The adapter passes its session on; only a missing session makes the shared route look it up again.
   assert.equal(old.auth.length, scenario.noAuth || scenario.authThrows ? 2 : 1);
   const fx = fixture(endpoint, scenario);
   assert.deepEqual(await invoke(fx, endpoint, scenario, "web"), expected, `${endpoint.name}/${endpoint.method}: web wire`);

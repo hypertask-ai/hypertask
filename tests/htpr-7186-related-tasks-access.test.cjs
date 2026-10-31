@@ -4,7 +4,6 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 
-// HTPR-7186: a related task on a board the reader lost access to must not show its title.
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti").createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
@@ -15,10 +14,8 @@ const tasks = {
   1: { id: 1, uniqueIndex: 7, title: "Open task", ticketNumber: null, projectId: 15 },
   2: { id: 2, uniqueIndex: 3, title: "Private title on board 99", ticketNumber: null, projectId: 99 },
 };
-// Linked both ways while the reader could open both boards.
 const relations = [{ id: 1, sourceTaskId: 1, targetTaskId: 2 }, { id: 2, sourceTaskId: 2, targetTaskId: 1 }];
 
-// Evaluates the access branches projectContentAccessWhere builds for a human reader.
 function canOpen(projectWhere, projectId) {
   const board = boards[projectId];
   return projectWhere.OR.some((branch) =>

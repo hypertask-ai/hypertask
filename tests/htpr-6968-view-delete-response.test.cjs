@@ -6,7 +6,6 @@ const { load } = require("./task-route-loader.cjs");
 const { matches, savedViewBoardAccessWhere } = require("./helpers/htpr-7166-fixture.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-view-delete-response");
-// Pins group by route so the fixture holds one digest per route.
 const groupOf = () => "delete-rename-view";
 const pin = (key, value) => rawPin(groupOf(key), key, value);
 const actor = { userId: 985, source: "better-auth" };
@@ -107,7 +106,6 @@ test("Pages dispatch preserves JSON, empty JSON, empty 204 and text wire respons
     ["no content", undefined, 204, null],
     ["download text", "Forbidden", 403, "text/html; charset=utf-8"],
   ]) {
-    // Reference: what a hand-written Pages handler sends for the same response.
     const reference = (_req, res) => {
       res.setHeader("Cache-Control", "no-store");
       return type === "application/json" || body === undefined ? res.status(status).json(body) : res.status(status).send(body);

@@ -1,5 +1,4 @@
 const test = require('node:test')
-// Built at runtime so secret scanners do not read fixtures as credentials.
 const PG = ['postgres', '//'].join(':')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -105,7 +104,6 @@ for (const failure of ['none', 'rejection', 'throw']) {
         return results[index]
       })
     })
-    // Positive control: the underlying unwrapped client warns on overlapping calls.
     const plain = new Client()
     await Promise.allSettled([plain.query(0), plain.query(2)])
     assert.match(warnings[0], /Calling client.query\(\)/)

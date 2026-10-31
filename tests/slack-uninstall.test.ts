@@ -1,6 +1,3 @@
-// HTPR-4857: Slack Marketplace readiness. The destructive uninstall path must
-// delete installs only for the events that really end them, never a row that
-// was reinstalled after the event happened.
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -31,7 +28,6 @@ function fakeDb(install: typeof INSTALL | null) {
         return install ? { ...install } : null;
       },
       async deleteMany(args) {
-        // Mirror the SQL predicate: only rows matching id + updatedAt cutoff die.
         const cutoff = args.where.updatedAt?.lte;
         if (!install || args.where.id !== install.id) return { count: 0 };
         if (cutoff && install.updatedAt > cutoff) return { count: 0 };
@@ -48,7 +44,7 @@ const envelope = (
   teamId = "T1",
 ): SlackRevocationEnvelope => ({
   team_id: teamId,
-  event_time: 1789100000, // after the row's updatedAt (2026-09-09T12:00Z)
+  event_time: 1789100000,
   event,
 });
 
@@ -143,7 +139,7 @@ test("unknown workspace and unrelated event types are no-ops", async () => {
 test("a delayed event never deletes a reinstalled row", async () => {
   const reinstalled = {
     ...INSTALL,
-    updatedAt: new Date("2026-09-11T09:00:00Z"), // after event_time
+    updatedAt: new Date("2026-09-11T09:00:00Z"),
   };
   const { db, deleted } = fakeDb(reinstalled);
   const result = await deleteSlackInstallForRevocation(
@@ -157,7 +153,7 @@ test("a delayed event never deletes a reinstalled row", async () => {
 test("an install updated later in the event's own second survives", async () => {
   const sameSecond = {
     ...INSTALL,
-    updatedAt: new Date(1789100000 * 1000 + 400), // same event second, ms precision
+    updatedAt: new Date(1789100000 * 1000 + 400),
   };
   const { db, deleted } = fakeDb(sameSecond);
   const result = await deleteSlackInstallForRevocation(
@@ -195,7 +191,6 @@ test("returnTo allows the exact settings slack path and drops its query", () => 
   );
   assert.equal(parseSafeReturnTo("https://evil.example/settings/slack"), null);
   assert.equal(parseSafeReturnTo("//evil.example"), null);
-  // Pre-existing allowlist behavior must not regress.
   assert.equal(parseSafeReturnTo("/settings/slack/link?state=abc"), "/settings/slack/link?state=abc");
   assert.equal(parseSafeReturnTo("/somewhere-else"), null);
 });

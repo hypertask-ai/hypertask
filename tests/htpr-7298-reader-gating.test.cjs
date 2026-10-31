@@ -18,7 +18,6 @@ function fixture(enabled) {
   const h = harness({ userId: 3, flag: enabled });
   const flagCalls = [];
   const effects = [];
-  // Keep the actual shared reader and ORM predicates; spy only on post-authorization effects.
   for (const name of ['updatePage', 'restorePageVersion', 'archivePage', 'listPageVersions']) {
     h.service[name] = async () => { effects.push(name); return name === 'listPageVersions' ? [] : h.state.pages[0]; };
   }
@@ -52,7 +51,6 @@ function fixture(enabled) {
     '@/lib/ai/tools/execution': { withToolErrors: (fn) => fn },
     '@/lib/ai/tools/helpers': { sanitizeForJson: (value) => value, getAccessibleProjectIds: async () => [1, 2, 3] },
   };
-  // Use a real human/agent membership for the MCP board predicate.
   for (const board of h.state.projects.slice(0, 2)) board.members.push({ userId: 3, agentId: 'credential-agent', status: 'Accepted', agent: { userId: 3, revokedAt: null } });
   return {
     ...h, effects, flagCalls,

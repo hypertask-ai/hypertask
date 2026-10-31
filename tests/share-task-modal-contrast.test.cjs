@@ -1,7 +1,3 @@
-// HTPR-5198: the desktop Share Task modal used a hard-coded light green for
-// its temporary "Copied" state. On the light theme's gray button, that was
-// only 1.33:1 contrast. The copied state already has a check icon and label,
-// so both states should retain the theme-aware primary foreground token.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

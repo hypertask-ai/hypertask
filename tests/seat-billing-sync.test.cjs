@@ -1,13 +1,3 @@
-// HTPR-4216: joining a paid team billed the same seat twice.
-//
-// The old flow paid a one-off invoice at a hard-coded amount when seats looked full,
-// then ALSO bumped the Stripe subscription quantity, which Stripe prorates by default.
-// Two charges for one seat, and the hard-coded amount mischarged custom-priced plans.
-// It also compared against bare totalSeats, ignoring seats already reserved for
-// pending invitees, so Stripe ended up under-billed by one when those were accepted.
-//
-// syncSeatBillingOnJoin replaces all of that with a single quantity change priced by
-// Stripe. These tests pin the properties that keep it from charging twice or wrongly.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -32,9 +22,6 @@ const { syncSeatBillingOnJoin } = jiti(path.join(root, "src/lib/syncSeatBilling.
 const passthrough = async (_teamId, run) => run(() => {});
 const sync = (teamId) => syncSeatBillingOnJoin(teamId, undefined, passthrough);
 
-// Stand-ins for the two external systems. Prisma is stubbed richly enough that the
-// REAL resolveSeatQuantity runs on top of it, so these tests exercise the actual
-// members-plus-pending-invitees math rather than a hard-coded number.
 let updates = [];
 let teamRow = null;
 let stripeQuantity = 0;
@@ -72,7 +59,6 @@ function stub({ team, quantity, throws = false }) {
   };
 }
 
-/** members = accepted seats, pendingInvites = invited-but-not-accepted emails. */
 const paidTeam = ({ members = 5, pendingInvites = [], ...overrides } = {}) => ({
   totalSeats: members,
   activeSubscriptionPlanId: "sub_test",
@@ -98,8 +84,6 @@ const paidTeam = ({ members = 5, pendingInvites = [], ...overrides } = {}) => ({
 });
 
 test("a comped team is never charged and its quantity never moves", async () => {
-  // A flat-fee partner deal: 12 people on 5 paid seats is exactly the shape that
-  // would otherwise rewrite a $100/month deal into $240 (HTPR-4831).
   stub({
     team: paidTeam({ members: 12, compedUntil: new Date(Date.now() + 86_400_000) }),
     quantity: 5,

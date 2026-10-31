@@ -17,10 +17,6 @@ const { orderBoardsForSwitcher } = jiti(
 
 const board = (id, title) => ({ id, title, name: title });
 
-// WHY: the switcher is a keyboard surface — you open it and press Enter on the
-// first or second row. Creation order (HTPR-5476) put a board you last touched
-// two years ago above the one you were in this morning, which makes the
-// shortcut slower than clicking. Ordering is the whole feature.
 test("the current board stays pinned at the top", () => {
   const boards = [board(1, "Alpha"), board(2, "Beta"), board(3, "Gamma")];
   const ordered = orderBoardsForSwitcher(

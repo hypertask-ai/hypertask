@@ -1,6 +1,3 @@
-// HTPR-4164: one-click unsubscribe. The token is handed to mail providers, who
-// POST the URL unattended to satisfy Gmail/Yahoo's one-click rule. So it must
-// grant exactly one power — silence this address — and nothing else.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -35,8 +32,6 @@ test("a token round-trips to the user it was minted for", () => {
 });
 
 test("a tampered payload is rejected", () => {
-  // The whole security model: without this, editing uid in the payload silences
-  // anyone you like.
   const token = createUnsubscribeToken(6, "a@b.com");
   const [payload, signature] = token.split(".");
   const forged = Buffer.from(JSON.stringify({ uid: 999, email: "a@b.com" })).toString(
@@ -67,12 +62,10 @@ test("the headers are exactly what one-click requires", () => {
   const headers = unsubscribeHeaders(6, "a@b.com");
   assert.ok(headers["List-Unsubscribe"].startsWith("<https://"));
   assert.ok(headers["List-Unsubscribe"].endsWith(">"));
-  // Without this exact value providers show a two-step flow instead of one-click.
   assert.equal(headers["List-Unsubscribe-Post"], "List-Unsubscribe=One-Click");
 });
 
 test("no headers when there is no user to unsubscribe", () => {
-  // Better to send without the header than to send a token that means nothing.
   assert.equal(unsubscribeHeaders(null, "a@b.com"), undefined);
   assert.equal(unsubscribeHeaders(6, null), undefined);
   assert.equal(unsubscribeHeaders(undefined, undefined), undefined);

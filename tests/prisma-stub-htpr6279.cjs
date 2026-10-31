@@ -1,17 +1,10 @@
-// Configurable Prisma stub for tests/assignees-p2002-idempotent.test.cjs.
-// assign.ts imports the real Prisma singleton from "@/lib/prisma"; the test
-// maps that specifier to this module (jiti interopDefault hands the module
-// exports to the importer as the default), so this file exports the prisma
-// object itself with the test knobs attached.
 const state = {
   task: null,
   project: null,
   outerAssignee: null,
-  // Row seen by the post-rollback re-read (null = nobody won).
   reAssignee: null,
   txAssignee: null,
   createdRow: null,
-  // Error thrown by tx.assignees.create, or null to succeed.
   createError: null,
 };
 
@@ -27,8 +20,6 @@ class PrismaClientKnownRequestError extends Error {
 
 const tx = {
   $executeRaw: async () => 0,
-  // assign.ts invokes $queryRaw as a tagged template; a plain async function
-  // works as the tag and returns no active lease.
   $queryRaw: async () => [],
   task: {
     findUnique: async () => state.task,
@@ -47,9 +38,6 @@ const tx = {
   },
 };
 
-// The pre-transaction existence check and the post-rollback re-read share
-// prisma.assignees.findFirst; they return outerAssignee and reAssignee
-// respectively (the re-read only happens after a create attempt).
 let findFirstCalls = 0;
 
 function reset(overrides = {}) {
@@ -75,15 +63,11 @@ const prisma = {
   assignees: {
     findFirst: async () => {
       findFirstCalls += 1;
-      // Outer existence check now uses findMany. The first findFirst is the
-      // post-P2002 winner re-read (HTPR-6428).
       return findFirstCalls === 1 ? state.reAssignee : state.reAssignee;
     },
     findMany: async () => (state.outerAssignee ? [state.outerAssignee] : []),
   },
   $transaction: async (cb) => cb(tx),
-  // Test knobs ride on the same object because interopDefault exposes exactly
-  // this object as the importer's default import.
   __htpr6279: { state, reset, calls, PrismaClientKnownRequestError },
 };
 

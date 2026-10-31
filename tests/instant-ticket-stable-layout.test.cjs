@@ -313,7 +313,6 @@ const body = load("src/components/PageComponents/TaskDetail/CommentAndDescriptio
   "../ContextMenu": { HighlightMenu: () => null },
   "../ContextMenu/QuoteButton": { default: () => null },
   "@/components/RTE/TipTapTaskDetail": { default: richEditor },
-  // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
   "./DescriptionEditorSlot": { default: richEditor },
   "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
   "../BackgroundTaskAttachments": { default: () => null },

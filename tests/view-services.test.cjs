@@ -222,7 +222,7 @@ test("updateView rejects a visibility change from a non-owner on a Public view",
   await assert.rejects(
     updateView({
       viewId: "view-1",
-      userId: 999, // stored view's owner is userId 6
+      userId: 999,
       visibility: "Private",
     }),
     /Only the view's owner can change its visibility/,

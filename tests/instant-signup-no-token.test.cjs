@@ -1,12 +1,3 @@
-// HTPR-4815: /api/auth/instant-signup is unauthenticated and accepts ANY email,
-// including one that already has an account. It used to return a usable
-// email-link token in its body (and again inside loginUrl), so POSTing a
-// victim's address handed the caller a working login for that person.
-//
-// This test guards the invariant rather than the wording: nothing in the
-// response body may be usable as a credential, and it must not confirm whether
-// an address already has an account. If someone re-adds a token, a loginUrl, or
-// the user object, this fails.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -18,7 +9,6 @@ const ROUTE = path.resolve(
 );
 const source = fs.readFileSync(ROUTE, "utf8");
 
-// The response literal handed back on the success path.
 function successResponseBody() {
   const marker = "const response = NextResponse.json({";
   const start = source.indexOf(marker);
@@ -39,8 +29,6 @@ test("the success response carries no credential", () => {
 
 test("the success response does not leak the account or its existence", () => {
   const body = successResponseBody();
-  // `user` exposes id/displayName/photoURL/uid for any address you guess;
-  // `isNewUser` answers "does this person have an account?" to anyone asking.
   for (const leak of ["user", "isNewUser"]) {
     assert.ok(
       !new RegExp(`\\b${leak}\\s*:`).test(body),
@@ -50,8 +38,6 @@ test("the success response does not leak the account or its existence", () => {
 });
 
 test("no login token is minted on this route at all", () => {
-  // Defence in depth: if the helper comes back, someone is heading toward
-  // returning it again.
   assert.ok(
     !/createEmailLoginToken\s*\(/.test(source),
     "instant-signup must not mint login tokens; the emailed verification link is the only way in",
@@ -59,18 +45,13 @@ test("no login token is minted on this route at all", () => {
 });
 
 test("the verification credential leaves only via email", () => {
-  // The property-name checks above block the exact shape we removed. This blocks
-  // every other shape: nesting it, spreading it, putting it in a header, a
-  // cookie, or a redirect. verificationToken IS a credential — verify-email-token
-  // accepts it and sets a signed session — so its only legitimate destination is
-  // sendVerificationEmail.
   const allowed = [
     /^\s*const verificationToken = createVerificationToken\(/,
     /^\s*const verificationLink = buildVerificationLinkWithUTM\(/,
     /^\s*createVerificationToken\(normalizedEmail\),\s*$/,
     /^\s*await sendVerificationEmail\(/,
     /^\s*(normalizedEmail,|verificationLink$|verificationLink,)/,
-    /^\s*(\/\/|\*|\/\*)/, // comments
+    /^\s*(\/\/|\*|\/\*)/,
   ];
   const offenders = source
     .split("\n")
@@ -86,9 +67,6 @@ test("the verification credential leaves only via email", () => {
 });
 
 test("an existing account is never mutated by an unauthenticated caller", () => {
-  // The route accepts any email. If it reaches updateUsers() for an address that
-  // already exists, a stranger can overwrite that user's displayName and flip
-  // their tutorial flags just by POSTing their email address.
   const guard = source.indexOf("if (existingUser) {");
   const provision = source.indexOf("await updateUsers(");
   assert.notEqual(guard, -1, "the existing-account early return is gone");
@@ -99,7 +77,6 @@ test("an existing account is never mutated by an unauthenticated caller", () => 
 });
 
 test("the verification email is still sent", () => {
-  // The fix must not silently turn signup into a dead end.
   assert.ok(
     /await sendVerificationEmail\(/.test(source),
     "instant-signup must still email the verification link",

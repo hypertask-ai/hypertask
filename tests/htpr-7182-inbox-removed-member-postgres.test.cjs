@@ -1,6 +1,3 @@
-// Real-controller regression for https://app.hypertask.ai/detail/project-15/7182.
-// Only dummy data in a disposable PostgreSQL container; no mocked Prisma reads.
-// Docker unavailable: SKIP locally, hard failure with HT_REQUIRE_PG_TESTS=1.
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -78,7 +75,6 @@ async function provision() {
       return { skipReason: "postgres container did not become ready within 30s", cleanup };
     }
 
-    // Match the existing PG harnesses: materialize the full Prisma schema as SQL.
     schemaSql = path.join(os.tmpdir(), `htpr7182-schema-${process.pid}-${Date.now()}.sql`);
     const diff = run(process.execPath, [
       path.join(root, "node_modules", "prisma", "build", "index.js"),
@@ -97,7 +93,6 @@ async function provision() {
     }
 
     process.env.DATABASE_URL = url;
-    // Feature-flag evaluation must not reach a developer's shared Redis cache.
     delete process.env.REDIS_URL;
     const jiti = require("jiti")(__filename, {
       interopDefault: true,
@@ -176,7 +171,6 @@ test("removed member cannot read private board tasks, comments, or blocked items
   assert.notEqual(boardB.project.ownerId, recipient.id);
   assert.equal(boardB.member.agentId, null);
   assert.equal(boardB.member.role, "Member");
-  // A separate task ensures the synthetic blocked path is tested independently.
   const blocked = await prisma.task.create({
     data: {
       uniqueIndex: 2, section: "Todo", title: "htpr7182-board-B-blocked-task", description: "",

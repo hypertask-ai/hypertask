@@ -4,13 +4,6 @@ const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const ts = require("typescript");
 
-// Models pad tool calls with empty values for fields they were never asked to touch.
-// This payload is not hypothetical: it is the literal JSON gpt-5.5 sent to
-// hypertask_update_task when asked to swap one tag for another, captured off the
-// running chat route. Note `labels: []` sitting next to a correct add/remove pair.
-// Because [] is not undefined, the tool read it as "replace all labels with none"
-// and deleted every tag on the task before adding the new one. Same story for
-// `description: ""`, which silently wiped the task's description.
 const REAL_MODEL_PAYLOAD = {
   task_id: 22802,
   ticket_number: "",
@@ -55,9 +48,7 @@ const dropEmptyPadding = loadDropEmptyPadding();
 
 test("empty labels padding is dropped, so a tag swap cannot wipe the task's tags", () => {
   const cleaned = dropEmptyPadding(REAL_MODEL_PAYLOAD, UPDATE_FIELDS);
-  // If `labels` survives as [], setTaskLabels(task, []) deletes every tag.
   assert.equal("labels" in cleaned, false);
-  // The real intent must survive untouched.
   assert.deepEqual(cleaned.add_labels, ["AI"]);
   assert.deepEqual(cleaned.remove_labels, ["AI Task Writer"]);
 });
@@ -74,8 +65,6 @@ test("empty ticket_number padding is dropped so it cannot poison task resolution
 });
 
 test("due_date: null still clears the date -- null is intent, not padding", () => {
-  // Only "" and [] are padding. null is how a caller explicitly clears a due date,
-  // so dropping it would remove a real capability.
   const cleaned = dropEmptyPadding({ due_date: null }, UPDATE_FIELDS);
   assert.equal("due_date" in cleaned, true);
   assert.equal(cleaned.due_date, null);
@@ -97,8 +86,6 @@ test("a whitespace-only string counts as padding, not content", () => {
 });
 
 test("an explicit full-replace label set still replaces", () => {
-  // The destructive path must stay reachable when the user really does state
-  // the complete final tag list.
   const cleaned = dropEmptyPadding({ labels: ["AI", "stale"] }, UPDATE_FIELDS);
   assert.deepEqual(cleaned.labels, ["AI", "stale"]);
 });

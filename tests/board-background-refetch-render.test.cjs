@@ -160,7 +160,6 @@ const moduleMocks = {
   "./NoBoardsEmptyState": { __esModule: true, default: noopComponent },
 };
 
-// Compile the actual route component while replacing IO hooks and the heavy board children.
 const source = fs.readFileSync(path.join(__dirname, "../src/app/[...boardURL]/LandingPage.tsx"), "utf8");
 const compiled = ts.transpileModule(source, {
   compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -206,7 +205,6 @@ test("a background refetch with temporarily missing data keeps the rendered boar
   }
 });
 
-// Exercise the shell's actual route slot, not a hand-written copy of its wrappers.
 const providerSource = fs.readFileSync(path.join(__dirname, "../src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
 const workspaceStart = providerSource.indexOf("<BoardStartupContext.Provider");
 const workspaceEnd = providerSource.indexOf("</BoardStartupContext.Provider>", workspaceStart);

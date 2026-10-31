@@ -1,15 +1,3 @@
-// HTPR-5467 — provision the task-write probe fixture for a health identity.
-//
-// The /api/ops/task-write-probe endpoint never creates data; it reports
-// inconclusive until this has been run once for the account behind the health
-// check's bearer token (HYPERTASK_MCP_TOKEN in prod-health.yml).
-//
-//   node scripts/ensure-task-write-probe-fixture.mjs <userId>
-//
-// Idempotent: re-running returns the existing fixture. It commits one archived
-// project and one task in it; delete either and the probe goes inconclusive
-// until this is run again.
-
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

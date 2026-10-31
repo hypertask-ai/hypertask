@@ -85,8 +85,6 @@ test("ambiguous ticket numbers ask for project_id instead of returning 500", () 
   }
 });
 
-// project_id remains a project-list selector unless unique_index makes it a
-// task qualifier. The route, MCP schema, and thin service must agree.
 test("pages list keeps exactly one task-or-project target under the project_id rule", () => {
   for (const input of [
     { task_id: 20706 },

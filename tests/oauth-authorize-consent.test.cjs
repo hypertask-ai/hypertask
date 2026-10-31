@@ -4,9 +4,6 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { NextRequest } = require("next/server");
 
-// HTPR-6200: /oauth/authorize used to mint an authorization code on a plain GET, so
-// any site could top-level-navigate a signed-in user into handing it board access.
-// A GET must now stop at the consent screen, and only an approved POST may mint.
 
 const root = path.resolve(__dirname, "..");
 const originalSessionSecret = process.env.SESSION_SECRET;
@@ -124,8 +121,6 @@ function consentTokenFor(overrides = {}) {
 }
 
 function assertSentBackToConsent(response) {
-  // No approval means no code. The person is on a form, so they land back on the
-  // consent screen's expiry state, and the rejected token does not travel with them.
   assert.equal(response.status, 303);
   const location = new URL(response.headers.get("location"));
   assert.equal(location.pathname, "/oauth/consent");
@@ -182,7 +177,6 @@ test("approving with a valid consent token mints the code and remembers the gran
     authorizePost({ ...baseParams(), consent_token: consentTokenFor() }),
   );
 
-  // 303, not 307: a 307 would re-POST the browser onto the client callback.
   assert.equal(response.status, 303);
   const location = new URL(response.headers.get("location"));
   assert.equal(location.pathname, "/oauth/success");
@@ -202,7 +196,6 @@ test("the token the consent redirect carries is the one approval accepts", async
   const consentUrl = new URL(consentResponse.headers.get("location"));
   const params = Object.fromEntries(consentUrl.searchParams.entries());
 
-  // Exactly what the consent form posts back, straight from the redirect.
   const response = await POST(authorizePost(params));
 
   assert.equal(response.status, 303);
@@ -335,7 +328,6 @@ test("a signed-out POST mints nothing and resumes through login", async () => {
   const location = new URL(response.headers.get("location"));
   assert.equal(location.pathname, "/login");
   assert.equal(location.searchParams.get("client_id"), "test-client");
-  // The stale approval must not survive the round trip through login.
   assert.equal(location.searchParams.get("consent_token"), null);
   assert.equal(createdCode, undefined);
 });

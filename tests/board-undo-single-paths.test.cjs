@@ -30,8 +30,6 @@ new Function("require", "module", "exports", compile(read("src/components/undoTo
 );
 const undo = undoModule.exports;
 
-// Extract declarations with the TypeScript parser, not a copied implementation.
-// External I/O is stubbed; notification rendering uses real react-hot-toast stores.
 function declaration(file, name) {
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let found;
@@ -227,7 +225,6 @@ test("no direct Undo confirmations remain; custom undo rendering has one owner",
     visit(source);
     return calls;
   }
-  // Positive control prevents an accidentally empty scan from proving absence.
   assert.deepEqual(inspect("control.ts", 'toast("Undo task archive")'), [{ file: "control.ts" }]);
   const calls = [], customOwners = [];
   function walk(dir) {

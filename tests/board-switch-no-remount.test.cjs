@@ -8,13 +8,6 @@ const { getNextRouterAwareHistoryState } = require(
   path.join(__dirname, "..", "src/lib/navigation/nextHistoryState.ts"),
 );
 
-// HTPR-6072: SectionComp used to be keyed by readinessRouteEntryId, so React
-// fully unmounted and rebuilt the whole board tree on every switch - even
-// with a warm local copy - purely to give the readiness telemetry (PR #2765,
-// HTPR-5432) a clean trace per route entry. That reset is already available
-// without a remount: prepareBoardReadinessTrace (boardReadinessPhases.ts)
-// keys its runtime by routeEntryId/generation on its own. This pins the key
-// staying gone so a future edit can't silently reintroduce the remount.
 
 test("HTPR-6072: SectionComp is not keyed by the readiness route entry id", () => {
   const src = fs.readFileSync(
@@ -62,11 +55,6 @@ test("HTPR-6072: board-level modals close on a project change instead of relying
 });
 
 test("HTPR-6072: the pending delete lookup is guarded against a ref, not a closure value", () => {
-  // A closure-captured currentProject.id read before and after the same
-  // await is always the same value, so a comparison against it can never
-  // detect a switch that happened during the await - only a ref (mutated on
-  // every render, read fresh after the await) can. This pins the fix the
-  // reviewer required after the first version of this guard was a no-op.
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/hooks/Homepage/useKanbanModalStates.ts"),
     "utf8",
@@ -86,18 +74,10 @@ test("HTPR-6072: the pending delete lookup is guarded against a ref, not a closu
 });
 
 test("HTPR-6072: the delete-lookup guard actually blocks a stale result across an await (ref, not closure)", () => {
-  // This repo has no React hook-rendering test setup, so this exercises the
-  // exact race the fix depends on directly: a ref mutated mid-await must be
-  // read as current afterwards, while a closure-captured variable read
-  // before and after the same await is always the same value and can never
-  // catch a change. The first version of this guard compared two reads of
-  // the same closured variable and was a no-op - this test would have
-  // failed against that version and passes against the ref-based fix.
-
   async function toggleDeleteModalClosureVersion(currentProjectId, lookup, onOpen) {
-    const lookupProjectId = currentProjectId; // closure read, same value both times
+    const lookupProjectId = currentProjectId;
     const result = await lookup();
-    if (currentProjectId !== lookupProjectId) return; // always false: same variable
+    if (currentProjectId !== lookupProjectId) return;
     onOpen(result);
   }
 
@@ -109,7 +89,6 @@ test("HTPR-6072: the delete-lookup guard actually blocks a stale result across a
   }
 
   return (async () => {
-    // Closure version: switching boards mid-await does not stop it opening.
     let openedByClosureVersion = false;
     const closurePromise = toggleDeleteModalClosureVersion(
       15,
@@ -123,7 +102,6 @@ test("HTPR-6072: the delete-lookup guard actually blocks a stale result across a
       "sanity check: the closure-comparison pattern cannot detect a project change and always opens",
     );
 
-    // Ref version: switching boards mid-await correctly blocks it opening.
     let openedByRefVersion = false;
     const projectIdRef = { current: 15 };
     const refPromise = toggleDeleteModalRefVersion(
@@ -131,7 +109,7 @@ test("HTPR-6072: the delete-lookup guard actually blocks a stale result across a
       () => new Promise((resolve) => setTimeout(() => resolve([1, 2]), 10)),
       () => { openedByRefVersion = true; },
     );
-    projectIdRef.current = 16; // user switched boards while the lookup was in flight
+    projectIdRef.current = 16;
     await refPromise;
     assert.equal(
       openedByRefVersion,
@@ -139,7 +117,6 @@ test("HTPR-6072: the delete-lookup guard actually blocks a stale result across a
       "the ref-based guard must block a delete-modal open when the project changed mid-lookup",
     );
 
-    // And it must still open normally when nothing changed.
     let openedWhenUnchanged = false;
     const stableRef = { current: 15 };
     await toggleDeleteModalRefVersion(
@@ -300,7 +277,6 @@ test("HTPR-6072: shallow navigation notifies Next when the current entry is alre
   const restoredUrls = [];
 
   const nextPatchedPushState = (data, url) => {
-    // Next deliberately skips its router update for its own internal calls.
     if (data?.__NA || data?._N) return data;
     restoredUrls.push(url);
     return {

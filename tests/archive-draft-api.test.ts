@@ -1,5 +1,3 @@
-// Assert-based test because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx tests/archive-draft-api.test.ts
 import assert from "node:assert/strict";
 import type { NextApiRequest, NextApiResponse } from "next";
 

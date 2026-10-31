@@ -8,8 +8,6 @@ const contracts = require("./htpr-6509-s3-baseline.json");
 assert.equal(contracts.commit, "fb9ef851b6bb3a5b8ef84d2425df5a6f7d19ac3b");
 const json = (value) => JSON.parse(JSON.stringify(value));
 
-// Frozen synthetic results were captured from production modules at the pinned
-// pre-change commit. Normal runs neither need Git history nor rewrite them.
 function reference(name, ...args) {
   const key = JSON.stringify([name, ...args]);
   assert.ok(Object.hasOwn(contracts.cases, key), `Missing baseline case: ${key}`);

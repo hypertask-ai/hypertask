@@ -265,7 +265,6 @@ function fakeDatabase(initialRuns = [], initialActivities = []) {
       findFirst: async ({ where }) => [...messages].reverse().find((message) => (!where.sessionId || message.sessionId === where.sessionId) && (!where.id || message.id === where.id) && (!where.role || message.role === where.role)) ?? null,
       findUnique: async ({ where }) => messages.find((message) => (!where.id || message.id === where.id) && (!where.replyToMessageId || message.replyToMessageId === where.replyToMessageId)) ?? null,
       createMany: async ({ data }) => {
-        // Postgres treats every NULL as distinct, so only a real id collides.
         const created = data.filter((row) => !(row.replyToMessageId && messages.some((item) => item.replyToMessageId === row.replyToMessageId)));
         messages.push(...created.map((row, index) => ({ id: `message-${messages.length + index + 1}`, ...row })));
         return { count: created.length };
@@ -449,7 +448,6 @@ function loadService({
       flagChecks.push(key);
       return featureEnabled(key);
     },
-    // Owner-only in the real default, so the sweep prefilter sees one id.
     featureFlagCandidateUserIds: async (key) => (featureEnabled(key) ? [6] : []),
   });
   stub("src/lib/mcp/auth.ts", { validateMcpAuth: async () => null });
@@ -476,9 +474,6 @@ function loadService({
     broadcast: async (...args) => broadcasts.push(args),
     broadcastTaskComment: async (...args) => broadcasts.push(args),
   });
-  // The shared thread's fan-out is its own module; it resolves the participant
-  // list from the database, which this harness does not model. Recording the
-  // call keeps "a chat response wakes the thread" assertable here.
   stub("src/lib/agents/chatBroadcast.ts", {
     broadcastChatSession: async (sessionId, alsoUserIds = []) =>
       broadcasts.push(["chat-session", sessionId, [...alsoUserIds]]),
@@ -566,9 +561,6 @@ test("chat Stop and timeout persist one outcome against late replies", async () 
   assert.equal(swept.db.messages.at(-1).content, model.AGENT_CHAT_TIMEOUT_MESSAGE);
   assert.equal(swept.run.stoppedById, null);
   assert.equal(swept.webhookEvents[0].actor.userId, null);
-  // A heartbeat prompt is an undelivered human message in the agent's own
-  // session, not a user turn: timing it out would corrupt the agent's own
-  // transcript and stop a run nobody is waiting on.
   const heartbeat = loadService({ runs: [] });
   heartbeat.db.messages.push({ id: "heartbeat-1", sessionId: "chat-1", role: "human", content: "heartbeat", isDelivered: false, createdAt: new Date("2026-09-04T10:00:00.000Z") });
   assert.equal(await heartbeat.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 0);
@@ -577,16 +569,11 @@ test("chat Stop and timeout persist one outcome against late replies", async () 
 });
 
 test("a run with no prompt binding is still ended", async () => {
-  // The stuck state this ticket is about: a run started before the prompt
-  // binding existed. Neither the sweep nor Stop may leave it nonterminal.
   const swept = loadChatTurn();
   swept.run.chatPromptMessageId = null;
   assert.equal(await swept.service.sweepExpiredAgentChatTurns(new Date("2026-09-04T10:05:00.000Z")), 1);
   assert.equal(swept.run.status, "STOPPED");
   assert.equal(swept.run.stoppedById, null);
-  // Stop is a promise to the user, so it ends the session's run even when the
-  // binding points somewhere else. Every writer of a delivered human message
-  // rebinds, so this is a backstop rather than a reachable state today.
   const stale = loadChatTurn();
   stale.run.chatPromptMessageId = "some-older-message";
   assert.ok(await stale.service.stopAgentChatTurn(browserPrincipal, "chat-1"));
@@ -878,8 +865,6 @@ test("chat responses store the activity and assistant message together", async (
   assert.equal(harness.broadcasts.length, 1);
   harness.db.messages.push({ id: "human-2", sessionId: "session-1", role: "human", createdAt: new Date() });
   Object.assign(harness.db.messages.find(({ role }) => role === "assistant"), { replyToMessageId: "human-2", createdAt: new Date("2030-01-01") });
-  // Bind the run to human-2 so the prompt check passes and the reused
-  // idempotency key is the only thing left that can reject this call.
   run.chatPromptMessageId = "human-2";
   await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: "human-2" }, "chat-response-1"), model.AgentRunActivityConflictError);
 });

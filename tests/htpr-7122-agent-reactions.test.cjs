@@ -1,6 +1,3 @@
-// HTPR-7122: an agent token used to save its emoji reaction as its owner's own,
-// so a Runner's thumbs up looked and read exactly like Valentin's approval. These
-// lock in that agent reactions are stored, shown and read as the agent.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -20,13 +17,11 @@ function loadTs(relativePath, { stubs = false } = {}) {
   const jiti = createJiti(path.join(root, `tests/htpr-7122-loader-${++loads}.cjs`), {
     alias: { "@": path.join(root, "src") },
     interopDefault: true,
-    // Stubbed modules live in require.cache, which jiti only reads with its module cache on.
     ...(stubs ? {} : { fsCache: false, moduleCache: false }),
   });
   return jiti(path.join(root, relativePath));
 }
 
-// A small in-memory Reaction table that honours the where clauses the store uses.
 function fakeTx(rows) {
   let nextId = rows.length + 1;
   const matches = (row, where) =>
@@ -114,7 +109,6 @@ test("a person's API reaction never revives or removes their agent's row", async
 test("the web emoji click only ever finds and deletes the person's own rows", () => {
   const page = fs.readFileSync(path.join(root, "src/pages/api/comments/addReaction.ts"), "utf8");
   const scoped = page.match(/userId:userId,\s*(?:\/\/[^\n]*\n\s*)?agentId:null,/g) || [];
-  // findMany plus both deleteMany calls.
   assert.equal(scoped.length, 3);
 });
 
@@ -125,7 +119,6 @@ test("the MCP route reacts as the calling agent and names it on the inbox notifi
   assert.match(route, /reactorAgentId: agent\?\.id \?\? null/);
   assert.match(route, /fromAgentId: agentId/);
   assert.doesNotMatch(route, /where: \{ commentId: target\.commentId, userId, unified \}/);
-  // The write response names only agents the caller may see, like the comment reads.
   assert.match(route, /return mapReactionWriteResult\(result, \(agentIds\) =>\s*loadVisibleReactionAgents\(agentIds, userId, target\.projectId\)/);
 });
 
@@ -203,7 +196,6 @@ test("task detail and shared reaction groups show agents as agents", () => {
   assert.match(load, /\|\| ' \(agent\)'/);
   const shared = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/getSharedTask.ts"), "utf8");
   assert.match(shared, /CASE WHEN r\."agentId" IS NULL THEN TO_JSONB\(u\.\*\) ELSE/);
-  // A public share never names an agent, so a reacting agent reads as "Private agent".
   assert.match(shared, /'isAgent', true,\s*'displayName', 'Private agent'/);
   assert.doesNotMatch(shared, /r\."agentDisplayName"/);
   const sheet = fs.readFileSync(
@@ -237,7 +229,6 @@ test("a reaction webhook event carries the reacting agent as its actor", async (
     commentId: 55, reactorUserId: 6, reactorIsAgent: true, reactorAgentId: RUNNER.id, emoji: "\u{1F44D}", added: true,
   });
   assert.deepEqual(actorInputs, [{ userId: 6, agentId: RUNNER.id }]);
-  // And an agent's reaction never becomes an event for another agent at all.
   assert.equal(mod.reactionWebhookTarget({ added: true, reactorIsAgent: true, commentAgentId: "agent-other" }), null);
 });
 

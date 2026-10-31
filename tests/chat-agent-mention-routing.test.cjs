@@ -1,8 +1,3 @@
-// HTPR-6284. An @agent mention in the AI chat sidebar routes the whole turn to
-// that fleet agent. These tests pin the three pieces that make that safe: only
-// a clean single mention routes, the fleet bridge contract is validated before
-// its answer reaches the chat, and assistant persistence cannot misattribute a
-// reply to an agent that did not write it.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -186,7 +181,6 @@ test("persistAssistantMessage attribution is tri-state", async () => {
     };
   }
 
-  // Plain AI chat, no override: stays unattributed.
   const plainDb = buildDb({ sessionAgentId: null });
   await persistAssistantMessage({
     db: plainDb,
@@ -198,7 +192,6 @@ test("persistAssistantMessage attribution is tri-state", async () => {
   });
   assert.equal(plainDb.created[0].authorAgentId, null);
 
-  // Native agent session, no override: session agent attribution (unchanged).
   const nativeDb = buildDb({ sessionAgentId: "native-agent" });
   await persistAssistantMessage({
     db: nativeDb,
@@ -210,7 +203,6 @@ test("persistAssistantMessage attribution is tri-state", async () => {
   });
   assert.equal(nativeDb.created[0].authorAgentId, "native-agent");
 
-  // Routed @mention turn: explicit agent id wins, even in a plain session.
   const routedDb = buildDb({ sessionAgentId: null });
   await persistAssistantMessage({
     db: routedDb,
@@ -223,7 +215,6 @@ test("persistAssistantMessage attribution is tri-state", async () => {
   });
   assert.equal(routedDb.created[0].authorAgentId, "fleet-agent");
 
-  // Failure sentence in a native agent session: explicit null stays null.
   const failureDb = buildDb({ sessionAgentId: "native-agent" });
   await persistAssistantMessage({
     db: failureDb,

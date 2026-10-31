@@ -29,7 +29,6 @@ test("one over the limit is limited", () => {
 
 test("retryAfterSeconds counts down to the window boundary", () => {
   const result = decideMcpRateLimit(121, 120, 1000, 1010, MCP_RATE_LIMIT_WINDOW_SECONDS);
-  // window covers [1000, 1060); 1010 is 10s in, so 50s remain
   assert.equal(result.retryAfterSeconds, 50);
 });
 

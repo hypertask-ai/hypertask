@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/** Production error collector. Node 24 ESM, no dependencies. */
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { promises as fs, readFileSync } from 'node:fs';
@@ -52,13 +51,11 @@ export function normalize(text, route = false) {
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, id)
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, id)
     .replace(/\b(?:[0-9a-f]{12,}|c[a-z0-9]{20,})\b/gi, id)
-    // Quoted names like `prisma.task.deleteMany()` say what failed; quoted user text and values do not.
     .replace(/"[^"\n]*"|'[^'\n]*'|`[^`\n]*`/g, quoted => (/[\s\d]/.test(quoted) || quoted.length > 62 ? id : quoted))
     .replace(/\b\d+(?:\.\d+)?\b/g, route ? id : '<n>')
     .replace(/\s+/g, ' ').trim().slice(0, 300);
 }
 
-// One kind of error is one ticket, whichever routes it shows up on; the ticket lists the routes.
 export function fingerprint(service, message) {
   return createHash('sha256').update(`${service}|${normalize(message)}`).digest('hex').slice(0, 16);
 }
@@ -68,7 +65,6 @@ function noiseFingerprint(service, id) {
 }
 
 function command(name, args, env, input) {
-  // Never echo child output: CLI errors and receipts may contain credentials.
   const result = spawnSync(name, args, { env, input, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error('command failed');
   return result.stdout;
@@ -289,7 +285,6 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
       if (!Array.isArray(rows)) throw new Error('invalid source response');
       const events = correlate(rows.map(validate).filter(event => event.ts > since && event.ts <= until), [...Object.values(state.pending), ...Object.values(state.fingerprints)].filter(group => group.incident).map(group => group.incident));
-      // A fingerprint keeps the board it was first routed to, so one kind of error never splits across boards.
       const boards = new Map();
       for (const event of events) {
         if (event.ticket === false) continue;
@@ -343,7 +338,6 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           while (Date.parse(events[start].ts) <= Date.parse(events[end].ts) - HOUR) count -= events[start++].count;
           if (count > peak) { peak = count; lastSeen = events[end].ts; }
         }
-        // Keep only the trailing hour for thresholds spanning collection passes.
         state.noiseWindows[fp] = events.filter(event => Date.parse(event.ts) > now - HOUR);
         if (peak <= noiseLimit && !state.fingerprints[fp] && !state.pending[fp]) continue;
         const fresh = state.fingerprints[fp] || state.pending[fp] ? warning.events : events;
@@ -405,7 +399,6 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     delete state.pending[fp];
     absorb(current, { ...group, aliases: [...new Set([...(group.aliases ?? []), fp])], normalized: redact(normalize(group.message)) }, false);
   }
-  // Persist fetched data before external writes so interrupted runs retry pending groups.
   await checkpoint();
   let held = 0;
   let section;
@@ -445,7 +438,6 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         const path = dryRun ? '<tmp-description.html>' : join(root, `.description-${randomUUID()}.html`);
         try {
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
-          // Reserve before create; ambiguous failures still consume cap until reconciled.
           state.created.push(iso(now));
           await checkpoint();
           const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
@@ -510,11 +502,8 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     try { write('vcc', ['activity', 'add', CONTROL, `${held} error groups held back by the hourly cap`]); }
     catch { diagnostic('held-back notice failed'); }
   }
-  // Retry retained completed days, oldest first; partial days cannot reveal a full-day spike.
   if (!signal.aborted && (summary || new Date(now).getUTCHours() >= 6)) {
     const services = new Set(Object.values(state.days).flatMap(counts => Object.keys(counts)));
-    // A day is final for a service once its source has read past that day's end. A source still
-    // failing two days later is reported as missing data rather than holding the summary forever.
     const dayEnd = date => Date.parse(`${date}T00:00:00Z`) + DAY;
     const covered = (date, service) => state.days[date]?.[service]?.complete === true;
     const finalized = (date, service) => Object.values(state.coverage).some(coverage => coverage.services.includes(service) && Date.parse(coverage.until) >= dayEnd(date));
@@ -591,7 +580,6 @@ async function main() {
       const root = process.env.ERROR_COLLECTOR_STATE_DIR ?? join(process.env.HOME ?? homedir(), '.local/state/error-collector');
       await fs.mkdir(root, { recursive: true, mode: 0o700 });
       await fs.chmod(root, 0o700);
-      // Also serialize manual --once runs; dry runs only read atomic snapshots.
       const result = spawnSync('/usr/bin/flock', ['--nonblock', join(root, 'run.lock'), process.execPath, ...process.argv.slice(1)], { env: { ...process.env, ERROR_COLLECTOR_LOCKED: '1' }, stdio: 'inherit' });
       process.exitCode = result.status ?? 1;
       return;

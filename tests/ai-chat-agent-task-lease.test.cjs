@@ -1,19 +1,8 @@
-// HTPR-5468: AI Chat runs task writes as the native agent driving the
-// conversation, but never claimed the task mutation lease those writes are
-// fenced behind. Every agent move, edit, archive or description publish from
-// chat came back as though another agent owned the ticket.
-//
-// These tests drive the real fence and the real adoption scope. The tool body
-// stands in for one AI Chat tool execution; both chat surfaces (the streaming
-// route and the HyperAI ticket-mention path) wrap their tool call in exactly
-// the helper exercised here.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-// One registry for both modules: a second jiti instance would give the fence a
-// different AsyncLocalStorage instance from the adoption boundary.
 const jiti = require('jiti')(
   path.join(root, 'tests/agent-lease-adoption-internal-jiti-entry.cjs'),
   { interopDefault: true, alias: { '@': path.join(root, 'src') } }
@@ -33,9 +22,6 @@ const TASK_ID = 42;
 const AGENT = 'agent-a';
 const USER = 7;
 
-// A lease table that behaves like the real one: an unexpired row is never
-// overwritten, an expired row is, DELETE only matches the exact holder, and
-// only adoption-minted rows carry a token (HTPR-5656).
 function leaseStore() {
   const store = { lease: null, now: () => new Date() };
   const live = () => store.lease && store.lease.expiresAt > store.now();
@@ -85,8 +71,6 @@ function leaseStore() {
       if (sql.includes('INSERT INTO "TaskLease"')) {
         if (live()) return [];
         const [, holder, agentId, token, referenceToken, ttlSeconds] = values;
-        // Model the ON CONFLICT DO UPDATE faithfully: columns the update set
-        // does not assign keep the expired row's previous values.
         const replacesExpired = !!store.lease;
         const keptToken =
           sql.includes('"token" = EXCLUDED."token"') || !replacesExpired
@@ -153,8 +137,6 @@ function leaseStore() {
   return store;
 }
 
-// Stands in for POST /mcp/tasks/lease/claim: an explicit claim replaces an
-// expired lease with a fresh row that carries no token.
 function explicitlyReclaim(store) {
   store.lease = {
     taskId: TASK_ID,
@@ -167,7 +149,6 @@ function explicitlyReclaim(store) {
   };
 }
 
-// The fence takes a transaction client; here the same object serves as both.
 const write = (store) =>
   assertAgentAssignmentChangeAllowed(store.db, TASK_ID, AGENT, USER);
 
@@ -295,8 +276,6 @@ test('a rolled-back join cannot release the original call\'s reference', async (
           await write(store);
           assert.equal(store.lease.adoptionCount, 2);
 
-          // Model the enclosing transaction rolling back its count and
-          // reference-token writes before scope cleanup runs.
           store.lease.adoptionRefs.pop();
           store.lease.adoptionCount -= 1;
           throw new Error('transaction rolled back');
@@ -317,9 +296,6 @@ test('a rolled-back join cannot release the original call\'s reference', async (
 });
 
 test('a later tool call in a long turn takes its own lease', async () => {
-  // The scope is one tool call, not the whole turn, so a turn that runs past
-  // the lease TTL between steps still works. A turn-wide adoption would have
-  // spent its one-shot grant on the first write and failed this one.
   const store = leaseStore();
   const clock = { value: Date.now() };
   store.now = () => new Date(clock.value);
@@ -374,8 +350,6 @@ test('the release never touches a lease another holder owns', async () => {
     { agentId: AGENT, userId: USER },
     async () => {
       await write(store);
-      // A human override cancelled our lease mid-call and another agent claimed
-      // the task. Releasing must not delete that agent's row.
       store.lease = {
         taskId: TASK_ID,
         holder: 99,
@@ -395,7 +369,6 @@ test('HTPR-5656: the release never deletes an explicit claim the same agent took
   const clock = { value: Date.now() };
   store.now = () => new Date(clock.value);
 
-  // The chat tool step adopts a lease, then the turn stalls past the TTL.
   await withAdoptedAgentMutationLease(
     store.db,
     { agentId: AGENT, userId: USER },
@@ -403,11 +376,8 @@ test('HTPR-5656: the release never deletes an explicit claim the same agent took
   );
   clock.value += 10 * 60 * 1000;
 
-  // Meanwhile the same agent's worker turn claims an explicit lease on the task.
   explicitlyReclaim(store);
 
-  // A second tool call adopts again and hands back. Its hand-back must not
-  // remove the worker's live explicit lease.
   await withAdoptedAgentMutationLease(
     store.db,
     { agentId: AGENT, userId: USER },
@@ -428,8 +398,6 @@ test('HTPR-5656: a stale hand-back matches the token, not just holder and agent'
 
   await withAgentMutationLeaseAdoption({ agentId: AGENT, userId: USER }, async () => {
     await write(store);
-    // Our adopted lease expires and the same agent explicitly re-claims the
-    // task before the delayed hand-back runs.
     clock.value += 10 * 60 * 1000;
     explicitlyReclaim(store);
 
@@ -444,7 +412,6 @@ test('HTPR-5656: a stale hand-back matches the token, not just holder and agent'
 
 test('HTPR-5656: adopting over an expired lease replaces its token, so the hand-back still matches', async () => {
   const store = leaseStore();
-  // A stale row from an earlier holder instance is still parked on the task.
   store.lease = {
     taskId: TASK_ID,
     holder: USER,
@@ -477,8 +444,6 @@ test('a human tool call is untouched and never adopts a lease', async () => {
   const store = leaseStore();
 
   await withAdoptedAgentMutationLease(store.db, {}, async () => {
-    // No agent id: the fence's human branch applies, which passes when no agent
-    // lease is live and keeps the override path for when one is.
     await assertAgentAssignmentChangeAllowed(store.db, TASK_ID, null, USER);
   });
 

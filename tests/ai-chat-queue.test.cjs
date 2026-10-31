@@ -1,7 +1,6 @@
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 
-/** Mirrors HTPR-5695 FIFO queue drain: pop head, leave the rest. */
 function drainQueue(queue) {
   if (queue.length === 0) return { next: null, rest: queue };
   const [next, ...rest] = queue;

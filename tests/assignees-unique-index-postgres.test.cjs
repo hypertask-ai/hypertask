@@ -1,30 +1,3 @@
-// HTPR-6279 — real-PostgreSQL regression test for the assignees uniqueness fix.
-//
-// Two concurrent assign calls could both pass the check-then-insert path and
-// create identical assignee rows (duplicated assignee chips, e.g. HTPR-6277).
-// The fix is the 20260908160000 migration: deduplicate existing rows, then add
-// partial unique indexes for person rows (agentId IS NULL) and agent rows
-// (agentId IS NOT NULL); the assign controller maps the losing insert to an
-// idempotent "already-assigned" outcome.
-//
-// This suite runs against a real throwaway PostgreSQL server (docker):
-//   1. the migration dedupes pre-existing duplicate rows (oldest survives) and
-//      creates both partial unique indexes;
-//   2. a duplicate insert is rejected with P2002 after the migration;
-//   3. two concurrent assigneesAssign calls produce exactly one row, one
-//      "created" outcome and one "already-assigned" outcome, both HTTP 200
-//      (the per-task mutation fence serializes the two transactions, so the
-//      loser reports already-assigned through the in-transaction recheck).
-// If docker or PostgreSQL is unavailable the tests SKIP (node:test skip)
-// rather than failing; CI sets HT_REQUIRE_PG_TESTS=1 to turn that into a hard
-// failure (same contract as tests/task-write-lock-postgres.test.cjs).
-//
-// The FIREBASE_SERVICE_ACCOUNT_B64 / REDIS_URL env set here are throwaway
-// values generated at runtime — firebase-admin only needs a parseable key to
-// initialize, and the fire-and-forget AI-summary scheduler rejects harmlessly
-// when Redis is unreachable (tracked below so unexpected rejections still fail
-// the suite).
-
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -96,8 +69,6 @@ function freePort() {
 }
 
 function throwawayFirebaseEnv() {
-  // Runtime-generated key so the FCM module can initialize; nothing sensitive
-  // is committed (the key exists only in this process's memory).
   const { privateKey } = crypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
   const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
   return Buffer.from(
@@ -131,7 +102,6 @@ async function provision() {
     try {
       run("docker", ["rm", "-f", container]);
     } catch {
-      /* best effort */
     }
   };
 
@@ -181,8 +151,6 @@ async function provision() {
       return { skipReason: "postgres container did not become ready within 30s", cleanup };
     }
 
-    // Materialise the Prisma schema as SQL and apply it with the container's
-    // own psql (read-only diff, nothing outside the throwaway container).
     const schemaSql = path.join(
       os.tmpdir(),
       `htpr6279-schema-${process.pid}-${Date.now()}.sql`
@@ -220,8 +188,6 @@ async function provision() {
 
     process.env.DATABASE_URL = url;
     process.env.FIREBASE_SERVICE_ACCOUNT_B64 = throwawayFirebaseEnv();
-    // The fire-and-forget AI-summary scheduler needs a redis URL to reject
-    // against; nothing connects to it in this suite.
     process.env.REDIS_URL = "redis://127.0.0.1:9/htpr6279";
 
     const jiti = require("jiti")(path.join(root, "tests", path.basename(__filename)), {
@@ -255,9 +221,6 @@ function psql(container, sql) {
   ], { input: sql });
 }
 
-// The assign path schedules an AI-summary job fire-and-forget; with no real
-// Redis that promise rejects. Record rejections here and let the suite assert
-// that only this known-benign one happened.
 const unhandledRejections = [];
 const onUnhandledRejection = (reason) => {
   unhandledRejections.push(reason);
@@ -302,19 +265,14 @@ before(async () => {
 });
 
 after(async () => {
-  // The fire-and-forget summary scheduler constructs an ioredis client that
-  // retries forever against the unreachable REDIS_URL and would keep this
-  // process (and node --test) alive; disconnect it before exiting.
   try {
     globalThis.redis?.disconnect?.();
   } catch {
-    /* not connected */
   }
   if (state?.prisma) {
     try {
       await state.prisma.$disconnect();
     } catch {
-      /* already disconnected */
     }
   }
   if (state?.cleanup) state.cleanup();
@@ -347,7 +305,6 @@ test("migration dedupes assignees and blocks duplicates", async (t) => {
     },
   });
 
-  // Pre-migration duplicates: two person rows and two agent rows.
   const personFirst = await prisma.assignees.create({
     data: { taskId: task.id, userId: person.id, assignerId: owner.id },
   });
@@ -385,9 +342,6 @@ test("migration dedupes assignees and blocks duplicates", async (t) => {
   assert.ok(names.includes("Assignees_taskId_userId_person_key"), names.join(","));
   assert.ok(names.includes("Assignees_taskId_agentId_key"), names.join(","));
 
-  // Post-migration, a duplicate insert is rejected by the database itself, and
-  // the real error shape (Prisma pg driver adapter) satisfies the controller's
-  // idempotency predicate.
   const assignModule = state.jiti(
     path.join(root, "src", "utils", "controllers", "assignees", "assign.ts")
   );
@@ -440,8 +394,6 @@ test("concurrent assigns produce one row and an already-assigned outcome", async
   const actor = currentUserFor(owner);
   const [first, second] = await withTimeout(
     Promise.all([
-      // Self-assign: the owner is a member, and notifications are skipped for
-      // self-assignment so no external side effects run in the test.
       assigneesAssign(actor, owner.id, task.id, undefined, undefined, { intent: "assign" }),
       assigneesAssign(actor, owner.id, task.id, undefined, undefined, { intent: "assign" }),
     ]),
@@ -458,8 +410,6 @@ test("concurrent assigns produce one row and an already-assigned outcome", async
   assert.equal(rows.length, 1, "the unique index collapsed the race to one row");
   assert.equal(rows[0].userId, owner.id);
 
-  // createAssignedActivity is fire-and-forget; give it time to finish so its
-  // queries do not race the suite's prisma.$disconnect() in after().
   await sleep(1500);
   assertNoUnexpectedRejections();
 });

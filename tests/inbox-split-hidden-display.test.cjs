@@ -1,16 +1,3 @@
-// HTPR-5515: "massive white space in the inbox".
-//
-// Every split renders its own wrapper and only the active one renders rows.
-// The wrapper relied on the HTML `hidden` attribute to remove the inactive
-// ones, but it also set `display: "flex"` inline. An inline declaration beats
-// the UA stylesheet rule `[hidden] { display: none }`, so `hidden` did nothing:
-// each inactive split stayed in the layout as an EMPTY `flex: 1` column.
-// With N splits, N-1 empty flex children shared the inbox height and the real
-// notification list was squeezed into a fraction of the page, leaving a large
-// blank area.
-//
-// This pins the resolved inline display value. It fails if the wrapper ever
-// goes back to an unconditional "flex".
 const test = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
@@ -34,7 +21,6 @@ const CONFIG_SOURCE = path.join(
   "inbox.config.ts",
 );
 
-// Mirrors inboxConfig.visibility in src/lib/configs/inbox.config.ts.
 const hidden = (value, index) => value !== index;
 const display = (value, index) => (value !== index ? "none" : "flex");
 

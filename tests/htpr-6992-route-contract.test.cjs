@@ -1,10 +1,3 @@
-// HTPR-6992: the old Pages handlers behind the 6923 app-router flag are gone.
-// Every kept route answers with its shared handler, with no flag lookup, and a
-// request with no session gets the same status and body the old handler sent.
-// The pinned bodies in tests/fixtures/htpr-6992-no-session-responses.json were
-// captured from the old handlers (base a9b09a569) and matched the new ones exactly
-// for every listed method. "wrong:<METHOD>" entries pin the new 405 answer; the
-// old code hung or answered 401 for some of those verbs.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

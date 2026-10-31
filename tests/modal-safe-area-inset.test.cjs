@@ -1,13 +1,5 @@
 "use strict";
 
-// The app runs viewportFit:"cover", so the Android status bar draws over page
-// content. A mobile modal pinned to a bare top-0 puts its first row underneath
-// that bar: the header is invisible and taps near the top reach system UI
-// instead of the dialog. The discard confirmation is where this was reported —
-// it looked broken because the Discard row was partly unreachable (HTPR-5534).
-//
-// 72 files render through ModalContainerCustom, so this guard protects every
-// mobile modal, not just the one that was reported.
 
 const test = require("node:test");
 const assert = require("node:assert");
@@ -38,7 +30,5 @@ test("no mobile breakpoint pins a modal to a bare top-0", () => {
 });
 
 test("the desktop position is untouched", () => {
-  // env() resolves to 0 without an inset, so this fix must not move anything
-  // on desktop, where the modal deliberately sits 180px down.
   assert.match(source, /sm:top-\[180px\]/);
 });

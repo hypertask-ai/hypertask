@@ -1,6 +1,3 @@
-// HTPR-4863: a team whose card fails must not keep premium forever.
-// Policy (owner-decided): past_due still entitles (Stripe is retrying),
-// unpaid does not (Stripe gave up), alongside the existing dead statuses.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -99,8 +96,6 @@ test("subscriptionStatusGrantsAccess encodes the policy", () => {
   assert.equal(subscriptionStatusGrantsAccess(null), false);
 });
 
-// The AI plan gate is the authorization path a failed-payment team would abuse,
-// so assert it directly and not only the client-side billing snapshot.
 async function gatePlanFor(subscriptionStatus) {
   prismaStub.setTeam({
     id: "team-1",

@@ -1,4 +1,3 @@
-// Retired parked replies must stay absent while legacy stored notices stay hidden.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -19,9 +18,6 @@ function stubModule(relativePath, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 
-// One database stub for the whole file: each route hands the proxy its own
-// tables by setting `db`. Re-stubbing the module per test does not reach a
-// route that an earlier jiti instance already resolved.
 let db = null;
 stubModule("src/lib/prisma.ts", {
   default: new Proxy({}, { get: (_target, key) => db[key] }),
@@ -29,10 +25,6 @@ stubModule("src/lib/prisma.ts", {
 
 let routeLoad = 0;
 
-/**
- * Load the send route with a database that records every write. `deliveryIds`
- * is what the webhook outbox hands back: an empty list is the parked agent.
- */
 function loadMessageRoute({
   deliveryIds = [],
   heartbeatAt = null,
@@ -204,7 +196,6 @@ test("legacy parked rows remain recognized for runtime exclusion", () => {
   );
 });
 
-/** The runtime's own read of the thread, with the query it builds recorded. */
 function loadTranscriptRoute() {
   const queries = [];
   const prisma = {
@@ -295,17 +286,12 @@ test("the runtime's own transcript never carries the parked line", async () => {
   }
 });
 
-/**
- * The browser's read of the thread. Two rows are stored: the human message
- * and, after it, the parked notice the send path wrote.
- */
 function loadHistoryRoute({
   heartbeatAt = null,
   subscription = { active: false, events: [] },
   extraRows = [],
 } = {}) {
   const counts = [];
-  // Newest first: the route reads descending and flips, like Prisma would.
   const rows = [
     ...extraRows,
     {
@@ -328,7 +314,6 @@ function loadHistoryRoute({
       findFirst: async () => ({
         id: "session-1",
         agentId: "agent-parked",
-        // chatAccess evaluates the shared-chat flag against the agent owner.
         agent: { userId: 6, heartbeatAt },
       }),
     },

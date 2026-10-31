@@ -9,7 +9,6 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-// Same CI-safe TypeScript loader used by tests/factory-owner-ui.test.cjs.
 function load(relative, overrides = {}) {
   const filename = path.resolve(root, relative);
   const mod = new Module(filename, module);

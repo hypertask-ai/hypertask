@@ -1,6 +1,4 @@
 const { readRefactoredSource } = require("../src/app/detail/[...slug]/taskDetailTestSources.cjs");
-// HTPR-5480: archiving from the task detail page must show the archived state
-// immediately when the page does not navigate away.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -38,12 +36,10 @@ test("the task-detail E shortcut uses the inbox-flow navigation decision", () =>
 });
 
 test("playlist navigation keeps the existing next/back behaviour", () => {
-  // Middle of the playlist: open the following task.
   assert.equal(
     resolveTaskPlaylistNavigation({ indexOf: 0, playlistLength: 3 }),
     "next",
   );
-  // Last task, or the only task: leave the detail page.
   assert.equal(
     resolveTaskPlaylistNavigation({ indexOf: 2, playlistLength: 3 }),
     "back",
@@ -52,12 +48,10 @@ test("playlist navigation keeps the existing next/back behaviour", () => {
     resolveTaskPlaylistNavigation({ indexOf: 0, playlistLength: 1 }),
     "back",
   );
-  // No playlist at all: leave the now-stale detail page.
   assert.equal(
     resolveTaskPlaylistNavigation({ indexOf: -1, playlistLength: 0 }),
     "back",
   );
-  // A snooze always leaves the page, even when the playlist cannot place it.
   assert.equal(
     resolveTaskPlaylistNavigation({
       indexOf: -1,

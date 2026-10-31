@@ -1,7 +1,3 @@
-// HTPR-6312: the priority filter on My Tasks must be gated by one flag for
-// BOTH the control and the behavior (a flag flipping off mid-session must
-// stop filtering, not just hide the button), counts must stay truthful, and
-// Escape must close the dropdown instead of navigating back.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -62,7 +58,6 @@ stubSourceModule("src/components/PageComponents/Kanban/TableView/TableView.tsx",
     return null;
   },
 });
-// HTPR-6456: MyTasks imports TableColumnsPicker; its modal SCSS blows up under jiti.
 stubSourceModule("src/components/PageComponents/Kanban/TableView/TableColumnsPicker.tsx", {
   default: () => null,
 });
@@ -81,7 +76,6 @@ stubSourceModule("src/components/Buttons/BackButton.tsx", {
 stubSourceModule("src/app/my-tasks/MyTasksKanbanFilterModal.tsx", {
   default: () => null,
 });
-// HTPR-6458: realtime client is not available under jsdom/jiti component tests.
 stubSourceModule("src/hooks/realtime/useMyTasksRealtime.ts", {
   useMyTasksRealtime: (...args) => realtimeSubscriptions.push(args),
   createMyTasksRealtimeEventHandler: () => () => {},
@@ -106,8 +100,6 @@ stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
   cn: (...args) => args.filter(Boolean).join(" "),
 });
 
-// jiti compiles JSX with the classic transform, so components without an
-// explicit React import need one in scope.
 global.React = React;
 
 const MyTasks = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx")).default;
@@ -118,16 +110,16 @@ const sections = [
     id: 100,
     section_title: "Board A",
     items: [
-      { id: 1, priority: { priority_index: 1 } }, // Urgent
-      { id: 2, priority: { priority_index: 3 } }, // Medium
+      { id: 1, priority: { priority_index: 1 } },
+      { id: 2, priority: { priority_index: 3 } },
     ],
   },
   {
     id: 200,
     section_title: "Board B",
     items: [
-      { id: 3, priority: { priority_index: 2 } }, // High
-      { id: 4 }, // no priority
+      { id: 3, priority: { priority_index: 2 } },
+      { id: 4 },
     ],
   },
 ];
@@ -184,7 +176,6 @@ test("flag on: picking priorities filters, updates counts, and toggles off", () 
   assert.ok(menu, "priority menu must open");
   assert.equal(menu.querySelectorAll("[role='menuitemcheckbox']").length, PriorityConstants.length);
 
-  // Pick Urgent (priority_index 1).
   const rows = [...menu.querySelectorAll("[role='menuitemcheckbox']")];
   click(rows.find((row) => row.textContent.includes("Urgent")), dom);
   assert.deepEqual(lastViewItems(), [1], "only the Urgent task stays visible");
@@ -192,11 +183,9 @@ test("flag on: picking priorities filters, updates counts, and toggles off", () 
   assert.equal(headerCount.textContent, "1", "header count must reflect the filter");
   assert.equal(filterButton.getAttribute("aria-expanded"), "true", "menu stays open while picking");
 
-  // Toggle the same row off: everything is back.
   click(menu.querySelector("[aria-checked='true']"), dom);
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
 
-  // "No Priority" keeps unprioritized tasks, like a board filter.
   click(rows.find((row) => row.textContent.includes("No Priority")), dom);
   assert.deepEqual(lastViewItems(), [4]);
 
@@ -220,7 +209,6 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
   click(rows.find((row) => row.textContent.includes("Urgent")), dom);
   assert.deepEqual(lastViewItems(), [1], "filter active before the flag flips");
 
-  // The flag flips off while the selection still exists (flag refresh).
   flagValues["htpr-6312-my-tasks-priority-filter"] = false;
   act(() => {
     reactRoot.render(React.createElement(MyTasks, { sections, tabs: ["All", "Board A", "Board B"], currentUser: { id: 6 } }));
@@ -335,7 +323,6 @@ for (const viewsEnabled of [false, true]) {
       const panel = document.querySelector('[data-testid="my-tasks-panel"]');
       assert.equal(panel.classList.contains("w-full"), true);
       assert.equal(panel.classList.contains("global-view-width"), false);
-      // Hold React commits until the burst finishes to expose render-captured state.
       for (const [shiftKey, expectedBoards, expectedItems] of [
         [false, [20, 30, 40], [40]],
         [true, [30, 20, 10], [10]],

@@ -1,9 +1,3 @@
-// HTPR-5381. Native AI bearer identity is exercised through the real resolver.
-//
-// This file used to assert the source text of requestUser.ts. Source text does
-// not prove that a foreign, revoked, agent-bound, or wrong-audience token is
-// actually refused, so the identity checks below now call getAiRequestUser with
-// real signed tokens against a stubbed database.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./refactored-module-source.cjs");
@@ -12,9 +6,6 @@ const jwt = require("jsonwebtoken");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
-// The app reads its signing key from the environment; give the test a throwaway
-// one. The name and value are assembled rather than written inline so the
-// release secret scanner does not read this fixture as a leaked credential.
 const SIGNING_KEY_ENV = "JWT_" + "SECRET";
 const TEST_SIGNING_KEY = ["ai", "native", "bearer", "test", "signing", "key", "0000000000"]
   .join("-");
@@ -65,9 +56,6 @@ stubModule("src/lib/prisma.ts", {
           : null,
     },
     revokedToken: {
-      // HTPR-5381: revocations belong to an account. Answering on the jti alone
-      // would let the route drop `user_id` and still look correct here, so the
-      // stub keys on both and returns the row that actually matched.
       findFirst: async ({ where }) => {
         const revoked = state.revokedJtis.get(where.user_id);
         if (!revoked) return null;
@@ -108,7 +96,6 @@ function requestWith(token) {
   });
 }
 
-/** A managed agent credential and the OAuth token minted from it. */
 function agentCredentials(generation = "managed-generation-1") {
   const managedJwt = jwt.sign(
     { sub: owner.email, userId: owner.id, agentId, jti: generation },
@@ -202,9 +189,6 @@ test("an MCP-audience token is not accepted as a native AI credential", async ()
 });
 
 test("a correctly signed token with a wrong issuer or audience is refused", async () => {
-  // The MCP-audience case above rejects one specific bad audience. These pin
-  // issuer and audience as independent conditions, so relaxing either one on
-  // its own is caught.
   for (const claims of [
     { issuer: "not-hypertask", audience: process.env.JWT_OAUTH_AUDIENCE },
     { issuer: process.env.JWT_ISSUER, audience: "https://elsewhere.example.test" },
@@ -278,8 +262,6 @@ test("malformed, opaque, and missing bearer values are refused", async () => {
   }
 });
 
-// Wiring the routes to the shared resolver is a structural contract: there is
-// no behaviour to call once a route re-implements identity locally.
 test("chat and Task Writer share the native-aware request user resolver", () => {
   const chatRoute = fs.readFileSync(
     path.join(root, "src/app/api/ai/chat/stream/route.ts"),
@@ -309,10 +291,6 @@ test("AI and OAuth issuance share one issuer and audience module", () => {
 });
 
 test("chat request model selection wins before the plan-aware fallback", () => {
-  // Which of the request's choice and the agent's pin wins is decided by
-  // resolveAgentModelPin, covered behaviourally in
-  // tests/native-agent-model-pin.test.cjs. What this asserts is that the route
-  // actually feeds that answer to the selector rather than re-deriving it.
   const chatRoute = fs.readFileSync(
     path.join(root, "src/app/api/ai/chat/stream/route.ts"),
     "utf8"
@@ -337,11 +315,6 @@ test("chat request model selection wins before the plan-aware fallback", () => {
   );
 });
 
-// The issuer/audience VALUES are pinned behaviourally above. What no call can
-// express is that both sides read them from one module: if mcp/auth.ts declared
-// its own JWT_OAUTH_AUDIENCE, every test here would still pass while issuance
-// and verification silently drifted apart (#2533). That single definition is
-// the contract, so it stays a structural check.
 test("OAuth issuance and verification read one shared issuer/audience module", () => {
   const oauthContract = fs.readFileSync(
     path.join(root, "src/lib/mcp/oauthTokenContract.ts"),

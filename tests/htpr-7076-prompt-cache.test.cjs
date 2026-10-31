@@ -1,5 +1,3 @@
-// HTPR-7076: fixed AI instructions are marked for Anthropic's prompt cache, and cached tokens are
-// recorded and priced (reads 0.1x, writes 1.25x).
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -16,7 +14,7 @@ const { modelCostUsd } = load(path.join(root, "src/app/api/ai/_lib/sharedAllowan
 const registry = load(path.join(root, "src/lib/ai/prompts/registry.ts"));
 const { isHaiku55Model, isHaiku45Model, resolveHaikuModelId } = load(path.join(root, "src/lib/aiModelOptions.ts"));
 
-const LONG = "Fixed writer instructions. ".repeat(100); // about 675 tokens
+const LONG = "Fixed writer instructions. ".repeat(100);
 const CACHE_OPTIONS = { anthropic: { cacheControl: { type: "ephemeral" } } };
 
 test("flag file registers with a release risk, default Owner and QA", () => {
@@ -54,7 +52,6 @@ test("cost: unchanged without cache tokens, 0.1x for reads and 1.25x for writes"
   const expected = (200 * 1 + 600 * 0.1 + 200 * 1.25) * 0.000003 + 100 * 0.000015;
   assert.ok(Math.abs(cached - expected) < 1e-12);
   assert.ok(cached < plain);
-  // Cache counts above the prompt size never go negative.
   assert.ok(modelCostUsd(pricing, 100, 0, 500, 500) >= 0);
 });
 

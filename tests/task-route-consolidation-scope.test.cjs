@@ -34,7 +34,6 @@ test("every existing App Router task route uses the single loader and the shared
     assert.doesNotMatch(source, /request\.json\(/);
     if (source.includes("export async function POST")) assert.match(source, /readJsonBody</);
   }
-  // getAll identity now comes from the shared task-write handler, never inline cookies.
   const getAll = read("src/lib/api/task-writes/getAll.ts");
   assert.match(getAll, /getSessionUser\(/);
   assert.doesNotMatch(getAll, /isValidUser|cookies\(\)|nookies_user/);
@@ -120,7 +119,6 @@ test("the shared access predicate does not add queries or change archived, teaml
   assert.deepEqual(calls[1].where.project, { contentAccess: 7, agentId: undefined });
 });
 
-// Exercise Prisma's actual SQL planner without connecting to any database.
 const models = new Map(Prisma.dmmf.datamodel.models.map((model) => [model.name, model]));
 function scalarRow(modelName, overrides) {
   const row = Object.fromEntries(models.get(modelName).fields.filter((field) => field.kind !== "object" && !field.isIgnored).map((field) => {

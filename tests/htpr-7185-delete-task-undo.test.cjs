@@ -29,7 +29,6 @@ function load(file, mocks) {
   );
   return mod.exports;
 }
-// Execute actual board declarations with only their external boundaries replaced.
 function boardActions(env) {
   const file = "src/hooks/MultiPages/useUpdateTaskInBoards.tsx";
   const source = ts.createSourceFile(file, read(file), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

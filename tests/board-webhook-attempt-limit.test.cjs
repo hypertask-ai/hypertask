@@ -10,14 +10,6 @@ const stubModule = (relativePath, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 
-/**
- * Load the outbox module against a fake database that records every write.
- *
- * A worker can POST successfully and then die before persisting the result. The
- * sweep must treat that abandoned claim as a spent attempt, otherwise the same
- * event is redelivered forever even though the row advertises a six-attempt
- * limit.
- */
 const load = () => {
   const updates = [];
   const prisma = {

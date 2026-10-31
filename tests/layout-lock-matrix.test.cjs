@@ -1,4 +1,3 @@
-// YPER4-252 matrix: same parts at every width and sidebar state, 8px tolerance.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const matrix = require('jiti')(__filename)('../e2e/smoke/lib/layout-lock-matrix.ts');

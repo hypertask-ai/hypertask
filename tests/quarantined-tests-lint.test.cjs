@@ -1,16 +1,3 @@
-/**
- * Quarantined tests configuration lint.
- * 
- * Ensures every quarantined test has:
- * - owner: GitHub username or team responsible
- * - ticket: issue/PR URL tracking the fix
- * - evidence: at least 2 links proving flakiness (same SHA fail + pass)
- * - reason: explanation of why it's flaky
- * - addedAt: date when quarantined
- * 
- * This prevents quarantine from becoming a dumping ground for broken tests.
- */
-
 const { test, describe } = require("node:test");
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");

@@ -31,7 +31,6 @@ function renderPage(query) {
   return renderToStaticMarkup(React.createElement(mod.exports.default));
 }
 
-// HTPR-7180: a script or unsafe address in redirect_uri must never get a return button.
 for (const uri of ["javascript:alert(document.cookie)", "JaVaScRiPt:alert(1)", "data:text/html,<script>alert(1)</script>", "http://evil.example/cb", "vbscript:msgbox(1)"]) {
   for (const code of ["", "&code=abc"]) {
     test(`success page refuses to return to ${uri}${code ? " with code" : ""}`, () => {

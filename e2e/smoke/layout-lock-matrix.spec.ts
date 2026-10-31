@@ -1,13 +1,3 @@
-// YPER4-252 layout lock matrix: the main parts of the key pages must not move at any window width.
-// Pages x widths x (AI sidebar open/closed, left sidebar collapsed/expanded). Each page opens once per
-// sidebar state and the window is resized through the widths, so the whole matrix stays fast.
-// Rewrite the baseline only for a ticket-requested layout change that Valentin approved:
-// LAYOUT_LOCK_MATRIX_UPDATE=1 LAYOUT_LOCK_SOURCE_COMMIT=$(git rev-parse origin/production) \
-//   npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock-matrix.spec.ts --workers=1 --retries=0
-// Run it against the origin/production build with live-like flags, never --all-flags-on, then add the
-// changed page to "approvedIn" in the baseline (see .github/scripts/layout-lock-approval.mjs).
-// Failures save an "after" screenshot with the baseline boxes outlined to LAYOUT_LOCK_MATRIX_OUT
-// (default test-results/layout-lock-matrix); an update run saves the "before" screenshots there too.
 import { test, expect, type Page } from '@playwright/test'
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs'
 import { createHash } from 'node:crypto'
@@ -46,8 +36,6 @@ const frame = {
   'left-sidebar': target('.app-shell-rail'),
   'ai-sidebar': target('[data-testid="ai-sidebar"], [data-ai-chat-panel]'),
 }
-// On a phone the ticket opens scrolled and the comment box is fixed at the bottom, so the scrolling parts
-// are compared by x, width and relations only. A long thread also makes the desktop comment box content-dependent.
 const ticketTargets = (long: boolean): Record<string, Target> => ({
   title: { ...target('#title-input'), ...(long ? { flowY: 'phone' as const } : {}) },
   description: { ...target('[data-testid="ticket-description"]', true), flowY: 'phone' },
@@ -108,7 +96,6 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
 })
 
-// On a phone the AI chat is a sheet over the page that scrolls the page behind it, so with it open no vertical position counts.
 const anchorOf = (definition: Target, width: number, state: MatrixState, box: Box): Anchor => {
   const { flowY, ...rest } = definition
   const phone = width < 768
@@ -118,14 +105,12 @@ const round = (box: Box) => Object.fromEntries(Object.entries(box).map(([key, va
 async function measure(page: Page, targets: Record<string, Target>): Promise<Record<string, Box | null>> {
   const boxes: Record<string, Box | null> = {}
   for (const [name, { selector }] of Object.entries(targets)) {
-    // Hidden copies (phone and desktop variants) are not layout; exactly one visible match is the anchor.
     const visible = page.locator(selector).locator('visible=true')
     const box = await visible.count() === 1 ? await visible.boundingBox() : null
     boxes[name] = box && round(box)
   }
   return boxes
 }
-// Why an anchor has no box: printed with the failure so CI-only misses can be diagnosed from the log.
 const describeMissing = (page: Page, targets: Record<string, Target>, actual: Record<string, Box | null>) =>
   Promise.all(Object.entries(actual).filter(([, box]) => box === null).map(async ([name]) => {
     const all = page.locator(targets[name].selector)
@@ -145,10 +130,6 @@ const threadEdges = (page: Page) => page.evaluate(() => {
   }
 })
 
-// Two animation frames, then the same boxes twice in a row: the layout has stopped changing.
-// Parts the baseline expects must be on the page first: the phone top bar mounts lazily and the phone
-// comment box waits for the thread to settle, so "missing twice in a row" is not "settled". A part that
-// stays missing for the whole 8s still fails as missing.
 async function settle(page: Page, targets: Record<string, Target>, required: string[] = []) {
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => undefined)
@@ -166,7 +147,6 @@ async function settle(page: Page, targets: Record<string, Target>, required: str
   return { actual, stable }
 }
 
-// A first visit shows comments expanded, later visits collapse the seen ones; start every state from the expanded thread.
 async function expandComments(page: Page) {
   const comments = page.getByTestId('ticket-comment')
   for (let index = 0; index < await comments.count(); index++) {
@@ -181,7 +161,6 @@ async function applyState(page: Page, state: MatrixState) {
   const wantRail = state.rail === 'collapsed' ? 'Expand sidebar' : 'Collapse sidebar'
   if (await rail.getAttribute('aria-label') !== wantRail) await rail.click()
   await expect(rail).toHaveAttribute('aria-label', wantRail)
-  // The rail's "AI Chat" button toggles the sidebar in both directions on desktop widths.
   const ai = page.locator('[data-testid="ai-sidebar"], [data-ai-chat-panel]')
   if (await ai.count() > 0 !== (state.ai === 'open')) await page.locator('.app-shell-rail button[aria-label="AI Chat"]').click()
   if (state.ai === 'open') await expect(ai).toBeVisible()
@@ -220,7 +199,6 @@ async function createLongThread(page: Page): Promise<string> {
   const cookies = JSON.parse(readFileSync(stateFile, 'utf8')).cookies as Array<{ name: string; value: string }>
   const userId = Number(JSON.parse(decodeURIComponent(cookies.find(cookie => cookie.name === 'nookies_user')!.value)).id)
   const projectId = Number(/[?&]id=(\d+)/.exec(process.env.SMOKE_DEMO_BOARD_PATH!)?.[1])
-  // The demo board is not under test elsewhere, so this task never changes the board page.
   const task = await createTask(page.request, { title: 'Layout lock long thread', projectId, userId })
   for (let index = 1; index <= 14; index++) {
     const text = `Comment ${index} of the layout lock long thread. ${'This sentence only adds realistic text so the comment wraps over more than one line in a narrow column. '.repeat(1 + (index % 3))}`
@@ -257,7 +235,6 @@ for (const definition of selected) {
         await page.setViewportSize({ width, height: 900 })
         const expected = baseline?.pages[definition.name]?.[stateKey(state)]?.[String(width)]
         const found: string[] = []
-        // HTPR-7074 hides the comment box until the thread settles (2s hard stop). Still hidden after 3s is a real failure.
         const slot = page.locator('[data-composer-slot-settled]').first()
         if (definition.thread && await slot.count() > 0 && !await expect(slot).toHaveAttribute('data-composer-slot-settled', 'true', { timeout: 3_000 }).then(() => true, () => false)) {
           found.push(`${label}: comment box still hidden 3s after the window changed width`)
@@ -265,12 +242,10 @@ for (const definition of selected) {
         const required = Object.keys(expected ?? {}).filter(name => width >= 768 || name !== 'ai-sidebar')
         await scrollToBaselinePosition(page, matrixBaselineLayout(definition.name, width, state))
         const { actual, stable } = await settle(page, definition.targets, required)
-        // On a phone the AI chat is an animated sheet over the page, not part of the layout.
         if (width < 768) actual['ai-sidebar'] = null
         measurements.push({ label, actual })
         if (!stable) found.push(`${label}: layout never settled within 8s`)
         if (definition.thread) {
-          // A fixed phone composer must be checked at the thread's end, not over offscreen comments.
           if (width < 768) {
             await page.getByTestId('ticket-thread').evaluate(thread => {
               for (let parent = thread.parentElement; parent; parent = parent.parentElement) {

@@ -46,8 +46,6 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
     routeSource,
     /includeActivity \? \{ taskId: task\.id \} : \{ taskId: task\.id, activity:/
   )
-  // History defaults to oldest-first like the app endpoint, but an explicit
-  // sort_order from the caller must still win.
   assert.match(
     routeSource,
     /includeActivity \? 'asc' : \(sortOrder as 'asc' \| 'desc'\)/

@@ -3,8 +3,6 @@ import { test } from 'node:test'
 import path from 'node:path'
 import { createJiti } from 'jiti'
 
-// HTPR-7212, 7213, 7215, 7216: long pages and empty comments were sent to the
-// embedding model as is, got a non-retryable 400 and were dropped from search.
 
 const root = path.resolve(__dirname, '..')
 const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false })

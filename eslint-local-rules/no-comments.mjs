@@ -1,7 +1,23 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-const checkJsTags = /^\/\*\*[\s\S]*?@(param|returns|property|callback)\b/;
+const typeDocTags = new Set(["deprecated", "type", "typedef", "template", "satisfies", "overload"]);
+const checkedJsDocTags = new Set([...typeDocTags, "param", "returns", "property", "callback"]);
+
+export function isTagOnlyJsDoc(text, filename) {
+  if (!text.startsWith("/**")) return false;
+  const allowed = /\.(?:js|mjs|cjs)$/.test(filename) ? checkedJsDocTags : typeDocTags;
+  const lines = text
+    .replace(/^\/\*\*/, "")
+    .replace(/\*\/$/, "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[\t ]*\*?[\t ]?/, "").trim())
+    .filter(Boolean);
+  return lines.length > 0 && lines.every((line) => {
+    const tag = /^@([a-zA-Z]+)\b/.exec(line);
+    return tag !== null && allowed.has(tag[1]);
+  });
+}
 
 export const allowedCommentPatterns = [
   /^\/[/\*]\s*eslint-(?:disable-next-line|disable-line|disable|enable)\b/,
@@ -14,8 +30,6 @@ export const allowedCommentPatterns = [
   /^\/[/\*]\s*(?:prettier-ignore|istanbul ignore|c8 ignore|v8 ignore|biome-ignore|trufflehog:ignore)\b/,
   /^\/[/\*]\*?\s*(?:\*\s*)?@(?:vitest-environment|jest-environment|refresh reset)\b/,
   /^\/[/\*]\s*#\s*sourceMappingURL\s*=/,
-  /^\/\*\*[\s\S]*?@(?:deprecated|type|typedef|template|satisfies|overload)\b/,
-  checkJsTags,
   /(?:@generated\b|DO NOT EDIT)/,
   /^#!/,
 ];
@@ -27,9 +41,7 @@ export function isGeneratedFile(filename, comments) {
 export function isAllowedComment(comment, filename, source) {
   const text = source.slice(...comment.range);
   if (/^\/[/\*]\s*@ts-ignore\b/.test(text)) return false;
-  return allowedCommentPatterns.some((pattern) =>
-    (pattern !== checkJsTags || /\.(?:js|mjs|cjs)$/.test(filename)) && pattern.test(text),
-  );
+  return isTagOnlyJsDoc(text, filename) || allowedCommentPatterns.some((pattern) => pattern.test(text));
 }
 
 const noComments = {
@@ -69,7 +81,7 @@ export const noCommentsPlugin = {
 };
 
 export const noCommentsLintConfig = {
-  files: ["src/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
+  files: ["{src,e2e,scripts,tests,.claude}/**/*.{ts,tsx,js,jsx,mjs,cjs}"],
   ignores: ["**/*.generated.ts"],
   plugins: { local: noCommentsPlugin },
   rules: { "local/no-comments": "error" },

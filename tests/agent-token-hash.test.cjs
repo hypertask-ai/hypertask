@@ -1,11 +1,3 @@
-// HTPR-4671. Agent bearer tokens are hashed at rest.
-//
-// The Agent row used to keep the credential in plaintext, so a database leak
-// handed out live keys. It now keeps the sha256 digest and the token's jti.
-// These tests drive the real validator against a stubbed database rather than
-// asserting source text: the point is that a real signed token is still
-// accepted, that a rotated or revoked one is refused, and that nothing on the
-// row can be replayed as a credential.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
@@ -15,8 +7,6 @@ const jwt = require("jsonwebtoken");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
-// Assembled rather than written inline so the release secret scanner does not
-// read this fixture as a leaked credential.
 const SIGNING_KEY_ENV = "JWT_" + "SECRET";
 const TEST_SIGNING_KEY = [
   "agent",
@@ -68,8 +58,6 @@ stubModule("src/lib/prisma.ts", {
           : null,
     },
     agent: {
-      // The real query filters on id, owner and liveness. Answering on the id
-      // alone would let the route drop the owner check and still look correct.
       findFirst: async ({ where }) =>
         state.agent &&
         state.agent.id === where.id &&
@@ -105,7 +93,6 @@ function requestWith(token) {
   });
 }
 
-/** Mints a credential and stores it the way every write site now does. */
 function mintAndStore() {
   const token = createMcpToken(owner.id, owner.email, undefined, agentId);
   state.agent = {
@@ -139,8 +126,6 @@ test("the stored row holds no value that can be replayed as a credential", async
   assert.equal(state.agent.mcpToken, undefined);
   assert.equal(state.agent.mcpTokenHash, hashAgentToken(token));
   assert.equal(state.agent.mcpTokenHash.length, 64);
-  // Every stored field is refused when presented as a bearer token, so a leaked
-  // dump cannot be turned back into access.
   for (const stored of [state.agent.mcpTokenHash, state.agent.mcpTokenJti]) {
     assert.equal(await validateMcpAuth(requestWith(stored)), null);
   }
@@ -184,8 +169,6 @@ test("a forged token naming a live agent is refused", async () => {
 
 test("a correctly signed token whose generation is stale is refused", async () => {
   mintAndStore();
-  // Same signing key, same owner, same agent, wrong generation: only the stored
-  // jti separates a current credential from a superseded one.
   const stale = jwt.sign(
     { sub: owner.email, userId: owner.id, agentId, jti: crypto.randomUUID() },
     TEST_SIGNING_KEY,
@@ -198,8 +181,6 @@ test("a correctly signed token whose generation is stale is refused", async () =
 test("a token sharing the stored generation but not the stored bytes is refused", async () => {
   const token = mintAndStore();
   const generation = state.agent.mcpTokenJti;
-  // A directly presented managed token is bound to the digest as well as the
-  // generation, so re-minting with the same jti does not resurrect access.
   const sameGeneration = jwt.sign(
     { sub: owner.email, userId: owner.id, agentId, jti: generation, extra: 1 },
     TEST_SIGNING_KEY,
@@ -299,9 +280,6 @@ test("a malformed OAuth client claim fails closed", async () => {
 test("another JWT_SECRET-signed flow cannot claim its way out of the digest check", async () => {
   mintAndStore();
   const generation = state.agent.mcpTokenJti;
-  // Wrong-purpose audiences fail during verification. An audience-less legacy
-  // token still reaches the agent branch, where the private OAuth generation
-  // claim must not buy the digest exemption that a real OAuth access token gets.
   for (const audience of ["email-link", "calendar-feed", undefined]) {
     const impostor = jwt.sign(
       {
@@ -328,8 +306,6 @@ test("another JWT_SECRET-signed flow cannot claim its way out of the digest chec
 test("a credential cannot donate authority across owners", async () => {
   mintAndStore();
   const generation = state.agent.mcpTokenJti;
-  // The OAuth mint reads the generation through a query scoped to id AND owner,
-  // which is what replaced the old cross-owner check on the stored plaintext.
   const foreignLookup = await require(path.join(root, "src/lib/prisma.ts"))
     .default.agent.findFirst({
       where: { id: agentId, userId: owner.id + 1, revokedAt: null },
@@ -377,9 +353,6 @@ test("the schema keeps no plaintext agent token column", () => {
 });
 
 test("no server file writes or reads a plaintext agent token column", () => {
-  // `mcpToken` legitimately survives in two shapes: the plaintext a page holds
-  // in client state after a mint, and the account-level MCP token status on the
-  // developer-access surface, which is a user credential and not an agent one.
   const allowed = new Set([
     "src/models/model.ts",
     "src/app/agents/AgentsRegister.tsx",
@@ -402,9 +375,6 @@ test("no server file writes or reads a plaintext agent token column", () => {
       const relative = path.relative(root, full).split(path.sep).join("/");
       if (allowed.has(relative)) continue;
       for (const line of fs.readFileSync(full, "utf8").split("\n")) {
-        // Both shapes: a Prisma select/write key (`mcpToken:`) and a property
-        // read off a row (`agent.mcpToken`). Matching only the first would miss
-        // a leftover reader.
         if (
           /\bmcpToken\b\s*:|\.\s*mcpToken\b/.test(line) &&
           !/^\s*(\/\/|\*)/.test(line)
@@ -414,7 +384,6 @@ test("no server file writes or reads a plaintext agent token column", () => {
       }
     }
   };
-  // Wider than src/ so a leftover reader in a script or a job cannot hide.
   for (const dir of ["src", "scripts", "prisma"]) {
     const full = path.join(root, dir);
     if (fs.existsSync(full)) walk(full);

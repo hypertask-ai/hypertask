@@ -1,4 +1,3 @@
-// HTPR-7052: new AI chats are named from the ticket, the board, or the first message.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

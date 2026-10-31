@@ -19,8 +19,6 @@ const TASK_ID = 81;
 const BASE_SECTION_ID = 91;
 const ALT_SECTION_ID = 92;
 
-// The probe resolves its fixture by name on every run, so any mock has to
-// answer the whole resolution conversation, not just the probe call.
 function fixtureFetch({ probeResult, onRequest, overrides = {} } = {}) {
   return async (input, init) => {
     const url = new URL(String(input));
@@ -463,8 +461,6 @@ test("the workflow schedules and serializes the production fixture", async () =>
 test("the monitor runs the probe unconditionally and stays loud when it fails", async () => {
   for (const file of [".github/workflows/prod-health.yml"]) {
     const text = await readFile(file, "utf8");
-    // No preflight gate: a fixture that is absent is provisioned by the probe,
-    // never a reason to skip the check (HTPR-6255, HTPR-6258).
     assert.doesNotMatch(text, /check-settings/);
     assert.doesNotMatch(text, /steps\.settings\.outputs\.configured/);
     assert.doesNotMatch(text, /vars\.CORE_SMOKE_PROJECT_ID/);
@@ -484,8 +480,6 @@ test("the monitor runs the probe unconditionally and stays loud when it fails", 
 });
 
 test("an existing fixture task without the qa-fixture label is refused", async () => {
-  // Labels are only settable at creation, so a pre-existing unlabelled task
-  // cannot be relabelled here; driving it anyway risks colliding with an agent.
   const originalFetch = global.fetch;
   global.fetch = fixtureFetch({
     overrides: {
@@ -505,7 +499,6 @@ test("an existing fixture task without the qa-fixture label is refused", async (
     }
     assert.equal(result.kind, "unrunnable");
     assert.match(result.detail, /missing the qa-fixture label/);
-    // Needs a human, so it is red and loud but never a board report.
     assert.equal(result.setupError, true);
     assert.equal(shouldRollback(result, "push"), false);
   } finally {
@@ -534,7 +527,6 @@ test("a credential problem fails the job without spamming the board", async () =
   );
   assert.equal(result.kind, "unrunnable");
   assert.equal(result.setupError, true);
-  // Still red and still un-rollbackable; just not a new ticket every 5 minutes.
   assert.equal(shouldRollback(result, "push"), false);
 
   const originalFetch = global.fetch;

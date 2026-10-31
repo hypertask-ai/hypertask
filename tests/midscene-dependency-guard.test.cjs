@@ -3,10 +3,6 @@ const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const path = require("node:path");
 
-// No workflow installs or runs e2e/midscene, so nothing in CI would notice the
-// advisory dependency coming back or the @midscene/web floor slipping below the
-// major that dropped it. Reading the committed manifest and lockfile is a check
-// that needs no install (HTPR-6289).
 const root = path.resolve(__dirname, "..");
 
 const readJson = (relativePath) =>

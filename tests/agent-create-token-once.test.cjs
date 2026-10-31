@@ -1,7 +1,3 @@
-// Behavioral coverage for createAgentForUser (src/lib/mcp/agents/create.ts),
-// the endpoint the Agent Chat "+" create-agent modal calls: the one-time
-// token on success, and the validation failures that must reject before ever
-// touching the database.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -66,8 +62,6 @@ function loadCreateModule({
       return { crossTeamAgentsEnabled: async () => false };
     }
     if (request === "@/lib/prisma") {
-      // esModuleInterop's __importDefault wraps a plain object as
-      // { default: mod } itself, so the mock must NOT pre-wrap it.
       return prisma;
     }
     if (request === "@/utils/controllers/agents/boardMembers") {
@@ -168,8 +162,6 @@ test("a successful create returns the token exactly once, alongside the agent", 
   assert.equal(data.success, true);
   assert.equal(data.agent.id, "new-agent");
   assert.equal(data.token, "one-time-token");
-  // The response is the only place the token appears; nothing else in the
-  // payload repeats or derives it.
   assert.doesNotMatch(JSON.stringify(data.agent), /one-time-token/);
 });
 
@@ -313,9 +305,6 @@ test("an authorized browser session (no management key) can create an agent and 
   const { handleCreateAgentRequest } = loadCreateModule({
     prisma,
     mintedToken: "session-token",
-    // No `management` key on the context: this is the browser's own session
-    // cookie, which validateManagementOrSessionAuth accepts as a fallback
-    // when no Authorization header is sent.
     validateManagementOrSessionAuth: async () => ({
       user: { id: 6, email: "a@b.com" },
     }),

@@ -479,13 +479,6 @@ test("concurrent Inbox reads share work only within the same account", async () 
   }
 });
 
-// HTPR-5847: readInboxReadModelRevisionFence's connection cost (the async
-// indexedDB.open() round trip, not the fence value itself) was landing on
-// the inbox network-load critical path a second time, right after the
-// parallel persisted-payload read had already paid it once. It now accepts
-// a pre-opened connection and skips its own open() when given one -- these
-// pin the fence read's own outcomes (present / missing / falls back on a
-// failed pre-open) as unchanged by that.
 test("readInboxReadModelRevisionFence reuses a pre-opened connection instead of opening its own", async () => {
   const originalIndexedDb = global.indexedDB;
   const originalBroadcastChannel = global.BroadcastChannel;
@@ -548,7 +541,6 @@ test("readInboxReadModelRevisionFence reuses a pre-opened connection instead of 
       "the fence read must not open a second connection when handed one",
     );
 
-    // No second argument: unchanged existing behaviour, opens its own.
     assert.equal(
       await readInboxReadModelRevisionFence(accountId),
       fenceRevision,
@@ -660,10 +652,6 @@ test("readInboxReadModelRevisionFence falls back to its own connection when the 
     const { readInboxReadModelRevisionFence } = jiti(
       path.join(root, "src/lib/inboxSync/indexedDbReadModel.ts"),
     );
-    // Simulates openInboxReadModelConnection() having failed (returns null,
-    // it never throws) -- the fence read must still open its own connection
-    // and return the correct value, exactly like calling it with no
-    // connection argument at all.
     assert.equal(
       await readInboxReadModelRevisionFence(accountId, null),
       fenceRevision,
@@ -674,13 +662,6 @@ test("readInboxReadModelRevisionFence falls back to its own connection when the 
   }
 });
 
-// HTPR-5847 follow-up: fenceConnectionPromise opens alongside the network
-// request in useGetNotifications. When that request throws (auth failure or
-// network error, both rethrow before the fence read ever runs), nothing else
-// closes it -- closeInboxReadModelConnection is what the hook's catch block
-// calls on that path. Proven here by opening, closing early (simulating the
-// throw path), then triggering clearInboxReadModels: if the closed
-// connection were still tracked, the clear would close() it a second time.
 test("closeInboxReadModelConnection removes the connection from tracking (no double close on a later clear)", async () => {
   const originalIndexedDb = global.indexedDB;
   const originalBroadcastChannel = global.BroadcastChannel;
@@ -801,12 +782,6 @@ test("a failed IndexedDB read does not block the next account read", async () =>
   }
 });
 
-// HTPR-5745: markAsDone and (un)archiveBulk both archive every OTHER
-// notification sharing the removed row's taskId server-side (HTPR-5640
-// sibling cleanup) -- so the optimistic client removal must target the
-// taskId too, not just the clicked row's own id, or same-task siblings
-// (e.g. other reactors' rows in the Reactions split) stay painted until the
-// next refetch.
 test("removal targets both the exact notification row and its same-task siblings", () => {
   const selected = notification(10, { taskId: 500 });
   const sibling = notification(11, { taskId: 500 });
@@ -1173,10 +1148,6 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
     /catch \(error\) \{\s*if \(isInboxAuthorizationError\(error\)\)[\s\S]*?fenceConnectionPromise\.then\(async \(database\) => \{\s*if \(!database\) return;[\s\S]*?closeInboxReadModelConnection\(database\)/,
     "the fetch-throw path must close the pre-opened fence connection so it does not leak",
   );
-  // The negation lives inside the requiresPersistentInboxFence helper since
-  // HTPR-5741 (#42) extracted it; the call site passes
-  // inboxRevisionStorageAvailable(userId) and the pure-function test above
-  // pins the enabled && !revisionStorageAvailable semantics.
   assert.match(hook, /=> enabled && !revisionStorageAvailable/);
   assert.match(hook, /const finalRevision = currentInboxReadModelRevision/);
   assert.match(hook, /Ignored Inbox response after final revision check/);

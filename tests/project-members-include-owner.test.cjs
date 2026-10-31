@@ -1,11 +1,3 @@
-// HTPR-3805: getProjectMembers(projectId, excludeUserId) drops excludeUserId
-// from the returned list. Both "list members" call sites passed their own
-// caller's id as excludeUserId, so the board OWNER - the caller, on boards
-// with zero Member rows - vanished from their own members list ("No members
-// found" on board 2198). A "list members" endpoint must never exclude the
-// caller; that's only for a genuinely different exclusion use case (none
-// exists in this repo today - processMentions.ts calls it with no
-// excludeUserId at all).
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("./helpers/chat-stream-source.cjs");

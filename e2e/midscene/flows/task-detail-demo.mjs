@@ -9,7 +9,6 @@ export default {
     {
       action: 'aiWaitFor',
       arg: 'a kanban board with at least one column and one task card is visible',
-      // Initial network idle can precede guest provisioning and the board redirect.
       timeoutMs: 60_000,
     },
     { action: 'aiTap', arg: 'the first visible task card on the board' },

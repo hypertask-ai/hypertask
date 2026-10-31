@@ -15,10 +15,6 @@ const {
   sortByAssigneeOrder,
 } = jiti(path.join(root, "src/utils/helperFunctions/helperFunctions.ts"));
 
-// The table view used to build every comparator ascending and negate the result
-// for descending, which also negated the "empty values last" branch and floated
-// blanks to the top (HTPR-4629). It now passes the direction down instead, so
-// these factories have to keep blanks last in BOTH directions.
 const ids = (tasks, comparator) => tasks.slice().sort(comparator).map((t) => t.id);
 
 test("due date keeps tasks with no due date last in both directions", () => {

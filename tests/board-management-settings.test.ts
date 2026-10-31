@@ -75,7 +75,6 @@ test("board lifecycle permissions match the server owner/admin boundary", () => 
   );
   assert.equal(canLeaveBoard(project(), 6), false);
   assert.equal(canLeaveBoard(project({ ownerId: "9" }), 6), true);
-  // ExtraMinimal used to omit ownerId; missing must not grant Leave.
   assert.equal(
     canLeaveBoard(project({ ownerId: undefined as unknown as string }), 6),
     false,

@@ -58,7 +58,6 @@ test("reportError filer uses the plain title and keeps its fingerprint dedupe", 
   const source = fs.readFileSync(path.join(__dirname, "../src/lib/errors/reportError.ts"), "utf8");
   assert.match(source, /plainTitle\(/);
   assert.doesNotMatch(source, /\[auto\]/);
-  // Dedupe is by Redis fingerprint, never by ticket title.
   assert.match(source, /errors:dedupe:\$\{fingerprint\}/);
   assert.match(source, /<strong>Message:<\/strong> \$\{escapeHtml\(report\.message\)\}/);
   assert.match(source, /source: report\.source/);

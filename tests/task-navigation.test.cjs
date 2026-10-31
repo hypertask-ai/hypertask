@@ -62,7 +62,6 @@ function fixture(t, { mobile = false, cached = false, openDetail } = {}) {
     "@/lib/analytics/taskDetailReadiness": { taskDetailEntryPathForRoute: () => "board", markTaskDetailNavigationStart: () => {} },
   })();
 
-  // Exercise Next's real App Router Link, stubbing route dispatch and disabled prefetch.
   const linkPath = require.resolve("next/dist/client/app-dir/link");
   const linkRequire = createRequire(linkPath);
   const linkModule = { exports: {} };
@@ -115,7 +114,6 @@ function fixture(t, { mobile = false, cached = false, openDetail } = {}) {
     const event = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...modifiers });
     if (modifiers.button === 1) Object.defineProperty(event, "which", { value: 2 });
     let defaultPrevented;
-    // Observe the real bubbling handlers, then suppress jsdom's unsupported native tab navigation.
     container.addEventListener("click", (event) => {
       defaultPrevented = event.defaultPrevented;
       event.preventDefault();

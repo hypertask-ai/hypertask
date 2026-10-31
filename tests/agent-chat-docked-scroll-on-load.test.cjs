@@ -1,22 +1,3 @@
-// HTPR-6099: after a page reload the docked AI chat panel (ticket detail
-// page, Agents page) stayed scrolled to the very first message with the
-// "jump to bottom" button showing, even though two earlier fixes for this
-// ticket had already shipped. Those fixes only touched the standalone
-// /agents/chat page (AgentChatClient.tsx); the docked panel is a separate
-// component (MessageList.tsx) with its own auto-scroll effect.
-//
-// The defect: that effect scrolled with behavior "smooth" and then called
-// handleMessageListScroll, which reads scrollTop synchronously. An animated
-// scroll has not moved the container at that point, so the read sees the
-// pre-scroll position, misjudges distance-from-bottom, and shows the "jump
-// to bottom" button while the view is still short of the newest message.
-//
-// The test below renders the real component and models that timing: a
-// "smooth" scroll leaves scrollTop where it was (the animation is still
-// pending), an "auto" scroll lands immediately. It asserts on where the
-// container actually sits when the component takes its measurement, so it
-// fails for any change that reintroduces an animated auto-follow scroll,
-// regardless of how the effect is written or formatted.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
@@ -36,8 +17,6 @@ const message = (id, content) => ({
   createdAt: new Date().toISOString(),
 });
 
-// One reload: the panel mounts with no session yet, then the session list
-// arrives with the ticket's own chat and its messages paint in one go.
 async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = false, exercise } = {}) {
   const dom = new JSDOM('<div id="root"></div>', {
     url: "https://app.hypertask.ai/detail/project-15/6099",
@@ -48,9 +27,6 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
     "HTMLElement",
     "ResizeObserver",
     "IS_REACT_ACT_ENVIRONMENT",
-    // jiti's JSX transform emits classic React.createElement calls, which
-    // the component source itself never imports (Next uses the automatic
-    // runtime).
     "React",
   ];
   const previousGlobals = new Map(
@@ -77,8 +53,6 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
   );
   let reactRoot;
 
-  // The list is 300px tall and each message renders 100px, so a real scroll
-  // to the bottom has to move scrollTop; landing at 0 means it never did.
   const listBox = { clientHeight: 300, messageHeight: 100 };
   let listElement = null;
   const state = { scrollTop: 0, measuredDistanceFromBottom: null, scrollAttempts: 0 };
@@ -109,13 +83,6 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
 
     const context = {
       chatMounted: false,
-      // Models the real helper in useAiChat.ts: it scrolls the node the
-      // component handed over via registerMessageListRef, and returns early
-      // while that is still null. Modelling that early return is what makes
-      // this test able to fail -- registering the ref after the auto-scroll
-      // effects made every mount-time scroll a silent no-op in production.
-      // "auto" then lands synchronously, "smooth" animates and so has not
-      // moved by the time the next statement runs.
       scrollMessagesToBottom: (behavior = "smooth") => {
         state.scrollAttempts += 1;
         if (!listElement) return;
@@ -123,8 +90,6 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
           state.scrollTop = scrollHeight(messageCount) - listBox.clientHeight;
         }
       },
-      // Stands in for the real handler, which derives the "jump to bottom"
-      // button from exactly this distance.
       handleMessageListScroll: () => {
         state.measuredDistanceFromBottom =
           scrollHeight(messageCount) - listBox.clientHeight - state.scrollTop;
@@ -201,8 +166,6 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
       messageCount = messages.length;
       context.sessions = [{ id: "session-6099", messages }];
       context.activeSession = "session-6099";
-      // MessageList reads currentSession directly (HTPR-6100) instead of
-      // resolving sessions/activeSession itself.
       context.currentSession = { id: "session-6099", messages };
     };
 
@@ -212,10 +175,6 @@ async function renderReloadAndMeasure({ historyOnFirstPaint = false, sidebar = f
       });
     };
     context.chatMounted = true;
-    // Opening an existing thread (and the reload QA reproduced) paints the
-    // list and its whole history in ONE commit, so the mount is the only
-    // chance to scroll. The two-step variant models the slower reload where
-    // the panel is restored open first and the history arrives after.
     if (historyOnFirstPaint) showHistory();
     await render();
 

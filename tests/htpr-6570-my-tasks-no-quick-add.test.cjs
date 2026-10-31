@@ -1,4 +1,3 @@
-// HTPR-6570: My Tasks has no Quick add row. Tasks are added the board way only.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");

@@ -5,7 +5,6 @@ import vm from 'node:vm';
 import demo from './flows/task-create-demo.mjs';
 import signedIn from './flows/signed-in-create-task.mjs';
 
-// Load the step executor without launching the CLI's browser.
 const source = readFileSync(new URL('./runner.mjs', import.meta.url), 'utf8');
 const runStep = vm.runInNewContext(source.slice(source.indexOf('async function runStep('), source.indexOf('async function runFlow(')) + '\nrunStep', { URL });
 const step = { action: 'saveTask', arg: 'Create task', value: 'QA test title' };

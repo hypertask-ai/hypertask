@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const yaml = require("js-yaml");
-// Fixtures use attempt 1; a CI re-run sets GITHUB_RUN_ATTEMPT=2 and would start real 15-minute polling (YPER4-338).
 process.env.GITHUB_RUN_ATTEMPT = "1";
 const script = new URL("../.github/scripts/posthog-error-monitor.mjs", `file://${__filename}`);
 function response(body, status = 200) { return { ok: status >= 200 && status < 300, status, json: async () => body }; }

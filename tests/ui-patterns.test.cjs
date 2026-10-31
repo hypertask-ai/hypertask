@@ -22,14 +22,12 @@ async function lint(code, filename = "src/components/NewUiPattern.tsx", rule) {
   return messages;
 }
 
-// HTPR-6422, ee15925f7 (#547), MyTasksViewControls.tsx: sort field select.
 test("rejects the historical native sort picker", async () => {
   const messages = await lint('<select value={config.sort.field} onChange={onChange}><option value="due">Due date</option></select>;');
   assert.equal(messages.length, 1);
   assert.match(messages[0].message, /Ctrl\+K.*OptionPickerModal/);
 });
 
-// HTPR-6457, 09391ff27 (#571), MyTasksViewControls.tsx: Involvement panel.
 test("rejects the historical hand-built involvement dropdown", async () => {
   const messages = await lint('<div className="absolute right-0 top-full z-40 mt-1 w-56 bg-modalBackground"><Field label="Involvement"><CheckRow checked={selected} /></Field></div>;', undefined, "no-new-choice-menus");
   assert.equal(messages.length, 1);
@@ -76,8 +74,6 @@ test("the actual required CI lint entry point enables the UI checks", async () =
   assert.match(workflow, /name: Lint[\s\S]*?run: npm run lint/);
 });
 
-// HTPR-6422, ee15925f7 (#547): parallel dirty-state Save and Save as view.
-// HTPR-6572, 6e166acdd (#706): another mobile Save view implementation.
 test("rejects historical parallel view-save actions", async () => {
   for (const code of [
     'const MyTasksViewTabs = () => <button onClick={onSave}>Save</button>;',
@@ -104,8 +100,6 @@ test("allows shared view save controls and ordinary non-view form saves", async 
   assert.equal((await lint(`${current}\nconst extra = <button>Save as view</button>;`, filename, "no-new-view-save-actions")).length, 1);
 });
 
-// HTPR-6422, ee15925f7 (#547): native CheckRow implementation.
-// HTPR-6461, 95f3471b5 (#578): new Show snoozed uses of that custom CheckRow.
 test("rejects historical native checkbox and repeated custom CheckRow usage", async () => {
   for (const code of [
     '<input type="checkbox" checked={checked} onChange={onChange} className="size-3.5 accent-shadcn-primary" />;',

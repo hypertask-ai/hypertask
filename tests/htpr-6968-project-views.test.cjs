@@ -9,10 +9,8 @@ const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-project-views");
 const GROUPS = ["create-view","update-view","delete-rename-view","switch-view","unsaved-view","reset-to-default","update-order","reset-order","set-default-order","smart-split"];
 const SPECIAL = { "smart-split exhaustion": "smart-split", "smart-split success": "smart-split" };
-// Pins group by route so the fixture holds one digest per route.
 const groupOf = key => SPECIAL[key] ?? key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? key;
 const pin = (key, value) => rawPin(groupOf(key), key, value);
-// Route map: methods served by each Pages endpoint.
 const projectViewRoutes = {
   "create-view": { methods: ["POST"] },
   "update-view": { methods: ["POST"] },
@@ -144,9 +142,7 @@ function fixture(endpoint, scenario = {}) {
   };
   mocks["@/models/Views/model"] = load("src/models/Views/model.ts", mocks);
   mocks["@/lib/smartSplits"] = load("src/lib/smartSplits.ts", mocks);
-  // Keep real view-order validation, availability filtering and permission checks.
   mocks["@/utils/controllers/projects/views/viewOrder"] = load("src/utils/controllers/projects/views/viewOrder.ts", mocks);
-  // The smart split's managed pair uses real label-reference parsing.
   if (name === "smart-split") view.board_filters = { addedFilters: [{ type: "Labels", searchPayload: [{ id: "view", value: "QA view" }] }] };
   const web = load(`src/lib/api/project-writes/views/${name}.ts`, mocks)[method];
   mocks[`@/lib/api/project-writes/views/${name}`] = { get [method]() { loads.push(method); if (scenario.loadThrows) throw new Error("Route load unavailable"); return web; } };
@@ -172,7 +168,6 @@ async function invoke(fx, endpoint, scenario, target) {
       for (const [key, value] of Object.entries(req.query)) for (const item of Array.isArray(value) ? value : [value]) params.append(key, item);
       const options = { method: req.method, headers: { ...req.headers, "content-type": "application/json" } };
       if (req.body !== undefined && !(endpoint.name === "delete-rename-view" && endpoint.method === "DELETE")) options.body = JSON.stringify(req.body);
-      // Undefined is a Pages parser value, not valid Web JSON. Test it through Pages.
       const request = req.body === undefined && !(endpoint.name === "delete-rename-view" && endpoint.method === "DELETE") ? { headers: new Headers(req.headers), json: async () => undefined } : new Request(`https://example.invalid/api/projects/views/${endpoint.name}?${params}`, options);
       if (scenario.cookies) request.cookies = scenario.cookies;
       const response = await fx.web(request);
@@ -186,7 +181,6 @@ async function invoke(fx, endpoint, scenario, target) {
   } catch (error) { return { throws: String(error) }; }
   finally { global.Date = RealDate; Object.assign(console, saved); }
 }
-// Runs the Pages adapter, pins response plus ordered effects, then checks the shared Web handler agrees.
 async function parity(endpoint, scenario, key) {
   const fx = fixture(endpoint, scenario), expected = await invoke(fx, endpoint, scenario, "current");
   pin(key, { expected, effects: clean(fx.effects) });

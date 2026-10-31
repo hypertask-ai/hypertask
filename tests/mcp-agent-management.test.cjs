@@ -150,7 +150,6 @@ function createDatabase({
     ['estimate', 'updateMany'],
     ['notification', 'updateMany'],
     ['webhookSubscription', 'updateMany'],
-    // Must match Prisma's generated client key (OAuth → oAuth…), not oauth…
     ['oAuthAuthorizationCode', 'updateMany'],
     ['chatSession', 'updateMany'],
   ]

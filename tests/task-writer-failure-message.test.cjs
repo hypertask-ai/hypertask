@@ -17,10 +17,6 @@ const { describeTaskWriterFailure, describeTaskWriterStreamFailure } = loadTs(
   "src/utils/helperFunctions/describeTaskWriterFailure.ts"
 );
 
-// WHY: the AI Task Writer used to render one sentence for every possible failure, so a
-// request the platform rejected outright looked identical to the model being down. Valentin
-// hit this on a task with pasted screenshots and had no way to tell what was wrong or what
-// to do about it. Each branch here has to say something the user can act on. Ref HTPR-4735.
 
 test("413 explains the cause and what to do, since no server error exists to report", async () => {
   const msg = await describeTaskWriterFailure(new Response("", { status: 413 }));
@@ -39,8 +35,6 @@ test("a server error message is surfaced rather than replaced", async () => {
   assert.equal(msg, "Model not allowed on your plan");
 });
 
-// A crashed route returns Next's HTML error page, which is not JSON. Parsing it must not
-// throw and lose the failure entirely.
 test("a non-JSON error body still yields a message carrying the status", async () => {
   const msg = await describeTaskWriterFailure(
     new Response("<!DOCTYPE html><html>500</html>", { status: 500 })

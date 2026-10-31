@@ -6,9 +6,6 @@ const { execFileSync } = require("node:child_process");
 
 const root = path.join(__dirname, "..");
 
-// HTPR-7173: /api/users/getAll returned every User row (email, uid,
-// stripe_customer_id) to anyone, even logged out. Nothing called it, so it is
-// gone. A global user listing must not come back.
 test("HTPR-7173: the global user listing route and controller stay deleted", () => {
   for (const file of [
     "src/pages/api/users/getAll.ts",
@@ -30,7 +27,6 @@ test("HTPR-7173: no source references the removed listing", () => {
       { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
     ).trim();
   } catch (error) {
-    // git grep exits 1 when nothing matches.
     assert.equal(error.status, 1);
   }
   assert.equal(hits, "");

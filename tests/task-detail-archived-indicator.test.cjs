@@ -86,7 +86,6 @@ test("keyboard and command archive paths do not flash the restore state", () => 
   assert.ok(mutationAt >= 0);
   assert.ok(localStatusAt > mutationAt);
   assert.match(markAsDone, /if \(isUnarchiving\) \{[\s\S]*status: "Normal"/);
-  // The archived status is applied locally only when nothing navigated away.
   assert.match(
     markAsDone,
     /shouldApplyLocalArchivedStatus\(\{ isUnarchiving, navigationOutcome \}\)[\s\S]*status: "Archive"/,
@@ -94,7 +93,6 @@ test("keyboard and command archive paths do not flash the restore state", () => 
 });
 
 test("archiving a directly opened task leaves its stale detail page", () => {
-  // No playlist to place the task in: the hook falls back to going back.
   assert.match(archiveHook, /: "back"/);
   assert.match(archiveHook, /if \(playlistTarget === "back"\) \{\s*onGoback\(\)/);
 });

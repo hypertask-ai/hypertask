@@ -1,8 +1,3 @@
-// HTPR-6509: the hourly guest sweep runs a few cascades at once instead of one
-// after another. The result must stay the same as the sequential loop: every
-// stale guest is attempted, a failing guest does not stop the others, and the
-// failures come back in input order. Parallelism must also stay bounded so the
-// sweep cannot take every pooled database connection.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -35,7 +30,6 @@ function loadRoute({ staleIds, failingIds = [] }) {
       calls.attempted.push(guestId);
       inFlight += 1;
       calls.maxInFlight = Math.max(calls.maxInFlight, inFlight);
-      // Uneven delays so a chunk finishes out of order.
       await new Promise((resolve) => setTimeout(resolve, (guestId % 3) * 2));
       inFlight -= 1;
       if (failingIds.includes(guestId)) throw new Error(`boom ${guestId}`);
@@ -70,7 +64,6 @@ test("every stale guest is attempted and failures keep input order", async () =>
     console.error = originalError;
   }
 
-  // Same numbers the sequential loop produced for this input.
   assert.deepEqual(body, { deleted: 8, failed: [13, 17, 20] });
   assert.deepEqual([...calls.attempted].sort((a, b) => a - b), staleIds);
   assert.ok(calls.maxInFlight > 1, "guests should be deleted in parallel");

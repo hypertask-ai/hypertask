@@ -43,8 +43,6 @@ test("range keys resolve from one table and invalid values use 30 days", () => {
   }
 });
 
-// A later edit to finished work must not rewrite history. The Done move is the
-// completion event, while updatedAt can change weeks later for unrelated edits.
 test("a task in Done completes when it entered Done, not when it was last edited", () => {
   const finished = task({
     section: "Done",
@@ -58,8 +56,6 @@ test("a task in Done completes when it entered Done, not when it was last edited
   );
 });
 
-// Archive is the only completion signal outside a Done-like column. Normal work
-// in that same column must remain open rather than borrowing its updatedAt.
 test("archive completion uses updatedAt outside Done, while Normal work stays open", () => {
   const archived = task({
     status: "Archive",
@@ -77,8 +73,6 @@ test("archive completion uses updatedAt outside Done, while Normal work stays op
   assert.equal(completedAt(open), null);
 });
 
-// Column names are user-entered. Normal capitalization and padding should work,
-// but partial matches would incorrectly finish columns such as "Not done".
 test("done-column matching ignores case and whitespace but requires an exact name", () => {
   assert.equal(isDoneSection("  DoNe "), true);
   assert.equal(isDoneSection("SHIPPED"), true);
@@ -87,11 +81,9 @@ test("done-column matching ignores case and whitespace but requires an exact nam
   assert.equal(isDoneSection("released"), true);
   assert.equal(isDoneSection("Not done"), false);
   assert.equal(isDoneSection("Done deal"), false);
-  // WHY: Velocity deliberately does not inherit MCP's broader done-keyword fallback.
   assert.equal(isDoneSection("Done WIN"), false);
 });
 
-// Velocity must use board metadata so custom finished columns count without changing legacy fallback behavior.
 test("a custom finished column reports completions only when its done set is passed", () => {
   const now = new Date("2026-03-18T12:00:00.000Z");
   const finished = task({
@@ -175,8 +167,6 @@ test("each range uses its required UTC bucket granularity", () => {
   );
 });
 
-// Median finish time should resist one slow outlier and correctly average the
-// two middle values when the completed set has an even size.
 test("median finish time handles even and odd completion counts", () => {
   const now = new Date("2026-03-18T12:00:00.000Z");
   const completedWithFinishTime = (id, completed, days) =>
@@ -316,7 +306,6 @@ test("totals sum the whole selected window instead of the last bucket", () => {
   assert.match(report.buckets[0].start, /T00:00:00\.000Z$/);
 });
 
-// The People table is an accountability view, so inactivity must be visible.
 test("people includes idle members with zeroed activity", () => {
   const now = new Date("2026-03-18T12:00:00.000Z");
   const report = buildVelocityReport(
@@ -358,8 +347,6 @@ test("people includes idle members with zeroed activity", () => {
   });
 });
 
-// A task edit carries no per-user timestamp, so attributing one would credit
-// everyone who ever edited the task for activity inside the selected period.
 test("a task edit alone credits nobody and invents no last-comment timestamp", () => {
   const now = new Date("2026-03-18T12:00:00.000Z");
   const report = buildVelocityReport(

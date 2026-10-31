@@ -1,6 +1,3 @@
-// HTPR-6281 QA fail #2: getTask was answering as a public CDN-cacheable
-// response while comments used private no-store. Activity updated; the side
-// panel kept a stale snapshot.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");

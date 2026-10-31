@@ -3,8 +3,6 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { withRealtime } from './lib/realtime'
 
-// YPER4-629 core release test: the inbox cycle (open, J, send a comment, E) must keep inboxFlow and move on.
-// HTPR-7655: opening a row by mouse click lost ?inboxFlow=true, so sending a comment stayed on the ticket.
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE || 'e2e/smoke/.state/smoke-state.json'
 test.use({ storageState: stateFile })
 test.describe.configure({ mode: 'serial' })

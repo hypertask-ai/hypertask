@@ -1,7 +1,3 @@
-// HTPR-6261. The mention endpoints used to keep only the first five board
-// agents before rendering the Agents group. Because the shared membership
-// query had no order, a different matching agent could disappear on each
-// keystroke. Exercise both callers so a cap cannot creep back into either one.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");

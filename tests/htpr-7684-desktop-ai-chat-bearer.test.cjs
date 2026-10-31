@@ -1,6 +1,3 @@
-// HTPR-7684. The desktop app's human CLI login may use the AI chat, and nothing else may.
-// Every refusal below sits next to the human CLI token that is still allowed,
-// and both go through the real resolver with real signed tokens.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

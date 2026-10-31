@@ -1,17 +1,3 @@
-// Generates and checks e2e/smoke/production-flag-modes.json, the credential-free copy of the live
-// feature flag modes that the browser-smoke job and the layout lock use. Never hand-edit that file:
-// it is built from e2e/smoke/flag-modes/, one file per flag, so retiring or adding a flag touches
-// one small file (HTPR-8194).
-//
-//   node scripts/flags/production-flag-modes.mjs --write        read live modes, rewrite the file
-//   node scripts/flags/production-flag-modes.mjs --add-defaults add flags that are new in code, with their registry default
-//   node scripts/flags/production-flag-modes.mjs --check        offline: complete, valid and not too old (runs in CI)
-//   node scripts/flags/production-flag-modes.mjs --check-live   file equals the live modes right now (runs where --write can run)
-//
-// Live modes come from /api/admin/flags when an agent session token is in the environment (exact
-// modes), otherwise from two /api/flags views: the plain QA user (Everyone or not) and the QA
-// account itself (also sees Owner + QA). Together they tell Everyone, Owner + QA and Off apart. CI never calls
-// either: it only runs --check, which reads the repo alone.
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -28,7 +14,6 @@ export const MAX_AGE_DAYS = 14;
 export const MODES = ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"];
 const KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-// Same rule as defaultFeatureFlagMode in src/lib/flags.ts.
 export function definitionDefaults(root) {
   const directory = path.join(root, FLAG_DEFINITIONS_DIRECTORY);
   const paths = readdirSync(directory).filter((name) => name !== "index.generated.ts").sort()
@@ -42,7 +27,6 @@ export function definitionDefaults(root) {
 
 const sorted = (modes) => Object.fromEntries(Object.entries(modes).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 
-// live is either the admin list [{ key, mode }] (exact) or the plain QA map { key: boolean }.
 export function buildSnapshot(defaults, live, now = new Date()) {
   let modes;
   let view;
@@ -51,8 +35,6 @@ export function buildSnapshot(defaults, live, now = new Date()) {
     modes = Object.fromEntries(Object.keys(defaults).map((key) => [key, stored.get(key) ?? defaults[key]]));
     view = "admin";
   } else {
-    // The plain user only says Everyone or not. With the QA account's view too, a flag the QA account
-    // cannot see is Off, never its registry default (HTPR-5908 was Off live while the copy said Owner + QA).
     const plain = live.plain ?? live;
     modes = localFlagModes(defaults, plain, [], live.qa);
     for (const [key, mode] of Object.entries(modes)) if (mode === "EVERYONE" && plain[key] !== true) modes[key] = "OFF";
@@ -61,8 +43,6 @@ export function buildSnapshot(defaults, live, now = new Date()) {
   return { source: SNAPSHOT_SOURCE, view, capturedAt: now.toISOString(), modes: sorted(modes) };
 }
 
-// Writes one small file per flag plus the capture header, then rebuilds the copy every reader uses.
-// A flag appears or disappears by one file, so two authors retiring different flags never clash.
 export function writeEntries(root, snapshot) {
   const list = listById("flag-modes");
   const directory = path.join(root, list.directory);
@@ -81,12 +61,10 @@ export function writeEntries(root, snapshot) {
   writeFileSync(path.join(root, list.target), build(list, root));
 }
 
-// A flag missing from the copy is not an error: readers use its registry default until the refresher adds it.
 export function missingFlags(snapshot, defaults) {
   return Object.keys(defaults).filter((key) => !(key in (snapshot?.modes ?? {})));
 }
 
-// Adds flags that are new in code with their registry default and drops flags that no longer exist.
 export function addMissingDefaults(snapshot, defaults) {
   const kept = Object.fromEntries(Object.entries(snapshot.modes).filter(([key]) => key in defaults));
   const added = Object.fromEntries(Object.entries(defaults).filter(([key]) => !(key in kept)));

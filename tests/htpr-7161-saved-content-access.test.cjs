@@ -1,5 +1,3 @@
-// HTPR-7161: a bookmark (star or pin) can never reach a task or comment the
-// signed-in user cannot read, and the bookmark lists only show readable tasks.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -23,8 +21,6 @@ function loadModule(file, stubs) {
   return loaded.exports;
 }
 
-// Board 1 belongs to the user; task 10 (comment 100) lives there. Task 20
-// (comment 200) lives on board 2 of another team.
 const TASKS = [{ id: 10, projectId: 1 }, { id: 20, projectId: 2 }];
 const COMMENTS = [{ id: 100, taskId: 10 }, { id: 200, taskId: 20 }];
 
@@ -42,7 +38,6 @@ function loadToggle() {
       findFirst: async ({ where }) => {
         calls.taskWhere.push(where);
         const task = TASKS.find((t) => t.id === where.id);
-        // The real access predicate only matches board 1 for this user.
         return task && where.project === ACCESS && task.projectId === 1 ? task : null;
       },
     },

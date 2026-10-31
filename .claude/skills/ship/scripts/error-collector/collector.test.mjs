@@ -115,7 +115,6 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
   }
   assert.equal(normalize('failed 42 now'), 'failed <n> now');
   assert.equal(normalize('/users/42', true), '/users/:id');
-  // A quoted code name says what failed, so it stays readable in the ticket title.
   assert.equal(normalize('Invalid `prisma.task.deleteMany()` invocation'), 'Invalid `prisma.task.deleteMany()` invocation');
   assert.equal(normalize('failed https://example.invalid/x?token=anything'), 'failed https://example.invalid/x');
   assert.equal(normalize('/users/42?email=test', true), '/users/:id');
@@ -293,7 +292,6 @@ check('tickets', 'redaction removes credential formats but preserves a useful no
     ['token: fixture-token', 'fixture-token'],
     ['eyJfixture.payload.signature', 'eyJfixture.payload.signature'],
     ['ghp_abcdefghijklmnopqrstuvwxyz', 'ghp_abcdefghijklmnopqrstuvwxyz'],
-    // Built at run time so secret scanners do not read the fake login as a real one.
     [['https://fixture-user', 'fixture-pass@example.invalid/path?token=fixture-query'].join(':'), 'fixture-pass'],
     ['https://fixture-user@example.invalid/path', 'fixture-user'],
     ['abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN', 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN'],
@@ -528,7 +526,6 @@ check('reporting', 'noise alert opt-ins are explicit, never alert expected respo
   assert.equal(creates(h).length, 0);
   assert.deepEqual(h.state().pending, {});
   assert.deepEqual(h.state().noiseWindows, {});
-  // Warning rules only match their configured service; an ordinary error on another service keeps ordinary grouping.
   h.events([event({ service: 'other', message: 'Warning: SECURITY WARNING: The SSL modes', ts: new Date(NOW + 1000).toISOString() })]);
   await h.run({ now: NOW + 1000 });
   assert.equal(creates(h).length, 1);
@@ -670,7 +667,6 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   await h.run({ now: NOW + 1000 });
   assert.equal(creates(h).length, 1);
   assert.equal(activities(h, 'YPER4-354').length, 0);
-  // The summary covers the last full UTC day, so 2026-10-14 is reported on the 15th.
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-14: 2 errors (2026-10-13: no complete data), 1 new kinds, 7 noise'));
   const posted = activities(h, 'YPER4-354').length;
@@ -1053,13 +1049,11 @@ check('followups', 'baseline rejects first-run, partial and legacy days, then de
   assert.equal(h.calls().filter(call => call.name === 'runner-deliver').length, 1);
   assert.match(h.calls().find(call => call.name === 'runner-deliver').input, /2026-10-14: 200/);
   await withHarness(async fresh => {
-    // A midnight first run collects a full day but has no previous baseline.
     fresh.events([event({ service: 'fixture', ticket: false, count: 1134, ts: '2026-10-13T12:00:00Z' })]);
     await fresh.run({ now: Date.parse('2026-10-14T00:00:00Z'), summary: true });
     assert.equal(fresh.state().days['2026-10-13'].fixture.complete, true);
     assert.ok(!fresh.calls().some(call => call.name === 'runner-deliver'));
     const state = fresh.state();
-    // Legacy counters and cursors do not prove full-day collection.
     delete state.coverage;
     delete state.days['2026-10-13'].fixture.complete;
     state.days['2026-10-13'].fixture.errors = 0;
@@ -1299,7 +1293,6 @@ check('sources', 'Neon collector advances snapshots atomically, failures leave b
 }));
 
 check('tickets', 'stale replay: cap-held HTPR-7481..7490 groups never file at 10:30 or 13:30', () => withHarness(async h => {
-  // Timings, totals and routes from the 2026-10-20 state copy; messages are shortened.
   const rows = JSON.parse(readFileSync(join(HERE, 'fixtures/stale-replay.json'), 'utf8'));
   const filling = Array.from({ length: 5 }, (_, i) => event({ service: 'vercel', message: `Active failure ${String.fromCharCode(65 + i)}`, route: '/cap-fixture', ts: '2026-10-20T08:00:00Z' }));
   h.events([...filling, ...rows.filter(row => row.message !== 'MCP context task id out of range')]);

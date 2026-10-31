@@ -77,8 +77,6 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
       return load("src/utils/controllers/tasks/createTaskCore.ts", mocks).createTaskCore({ ...body, sectionTitle: "Todo", projectIdentifier: "QASA", ...extra });
     }
     if (kind === "global-effects") {
-      // Both global routes already commit their nested description before
-      // scheduling this same Vercel-lifetime-protected indexing work.
       committed = descriptionSaved = true;
       task = { ...body, id: 42, project: { teamId: 2 } };
       load("src/lib/api/task-writes/create-global-effects.ts", mocks).schedulePostCreateWork({ task, userId: actor.id, projectId: 7049, originUserId: actor.id });

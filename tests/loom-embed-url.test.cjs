@@ -17,9 +17,6 @@ const javascript = ts.transpileModule(source, {
   },
 }).outputText;
 
-// The extension pulls in Tiptap at module scope purely to declare the node. The
-// URL logic under test needs none of it, so stub the imports rather than drag
-// the editor into a unit test.
 const stubs = {
   "@tiptap/core": {
     Node: { create: (config) => config },
@@ -51,8 +48,6 @@ test("a bare share link embeds", () => {
   );
 });
 
-// What Loom's own Copy Link button produces. The id must not carry the query
-// string into the embed URL.
 test("the ?sid= link Loom copies embeds, without dragging sid along", () => {
   assert.equal(
     getEmbedUrlFromloomUrl({
@@ -62,8 +57,6 @@ test("the ?sid= link Loom copies embeds, without dragging sid along", () => {
   );
 });
 
-// The regression this file exists for: extra params used to fail validation
-// outright, so the link pasted as plain text and no video appeared (HTPR-3940).
 test("extra query params still embed", () => {
   for (const url of [
     `https://www.loom.com/share/${ID}?sid=2b1c9a4e-7f3d-4c2a-9b8e-1a2b3c4d5e6f&t=12`,

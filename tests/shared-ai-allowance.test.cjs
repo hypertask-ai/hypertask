@@ -32,7 +32,6 @@ function useRedis(redis) {
   stubModule("src/lib/redis.ts", redisModule);
 }
 
-// HTPR-7079 flag state for the allowance middleware (no real database here).
 let failedAllowanceFlagOn = true;
 stubModule("src/lib/flags.ts", {
   isFeatureEnabled: async (key) =>
@@ -1241,7 +1240,7 @@ test("new model allowance uses a conservative tier rate when Gateway has no new 
     assert.equal(called, true);
     const committed = [...redis.values.entries()].filter(([key]) => key.endsWith(":committed") && !key.endsWith(":system:committed"));
     assert.equal(committed.length, 1);
-    assert.equal(Number(committed[0][1]), 62); // Most expensive Luna rate: 12 + 50 micro-USD.
+    assert.equal(Number(committed[0][1]), 62);
   } finally {
     global.fetch = previousFetch;
   }
@@ -1338,10 +1337,10 @@ test("failed successor releases its reservation before a successful fallback set
         controller.close();
       } }),
     }) });
-    for await (const _chunk of succeeded.stream) { /* consume through settlement */ }
+    for await (const _chunk of succeeded.stream) {  }
     const committed = [...redis.values.entries()].filter(([key]) => key.endsWith(":committed") && !key.endsWith(":system:committed"));
     assert.equal(committed.length, 1);
-    assert.equal(Number(committed[0][1]), 11); // 3 input + 4 output tokens, not the failed reservation.
+    assert.equal(Number(committed[0][1]), 11);
     assert.equal([...redis.reservations.values()].flatMap((entries) => [...entries.keys()]).length, 0);
   } finally {
     global.fetch = previousFetch;
@@ -1455,7 +1454,6 @@ test("the allowance team stamp round-trips and ignores unmarked content", () => 
   assert.equal(parseAllowanceTeamStamp(null), null);
 });
 
-// HTPR-7079: a call that fails before any output counts only its input.
 const HTPR_7079_PRICING = { input: "0.00001", output: "0.00005" };
 const HTPR_7079_PROMPT = [{ role: "user", content: "hello allowance" }];
 const HTPR_7079_MAX_OUTPUT = 10_000;
@@ -1525,7 +1523,6 @@ async function drain(stream) {
   try {
     for await (const chunk of stream) seen.push(chunk);
   } catch {
-    // The wrapped stream may error; settlement has already happened.
   }
   return seen;
 }

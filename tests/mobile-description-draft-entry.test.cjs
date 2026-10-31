@@ -124,8 +124,6 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/mobile/backDismiss": { armBackDismiss },
   });
   let editorProps, editorState, context, setDraftState;
-  // Execute the real cancel and draft hooks as well as Back dismissal; replacing
-  // cancel with setEditMode(null) would hide errors before the mode is cleared.
   function Editor(props) {
     editorProps = props;
     const state = useTaskDetailEditorState(props);
@@ -149,7 +147,6 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "../ContextMenu": { HighlightMenu: () => null },
     "../ContextMenu/QuoteButton": () => null,
     "@/components/RTE/TipTapTaskDetail": Editor,
-    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
     "./DescriptionEditorSlot": Editor,
     "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": () => null,
@@ -210,8 +207,6 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
   const openDetail = setOpen => {
     dom.window.history.pushState({ ...nextState, ...(cachedLayout ? { cachedTaskDetail: { accountId: 2343, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex } } : {}) }, "", taskHref);
     Navigation({ accountId: 2343, children: null });
-    // Next's background refresh strips custom state from the task entry before
-    // the modal adds its own entry, while cached navigation retains the task.
     dom.window.history.replaceState(nextState, "", taskHref);
     setOpen(true);
   };

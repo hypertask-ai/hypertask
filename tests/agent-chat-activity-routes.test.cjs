@@ -67,8 +67,6 @@ stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => ({ awaitin
 stub("src/lib/flags.ts", {
   isFeatureEnabled: async (key, userId) => {
     assert.equal(userId, 6);
-    // Chat context is a separate feature; keep it off so these routes keep
-    // their plain transcript shape.
     if (key === "htpr-7734-agent-chat-context") return false;
     if (key === "htpr-7518-agent-sidebar-chats") return true;
     assert.fail(`Unexpected flag: ${key}`);
@@ -262,18 +260,14 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
     chatClientSource.lastIndexOf("useEffect(() => {", chatClientSource.indexOf("if (!session || awaiting || activityRowsEnabled) return;")),
   );
 
-  // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
   assert.match(chatClientSource, /const ACTIVITY_POLL_MS = 5000/);
-  // Without this the browser can serve a cached history and the feed freezes.
   assert.match(
     chatClientSource,
     /fetch\(`\/api\/agent-chat\/\$\{loadSessionId\}`,[\s\S]*?cache: "no-store"/,
   );
-  // The reply poll stops once the agent answers, so it cannot carry the feed.
   assert.match(polling, /if \(!session \|\| !activityRowsEnabled\) return;/);
   assert.doesNotMatch(polling, /awaiting/);
   assert.match(polling, /setInterval\([\s\S]*?ACTIVITY_POLL_MS\)/);
-  // A hidden tab reads nothing, and each tick is a 600-row timeline query.
   assert.match(polling, /document\.visibilityState !== "visible"/);
   assert.match(polling, /addEventListener\("visibilitychange", onVisibility\)/);
   assert.match(polling, /removeEventListener\("visibilitychange", onVisibility\)/);

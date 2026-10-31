@@ -7,13 +7,10 @@ import { isDeepStrictEqual } from 'node:util';
 
 export const RUNNER = process.env.GITHUB_ACTIONS === 'true' ? 'github-actions' : 'vps';
 export const STATE = path.join(os.homedir(), '.local/state/speed');
-// Real-phone context (2026-10-11): the shared setup only sets viewport, isMobile and hasTouch, which renders the ticket page at
-// innerWidth 780 and document width 834. A mobile user agent and deviceScaleFactor 3 give the real 390 wide layout (iPhone 13).
 export const PHONE_PROFILE = Object.freeze({
   deviceScaleFactor: 3,
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Mobile/15E148 Safari/604.1',
 });
-// New label so seven-day comparisons never mix runs from the old desktop-like phone layout.
 export const PHONE_PROFILE_KEY = 'phone-iphone-dpr3-4g-4x-390x844';
 export function withPhoneProfile(browser) {
   return { newContext: options => browser.newContext({ ...options, ...PHONE_PROFILE }) };
@@ -43,12 +40,9 @@ export function summarize(samples) {
   }]));
 }
 
-// A path whose measurement changed gets a new version; only same-version history is its baseline.
-// Board paths version 2 (2026-10-23, YPER4-615): the page scrolls the card itself; Playwright's pre-scroll waited about 3 s on a busy phone.
 export const PATH_VERSIONS = { board: 2, 'board-returning': 2, 'ticket-warm': 2, search: 2, 'page-navigation': 2, 'ctrl-j': 2 };
 export const SEARCH_IDLE_PAUSE_MS = 3000;
 
-// Saved by the app after a board visit; with it the server sends a ready-made board (HTPR-6934). The QA login filter drops it.
 export const BOARD_PREFERENCE_COOKIE = 'ht_board_display_v1';
 
 export const servedBoardFromServer = (requests, contentMs) => !requests.some(request => request.path === '/api/projects/boardTasks' && request.startMs <= contentMs);
@@ -68,7 +62,6 @@ export function compare(run, history) {
   const start = Date.parse(`${run.started.slice(0, 10)}T00:00:00Z`);
   const previous = history.filter(old => old.status === 'complete' && Date.parse(old.started) < start && Date.parse(old.started) >= start - 7 * 86400000 && isDeepStrictEqual(sharedConditions(old.conditions), sharedConditions(run.conditions)));
   return Object.entries(run.groups).flatMap(([cohort, group]) => METRICS.map(metric => {
-    // One vote per UTC day, so an investigator's repeat runs do not outweigh the daily timer.
     const days = new Map();
     for (const old of [...previous].sort((a, b) => Date.parse(a.started) - Date.parse(b.started))) {
       if (old.groups[cohort] && sameCohort(old, run, cohort)) days.set(old.started.slice(0, 10), old.groups[cohort][metric].median);
@@ -129,7 +122,6 @@ export function browserObserver() {
   for (const event of ['click', 'keydown']) document.addEventListener(event, () => { window.__analyst.start = performance.now(); }, { capture: true });
 }
 
-// g then b opens the shared QA account's previous board and its saved view, which other QA sessions change.
 export const boardCardPrefix = boardId => `/detail/project-${boardId}/`;
 
 export async function ready(page, surface, landedBoard) {
@@ -147,13 +139,11 @@ export async function ready(page, surface, landedBoard) {
     const test = () => {
       if (surface === 'page-navigation') {
         const cards = [...document.querySelectorAll(`a[href^="${cardPrefix}"]`)];
-        // On a phone the first column's cards can start below the fold, as the board path's card does.
         if (cards.length && !cards.some(visible)) cards[0].scrollIntoView({ block: 'center' });
         return cards.some(visible);
       }
       if (surface === 'board') {
         const card = document.querySelector(`a[href="${task}"]`);
-        // view=default bypasses saved filters; newer QA cards and late reflows push task 43 below a phone screen, so scroll it here.
         if (card && !visible(card)) card.scrollIntoView({ block: 'center' });
         return visible(card) && document.body.textContent.includes('QA Sandbox');
       }
@@ -182,7 +172,6 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
     if (!row) return;
     row.status = event.response.status;
     row.ttfbMs = (event.timestamp - row.start) * 1000;
-    // Header descriptions can contain private strings. Persist only metric names and numeric durations.
     const header = Object.entries(event.response.headers).find(([name]) => name.toLowerCase() === 'server-timing')?.[1];
     row.serverTiming = String(header || '').split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).flatMap(metric => {
       const name = metric.trim().match(/^([\w-]+)/)?.[1];
@@ -207,7 +196,7 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
         if (row) row.blocked = true;
         await cdp.send('Fetch.failRequest', { requestId: event.requestId, errorReason: 'BlockedByClient' });
       }
-    } catch { /* A page can close with an intercepted request queued. */ }
+    } catch {  }
   };
   const onData = event => { const row = requests.get(event.requestId); if (row) row.bytes += event.encodedDataLength; };
   const handlers = { 'Network.dataReceived': onData, 'Network.requestWillBeSent': onRequest, 'Network.responseReceived': onResponse, 'Network.loadingFinished': onFinished, 'Network.loadingFailed': onFailed, 'Fetch.requestPaused': onPaused };
@@ -223,8 +212,6 @@ export function pendingScripts(requests) {
   return scripts(requests).filter(row => row.durationMs === undefined).length;
 }
 
-// A server-rendered page can be visible while its code still downloads, and a throttled phone can sit
-// network-quiet mid-hydration before requesting lazy code. Settled means quiet scripts after an idle main thread.
 export async function settleScripts(requests, wait, idle, { quietMs, capMs, pollMs } = SCRIPT_SETTLE) {
   let waited = 0;
   let quiet = 0;
@@ -290,7 +277,6 @@ function measure(shared, browser, profile, index, run) {
   return measurePhases(phase => measurePhase(shared, browser, profile, index, run, phase), run, profile, index);
 }
 
-// Null when the app declines to save one: on desktop it refuses while AI chat opens by default, which is the default setting.
 export async function savedBoardPreference(context, page, pollMs = 250, capMs = 5000) {
   for (let waited = 0; waited <= capMs; waited += pollMs) {
     const preference = (await context.cookies()).find(cookie => cookie.name === BOARD_PREFERENCE_COOKIE);
@@ -313,7 +299,6 @@ async function boardPreference(shared, browser, mobile) {
 
 async function measurePhase(shared, browser, profile, index, run, phase) {
   const mobile = profile === 'phone';
-  // Untimed and unthrottled: a returning user saved the preference on an earlier visit. The timed context stays cold otherwise.
   const preference = phase === 'board-returning' ? await boardPreference(shared, browser, mobile) : null;
   const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
   if (preference) await context.addCookies([preference]);
@@ -342,7 +327,6 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     await operation();
     const contentAt = await ready(page, surface === 'board-returning' ? 'board' : surface, landed.id);
     const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
-    // Same two-second observation tail as speed-check; not part of content-visible timing.
     await page.waitForTimeout(2000);
     const metrics = await page.evaluate(({ origin, contentAt }) => {
       const longTasks = window.__analyst.longTasks.filter(task => task.startMs >= origin && task.startMs <= contentAt + 2000);
@@ -361,15 +345,12 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
       await sample(phase, () => navigate(BOARD));
       return;
     }
-    // Direct ticket is cold in a fresh context; the board primes only the warm click below.
     await sample('ticket-cold', () => navigate(TASK));
-    // Outside timing: "opened before" means the ticket code already arrived, as it has for a user who stayed on it.
     const settled = Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout)));
     if (settled.pendingScripts) throw new Error(`Ticket code did not settle: ${settled.pendingScripts} scripts pending`);
     await navigate(BOARD);
     await ready(page, 'board');
     await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
-    // Outside timing: a fast opened-before ticket still loads its deferred parts after the tail, which holds the next hard navigation back (YPER4-525).
     const previousPage = await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout));
     await page.waitForTimeout(SEARCH_IDLE_PAUSE_MS);
     await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
@@ -382,10 +363,8 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
       landed = safeSearch(page.url());
       await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
     }, run.actions, 'client', BOARD), false);
-    // Since 2026-10-20 plain QA opens the Compose writer inside the Commands sheet (ctrl-j path version 2).
     await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
     await page.locator('.section-container').first().focus();
-    // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
     await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
     await page.keyboard.press('Escape');
   } catch (error) {
@@ -429,7 +408,6 @@ async function main() {
   try {
     const company = process.env.COMPANY_SKILLS_DIR || path.join(os.homedir(), 'projects/company-skills');
     const shared = await import(pathToFileURL(path.join(company, 'skills/speed-check/scripts/common.mjs')).href);
-    // Reviewed read-only additions: bootstrap, My Tasks and keyword search. Never allow AI prompts or task writes.
     shared.readPosts.add('/api/app-shell/bootstrap');
     shared.readGets.add('/api/my-tasks');
     shared.readPosts.add('/api/search/document');
@@ -475,7 +453,6 @@ async function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(() => {
-    // Browser/JSON exceptions can contain cookies or private response bodies.
     console.error('Speed measurement cannot verify. Check QA-normal login, shared speed-check, selectors and private history. No credentials logged.');
     process.exitCode = 1;
   });

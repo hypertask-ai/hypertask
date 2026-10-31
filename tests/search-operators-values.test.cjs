@@ -14,7 +14,7 @@ const matches = (row, filter) => {
     const text = (row[field] ?? '').toLowerCase()
     return row[field] !== null && (kind === 'startsWith' ? text.startsWith(needle) : text.includes(needle))
   }
-  return true // Board visibility is asserted separately below.
+  return true
 }
 const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   .sort((a, b) => {

@@ -389,8 +389,6 @@ test("linkTaskPullRequest is idempotent and does not duplicate activity", async 
 function loadBrowserLinkRoute(verifySession, { broadcastError = null } = {}) {
   const linkCalls = [];
   const broadcastCalls = [];
-  // The shared App Router handler now owns this route; adapt it to the
-  // (req, res) shape the assertions below use.
   const { POST } = load("src/lib/api/task-writes/link-pull-request.ts", {
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession },
     "@/lib/pullRequests/taskPullRequests": {

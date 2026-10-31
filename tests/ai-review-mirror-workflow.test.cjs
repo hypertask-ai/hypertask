@@ -34,8 +34,6 @@ async function runMirror({
   const infos = [];
   const warnings = [];
   let refusedReads = rateLimitReads;
-  // The exact 403 a saturated App installation returns: no room left in the
-  // hourly window, resetting in a moment (YPER4-925).
   const refuse = () => {
     assert.ok(refusedReads > 0, "the reads must be refused only as often as the test asks");
     refusedReads -= 1;
@@ -78,13 +76,9 @@ async function runMirror({
   const savedAuthor = process.env.REVIEW_COMMENT_AUTHOR;
   const savedWorkspace = process.env.GITHUB_WORKSPACE;
   globalThis.fetch = fetchStub;
-  // The step imports the shared retry helper from the checked-out production
-  // scripts, which in the runner is the workspace root.
   process.env.GITHUB_WORKSPACE = process.cwd();
   if (token === null) delete process.env.HYPERTASK_MCP_TOKEN;
   else process.env.HYPERTASK_MCP_TOKEN = token;
-  // The step reads this from the workflow env; without it no comment is the
-  // reviewer's and every path here would skip.
   process.env.REVIEW_COMMENT_AUTHOR = REVIEWER.login;
   try {
     await new AsyncFunction("github", "context", "core", await loadScript())(
@@ -129,12 +123,10 @@ test("the review verdict lands in the ticket thread with the reviewed commit", a
   assert.equal(posts[0].init.headers["Idempotency-Key"], `ai-review-mirror-43-${SHA}`);
   const body = JSON.parse(posts[0].init.body);
   assert.equal(body.ticket_number, "HTPR-1234");
-  // Without a kind, an agent comment is filed in the hidden agent log.
   assert.equal(body.kind, "qa");
   assert.match(body.text, /APPROVE \(minors only: 1\)/);
   assert.match(body.text, /MINOR/);
   assert.ok(body.text.includes(`reviewed-commit: ${SHA}`));
-  // Signature and provider comment tags are not findings.
   assert.doesNotMatch(body.text, /ai-review-signature/);
 });
 
@@ -173,9 +165,6 @@ test("a branch that names no ticket is not mirrored", async () => {
 });
 
 test("the [bot] spelling of the same reviewer account is mirrored too", async () => {
-  // GitHub names one App account hypertask-ai-review[bot] on a comment event and
-  // hypertask-ai-review in the REST payload. The live run mirrored nothing
-  // because only one spelling matched.
   const event = await runMirror({ comment: { user: { login: "hypertask-ai-review[bot]" }, body: REVIEW } });
   assert.equal(event.posts.length, 1);
 
@@ -263,7 +252,6 @@ test("a read the app does not confirm fails the run", async () => {
   const { failures } = await runMirror({ postResponse: { status: 500, body: { success: false } } });
   const readFailure = await runMirror({ ticketComments: null });
   assert.equal(failures.length, 1);
-  // null comments is not an array, so the run must stop before posting.
   assert.match(readFailure.failures[0], /was not confirmed by the app/);
   assert.deepEqual(readFailure.posts, []);
 });
@@ -281,8 +269,6 @@ test("the workflow mirrors no candidate code into the run", async () => {
     "actions/checkout@11d5960a326750d5838078e36cf38b85af677262",
     "actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea",
   ]);
-  // The one checkout is the shared production scripts for the rate-limit
-  // retry, never the pull request under review.
   assert.equal(checkout.with.ref, "production");
   assert.equal(checkout.with["persist-credentials"], false);
   assert.equal(checkout.with["sparse-checkout"], ".github/scripts");
@@ -292,7 +278,6 @@ test("the workflow mirrors no candidate code into the run", async () => {
   }
   assert.deepEqual(workflow.on.issue_comment.types, ["created", "edited"]);
   assert.equal(workflow.on.workflow_dispatch.inputs.pr.required, true);
-  // An ordinary comment must not cancel the reviewer's delivery.
   assert.equal(workflow.concurrency["cancel-in-progress"], false);
   assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
   assert.ok(script.env.REVIEW_COMMENT_AUTHOR);
@@ -309,8 +294,6 @@ test("a rate-limited pull read waits for the reset and still mirrors the verdict
 });
 
 test("a rate-limited comment read waits for the reset and still mirrors the verdict (YPER4-925)", async () => {
-  // The live run failed on this read: 403, x-ratelimit-remaining 0, resetting
-  // 82 seconds later, and the verdict never reached the ticket.
   const { posts, failures, warnings } = await runMirror({ rateLimitReads: 1, rateLimitCommentRead: true });
 
   assert.deepEqual(failures, []);

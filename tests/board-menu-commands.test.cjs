@@ -45,8 +45,6 @@ test("board menu commands skip unavailable entries", () => {
   ]);
 });
 
-// HTPR-3805: on the Table view, table-scoped actions (configure columns,
-// sort, filter) lead the menu; board-only column/section actions drop below.
 test("table surface leads with table actions, board actions below", () => {
   assert.deepEqual(boardMenuKeys(true, "table"), [
     "configureTableColumns",

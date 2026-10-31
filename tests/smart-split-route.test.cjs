@@ -255,7 +255,6 @@ test("prompts over 1,000 characters are rejected before the transaction", async 
   const handler = loadHandler({
     tx: {},
   });
-  // Replace the transaction after loading; the route keeps the same stub object.
   const prismaModule = require.cache[path.join(root, "src/lib/prisma.ts")].exports.default;
   prismaModule.$transaction = async () => { transactionCalls += 1; };
   const res = response();
@@ -444,8 +443,6 @@ test("paired smart split stays manageable when ordinary views use its label", as
     { visibility: "Public", unsaved_User_Project_View: { none: {} } },
     { userId: 6 },
   ]);
-  // One scan protects other members' private state; the second updates only
-  // public saved views and the requester's own views.
   assert.equal(ownershipScanCalls, 2);
 });
 
@@ -489,8 +486,6 @@ test("rename refuses to leave another member's private view stale", async () => 
 
   assert.equal(res.result.statusCode, 409);
   assert.match(res.result.body.message, /another member's private view/i);
-  // The transaction rolls back the earlier label/view writes in production.
-  // The mock records them, but no dependent private View row is ever updated.
   assert.equal(updateCalls, 2);
 });
 

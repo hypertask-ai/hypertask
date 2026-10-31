@@ -8,7 +8,6 @@ const source = readFileSync(new URL('./runner.mjs', import.meta.url), 'utf8');
 const stepSource = source.slice(source.indexOf('const DNS_OR_CONNECTION_ERROR'), source.indexOf('async function runFlow('));
 const warnings = [];
 const runStep = vm.runInNewContext(`${stepSource}\nrunStep`, { console: { warn: (line) => warnings.push(line) }, setTimeout });
-// YPER4-266: every goto retries transient network errors; tests skip the 2s wait.
 const navigation = { ...boardDemo.steps[0], retryDelayMs: 0 };
 
 function mockPage(errors) {

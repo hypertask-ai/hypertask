@@ -40,8 +40,6 @@ test("first-open summarize waits for the deferred session", () => {
 
 test("deferred and manual sends share a synchronous mutex", () => {
   assert.match(chatSource, /const sendInFlightRef = useRef\(false\)/);
-  // BYOK and in-flight guards may be split so streaming can enqueue follow-ups
-  // (HTPR-5695) without weakening the pre-stream double-send mutex.
   assert.match(chatSource, /if \(isByokBlocked\) return;/);
   assert.match(chatSource, /if \(sendInFlightRef\.current\) return false;/);
   assert.match(chatSource, /sendInFlightRef\.current = true/);

@@ -382,7 +382,6 @@ async function withCompose(options, check) {
   try {
     reactRoot = createRoot(document.getElementById("root"));
     await render();
-    // Invoke the real textarea handler without depending on React's process-global input-event detection.
     const textarea = document.querySelector("textarea");
     const propsKey = Object.keys(textarea).find((key) => key.startsWith("__reactProps$"));
     await React.act(async () => textarea[propsKey].onChange({ target: { value: note } }));

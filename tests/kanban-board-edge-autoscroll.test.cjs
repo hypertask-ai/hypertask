@@ -73,7 +73,6 @@ test("a board with nothing off-screen never scrolls", () => {
 });
 
 test("edge zones are measured against the scroller box, not the window", () => {
-  // Board inset by the app-shell rail: x=60 is the scroller's own left edge.
   const delta = boardEdgeScrollStep({
     ...board,
     pointerX: 60,
@@ -103,8 +102,6 @@ const { canScrollX } = jiti(
 );
 
 test("an overflowing but non-scrollable wrapper is not a scroller", () => {
-  // Non-rail / mobile board wrapper: content overflows, overflow-x is visible,
-  // so assigning scrollLeft would do nothing (HTPR-5561).
   assert.equal(
     canScrollX({ scrollWidth: 3000, clientWidth: 1200, overflowX: "visible" }),
     false,

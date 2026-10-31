@@ -41,7 +41,6 @@ test("the comment box is held back until the flag is known and On, and never whe
   assert.equal(settledOnFirstRender({ ready: false, on: false, applies: false }), true, "cached layout and phone-embedded keep their own path");
 });
 
-// Mounts the hook with a slot whose box top the test controls; frames and timers are driven by hand.
 async function withHarness(t, { hydrated = true, boxTop, rowsFinal = { current: true } }, run) {
   const { JSDOM } = require("jsdom");
   const { act } = React;

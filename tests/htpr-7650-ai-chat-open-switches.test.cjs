@@ -548,7 +548,6 @@ test("fullscreen return flag Off retains the saved automatic-opening choice", ()
   }
 });
 
-// HTPR-8088: with manual chat on, only the new-ticket switch still opens the chat by itself.
 const manual = (values, options = {}) => pageHarness(values, { ...options, manualChat: true });
 
 test("manual chat: no switch opens the chat on a ticket, a board or My Tasks", () => {

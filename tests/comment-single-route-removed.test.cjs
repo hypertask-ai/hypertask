@@ -1,6 +1,3 @@
-// HTPR-5809: the legacy single-comment handler exposed and updated comments by
-// numeric ID without authentication or object authorization. It had no callers,
-// so keep the endpoint and its dormant controller removed.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

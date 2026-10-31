@@ -241,7 +241,6 @@ test(`Save & new isolates late preview and upload callbacks from the next ticket
   assert.deepEqual(fixture.state.attachments, []);
   assert.deepEqual(fixture.context.createTaskAttachmentsRef.current, []);
   const triggerAfterReset = fixture.state.trigger;
-  // The old gallery emits its uploadedFiles again when its files become empty.
   await fixture.getAttachments([file]);
   await fixture.callbackAttachments(uploaded);
   assert.deepEqual(fixture.state.attachments, [], 'old callbacks cannot repopulate the next composer');

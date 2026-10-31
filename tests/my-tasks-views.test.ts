@@ -387,7 +387,6 @@ test("apply path migrates flat overlapping filters into filterSettings", () => {
     task(2, { priority: { priority_index: 1 } as MyTasksTask["priority"] }),
   ];
 
-  // Flat priority still filters correctly via in-memory migration before persist.
   assert.deepEqual(
     applyMyTasksView(
       tasks,
@@ -480,8 +479,6 @@ test("apply migrates flat edits even when filterSettings already exist", () => {
       NOW,
       { applyFilterSettings: true },
     ).map(({ id }) => id),
-    // Inbox alone would keep both; merged Priority keeps only task 1.
-    // Tasks without inbox still fail Inbox unless they match ANY with Priority.
     [1],
   );
 });
@@ -515,7 +512,6 @@ test("filterSettings path still applies flat starred:false", () => {
       NOW,
       { applyFilterSettings: true },
     ).map(({ id }) => id),
-    // Priority keeps both; not-starred drops the starred task.
     [2],
   );
 });

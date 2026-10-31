@@ -185,9 +185,6 @@ function loadCommentsRoute({
     '@/lib/mcp/auth': {
       checkMcpRateLimit: async () => null,
       validateMcpAuth: async () => authContext,
-      // The route hands a rejection to the shared helper so the 401 names its
-      // cause (HTPR-4814). The real one reads the request headers; here only
-      // the status and shape the route passes through matter.
       mcpUnauthorizedResponse: async () => ({
         body: {
           success: false,

@@ -42,8 +42,6 @@ test("My Tasks matches assignee rows for the current user", () => {
   );
   assert.equal(myTasksPredicate({ assignees: [{ userId: 7 }] }, context), false);
   assert.equal(myTasksPredicate({ assignees: [] }, {}), false);
-  // An agent assignee row carries the agent's backing user id; the ticket
-  // belongs to the agent, not to the person behind it (HTPR-5743).
   assert.equal(
     myTasksPredicate({ assignees: [{ userId: 6, agentId: "a1" }] }, context),
     false,

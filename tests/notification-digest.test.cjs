@@ -5,8 +5,6 @@ const path = require("node:path");
 const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
 
-// digest.ts binds redis/qstash at module scope, so it must be evicted alongside
-// its stubs or a cached copy keeps the previous test's fakes.
 const stubbedModulePaths = [
   "src/lib/redis.ts",
   "src/lib/qstash.ts",
@@ -41,10 +39,6 @@ function loadTs(relativePath) {
   return jiti(path.join(root, relativePath));
 }
 
-/**
- * Loads digest.ts against a fake Redis and a recording publishJob.
- * `setResults` queues the return of each redis.set call ("OK" = window claimed).
- */
 function loadDigest({
   setResults = ["OK"],
   publishThrows = false,
@@ -98,7 +92,6 @@ test("first event opens a window and schedules one job", async () => {
 });
 
 test("second event joins the open window without scheduling again", async () => {
-  // set() returns null: the NX claim failed, so a job is already pending.
   const { mod, calls } = loadDigest({ setResults: [null] });
 
   const bundled = await mod.enqueueDigest(6, 4242);
@@ -151,10 +144,6 @@ test("the window start is backdated so the triggering notification is included",
 });
 
 test("the watermark bounds the next window past the last emailed event", async () => {
-  // The regression this guards: events at t=0 and t=250 are both sent by the
-  // digest at t=300. An event at t=301 opens a window backdated to t=181, whose
-  // query would otherwise pick the t=250 row up a second time. The watermark is
-  // the only thing that excludes it, since emailing never mutates the row.
   const { mod } = loadDigest({ setResults: ["OK"] });
   const lastEmailed = new Date("2026-07-20T12:04:10Z");
 
@@ -165,7 +154,6 @@ test("the watermark bounds the next window past the last emailed event", async (
 });
 
 test("a missing watermark reads as undefined rather than throwing", async () => {
-  // Redis loss must degrade to a possible duplicate, never to a dropped email.
   const { mod } = loadDigest({ setResults: ["OK"] });
   assert.equal(await mod.getLastDigestedAt(6, 999), undefined);
 });
@@ -181,9 +169,6 @@ test("the watermark survives independently per user and task", async () => {
 });
 
 test("the window keeps the email it replaced so an insert failure cannot lose it", async () => {
-  // Email used to be independent of the Notification insert. The digest makes
-  // it depend on it, so a swallowed insert error would turn a lost inbox row
-  // into a lost email too. The stored payload is what restores that redundancy.
   const { mod } = loadDigest({ setResults: ["OK"] });
 
   await mod.enqueueDigest(6, 4242, {
@@ -214,7 +199,6 @@ test("a window opened without a payload still reads back cleanly", async () => {
   assert.equal(await mod.getDigestFallback(6, 4242), undefined);
 });
 
-// --- event dedupe ---
 
 function loadEvents() {
   resetModules();
@@ -222,8 +206,6 @@ function loadEvents() {
 }
 
 test("a mention that also produced a comment row counts as one update", () => {
-  // A follower who is also mentioned gets Comment + Mentioned for one comment.
-  // Listing both would say "2 updates" for a single action.
   const { dedupePerComment } = loadEvents();
 
   const rows = dedupePerComment([
@@ -261,7 +243,6 @@ test("distinct comments and comment-less events are all kept", () => {
 });
 
 test("every notification type has digest phrasing", () => {
-  // A missing entry renders "Alice undefined" in a user-facing email.
   const { verbByType } = loadEvents();
   for (const type of [
     "Comment",
@@ -282,7 +263,6 @@ test("every notification type has digest phrasing", () => {
   }
 });
 
-// --- template ---
 
 function loadTemplates() {
   resetModules();
@@ -314,7 +294,6 @@ test("digest renders every event and its comment preview", () => {
 
   assert.match(html, /Alice commented/);
   assert.match(html, /Bob moved this task/);
-  // Block boundaries must become spaces, otherwise Tiptap paragraphs glue.
   assert.match(html, /first second/);
   assert.match(html, /https:\/\/x\.test\/t\/1/);
 });

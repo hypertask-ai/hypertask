@@ -1,5 +1,3 @@
-// HTPR-6653: only the owner can comp a team, and every change is logged in the
-// same transaction as the update.
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");

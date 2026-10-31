@@ -5,8 +5,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 
-// jsdom 30's undici dependency uses this Node 22 API. Keep the DOM regression
-// runnable on the current CI runner's older Node without changing CI itself.
 const workerThreads = require("node:worker_threads");
 if (typeof workerThreads.markAsUncloneable !== "function") {
   workerThreads.markAsUncloneable = () => {};

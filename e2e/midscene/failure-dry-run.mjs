@@ -29,7 +29,6 @@ processResults([failure], state, deps);
 processResults([failure], state, deps);
 assert.equal(output.filter((line) => line.startsWith('DRY RUN:')).length, 1);
 assert.equal(output.filter((line) => line.startsWith('SUPPRESSED:')).length, 1);
-// An actual open-ticket lookup also suppresses after a green night and lost local state.
 const plan = ticketPlan(failure);
 const existing = { title: plan.title, status: 'Normal', section: 'Bugs' };
 processResults([{ ...failure, ok: true }, failure], {}, { ...deps, listTickets: () => [existing] });

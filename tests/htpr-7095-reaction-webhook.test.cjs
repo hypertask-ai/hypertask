@@ -102,7 +102,6 @@ test("only an added reaction by a person on an agent comment has a target", () =
   assert.equal(mod.reactionWebhookTarget({ added: true, reactorIsAgent: false, commentAgentId: null }), null);
 });
 
-// Same order as both reaction routes: prepare before the transaction, persist inside it.
 async function deliver(mod, input) {
   const prepared = await mod.prepareCommentReactionWebhook(input);
   return prepared ? mod.persistCommentReactionWebhook({}, prepared, input) : [];
@@ -166,9 +165,7 @@ test("both reaction routes write the outbox row in the reaction transaction, onl
   assert.match(page, /prisma\.\$transaction\(async \(tx\) => \{\s*const reaction = await tx\.reaction\.create/);
   assert.ok(!/added: false/.test(page));
   assert.match(page, /reactorIsAgent: false/);
-  // MCP: only a reaction that was not active before, and an agent call never counts as a person.
   assert.match(mcp, /preparedWebhook && !wasActive && active\)/);
-  // HTPR-7122: the route passes the calling agent, and an agent call is never a person.
   assert.match(mcp, /setReaction\(target, userId, emoji, active, ctx\.agentId \?\? null\)/);
   assert.match(mcp, /reactorIsAgent: Boolean\(agent\)/);
 });

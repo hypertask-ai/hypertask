@@ -1,6 +1,3 @@
-// Calls a Pages API route with no session and records status and body.
-// Prisma and next/headers are stubbed the same way as tests/api-no-login.test.cjs,
-// so a route that reaches the database before its auth check throws PRISMA_TOUCHED.
 const fs = require("node:fs");
 const Module = require("node:module");
 const os = require("node:os");
