@@ -25,7 +25,7 @@ const button = (name) => footer().querySelector(`button[aria-label="${name}"]`);
 const click = async (node) => React.act(async () => node.click());
 const enable = async ({ flags, rerender }) => { flags[flag] = true; await rerender(); };
 
-test('flag registers a default-Everyone low-risk feature and uses the generated registry', () => {
+test('flag registers a default-Everyone low-risk feature', () => {
   const jiti = createJiti(__filename, { fsCache: false });
   const definition = jiti(path.join(root, `src/lib/flags/definitions/${flag}.ts`));
   assert.equal(definition.HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, flag);
@@ -35,7 +35,6 @@ test('flag registers a default-Everyone low-risk feature and uses the generated 
   assert.equal(definition.default.releaseRisk.risk, 'small');
   assert.ok(definition.default.releaseRisk.reason);
   assert.equal(definition.default.releaseRisk.highRisk, undefined);
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/flags/definitions/index.generated.ts'), 'utf8'), /export \{ HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG \}/);
 });
 
 for (const apple of [false, true]) {

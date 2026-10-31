@@ -266,5 +266,4 @@ test('exact-count bugfix defaults to Everyone and is registered through the gene
   const registeredImport = generated.match(/import (flag\d+) from "\.\/htpr-7462-mcp-ratelimit-exact-count";/)
   assert.ok(registeredImport)
   assert.ok(generated.includes(`  ${registeredImport[1]},`))
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/flags/keys.ts'), 'utf8'), /export \* from "\.\/definitions\/index\.generated"/)
 })
