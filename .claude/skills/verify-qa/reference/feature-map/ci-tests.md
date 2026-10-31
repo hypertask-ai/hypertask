@@ -11,7 +11,7 @@ This is infrastructure; application screens do not change.
 1. Open a normal production pull request.
 2. Read the preparation job and shard artifact.
 3. Confirm code checks and both shards start independently after preparation.
-4. Confirm scope guard, Typecheck and Lint succeed in `ci-checks`.
+4. Confirm scope guard, Typecheck, `Lint (oxlint)` and `Lint (eslint, rules Oxlint lacks)` succeed in `ci-checks`.
 5. Confirm both test shards execute successfully.
 6. Confirm the summary proves every planned file ran once.
 7. Confirm the required `ci-tests` result succeeds only after all producers.
@@ -35,7 +35,7 @@ Execute the workflow's summary shell with isolated inputs locally.
 ## What proof to collect
 
 Save workflow run URLs, head SHAs and job/step timestamps.
-Record successful scope guard, Typecheck, Lint and both shards.
+Record successful scope guard, Typecheck, both lint steps and both shards.
 Record the summary's exact-file execution proof.
 Compare preparation and shard-start timings against historical runs.
 Separate avoided serial work from overall CI wall time.

@@ -44,9 +44,14 @@ test("the required CI lint step uses the baseline-aware npm command without rege
   const workflow = readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8");
   const checks = yaml.load(workflow).jobs["ci-checks"];
   assert.equal(checks.if, "needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'");
-  assert.equal(checks.steps.find((step) => step.name === "Lint").if, "needs.ci-prepare.outputs.run_tests == 'true'");
-  assert.equal(checks.steps.find((step) => step.name === "Lint").run,
-    "npm run lint -- --cache --cache-strategy content --cache-location .cache/eslint/.eslintcache");
+  const condition = "needs.ci-prepare.outputs.run_tests == 'true'";
+  const oxlint = checks.steps.find((step) => step.name === "Lint (oxlint)");
+  assert.equal(oxlint.if, condition);
+  assert.equal(oxlint.run, "npm run lint:oxlint");
+  const eslintStep = checks.steps.find((step) => step.name === "Lint (eslint, rules Oxlint lacks)");
+  assert.equal(eslintStep.if, condition);
+  assert.match(eslintStep.run,
+    /^\s*npm run lint -- --cache --cache-strategy content --cache-location \.cache\/eslint\/\.eslintcache$/m);
   assert.match(scripts.lint, /--suppressions-location eslint-local-rules\/style-guide-suppressions\.json/);
   assert.doesNotMatch(scripts.lint, /--suppress-all|--suppress-rule|--prune-suppressions/);
 });
@@ -96,7 +101,7 @@ test("a baselined file passes its allowance, rejects an added violation, and per
 });
 
 test("the style baseline does not suppress unrelated lint errors", () => {
-  const { status, result } = lint("export default function Probe() { return <div>don't</div>; }");
+  const { status, result } = lint("export default function Probe() { /* note */ return <div />; }");
   assert.equal(status, 1);
-  assert.ok(result.messages.some((message) => message.ruleId === "react/no-unescaped-entities"));
+  assert.ok(result.messages.some((message) => message.ruleId === "local/no-comments"));
 });
