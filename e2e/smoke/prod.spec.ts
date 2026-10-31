@@ -646,6 +646,8 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.getByPlaceholder('Type a command or search...').fill('Link page')
     await expect(linkPageCommand).toBeVisible({ timeout: 15_000 })
     await linkPageCommand.click()
+    await expect(page.locator('#option-picker input'), 'the Link page command did not open the chooser')
+      .toBeVisible({ timeout: 20_000 })
     await page.locator('#option-picker input').fill(title)
     await page.locator('#option-picker').getByText(title, { exact: true }).click()
     await expect(page.locator(`a[href="/page/${publicId}"]`)).toBeVisible()
