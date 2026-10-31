@@ -92,3 +92,34 @@ test("proof reads the shard artifacts and rejects a dropped or repeated file", a
     await rm(results, { recursive: true, force: true });
   }
 });
+
+test("balances shards by measured work instead of file count, deterministically", async () => {
+  const { partition, assertPartition, workOf, readDurationWeights } = await import("../.github/scripts/shard-tests.mjs");
+  const weights = readDurationWeights(JSON.stringify({
+    defaultWorkMs: 250,
+    files: {
+      "tests/slow.test.cjs": 6000,
+      "tests/medium.test.cjs": 4000,
+      "tests/serial.test.ts": 3000,
+      "tests/quick.test.cjs": 500,
+    },
+  }));
+  const files = ["tests/slow.test.cjs", "tests/medium.test.cjs", "tests/serial.test.ts", "tests/quick.test.cjs", "tests/added.test.cjs"];
+  const shards = partition(files, 2, weights);
+  const work = workOf(shards, weights);
+  assert.ok(Math.max(...work) - Math.min(...work) <= weights.defaultWorkMs + 500,
+    `shards are unbalanced: ${work.join(",")}`);
+  assert.deepEqual(partition([...files].reverse(), 2, weights), shards);
+  assertPartition([...files].sort(), shards, weights);
+  assert.throws(() => partition(files, 0, weights), /positive integer/);
+
+  const moved = [shards[0].slice(1), [...shards[0].slice(0, 1), ...shards[1]]];
+  assert.throws(() => assertPartition([...files].sort(), moved, weights), /measured work split/);
+});
+
+test("an unreadable or empty weights file is refused instead of silently unbalancing", async () => {
+  const { readDurationWeights } = await import("../.github/scripts/shard-tests.mjs");
+  assert.throws(() => readDurationWeights(JSON.stringify({ files: {} })), /defaultWorkMs/);
+  assert.throws(() => readDurationWeights("{}"), /files object/);
+  assert.throws(() => readDurationWeights(JSON.stringify({ defaultWorkMs: 10, files: { "tests/a.test.cjs": -1 } })), /bad measured work/);
+});
