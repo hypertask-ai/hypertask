@@ -1,13 +1,3 @@
-// HYCI-36 — behavioral tests for the glm-qa job's merged-pull-request read.
-// The step's `run: |` block is extracted from the workflow YAML, de-indented and
-// executed as a bash script with stub `curl`/`sleep` binaries on the PATH, the
-// same way tests/prod-health-workflow.test.cjs exercises the health job.
-//
-// The read answered 403 (rate limited) on 87 of the last 500 production runs and
-// reddened every one of those pushes after the merge and deploy had succeeded.
-// It must retry, then fail open and skip the brief. The genuine ambiguity — more
-// than one merged PR containing the commit — must still fail loudly.
-
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
@@ -35,13 +25,12 @@ async function resolveScript() {
       continue;
     }
     const indent = (line.match(/^ */) || [""])[0].length;
-    if (indent <= 8) break; // next step key
+    if (indent <= 8) break;
     block.push(line.slice(10));
   }
   return block.join("\n");
 }
 
-// Serves one status per read from HC_PR_SEQUENCE and answers with HC_PR_BODY.
 const CURL_STUB = `#!/usr/bin/env bash
 set -u
 out=""
@@ -119,8 +108,7 @@ test("a readable merged pull request sets the brief's ticket", async () => {
   assert.doesNotMatch(outputs, /skipped=true/);
 });
 
-// The retry: a rate-limited read must not cost the brief on its own.
-test("a read that answers 403 twice and then 200 still resolves the ticket", async () => {
+test("a rate-limited read retries and still resolves the ticket", async () => {
   const { result, outputs } = await runResolve({
     HC_PR_SEQUENCE: "403 403 200",
     HC_PR_BODY: mergedPr(2633, "HYCI-36 fix"),
@@ -132,8 +120,6 @@ test("a read that answers 403 twice and then 200 still resolves the ticket", asy
   assert.match(outputs, /number=2633/);
 });
 
-// The fail open: exploratory QA failing to find its ticket never reds a push
-// whose merge and deploy already succeeded.
 test("a read that keeps failing skips the brief with a warning instead of failing the job", async () => {
   const { result, outputs } = await runResolve({ HC_PR_SEQUENCE: "403 403 403" });
 
@@ -162,8 +148,6 @@ test("a commit with no merged pull request is an ordinary skip", async () => {
   assert.match(outputs, /skipped=true/);
 });
 
-// The ambiguity is not a flake: guessing the deploy ticket would brief the wrong
-// change, so it must stay red.
 test("two merged pull requests containing the commit still fail the job", async () => {
   const { result, outputs } = await runResolve({
     HC_PR_BODY: JSON.stringify([

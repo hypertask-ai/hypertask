@@ -305,10 +305,6 @@ test("two deployments for one commit pick the READY one without a broken pipe", 
   assert.equal(promoted, null);
 });
 
-// HYCI-36: Vercel's builder runs out of memory and retries the build. The retry
-// reached READY 6-14 minutes after the failure on 7 of the 26 red build-failure
-// runs in the week to 2026-10-31, so the wait must read through the failure
-// instead of reporting a red push for a commit that then shipped.
 test("an out-of-memory build that Vercel retries to READY is health-checked, not red", async () => {
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
     HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}}]}',
@@ -324,9 +320,6 @@ test("an out-of-memory build that Vercel retries to READY is health-checked, not
   assert.equal(promoted, null);
 });
 
-// The other half of HYCI-36: 19 of the 26 out-of-memory failures never retried.
-// Vercel's builder running out of memory is not a failure of the merged commit,
-// so it is alerted once and the push stays green.
 test("an out-of-memory build that never retries alerts without reddening the push", async () => {
   const { result, promoted, outputs } = await runHealthCheck("ok ok healthy", {
     HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-oom","state":"ERROR","errorCode":"out_of_memory","meta":{"githubCommitSha":"__SHA__"}}]}',
@@ -340,8 +333,6 @@ test("an out-of-memory build that never retries alerts without reddening the pus
   assert.equal(promoted, null);
 });
 
-// The fail-open must not swallow a real code failure: a type error never clears
-// on retry, so it still reds the push on the first read.
 test("a code-class build failure is still red and does not wait for a retry", async () => {
   const { result, promoted } = await runHealthCheck("ok ok healthy", {
     HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-bad","state":"ERROR","errorCode":"type_error","meta":{"githubCommitSha":"__SHA__"}}]}',
@@ -354,7 +345,6 @@ test("a code-class build failure is still red and does not wait for a retry", as
   assert.equal(promoted, null);
 });
 
-// An ERROR whose cause cannot be classified fails closed, never open.
 test("a build failure without a readable error code is still red", async () => {
   const { result } = await runHealthCheck("ok ok healthy", {
     HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-bad","state":"ERROR","meta":{"githubCommitSha":"__SHA__"}}]}',
