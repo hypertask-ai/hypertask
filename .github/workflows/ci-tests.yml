@@ -254,6 +254,14 @@ jobs:
             node .github/scripts/shard-tests.mjs --count "$CI_TEST_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
           fi
           node .github/scripts/shard-tests.mjs --check --out "$OUT"
+          # State how much of the suite this run covers. A pick that quietly
+          # widened back to everything is then visible in the run itself.
+          TOTAL=$(node -e 'import("./scripts/test-inventory.mjs").then(async (m) => {
+            const found = await m.discoverTestFiles({ root: process.cwd(), testsRoot: process.cwd() + "/tests" });
+            process.stdout.write(String(found.supported.length));
+          })')
+          RUN=$(jq -r '.files' "$OUT/manifest.json")
+          echo "test selection: ${RUN} of ${TOTAL} test files ($((RUN * 100 / TOTAL))%)" | tee -a "$GITHUB_STEP_SUMMARY"
           echo "run_tests=true" >> "$GITHUB_OUTPUT"
           indexes=$(node -e 'const n=Number(process.argv[1]); if (!Number.isInteger(n)||n<1) process.exit(1); process.stdout.write(JSON.stringify([...Array(n).keys()].map(String)))' "$CI_TEST_SHARDS")
           echo "indexes=${indexes}" >> "$GITHUB_OUTPUT"
