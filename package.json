@@ -28,6 +28,7 @@
     "cleanup:verification-codes": "tsx src/scripts/cleanup-verification-codes.ts",
     "cleanup:oauth-codes": "tsx src/scripts/cleanup-oauth-codes.ts",
     "flags:generate": "node scripts/generate-flag-index.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs",
     "postinstall": "npm run flags:generate",
     "predev": "npm run flags:generate",
     "prebuild": "npm run flags:generate",
@@ -37,7 +38,8 @@
     "prelint": "npm run flags:generate",
     "prelint:changed": "npm run flags:generate",
     "lint:oxlint": "bash scripts/heavy-job.sh oxlint",
-    "prelint:oxlint": "npm run flags:generate"
+    "prelint:oxlint": "npm run flags:generate",
+    "quick-check": "node scripts/quick-check.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.87",
