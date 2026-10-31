@@ -142,7 +142,8 @@ console.log(
 timingDirectory = mkdtempSync(path.join(tmpdir(), "hypertask-test-durations-"));
 process.on("exit", (exitCode) => {
   for (const message of todoRemovalMessages(passingTodos, root)) console.error(message);
-  if (passingTodos.length > 0) process.exitCode ||= 1;
+  const finalExitCode = passingTodos.length > 0 ? exitCode || 1 : exitCode;
+  if (finalExitCode !== exitCode) process.exitCode = finalExitCode;
   try {
     const durationMs = performance.now() - startedAt;
     fileDurations.sort((a, b) => b.durationMs - a.durationMs || a.file.localeCompare(b.file));
@@ -159,7 +160,7 @@ process.on("exit", (exitCode) => {
       differencePercent,
       selectedFiles: selected.length,
       recordedFiles: fileDurations.length,
-      exitCode,
+      exitCode: finalExitCode,
       files: fileDurations,
     };
     if (isCi) {

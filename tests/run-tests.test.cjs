@@ -163,7 +163,7 @@ for (const extraFailure of [false, true]) {
 
 test("passing todo fails the run and names the marker to remove", (t) => {
   const directory = fixture(t, {
-    "passing.test.cjs": `require('node:test')('repaired fixture', { todo: true }, () => {});`,
+    "passing.test.cjs": `require('node:test')('repaired fixture', { todo: 'HTPR-1 known bug' }, () => {});`,
     "healthy.test.cjs": `require('node:test')('ordinary case', () => {});`,
   });
   const { status, stderr, report } = run(directory);
@@ -174,7 +174,7 @@ test("passing todo fails the run and names the marker to remove", (t) => {
 
 test("known-bug todo that still fails keeps the run green", (t) => {
   const directory = fixture(t, {
-    "failing.test.cjs": `require('node:test')('broken fixture', { todo: 'known bug' }, () => { throw Error('still broken'); });`,
+    "failing.test.cjs": `require('node:test')('broken fixture', { todo: 'HTPR-1 known bug' }, () => { throw Error('still broken'); });`,
   });
   const { status, stderr } = run(directory);
   assert.equal(status, 0, stderr);
@@ -183,7 +183,7 @@ test("known-bug todo that still fails keeps the run green", (t) => {
 
 test("a real failure keeps its own exit status alongside a passing todo", (t) => {
   const directory = fixture(t, {
-    "passing.test.cjs": `require('node:test')('repaired before failure', { todo: true }, () => {});`,
+    "passing.test.cjs": `require('node:test')('repaired before failure', { todo: 'HTPR-1 known bug' }, () => {});`,
     "typescript.test.ts": "",
   });
   writeFileSync(path.join(directory, "node_modules/tsx/dist/cli.mjs"), "process.exit(7);");
@@ -192,18 +192,18 @@ test("a real failure keeps its own exit status alongside a passing todo", (t) =>
   assert.match(stderr, /remove the todo marker: not found in tests repaired before failure/);
 });
 
-test("the todo scan reads reason-bearing, indented and CRLF TAP lines only", async () => {
+test("the todo scan reads known-bug todos only, including indented and CRLF output", async () => {
   const { findPassingTodos } = await import(pathToFileURL(path.join(root, "scripts/todo-passing.mjs")).href);
   assert.deepEqual(findPassingTodos([
     "TAP version 13",
-    "ok 1 - repaired bug # TODO",
-    "ok 2 - repaired with reason # TODO fix later",
-    "not ok 3 - still broken # TODO known bug",
+    "ok 1 - bare placeholder # TODO",
+    "ok 2 - repaired bug # TODO HTPR-5888 stale known bug",
+    "not ok 3 - still broken # TODO HTPR-5888 known bug",
     "ok 4 - skipped # SKIP",
     "ok 5 - skipped todo # TODO # SKIP",
     "ok 6 - ordinary test",
     "# ok 7 - logged text # TODO",
-    "    ok 8 - nested bug # TODO  ",
-  ].join("\r\n")), ["repaired bug", "repaired with reason", "nested bug"]);
+    "    ok 8 - nested bug # TODO HTPR-5888 nested  ",
+  ].join("\r\n")), ["repaired bug", "nested bug"]);
   assert.deepEqual(findPassingTodos(""), []);
 });
