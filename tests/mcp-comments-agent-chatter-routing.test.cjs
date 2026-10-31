@@ -37,7 +37,7 @@ test('flag on refuses chatter as a comment and writes a parsed thought without c
   assert.equal(calls.urls.length, 0)
   assert.deepEqual(calls.runs, [[{ userId: 6, agentId: 'agent-1', teamScope: null, displayName: 'Owner', source: 'agent' }, { taskId: 99, title: null, source: 'runtime' }]])
   assert.equal(calls.activities[0][2].type, 'THOUGHT')
-  assert.deepEqual(calls.flags, [])
+  assert.deepEqual(calls.flags, [{ key: 'yper4-910-agent-writing', userId: 6 }])
 })
 
 for (const kind of routing.COMMENT_KINDS) {
