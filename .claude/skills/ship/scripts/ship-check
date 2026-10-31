@@ -18,7 +18,7 @@
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
 #   ship-check ticket <T>        ticket exists on the board
 #   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof, breaks if and a
-#                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in this session's .unlazy/s-<id>/gates/*.md
+#                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in the ticket's ~/.unlazy/ledgers/<T>/gates/*.md
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
@@ -46,12 +46,15 @@ check_ticket() {
   echo "ticket ok"
 }
 
+# One folder per ticket, outside the project: ship-gates writes the ledger here and every
+# gate tool reads it from the same place.
+ledger_gates_dir() { printf '%s/.unlazy/ledgers/%s/gates' "${SHIP_STATE_ROOT:-$HOME}" "$1"; }
+
 deeper_gate_runnable() {
-  local f id=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
-  [[ ${id:0:8} =~ ^[A-Za-z0-9._-]{1,8}$ ]] || return 1
-  for f in "$PWD/.unlazy/s-${id:0:8}"/gates/*.md; do
+  local f
+  for f in "$(ledger_gates_dir "$1")"/*.md; do
     [ -f "$f" ] || continue
-    awk -v id="$1" '
+    awk -v id="$2" '
       /^- \[[ xX]\] / { inside = substr($0, 7, length(id) + 1) == id ":"; next }
       /^[^ ]/ { inside = 0 }
       inside && /^  CHECK: *[^ ]/ { check = 1 }
@@ -73,12 +76,8 @@ check_deeper() {
   done
   id=$(grep -oE "proof gate: *$t\.deeper-[a-z0-9-]+" <<<"$text" | head -1 | sed -E 's/^proof gate: *//')
   [ -n "$id" ] || fail "the Deeper: activity on $t must name its proof gate as \"proof gate: $t.deeper-<name>\""
-  deeper_gate_runnable "$id"
-  case $? in
-    0) ;;
-    1) fail "deeper needs this session's id (CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID) to find its scope" ;;
-    *) fail "$id has no gate with CHECK: and EXPECT: in this session's $PWD/.unlazy/s-<id>/gates/*.md; a manual note does not count" ;;
-  esac
+  deeper_gate_runnable "$t" "$id" \
+    || fail "$id has no gate with CHECK: and EXPECT: in $(ledger_gates_dir "$t")/*.md; a manual note does not count"
   echo "deeper ok"
 }
 

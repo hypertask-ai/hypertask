@@ -13,7 +13,11 @@ T=$1
 ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
 [ -n "$ID" ] || { echo "ship-gates needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
 [[ ${ID:0:8} =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ship-gates: invalid session id prefix" >&2; exit 1; }
-L=$PWD/.unlazy/s-${ID:0:8}/GATES.md
+# The ledger is private working state: one folder per ticket under the home folder, never in
+# the project. Locks and extra gates live in the same folder, so a project stays clean.
+STATE=${SHIP_STATE_ROOT:-$HOME}
+[[ $STATE == /* && $STATE != *$'\n'* ]] || { echo "ship-gates: SHIP_STATE_ROOT must be an absolute path" >&2; exit 1; }
+L=$STATE/.unlazy/ledgers/$T/GATES.md
 C=$HOME/.agents/skills/ship/scripts/ship-check
 U=$HOME/.agents/skills/unlazy/scripts
 # Other repos (CLI, docs, verify): every CHECK carries the repo settings, or it would read the app repo.
@@ -29,9 +33,9 @@ if [ -n "${SHIP_REPO:-}" ] && [ "$SHIP_REPO" != hypertask-ai/hypertask ]; then
     ENVP+="SHIP_WORKER='$SHIP_WORKER' "
   fi
 fi
-node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" <<'JS'
+node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" "$STATE" <<'JS'
 import { dirname } from 'node:path';
-const [ledger, session, ticket, check, scripts, root, envPrefix] = process.argv.slice(2);
+const [ledger, session, ticket, check, scripts, root, envPrefix, state] = process.argv.slice(2);
 const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await import(`${scripts}/lib/gates.mjs`);
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const gates = {
@@ -45,15 +49,19 @@ const gates = {
   done: ["The ticket is in the done column its board names", 'done ok'],
   cleaned: ['This session removed its worktree and branch for the ticket (/clean-up)', 'cleaned ok'],
 };
-if (/[\r\n\0]/.test(session + root + check + envPrefix) || Buffer.byteLength(session) > 4095) throw new Error('invalid session id or path');
+if (/[\r\n\0]/.test(session + root + check + envPrefix + state) || Buffer.byteLength(session) > 4095) throw new Error('invalid session id or path');
 const read = (file) => {
-  try { return readStableRegularFile(file, { root }); }
+  try { return readStableRegularFile(file, { root: state }); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
 };
-await withFileLock(root, ledger, () => {
+await withFileLock(state, ledger, () => {
   const binding = `${dirname(ledger)}/session`;
   const bound = read(binding);
-  if (bound && bound.trim() !== session.trim()) throw new Error('ship-gates: session prefix collision');
+  // One folder per ticket: a new session continues the ticket's ledger instead of failing,
+  // because the ticket owns the ledger and ship-claim owns the work.
+  if (bound && bound.trim() !== session.trim()) {
+    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound.trim()} to ${session.trim()}\n`);
+  }
   let text = read(ledger);
   const doc = parseGates(text, { requireGates: !!text });
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
@@ -67,7 +75,7 @@ await withFileLock(root, ledger, () => {
     if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
         !generatedCheck.test(gate.check) || !gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) ||
         gate.expect !== gates[match[2]][1] || gate.cwd !== root) {
-      throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
+      throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in ${dirname(ledger)}/gates/extra.md and review them separately`);
     }
   }
   if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
@@ -77,12 +85,12 @@ await withFileLock(root, ledger, () => {
     if (doc.gates.some((gate) => gate.id === id)) continue;
     text += `\n- [ ] ${id}: ${title}\n  CHECK: ${envPrefix}${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
   }
-  writeAtomic(binding, session + '\n', { root });
-  writeAtomic(ledger, text, { root });
+  writeAtomic(binding, session + '\n', { root: state });
+  writeAtomic(ledger, text, { root: state });
 });
 JS
 status=0
-node "$U/gate-check.mjs" --approve "$L" >&2 || status=$?
+node "$U/gate-check.mjs" --approve "$L" --root "$(dirname "$L")" >&2 || status=$?
 printf '%s\n' "$L"
 # Unmet ship steps are expected when creating the ledger.
 [ "$status" -le 1 ] || exit "$status"
