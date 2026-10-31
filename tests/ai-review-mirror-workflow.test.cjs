@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const yaml = require("js-yaml");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const SHA = "b".repeat(40);
@@ -17,21 +18,6 @@ const REVIEW = `APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**
 const loadScript = async () => yaml.load(await readFile(WORKFLOW, "utf8")).jobs.mirror.steps
   .find(step => step.with?.script).with.script;
 
-const loadWritingGuard = () => {
-  const ts = require("typescript");
-  const path = require("node:path");
-  const Module = require("node:module");
-  const { readFileSync } = require("node:fs");
-  const filePath = path.join(process.cwd(), "src/lib/agents/writing.ts");
-  const javascript = ts.transpileModule(readFileSync(filePath, "utf8"), {
-    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
-  const loaded = new Module(filePath);
-  loaded.filename = filePath;
-  loaded.require = (request) => require(request);
-  loaded._compile(javascript, filePath);
-  return loaded.exports;
-};
 
 async function runMirror({
   eventName = "issue_comment",
@@ -156,7 +142,7 @@ test("the review verdict lands in the ticket thread with the reviewed commit", a
 
 test("the people line passes the board's voice guard, which the findings cannot (YPER4-910)", async () => {
   const { posts } = await runMirror();
-  const { assertAgentWriting, AgentWritingError } = loadWritingGuard();
+  const { assertAgentWriting, AgentWritingError } = loadModule("src/lib/agents/writing.ts");
 
   assert.doesNotThrow(
     () => assertAgentWriting("agent-id", { text: JSON.parse(posts[0].init.body).text }),
