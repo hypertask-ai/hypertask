@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
-usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE (--reason URL | --review ID | --failure REASON) [--dry-run] | ht-flag review KEY everyone --ai-review URL --independent TEXT --live-qa URL [--dry-run]; reason must link to a clear yes from Valentin within 7 days: his thumbs up on a switch question, his own ticket yes after exactly one switch question, or an in-chat record of his exact words from HT Product Lead (#comment-<id>); questions name Switch <flag-key> to <mode>'; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE (--reason URL | --review ID | --failure REASON, owner-qa only) [--dry-run] | ht-flag review KEY everyone --ai-review URL --independent TEXT --live-qa URL [--dry-run]; reason must link to a clear yes from Valentin within 7 days: his thumbs up on a switch question, his own ticket yes after exactly one switch question, or an in-chat record of his exact words from HT Product Lead (#comment-<id>); questions name Switch <flag-key> to <mode>'; }
 
 dry_run=false
 args=()
@@ -51,7 +51,7 @@ case "$command" in
         body=$(jq -nc --arg key "$key" --arg mode "$mode" --argjson review "$4" '{key:$key,mode:$mode,review:$review}')
         ;;
       --failure)
-        [ "$mode" = OFF ] || fail 'failure is only allowed for off'
+        [ "$mode" = OWNER_AND_QA ] || fail 'failure is only allowed for owner-qa'
         node -e 'const reason=process.argv[1]; if (!reason.trim() || reason.length > 300) process.exit(1)' "$4" || fail 'failure must be a nonblank reason or URL (max 300 characters)'
         body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg failure "$4" '{key:$key,mode:$mode,failure:$failure}')
         ;;

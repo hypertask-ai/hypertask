@@ -38,6 +38,6 @@ Drive the real parse or dispatch entry point, prove side effects, and reload sav
 Store proof, checklist, captures, and the self-contained HTML report in the ticket's evidence folder outside the worktree. Publish the report as a ticket page. Post one QA verdict with report link and key attachments; read it back. Run the proof and documentation gates before closing.
 
 - PASS: explain what changed for the user, link the merged PR and report, and move to Done only after the gates pass. Give the exact place and short steps to try it.
-- FAIL: keep In Progress. For flagged behavior, use the emergency Off path before repairs. Re-run deployment and live verification after repair. After two failed attempts, record the blocker and hand off; do not claim completion.
+- FAIL: keep In Progress. For flagged behavior, use the emergency failure path to hold it at Owner + QA before repairs. Re-run deployment and live verification after repair. After two failed attempts, record the blocker and hand off; do not claim completion.
 
 A real human decision uses one Question in the house-rules tickets skill format: max 3 plain bullets, then Question, My recommendation, Why, Yes, No. No outside links or product precedents. Never use Valentin Review simply to ask for a flag switch. Keep decisions, flags, and follow-up work on their existing product surfaces; never build another decision inbox. Finish with /ship's session-scoped cleanup and proof.

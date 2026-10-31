@@ -70,18 +70,19 @@ independent='Checked independently'
   jq -e --arg key "$key" --arg ai "$ai_review" --arg text "$independent" --arg qa "$live_qa" \
     '.method == "POST" and .url == "https://app.hypertask.ai/api/mcp/flags/reviews" and .body == {key:$key,mode:"EVERYONE",aiReviewUrl:$ai,independentReview:$text,liveQaUrl:$qa,inboxCycle:"passed"}' >/dev/null
 "$script" set "$key" everyone --review 42 --dry-run | jq -e '.method == "PATCH" and .body.review == 42 and .body.mode == "EVERYONE" and (.body | has("reason") | not)' >/dev/null
-"$script" set "$key" off --failure "$live_qa" --dry-run | jq -e --arg qa "$live_qa" '.body.failure == $qa and .body.mode == "OFF"' >/dev/null
+"$script" set "$key" owner-qa --failure "$live_qa" --dry-run | jq -e --arg qa "$live_qa" '.body.failure == $qa and .body.mode == "OWNER_AND_QA"' >/dev/null
+reject set "$key" off --failure "$live_qa"
 reject set "$key" off --review 42
 reject set "$key" everyone --failure "$live_qa"
 reject set "$key" everyone --review 0
 reject set "$key" everyone --review 1.5
 reject set "$key" everyone --review 9007199254740992
 for failure_reason in 'Emergency safety stop' 'http://qa.test/fail' "$(printf '%0300d' 0)"; do
-  "$script" set "$key" off --failure "$failure_reason" --dry-run |
-    jq -e --arg reason "$failure_reason" '.body.failure == $reason and .body.mode == "OFF"' >/dev/null
+  "$script" set "$key" owner-qa --failure "$failure_reason" --dry-run |
+    jq -e --arg reason "$failure_reason" '.body.failure == $reason and .body.mode == "OWNER_AND_QA"' >/dev/null
 done
 for failure_reason in '' ' ' $'\t\n' "$(printf '%0301d' 0)"; do
-  reject set "$key" off --failure "$failure_reason"
+  reject set "$key" owner-qa --failure "$failure_reason"
 done
 reject set "$key" everyone --review 42 --reason "$reason"
 reject review "$key" off --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa"
@@ -135,9 +136,9 @@ if grep -qE 'offline-test-credential' "$tmp/output"; then
 fi
 TEST_STATUS=201 TEST_RESPONSE='{"review":{"id":42}}' "$script" review "$key" everyone --ai-review "$ai_review" --independent "$independent" --live-qa "$live_qa" > "$tmp/output" 2>&1
 grep -qE '^review 42$' "$tmp/output"
-for api_error in 'The review must be recorded by a different agent' 'Failure-Off is not allowed for high-risk flags'; do
+for api_error in 'The review must be recorded by a different agent' 'Failure holds are not allowed for high-risk flags'; do
   if [[ $api_error == *high-risk* ]]; then
-    switch_args=(off --failure "$live_qa")
+    switch_args=(owner-qa --failure "$live_qa")
   else
     switch_args=(everyone --review 42)
   fi

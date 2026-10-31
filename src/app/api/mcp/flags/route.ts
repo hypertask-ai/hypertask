@@ -96,7 +96,9 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.failure !== "string" || !body.failure.trim() || body.failure.length > 300) {
         return noStore({ error: "Failure must be a nonblank reason or URL (max 300 characters)" }, 400);
       }
-      if (body.mode !== "OFF") throw new FeatureFlagApprovalError("A failure record can only switch a flag Off");
+      if (body.mode !== "OFF" && body.mode !== "OWNER_AND_QA") {
+        throw new FeatureFlagApprovalError("A failure record can only restrict a flag: Owner + QA or Off");
+      }
       const role = ctx.agentRole ?? await getAgentRole(ctx);
       if (!roleMeets(role, "write")) {
         const refusal = insufficientScopeResponse(role, "write");

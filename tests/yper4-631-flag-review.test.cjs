@@ -388,11 +388,45 @@ for (const flagKey of ["unknown-flag", "htpr-6091-feature-flags"]) {
     assert.equal(stored.has(flagKey), false);
   });
 }
-for (const mode of ["EVERYONE", "OWNER_ONLY", "OWNER_AND_QA"]) {
+for (const mode of ["EVERYONE", "OWNER_ONLY"]) {
   test(`failure cannot switch ${mode} on`, async () => {
     assert.equal((await switchFlag({ key, mode, failure })).status, 403); assertNoChange();
   });
 }
+
+test("failure-Owner + QA holds a flag down without approval and records one audit", async () => {
+  stored.get(key).mode = "EVERYONE";
+  const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.previousMode, "EVERYONE");
+  assert.equal(response.body.flag.mode, "OWNER_AND_QA");
+  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
+  assert.equal(changes[0].newMode, "OWNER_AND_QA");
+  assert.equal(broadcasts, 1);
+  assert.equal(reviews.size, 0);
+});
+
+for (const flag of [
+  ...["money", "access", "data-deletion", "customer-email"].map((category) => definitions.find((flag) => flag.releaseRisk?.highRisk === category)),
+  bugfix, { key: "legacy-unclassified" },
+]) {
+  test(`failure-Owner + QA holds ${flag.key} down without approval`, async () => {
+    policy = null;
+    stored.set(flag.key, { key: flag.key, mode: "EVERYONE" });
+    const response = await switchFlag({ key: flag.key, mode: "OWNER_AND_QA", failure });
+    assert.equal(response.status, 200);
+    assert.equal(stored.get(flag.key).mode, "OWNER_AND_QA");
+    assert.equal(changes.length, 1);
+    assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
+  });
+}
+
+test("failure-Owner + QA refuses a flag already held and leaves history empty", async () => {
+  assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
+  assertNoChange();
+});
 for (const reason of ["Emergency safety stop", "http://qa.test/failure", "x".repeat(300)]) {
   test(`failure-Off accepts a nonblank reason: ${reason.slice(0, 30)}`, async () => {
     policy = null;

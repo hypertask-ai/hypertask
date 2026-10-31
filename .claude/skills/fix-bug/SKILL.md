@@ -30,4 +30,4 @@ For money, access, security, or irreversible-data work, load [interrogate](../in
 
 Use your own worktree off production. Native CLI fixes belong in the Zig CLI repo, never the retired Node package. Previews share production data and cannot host destructive tests. Prefer clearer names, assertions, and logs over explanatory code comments. Helper briefs contain the observed cause, failing check, scope, and the [root-cause](principles/fix-root-causes.md), [proof](principles/prove-it-works.md), and [behavior-test](principles/test-behavior-not-implementation.md) principles, not another copy of the workflow.
 
-If flagged behavior fails live, switch it Off through the approved failure path before repairing. Never widen an existing flag as part of a routine self-merge. Document what users now experience before closing; a merged PR alone is not completion.
+If flagged behavior fails live, hold it at Owner + QA through the approved failure path before repairing. Never switch a flag Off. Never widen an existing flag as part of a routine self-merge. Document what users now experience before closing; a merged PR alone is not completion.
