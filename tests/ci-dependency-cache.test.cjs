@@ -77,14 +77,17 @@ test("every install job keeps npm downloads warm and reads them only on a node_m
 });
 
 test("only production pushes seed the npm download cache", () => {
+  let seeds = 0;
   for (const job of installJobs()) {
     const save = job.steps.find(
       (step) => String(step.uses ?? "").startsWith("actions/cache/save@") && step.with?.path === "~/.npm",
     );
     if (!save) continue;
+    seeds += 1;
 
     assert.match(String(save.if), /github\.event_name == 'push'/);
     assert.match(String(save.if), /restore-node-modules\.outputs\.cache-hit != 'true'/);
     assert.match(String(save.if), /restore-npm-cache\.outputs\.cache-hit != 'true'/);
   }
+  assert.ok(seeds >= 1, "nothing seeds the npm download cache");
 });
