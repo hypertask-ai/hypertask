@@ -160,35 +160,9 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
 
-      # Any lockfile change misses the node_modules key above, so the install had
-      # to fetch everything from the network. The npm download cache is keyed on
-      # the lockfile and falls back to any older key for this OS and architecture,
-      # so a changed lockfile still starts warm. It is read only on a node_modules
-      # miss, which keeps the common path free. The prefix-only fallback reuses
-      # the same ~/.npm tarballs that browser-smoke's setup-node cache already
-      # saves, so this cache is warm before its own key exists for the first time.
-      - name: Restore npm download cache
-        id: restore-npm-cache
-        if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.npm
-          key: npm-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json', '.npmrc') }}
-          restore-keys: |
-            npm-cache-${{ runner.os }}-${{ runner.arch }}-
-            node-cache-${{ runner.os }}-
-
       - name: Install dependencies
         if: (github.event_name == 'push' || steps.scope.outputs.build_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
-
-      - name: Save npm download cache
-        # Only a production push seeds it, after an install that just filled it.
-        if: github.event_name == 'push' && steps.restore-node-modules.outputs.cache-hit != 'true' && steps.restore-npm-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.npm
-          key: ${{ steps.restore-npm-cache.outputs.cache-primary-key }}
 
       - name: Agent scope debt needs a recorded approval
         if: github.event_name == 'pull_request'
@@ -340,19 +314,6 @@ jobs:
         with:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
-
-      # Same warm npm download cache as ci-prepare: read only when the
-      # node_modules key above misses, so a lockfile change no longer installs cold.
-      - name: Restore npm download cache
-        id: restore-npm-cache
-        if: steps.restore-node-modules.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.npm
-          key: npm-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json', '.npmrc') }}
-          restore-keys: |
-            npm-cache-${{ runner.os }}-${{ runner.arch }}-
-            node-cache-${{ runner.os }}-
 
       - name: Install dependencies
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
@@ -532,23 +493,9 @@ jobs:
           path: node_modules
           key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
 
-      # Same warm npm download cache as ci-prepare: read only when the
-      # node_modules key above misses, so a lockfile change no longer installs cold.
-      - name: Restore npm download cache
-        id: restore-npm-cache
-        if: steps.restore-node-modules.outputs.cache-hit != 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.npm
-          key: npm-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json', '.npmrc') }}
-          restore-keys: |
-            npm-cache-${{ runner.os }}-${{ runner.arch }}-
-            node-cache-${{ runner.os }}-
-
       - name: Install dependencies
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
-
 
       - name: Generate Prisma client
         run: npx prisma generate
@@ -821,8 +768,9 @@ jobs:
           echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
 
       # browser-smoke was the last install job outside the shared dependency cache,
-      # so every pull request rebuilt node_modules from the npm cache alone. It now
-      # restores the same key as ci-prepare and only installs on a miss.
+      # so every pull request rebuilt node_modules from the npm tarballs alone. It
+      # restores the same production-seeded key as ci-prepare and installs only on
+      # a miss.
       - name: Restore node_modules cache
         id: restore-node-modules
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
