@@ -41,21 +41,22 @@ print(markers[sys.argv[1]])
         return subprocess.run(['bash', script, ticket], cwd=cwd, env=dict(env, **extra), text=True, capture_output=True)
     def calls():
         return [json.loads(line) for line in (p/'calls').read_text().splitlines()]
-    def ledger(session, cwd=repo):
-        return cwd / '.unlazy' / ('s-'+session[:8]) / 'GATES.md'
+    # One folder per ticket under the home folder, never in the project.
+    def ledger(ticket='HTPR-6819'):
+        return home / '.unlazy' / 'ledgers' / ticket / 'GATES.md'
     def ids(file):
         return re.findall(r'^- \[[ x]\] ([^:]+):', file.read_text(), re.M)
 
     r = run()
     assert r.returncode != 0 and 'needs CLAUDE_CODE_SESSION_ID' in r.stderr
-    assert not (repo/'.unlazy').exists()
+    assert not (home/'.unlazy').exists()
     r = run('HTPR-6819; touch bad', CLAUDE_CODE_SESSION_ID='sessionA-full')
-    assert r.returncode != 0 and not (repo/'.unlazy').exists()
-    print('ok missing session and invalid ticket fail without writing a scope')
+    assert r.returncode != 0 and not (home/'.unlazy').exists()
+    print('ok missing session and invalid ticket fail without writing a ledger')
 
     session = 'sessionA-full-id'
     r = run(CLAUDE_CODE_SESSION_ID=session, CODEX_SESSION_ID='ignoredB-full', CODEX_THREAD_ID='ignoredC-full')
-    file = ledger(session)
+    file = ledger()
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == str(file), (r.stdout, r.stderr)
     assert (file.parent/'session').read_text() == session+'\n'
@@ -70,33 +71,37 @@ print(markers[sys.argv[1]])
     assert r.returncode == 0 and len(ids(file)) == 9 and len(calls()) == 11
     assert file.read_text() == original
     print('ok Claude precedence, full binding, absolute quoted commands/CWD, executed approvals, deployed suffix and idempotence')
+    assert not (repo/'.unlazy').exists(), 'a ship run left session state in the project'
 
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 17 and len(set(ids(file))) == 17, r.stderr
-    assert 'YPER4-123.proof' not in ids(file)
-    assert file.read_text().startswith(original)
-    assert len([d for d in (repo/'.unlazy').iterdir() if d.name != 'locks']) == 1
+    other = ledger('YPER4-123')
+    assert r.returncode == 0 and other.exists() and len(ids(other)) == 8, r.stderr
+    assert 'YPER4-123.proof' not in ids(other)
+    assert file.read_text() == original
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 17
-    print('ok another ticket appends in one scope and repeat calls do not duplicate ids or reset evidence')
+    assert r.returncode == 0 and len(ids(other)) == 8
+    assert not (repo/'.unlazy').exists()
+    print('ok each ticket gets its own folder and repeat calls do not duplicate ids or reset evidence')
 
     for key, sid in [('CODEX_SESSION_ID','codexses-full'), ('CODEX_THREAD_ID','codexthr-full')]:
         r = run('HYFA-12', **{key:sid})
-        assert r.returncode == 0 and len(ids(ledger(sid))) == 8, r.stderr
-        assert (ledger(sid).parent/'session').read_text() == sid+'\n'
+        assert r.returncode == 0 and len(ids(ledger('HYFA-12'))) == 8, r.stderr
+        assert (ledger('HYFA-12').parent/'session').read_text() == sid+'\n'
     r = run('HYFA-13', CODEX_SESSION_ID='codexses-full', CODEX_THREAD_ID='ignoredC-full')
-    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 16
+    assert r.returncode == 0 and len(ids(ledger('HYFA-13'))) == 8
+    assert (ledger('HYFA-13').parent/'session').read_text() == 'codexses-full\n'
     print('ok Codex session/thread fallback and precedence')
 
     before = file.read_text()
-    count = len(calls())
     r = run(CLAUDE_CODE_SESSION_ID='sessionA-another-full-id')
-    assert r.returncode != 0 and 'session prefix collision' in r.stderr
-    assert file.read_text() == before and len(calls()) == count
-    print('ok colliding session prefixes cannot overwrite another session')
+    assert r.returncode == 0, r.stderr
+    assert 'HTPR-6819 ledger moved from session sessionA-full-id to sessionA-another-full-id' in r.stderr, r.stderr
+    assert file.read_text() == before
+    assert (file.parent/'session').read_text() == 'sessionA-another-full-id\n'
+    print('ok a later session continues the same ticket ledger and keeps its gates')
 
-    result = subprocess.run(['node', str(unlazy/'scripts/gate-check.mjs'), '--reverify', '--root', str(repo),
-                             '--scope', 's-'+session[:8]], cwd=p, env=dict(env, DONE='yes'), text=True, capture_output=True)
+    result = subprocess.run(['node', str(unlazy/'scripts/gate-check.mjs'), '--reverify', '--root', str(file.parent),
+                             str(file)], cwd=repo, env=dict(env, DONE='yes'), text=True, capture_output=True)
     assert result.returncode == 0 and 'ALL MET' in result.stdout, result.stdout+result.stderr
     assert all(c[1] == str(repo) for c in calls())
     assert 'NOT RUN' not in result.stdout
@@ -105,7 +110,7 @@ print(markers[sys.argv[1]])
     result = subprocess.run(['node', str(unlazy/'scripts/gate-check.mjs'), '--reverify', str(file)],
                             cwd=elsewhere, env=dict(env, DONE='yes'), text=True, capture_output=True)
     assert result.returncode == 0 and 'ALL MET' in result.stdout and 'NOT RUN' not in result.stdout, result.stdout+result.stderr
-    print('ok named and discovered re-verification use the same approved CWD from a different launch directory')
+    print('ok re-verification from the project and from elsewhere uses the same approved CWD')
 
     before = file.read_text()
     for tainted in [
@@ -127,20 +132,21 @@ print(markers[sys.argv[1]])
 
     cli = dict(SHIP_REPO='hypertask-ai/cli', SHIP_BASE='main')
     r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
-    assert r.returncode != 0 and 'SHIP_CHECKOUT' in r.stderr and not ledger('cliSessA-full').exists()
+    assert r.returncode != 0 and 'SHIP_CHECKOUT' in r.stderr and not ledger('HTPR-6806').exists()
     r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', SHIP_CHECKOUT="/x';touch bad", **cli)
-    assert r.returncode != 0 and not ledger('cliSessA-full').exists()
+    assert r.returncode != 0 and not ledger('HTPR-6806').exists()
     cli['SHIP_CHECKOUT'] = '/home/u/hypertask cli'
     count = len(calls())
     r = run('HTPR-6806', CLAUDE_CODE_SESSION_ID='cliSessA-full', **cli)
-    cfile = ledger('cliSessA-full')
+    cfile = ledger('HTPR-6806')
     assert r.returncode == 0, r.stderr
     prefix = "SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/hypertask cli' "
     assert cfile.read_text().count('  CHECK: '+prefix) == 9
     new = calls()[count:]
     assert len(new) == 9 and all(c[2] == 'hypertask-ai/cli' and c[3] == '/home/u/hypertask cli' for c in new), new
     r = run('HTPR-6819', CLAUDE_CODE_SESSION_ID='cliSessA-full')
-    assert r.returncode == 0 and len(ids(cfile)) == 18, r.stderr
+    assert r.returncode == 0 and len(ids(cfile)) == 9, r.stderr
+    assert len(ids(ledger('HTPR-6819'))) == 9
     assert all(c[2] is None for c in calls()[-9:])
     print('ok CLI tickets carry SHIP_REPO, SHIP_BASE and SHIP_CHECKOUT into every check; app tickets append without them')
 

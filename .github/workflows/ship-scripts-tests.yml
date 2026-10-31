@@ -20,6 +20,7 @@ on:
       - '.github/scripts/ci-runner-policy.cjs'
       - '.github/workflows/pr-guards-trusted.yml'
       - 'tests/ci-runner-policy.test.cjs'
+      - 'tests/ship-ledger-home.test.cjs'
 
 permissions:
   contents: read
@@ -86,6 +87,7 @@ jobs:
           python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
           bash .claude/skills/ship/scripts/runner-pickup.test.sh
+          node --test tests/ship-ledger-home.test.cjs
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs

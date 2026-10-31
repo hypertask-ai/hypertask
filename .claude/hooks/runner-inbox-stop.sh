@@ -173,10 +173,18 @@ ticket_ok() {
     return 1
   fi
   # Idle means no unmet gate in this session's unlazy ledger (unchecked and not abandoned).
-  local sid cwd ledger id
-  sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null); cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
-  for ledger in "${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md"; do
-    [ -n "$sid" ] && [ -f "$ledger" ] || continue
+  # Ship keeps one ledger folder per ticket under the home folder; its session file names the
+  # session that holds it. The vcc skill keeps a session ledger beside it.
+  local sid ledger id dir
+  sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null)
+  [ -n "$sid" ] || return 0
+  local ledgers=("$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md")
+  for dir in "${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers"/*; do
+    [ -f "$dir/session" ] && grep -q "^${sid:0:8}" "$dir/session" 2>/dev/null || continue
+    ledgers+=("$dir/GATES.md")
+  done
+  for ledger in "${ledgers[@]}"; do
+    [ -f "$ledger" ] || continue
     while IFS= read -r id; do
       grep -qE "^ABANDON: $id( |:|$)" "$ledger" || return 1
     done < <(grep -E '^- \[ \] ' "$ledger" | sed -E 's/^- \[ \] ([^:]+):.*/\1/')

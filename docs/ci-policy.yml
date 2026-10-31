@@ -289,7 +289,7 @@ ship_scripts_tests:
   runs_on: ubuntu-latest
   required: false
   pull_request_base: production
-  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", "scripts/premerge-local-*.mjs", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs"]
+  paths: [".claude/skills/ship/scripts/**", ".claude/skills/vcc/bin/**", ".claude/skills/verify-qa/scripts/**", ".claude/skills/scriptify/scripts/**", ".claude/skills/maintain-verification-skill/scripts/**", ".claude/systemd/**", "scripts/daily-stats*", "scripts/proc-watchdog*", "scripts/premerge-local.sh", "scripts/premerge-local-*.mjs", ".github/workflows/ship-scripts-tests.yml", "docs/ci-policy.yml", ".github/scripts/ci-runner-policy.cjs", ".github/workflows/pr-guards-trusted.yml", "tests/ci-runner-policy.test.cjs", "tests/ship-ledger-home.test.cjs"]
   node_major: 24
   commands:
     - node --test tests/ci-runner-policy.test.cjs tests/pr-guards-workflow.test.cjs
@@ -305,6 +305,7 @@ ship_scripts_tests:
     - python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
     - python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
     - bash .claude/skills/ship/scripts/runner-pickup.test.sh
+    - node --test tests/ship-ledger-home.test.cjs
     - python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
     - node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
     - bash .claude/skills/ship/scripts/error-collector.test.sh
