@@ -638,3 +638,15 @@ bugfix_regression:
   new_dependency: false
   paid_service: false
   forks_trusted: false
+
+session_ledgers:
+  ticket: https://app.hypertask.ai/detail/project-11514/16
+  job: ci-prepare
+  unconditional_step: true
+  script: scripts/check-session-ledgers.mjs
+  local_command: npm run check:session-ledgers
+  rejected_paths: [GATES.md, .unlazy/, .unlazy-hook-state.json]
+  ledger_home: ~/.unlazy/ledgers/<ticket>/GATES.md
+  step_seconds: 0.12
+  additional_jobs: false
+  additional_required_contexts: false
