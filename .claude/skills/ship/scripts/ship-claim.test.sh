@@ -181,7 +181,10 @@ cat > "$D/vcc" <<'EOF'
 echo "$*" >> "$FAKE_LOG"
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
-if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_NOT_MEMBER:-}" ]; then echo "Agent is not a member of this board" >&2; exit 1; fi
+if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_NOT_MEMBER:-}" ]; then
+  echo '{"success":false,"error":"Agent is not a member of this board. Add the agent to the board before assigning."}'
+  echo "hypertask: the server rejected the command input" >&2; exit 1
+fi
 if [ "$1 $2" = "activity add" ] && [ -n "${FAKE_SHARED_ACTIVITY:-}" ]; then
   jq --arg id "new-activity-$(jq '.activities | length' "$FAKE_AGENT_LOG")" --arg text "$4" --arg now "$(date -u +%FT%TZ)" '.activities += [{id:$id,createdAt:$now,agentId:"a2",agentName:"RUNNER 3",text:$text}]' "$FAKE_AGENT_LOG" > "$FAKE_AGENT_LOG.next"
   mv "$FAKE_AGENT_LOG.next" "$FAKE_AGENT_LOG"
@@ -268,6 +271,8 @@ mk
 eq "member refusal stops the claim" "$rc" 4
 [[ $out == *'board 11514 (Hypertask CI)'* && $out == *'does not list member'* ]] \
   && ok "refusal names the board and the missing member" || bad "unclear refusal: $out"
+[[ $out == *'ask CI Boss to add'* ]] && ok "refusal names who to ask" || bad "no person to ask: $out"
+[[ $out != *'assign failed'* ]] && ok "no bare assign failure hides the refusal" || bad "bare assign failure: $out"
 grep -qE '^(comment|activity) add |^task move ' "$D/log" && bad "member refusal published a claim" || ok "member refusal writes nothing"
 
 # Hand-over replay through the full flow (task read via the stub).
