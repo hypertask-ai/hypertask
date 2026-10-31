@@ -6,6 +6,7 @@ const path = require("node:path");
 const SOURCE = path.join(__dirname, "..", "src", "utils", "controllers", "reports", "statusUpdate.ts");
 const source = fs.readFileSync(SOURCE, "utf8");
 const CHARS_PER_TOKEN = 3;
+const JSON_OVERHEAD_CHARACTERS = 160;
 
 function schemaLimits() {
   const headline = /headline: z\.string\(\)\.min\(1\)\.max\((\d+)\)/.exec(source);
@@ -19,28 +20,31 @@ function schemaLimits() {
   };
 }
 
+function estimatedTokensForLargestObject() {
+  const { headlineMax, sections } = schemaLimits();
+  const worstCaseCharacters = headlineMax + sections.reduce((total, section) => total + section.itemMax * section.itemsMax, 0);
+  return { worstCaseCharacters, estimatedTokens: Math.ceil((worstCaseCharacters + JSON_OVERHEAD_CHARACTERS) / CHARS_PER_TOKEN) };
+}
+
 function outputBudget() {
   const match = /maxOutputTokens: (\d+)/.exec(source);
   assert.ok(match, "the status update generation must set maxOutputTokens");
   return Number(match[1]);
 }
 
-test("status update output budget covers the largest object its own schema accepts", () => {
-  const { headlineMax, sections } = schemaLimits();
-  const worstCaseCharacters = headlineMax + sections.reduce((total, section) => total + section.itemMax * section.itemsMax, 0);
-  const requiredTokens = Math.ceil(worstCaseCharacters / CHARS_PER_TOKEN);
+test("the estimated reply size of the largest object statusSchema accepts stays under the cap", () => {
+  const { worstCaseCharacters, estimatedTokens } = estimatedTokensForLargestObject();
   const budget = outputBudget();
   assert.ok(
-    budget >= requiredTokens,
-    `maxOutputTokens ${budget} cannot hold the ${worstCaseCharacters} characters statusSchema allows (${requiredTokens} tokens); a cut-off reply fails as AI_NoObjectGeneratedError`
+    budget > estimatedTokens,
+    `maxOutputTokens ${budget} is under the estimated ${estimatedTokens} tokens for the ${worstCaseCharacters} characters statusSchema allows; a cut-off reply fails as AI_NoObjectGeneratedError`
   );
 });
 
-test("the cap that truncated a real production status update is below the schema allowance", () => {
-  const { headlineMax, sections } = schemaLimits();
-  const worstCaseCharacters = headlineMax + sections.reduce((total, section) => total + section.itemMax * section.itemsMax, 0);
+test("the estimated reply size is well above the cap that truncated a real production status update", () => {
+  const { estimatedTokens } = estimatedTokensForLargestObject();
   assert.ok(
-    Math.ceil(worstCaseCharacters / CHARS_PER_TOKEN) > 900,
+    estimatedTokens > 900,
     "HTPR-8222: a 900 token cap cut a real reply at 892 output tokens and returned a 502"
   );
 });
