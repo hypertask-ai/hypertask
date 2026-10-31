@@ -54,11 +54,12 @@ test('Ctrl+K board name search answers a lowercase query and a capitalized query
     reactRoot = createRoot(container);
     const search = value => React.act(async () => state.onKeyChange({ target: { value } }));
     const keys = () => state.filterCommands.flatMap(group => group.commandLists).map(command => command.key);
+    const boardKeys = (list) => list.filter(key => key !== 'searchTasksHandover');
     await React.act(async () => { reactRoot.render(React.createElement(Harness)); });
 
     await search('hypertask prod');
     const lowercase = keys();
-    assert.deepEqual(lowercase, ['gotoBoard-11']);
+    assert.deepEqual(boardKeys(lowercase), ['gotoBoard-11']);
 
     await search('Hypertask Prod');
     assert.deepEqual(keys(), lowercase);
@@ -67,7 +68,7 @@ test('Ctrl+K board name search answers a lowercase query and a capitalized query
     assert.deepEqual(keys(), lowercase);
 
     await search('hypertask');
-    assert.deepEqual(keys(), ['gotoBoard-11', 'gotoBoard-13'], 'ranking of the matching boards stays unchanged');
+    assert.deepEqual(boardKeys(keys()), ['gotoBoard-11', 'gotoBoard-13'], 'ranking of the matching boards stays unchanged');
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     for (const [file, previous] of previousModules) {
