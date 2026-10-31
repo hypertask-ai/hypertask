@@ -11,8 +11,8 @@ The filing job reads that single log, groups lines with the existing
 commit later passed, and files one `HYCI` ticket per cause with two or more
 lines. Groups of one line are never filed.
 
-A cause ticket is named for the whole cause, ``[INFRA] CI failure cause: <step>
-in <job> — <error key>``, so two different errors in one step do not share a
+A cause ticket is named for the whole cause, `[INFRA] CI failure cause: <step>
+in <job> — <error key>`, so two different errors in one step do not share a
 ticket. The filing job finds the previous ticket by that normalized title and
 comments on it instead of filing a duplicate. The platform strips HTML comments
 from descriptions, which is why the title carries the cause and the description
