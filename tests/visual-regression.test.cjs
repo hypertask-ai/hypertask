@@ -75,12 +75,9 @@ async function seed(visual) {
 test("workflow is informational, read-only, path-scoped and uses the smoke services/environment", () => {
   const workflow = source(".github/workflows/visual-regression.yml");
   assert.match(workflow, /name: Visual Regression/);
-  // HYCI-10: pull-request comparisons live in ci-tests.yml visual-compare so the
-  // head reuses the one app build; this workflow keeps pushes and manual runs.
   assert.equal(yaml.load(workflow).on.pull_request, undefined);
   assert.deepEqual(yaml.load(workflow).on.push.branches, ["production"]);
   assert.match(workflow, /workflow_dispatch:[\s\S]*base:[\s\S]*default: production[\s\S]*head:/);
-  // The old pull_request paths filter moved here unchanged.
   const scope = source(".github/scripts/visual-change-scope.cjs");
   for (const pattern of ["src/app/**", "src/components/**", "src/hooks/**", "src/styles/**", "styles/**", "**/*.css", "tailwind.config.*", "public/**", "e2e/visual/**", "scripts/seed-browser-smoke.mjs", "scripts/visual-regression-ci.mjs", ".github/workflows/visual-regression.yml"]) assert.ok(scope.includes(`'${pattern}'`), pattern);
   for (const pattern of ["src/app/api/**", "**/*.md"]) assert.ok(scope.includes(`'${pattern}'`), pattern);

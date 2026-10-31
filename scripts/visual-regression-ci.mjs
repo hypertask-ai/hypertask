@@ -23,8 +23,6 @@ export function captureArguments(phase) {
   return ["playwright", "test", "-c", "e2e/visual/playwright.visual.config.ts", `--update-snapshots=${phase === "base" ? "all" : "none"}`];
 }
 
-// HYCI-10: the head comparison reuses the one build from ci-tests' app-build job
-// instead of building the candidate a second time.
 export function headBuildMode(env) {
   const mode = env.VISUAL_HEAD_BUILD || "local";
   if (!["local", "artifact"].includes(mode)) throw new Error(`Unknown VISUAL_HEAD_BUILD: ${mode}`);

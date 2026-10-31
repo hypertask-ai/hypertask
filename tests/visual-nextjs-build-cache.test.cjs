@@ -86,7 +86,7 @@ test("the pull-request comparison reuses the one build instead of building the h
   assert.equal(compare.find(step => step.name === "Give the head the one build").run,
     'mkdir -p "$RUNNER_TEMP/app-build/unpacked"\n' +
     'tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build/unpacked"\n' +
-    'mv "$RUNNER_TEMP/app-build/unpacked/.next" head/.next');
+    'mv "$RUNNER_TEMP/app-build/unpacked/.next" head/.next\n');
   for (const name of ["Build and capture base, then compare head", "Summarize failed screens"]) {
     assert.equal(compare.find(step => step.name === name).env.VISUAL_HEAD_BUILD, "artifact", name);
   }

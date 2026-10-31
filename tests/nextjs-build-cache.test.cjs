@@ -24,7 +24,10 @@ test("the one build job restores only the matching Next.js incremental cache bef
 });
 
 test("browser-smoke runs on pushes and on ready pull requests, never on drafts or a cancelled build", () => {
-  const reads = (github, result = "success") => runInNewContext(workflow.jobs["browser-smoke"].if, {
+  const expression = workflow.jobs["browser-smoke"].if
+    .replace(/^\$\{\{\s*|\s*\}\}$/g, "")
+    .replaceAll("needs.app-build.", 'needs["app-build"].');
+  const reads = (github, result = "success") => runInNewContext(expression, {
     github,
     needs: { "app-build": { result } },
     cancelled: () => false,
@@ -38,7 +41,6 @@ test("browser-smoke runs on pushes and on ready pull requests, never on drafts o
   ]) {
     assert.equal(reads(github), expected, JSON.stringify(github));
   }
-  // The required context reports the build's failure; it must never skip.
   assert.equal(reads({ event_name: "pull_request", event: { pull_request: { draft: false } } }, "failure"), true);
   assert.equal(reads({ event_name: "pull_request", event: { pull_request: { draft: false } } }, "cancelled"), false);
 });

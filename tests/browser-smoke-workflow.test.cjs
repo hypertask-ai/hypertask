@@ -24,8 +24,6 @@ test("browser smoke exposes no repository or production credentials to PR code",
   assert.match(job, /ghcr\.io\/hypertask-ai\/ci-redis:7-alpine@sha256:[a-f0-9]{64}/);
   assert.match(job, /ghcr\.io\/hypertask-ai\/ci-soketi:[^@\s]+@sha256:[a-f0-9]{64}/);
   assert.match(job, /health-cmd "wget [^"]+http:\/\/127\.0\.0\.1:6001"/);
-  // HYCI-10: one build serves every consumer, so the disposable secrets come from
-  // the commit instead of openssl rand. They are still masked and still disposable.
   assert.match(job, /seed="\$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}-smoke"/);
   assert.match(job, /session_secret=\$\(printf '%s' "\$seed:session" \| sha256sum \| cut -d' ' -f1\)/);
   assert.match(job, /printf '::add-mask::%s\\n' "\$session_secret"/);
@@ -258,7 +256,7 @@ test("browser smoke retries its build once, only after a Google font download fa
   const path = require("node:path");
   const { spawnSync } = require("node:child_process");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
-  const step = workflow.jobs["browser-smoke"].steps.find((s) => s.name === "Build the local app (no migrations)");
+  const step = workflow.jobs["app-build"].steps.find((s) => s.name === "Build the app once");
   const run = (outcomes) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
     fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
