@@ -19,7 +19,7 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Read task context, hierarchy, and description history** | ✅ 6 | ✅ 3 | ✅ 4 | ✅ 3 | ✅ 3 |
 | **Search, retrieve, and find related tasks** | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 | ✅ 3 |
 | **Pull, lease, and coordinate the next task** | ✅ 6 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
-| **Create, update, move, batch, or escalate tasks** | ✅ 9 | ✅ 6 | ✅ 5 (transition) | ✅ 4 | ✅ 6 |
+| **Create, update, move, batch, or escalate tasks** | ✅ 9 (transition) | ✅ 6 (transition) | ✅ 5 (transition) | ✅ 4 | ✅ 6 (transition) |
 | **Assign people and attach files** | ✅ 3 | ✅ 2 | ✅ 5 | ✅ 3 | ✅ 2 |
 | **Link, unlink, and inspect task relations** | ✅ 3 | ✅ 1 | ✅ 3 | ✅ 1 | ✅ 1 |
 | **Review and authorize factory acceptance transitions** | ✅ 2 | ↪ MCP tools do not approve acceptance contracts or issue factory authority grants; enrolled workers request ordinary task moves through existing tools. | ↪ The CLI does not approve acceptance contracts or issue factory authority grants; the isolated factory authority calls these API endpoints directly. | ↪ AI Chat tools are model-facing task tools, not acceptance authorities. | ↪ HyperAI tools are model-facing task tools, not acceptance authorities. |
