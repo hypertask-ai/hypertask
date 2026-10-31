@@ -4,9 +4,12 @@ import { prismaErrorDiagnostics } from '@/lib/errors/prismaErrorDiagnostics'
 const reportedRequests = new WeakSet<Request>()
 
 class McpServerErrorWithoutCause extends Error {
+  readonly status: number
+
   constructor(status: number) {
     super(`MCP route answered ${status} without reporting its cause`)
     this.name = 'McpServerErrorWithoutCause'
+    this.status = status
   }
 }
 
@@ -39,17 +42,21 @@ function stackFramesOnly(error: unknown, headline: string): string | undefined {
 export function buildMcpCrashReport(request: Request, error: unknown) {
   const route = mcpRouteTemplate(request)
   const errorName = errorNameOf(error)
-  const message = `MCP ${request.method} ${route} failed with ${errorName}`
+  const status = error instanceof McpServerErrorWithoutCause ? error.status : undefined
+  const message = status === undefined
+    ? `MCP ${request.method} ${route} failed with ${errorName}`
+    : `MCP ${request.method} ${route} answered ${status} without reporting its cause`
   return {
     message,
     stack: stackFramesOnly(error, message),
     url: route,
     source: 'server' as const,
-    fingerprintKey: `mcp:${request.method}:${route}:${errorName}`,
+    fingerprintKey: `mcp:${request.method}:${route}:${errorName}${status === undefined ? '' : `:${status}`}`,
     extra: {
       route,
       method: request.method,
       errorName,
+      ...(status === undefined ? {} : { status }),
       ...prismaErrorDiagnostics(error),
     },
   }
@@ -76,6 +83,6 @@ export function reportMcpOperationCrash(request: Request, error: unknown): void 
 }
 
 export function reportUnexplainedMcpServerError(request: Request, status: number): void {
-  if (status !== 500 || reportedRequests.has(request)) return
+  if (status < 500 || status > 599 || reportedRequests.has(request)) return
   reportMcpOperationCrash(request, new McpServerErrorWithoutCause(status))
 }
