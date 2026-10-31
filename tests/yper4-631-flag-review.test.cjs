@@ -72,6 +72,10 @@ const prisma = {
       locks.push("change-write");
       return row;
     },
+    findFirst: async ({ where }) => {
+      const rows = changes.filter((change) => change.key === where.key);
+      return rows.length ? { reason: rows.at(-1).reason } : null;
+    },
   },
   featureFlagReview: {
     create: async ({ data }) => {
@@ -324,15 +328,16 @@ for (const pathKind of ["review", "failure"]) {
       if (scenario === "edited-comment") policy.editedAt = new Date();
       if (scenario === "deleted-task") policy.status = "Deleted";
       if (scenario === "missing-comment") policy = null;
-      const response = await switchFlag(pathKind === "review" ? undefined : { key, mode: "OFF", failure });
+      if (pathKind === "failure") stored.get(key).mode = "EVERYONE";
+      const response = await switchFlag(pathKind === "review" ? undefined : { key, mode: "OWNER_AND_QA", failure });
       assert.equal(response.status, pathKind === "review" ? 403 : 200);
       if (pathKind === "review") assertNoChange();
-      else { assert.equal(changes.length, 1); assert.equal(changes[0].newMode, "OFF"); }
+      else { assert.equal(changes.length, 1); assert.equal(changes[0].newMode, "OWNER_AND_QA"); }
     });
   }
   test(`${pathKind} refuses stored and unstored default no-ops`, async () => {
     await seedReview();
-    const mode = pathKind === "review" ? "EVERYONE" : "OFF";
+    const mode = pathKind === "review" ? "EVERYONE" : "OWNER_AND_QA";
     stored.get(key).mode = mode;
     const body = pathKind === "review" ? { key, mode, review: 1 } : { key, mode, failure };
     assert.equal((await switchFlag(body)).status, 403);
@@ -345,13 +350,18 @@ for (const pathKind of ["review", "failure"]) {
   });
   test(`${pathKind} still allows old human policy thumbs-up with a skin tone`, async () => {
     await seedReview(); policy.reactions[0].unified = "1f44d-1f3fd";
-    assert.equal((await switchFlag(pathKind === "review" ? undefined : { key, mode: "OFF", failure })).status, 200);
+    if (pathKind === "failure") stored.get(key).mode = "EVERYONE";
+    assert.equal((await switchFlag(pathKind === "review" ? undefined : { key, mode: "OWNER_AND_QA", failure })).status, 200);
   });
 }
 
-test("failure-Off on a classified non-bugfix flag succeeds with audit evidence", async () => {
-  const response = await switchFlag({ key, mode: "OFF", failure });
+test("failure-Owner + QA on a classified non-bugfix flag succeeds with audit evidence", async () => {
+  stored.get(key).mode = "EVERYONE";
+  const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
   assert.equal(response.status, 200);
+  assert.equal(response.body.previousMode, "EVERYONE");
+  assert.equal(response.body.flag.mode, "OWNER_AND_QA");
+  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
   assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
   assert.equal(changes[0].agentId, "agent-b");
   assert.equal(broadcasts, 1);
@@ -362,17 +372,17 @@ for (const flag of [
   ...["money", "access", "data-deletion", "customer-email"].map((category) => definitions.find((flag) => flag.releaseRisk?.highRisk === category)),
   bugfix, { key: "legacy-unclassified" },
 ]) {
-  test(`failure-Off switches ${flag.key} without approval and records exactly one audit`, async () => {
+  test(`failure-Owner + QA holds ${flag.key} down without approval and records exactly one audit`, async () => {
     policy = null;
     stored.set(flag.key, { key: flag.key, mode: "EVERYONE" });
-    const response = await switchFlag({ key: flag.key, mode: "OFF", failure });
+    const response = await switchFlag({ key: flag.key, mode: "OWNER_AND_QA", failure });
     assert.equal(response.status, 200);
     assert.equal(response.body.previousMode, "EVERYONE");
-    assert.equal(stored.get(flag.key).mode, "OFF");
+    assert.equal(stored.get(flag.key).mode, "OWNER_AND_QA");
     assert.equal(changes.length, 1);
     assert.equal(changes[0].key, flag.key);
     assert.equal(changes[0].oldMode, "EVERYONE");
-    assert.equal(changes[0].newMode, "OFF");
+    assert.equal(changes[0].newMode, "OWNER_AND_QA");
     assert.equal(changes[0].userId, 6);
     assert.equal(changes[0].agentId, "agent-b");
     assert.equal(changes[0].agentName, "agent-b");
@@ -382,84 +392,86 @@ for (const flag of [
   });
 }
 for (const flagKey of ["unknown-flag", "htpr-6091-feature-flags"]) {
-  test(`failure-Off refuses unknown or retired ${flagKey}`, async () => {
-    assert.equal((await switchFlag({ key: flagKey, mode: "OFF", failure })).status, 400);
+  test(`failure-Owner + QA refuses unknown or retired ${flagKey}`, async () => {
+    assert.equal((await switchFlag({ key: flagKey, mode: "OWNER_AND_QA", failure })).status, 400);
     assertNoChange();
     assert.equal(stored.has(flagKey), false);
   });
 }
-for (const mode of ["EVERYONE", "OWNER_ONLY"]) {
-  test(`failure cannot switch ${mode} on`, async () => {
+for (const mode of ["EVERYONE", "OWNER_ONLY", "OFF"]) {
+  test(`failure cannot switch ${mode}`, async () => {
     assert.equal((await switchFlag({ key, mode, failure })).status, 403); assertNoChange();
   });
 }
-
-test("failure-Owner + QA holds a flag down without approval and records one audit", async () => {
-  stored.get(key).mode = "EVERYONE";
-  const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
-  assert.equal(response.status, 200);
-  assert.equal(response.body.previousMode, "EVERYONE");
-  assert.equal(response.body.flag.mode, "OWNER_AND_QA");
-  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
-  assert.equal(changes.length, 1);
-  assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
-  assert.equal(changes[0].newMode, "OWNER_AND_QA");
-  assert.equal(broadcasts, 1);
-  assert.equal(reviews.size, 0);
-});
-
-for (const flag of [
-  ...["money", "access", "data-deletion", "customer-email"].map((category) => definitions.find((flag) => flag.releaseRisk?.highRisk === category)),
-  bugfix, { key: "legacy-unclassified" },
-]) {
-  test(`failure-Owner + QA holds ${flag.key} down without approval`, async () => {
-    policy = null;
-    stored.set(flag.key, { key: flag.key, mode: "EVERYONE" });
-    const response = await switchFlag({ key: flag.key, mode: "OWNER_AND_QA", failure });
-    assert.equal(response.status, 200);
-    assert.equal(stored.get(flag.key).mode, "OWNER_AND_QA");
-    assert.equal(changes.length, 1);
-    assert.equal(changes[0].reason, `live-qa-failed:${failure}`);
+for (const mode of ["OFF", "OWNER_ONLY"]) {
+  test(`failure-Owner + QA refuses to widen a flag held at ${mode} without this path's own hold`, async () => {
+    stored.get(key).mode = mode;
+    assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
+    assert.equal(stored.get(key).mode, mode);
+    assertNoChange();
   });
 }
+
+test("failure-Owner + QA lifts a flag this path switched Off", async () => {
+  stored.get(key).mode = "OFF";
+  changes.push({ key, reason: `live-qa-failed:${failure}`, oldMode: "EVERYONE", newMode: "OFF" });
+  const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.previousMode, "OFF");
+  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
+  assert.equal(changes.length, 2);
+  assert.equal(changes.at(-1).reason, `live-qa-failed:${failure}`);
+});
+
+test("failure-Owner + QA ignores an approved Off when lifting", async () => {
+  stored.get(key).mode = "OFF";
+  changes.push({ key, reason: "https://app.hypertask.ai/detail/project-15/8232#comment-1", oldMode: "EVERYONE", newMode: "OFF" });
+  assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
+  assert.equal(stored.get(key).mode, "OFF");
+  assert.equal(changes.length, 1);
+});
 
 test("failure-Owner + QA refuses a flag already held and leaves history empty", async () => {
   assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 403);
   assertNoChange();
 });
 for (const reason of ["Emergency safety stop", "http://qa.test/failure", "x".repeat(300)]) {
-  test(`failure-Off accepts a nonblank reason: ${reason.slice(0, 30)}`, async () => {
+  test(`failure-Owner + QA accepts a nonblank reason: ${reason.slice(0, 30)}`, async () => {
     policy = null;
-    assert.equal((await switchFlag({ key, mode: "OFF", failure: reason })).status, 200);
+    stored.get(key).mode = "EVERYONE";
+    assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure: reason })).status, 200);
     assert.equal(changes.length, 1);
     assert.equal(changes[0].reason, `live-qa-failed:${reason}`);
   });
 }
 for (const role of ["read", "write", "admin"]) {
   for (const fromContext of [true, false]) {
-    test(`failure-Off unconditionally enforces ${role} from ${fromContext ? "auth context" : "persisted permissions"}`, async () => {
+    test(`failure-Owner + QA unconditionally enforces ${role} from ${fromContext ? "auth context" : "persisted permissions"}`, async () => {
       ctx.agentRole = fromContext ? role : undefined;
       persistedRole = role;
       roleRefusal = null;
       policy = null;
-      const response = await switchFlag({ key, mode: "OFF", failure });
+      stored.get(key).mode = "EVERYONE";
+      const response = await switchFlag({ key, mode: "OWNER_AND_QA", failure });
       assert.equal(response.status, role === "read" ? 403 : 200);
       if (role === "read") { assert.equal(response.body.code, "insufficient_scope"); assertNoChange(); }
       else assert.equal(changes.length, 1);
     });
   }
 }
-test("competing failure-Off requests create one audit under serialized transactions", async () => {
-  const responses = await Promise.all([switchFlag({ key, mode: "OFF", failure }), switchFlag({ key, mode: "OFF", failure })]);
+test("competing failure-Owner + QA requests create one audit under serialized transactions", async () => {
+  stored.get(key).mode = "EVERYONE";
+  const responses = await Promise.all([switchFlag({ key, mode: "OWNER_AND_QA", failure }), switchFlag({ key, mode: "OWNER_AND_QA", failure })]);
   assert.deepEqual(responses.map((response) => response.status).sort(), [200, 403]);
   assert.equal(changes.length, 1);
   assert.equal(broadcasts, 1);
 });
-test("failure-Off rolls back the audit when the flag write fails", async (t) => {
+test("failure-Owner + QA rolls back the audit when the flag write fails", async (t) => {
   t.mock.method(console, "error", () => {});
   writeFails = true;
-  assert.equal((await switchFlag({ key, mode: "OFF", failure })).status, 500);
-  assert.equal(stored.get(key).mode, "OWNER_AND_QA");
+  stored.get(key).mode = "EVERYONE";
+  assert.equal((await switchFlag({ key, mode: "OWNER_AND_QA", failure })).status, 500);
+  assert.equal(stored.get(key).mode, "EVERYONE");
   assertNoChange();
 });
 for (const body of [
