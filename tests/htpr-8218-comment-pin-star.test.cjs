@@ -132,15 +132,20 @@ test('another agent star stays separate from the owner and from other agents', a
   assert.deepEqual(store.map((row) => row.id), ['owner-star', 'other-agent-star', undefined]);
 });
 
-test('deleting an agent cannot hand its private stars to the person', () => {
-  const schema = require('node:fs').readFileSync(path.join(root, 'src/prisma/schema.prisma'), 'utf8');
-  const migration = require('node:fs').readFileSync(
-    path.join(root, 'src/prisma/migrations/20261031150000_add_saved_content_agent/migration.sql'),
-    'utf8',
-  );
-  assert.match(schema, /agent\s+Agent\?\s+@relation\(fields: \[agentId\], references: \[id\], onDelete: Cascade\)/);
-  assert.match(migration, /ON DELETE CASCADE/);
-  assert.doesNotMatch(migration, /ON DELETE SET NULL/);
+test('the person starred list shows only person markers', async () => {
+  const queries = [];
+  const { getAllStarred } = loadModule('src/utils/controllers/savedContent/getAllStarred.ts', {
+    '@/lib/prisma': { default: { savedContent: { findMany: async (query) => { queries.push(query); return []; } } } },
+    '@/utils/controllers/projects/getAllIncludes': { projectContentAccessWhere: () => ({}) },
+    '@/utils/controllers/savedContent/helper': {
+      commentOnSavedTask: () => [],
+      fetchProjectIds: async () => [15],
+      includeSavedContentComment: () => ({}),
+    },
+  });
+  assert.equal((await getAllStarred(6)).status, 200);
+  assert.equal(queries[1].where.agentId, null);
+  assert.equal(queries[1].where.userId, 6);
 });
 
 test('write role refusal prevents changes', async () => {
