@@ -162,9 +162,12 @@ test('phone title hit-target invariant is independent of allowed landmark drift'
 
 test('spec covers six screens, updates serially from live-like flags, and never changes the baseline on ordinary runs', () => {
   const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
+  const docs = fs.readFileSync(path.join(__dirname, '../docs/ci.md'), 'utf8');
   assert.match(spec, /\['ticket', 'board', 'inbox', 'my-tasks', 'new-task', 'app-shell'\]/);
-  assert.match(spec, /LAYOUT_LOCK_UPDATE=1/);
-  assert.match(spec, /--workers=1 --retries=0/);
+  assert.match(spec, /process\.env\.LAYOUT_LOCK_UPDATE === '1'/);
+  assert.match(docs, /LAYOUT_LOCK_UPDATE=1 LAYOUT_LOCK_SOURCE_COMMIT=\$\(git rev-parse origin\/production\)/);
+  assert.match(docs, /--workers=1 --retries=0/);
+  assert.match(docs, /never `--all-flags-on`/);
   assert.match(spec, /if \(update && !fromBoard\) \{[\s\S]*testInfo\.config\.workers/);
   assert.match(spec, /baseline update requires live-like flags, not all-flags-on/);
   assert.match(spec, /modes\[key\] === 'EVERYONE'/);

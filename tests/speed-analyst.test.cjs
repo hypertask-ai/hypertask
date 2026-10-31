@@ -333,7 +333,7 @@ test('opened-before waits until the cold ticket code finishes downloading, and g
   assert.deepEqual(await settleScripts(stuck, async () => {}, async () => 0, { quietMs: 500, capMs: 1000, pollMs: 250 }), { settleMs: 1000, pendingScripts: 1 });
 
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
-  assert.match(source, /sample\('ticket-cold'[^\n]*\n[^\n]*\n\s*const settled = Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);
+  assert.match(source, /sample\('ticket-cold'[^\n]*\n\s*const settled = Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);
 });
 
 test('a failed path records the step and a safe one-line error, never full URLs or other query values', async () => {
@@ -457,7 +457,7 @@ test('search starts only after the opened-before ticket page is idle, and compar
   assert.equal(baselineFor('phone:my-tasks'), 100);
   assert.ok(SEARCH_IDLE_PAUSE_MS >= 3000);
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
-  assert.match(source, /sample\('ticket-warm'[^\n]*\n[^\n]*\n\s*const previousPage = await settleScripts\([^\n]*\n\s*await page\.waitForTimeout\(SEARCH_IDLE_PAUSE_MS\);\n\s*await sample\('search'/);
+  assert.match(source, /sample\('ticket-warm'[^\n]*\n\s*const previousPage = await settleScripts\([^\n]*\n\s*await page\.waitForTimeout\(SEARCH_IDLE_PAUSE_MS\);\n\s*await sample\('search'/);
 });
 
 test('runner is recorded from GitHub Actions, including failures before browser setup', () => {

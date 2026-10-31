@@ -49,3 +49,12 @@ streamText({ model }); gateway.getCredits(); localHelper();`);
   assert.ok(calls.every(call => /^[a-f0-9]{64}$/.test(call.digest)));
   assert.deepEqual(calls.map(call => call.code.split("(")[0]), ["fetch", "globalThis.fetch", "axios.post", "streamText", "gateway.getCredits"]);
 });
+
+test("a .js component with JSX still parses, so its paid calls are inspected", async () => {
+  const { callsInFile } = await import(modulePath);
+  const calls = callsInFile("src/utils/emojiLoader.js", `
+export const load = () => fetch("/api/users/preferences");
+export const Picker = props => <div {...props} onClick={() => fetch("/api/paid")} />;`);
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every(call => call.code.startsWith("fetch(")));
+});

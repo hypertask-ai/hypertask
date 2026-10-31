@@ -9,7 +9,7 @@ const networkCalls = new Set(["fetch", "generateText", "streamText", "generateOb
 const printer = ts.createPrinter({ removeComments: true });
 
 export function callsInFile(path, text) {
-  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, /\.(?:ts|mts|cts)$/.test(path) ? ts.ScriptKind.TS : ts.ScriptKind.TSX);
   if (source.parseDiagnostics.length) throw new Error(`Cannot parse network calls in ${path}`);
   const calls = [];
   function visit(node) {
