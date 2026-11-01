@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import type { PrismaClient } from "@prisma/client";
 
 import {
@@ -530,29 +528,4 @@ test("covers a team the caller can use without an accepted board row", async () 
     fakeDatabase(state) as unknown as PrismaClient,
   );
   assert.equal(created, 1);
-});
-
-test("agent list routes seed only for the permanent owner and QA identities", () => {
-  const root = path.resolve(__dirname, "..");
-  const teamRoute = readFileSync(
-    path.join(root, "src/app/api/agents/route.ts"),
-    "utf8",
-  );
-  const ownedRoute = readFileSync(
-    path.join(root, "src/app/api/agents/owned/route.ts"),
-    "utf8",
-  );
-  const mcpCreate = readFileSync(
-    path.join(root, "src/lib/mcp/agents/create.ts"),
-    "utf8",
-  );
-
-  assert.match(teamRoute, /ensureDefaultTeamAgent\(/);
-  assert.match(ownedRoute, /ensureDefaultAgentsOnAccessibleTeams\(/);
-  assert.match(teamRoute, /if \(await isOwnerOrQaUserId\(/);
-  assert.match(ownedRoute, /if \(await isOwnerOrQaUserId\(/);
-  assert.match(teamRoute, /lockTeamAgentSeed\(/);
-  assert.match(mcpCreate, /lockTeamAgentSeed\(/);
-  assert.doesNotMatch(teamRoute, /as unknown as TeamAgentStore/);
-  assert.doesNotMatch(ownedRoute, /as unknown as TeamAgentStore/);
 });

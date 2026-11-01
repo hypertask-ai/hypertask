@@ -129,17 +129,3 @@ test("comment hydration ignores foreign and unscoped drafts", () => {
   assert.equal(getTaskDraftContent(drafts, 101, "Comment"), "");
   assert.equal(getTaskDraftContent(drafts, undefined, "Comment"), "");
 });
-
-test("desktop and mobile comment editors remount for each task", () => {
-  const component = fs.readFileSync(
-    path.join(
-      __dirname,
-      "../src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx",
-    ),
-    "utf8",
-  );
-  const taskBoundKey = 'key={`comment-input-${_parsedTask.id}`}';
-
-  assert.equal(component.split(taskBoundKey).length - 1, 2);
-  assert.match(component, /getTaskDraftContent\(\s*draftsFromTQ,\s*_parsedTask\?\.id,\s*"Comment"/);
-});

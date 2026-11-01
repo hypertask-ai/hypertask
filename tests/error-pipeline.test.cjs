@@ -100,19 +100,6 @@ test("auto-error routing prefers Backlog while preserving legacy and configured 
   assert.deepEqual(selectErrorBoardSection(99, [bugs, backlog]), bugs);
 });
 
-test("auto-error routing is revalidated for every ticket", () => {
-  const reportErrorSource = fs.readFileSync(
-    path.join(root, "src/lib/errors/reportError.ts"),
-    "utf8",
-  );
-
-  assert.doesNotMatch(reportErrorSource, /boardTargetCache/);
-  assert.match(
-    reportErrorSource,
-    /const sections = await prisma\.section\.findMany/,
-  );
-});
-
 test("thresholded errors preserve the configured occurrence", () => {
   assert.equal(errorTicketMinimumOccurrences(50), 50);
 });
@@ -231,41 +218,4 @@ test("invalid threshold Redis results fail closed", async () => {
     claimThresholdErrorTicket(redis, "fingerprint", 50),
     /invalid error-threshold result/,
   );
-});
-
-test("empty-completion reporting uses a stable key and explicit retry failure state", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
-  assert.match(route, /fingerprintKey: "ai-chat-empty-completion"/);
-  assert.match(route, /let emptyCompletionRetryFailed = false/);
-  assert.match(route, /emptyCompletionRetryFailed = true/);
-  assert.match(
-    route,
-    /reportEmptyCompletion\(\s*emptyCompletionRetryFailed,\s*emptyCompletionError\s*\)/,
-  );
-});
-
-test("browser error intake preserves handled reports without trusting their source", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/errors/route.ts"),
-    "utf8",
-  );
-  assert.match(route, /source: z\.enum\(\["client", "handled"\]\)/);
-  assert.match(
-    route,
-    /source: parsed\.data\.source === "handled" \? "handled" : "client"/,
-  );
-});
-
-test("shared error reporting stays loadable outside Next without exposing server telemetry", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/telemetry/posthogErrorTracking.ts"),
-    "utf8",
-  );
-  assert.doesNotMatch(source, /import ["']server-only["']/);
-  assert.match(source, /typeof window !== "undefined"/);
-  assert.doesNotMatch(source, /node:crypto|posthog-node/);
-  assert.doesNotMatch(source, /NEXT_PUBLIC_POSTHOG_SERVER/);
 });

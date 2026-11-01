@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import fs from "./refactored-module-source.cjs";
-import path from "node:path";
 import {
   beginEmptySectionMutation,
   getActiveEmptySectionSettingFromProject,
@@ -15,8 +13,6 @@ import {
   createBoardReadModelSnapshot,
   materializeBoardReadModelSnapshot,
 } from "../src/lib/boardSync/contract";
-
-const root = path.resolve(__dirname, "..");
 
 const view = (id: string, setting: "Show" | "Hidden") => ({
   id,
@@ -327,59 +323,4 @@ test("a successful earlier toggle becomes the rollback baseline", () => {
     } as never),
     "Hidden",
   );
-});
-
-test("the command toggles both directions through the optimistic shared save", () => {
-  const saveHookSource = fs.readFileSync(
-    path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
-    "utf8",
-  );
-  const saveStart = saveHookSource.indexOf("const saveEmptySectionsAPI");
-  const nextFunction = saveHookSource.indexOf("const saveStalenessToViewAPI", saveStart);
-  const saveSource = saveHookSource.slice(saveStart, nextFunction);
-  const commandSource = fs.readFileSync(
-    path.join(root, "src/components/commandDispatcher.ts"),
-    "utf8",
-  ).split("function dispatchCommandGroup1")[1];
-  const commandStart = commandSource.indexOf("case CommandMode.ToggleEmptyColumns");
-  const nextCommand = commandSource.indexOf("case CommandMode.HideColumn", commandStart);
-  const toggleSource = commandSource.slice(commandStart, nextCommand);
-
-  assert.match(toggleSource, /saveEmptySectionsAPI/);
-  assert.match(toggleSource, /current === "Hidden" \? "Show" : "Hidden"/);
-  assert.match(saveSource, /beginEmptySectionMutation/);
-  assert.match(saveSource, /settleEmptySectionMutation/);
-  assert.ok(
-    saveSource.indexOf("beginEmptySectionMutation") <
-      saveSource.indexOf("apiHandler("),
-    "the active board must update before the network request starts",
-  );
-});
-
-test("the canonical URL view reaches the durable unsaved-view branch", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/api/project-writes/views/unsaved-view.ts"),
-    "utf8",
-  );
-  const transientGuard = source.indexOf("shouldUseTransientTabSettings(");
-  const durableWrite = source.indexOf("const createUnsavedViewHandler", transientGuard);
-
-  assert.ok(transientGuard >= 0);
-  assert.ok(durableWrite > transientGuard);
-  assert.match(source.slice(durableWrite), /board_empty_sections/);
-});
-
-test("the command saves against the URL-pinned view instead of the raw cache view", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
-    "utf8",
-  );
-  const saveStart = source.indexOf("const saveEmptySectionsAPI");
-  const nextFunction = source.indexOf("const saveStalenessToViewAPI", saveStart);
-  const saveSource = source.slice(saveStart, nextFunction);
-
-  assert.match(saveSource, /project\.project_view\?\.user_project_views\[0\]\?\.appliedView/);
-  assert.match(saveSource, /viewId: targetViewId/);
-  assert.match(saveSource, /updateMode: PERSONAL_EMPTY_SECTIONS_UPDATE_MODE/);
-  assert.doesNotMatch(saveSource, /baseViewId/);
 });

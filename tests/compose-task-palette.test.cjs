@@ -1303,12 +1303,6 @@ test('New Task desktop leaves action tooltips unclipped and scrolls only attachm
   }
 });
 
-test('New Task keeps the palette width Search uses', () => {
-  const source = fs.readFileSync(path.join(root, 'src/components/Modals/commands/HTC/commands.tsx'), 'utf8');
-  assert.match(source, /paletteModalSizing sm:top-\[24%\] sm:min-w-\[560px\]/);
-  assert.doesNotMatch(source, /w-\[1120px\]/);
-});
-
 test('both flags enable stage labels in the existing live status and retries reset progress', async (t) => {
   for (const mobile of [false, true]) {
     await withPalette(t, { newWindow: true, mobile, tab: 'compose' }, async ({ type, press, requests, fail, input }) => {

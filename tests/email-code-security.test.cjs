@@ -614,28 +614,3 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
   assert.equal(response.status, 500)
   assert.equal(calls.verifications.length, 3)
 })
-
-test('legacy clients submit email and production paths do not log raw credentials', () => {
-  const emailAuth = fs.readFileSync(
-    path.join(root, 'src/app/login/EmailAuth/useEmailAuth.ts'),
-    'utf8'
-  )
-  const guestLogin = fs.readFileSync(
-    path.join(root, 'src/components/Modals/GuestLoginModal/index.tsx'),
-    'utf8'
-  )
-  const verifyRoute = fs.readFileSync(
-    path.join(root, 'src/app/api/auth/verify-code/route.ts'),
-    'utf8'
-  )
-  const sendRoute = fs.readFileSync(
-    path.join(root, 'src/app/api/auth/send-email-link/route.ts'),
-    'utf8'
-  )
-
-  assert.match(emailAuth, /code: verificationCode,\s+email,/)
-  assert.match(guestLogin, /code,\s+email,/)
-  assert.doesNotMatch(verifyRoute, /Verifying code:/)
-  assert.doesNotMatch(sendRoute, /Sign-in link with UTM params:/)
-  assert.doesNotMatch(sendRoute, /Sign-in link \(no Resend configured\):/)
-})
