@@ -80,13 +80,18 @@ await withFileLock(state, ledger, () => {
       .map((gate) => gate.id));
     const kept = [];
     let dropping = false;
+    let left = 0;
     for (const line of text.split('\n')) {
       const head = line.match(/^- \[[ xX]\] (\S+?):/);
-      if (head) dropping = stale.has(head[1]);
-      else if (/^[^ ]/.test(line)) dropping = false;
+      if (head) {
+        dropping = stale.has(head[1]);
+        if (!dropping) left += 1;
+      } else if (/^[^ ]/.test(line)) dropping = false;
       if (!dropping) kept.push(line);
     }
-    text = kept.join('\n');
+    // A ledger of nothing but these gates is empty again, so the header is written fresh instead of
+    // failing as a ledger with zero live gates.
+    text = left ? kept.join('\n') : '';
     process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}; ${stale.size} generated gates written again at ${root}\n`);
   }
   const doc = parseGates(text, { requireGates: !!text });
