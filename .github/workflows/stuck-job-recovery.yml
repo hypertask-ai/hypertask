@@ -6,8 +6,10 @@ name: Stuck Job Recovery
 # recorded completed_at 3601-3604 s later, which made one push 68.0 minutes for
 # 8.0 minutes of work. Nothing inside the job can un-stick it, so this workflow
 # caps the wait: a pull-request run whose finished job has taken no step for
-# eight minutes is cancelled, and the next tick re-runs only the jobs that were
-# cut off. Production push runs are reported in the job summary and never
+# eight minutes is cancelled, and once that cancellation settles the same sweep
+# re-runs its failed jobs so a second attempt reports on a fresh runner. Only a
+# run this sweep cancelled may be re-run, and a run holding a real failure is
+# never touched. Production push runs are reported in the job summary and never
 # cancelled, because a push run verifies a deploy.
 on:
   schedule:

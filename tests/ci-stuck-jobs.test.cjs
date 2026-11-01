@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { decide } = require('../.github/scripts/ci-stuck-jobs.cjs');
+const { decide, apply, plan } = require('../.github/scripts/ci-stuck-jobs.cjs');
 
 const now = Date.parse('2026-11-01T09:00:00Z');
 const step = (name, finished) => ({ name, conclusion: 'success', completed_at: finished });
@@ -37,15 +37,45 @@ test('a production push run is reported and never cancelled', () => {
   assert.equal(decision.stuck.length, 1);
 });
 
-test('a cancelled run re-runs only the jobs cut off after their steps succeeded', () => {
+test('a cancelled run recovery did not cancel is never re-run', () => {
   const cancelledRun = { ...stuckRun, status: 'completed', conclusion: 'cancelled' };
+  const jobs = [job('test-shard (1)', 'completed', [step('Test shard', finishedAt)], 'cancelled')];
+  assert.equal(decide(cancelledRun, jobs, { now }), null);
+});
+
+test('a run holding a genuine failure is never cancelled and never retried', () => {
   const jobs = [
-    job('test-shard (1)', 'completed', [step('Test shard', finishedAt)], 'cancelled'),
-    job('ci-tests', 'completed', [step('Summary', finishedAt)], 'success'),
+    job('test-shard (1)', 'in_progress', [step('Test shard', finishedAt)], null),
+    job('tests', 'completed', [step('Test', '2026-11-01T07:40:00Z')], 'failure'),
   ];
-  const decision = decide(cancelledRun, jobs, { now });
-  assert.equal(decision.action, 'rerun');
-  assert.deepEqual(decision.stuck.map(entry => entry.name), ['test-shard (1)']);
+  assert.equal(decide(stuckRun, jobs, { now }), null);
+  assert.equal(decide({ ...stuckRun, event: 'push' }, jobs, { now }), null);
+});
+
+test('apply cancels and re-runs only the run it cancelled itself', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    return { status: 'completed' };
+  };
+  const done = await apply('o/r', [
+    { runId: 7, action: 'cancel', stuck: [{ name: 'test-shard (1)' }] },
+    { runId: 8, action: 'rerun', stuck: [] },
+    { runId: 9, action: 'report', stuck: [{ name: 'browser-smoke' }] },
+  ], { api });
+  assert.deepEqual(calls, ['POST /repos/o/r/actions/runs/7/cancel', 'POST /repos/o/r/actions/runs/7/rerun-failed-jobs']);
+  assert.deepEqual(done, [{ runId: 7, action: 'recover', rerun: true, jobs: ['test-shard (1)'] }]);
+});
+
+test('a cancel that never settles is reported and never retried', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    return { status: 'in_progress' };
+  };
+  const done = await apply('o/r', [{ runId: 7, action: 'cancel', stuck: [{ name: 'test-shard (1)' }] }], { api, settle: async () => false });
+  assert.deepEqual(calls, ['POST /repos/o/r/actions/runs/7/cancel']);
+  assert.deepEqual(done, [{ runId: 7, action: 'cancel', rerun: false, reason: 'cancel did not settle' }]);
 });
 
 test('a completed green run and a second attempt are ignored', () => {
@@ -54,10 +84,19 @@ test('a completed green run and a second attempt are ignored', () => {
   assert.equal(decide({ ...stuckRun, run_attempt: 2 }, jobs, { now }), null);
 });
 
-test('an old cancelled run is history and is never re-run', () => {
-  const jobs = [job('test-shard (1)', 'completed', [step('Test shard', finishedAt)], 'cancelled')];
-  const stale = { ...stuckRun, status: 'completed', conclusion: 'cancelled', updated_at: '2026-11-01T08:10:00Z' };
-  assert.equal(decide(stale, jobs, { now }), null);
+test('an old run is history and costs no job request', async () => {
+  const stale = { ...stuckRun, updated_at: '2026-11-01T08:10:00Z' };
+  let fetched = 0;
+  const decisions = await plan('o/r', {
+    now,
+    runs: [stale, { ...stuckRun, run_attempt: 2, id: 5 }, { ...stuckRun, status: 'completed', conclusion: 'cancelled', id: 6 }],
+    jobsFor: () => {
+      fetched += 1;
+      return [];
+    },
+  });
+  assert.deepEqual(decisions, []);
+  assert.equal(fetched, 0);
 });
 
 test('an empty job list is ignored instead of cancelling blind', () => {

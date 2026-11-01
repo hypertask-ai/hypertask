@@ -11,20 +11,25 @@
 //
 // This cannot be un-stuck from inside a job, so the wait is capped instead.
 // A job whose every step has completed and whose newest step is older than
-// STUCK_MINUTES is not doing anything, and the run is cancelled. The next tick
-// sees the cancelled run and re-runs only the jobs that were cut off, so the
-// second attempt reports normally on a fresh runner. Only pull-request runs are
+// STUCK_MINUTES is not doing anything, so this sweep cancels that run and, once
+// the cancellation settles, re-runs its failed jobs: the second attempt reports
+// normally on a fresh runner. Provenance is the sweep's own cancel call, so a
+// run that was cancelled by anything else (a person, a superseded push) is
+// history and is never restarted. A run that holds a real failure is left alone
+// as well, so no genuine red check is ever retried. Only pull-request runs are
 // touched: a production push run verifies a deploy and is reported, never
-// cancelled. Only runs touched in the last RECENT_MINUTES are acted on, so an
-// old cancelled run is history and is never re-run.
+// cancelled. Only runs touched in the last RECENT_MINUTES and first attempts
+// are read at all, so an old run costs no request.
 const { execFile } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 
 const STUCK_MINUTES = 8;
 const RECENT_MINUTES = 30;
+const SETTLE_ATTEMPTS = 12;
+const SETTLE_DELAY_MS = 5000;
 const PR_EVENT = 'pull_request';
-const CANCELLED = 'cancelled';
 const REPORT_ONLY = 'report';
+const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
 
 function stepEnd(step) {
   return step && step.completed_at ? Date.parse(step.completed_at) : null;
@@ -42,39 +47,33 @@ function finishedJob(job, now, stuckMinutes) {
   return idle >= stuckMinutes * 60 ? { name: job.name, idle: Math.round(idle), lastStepAt: new Date(last).toISOString() } : null;
 }
 
-function cutOffJob(job) {
-  const steps = job.steps ?? [];
-  if (job.conclusion !== CANCELLED) return null;
-  if (!steps.length) return null;
-  if (steps.some(step => !step.completed_at)) return null;
-  return job.name;
+function fresh(run, now, recentMinutes) {
+  const touched = run.updated_at ? Date.parse(run.updated_at) : null;
+  return touched === null || (now - touched) / 60000 <= recentMinutes;
+}
+
+function liveRun(run, now, recentMinutes) {
+  if ((run.run_attempt ?? 1) !== 1) return false;
+  if (run.status !== 'in_progress') return false;
+  return fresh(run, now, recentMinutes);
 }
 
 function decide(run, jobs, { now = Date.now(), stuckMinutes = STUCK_MINUTES, recentMinutes = RECENT_MINUTES } = {}) {
-  const attempt = run.run_attempt ?? 1;
-  const touched = run.updated_at ? Date.parse(run.updated_at) : null;
-  if (touched !== null && (now - touched) / 60000 > recentMinutes) return null;
-  const base = {
+  if (!fresh(run, now, recentMinutes)) return null;
+  if ((run.run_attempt ?? 1) !== 1) return null;
+  if (jobs.some(job => FAILED.has(job.conclusion))) return null;
+  if (run.status !== 'in_progress') return null;
+  const stuck = jobs.map(job => finishedJob(job, now, stuckMinutes)).filter(Boolean);
+  if (!stuck.length) return null;
+  return {
     runId: run.id,
     workflow: run.name ?? '',
     event: run.event ?? '',
-    attempt,
+    attempt: run.run_attempt ?? 1,
     title: (run.display_title ?? '').slice(0, 80),
+    action: run.event === PR_EVENT ? 'cancel' : REPORT_ONLY,
+    stuck,
   };
-  if (attempt !== 1) return null;
-  if (run.status === 'in_progress') {
-    const stuck = jobs.map(job => finishedJob(job, now, stuckMinutes)).filter(Boolean);
-    if (!stuck.length) return null;
-    const allowed = run.event === PR_EVENT;
-    return { ...base, action: allowed ? 'cancel' : REPORT_ONLY, stuck };
-  }
-  if (run.status === 'completed' && run.conclusion === CANCELLED) {
-    const cutOff = jobs.map(cutOffJob).filter(Boolean);
-    if (!cutOff.length) return null;
-    const allowed = run.event === PR_EVENT;
-    return { ...base, action: allowed ? 'rerun' : REPORT_ONLY, stuck: cutOff.map(name => ({ name })) };
-  }
-  return null;
 }
 
 function ghApi(args) {
@@ -94,16 +93,21 @@ async function json(path, method = 'GET') {
   }
 }
 
-async function plan(repo, { now = Date.now(), stuckMinutes = STUCK_MINUTES, runs = null, jobsFor = null } = {}) {
+async function plan(repo, { now = Date.now(), stuckMinutes = STUCK_MINUTES, recentMinutes = RECENT_MINUTES, runs = null, jobsFor = null } = {}) {
   const listed = runs ?? (await pages(`/repos/${repo}/actions/runs?per_page=100`));
-  const open = listed.filter(run => run.status === 'in_progress' || (run.status === 'completed' && run.conclusion === CANCELLED));
   const decisions = [];
-  for (const run of open) {
-    const jobs = jobsFor ? jobsFor(run.id) ?? [] : (await json(`/repos/${repo}/actions/runs/${run.id}/jobs?per_page=100`)).jobs ?? [];
-    const decision = decide(run, jobs, { now, stuckMinutes });
+  for (const run of listed) {
+    if (!liveRun(run, now, recentMinutes)) continue;
+    const jobs = jobsFor ? jobsFor(run.id) ?? [] : await jobsOf(repo, run.id);
+    const decision = decide(run, jobs, { now, stuckMinutes, recentMinutes });
     if (decision) decisions.push(decision);
   }
   return decisions;
+}
+
+async function jobsOf(repo, runId) {
+  const payload = await json(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`);
+  return payload.jobs ?? [];
 }
 
 async function pages(path) {
@@ -117,18 +121,27 @@ async function pages(path) {
   return found;
 }
 
-async function apply(repo, decisions) {
+async function apply(repo, decisions, { api = json, settle = settleCancel } = {}) {
   const done = [];
-  for (const decision of decisions) {
-    if (decision.action === 'cancel') {
-      await json(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
-      done.push({ runId: decision.runId, action: 'cancel' });
-    } else if (decision.action === 'rerun') {
-      await json(`/repos/${repo}/actions/runs/${decision.runId}/rerun-failed-jobs`, 'POST');
-      done.push({ runId: decision.runId, action: 'rerun' });
+  for (const decision of decisions.filter(entry => entry.action === 'cancel')) {
+    await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
+    if (!(await settle(repo, decision.runId, api))) {
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'cancel did not settle' });
+      continue;
     }
+    await api(`/repos/${repo}/actions/runs/${decision.runId}/rerun-failed-jobs`, 'POST');
+    done.push({ runId: decision.runId, action: 'recover', rerun: true, jobs: decision.stuck.map(entry => entry.name) });
   }
   return done;
+}
+
+async function settleCancel(repo, runId, api) {
+  for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
+    const run = await api(`/repos/${repo}/actions/runs/${runId}`);
+    if (run.status === 'completed') return true;
+    await new Promise(resolve => setTimeout(resolve, SETTLE_DELAY_MS));
+  }
+  return false;
 }
 
 function fixturePlan(entry, options) {
@@ -165,7 +178,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, plan, apply, fixturePlan, STUCK_MINUTES, RECENT_MINUTES };
+module.exports = { decide, finishedJob, fresh, liveRun, plan, apply, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES };
 
 if (require.main === module) {
   main().catch(error => {

@@ -178,7 +178,10 @@ stuck_job_recovery:
   stuck_after_minutes: 8
   recent_minutes: 30
   attempts_touched: 1
-  actions: [cancel_run, rerun_failed_jobs]
+  actions: [cancel_run, wait_for_cancel, rerun_failed_jobs]
+  rerun_provenance: run cancelled by this sweep, same invocation
+  never_act_on: [runs_holding_a_failed_job, runs_not_cancelled_by_this_sweep]
+  job_list_after: eligibility_filter
   acts_on: [pull_request_runs]
   report_only: [production_push_runs, other_run_events]
   never: [self_hosted_runners, other_repositories, paid_services]
