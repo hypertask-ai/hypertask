@@ -100,24 +100,28 @@ export function percentile(values, share) {
 const RED = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
 const IDLE = new Set(['skipped', 'cancelled']);
 
-function pushToGreen(rows, excluded = new Set()) {
-  const shas = new Map();
+export function commitRuns(rows) {
+  const groups = new Map();
   for (const row of rows) {
     if (!row.sha) continue;
-    const group = shas.get(row.sha) ?? [];
-    group.push(row);
-    shas.set(row.sha, group);
+    const group = groups.get(row.sha) ?? [];
+    group.push({ conclusion: row.conclusion, createdAt: row.createdAt, updatedAt: row.updatedAt, unreadable: Boolean(row.unreadable) });
+    groups.set(row.sha, group);
   }
+  return groups;
+}
+
+function pushToGreen(groups, excluded = new Set()) {
   const greens = [];
-  for (const [sha, group] of shas) {
+  for (const [sha, runs] of groups) {
     if (excluded.has(sha)) continue;
-    if (group.some(row => row.unreadable)) continue;
-    if (!group.some(row => row.conclusion === 'success')) continue;
-    if (group.some(row => RED.has(row.conclusion))) continue;
-    const scored = group.filter(row => !IDLE.has(row.conclusion));
+    if (runs.some(run => run.unreadable || run.status && run.status !== 'completed')) continue;
+    if (!runs.some(run => run.conclusion === 'success')) continue;
+    if (runs.some(run => RED.has(run.conclusion))) continue;
+    const scored = runs.filter(run => !IDLE.has(run.conclusion));
     if (!scored.length) continue;
-    const first = Math.min(...scored.map(row => Date.parse(row.createdAt)));
-    const last = Math.max(...scored.map(row => Date.parse(row.updatedAt)));
+    const first = Math.min(...scored.map(run => Date.parse(run.createdAt)));
+    const last = Math.max(...scored.map(run => Date.parse(run.updatedAt)));
     greens.push((last - first) / 1000);
   }
   return greens;
@@ -139,7 +143,7 @@ function groups(entries, key, value) {
     .sort((left, right) => right.median - left.median);
 }
 
-export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new Set() } = {}) {
+export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new Set(), commits = null } = {}) {
   const rows = allRows.filter(row => row);
   const measured = rows.filter(row => !IDLE.has(row.conclusion) && !row.unreadable);
   const jobEntries = [];
@@ -152,7 +156,7 @@ export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new 
       }
     }
   }
-  const greens = pushToGreen(rows, excluded);
+  const greens = pushToGreen(commits ?? commitRuns(rows), excluded);
   const completed = measured;
   const pick = field => completed.map(row => row[field]);
   return {
@@ -233,9 +237,16 @@ export async function collectApp(app, { limit, gh = fetchJson }) {
   const shas = [...new Set(kept.map(run => run.head_sha).filter(Boolean))];
   const coverage = await pool(shas.map(sha => () => gh(app.repo, `/actions/runs?head_sha=${sha}&per_page=100`)
     .then(payload => payload.workflow_runs ?? []).catch(() => null)));
+  const commits = new Map();
   shas.forEach((sha, index) => {
     const runs = coverage[index];
-    if (!runs || runs.some(run => run.status !== 'completed') || runs.some(run => RED.has(run.conclusion))) excluded.add(sha);
+    if (!runs || !runs.length) {
+      excluded.add(sha);
+      return;
+    }
+    commits.set(sha, runs.map(run => ({
+      conclusion: run.conclusion ?? '', status: run.status ?? '', createdAt: run.created_at, updatedAt: run.updated_at, unreadable: false,
+    })));
   });
   const fetched = await pool(kept.map(run => () => gh(app.repo, `/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`)
     .then(payload => ({ jobs: payload.jobs ?? [] })).catch(() => ({ jobs: null }))));
@@ -245,7 +256,7 @@ export async function collectApp(app, { limit, gh = fetchJson }) {
     : decomposeRun(run, fetched[index].jobs)).filter(Boolean);
   const newest = all[0]?.head_sha;
   if (newest) excluded.add(newest);
-  return { app, rows, jobsByRun, excluded };
+  return { app, rows, jobsByRun, excluded, commits };
 }
 
 export function fmt(value) {
@@ -370,8 +381,8 @@ export async function main(args = process.argv.slice(2)) {
     summaries.push(...(payload.apps ?? []).map(appFromFixture));
   } else {
     for (const app of apps) {
-      const { rows, jobsByRun, excluded } = await collectApp(app, { limit: options.limit });
-      summaries.push(summarize(app, rows, jobsByRun, { excluded }));
+      const { rows, jobsByRun, excluded, commits } = await collectApp(app, { limit: options.limit });
+      summaries.push(summarize(app, rows, jobsByRun, { excluded, commits }));
     }
   }
   const command = `node scripts/ci-check-time.mjs --limit ${options.limit}${options.repos ? ` --repos ${options.repos}` : ''} --out ci-check-time.html`;

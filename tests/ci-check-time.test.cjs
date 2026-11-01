@@ -111,11 +111,15 @@ test('the command replays a saved fixture without network access', () => {
   assert.equal(payload.apps[0].slowSpots.length, 3);
 });
 
-test('collecting runs pages through GitHub and reads jobs for each attempt', async () => {
+test('collecting runs pages through GitHub, proves each commit and reads jobs', async () => {
   const { collectApp, summarize } = await subject;
   const seen = [];
   const gh = async (repo, url) => {
     seen.push(`${repo}${url}`);
+    if (url.startsWith('/actions/runs?head_sha=')) {
+      const sha = new URLSearchParams(url.split('?')[1]).get('head_sha');
+      return { workflow_runs: fixture.apps[0].runs.filter(run => run.head_sha === sha) };
+    }
     if (url.startsWith('/actions/runs?')) {
       const page = Number(new URLSearchParams(url.split('?')[1]).get('page'));
       return { workflow_runs: page === 1 ? fixture.apps[0].runs.slice(0, 3) : [] };
@@ -123,15 +127,35 @@ test('collecting runs pages through GitHub and reads jobs for each attempt', asy
     const id = Number(url.match(/\/actions\/runs\/(\d+)\//)[1]);
     return { jobs: fixture.apps[0].jobs[String(id)] ?? [] };
   };
-  const { rows, jobsByRun } = await collectApp({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, { limit: 2, gh });
+  const { rows, jobsByRun, commits, excluded } = await collectApp({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, { limit: 2, gh });
   assert.equal(rows.length, 2);
-  assert.deepEqual(seen.slice(0, 3), [
-    'hypertask-ai/hypertask/actions/runs?per_page=100&page=1',
+  assert.ok(seen.includes('hypertask-ai/hypertask/actions/runs?head_sha=aaa&per_page=100'));
+  assert.deepEqual(seen.filter(url => url.includes('/jobs?')), [
     'hypertask-ai/hypertask/actions/runs/101/attempts/1/jobs?per_page=100',
     'hypertask-ai/hypertask/actions/runs/102/attempts/1/jobs?per_page=100',
   ]);
   assert.equal(jobsByRun.get(101).length, 2);
-  assert.equal(summarize({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, rows, jobsByRun).runs, 2);
+  assert.equal(commits.get('aaa').length, 2);
+  assert.equal(excluded.has('aaa'), true);
+  const summary = summarize({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, rows, jobsByRun, { excluded, commits });
+  assert.equal(summary.runs, 2);
+  assert.equal(summary.greenPushes, 0);
+});
+
+test('a commit is timed from every run it has, including one outside the sampled window', async () => {
+  const { summarize } = await subject;
+  const row = () => ({
+    id: 1, sha: 'abc', workflow: 'ci', waiting: 5, wall: 60, setup: 20, tests: 35, other: 5, gap: 0,
+    clipped: false, createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:01:00Z', conclusion: 'success',
+  });
+  const commits = new Map([['abc', [
+    { conclusion: 'success', createdAt: '2026-10-31T09:58:00Z', updatedAt: '2026-10-31T09:59:00Z', unreadable: false },
+    { conclusion: 'success', createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:01:00Z', unreadable: false },
+  ]]]);
+  const summary = summarize({ name: 'app', repo: 'owner/app' }, [row()], new Map(), { commits });
+  assert.equal(summary.pushToGreen.median, 180);
+  const unfinished = new Map([['abc', [{ conclusion: '', status: 'in_progress', createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:01:00Z', unreadable: false }]]]);
+  assert.equal(summarize({ name: 'app', repo: 'owner/app' }, [row()], new Map(), { commits: unfinished }).greenPushes, 0);
 });
 
 test('skipped runs never block green and never count as CI time', async () => {
