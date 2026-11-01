@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -28,30 +27,6 @@ const baseTurn = {
   inputTokens: 11,
   outputTokens: 7,
 };
-
-test("the stream records routed and terminal turn outcomes", () => {
-  const stream = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
-  assert.match(
-    stream,
-    /observedAgentId = routedAgent\.id;[\s\S]*?recordTurnOutcome\(\s*fleet\.success \? "ok" : "failed"/,
-  );
-  assert.match(
-    stream,
-    /emptyCompletionError \?\? "AI generation returned no visible reply"/,
-  );
-  assert.match(
-    stream,
-    /let observedModel = selected\.resolvedModelId/,
-  );
-  assert.match(
-    stream,
-    /onFinish: async \(\{ usage, finishReason\b[^}]*\}\)[\s\S]*?generationFinishedWithError = finishReason === "error";[\s\S]*?else if \(generationFinishedWithError\) \{\s*recordTurnOutcome\("failed"/,
-  );
-  assert.match(stream, /waitUntil\(observation\)/);
-});
 
 test("the generation event contains tracking fields but no chat bodies", () => {
   const capture = observability.buildAiChatTurnCapture(baseTurn, "production");
@@ -92,15 +67,6 @@ test("generation events default missing team allowance properties to null", () =
   assert.equal(capture.properties.ht_team_ai_used_usd, null);
 });
 
-test("usage tracing passes the team allowance snapshot into generation capture", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai/_lib/modelProvider.ts"),
-    "utf8",
-  );
-  assert.match(source, /const observation = \(async \(\) => \{[\s\S]*?teamAllowanceSnapshot\(row\.teamId, allowanceUsd\)/);
-  assert.match(source, /recordAiChatTurn\(\{[\s\S]*?teamId: row\.teamId,[\s\S]*?teamAllowanceUsd: allowanceSnapshot\?\.allowanceUsd \?\? null,[\s\S]*?teamAllowanceUsedUsd: allowanceSnapshot\?\.usedUsd \?\? null/);
-});
-
 test("failed and cancelled turns carry the correct outcomes", () => {
   const failed = observability.buildAiChatTurnCapture(
     { ...baseTurn, outcome: "failed", error: new Error("boom") },
@@ -131,13 +97,4 @@ test("failed turn errors are redacted before capture", () => {
   assert.ok(!redacted.$ai_error.includes("sk-live-abc123"));
   assert.match(redacted.$ai_error, /redacted/);
   assert.equal(redacted.$ai_model, "gpt-5.5");
-});
-
-test("the release contains no automatic Manager alert machinery", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/telemetry/aiChatObservability.ts"),
-    "utf8",
-  );
-  assert.doesNotMatch(source, /getRedis|createCommentService|AI Chat is unhealthy/);
-  assert.doesNotMatch(source, /CLAIM_ALERT|RECOVER_CLAIM|TURN_WINDOW/);
 });

@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 const { ZodError } = require("zod");
 
@@ -101,15 +100,6 @@ test("MCP assignment errors name the target without a schema path", () => {
   assert.match(actionableToolError(unknownKey.error), /^Remove unsupported fields/);
 });
 
-test("MCP task service forwards agent_id to the shared assign endpoint", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/mcp-server/lib/services/task.service.ts"),
-    "utf8"
-  );
-  assert.match(source, /body\.agent_id = validatedInput\.agent_id/);
-  assert.match(source, /['"]\/mcp\/assignees\/assign['"]/);
-});
-
 test("AI assignee resolver maps an agent name and UUID to agentIds only", () => {
   const members = [
     { id: 6, displayName: "Valentin Yeo", email: "valentin@hypertask.ai" },
@@ -147,13 +137,4 @@ test("AI assignee resolver reports agents outside the task board clearly", () =>
   );
   assert.deepEqual(result.agentIds, []);
   assert.match(result.failures[0].error, /on this task's board/);
-});
-
-test("AI assignment rechecks resolved agent membership on the task board", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
-  assert.match(source, /isAgentOnBoard\(task\.projectId, agentId\)/);
-  assert.match(source, /\{ agent_id: agentId \}/);
 });

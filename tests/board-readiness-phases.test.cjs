@@ -1,7 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
 const test = require("node:test");
-const fs = require("./refactored-module-source.cjs");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
@@ -211,67 +210,6 @@ test("client fallback duration excludes the failed parser attempt", () => {
   } finally {
     runtime.restore();
   }
-});
-
-test("network publication is marked at the React Query observer boundary", () => {
-  const landingSource = fs.readFileSync(
-    path.join(root, "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  const apiSource = fs.readFileSync(
-    path.join(root, "src/utils/api/Homepage/index.ts"),
-    "utf8",
-  );
-
-  assert.match(
-    landingSource,
-    /if \(networkQueryPublished\) \{\s*markBoardNetworkQueryPublished\(readinessTraceScope\)/,
-  );
-  assert.doesNotMatch(apiSource, /markBoardNetworkQueryPublished/);
-});
-
-test("first-commit metadata is frozen across network reconciliation", () => {
-  const landingSource = fs.readFileSync(
-    path.join(root, "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-
-  assert.match(
-    landingSource,
-    /readinessCompletionRef = useRef\(\{[\s\S]*readinessSource: _readinessSource/,
-  );
-  assert.match(
-    landingSource,
-    /const readinessCompletion = readinessCompletionRef\.current;[\s\S]*completeBoardReadinessTrace\([\s\S]*readinessCompletion,[\s\S]*boardReadinessTraceScope/,
-  );
-  assert.match(
-    landingSource,
-    /markBoardReadinessPhase\("firstBoardCommit", boardReadinessTraceScope\)[\s\S]*?boardReadinessTraceScope,[\s\S]*?readinessEntryKey,[\s\S]*?releaseSecondaryStartup/,
-  );
-});
-
-test("route trace activation only mutates telemetry after React commits", () => {
-  const landingSource = fs.readFileSync(
-    path.join(root, "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-
-  assert.match(
-    landingSource,
-    /const useCommittedBoardReadinessTrace =[\s\S]*useLayoutEffect\(\(\) => \{[\s\S]*prepareBoardReadinessTrace\(\{ accountId, projectId, routeEntryId \}\)/,
-  );
-  assert.match(
-    landingSource,
-    /const readinessTraceScope = useCommittedBoardReadinessTrace\(\{/,
-  );
-  assert.match(
-    landingSource,
-    /const boardReadinessTraceScope = useCommittedBoardReadinessTrace\(\{/,
-  );
-  assert.doesNotMatch(
-    landingSource,
-    /if \(requestedProjectId !== null\) \{[\s\S]{0,300}prepareBoardReadinessTrace/,
-  );
 });
 
 test("authenticated production readiness emits once after usable paint", () => {

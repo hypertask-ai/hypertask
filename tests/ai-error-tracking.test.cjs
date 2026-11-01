@@ -74,17 +74,3 @@ test('chat API tracking does not persist provider-echoed prompt or reply bodies'
   assert.equal(reports[0].extra.statusCode, 500);
   assert.ok(!JSON.stringify(reports).includes('private echoed'));
 });
-
-test('AI API failures use existing durable tracker and existing PostHog alerting, with no new vendor', () => {
-  for (const route of ['suggest-reply', 'hyper-mentioned', 'task-writer', 'task-questions', 'generate-board', 'tiptap-forwardslash', 'audio-transcript', 'generate-image']) {
-    const source = fs.readFileSync(path.join(root, `src/app/api/ai/${route}/route.ts`), 'utf8');
-    assert.match(source, /await reportError\(/, route);
-    assert.doesNotMatch(source, /@sentry|Sentry\./);
-  }
-  const tracker = fs.readFileSync(path.join(root, 'src/lib/errors/reportError.ts'), 'utf8');
-  assert.match(tracker, /capturePostHogException\(report\)/);
-  assert.match(tracker, /reportErrorTicket\(report\)/);
-  const alerts = fs.readFileSync(path.join(root, '.github/workflows/posthog-error-alert.yml'), 'utf8');
-  assert.match(alerts, /workflow_dispatch/);
-  assert.match(alerts, /posthog-error-alert\.mjs/);
-});

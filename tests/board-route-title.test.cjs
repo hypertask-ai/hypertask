@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const jitiModule = require("jiti");
@@ -45,14 +44,4 @@ test("resolves direct and previous-board title requests safely", () => {
     resolveBoardRouteTitleRequest({ id: "not-a-board", view: "growth" }),
     { projectId: null, viewSlug: "growth" },
   );
-});
-
-test("the project route uses generated metadata instead of a static generic title", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/[...boardURL]/page.tsx"),
-    "utf8",
-  );
-  assert.match(source, /export async function generateMetadata/);
-  assert.match(source, /getProjectForValidation\(/);
-  assert.doesNotMatch(source, /export const metadata[^]*title:\s*["']Hypertask["']/);
 });

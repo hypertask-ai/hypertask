@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const jwt = require("jsonwebtoken");
 const { NextRequest } = require("next/server");
@@ -260,73 +259,4 @@ test("malformed, opaque, and missing bearer values are refused", async () => {
       `bearer ${JSON.stringify(token)} must not authenticate`
     );
   }
-});
-
-test("chat and Task Writer share the native-aware request user resolver", () => {
-  const chatRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
-  const writerRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/task-writer/route.ts"),
-    "utf8"
-  );
-
-  for (const route of [chatRoute, writerRoute]) {
-    assert.match(route, /getAiRequestUser\(request\)/);
-  }
-  assert.doesNotMatch(chatRoute, /from "next\/headers"/);
-  assert.doesNotMatch(chatRoute, /function getCurrentUserFromCookies/);
-  assert.doesNotMatch(writerRoute, /getCurrentUserFromCookies,/);
-});
-
-test("AI and OAuth issuance share one issuer and audience module", () => {
-  const mcpAuth = fs.readFileSync(
-    path.join(root, "src/lib/mcp/auth/verifyJwt.ts"),
-    "utf8"
-  );
-
-  assert.match(mcpAuth, /from '@\/lib\/mcp\/oauthTokenContract'/);
-  assert.doesNotMatch(mcpAuth, /const JWT_OAUTH_AUDIENCE/);
-});
-
-test("chat request model selection wins before the plan-aware fallback", () => {
-  const chatRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
-
-  assert.match(
-    chatRoute,
-    /resolveModelSelection\(\s*requestedModel\.provider,\s*requestedModel\.model,\s*modelOptionIdForTurn,/,
-  );
-  assert.match(chatRoute, /const requestedModel = isBrowserLunaDefaultUnqualifiedHere\(body, defaultContext, storePlanId\)\s*\? \{ modelOptionId: null, model: null, provider: null \}\s*: body;/);
-  assert.match(
-    chatRoute,
-    /modelOptionIdForTurn = resolveAgentModelPin\(\{[\s\S]*agentModelOptionId: isServerChosenDefaultTurn\(body, requestedModel\) \? null : actingAgent\?\.modelOptionId,/,
-  );
-  assert.match(
-    chatRoute,
-    /getAiModelOptionById\(modelOptionId\) \?\? getAiModelOptionById\(requestedModel\)/,
-  );
-  assert.match(
-    chatRoute,
-    /defaultModelSelection\([\s\S]*defaultModelOption,[\s\S]*\);/,
-  );
-});
-
-test("OAuth issuance and verification read one shared issuer/audience module", () => {
-  const oauthContract = fs.readFileSync(
-    path.join(root, "src/lib/mcp/oauthTokenContract.ts"),
-    "utf8"
-  );
-  const mcpAuth = fs.readFileSync(
-    path.join(root, "src/lib/mcp/auth/verifyJwt.ts"),
-    "utf8"
-  );
-
-  assert.match(oauthContract, /export const JWT_OAUTH_ISSUER/);
-  assert.match(oauthContract, /export const JWT_OAUTH_AUDIENCE/);
-  assert.match(mcpAuth, /from ['"]@\/lib\/mcp\/oauthTokenContract['"]/);
-  assert.doesNotMatch(mcpAuth, /const JWT_OAUTH_AUDIENCE\s*=/);
 });

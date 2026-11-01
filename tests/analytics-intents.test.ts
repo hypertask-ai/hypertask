@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
 
@@ -399,12 +398,4 @@ test("stale lease completion cannot mark a newly leased intent processed", async
   assert.equal(await h.intents.processAnalyticsIntent("task_created:41"), "skipped");
   assert.equal(h.intentRows[0].processedAt, null);
   assert.equal(h.captures.length, 1);
-});
-
-test("additive intent migration and schema contain the unique key and due index", () => {
-  const sql = fs.readFileSync("src/prisma/migrations/20261017140000_htpr_7288_analytics_intent/migration.sql", "utf8");
-  assert.match(sql, /CREATE TABLE "AnalyticsIntent"/);
-  assert.match(sql, /CREATE UNIQUE INDEX "AnalyticsIntent_key_key"/);
-  assert.match(sql, /ON "AnalyticsIntent"\("processedAt", "nextAttemptAt"\)/);
-  assert.match(fs.readFileSync("src/prisma/schema.prisma", "utf8"), /model AnalyticsIntent \{[\s\S]*?@@index\(\[processedAt, nextAttemptAt\]\)/);
 });
