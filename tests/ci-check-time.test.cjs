@@ -129,10 +129,10 @@ test('collecting runs pages through GitHub, proves each commit and reads jobs', 
   };
   const { rows, jobsByRun, commits, excluded } = await collectApp({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, { limit: 2, gh });
   assert.equal(rows.length, 2);
-  assert.ok(seen.includes('hypertask-ai/hypertask/actions/runs?head_sha=aaa&per_page=100'));
+  assert.ok(seen.includes('hypertask-ai/hypertask/actions/runs?head_sha=aaa&per_page=100&page=1'));
   assert.deepEqual(seen.filter(url => url.includes('/jobs?')), [
-    'hypertask-ai/hypertask/actions/runs/101/attempts/1/jobs?per_page=100',
-    'hypertask-ai/hypertask/actions/runs/102/attempts/1/jobs?per_page=100',
+    'hypertask-ai/hypertask/actions/runs/101/attempts/1/jobs?per_page=100&page=1',
+    'hypertask-ai/hypertask/actions/runs/102/attempts/1/jobs?per_page=100&page=1',
   ]);
   assert.equal(jobsByRun.get(101).length, 2);
   assert.equal(commits.get('aaa').length, 2);

@@ -207,6 +207,16 @@ function fetchJson(repo, path) {
   });
 }
 
+async function pages(gh, repo, path, key = 'workflow_runs') {
+  const found = [];
+  for (let page = 1; ; page++) {
+    const payload = await gh(repo, `${path}&page=${page}`);
+    const batch = payload[key] ?? [];
+    found.push(...batch);
+    if (batch.length < 100) return found;
+  }
+}
+
 async function pool(tasks, width = 8) {
   const results = [];
   let next = 0;
@@ -235,8 +245,7 @@ export async function collectApp(app, { limit, gh = fetchJson }) {
     ...completed.slice(limit).map(run => run.head_sha),
   ].filter(Boolean));
   const shas = [...new Set(kept.map(run => run.head_sha).filter(Boolean))];
-  const coverage = await pool(shas.map(sha => () => gh(app.repo, `/actions/runs?head_sha=${sha}&per_page=100`)
-    .then(payload => payload.workflow_runs ?? []).catch(() => null)));
+  const coverage = await pool(shas.map(sha => () => pages(gh, app.repo, `/actions/runs?head_sha=${sha}&per_page=100`).catch(() => null)));
   const commits = new Map();
   shas.forEach((sha, index) => {
     const runs = coverage[index];
@@ -248,12 +257,13 @@ export async function collectApp(app, { limit, gh = fetchJson }) {
       conclusion: run.conclusion ?? '', status: run.status ?? '', createdAt: run.created_at, updatedAt: run.updated_at, unreadable: false,
     })));
   });
-  const fetched = await pool(kept.map(run => () => gh(app.repo, `/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`)
-    .then(payload => ({ jobs: payload.jobs ?? [] })).catch(() => ({ jobs: null }))));
+  const fetched = await pool(kept.map(run => () => pages(gh, app.repo, `/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`, 'jobs')
+    .then(jobs => ({ jobs })).catch(() => ({ jobs: null }))));
   const jobsByRun = new Map(kept.map((run, index) => [run.id, fetched[index].jobs ?? []]));
   const rows = kept.map((run, index) => fetched[index].jobs === null
     ? { id: run.id, sha: run.head_sha ?? '', unreadable: true, conclusion: run.conclusion ?? '' }
     : decomposeRun(run, fetched[index].jobs)).filter(Boolean);
+  for (const row of rows) if (row.unreadable && row.sha) excluded.add(row.sha);
   const newest = all[0]?.head_sha;
   if (newest) excluded.add(newest);
   return { app, rows, jobsByRun, excluded, commits };
@@ -286,14 +296,14 @@ export function formatHtml(summaries, { limit, generatedAt = new Date().toISOStr
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Where check time goes</title>
 <style>
-body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:32px;background:#0b0e14;color:#e6e9ef}
-h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:28px 0 8px}.meta{color:#8b93a7;font-size:13px;font-weight:400}
+body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:32px;background:#0b0e14;color:#e6e9ef}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:20px;margin:28px 0 8px}.meta{color:#8b93a7;font-size:13px;font-weight:400}
 table{border-collapse:collapse;margin:0 0 8px;min-width:520px}th,td{text-align:left;padding:6px 14px 6px 0;border-bottom:1px solid #1d222d}
 th{color:#8b93a7;font-weight:600;font-size:13px}.lead td{font-weight:700;color:#8fd4a4}.spots td:first-child{color:#cbd2e0}
 p.def{color:#9aa3b8;font-size:13px;max-width:820px}code{background:#161b25;padding:2px 6px;border-radius:4px;font-size:12px}
 </style></head><body>
 <h1>Where check time goes</h1>
-<p class="def">Last ${limit} completed check runs per app, generated ${escape(generatedAt)}. Waiting is the queue from a run being created to a runner starting it. Setup covers checkout, installs and builds; tests covers the checks themselves. Both sum step time across every job, so parallel jobs add up to more than the wall clock. Between-job wait is run wall clock minus the longest job. Push to all green counts commits with no failed, timed-out or action-required run, from the first run created for that commit to the last one finishing; skipped runs from path filters never block it.</p>
+<p class="def">Last ${limit} completed check runs per app, generated ${escape(generatedAt)}. Waiting is the queue from a run being created to a runner starting it. Setup covers checkout, installs and builds; tests covers the checks themselves. Both sum step time across every job, so parallel jobs add up to more than the wall clock. Run time outside jobs is wall clock no job was executing. Push to all green counts commits with no failed, timed-out or action-required run, from the first run created for that commit to the last one finishing; skipped runs from path filters never block it.</p>
 ${appTable}
 <p class="def">Rerun any time: <code>${escape(command)}</code>. Every number comes from GitHub Actions timestamps: <code>created_at</code>, <code>run_started_at</code>, <code>updated_at</code> and each step's <code>started_at</code>/<code>completed_at</code>.</p>
 </body></html>`;

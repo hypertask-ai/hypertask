@@ -16,8 +16,8 @@ executing, measured from the union of job intervals. Push to all green counts co
 timed-out or action-required run, from the first run created for that commit to
 the last one finishing. Skipped runs from path filters never block it, and the
 newest commit, any commit with unfinished or cut-off runs, and any commit whose
-full run list cannot be read waits until its checks settle. Runs that never executed stay out of the medians, and unreadable
-runs are counted instead of scored. Slow spots rank workflow and job medians
+full run list cannot be read waits until its checks settle. Runs that never executed stay out of the medians, and a run whose jobs cannot be
+read is counted and keeps its commit unranked. Slow spots rank workflow and job medians
 with at least two real samples.
 
 The script is read-only: it needs a `gh` token with Actions read access and
