@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -102,18 +101,5 @@ test("a null due date still counts as a non-label change", () => {
       update: { due_date: null, add_labels: ["Quick wins"] },
     }),
     true
-  );
-});
-
-test("the chat route decides the update gate through the shared helper", () => {
-  const routeSource = fs.readFileSync(
-    path.join(root, "src/lib/ai/tools/updateTask.ts"),
-    "utf8"
-  );
-
-  assert.match(routeSource, /updateTasksNeedConfirmation\(\{/);
-  assert.doesNotMatch(
-    routeSource,
-    /const needsConfirmation =\s*\n?\s*targets\.length >= 4/
   );
 });

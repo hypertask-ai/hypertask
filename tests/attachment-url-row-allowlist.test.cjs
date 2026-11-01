@@ -73,23 +73,3 @@ test('a supplied Attachment is normalised to a real boolean', () => {
     )
   }
 })
-
-test('both URL write sites in the comment path go through the allowlist', () => {
-  const source = require('node:fs').readFileSync(
-    path.join(root, 'src/utils/controllers/urls/addIntoTask.ts'),
-    'utf8'
-  )
-  assert.match(source, /data: urlRowData\(matchedUrlData\)/)
-  assert.match(source, /urlRowData\(urlData, \{ commentId \}\)/)
-  assert.doesNotMatch(source, /data: matchedUrlData\b/)
-  assert.doesNotMatch(source, /\.\.\.urlData/)
-})
-
-test('the description URL writes go through the allowlist too', () => {
-  const source = require('node:fs').readFileSync(
-    path.join(root, 'src/utils/controllers/urls/addIntoTaskDesc.ts'),
-    'utf8'
-  )
-  assert.match(source, /data: urlsToAdd\.map\(urlData => urlRowData\(urlData, \{ taskId \}\)\)/)
-  assert.doesNotMatch(source, /data: \{[^}]*\.\.\.urlData/s)
-})

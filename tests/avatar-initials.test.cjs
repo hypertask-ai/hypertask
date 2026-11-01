@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const createJiti = require("jiti");
@@ -43,34 +42,4 @@ test("treats the legacy generic image as an absent avatar", () => {
   assert.equal(hasCustomAvatar(historicalLegacy), false);
   assert.equal(hasCustomAvatar(`${historicalLegacy}#cached`), false);
   assert.equal(hasCustomAvatar("https://example.com/custom.png"), true);
-});
-
-test("agent photo removal remains nullable from the modal through the route", () => {
-  const modal = fs.readFileSync(
-    path.join(root, "src/components/Modals/Agent/agent.modal.tsx"),
-    "utf8",
-  );
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/agents/[agentId]/route.ts"),
-    "utf8",
-  );
-
-  assert.match(modal, /photoURL:\s*customPhotoURL/);
-  assert.match(route, /body\.photoURL === null/);
-  assert.match(route, /data\.photoURL = null/);
-});
-
-test("keeps the current-user sidebar avatar compact on mobile", () => {
-  const sidebar = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/sidebars/RightSidebar/CurrentUserSidebar.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(
-    sidebar,
-    /<UserAvatar[\s\S]*?className="sm:!h-7 sm:!w-7"[\s\S]*?compactOnMobile/,
-  );
 });

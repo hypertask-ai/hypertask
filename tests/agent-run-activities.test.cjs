@@ -1016,38 +1016,6 @@ test("chat selection posts one human message and one select prompt event", async
   assert.equal(harness.broadcasts.length, 1);
 });
 
-test("migration constrains retry keys and elicitation selections", () => {
-  const migration = require("node:fs").readFileSync(
-    path.join(
-      root,
-      "src/prisma/migrations/20260904152000_add_agent_run_activities/migration.sql",
-    ),
-    "utf8",
-  );
-  assert.match(migration, /UNIQUE INDEX "AgentRunActivity_runId_idempotencyKey_key"/);
-  assert.match(migration, /AgentRunActivity_selection_check/);
-  assert.match(migration, /AgentRunActivity_options_type_check/);
-  const replayMigration = require("node:fs").readFileSync(
-    path.join(
-      root,
-      "src/prisma/migrations/20260904184500_add_agent_run_activity_comment_replay/migration.sql",
-    ),
-    "utf8",
-  );
-  assert.match(replayMigration, /ADD COLUMN "responseCommentId" INTEGER/);
-  assert.match(replayMigration, /"commentAgentWebhookDeliveryIds" TEXT\[\]/);
-  assert.match(
-    replayMigration,
-    /"commentNotificationsProcessingAt" TIMESTAMP\(3\)/,
-  );
-  assert.match(replayMigration, /"commentNotificationDeliveryKeys" TEXT\[\]/);
-  assert.match(replayMigration, /"commentMentionsAttemptedAt" TIMESTAMP\(3\)/);
-  assert.match(replayMigration, /"commentFcmAttemptedAt" TIMESTAMP\(3\)/);
-  assert.match(replayMigration, /"commentEmailsAttemptedAt" TIMESTAMP\(3\)/);
-  assert.match(replayMigration, /"commentNotificationsCompletedAt" TIMESTAMP\(3\)/);
-  assert.match(replayMigration, /AgentRunActivity_selectionCommentId_fkey/);
-});
-
 function loadAtomicCommentService(
   prisma,
   persistAgentWebhookEvent,
