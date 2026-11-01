@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "concurrently 'next dev' 'npm run stripe:listen'",
-    "build": "npx prisma generate && NODE_OPTIONS=--max-old-space-size=4096 next build && node scripts/run-production-migrations.mjs",
+    "build": "npx prisma generate && NODE_OPTIONS=--max-old-space-size=4096 next build --webpack && node scripts/run-production-migrations.mjs",
     "start": "next start && npm run stripe:listen",
     "stripe:listen": "stripe listen --events checkout.session.completed,checkout.session.async_payment_succeeded,checkout.session.async_payment_failed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted --forward-to localhost:3000/api/stripe/webhook",
     "billing:harness": "node scripts/stripe-seat-billing-harness.cjs",

@@ -84,3 +84,19 @@ is dropped.
 If a Turbopack build still dies with 137 at this setting, the next levers are turning
 `productionBrowserSourceMaps` off (PostHog would lose its maps) and the paid Enhanced
 Build Machine, which is Valentin's decision.
+
+`experimental.turbopackMemoryEviction: "full"` (HTPR-8244) did not save it: the first deployment
+that carried it, `16617d97e`, failed the Vercel build at 09:37 UTC. The `--webpack` pin below is
+what puts production back on a build the heap cap describes.
+
+## Builder pinned to webpack (2026-11-01)
+
+Ticket: HYCI-61, https://app.hypertask.ai/detail/project-11514/61
+
+HTPR-8245 dropped `--webpack` from the production build so Next picked its default builder, which in Next 16.4.2 is Turbopack. Every production deployment from the switch on was killed: ea23ee008 (09:18 UTC) and 7a0a7d7f6 (09:33 UTC) both exited 137 during "Creating an optimized production build" after about 14 minutes, and Vercel reported "At least one Out of Memory ("OOM") event was detected during the build". The last green production deployment was daa9d881b at 06:44 UTC, built with `next build --webpack`.
+
+The 4 GB cap above bounds the V8 heap of the webpack builder. Turbopack compiles in Rust, so `--max-old-space-size` never applied to it, and no Turbopack build-mode option in Next 16.4.2 caps its allocation. The heap cap was therefore no longer describing the build: the container was killed with no heap message, exactly the signature the 4 GB note describes for a process tree that outgrows the machine rather than a V8 heap that reaches its limit.
+
+The build script now names `--webpack` again. `next.config.js` keeps both the `webpack` hook and the `turbopack` resolveAlias block, so the Turbopack move is one flag away once it fits the machine. Two checks keep this honest: `tests/build-memory-config.test.cjs` fails when the build script stops naming a builder (an implicit builder is one Next default flip away from the same OOM), and `scripts/visual-regression-ci.mjs` mirrors the production builder from `package.json`, so the visual base build follows automatically.
+
+CI keeps building with Turbopack in the browser-smoke shards, so the whole app still compiles under Turbopack on every pull request; only the deployment that has to fit an 8 GB container is pinned. Returning production to Turbopack needs a memory answer for the Rust side, which is a new ticket, not a flag flip.
