@@ -119,6 +119,13 @@ test("the refresher closes its open pull request when nothing differs", () => {
   assert.match(text, /pause-until/);
 });
 
+test("the refresher's pull request can go green: no finished ticket in the title, and a stale copy stops it (HTPR-8254)", () => {
+  const text = readFileSync(path.join(root, "scripts/flags/refresh-production-flag-modes.sh"), "utf8");
+  assert.doesNotMatch(text, /--title "(HTPR|HYFA|YPER4)-\d+ \[/);
+  assert.match(text, /installed=\$\(sha256sum "\$0"/);
+  assert.match(text, /git add -A -- "\$dir" "\$file"/);
+});
+
 test("with the QA account view, a flag only the owner sees is Off, never its Owner + QA default (YPER4-289)", async () => {
   const { buildSnapshot } = await load();
   const plain = { "htpr-1-a": false, "htpr-2-b": false, "htpr-3-c": false };
