@@ -227,12 +227,14 @@ export async function run(options = {}) {
     return result;
   };
 
+  const needsConfirmation = (result) =>
+    result.kind === "application"
+      ? !result.action.startsWith("inbox ") &&
+        !result.steps.some((step) => step.startsWith("inbox "))
+      : isTransportFailure(result);
+
   const first = await invoke();
-  if (
-    first.ok || first.kind !== "application" ||
-    first.action.startsWith("inbox ") ||
-    first.steps.some((step) => step.startsWith("inbox "))
-  ) return first;
+  if (first.ok || !needsConfirmation(first)) return first;
 
   await (
     options.sleep ||
@@ -240,6 +242,12 @@ export async function run(options = {}) {
       new Promise((resolve) => setTimeout(resolve, milliseconds)))
   )(1_000);
   const confirmation = await invoke();
+  if (confirmation.ok) {
+    return {
+      ...confirmation,
+      detail: `passed confirmation retry after ${first.action}`,
+    };
+  }
   if (sameApplicationFailure(first, confirmation)) {
     return {
       ...confirmation,
@@ -247,18 +255,35 @@ export async function run(options = {}) {
       detail: `confirmed twice: ${confirmation.detail}`,
     };
   }
-  if (confirmation.ok) {
+  if (isTransportFailure(first) && isTransportFailure(confirmation)) {
     return {
       ...confirmation,
-      detail: `passed confirmation retry after ${first.action}`,
+      detail: `confirmed twice: ${confirmation.detail}`,
     };
   }
-  return {
-    ...confirmation,
-    kind: "unrunnable",
-    action: "confirm application failure",
-    detail: `first failure was ${first.action}; confirmation returned ${confirmation.action}`,
-  };
+  if (first.kind === "application") {
+    return {
+      ...confirmation,
+      kind: "unrunnable",
+      action: "confirm application failure",
+      detail: `first failure was ${first.action}; confirmation returned ${confirmation.action}`,
+    };
+  }
+  return first;
+}
+
+// One slow request is a blip, not a verdict: it used to fail the gate and file
+// an incident on its first occurrence (HTPR-8246). A transport failure now
+// needs the same second confirmation an application failure already needs.
+const TRANSPORT_FAILURE =
+  /aborted due to timeout|fetch failed|socket hang up|network|ECONNRESET|ETIMEDOUT/i;
+
+export function isTransportFailure(result) {
+  return (
+    result?.ok === false &&
+    result.kind === "unrunnable" &&
+    TRANSPORT_FAILURE.test(`${result.action} ${result.detail}`)
+  );
 }
 
 export function sameApplicationFailure(first, confirmation) {
