@@ -28,7 +28,7 @@ setup() {
   mkdir -p "$HOME" "$C/source/.claude/skills/ship/scripts" "$C/source/.claude/hooks" "$C/source/.claude/systemd" "$C/lib" "$C/units/agent-events.service.d"
   S=$C/source/.claude/skills/ship/scripts
   cp "$HERE/runner-pickup" "$HERE/runner-domain-pickup.py" "$HERE/runner_domains.py" "$HERE/user-unit-check" "$SCRIPT" "$S/"
-  for file in runner-chat-reply ship-identity; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$file"; done
+  for file in runner-chat-reply ship-identity ci-wait; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$file"; done
   printf '#!/usr/bin/env bash\nexit 0\n' > "$C/source/.claude/hooks/runner-inbox-stop.sh"
   for file in runner-webhook runner-dispatch; do printf '#!/usr/bin/env python3\nprint("fixture")\n' > "$S/$file"; done
   cat > "$S/runner-deliver" <<'EOF'

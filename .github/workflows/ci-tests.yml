@@ -143,6 +143,7 @@ jobs:
           python3 .claude/skills/ship/scripts/runner-dispatch.cache.test.py
           python3 .claude/skills/ship/scripts/runner-snapshot.test.py
           bash .claude/skills/ship/scripts/runner-selfupdate.test.sh
+          bash .claude/skills/ship/scripts/gh-notify.test.sh
 
       - name: Guard CI image sources
         run: node --test tests/ci-image-sources.test.cjs
