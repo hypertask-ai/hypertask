@@ -2118,8 +2118,12 @@ jobs:
     # HYCI-10: this comparison used to live in visual-regression.yml and build the
     # candidate a second time. It now reuses the build browser-smoke published, so a
     # screen change costs one build, not two. Advisory, like the workflow it replaces.
-    needs: [browser-smoke]
-    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.browser-smoke.outputs.docs_only != 'true' && needs.browser-smoke.result != 'cancelled' }}
+    # HYCI-77: it waited for the summary, so all four page shards (and the summary)
+    # ran before the comparison could start, and it finished last on most of the
+    # slowest pushes of the day. It needs only the one build and the scope answer
+    # that build already publishes, so it now runs alongside the shards.
+    needs: [browser-build]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.draft == false && needs.browser-build.result == 'success' && needs.browser-build.outputs.docs_only != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

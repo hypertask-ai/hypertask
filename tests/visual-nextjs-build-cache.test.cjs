@@ -71,7 +71,7 @@ test("the pull-request comparison reuses the one build instead of building the h
   const compare = load(".github/workflows/ci-tests.yml").jobs["visual-compare"];
   const runs = compare.steps.filter(step => typeof step.run === "string").map(step => step.run).join("\n");
   assert.doesNotMatch(runs, /next build/);
-  assert.deepEqual(compare.needs, ["browser-smoke"]);
+  assert.deepEqual(compare.needs, ["browser-build"]);
   assert.equal(compare.steps.find(step => step.name === "Download the one build").with.name, "app-build");
   assert.equal(compare.steps.find(step => step.name === "Give the head the one build").run,
     'mkdir -p "$RUNNER_TEMP/app-build/unpacked"\n' +

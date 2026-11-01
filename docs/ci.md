@@ -549,7 +549,7 @@ removed source file. Its self-check covers both outputs and fail-closed cases:
 ## Visual regression (informational v1)
 
 `Visual Regression` (`.github/workflows/visual-regression.yml`) reports `visual-regression` on production pushes and on manual runs, which accept `base` and `head` refs.
-Pull-request comparisons run as `visual-compare` in `.github/workflows/ci-tests.yml`, on non-draft production PRs touching screen or harness files (`.github/scripts/visual-change-scope.cjs` holds the list); HYCI-10 moved them there so the head reuses the one app build instead of building a second time.
+Pull-request comparisons run as `visual-compare` in `.github/workflows/ci-tests.yml`, on non-draft production PRs touching screen or harness files (`.github/scripts/visual-change-scope.cjs` holds the list); HYCI-10 moved them there so the head reuses the one app build instead of building a second time; HYCI-77 made it need only that build, so it runs alongside the four page shards instead of after their summary.
 Base always builds from its own checkout with a fresh disposable database and creates temporary expected PNGs; head compares against them.
 Each base build restores the production browser-smoke Next.js incremental cache using that checkout's lockfile/config hash and resolved commit, with the same compatible-hash fallback. Restore uses the producer's `.next/cache` archive path, then moves only that directory into the matching checkout before building. Visual runs never publish shared build caches; the `browser-smoke-desktop` half remains the only producer. A screenshot-cache hit skips the unused base restore, and production baseline-only runs skip the unused head restore. Cold misses still build and compare normally.
 The job summary reports five phase timings and one matching log line: base build, base seed+capture, head build, head seed+capture and compare. A pull-request comparison that reuses the shared build reports four phases and says so, because it never runs `next build` for the head. Build rows measure only `next build`; seed+capture includes setup, readiness and teardown. Head capture and comparison share one Playwright command, charged to compare. Partial failures retain elapsed timings and mark unreached phases explicitly.
@@ -1344,7 +1344,8 @@ The required ruleset context stays `browser-smoke`, a summary job with
 browser-smoke-flags]`. It is green only when all four shards are green, and a
 cancelled, failed or missing shard never reads as a pass. `contract` and
 `docs_only` still pass through from the desktop shard, so `mcp-cli-api-contract`
-and `visual-compare` keep their wiring. `tests/browser-smoke-workflow.test.cjs`
+keeps its wiring; `visual-compare` needs only the one build, so HYCI-77
+starts it beside the shards instead of after their summary. `tests/browser-smoke-workflow.test.cjs`
 still proves every spec/project pair runs exactly once and that no shard was left
 without work.
 
