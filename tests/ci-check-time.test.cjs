@@ -179,6 +179,8 @@ test('a commit whose runs are unfinished, cut off or unreadable is never called 
   const settled = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map());
   assert.equal(settled.greenPushes, 2);
   assert.equal(settled.unreadable, 1);
-  const pendingApp = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map(), { pending: new Set(['abc']) });
-  assert.equal(pendingApp.greenPushes, 1);
+  const excludedApp = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map(), { excluded: new Set(['abc']) });
+  assert.equal(excludedApp.greenPushes, 1);
+  const unreadableSha = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map());
+  assert.equal(unreadableSha.greenPushes, 2);
 });

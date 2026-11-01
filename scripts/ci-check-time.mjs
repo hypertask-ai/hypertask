@@ -100,7 +100,7 @@ export function percentile(values, share) {
 const RED = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
 const IDLE = new Set(['skipped', 'cancelled']);
 
-function pushToGreen(rows, pending = new Set()) {
+function pushToGreen(rows, excluded = new Set()) {
   const shas = new Map();
   for (const row of rows) {
     if (!row.sha) continue;
@@ -110,11 +110,14 @@ function pushToGreen(rows, pending = new Set()) {
   }
   const greens = [];
   for (const [sha, group] of shas) {
-    if (pending.has(sha)) continue;
+    if (excluded.has(sha)) continue;
+    if (group.some(row => row.unreadable)) continue;
     if (!group.some(row => row.conclusion === 'success')) continue;
     if (group.some(row => RED.has(row.conclusion))) continue;
-    const first = Math.min(...group.map(row => Date.parse(row.createdAt)));
-    const last = Math.max(...group.map(row => Date.parse(row.updatedAt)));
+    const scored = group.filter(row => !IDLE.has(row.conclusion));
+    if (!scored.length) continue;
+    const first = Math.min(...scored.map(row => Date.parse(row.createdAt)));
+    const last = Math.max(...scored.map(row => Date.parse(row.updatedAt)));
     greens.push((last - first) / 1000);
   }
   return greens;
@@ -136,9 +139,9 @@ function groups(entries, key, value) {
     .sort((left, right) => right.median - left.median);
 }
 
-export function summarize(app, allRows, jobsByRun = new Map(), { pending = new Set(), unreadable = 0 } = {}) {
+export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new Set() } = {}) {
   const rows = allRows.filter(row => row);
-  const measured = rows.filter(row => !IDLE.has(row.conclusion));
+  const measured = rows.filter(row => !IDLE.has(row.conclusion) && !row.unreadable);
   const jobEntries = [];
   const stepEntries = [];
   for (const row of measured) {
@@ -149,7 +152,7 @@ export function summarize(app, allRows, jobsByRun = new Map(), { pending = new S
       }
     }
   }
-  const greens = pushToGreen(rows, pending);
+  const greens = pushToGreen(rows, excluded);
   const completed = measured;
   const pick = field => completed.map(row => row[field]);
   return {
@@ -161,7 +164,7 @@ export function summarize(app, allRows, jobsByRun = new Map(), { pending = new S
     skipped: rows.filter(row => row && IDLE.has(row.conclusion)).length,
     greenPushes: greens.length,
     clipped: completed.filter(row => row.clipped).length,
-    unreadable: unreadable + rows.filter(row => row.unreadable).length,
+    unreadable: rows.filter(row => row.unreadable).length,
     pushToGreen: { median: median(greens), p90: percentile(greens, 0.9) },
     median: {
       waiting: median(pick('waiting')),
@@ -181,8 +184,8 @@ export function summarize(app, allRows, jobsByRun = new Map(), { pending = new S
 export function appFromFixture(entry) {
   const rows = entry.runs.map(run => decomposeRun(run, entry.jobs?.[String(run.id)] ?? [])).filter(Boolean);
   const jobsByRun = new Map(entry.runs.map(run => [run.id, entry.jobs?.[String(run.id)] ?? []]));
-  const pending = new Set(entry.runs.filter(run => run.status && run.status !== 'completed').map(run => run.head_sha));
-  return summarize(entry, rows, jobsByRun, { pending });
+  const excluded = new Set(entry.runs.filter(run => run.status && run.status !== 'completed').map(run => run.head_sha));
+  return summarize(entry, rows, jobsByRun, { excluded });
 }
 
 function fetchJson(repo, path) {
@@ -215,26 +218,34 @@ async function pool(tasks, width = 8) {
 
 export async function collectApp(app, { limit, gh = fetchJson }) {
   const all = [];
-  for (let page = 1; all.length < limit + 1; page++) {
+  for (let page = 1; ; page++) {
     const payload = await gh(app.repo, `/actions/runs?per_page=100&page=${page}`);
     const batch = payload.workflow_runs ?? [];
     all.push(...batch);
-    if (batch.length < 100) break;
+    if (batch.length < 100 || all.filter(run => run.status === 'completed').length > limit) break;
   }
   const completed = all.filter(run => run.status === 'completed');
   const kept = completed.slice(0, limit);
-  const cut = completed.slice(limit);
+  const excluded = new Set([
+    ...all.filter(run => run.status !== 'completed').map(run => run.head_sha),
+    ...completed.slice(limit).map(run => run.head_sha),
+  ].filter(Boolean));
+  const shas = [...new Set(kept.map(run => run.head_sha).filter(Boolean))];
+  const coverage = await pool(shas.map(sha => () => gh(app.repo, `/actions/runs?head_sha=${sha}&per_page=100`)
+    .then(payload => payload.workflow_runs ?? []).catch(() => null)));
+  shas.forEach((sha, index) => {
+    const runs = coverage[index];
+    if (!runs || runs.some(run => run.status !== 'completed') || runs.some(run => RED.has(run.conclusion))) excluded.add(sha);
+  });
   const fetched = await pool(kept.map(run => () => gh(app.repo, `/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`)
     .then(payload => ({ jobs: payload.jobs ?? [] })).catch(() => ({ jobs: null }))));
   const jobsByRun = new Map(kept.map((run, index) => [run.id, fetched[index].jobs ?? []]));
   const rows = kept.map((run, index) => fetched[index].jobs === null
     ? { id: run.id, sha: run.head_sha ?? '', unreadable: true, conclusion: run.conclusion ?? '' }
     : decomposeRun(run, fetched[index].jobs)).filter(Boolean);
-  const pending = new Set([...all.filter(run => run.status !== 'completed').map(run => run.head_sha),
-    ...cut.map(run => run.head_sha)].filter(Boolean));
   const newest = all[0]?.head_sha;
-  if (newest) pending.add(newest);
-  return { app, rows, jobsByRun, pending };
+  if (newest) excluded.add(newest);
+  return { app, rows, jobsByRun, excluded };
 }
 
 export function fmt(value) {
@@ -359,8 +370,8 @@ export async function main(args = process.argv.slice(2)) {
     summaries.push(...(payload.apps ?? []).map(appFromFixture));
   } else {
     for (const app of apps) {
-      const { rows, jobsByRun, pending } = await collectApp(app, { limit: options.limit });
-      summaries.push(summarize(app, rows, jobsByRun, { pending }));
+      const { rows, jobsByRun, excluded } = await collectApp(app, { limit: options.limit });
+      summaries.push(summarize(app, rows, jobsByRun, { excluded }));
     }
   }
   const command = `node scripts/ci-check-time.mjs --limit ${options.limit}${options.repos ? ` --repos ${options.repos}` : ''} --out ci-check-time.html`;
