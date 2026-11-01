@@ -57,6 +57,23 @@ const read = (file) => {
   try { return readStableRegularFile(file, { root: state }); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
 };
+// Never let --approve authorize a CHECK added by another ledger author.
+// Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for other repos.
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
+const gateId = /^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/;
+const generated = (gate) => {
+  const match = gate.id.match(gateId);
+  if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-'))) return false;
+  return generatedCheck.test(gate.check ?? '') &&
+    gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) &&
+    gate.expect === gates[match[2]][1];
+};
+const repoOf = (gate) => (gate.check.startsWith('SHIP_REPO=') ? gate.check.split(' ')[0].replace('SHIP_REPO=', '') : APP_REPO);
+// The repository settings a generated gate carries. A handover in the same directory changes them
+// without changing the CWD, and a gate that keeps the old ones checks a checkout nobody uses.
+const prefixPattern = /^(SHIP_REPO=[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='\/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?/;
+const prefixOf = (gate) => prefixPattern.exec(gate.check ?? '')[0];
 // This ticket's gate blocks from one ledger file, split into what moves and what stays.
 // A moved block drops the old result: its check now runs from this ledger and checkout.
 const splitTicketGates = (source, ticket, cwd, accept) => {
@@ -70,16 +87,18 @@ const splitTicketGates = (source, ticket, cwd, accept) => {
   }
   const moved = [];
   const kept = [];
+  let owner = null;
   for (let i = 0; i < lines.length; i += 1) {
-    if (!held.has(i)) { kept.push(lines[i]); continue; }
+    if (!held.has(i)) { kept.push(lines[i]); owner = null; continue; }
+    // The CHECK and CWD lines belong to the gate above them, so the settings come from its header.
+    if (byLine.has(i)) owner = byLine.get(i);
     const line = lines[i];
-    const gate = byLine.get(i);
     if (/^- \[[ xX]\] /.test(line)) moved.push(line.replace(/^- \[[ xX]\] /, '- [ ] '));
     else if (/^ {2}CWD: /.test(line)) moved.push(`  CWD: ${cwd}`);
     // A moved gate runs here, so it keeps this session's repository settings: the old checkout or
     // base branch it was written for may not exist any more.
-    else if (/^ {2}CHECK: /.test(line) && gate && generated(gate)) {
-      moved.push(`  CHECK: ${envPrefix}${line.slice('  CHECK: '.length + prefixOf(gate).length)}`);
+    else if (/^ {2}CHECK: /.test(line) && owner && generated(owner)) {
+      moved.push(`  CHECK: ${envPrefix}${line.slice('  CHECK: '.length + prefixOf(owner).length)}`);
     } else if (/^ {2}EVIDENCE: /.test(line)) moved.push('  EVIDENCE: pending');
     else moved.push(line);
   }
@@ -139,23 +158,6 @@ const apply = async () => {
   }
   let doc = parseGates(text, { requireGates: !!text });
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
-  // Never let --approve authorize a CHECK added by another ledger author.
-  // Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for other repos.
-  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
-  const gateId = /^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/;
-  const generated = (gate) => {
-    const match = gate.id.match(gateId);
-    if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-'))) return false;
-    return generatedCheck.test(gate.check ?? '') &&
-      gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) &&
-      gate.expect === gates[match[2]][1];
-  };
-  const repoOf = (gate) => (gate.check.startsWith('SHIP_REPO=') ? gate.check.split(' ')[0].replace('SHIP_REPO=', '') : APP_REPO);
-  // The repository settings a generated gate carries. A handover in the same directory changes them
-  // without changing the CWD, and a gate that keeps the old ones checks a checkout nobody uses.
-  const prefixPattern = /^(SHIP_REPO=[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='\/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?/;
-  const prefixOf = (gate) => prefixPattern.exec(gate.check ?? '')[0];
   // A ledger written before this change sits inside the project, where a session that is already
   // mid-ticket would lose its gates. Adopt this ticket's gates from every old session folder, then
   // delete what is left: the project must stay clean, and a copied file can still leak.
@@ -262,6 +264,13 @@ const apply = async () => {
   // re-approved by accident.
   const strays = doc.gates.filter((gate) => generated(gate) && (gate.cwd !== root || prefixOf(gate) !== envPrefix));
   const strayWhere = (gate) => (gate.cwd !== root ? `from ${gate.cwd}` : `for ${prefixOf(gate).trim() || 'the app repository'}`);
+  // The ticket folder outlives the sessions that fill it, and a handover from another repository
+  // changes the settings too: name that repository before asking for a move it cannot perform.
+  for (const gate of strays) {
+    if (repoOf(gate) !== currentRepo) {
+      throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
+    }
+  }
   if (strays.length && process.env.SHIP_LEDGER_MOVE !== '1') {
     throw new Error(`ship-gates: ${ticket} ledger was written ${strayWhere(strays[0])}; re-run with SHIP_LEDGER_MOVE=1 to run its gates ${strays[0].cwd !== root ? `in ${root}` : "with this session's repository settings"}`);
   }
@@ -269,9 +278,6 @@ const apply = async () => {
     const rewritten = new Map();
     for (const gate of strays) {
       const [, gateTicket, name] = gate.id.match(gateId);
-      if (repoOf(gate) !== currentRepo) {
-        throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
-      }
       rewritten.set(gate.id, `  CHECK: ${envPrefix}${quote(check)} ${name} ${gateTicket}`);
     }
     const lines = text.split('\n');
