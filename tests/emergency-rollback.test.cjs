@@ -18,6 +18,8 @@ const rollback = (sha, parent = PARENT) => ({
   message: `Revert ${sha.slice(0, 7)}: production smoke failed (auto-rollback)\n\nAuto-Rollback-Of: ${sha}`,
 });
 
+const triggerOption = (opts) => (opts.ambientTrigger ? {} : { eventName: opts.eventName ?? "schedule" });
+
 async function run(overrides = {}, opts = {}) {
   const calls = [];
   const replies = {
@@ -47,12 +49,12 @@ async function run(overrides = {}, opts = {}) {
   const result = await emergencyRollback(X, opts.vercelToken ?? "vercel-token", fetchImpl, async () => {}, {
     repo: opts.repo ?? "hypertask-ai/hypertask", githubToken: opts.githubToken ?? "github-token",
     runUrl: opts.runUrl ?? "https://github.com/hypertask-ai/hypertask/actions/runs/123",
-    eventName: opts.eventName ?? "schedule",
+    ...triggerOption(opts),
   });
   const retried = opts.repeatSha ? await emergencyRollback(opts.repeatSha, "vercel-token", fetchImpl, async () => {}, {
     repo: "hypertask-ai/hypertask", githubToken: "github-token",
     runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/124",
-    eventName: opts.eventName ?? "schedule",
+    ...triggerOption(opts),
   }) : undefined;
   return { result, calls, retried };
 }
@@ -296,6 +298,33 @@ test("a hand-started nightly still rolls back when the tool is told its own trig
   }
 });
 
+test("the command line never rolls back a hand start, even with its trigger unset", async () => {
+  const before = process.env.GITHUB_EVENT_NAME;
+  process.env.GITHUB_EVENT_NAME = "workflow_dispatch";
+  try {
+    const { result, calls } = await run({}, { ambientTrigger: true });
+    assert.equal(result.action, "skip");
+    assert.equal(result.reason, "manual runs never roll back");
+    assert.equal(result.freeze, false);
+    assert.deepEqual(calls, []);
+  } finally {
+    if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
+    else process.env.GITHUB_EVENT_NAME = before;
+  }
+});
+
+test("the command line rolls back a scheduled run when its trigger is unset", async () => {
+  const before = process.env.GITHUB_EVENT_NAME;
+  process.env.GITHUB_EVENT_NAME = "schedule";
+  try {
+    const { result } = await run({}, { ambientTrigger: true });
+    assert.equal(result.action, "requested");
+    assert.equal(result.revert.status, "created");
+  } finally {
+    if (before === undefined) delete process.env.GITHUB_EVENT_NAME;
+    else process.env.GITHUB_EVENT_NAME = before;
+  }
+});
 
 test("an existing freeze stops all GitHub and Vercel mutations", async () => {
   const { result, calls } = await run({ [`GET ${gh}/actions/variables/MERGE_FREEZE`]: [{ value: "incident run" }] });
