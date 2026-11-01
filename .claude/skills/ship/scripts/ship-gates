@@ -127,7 +127,7 @@ const legacyTicketGates = () => {
       const gate = doc.gates.find((candidate) => candidate.id === block.id);
       if (!gate || isGenerated(gate) || seen.has(gate.id)) continue;
       seen.add(gate.id);
-      found.push({ id: block.id, text: block.text, file, extra, digest: digest(gate) });
+      found.push({ id: block.id, text: block.text, file, digest: digest(gate) });
     }
   };
   for (const folder of folders) {
@@ -139,6 +139,14 @@ const legacyTicketGates = () => {
       .map((entry) => entry.name).sort()) scan(join(base, 'gates', name), true);
   }
   return found;
+};
+// A gate taken over from a project folder is a command another session wrote, so it never enters
+// the ledger ship-gates approves: it lands in the extra file a person reviews.
+const carriedGates = (file) => {
+  const source = read(file);
+  if (!source.trim()) return [];
+  const carriedDoc = parseGates(source, { requireGates: false });
+  return carriedDoc.errors.length ? [] : carriedDoc.gates;
 };
 await withFileLock(state, ledger, () => {
   const folder = dirname(ledger);
@@ -179,23 +187,34 @@ await withFileLock(state, ledger, () => {
   }
   const carried = text ? [] : legacyTicketGates();
   if (carried.length && process.env.SHIP_LEDGER_ADOPT !== '1') {
-    throw new Error(`ship-gates: ${carried.map((gate) => gate.id).join(', ')} in ${carried[0].file} are not in ${ledger}; run with SHIP_LEDGER_ADOPT=1 to carry them over, or finish them there`);
+    throw new Error(`ship-gates: ${carried.map((gate) => gate.id).join(', ')} in ${carried[0].file} are not carried beside ${ledger}; run with SHIP_LEDGER_ADOPT=1 to copy them into ${extrasFile}, where a person reviews them`);
   }
   const doc = parseGates(text, { requireGates: !!text });
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
   for (const gate of doc.gates) {
-    if (adopted.has(gate.id)) {
-      if (adopted.get(gate.id) !== digest(gate)) {
-        throw new Error(`ship-gates: ${gate.id} no longer matches the definition that was adopted; restore it, or write the new one in ${extrasFile} and review it there`);
-      }
-      continue;
-    }
     if (isGenerated(gate)) {
       if (gate.cwd !== root) throw new Error(`ship-gates: ${ticket} ledger holds gates written in ${gate.cwd}; run ship-gates there, or with SHIP_LEDGER_MOVE=1 to move them here and earn them again`);
       continue;
     }
     if (!gate.check) continue;
-    throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
+    throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in ${extrasFile} and review them separately`);
+  }
+  // A carried gate keeps the checkout it was written in. Once that checkout is gone the gate can
+  // no longer run, and re-pointing it silently would approve a command nobody reviewed again.
+  const carriedNow = carriedGates(extrasFile);
+  const staleCarried = carriedNow.filter((gate) => adopted.has(gate.id) && gate.cwd && gate.cwd !== root);
+  if (staleCarried.length) {
+    throw new Error(`ship-gates: carried ${staleCarried.map((gate) => gate.id).join(', ')} still runs in ${staleCarried[0].cwd}; remove it from ${extrasFile} and its line in ${adoptedFile}, then write the replacement and have it reviewed there`);
+  }
+  // A carried gate is trusted only while it still says exactly what was carried: an id alone would
+  // let a later CHECK edit ride on the earlier review.
+  const carriedById = new Map(carriedNow.map((gate) => [gate.id, gate]));
+  for (const [id, sha] of adopted) {
+    const gate = carriedById.get(id);
+    if (!gate) throw new Error(`ship-gates: carried ${id} is no longer in ${extrasFile}; write it back, or drop its line in ${adoptedFile} too`);
+    if (digest(gate) !== sha) {
+      throw new Error(`ship-gates: ${id} no longer matches the definition that was adopted; restore it, or remove its line in ${adoptedFile} and review the new one in ${extrasFile}`);
+    }
   }
   if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
   for (const [name, [title, expect]] of Object.entries(gates)) {
@@ -204,22 +223,19 @@ await withFileLock(state, ledger, () => {
     if (doc.gates.some((gate) => gate.id === id)) continue;
     text += `\n- [ ] ${id}: ${title}\n  CHECK: ${envPrefix}${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
   }
-  for (const gate of carried) if (!gate.extra) text += `\n${gate.text}\n`;
   if (carried.length) {
-    // A separately reviewed check belongs beside the ledger, where ship-check reads extra gates.
-    const extras = carried.filter((gate) => gate.extra);
-    if (extras.length) {
-      mkdirSync(dirname(extrasFile), { recursive: true });
-      let extraText = read(extrasFile);
-      const have = new Set(gateBlocks(extraText).map((block) => block.id));
-      const add = extras.filter((gate) => !have.has(gate.id));
-      if (add.length) {
-        if (!extraText.trim()) extraText = '# Extra gates carried out of the project\n';
-        for (const gate of add) extraText += `\n${gate.text}\n`;
-        writeAtomic(extrasFile, extraText, { root: state });
-      }
+    // Every carried check belongs beside the ledger, in the extra file ship-check reads and a
+    // person approves, so the automatic approval below only ever covers generated gates.
+    mkdirSync(dirname(extrasFile), { recursive: true });
+    let extraText = read(extrasFile);
+    const have = new Set(gateBlocks(extraText).map((block) => block.id));
+    const add = carried.filter((gate) => !have.has(gate.id));
+    if (add.length) {
+      if (!extraText.trim()) extraText = '# Extra gates carried out of the project\n';
+      for (const gate of add) extraText += `\n${gate.text}\n`;
+      writeAtomic(extrasFile, extraText, { root: state });
     }
-    process.stderr.write(`ship-gates: carried ${carried.map((gate) => gate.id).join(', ')} over from ${carried[0].file}\n`);
+    process.stderr.write(`ship-gates: carried ${carried.map((gate) => gate.id).join(', ')} over from ${carried[0].file} into ${extrasFile}\n`);
     const next = new Map(adopted);
     for (const gate of carried) next.set(gate.id, gate.digest);
     writeAtomic(adoptedFile, [...next].map(([id, sha]) => `${id} ${sha}`).sort().join('\n') + '\n', { root: state });

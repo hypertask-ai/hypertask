@@ -128,6 +128,13 @@ before=$(activity); RUNNER_PICKUP_MAX_AGE_DAYS=100000 "$SCRIPT" run 3 2>/dev/nul
 eq "delivered item is not requeued or announced" "$(activity)" "$before"
 jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 eq "prompt mode adds context instead of blocking" "$(hook 'RUNNER 3' "$pl" prompt | jq -r .hookSpecificOutput.hookEventName)" "UserPromptSubmit"
+# A ledger's session file holds the full session id: another session sharing eight characters is not it.
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+printf 'abcdef123456-longer\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+out=$(hook 'RUNNER 3' '{"session_id":"abcdef12","cwd":"'$T'/work"}')
+eq "a ledger of another session sharing the prefix does not hold the runner" "$(jq -r .decision <<<"$out")" "block"
+printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
 
 # Weekly pickup pause also holds tickets already queued before the threshold was crossed.
 status=$HOME/.local/state/token-ladder/status.json

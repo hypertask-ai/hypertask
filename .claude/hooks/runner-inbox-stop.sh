@@ -182,7 +182,7 @@ ticket_ok() {
   cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
   local ledgers=("${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md")
   for dir in "${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers"/*; do
-    [ -f "$dir/session" ] && grep -q "^${sid:0:8}" "$dir/session" 2>/dev/null || continue
+    [ -f "$dir/session" ] && grep -qxF -- "$sid" "$dir/session" 2>/dev/null || continue
     ledgers+=("$dir/GATES.md")
   done
   for ledger in "${ledgers[@]}"; do
