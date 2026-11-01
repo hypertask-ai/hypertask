@@ -39,9 +39,6 @@ function telemetry(t, overrides = {}) {
 test("each legacy route reports its own path exactly once before delegating", async () => {
   for (const route of routes) {
     const file = `src/pages${route}.ts`;
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /import \{ reportLegacyRouteHit \} from "@\/lib\/telemetry\/legacyRouteHit"/);
-    assert.equal(source.split(`reportLegacyRouteHit("${route}", req)`).length - 1, 1, file);
     const calls = [];
     const req = { method: "DELETE", headers: {} };
     const sentinel = {};

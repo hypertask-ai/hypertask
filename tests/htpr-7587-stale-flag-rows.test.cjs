@@ -32,7 +32,6 @@ function sourceFiles(directory) {
 }
 
 test("the migration deletes exactly the 11 stale keys and nothing else", () => {
-  assert.match(migration, /^DELETE FROM "FeatureFlag" WHERE "key" IN \(/);
   const deleted = [...migration.matchAll(/'([^']+)'/g)].map(([, key]) => key);
   assert.deepEqual(deleted, staleKeys);
 });

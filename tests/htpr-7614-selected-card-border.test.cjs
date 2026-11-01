@@ -116,9 +116,13 @@ test("selection compiles to an important one-pixel border-box outline, independe
   for (const name of added) {
     assert.ok(!/rounded|border-l-(?:\d|\[\d)|[wh]-|p[trblxy]?-/.test(name), "no selection layout or radius change");
   }
-  const bootstrap = fs.readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8");
-  assert.match(bootstrap, /\.shadow-sm\s*\{[^}]*box-shadow:[^}]*!important/s,
-    "phone shadows replace ring box-shadows, but cannot replace an outline");
+  const bootstrap = postcss.parse(fs.readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8"));
+  const shadowSm = [];
+  bootstrap.walkDecls("box-shadow", decl => {
+    if (decl.parent.selector === ".shadow-sm") shadowSm.push(decl);
+  });
+  assert.equal(shadowSm.length, 1, "phone shadows replace ring box-shadows, but cannot replace an outline");
+  assert.ok(shadowSm[0].important);
   for (const theme of ["porcelain", "graphite", "amoled", "dia", "rounded"]) {
     const sheet = postcss.parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), "utf8"));
     sheet.walkDecls(/^outline(?:-|$)/, decl => {
@@ -127,11 +131,19 @@ test("selection compiles to an important one-pixel border-box outline, independe
       }
     });
   }
-  const rounded = fs.readFileSync(path.join(root, "src/styles/tailwindThemes/rounded.css"), "utf8");
-  assert.match(rounded, /\.kanban-task-card\s*\{[^}]*border-radius:\s*var\(--m3-m\)/s);
-  assert.match(rounded, /box-shadow:\s*none/);
-  const dia = fs.readFileSync(path.join(root, "src/styles/tailwindThemes/dia.css"), "utf8");
-  assert.match(dia, /\.kanban-task-card\s*\{[^}]*border-radius:\s*10px;[^}]*box-shadow:/s);
+  const cardRules = theme => {
+    const rules = [];
+    postcss.parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), "utf8"))
+      .walkRules(".kanban-task-card", rule => rules.push(rule));
+    assert.equal(rules.length, 1, `${theme} must style the kanban card once`);
+    return rules[0];
+  };
+  const rounded = cardRules("rounded");
+  assert.equal(rounded.nodes.find(node => node.prop === "border-radius").value, "var(--m3-m)");
+  assert.equal(rounded.nodes.find(node => node.prop === "box-shadow").value, "none");
+  const dia = cardRules("dia");
+  assert.equal(dia.nodes.find(node => node.prop === "border-radius").value, "10px");
+  assert.ok(dia.nodes.some(node => node.prop === "box-shadow"));
 });
 
 test("the discovered flag is a small default-Everyone bugfix", () => {
