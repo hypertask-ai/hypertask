@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { decide, apply, plan, resume, recover, sweep, readPending, PENDING_LIMIT } = require('../.github/scripts/ci-stuck-jobs.cjs');
+const { decide, apply, plan, resume, recover, sweep, chain, sweepInFlight, readPending, STUCK_MINUTES, PENDING_LIMIT } = require('../.github/scripts/ci-stuck-jobs.cjs');
 
 const now = Date.parse('2026-11-01T09:00:00Z');
 const step = (name, finished) => ({ name, conclusion: 'success', completed_at: finished });
@@ -481,4 +481,65 @@ test('a cancel with no answer is reported until it leaves the recovery window', 
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'report', reason: 'the cancel outcome is unknown', keep: true }]);
   assert.deepEqual(outcome.pending, [{ ...uncertain, tries: 2 }]);
   assert.deepEqual(written.at(-1), [{ ...uncertain, tries: 2 }]);
+});
+
+test('the rule is three minutes and both sides of it are pinned', () => {
+  const at = (iso) => job('test-shard (1)', 'in_progress', [step('Test shard', iso)]);
+  assert.equal(STUCK_MINUTES, 3);
+  assert.equal(decide(stuckRun, [at('2026-11-01T08:58:00Z')], { now }), null);
+  assert.equal(decide(stuckRun, [at('2026-11-01T08:57:01Z')], { now }), null);
+  const decision = decide(stuckRun, [at('2026-11-01T08:56:00Z')], { now });
+  assert.equal(decision.action, 'cancel');
+  assert.equal(decision.stuck[0].idle, 240);
+});
+
+test('a sweep waits and then dispatches the next one', async () => {
+  const calls = [];
+  let waited = 0;
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    if (path.includes('/workflows/stuck-job-recovery.yml/runs')) return { workflow_runs: [{ id: 5, status: 'completed' }] };
+    return {};
+  };
+  const outcome = await chain('o/r', { api, waitMs: 180000, ownRunId: '5', sleep: async (ms) => { waited += ms; } });
+  assert.deepEqual(outcome, { dispatched: true, ref: 'production' });
+  assert.equal(waited, 180000);
+  assert.deepEqual(calls, [
+    'GET /repos/o/r/actions/workflows/stuck-job-recovery.yml/runs?per_page=30',
+    'POST /repos/o/r/actions/workflows/stuck-job-recovery.yml/dispatches',
+  ]);
+});
+
+test('a sweep never starts a second chain while a link is still running', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    return { workflow_runs: [{ id: 9, status: 'in_progress' }, { id: 5, status: 'completed' }] };
+  };
+  const outcome = await chain('o/r', { api, ownRunId: '5', sleep: async () => {} });
+  assert.deepEqual(outcome, { dispatched: false, reason: 'another sweep is already in_progress' });
+  assert.equal(calls.filter(call => call.startsWith('POST')).length, 0);
+});
+
+test('a sweep gives way to a link that is already on its way', async () => {
+  const queued = await sweepInFlight('o/r', { api: async () => ({ workflow_runs: [{ id: 4, status: 'queued' }] }), ownRunId: '5' });
+  assert.deepEqual(queued, { id: 4, status: 'queued' });
+  const own = await sweepInFlight('o/r', { api: async () => ({ workflow_runs: [{ id: 5, status: 'in_progress' }] }), ownRunId: '5' });
+  assert.equal(own, null);
+});
+
+test('a chain that cannot read the run list dispatches nothing', async () => {
+  const outcome = await chain('o/r', { api: async () => { throw new Error('gh api failed: HTTP 500'); }, ownRunId: '5', sleep: async () => {} });
+  assert.equal(outcome.dispatched, false);
+  assert.match(outcome.reason, /run list could not be read/);
+});
+
+test('a chain whose dispatch fails says so instead of claiming a tick', async () => {
+  const api = async (path, method = 'GET') => {
+    if (method === 'POST') throw new Error('gh api failed: HTTP 422');
+    return { workflow_runs: [] };
+  };
+  const outcome = await chain('o/r', { api, ownRunId: '5', sleep: async () => {} });
+  assert.equal(outcome.dispatched, false);
+  assert.match(outcome.reason, /not dispatched/);
 });

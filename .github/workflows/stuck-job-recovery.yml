@@ -6,11 +6,21 @@ name: Stuck Job Recovery
 # recorded completed_at 3601-3604 s later, which made one push 68.0 minutes for
 # 8.0 minutes of work. Nothing inside the job can un-stick it, so this workflow
 # caps the wait: a pull-request run whose finished job has taken no step for
-# eight minutes is cancelled, and once that cancellation settles the same sweep
+# three minutes is cancelled, and once that cancellation settles the same sweep
 # re-runs its failed jobs so a second attempt reports on a fresh runner. Only a
 # run this sweep cancelled may be re-run, and a run holding a real failure is
 # never touched. Production push runs are reported in the job summary and never
 # cancelled, because a push run verifies a deploy.
+#
+# HYCI-71. A cron is not a tick on a repository this busy. In the 87 hours from
+# 2026-10-29T00:00Z GitHub delivered 17 of the 349 scheduled runs
+# feature-flag-gate asks for, 16 of 87 for the hourly ux-signoff-gate, and 33 of
+# about 1049 for prod-health's five-minute crons, so this ten-minute sweep was a
+# sweep every few hours and the three-minute rule almost never got to fire. Each
+# sweep now waits three minutes and dispatches the next one, and the schedule
+# only restarts a chain that died. One chain link is always either sweeping or
+# waiting, which costs one of the twenty parallel jobs and only free hosted
+# minutes, because this repository is public.
 on:
   schedule:
     - cron: '*/10 * * * *'
@@ -28,7 +38,10 @@ jobs:
   recover:
     name: stuck-job-recovery
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # The sweep itself finishes in about a minute; the rest is the three-minute
+    # wait before the next link is dispatched, so a link that overruns the chain
+    # wait is still a chain link and not a lost tick.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -45,9 +58,9 @@ jobs:
       # (prod-health.yml). Without it the store cannot be read, and a sweep with no
       # store cancels nothing: a cancelled run nobody can finish is worse than a
       # slow one.
-      - name: Cancel or re-run stuck runs
+      - name: Cancel or re-run stuck runs, then start the next sweep
         env:
           GH_TOKEN: ${{ github.token }}
           STORE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           REPO: ${{ github.repository }}
-        run: node .github/scripts/ci-stuck-jobs.cjs --apply
+        run: node .github/scripts/ci-stuck-jobs.cjs --apply --chain

@@ -20,10 +20,20 @@
 // touched: a production push run verifies a deploy and is reported, never
 // cancelled. Only runs touched in the last RECENT_MINUTES and first attempts
 // are read at all, so an old run costs no request.
+//
+// HYCI-71: capping the wait is worth nothing if the sweep is not there to do it.
+// GitHub drops most scheduled triggers on a repository this busy: in the 87
+// hours from 2026-10-29T00:00Z it delivered 17 of the 349 runs
+// feature-flag-gate asks for on a 15-minute cron, 16 of 87 for the hourly
+// ux-signoff-gate, and 33 of about 1049 for prod-health's five-minute crons. A
+// ten-minute sweep is therefore a sweep every few hours, and a job whose last
+// step is older than RECENT_MINUTES is not read at all, so the cap almost never
+// fired. Each sweep now waits CHAIN_WAIT_MS and dispatches the next one, which
+// is a real tick; a scheduled or pushed run only restarts a chain that died.
 const { execFile } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 
-const STUCK_MINUTES = 8;
+const STUCK_MINUTES = 3;
 const RECENT_MINUTES = 30;
 const SETTLE_ATTEMPTS = 12;
 const SETTLE_DELAY_MS = 5000;
@@ -40,6 +50,9 @@ const PENDING_VARIABLE = 'STUCK_RECOVERY_PENDING';
 const PENDING_LIMIT = 20;
 const RECOVERY_ATTEMPTS = 3;
 const PENDING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const WORKFLOW_FILE = 'stuck-job-recovery.yml';
+const CHAIN_REF = 'production';
+const CHAIN_WAIT_MS = 3 * 60 * 1000;
 const SETTLE_FAILED = 'cancel did not settle';
 const RERUN_FAILED = 're-run request failed';
 const JOBS_UNAVAILABLE = 'job list unavailable after the cancel';
@@ -480,6 +493,42 @@ async function sweep(repo, { now = Date.now(), read = null, discover = null, sav
   return { decisions, unread, discovery, stored, recovery };
 }
 
+// The sweep a scheduled or pushed run should not duplicate: a chain link is
+// already on its way, and it sweeps within CHAIN_WAIT_MS. Its own run is never
+// counted, because a link is still running when the sweep it dispatched starts.
+async function sweepInFlight(repo, { api = json, ownRunId = null } = {}) {
+  const payload = await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=30`);
+  const live = (payload.workflow_runs ?? []).filter(run => run.status === 'in_progress' || run.status === 'queued');
+  return live.find(run => String(run.id) !== String(ownRunId)) ?? null;
+}
+
+// A real tick. The scheduled trigger is a backstop that fires every few hours,
+// so the sweep that just ran starts the next one after CHAIN_WAIT_MS and the
+// chain keeps ticking until a run fails, the repository has no runner, or a
+// production push restarts it. Waiting here rather than dispatching at once keeps
+// one chain link per tick: the dispatch is skipped when another link is still
+// running, so a backstop that lands on a live chain never starts a second one.
+async function chain(repo, { api = json, waitMs = CHAIN_WAIT_MS, ownRunId = process.env.GITHUB_RUN_ID, ref = CHAIN_REF, sleep = wait } = {}) {
+  await sleep(waitMs);
+  let busy;
+  try {
+    busy = await sweepInFlight(repo, { api, ownRunId });
+  } catch (error) {
+    return { dispatched: false, reason: `the run list could not be read: ${String(error.message).slice(0, 80)}` };
+  }
+  if (busy) return { dispatched: false, reason: `another sweep is already ${busy.status}` };
+  try {
+    await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`, 'POST', { ref });
+    return { dispatched: true, ref };
+  } catch (error) {
+    return { dispatched: false, reason: `the next sweep was not dispatched: ${String(error.message).slice(0, 80)}` };
+  }
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const repo = argValue(argv, '--repo') ?? process.env.REPO ?? process.env.GITHUB_REPOSITORY;
@@ -490,14 +539,27 @@ async function main() {
     now: Date.parse(argValue(argv, '--now')) || Date.now(),
   };
   const live = applyChanges && !fixture;
+  const chaining = argv.includes('--chain');
   let decisions = [];
   let unread = [];
   let discovery = null;
   let stored = { ok: true, pending: [] };
   let recovery = { done: [], pending: [], saved: true };
-  if (live) {
+  // A scheduled or pushed run only exists to restart a chain that died, so it
+  // gives way to a link that is already running instead of sweeping twice.
+  const backstop = ['schedule', 'push'].includes(process.env.GITHUB_EVENT_NAME ?? '');
+  let skipped = null;
+  if (live && backstop) {
+    try {
+      const busy = await sweepInFlight(repo, { ownRunId: process.env.GITHUB_RUN_ID });
+      if (busy) skipped = `run ${busy.id} is already ${busy.status}`;
+    } catch {
+      skipped = null;
+    }
+  }
+  if (live && !skipped) {
     ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now: options.now }));
-  } else {
+  } else if (!skipped) {
     try {
       ({ decisions, unread } = fixture
         ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
@@ -540,6 +602,14 @@ async function main() {
     const names = decision.stuck.map(entry => entry.name).join(', ');
     console.log(`::notice::${decision.workflow} run ${decision.runId} ${decision.action}: ${names}`);
   }
+  if (skipped) {
+    console.log(`::notice::this sweep stood down: ${skipped} and sweeps again within ${Math.round(CHAIN_WAIT_MS / 60000)} minutes.`);
+    return;
+  }
+  if (!chaining) return;
+  const next = await chain(repo, { waitMs: Number(argValue(argv, '--chain-wait-ms') ?? CHAIN_WAIT_MS) });
+  if (next.dispatched) console.log(`::notice::the next sweep is dispatched on ${next.ref}.`);
+  else console.log(`::warning::the chain stopped: ${next.reason}. The next scheduled or production push run restarts it.`);
 }
 
 function argValue(argv, flag) {
@@ -547,7 +617,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, chain, sweepInFlight, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, CHAIN_WAIT_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {
