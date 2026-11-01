@@ -230,10 +230,11 @@ test('stale title rechecks cannot invalidate a newer result', async () => {
 });
 
 
-test('one group per pull request cancels the older evaluation instead of racing it', async () => {
+test('one group per pull request serializes the evaluation instead of racing it', async () => {
   assert.ok(!workflow.concurrency.group.includes('github.run_id'));
   assert.match(workflow.concurrency.group, /github\.event\.pull_request\.number/);
-  assert.equal(workflow.concurrency['cancel-in-progress'], true);
+  assert.equal(workflow.concurrency.queue, 'max');
+  assert.equal(workflow.concurrency['cancel-in-progress'], false);
   const superseded = await run({ event: { title: 'Older event title' }, current: { title: 'Newer title' } });
   assert.deepEqual(superseded.posts, []);
 });

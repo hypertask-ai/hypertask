@@ -39,7 +39,8 @@ test('trusted publication combines outside and title guards without exposing can
   assert.deepEqual(Object.keys(w.jobs), ['pr-guards-trusted', 'bind-ticket']);
   assert.deepEqual(Object.keys(w.on), ['pull_request_target', 'workflow_dispatch']);
   assert.equal(w.concurrency.group, 'pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}');
-  assert.equal(w.concurrency['cancel-in-progress'], true);
+  assert.equal(w.concurrency.queue, 'max');
+  assert.equal(w.concurrency['cancel-in-progress'], false);
   const steps = w.jobs['pr-guards-trusted'].steps;
   assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'runner-policy']);
   const checkout = steps.find(step => step.uses?.startsWith('actions/checkout@'));

@@ -16,10 +16,13 @@ permissions:
   statuses: write
 
 concurrency:
-  # One run per pull request: a newer event cancels the older run before it can
-  # publish a status from labels it read earlier.
+  # One run at a time per pull request, and no cancellation. A cancelled
+  # evaluation leaves the required pr-title status unresolved, and a rerun of an
+  # older event cancels the current one (HYCI-29). `queue: max` keeps a slot for
+  # every pending event, so the newest event always publishes its own result.
   group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
-  cancel-in-progress: true
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   pr-guards-trusted:

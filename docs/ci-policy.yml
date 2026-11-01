@@ -383,6 +383,8 @@ policies:
   concurrency:
     cancel_superseded_pull_request_runs: true
     trusted_guard_event_isolation: pull_request_number
+    trusted_guard_cancel_in_progress: false
+    trusted_guard_pending_events: queue_max
     serialized_pull_request_guard_writes: true
     cancel_production_push_runs: false
     app_smoke_production_cache_cancel_superseded: true

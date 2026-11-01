@@ -19,10 +19,13 @@ operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.
 No required ruleset context changes.
 
-Trusted guard concurrency is one run per pull request, so a newer event cancels
-an older evaluation before it can publish. A label read by the older run can
-never reach a status after the newer event blocked or cleared it. Reruns cancel
-and re-evaluate the same pull request.
+Trusted guard concurrency is one run at a time per pull request, and it no longer
+cancels. A cancelled evaluation leaves the required `pr-title` status
+unresolved, and a rerun of an older event cancels the current evaluation, so the
+group keeps `queue: max` and lets every pending event run in order. A label read
+by an older run still cannot reach a status after a newer event changed it: the
+publisher rereads the head, title and labels before every write, and the newest
+event always publishes last.
 
 `node tests/guard-quota.test.cjs` executes the saved production scripts and
 candidate workflow entry points with isolated GitHub responses. For a small,

@@ -134,7 +134,8 @@ test("workflow has safe triggers, permissions, concurrency and a pinned metadata
   assert.equal(inputs.simulate_fork.default, false);
   assert.deepEqual(workflow.permissions, { "pull-requests": "write", contents: "read", statuses: "write" });
   assert.match(workflow.concurrency.group, /github\.event\.pull_request\.number/);
-  assert.equal(workflow.concurrency["cancel-in-progress"], true);
+  assert.equal(workflow.concurrency.queue, "max");
+  assert.equal(workflow.concurrency["cancel-in-progress"], false);
   const job = workflow.jobs["pr-guards-trusted"];
   assert.equal(job["runs-on"], "ubuntu-latest");
   const step = job.steps.find(step => step.id === "outside");

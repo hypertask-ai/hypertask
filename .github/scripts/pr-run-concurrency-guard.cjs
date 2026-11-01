@@ -3,16 +3,16 @@
 // older run, or the extra jobs sit in the queue behind the newest push
 // (YPER4-663: 108 queued jobs, oldest wait 2.5 h).
 //
-// Two gates are excluded on purpose: they run trusted production code on one
-// shared line, and a cancelled run leaves their required status unresolved
-// (YPER4-707). They keep `queue: max` instead, so a newer event never drops an
-// older pending run.
+// Gates that publish a required status are excluded on purpose: a cancelled run
+// leaves that status unresolved. They keep `queue: max` instead, so a newer
+// event never drops an older pending run.
 const { readdirSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 
 const EXCEPTIONS = new Map([
   ['feature-flag-gate', 'shared production line with queue: max; cancelling leaves the required gate status unresolved (YPER4-707)'],
   ['ux-signoff-gate', 'shared production line with queue: max; cancelling leaves the signoff status unresolved (YPER4-707)'],
+  ['pr-guards-trusted', 'publishes the required pr-title status with queue: max; a cancelled evaluation leaves it pending (HYCI-29)'],
 ]);
 
 const PUSH_EVENTS = ['pull_request', 'pull_request_target'];

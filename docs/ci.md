@@ -47,7 +47,7 @@ Small guards share scanner work and trusted metadata:
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. PR runs and fleet sweeps share the non-cancelling `feature-flag-gate-production` group, so an old sweep cannot overwrite a newer PR verdict. The shared group uses `queue: max`, preserving up to 100 pending runs instead of replacing the previous pending PR event. GitHub cancels new arrivals beyond that documented limit; scheduled sweeps recover missed events. See [GitHub concurrency syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency). The single-PR path still lists open heads to reject shared commits, but never reads or posts unrelated verdicts. Policy changes and closed/shared-head recovery reach other PRs at the next scheduled sweep; GitHub scheduling can delay that sweep. `ux-signoff-gate.yml` retains all PR, scheduled and manual reconciliation under the global non-cancelling `ux-signoff-gate` group, which also uses `queue: max`, so a burst of PR events no longer cancels the waiting run (before this, 109 of 400 runs were cancelled). Its hourly schedule is a backstop only: GitHub ran it about every four hours at `*/10`, and the hourly `required-check-settings.yml` shows the same four to six hour gaps, so no cron line shortens the wait. Reactions are reread on each PR event. Their original semantic statuses and flag fingerprints are unchanged.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
-- Push secret scans and manual outside-PR dry runs keep their workflows. Only per-PR guards cancel superseded runs; Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
+- Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR test and smoke guards cancel superseded runs, but the trusted guard no longer cancels: it publishes a required status, so it serializes per pull request with `queue: max` (HYCI-29). Dependabot major-ticket side effects and the shared auto-merge sweeper stay non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
 
 Static gates inside `ci-checks` share one job and run as concurrent lanes (HYCI-8):
 agent board scope, TypeScript, Oxlint, ESLint, the lint overlap guard, board
@@ -809,10 +809,13 @@ operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.
 No required ruleset context changes.
 
-Trusted guard concurrency is one run per pull request, so a newer event cancels
-an older evaluation before it can publish. A label read by the older run can
-never reach a status after the newer event blocked or cleared it. Reruns cancel
-and re-evaluate the same pull request.
+Trusted guard concurrency is one run at a time per pull request, and it no longer
+cancels. A cancelled evaluation leaves the required `pr-title` status
+unresolved, and a rerun of an older event cancels the current evaluation, so the
+group keeps `queue: max` and lets every pending event run in order. A label read
+by an older run still cannot reach a status after a newer event changed it: the
+publisher rereads the head, title and labels before every write, and the newest
+event always publishes last.
 
 `node tests/guard-quota.test.cjs` executes the saved production scripts and
 candidate workflow entry points with isolated GitHub responses. For a small,
