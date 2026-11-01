@@ -47,10 +47,14 @@ test("every CI service and command-line consumer uses a pinned GHCR copy with re
       < ci.steps.findIndex((step) => step.name === "Test shard"),
     "the registry login runs before the tests that need it",
   );
-  const nightly = workflow("coverage-nightly").jobs["coverage-nightly"];
+  const nightly = workflow("coverage-nightly").jobs["coverage-lane"];
   assert.equal(nightly.env.HTPR_PG_IMAGE, ci.env.HTPR_PG_IMAGE);
-  assertLoginBefore(nightly, "Pull PostgreSQL test image");
-  assertLoginBefore(nightly, "Test with coverage collection");
+  assertLoginBefore(nightly, "Pull PostgreSQL test image", "steps.pg.outputs.containers == '1'");
+  assert.ok(
+    nightly.steps.findIndex((step) => step.uses?.startsWith("docker/login-action@"))
+      < nightly.steps.findIndex((step) => step.name === "Test lane with coverage collection"),
+    "the registry login runs before the tests that need it",
+  );
   const guard = workflow("ci-tests").jobs["ci-prepare"].steps.find((step) => step.name === "Guard CI image sources");
   assert.equal(guard.run, "node --test tests/ci-image-sources.test.cjs");
   assert.equal(guard.if, undefined, "guard must run even for workflow-only PRs");

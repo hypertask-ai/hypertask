@@ -12,12 +12,67 @@ concurrency:
 
 permissions: {}
 
+# HYCI-53: one job could no longer finish the suite inside its hour. The nightly
+# of 2026-10-30 was green at 42m53s with 41m18s of it inside a single `npm test`
+# step, and the two runs after it were cut off by the 60-minute cap. The full
+# suite is the same file set CI Tests already runs as parallel lanes, so the
+# nightly plans lanes from the measured duration weights and runs them side by
+# side on free hosted runners. Coverage is collected per lane and merged before
+# reporting, so the baseline still covers every file exactly once.
+env:
+  COVERAGE_POOL_LANES: "4"
+  COVERAGE_SERIAL_LANES: "1"
+
 jobs:
-  coverage-nightly:
-    name: coverage-nightly
+  coverage-plan:
+    name: coverage-plan
     if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      lanes: ${{ steps.lanes.outputs.indexes }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Write coverage lanes
+        id: lanes
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/coverage-lanes"
+          LANES=$((COVERAGE_POOL_LANES + COVERAGE_SERIAL_LANES))
+          node .github/scripts/shard-tests.mjs --discover --count "$LANES" --serial-lanes "$COVERAGE_SERIAL_LANES" --out "$OUT"
+          node .github/scripts/shard-tests.mjs --check --serial-lanes "$COVERAGE_SERIAL_LANES" --out "$OUT"
+          indexes=$(node -e 'const n=Number(process.argv[1]); if (!Number.isInteger(n)||n<1) process.exit(1); process.stdout.write(JSON.stringify([...Array(n).keys()].map(String)))' "$LANES")
+          echo "indexes=${indexes}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage lanes
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-lanes
+          path: ${{ runner.temp }}/coverage-lanes
+          retention-days: 7
+
+  coverage-lane:
+    name: coverage-lane
+    needs: coverage-plan
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        lane: ${{ fromJSON(needs.coverage-plan.outputs.lanes || '["0"]') }}
     permissions:
       contents: read
       packages: read
@@ -56,7 +111,19 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Download coverage lanes
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: coverage-lanes
+          path: coverage-lanes
+
+      - name: Decide lane container fixtures
+        id: pg
+        shell: bash
+        run: node .github/scripts/shard-containers.mjs "coverage-lanes/shard-${{ matrix.lane }}.txt" >> "$GITHUB_OUTPUT"
+
       - name: Authenticate CI image pulls
+        if: steps.pg.outputs.containers == '1'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
@@ -64,18 +131,128 @@ jobs:
           password: ${{ github.token }}
 
       - name: Pull PostgreSQL test image
+        if: steps.pg.outputs.need == '1'
         run: docker pull "$HTPR_PG_IMAGE"
 
-      - name: Test with coverage collection
+      - name: Test lane with coverage collection
+        id: lane-test
+        shell: bash
         env:
+          LANE: ${{ matrix.lane }}
           NODE_V8_COVERAGE: coverage/raw
           HT_REQUIRE_PG_TESTS: "1"
-          # A nightly tests one committed SHA for up to an hour. Production's
-          # allowlist can shrink meanwhile (HYCI-2 batches), which turned these
-          # tests red on a tree that was green when it merged (HYCI-30). Compare
-          # against the commit this run landed on instead of a moving branch.
+          # A nightly tests one committed SHA. Production's allowlist can shrink
+          # meanwhile (HYCI-2 batches), which turned these tests red on a tree that
+          # was green when it merged (HYCI-30). Compare against the commit this run
+          # landed on instead of a moving branch.
           SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.sha }}^
-        run: npm test
+        run: |
+          set -euo pipefail
+          LIST="coverage-lanes/shard-${LANE}.txt"
+          mkdir -p "$RUNNER_TEMP/coverage-lane-upload"
+          cp "$LIST" "$RUNNER_TEMP/coverage-lane-upload/shard-${LANE}.txt"
+          mapfile -t FILES < "$LIST"
+          echo "lane ${LANE} files=${#FILES[@]}"
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "shard ${LANE} empty" | tee "$RUNNER_TEMP/coverage-lane-upload/shard-${LANE}.log"
+            exit 0
+          fi
+          npm test -- "${FILES[@]}" 2>&1 | tee "$RUNNER_TEMP/coverage-lane-upload/shard-${LANE}.log"
+
+      - name: Pack lane coverage
+        if: always() && steps.lane-test.outcome != 'skipped'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/coverage-lane-upload/coverage"
+          if [ -d coverage/raw ]; then
+            tar -czf "$RUNNER_TEMP/coverage-lane-upload/coverage/raw.tgz" -C coverage raw
+          fi
+
+      - name: Collect test durations
+        if: always() && steps.lane-test.outcome != 'skipped'
+        run: |
+          mkdir -p "$RUNNER_TEMP/coverage-lane-upload"
+          if [ -f test-durations.json ]; then
+            cp test-durations.json "$RUNNER_TEMP/coverage-lane-upload/test-durations.json"
+          fi
+
+      - name: Upload lane result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-lane-${{ matrix.lane }}
+          path: ${{ runner.temp }}/coverage-lane-upload
+          if-no-files-found: warn
+          retention-days: 30
+
+  coverage-nightly:
+    name: coverage-nightly
+    needs: [coverage-plan, coverage-lane]
+    if: always() && github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Download coverage lanes
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: coverage-lanes
+          path: coverage-lanes
+
+      - name: Download lane results
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          pattern: coverage-lane-*
+          path: coverage-results
+
+      - name: Merge lane coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p coverage/raw
+          dirs=()
+          for archive in coverage-results/*/coverage/raw.tgz; do
+            [ -f "$archive" ] || continue
+            lane=$(basename "$(dirname "$(dirname "$archive")")")
+            mkdir -p "$RUNNER_TEMP/unpacked/$lane"
+            tar -xzf "$archive" -C "$RUNNER_TEMP/unpacked/$lane"
+            dirs+=("$RUNNER_TEMP/unpacked/$lane/raw")
+          done
+          if [ "${#dirs[@]}" -eq 0 ]; then
+            echo "no lane coverage to merge; the baseline stays empty and this run is red on the lane result"
+            exit 0
+          fi
+          node .github/scripts/merge-coverage-raw.mjs coverage/raw "${dirs[@]}"
 
       - name: Build report-only coverage baseline
         continue-on-error: true
@@ -92,3 +269,12 @@ jobs:
             coverage/critical-domains.md
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Prove every test file ran once
+        run: node .github/scripts/shard-tests.mjs --prove --serial-lanes "$COVERAGE_SERIAL_LANES" --out coverage-lanes --results coverage-results
+
+      - name: Fail when a lane failed
+        if: needs.coverage-lane.result != 'success'
+        run: |
+          echo "::error::a coverage lane did not pass (coverage-lane: ${{ needs.coverage-lane.result }})"
+          exit 1

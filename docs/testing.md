@@ -75,7 +75,7 @@ Name tests after the behavior or regression they protect. Ticket numbers may app
 
 ## Coverage baseline
 
-The non-required `Coverage Nightly` workflow collects native V8 coverage from the full suite on `production` at 02:17 UTC daily, or via a production-only manual dispatch. PR and production-push CI Tests runs still check correctness but do not collect coverage. Download the baseline from Coverage Nightly, which publishes `automated-test-coverage-<commit>` for 30 days with:
+The non-required `Coverage Nightly` workflow collects native V8 coverage from the full suite on `production` at 02:17 UTC daily, or via a production-only manual dispatch. It plans five lanes from the measured duration weights (four pool lanes and one serial lane), runs each lane on its own hosted runner, proves every test file ran once, and merges the lane coverage dumps into one `coverage/raw` before reporting. PR and production-push CI Tests runs still check correctness but do not collect coverage. Download the baseline from Coverage Nightly, which publishes `automated-test-coverage-<commit>` for 30 days with:
 
 - Istanbul's machine-readable `coverage-summary.json`;
 - `critical-domains.json` for automation;
