@@ -428,3 +428,29 @@ test('adopting a legacy ledger re-points its gates at this session repository se
     fs.rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('an extras-only legacy file from another repository is refused and left in place', needsUnlazy, () => {
+  const f = fixture();
+  const cli = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/cli' };
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', cli);
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
+    const legacy = path.join(f.project, '.unlazy/s-sessionA/gates');
+    fs.mkdirSync(legacy, { recursive: true });
+    const source = path.join(legacy, 'extra.md');
+    fs.writeFileSync(source, fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
+    fs.rmSync(home, { recursive: true, force: true });
+
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: f.project,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full' },
+    });
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /ledger belongs to hypertask-ai\/cli, not hypertask-ai\/hypertask/);
+    assert.equal(fs.existsSync(source), true);
+    assert.equal(fs.existsSync(path.join(home, 'gates/extra.md')), false);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
