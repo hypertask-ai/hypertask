@@ -136,7 +136,7 @@ function ticketText(context, counts, enforcing) {
     ? `Over 400 hand-written lines, sent to fail: ${counts.sent.length}.${named(context, counts.sent)}`
     : `Over 400 hand-written lines, would fail: ${counts.sent.length}.${named(context, counts.sent)}`;
   const rows = [
-    `Agent changes checked: ${counts.agentChanges}.`,
+    `Open agent changes: ${counts.agentChanges}.`,
     overCap,
     `Allowed by ${policy.exceptionLabel} and a human reason: ${counts.allowed.length}.${named(context, counts.allowed)}`,
     `Under the cap, still passing: ${counts.withinCap}.`,

@@ -132,7 +132,7 @@ test('an over-cap agent change goes back to the guard and the rest are left alon
   const big = agentPull(1, { additions: 500, changed_files: 1 });
   const small = agentPull(2, { additions: 200, changed_files: 1 });
   const human = pull(3, { login: 'valentinyeo', type: 'User' }, { additions: 900, changed_files: 1 });
-  const dependabot = pull(4, { login: 'app/dependabot', type: 'Bot' }, { additions: 700, changed_files: 1 });
+  const dependabot = pull(4, { login: 'dependabot[bot]', type: 'Bot' }, { additions: 700, changed_files: 1 });
   const { posts, requests } = await run({
     pulls: [big, small, human, dependabot],
     files: { 1: [file('src/a.ts', 500)], 2: [file('src/b.ts', 200)] },
@@ -143,7 +143,7 @@ test('an over-cap agent change goes back to the guard and the rest are left alon
     ['DELETE', `/repos/hypertask-ai/hypertask/issues/1/labels/${LABEL}`],
   ]);
   assert.deepEqual(posts.map(post => post.body.ticket_number), ['HYCI-51']);
-  assert.match(posts[0].body.text, /Agent changes checked: 2\./);
+  assert.match(posts[0].body.text, /Open agent changes: 2\./);
   assert.match(posts[0].body.text, /sent to fail: 1\. <a href="https:\/\/github.com\/hypertask-ai\/hypertask\/pull\/1">#1<\/a>/);
   assert.match(posts[0].body.text, /Under the cap, still passing: 1\./);
   assert.doesNotMatch(posts[0].body.text, /pr-title/);
@@ -210,7 +210,7 @@ test('a dispatch before blocking starts reports what would fail and asks nothing
 test('the ticket text carries the counts, the links and the day', () => {
   const text = sweep.ticketText(context, { agentChanges: 8, sent: [1, 2, 3], allowed: [4], withinCap: 4, unavailable: [] }, true);
   assert.match(text, /Day one: big agent changes go back to the size check\./);
-  assert.match(text, /Agent changes checked: 8\./);
+  assert.match(text, /Open agent changes: 8\./);
   assert.match(text, /Allowed by size-ok and a human reason: 1\./);
   assert.match(sweep.ticketText(context, { agentChanges: 0, sent: [], allowed: [], withinCap: 0, unavailable: [] }, false), /would fail: 0/);
 });
