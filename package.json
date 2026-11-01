@@ -48,7 +48,7 @@
     "@aws-sdk/client-s3": "^3.1156.0",
     "@aws-sdk/s3-request-presigner": "^3.1156.0",
     "@better-auth/api-key": "1.6.33",
-    "@better-auth/infra": "^0.4.20",
+    "@better-auth/infra": "^0.4.22",
     "@better-auth/passkey": "~1.6.33",
     "@dicebear/bottts-neutral": "9.4.3",
     "@dicebear/core": "9.4.3",
