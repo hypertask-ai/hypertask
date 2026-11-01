@@ -112,6 +112,17 @@ two is the summary, which becomes ready only after both halves finish.
 - The job reads no pull request on days before the window closes.
 - Existing required check contexts stay unchanged.
 
+## Day-one sweep (HYCI-51)
+
+- The block decides on a pull request event, so a big change opened before blocking kept its pass.
+- `pr-size-day-one.yml` runs daily and by `workflow_dispatch` on `production`, measures every open agent change through the same `pr-size.cjs` rule, and fails the ones over the cap.
+- A scheduled run before `blockFrom` reads no pull request; the first run after it sweeps, and a later one finds its own success and does nothing.
+- A dispatch run always sweeps, so a rehearsal reports what would fail and writes no status.
+- A blocked change gets the required `pr-title` failure on its head, and a change allowed by `size-ok` and a human reason is left alone.
+- It publishes with the guard's own freshness rule: only an unchanged head, state and label set lets the measurement fail the change.
+- A change that cannot be measured is named on the ticket, never counted as passing.
+- The counts go to HYCI-51 once, keyed on `blockFrom`, with its own key for a rehearsal.
+
 ## Review gate
 
 - The private `valentinyeo/hypertask-reviewer` workflow fails over subscription-first between its configured backends (currently the ChatGPT/Codex subscription and the Claude Code subscription); the reviewer repository owns the provider order, models, and failover details, so they are not duplicated here.

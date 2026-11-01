@@ -7,6 +7,10 @@
     "endsAt": "2026-11-07T22:54:58Z",
     "ticket": "HYCI-29"
   },
+  "dayOne": {
+    "ticket": "HYCI-51",
+    "triggerLabel": "size-recheck"
+  },
   "excludedFiles": ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Cargo.lock"],
   "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/"],
   "excludedSuffixes": [".snap", ".generated.ts", ".generated.tsx"]

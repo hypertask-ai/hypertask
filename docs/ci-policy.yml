@@ -139,6 +139,24 @@ pr_size_observation:
   no_reads_before_window_close: true
   fail_closed_on: [missing_board_token, unreadable_pull_requests, post_error]
 
+pr_size_day_one:
+  ticket: https://app.hypertask.ai/detail/project-11514/51
+  workflow: .github/workflows/pr-size-day-one.yml
+  script: .github/scripts/pr-size-day-one.cjs
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  cron_utc: "20 0 * * *"
+  trusted_code_ref: production
+  runs_on: ubuntu-latest
+  post_target: hypertask_ticket_comment
+  post_count: 1
+  idempotency_key: block_from
+  sweeps: open_agent_pull_requests
+  publishes: pr-title
+  no_reads_before_block_from: true
+  rehearsal_writes_no_status: true
+  fail_closed_on: [missing_board_token, missing_day_one_ticket, post_error]
+
 required_check_settings_monitor:
   ticket: https://app.hypertask.ai/detail/project-4060/780
   workflow: .github/workflows/required-check-settings.yml

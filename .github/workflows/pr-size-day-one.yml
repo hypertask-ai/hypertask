@@ -1,0 +1,53 @@
+name: PR Size Day One
+
+# HYCI-51: the size block only decides on a pull request event, so a change
+# opened before blocking started kept its pass. The sweep measures every open
+# agent change once and asks the trusted guard to look again; the guard stays
+# the only publisher of the required pr-title verdict.
+
+on:
+  schedule:
+    - cron: "20 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: pr-size-day-one
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+  # Comments only: the size comment matches the guard's. No statuses scope, so
+  # this workflow cannot publish a verdict even by mistake.
+  pull-requests: write
+
+jobs:
+  sweep:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Mint the label token the guard triggers need
+        id: trigger-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          # A github.token label write starts no workflow run, so the guard would
+          # never look again. The app token is what makes the label an event.
+          app-id: ${{ secrets.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          permission-issues: write
+          permission-pull-requests: read
+      - name: Measure every open agent change once
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          DAY_ONE_TOKEN: ${{ steps.trigger-token.outputs.token }}
+        with:
+          script: |
+            await require('./.github/scripts/pr-size-day-one.cjs')({ github, context, core });
