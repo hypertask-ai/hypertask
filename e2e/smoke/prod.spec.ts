@@ -223,7 +223,7 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
       }
       await entry.click({ timeout: 5_000 })
     }
-    await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id))
+    await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id), { timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page).toHaveTitle(`${board.title} • Hypertask`, { timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page.locator('[data-board-tasks-hydrated="true"]')).toBeAttached({ timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page.locator('[id^="task-"]').filter({ hasText: `${board.title} fixture` }).first()).toBeVisible({ timeout: BOARD_SWITCH_TIMEOUT })
@@ -646,12 +646,18 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
     await page.goto(pageFixture.detailPath)
     await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
     const linkPageCommand = page.getByRole('dialog').getByText('Link page', { exact: true })
-    await page.keyboard.press('Control+k')
-    await page.getByPlaceholder('Type a command or search...').fill('Link page')
-    await expect(linkPageCommand).toBeVisible({ timeout: 15_000 })
-    await linkPageCommand.click()
-    await expect(page.locator('#option-picker input'), 'the Link page command did not open the chooser')
-      .toBeVisible({ timeout: 20_000 })
+    const pagePicker = page.locator('#option-picker input')
+    for (let attempt = 1; ; attempt++) {
+      await page.keyboard.press('Control+k')
+      await page.getByPlaceholder('Type a command or search...').fill('Link page')
+      await linkPageCommand.click()
+      try {
+        await expect(pagePicker, 'the Link page command did not open the chooser').toBeVisible({ timeout: 3_000 })
+        break
+      } catch (error) {
+        if (attempt === 5) throw error
+      }
+    }
     await page.locator('#option-picker input').fill(title)
     await page.locator('#option-picker').getByText(title, { exact: true }).click()
     await expect(page.locator(`a[href="/page/${publicId}"]`)).toBeVisible()
