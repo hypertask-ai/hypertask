@@ -1,0 +1,385 @@
+{
+  "apps": [
+    {
+      "name": "hypertask",
+      "label": "Hypertask",
+      "repo": "hypertask-ai/hypertask",
+      "factory": "Hypertask",
+      "runs": [
+        {
+          "id": 101,
+          "name": "ci-tests",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "aaa",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T10:00:00Z",
+          "run_started_at": "2026-10-31T10:00:20Z",
+          "updated_at": "2026-10-31T10:03:50Z"
+        },
+        {
+          "id": 102,
+          "name": "browser-smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "aaa",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T10:00:05Z",
+          "run_started_at": "2026-10-31T10:00:30Z",
+          "updated_at": "2026-10-31T10:05:30Z"
+        },
+        {
+          "id": 103,
+          "name": "ci-tests",
+          "status": "completed",
+          "conclusion": "failure",
+          "head_sha": "bbb",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T10:10:00Z",
+          "run_started_at": "2026-10-31T10:10:10Z",
+          "updated_at": "2026-10-31T10:11:30Z"
+        },
+        {
+          "id": 104,
+          "name": "app-smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ccc",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T10:20:00Z",
+          "run_started_at": "2026-10-31T10:20:10Z",
+          "updated_at": "2026-10-31T10:22:30Z"
+        },
+        {
+          "id": 105,
+          "name": "app-smoke",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ccc",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T10:20:05Z",
+          "run_started_at": "2026-10-31T10:20:15Z",
+          "updated_at": "2026-10-31T10:25:30Z"
+        }
+      ],
+      "jobs": {
+        "101": [
+          {
+            "id": 101695,
+            "name": "ci-tests",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:00:20Z",
+            "completed_at": "2026-10-31T10:03:40Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:20Z",
+                "completed_at": "2026-10-31T10:00:25Z"
+              },
+              {
+                "name": "Run actions/setup-node@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:25Z",
+                "completed_at": "2026-10-31T10:00:55Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:55Z",
+                "completed_at": "2026-10-31T10:01:55Z"
+              },
+              {
+                "name": "Run npm test",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:01:55Z",
+                "completed_at": "2026-10-31T10:03:40Z"
+              }
+            ]
+          },
+          {
+            "id": 177046,
+            "name": "lint",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:00:20Z",
+            "completed_at": "2026-10-31T10:01:50Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:20Z",
+                "completed_at": "2026-10-31T10:00:25Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:25Z",
+                "completed_at": "2026-10-31T10:01:25Z"
+              },
+              {
+                "name": "Run npm run lint",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:01:25Z",
+                "completed_at": "2026-10-31T10:01:50Z"
+              }
+            ]
+          }
+        ],
+        "102": [
+          {
+            "id": 196526,
+            "name": "browser-smoke",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:00:30Z",
+            "completed_at": "2026-10-31T10:05:30Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:30Z",
+                "completed_at": "2026-10-31T10:00:35Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:00:35Z",
+                "completed_at": "2026-10-31T10:01:15Z"
+              },
+              {
+                "name": "Run npx playwright test",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:01:15Z",
+                "completed_at": "2026-10-31T10:05:00Z"
+              },
+              {
+                "name": "Run actions/upload-artifact@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:05:00Z",
+                "completed_at": "2026-10-31T10:05:30Z"
+              }
+            ]
+          }
+        ],
+        "103": [
+          {
+            "id": 139042,
+            "name": "ci-tests",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:10:10Z",
+            "completed_at": "2026-10-31T10:11:10Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:10:10Z",
+                "completed_at": "2026-10-31T10:10:15Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:10:15Z",
+                "completed_at": "2026-10-31T10:11:10Z"
+              }
+            ]
+          },
+          {
+            "id": 121123,
+            "name": "lint",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:10:10Z",
+            "completed_at": "2026-10-31T10:11:30Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:10:10Z",
+                "completed_at": "2026-10-31T10:10:15Z"
+              },
+              {
+                "name": "Run npm run lint",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:10:15Z",
+                "completed_at": "2026-10-31T10:11:30Z"
+              }
+            ]
+          }
+        ],
+        "104": [
+          {
+            "id": 159761,
+            "name": "app-smoke",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:20:10Z",
+            "completed_at": "2026-10-31T10:22:10Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:10Z",
+                "completed_at": "2026-10-31T10:20:15Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:15Z",
+                "completed_at": "2026-10-31T10:20:55Z"
+              },
+              {
+                "name": "Run node scripts/check-app-performance-budget.mjs",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:55Z",
+                "completed_at": "2026-10-31T10:22:10Z"
+              }
+            ]
+          }
+        ],
+        "105": [
+          {
+            "id": 148854,
+            "name": "app-smoke",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:20:15Z",
+            "completed_at": "2026-10-31T10:22:13Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:15Z",
+                "completed_at": "2026-10-31T10:20:20Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:20Z",
+                "completed_at": "2026-10-31T10:21:00Z"
+              },
+              {
+                "name": "Run node scripts/check-app-performance-budget.mjs",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:21:00Z",
+                "completed_at": "2026-10-31T10:22:13Z"
+              }
+            ]
+          },
+          {
+            "id": 109871,
+            "name": "browser-smoke",
+            "conclusion": "success",
+            "started_at": "2026-10-31T10:20:20Z",
+            "completed_at": "2026-10-31T10:25:30Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:20Z",
+                "completed_at": "2026-10-31T10:20:25Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:20:25Z",
+                "completed_at": "2026-10-31T10:21:05Z"
+              },
+              {
+                "name": "Run npx playwright test",
+                "conclusion": "success",
+                "started_at": "2026-10-31T10:21:05Z",
+                "completed_at": "2026-10-31T10:25:30Z"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "postbox",
+      "label": "Postbox",
+      "repo": "valentinyeo/postbox",
+      "factory": "Software Factory",
+      "runs": [
+        {
+          "id": 201,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "ddd",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T11:00:00Z",
+          "run_started_at": "2026-10-31T11:00:30Z",
+          "updated_at": "2026-10-31T11:04:35Z"
+        },
+        {
+          "id": 202,
+          "name": "ci",
+          "status": "completed",
+          "conclusion": "success",
+          "head_sha": "eee",
+          "run_attempt": 1,
+          "created_at": "2026-10-31T11:30:00Z",
+          "run_started_at": "2026-10-31T11:30:10Z",
+          "updated_at": "2026-10-31T11:32:10Z"
+        }
+      ],
+      "jobs": {
+        "201": [
+          {
+            "id": 198351,
+            "name": "ci",
+            "conclusion": "success",
+            "started_at": "2026-10-31T11:00:30Z",
+            "completed_at": "2026-10-31T11:04:30Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T11:00:30Z",
+                "completed_at": "2026-10-31T11:00:35Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T11:00:35Z",
+                "completed_at": "2026-10-31T11:01:20Z"
+              },
+              {
+                "name": "Run npm test",
+                "conclusion": "success",
+                "started_at": "2026-10-31T11:01:20Z",
+                "completed_at": "2026-10-31T11:04:30Z"
+              }
+            ]
+          }
+        ],
+        "202": [
+          {
+            "id": 144997,
+            "name": "ci",
+            "conclusion": "success",
+            "started_at": "2026-10-31T11:30:10Z",
+            "completed_at": "2026-10-31T11:32:10Z",
+            "steps": [
+              {
+                "name": "Run actions/checkout@v4",
+                "conclusion": "success",
+                "started_at": "2026-10-31T11:30:10Z",
+                "completed_at": "2026-10-31T11:30:15Z"
+              },
+              {
+                "name": "Run npm ci",
+                "conclusion": "success",
+                "started_at": "2026-10-31T11:30:15Z",
+                "completed_at": "2026-10-31T11:31:00Z"
+              },
+              {
+                "name": "Run npm test",
+                "conclusion": "success",
+                "started_at": "2026-10-31T11:31:00Z",
+                "completed_at": "2026-10-31T11:32:10Z"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
