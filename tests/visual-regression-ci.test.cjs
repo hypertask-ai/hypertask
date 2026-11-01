@@ -5,7 +5,7 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
+function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false, webpackBase = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
   const filename = path.join(__dirname, "../scripts/visual-regression-ci.mjs");
   const code = readFileSync(filename, "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, "").replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
   const calls = [];
@@ -34,6 +34,9 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
     appendFile: async (file, text) => files.set(file, (files.get(file) ?? "") + text),
     readFileSync: file => JSON.stringify({ packages: { "node_modules/@playwright/test": { version: lockVersions[path.basename(path.dirname(file))] } } }),
     readFile: async file => {
+      if (file.endsWith("next.config.js")) {
+        return webpackBase && path.basename(path.dirname(file)) === "base" ? "webpack(config) {}" : "const nextConfig = {};";
+      }
       if (file.endsWith(".png")) {
         const png = Buffer.alloc(24);
         Buffer.from("89504e470d0a1a0a", "hex").copy(png);
@@ -109,6 +112,15 @@ test("five timing rows cover the entire unchanged paired lifecycle and match the
   assert.match(summary, /Build rows time only `next build`/);
   assert.match(summary, /captures and compares head screenshots in one command/);
   assert.deepEqual(run.logs, ["Visual Regression timings: base build=60.0 s; base seed+capture=25.9 s; head build=120.0 s; head seed+capture=11.8 s; compare=16.1 s; total=233.8 s"]);
+});
+
+test("an older baseline keeps webpack while the migrated head builds with Turbopack", async () => {
+  const run = fixture({ webpackBase: true });
+  await run.main();
+  assert.deepEqual(run.calls.filter(call => call.includes(": npx next build")), [
+    "base: npx next build --webpack",
+    "head: npx next build",
+  ]);
 });
 
 test("a failed base build still reports elapsed work, distinguishes unreached phases, and remains a failure", async () => {
