@@ -229,6 +229,8 @@ test("a single-commit tree resolves to its own ceiling instead of throwing", (t)
 
 test("a tree with no ancestry settles on the base commit its event pinned", (t) => {
   const repo = branchFixture(t);
+  fs.writeFileSync(join(repo.dir, "one-commit.txt"), "one\n");
+  repo.commit("a one-commit-deep checkout");
   const pinned = "9f2c1d8e4b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d";
   const shallow = (args) => {
     if (args[0] === "merge-base") throw new Error("fatal: no merge base in a one-commit checkout");
