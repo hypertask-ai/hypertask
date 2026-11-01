@@ -482,7 +482,7 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.equal(aggregate.outputs.contract, "${{ needs.browser-smoke-desktop.outputs.contract }}");
   assert.equal(aggregate.outputs.docs_only, "${{ needs.browser-smoke-desktop.outputs.docs_only }}");
   assert.equal(workflow.jobs["mcp-cli-api-contract"].needs, "browser-smoke");
-  assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-smoke"]);
+  assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-build"]);
 
   const step = aggregate.steps[0];
   const env = ["BUILD", "DESKTOP", "MOBILE", "MATRIX", "FLAGS"];

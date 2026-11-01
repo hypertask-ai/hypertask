@@ -1344,7 +1344,8 @@ The required ruleset context stays `browser-smoke`, a summary job with
 browser-smoke-flags]`. It is green only when all four shards are green, and a
 cancelled, failed or missing shard never reads as a pass. `contract` and
 `docs_only` still pass through from the desktop shard, so `mcp-cli-api-contract`
-and `visual-compare` keep their wiring. `tests/browser-smoke-workflow.test.cjs`
+keeps its wiring; `visual-compare` needs only the one build, so HYCI-77
+starts it beside the shards instead of after their summary. `tests/browser-smoke-workflow.test.cjs`
 still proves every spec/project pair runs exactly once and that no shard was left
 without work.
 
