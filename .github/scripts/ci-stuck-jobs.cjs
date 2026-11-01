@@ -50,6 +50,8 @@ const NOT_CANCELLED = 'no job left cancelled';
 const STORE_UNAVAILABLE = 'recovery storage is unreadable';
 const STORE_FULL = 'recovery store is full';
 const STORE_UNWRITABLE = 'recovery storage refused the reservation';
+const UNISSUED = 'the cancel never reached GitHub';
+const CANCEL_AMBIGUOUS = 'the cancel outcome is unknown';
 // A cancel can land after the sweep that issued it gave up, so the recovery is
 // kept until something settles it: a re-run, a real failure, no cancelled job
 // left, or a newer attempt replacing the one this sweep cancelled.
@@ -179,7 +181,16 @@ async function pages(path) {
   return found;
 }
 
-async function apply(repo, decisions, { api = json, settle = settleCancel, beforeCancel = null } = {}) {
+// A 4xx is GitHub refusing the cancel, so nothing was cancelled and nothing
+// needs a recovery. Anything else (a network error, a timeout, a 5xx, 408, 429)
+// may have been accepted and lost on the way back, so it is unconfirmed rather
+// than refused and the run is reconciled on a later sweep.
+function refusesCancel(message) {
+  if (!/HTTP 4\d\d/.test(message)) return false;
+  return !/HTTP (408|429)/.test(message);
+}
+
+async function apply(repo, decisions, { api = json, settle = settleCancel, beforeCancel = null, onIssue = null, onConfirmed = null } = {}) {
   const done = [];
   for (const decision of decisions.filter(entry => entry.action === 'cancel')) {
     try {
@@ -187,11 +198,17 @@ async function apply(repo, decisions, { api = json, settle = settleCancel, befor
         done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: NOT_FIRST_ATTEMPT });
         continue;
       }
+      if (onIssue && (await onIssue(decision)) === false) {
+        done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: STORE_UNWRITABLE });
+        continue;
+      }
       await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
     } catch (error) {
-      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${String(error.message).slice(0, 80)}` });
+      const message = String(error.message).slice(0, 80);
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${message}`, definitive: refusesCancel(message) });
       continue;
     }
+    if (onConfirmed) await onConfirmed(decision);
     if (!(await settle(repo, decision.runId, api))) {
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: SETTLE_FAILED });
       continue;
@@ -267,12 +284,19 @@ async function writePending(repo, pending, api = storeJson) {
 // One stored cancel, carried by whichever sweep comes next: the cancel already
 // landed, so the only question is whether the run now holds the cancelled jobs
 // this sweep would have re-run, and whether it still may be re-run at all.
+// `confirmed` means this sweep saw GitHub accept the cancel; `issued` means it
+// sent the request and never learned the outcome. A reservation with neither is
+// an intent this sweep never acted on, and a cancellation by a person or by a
+// superseded push must never be restarted because of it.
 async function resume(repo, entry, { api = json, now = Date.now(), attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS } = {}) {
   if (!(now - Date.parse(entry.cancelledAt) <= maxAgeMs)) {
     return { runId: entry.runId, action: 'drop', reason: 'older than the recovery window' };
   }
   if ((entry.tries ?? 0) >= attempts) {
     return { runId: entry.runId, action: 'drop', reason: `still not re-run after ${attempts} sweeps` };
+  }
+  if (entry.issued !== true) {
+    return { runId: entry.runId, action: 'drop', reason: UNISSUED };
   }
   const run = await api(`/repos/${repo}/actions/runs/${entry.runId}`);
   if ((entry.attempt ?? 1) !== (run.run_attempt ?? 1)) {
@@ -297,19 +321,35 @@ async function resume(repo, entry, { api = json, now = Date.now(), attempts = RE
   }
 }
 
-async function recover(repo, decisions, { api = json, settle = settleCancel, now = Date.now(), pending = [], save = null, attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS } = {}) {
+function keeper(save, pending) {
+  let stored = JSON.stringify(pending);
+  let ok = true;
+  return {
+    get saved() {
+      return ok;
+    },
+    get available() {
+      return Boolean(save);
+    },
+    async write(value) {
+      if (!save) return true;
+      const list = value.map(entry => ({ ...entry }));
+      if (JSON.stringify(list) === stored) return true;
+      if (!(await save(list))) {
+        ok = false;
+        return false;
+      }
+      stored = JSON.stringify(list);
+      return true;
+    },
+  };
+}
+
+// The half that finishes what an earlier sweep started. Nothing here discovers
+// anything, so it runs first and a slow or failing run list cannot delay it.
+async function finishPending(repo, { api = json, now = Date.now(), pending = [], attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS, store = null } = {}) {
   const done = [];
   const carried = [];
-  let stored = JSON.stringify(pending);
-  const write = async (value) => {
-    if (!save) return true;
-    const list = value.map(entry => ({ ...entry }));
-    if (JSON.stringify(list) === stored) return true;
-    if (!(await save(list))) return false;
-    stored = JSON.stringify(list);
-    return true;
-  };
-  let saved = true;
   for (const entry of pending) {
     let outcome;
     try {
@@ -320,56 +360,81 @@ async function recover(repo, decisions, { api = json, settle = settleCancel, now
     done.push(outcome);
     if (outcome.keep) carried.push({ ...entry, tries: (entry.tries ?? 0) + 1 });
   }
-  const known = new Set(pending.map(entry => entry.runId));
-  const candidates = decisions.filter(decision => !known.has(decision.runId));
-  // A cancel that cannot be stored is a cancel nobody can finish, so nothing is
-  // cancelled while the store is unreadable: the run keeps its own lease instead.
-  if (!save) {
-    const refused = candidates.filter(decision => decision.action === 'cancel')
+  if (store) await store.write(carried);
+  return { done, carried };
+}
+
+// What keeps an entry for the next sweep: a cancel that landed and still needs
+// finishing, or one whose outcome GitHub never told us. Everything else is
+// settled, and a run whose cancel this sweep never issued is not settled by us
+// at all.
+function carries(outcome) {
+  if (outcome.action === 'skip') return false;
+  if (outcome.rerun) return false;
+  if (UNFINISHED.has(outcome.reason)) return true;
+  if (String(outcome.reason ?? '').startsWith(CANCEL_FAILED)) return outcome.definitive === false;
+  return false;
+}
+
+// The half that starts new recoveries. Every entry is written before its cancel
+// is issued, so a sweep that dies leaves an unissued reservation rather than a
+// cancelled run with no record, and a run that cannot be reserved is not
+// cancelled at all.
+async function startRecoveries(repo, decisions, { api = json, settle = settleCancel, now = Date.now(), carried: seed = [], save = null, store = null } = {}) {
+  const done = [];
+  const carried = seed.map(entry => ({ ...entry }));
+  // No store means no cancel: a cancelled run nobody can finish is worse than a
+  // slow one.
+  if (!(store ? store.available : Boolean(save))) {
+    const refused = decisions.filter(decision => decision.action === 'cancel')
       .map(decision => ({ runId: decision.runId, action: 'skip', rerun: false, reason: STORE_UNAVAILABLE }));
     done.push(...refused);
     return { done, pending: carried, saved: true, refused: refused.length };
   }
-  // The recovery is written before the cancel, not after it: a sweep that dies
-  // between the two would otherwise leave a cancelled run with no record, and a
-  // run that cannot be reserved in the store is not cancelled at all.
-  const wanted = candidates.filter(decision => decision.action === 'cancel');
+  const held = store ?? keeper(save, carried);
+  const known = new Set(carried.map(entry => entry.runId));
+  const wanted = decisions.filter(decision => decision.action === 'cancel' && !known.has(decision.runId));
   let room = PENDING_LIMIT - carried.length;
   let writable = true;
-  const reserved = [];
   for (const decision of wanted) {
     if (!writable || room <= 0) {
       done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: writable ? STORE_FULL : STORE_UNWRITABLE });
       continue;
     }
-    carried.push({ runId: decision.runId, attempt: decision.attempt ?? 1, cancelledAt: new Date(now).toISOString(), tries: 0 });
+    const entry = { runId: decision.runId, attempt: decision.attempt ?? 1, cancelledAt: new Date(now).toISOString(), tries: 0, issued: false, confirmed: false };
+    carried.push(entry);
     room -= 1;
-    if (!(await write(carried))) {
-      carried.pop();
+    const mark = (patch) => {
+      Object.assign(entry, patch);
+      return held.write(carried);
+    };
+    const outcomes = await apply(repo, [decision], {
+      api,
+      settle,
+      beforeCancel: async () => {
+        const run = await api(`/repos/${repo}/actions/runs/${decision.runId}`);
+        return run.status === 'in_progress' && (run.run_attempt ?? 1) === (decision.attempt ?? 1);
+      },
+      onIssue: () => mark({ issued: true }),
+      onConfirmed: () => mark({ confirmed: true }),
+    });
+    done.push(...outcomes);
+    // A reservation whose cancel was never issued, or whose outcome is settled,
+    // is not carried: the run keeps its own lease or is done with us.
+    if (!entry.issued || !outcomes.some(carries)) {
+      carried.splice(carried.indexOf(entry), 1);
       room += 1;
-      writable = false;
-      saved = false;
-      done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: STORE_UNWRITABLE });
-      continue;
     }
-    reserved.push(decision);
   }
-  const outcomes = await apply(repo, reserved, {
-    api,
-    settle,
-    beforeCancel: async (decision) => {
-      const run = await api(`/repos/${repo}/actions/runs/${decision.runId}`);
-      return run.status === 'in_progress' && (run.run_attempt ?? 1) === (decision.attempt ?? 1);
-    },
-  });
-  done.push(...outcomes);
-  // A reservation is dropped when its cancel never landed (the run is as it was
-  // and the next sweep may pick it again) and when it settled; it is kept only
-  // while it still needs the next sweep to finish it.
-  const settled = new Set(outcomes.filter(outcome => !UNFINISHED.has(outcome.reason)).map(outcome => outcome.runId));
-  const next = carried.filter(entry => !settled.has(entry.runId));
-  if (!(await write(next))) saved = false;
-  return { done, pending: next, saved };
+  await held.write(carried);
+  return { done, pending: carried, saved: held.saved };
+}
+
+async function recover(repo, decisions, { api = json, settle = settleCancel, now = Date.now(), pending = [], save = null, attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS } = {}) {
+  const store = keeper(save, pending);
+  const finished = await finishPending(repo, { api, now, pending, attempts, maxAgeMs, store });
+  const started = await startRecoveries(repo, decisions, { api, settle, now, carried: finished.carried, store });
+  return { done: [...finished.done, ...started.done], pending: started.pending, saved: store.saved, refused: started.refused };
 }
 
 async function settleCancel(repo, runId, api) {
@@ -386,12 +451,15 @@ function fixturePlan(entry, options) {
   return plan(entry.repo, { ...options, runs: entry.runs, jobsFor: id => jobsByRun.get(id) ?? [] });
 }
 
-// One sweep. Discovery is the half that can fail, so the store is read and the
-// recoveries a previous sweep started are finished whatever the run list or any
-// single job list does: a cancelled check is the one thing here that a person
-// would have to finish by hand.
+// One sweep. Discovery is the half that can fail and the half that can be slow,
+// so the store is read and the recoveries an earlier sweep started are finished
+// before anything is discovered: a cancelled check is the one thing here a person
+// would otherwise have to finish by hand.
 async function sweep(repo, { now = Date.now(), read = null, discover = null, save = null, api = json, settle = settleCancel } = {}) {
   const stored = await (read ?? (() => readPending(repo)))();
+  // An unreadable store leaves no store at all, and no store cancels nothing.
+  const store = stored.ok ? keeper(save ?? (list => writePending(repo, list)), stored.pending) : null;
+  const finished = await finishPending(repo, { api, now, pending: stored.pending, store });
   let decisions = [];
   let unread = [];
   let discovery = null;
@@ -400,10 +468,8 @@ async function sweep(repo, { now = Date.now(), read = null, discover = null, sav
   } catch (error) {
     discovery = String(error.message).slice(0, 120);
   }
-  const recovery = await recover(repo, decisions, {
-    api, settle, now, pending: stored.pending,
-    save: stored.ok ? save ?? (list => writePending(repo, list)) : null,
-  });
+  const started = await startRecoveries(repo, decisions, { api, settle, now, carried: finished.carried, store });
+  const recovery = { done: [...finished.done, ...started.done], pending: started.pending, saved: store ? store.saved : true, refused: started.refused };
   return { decisions, unread, discovery, stored, recovery };
 }
 
@@ -471,7 +537,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {

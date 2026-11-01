@@ -37,13 +37,21 @@ refuses the new cancel and keeps the twenty it already holds. Only ids this swee
 cancelled are ever stored, a stored entry is tried at most three times and
 expires after six hours, and a stored run that holds a real failure, has no
 cancelled job left, or has moved to a newer attempt is dropped instead of
-re-run. The store is a repository variable, which is its own permission, so it is
-read and written with the token `prod-health.yml` already uses for those two
-endpoints rather than `github.token`; run control keeps `github.token`, which is
-the only one with `actions: write`. Discovery cannot delay what discovery started
-elsewhere either: the stored recoveries are read and finished before the run list
-is read, a run list that fails is reported and cancels nothing new, and a single
-unreadable job list skips that one run for the sweep instead of ending it. A run that already waits for its stored recovery is never cancelled
+re-run. An entry has three states: reserved (written, no cancel sent), issued (the cancel
+was sent and its answer is unknown) and confirmed (GitHub accepted it). A
+reservation nobody issued is dropped and never re-run, so a cancellation by a
+person or by a superseded push is never restarted because a sweep died between
+writing and cancelling; a cancel whose answer was lost (a network error, a
+timeout, a 5xx, 408 or 429) keeps its issued entry and is reconciled on a later
+sweep, while only a 4xx refusal is treated as nothing cancelled. The store is a
+repository variable, which is its own permission, so it is read and written with
+the token `prod-health.yml` already uses for those two endpoints rather than
+`github.token`; run control keeps `github.token`, which is the only one with
+`actions: write`. Discovery cannot delay what discovery started
+elsewhere either: a sweep reads the store, finishes every stored recovery, and
+only then reads the run list, so a slow or failing run list cannot time out a
+cancelled check; a run list that fails is reported and cancels nothing new, and a
+single unreadable job list skips that one run for the sweep instead of ending it. A run that already waits for its stored recovery is never cancelled
 again in the same sweep, and a decision is re-checked against the run's current
 attempt immediately before the cancel. Only a confirmed missing variable is read
 as an empty store: any other read failure leaves the stored recoveries untouched

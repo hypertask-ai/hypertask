@@ -189,10 +189,14 @@ stuck_job_recovery:
     attempts: 3
     max_age_hours: 6
     checkpoint: before_the_cancel
+    states: [reserved, issued, confirmed]
+    unissued_reservation: dropped_never_rerun
+    ambiguous_cancel: kept_and_reconciled_by_the_next_sweep
     capacity: reserved_before_cancel, never_dropped, full_store_cancels_nothing
     bound_to: run_attempt
     unreadable_store: leaves_stored_entries_untouched
     unwritable_store: cancels_nothing
+  sweep_order: [read_store, finish_stored_recoveries, discover_runs, start_new_recoveries]
   discovery_isolation: [run_list_failure_keeps_stored_recoveries, job_list_failure_skips_only_that_run]
   never_act_on: [runs_holding_a_failed_job, runs_not_cancelled_by_this_sweep]
   job_list_after: eligibility_filter

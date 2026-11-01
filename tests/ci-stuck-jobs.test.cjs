@@ -152,10 +152,10 @@ test('an empty job list is ignored instead of cancelling blind', () => {
   assert.equal(decide(stuckRun, [job('queued', 'queued', [])], { now }), null);
 });
 
-const found = { runId: 7, attempt: 1, cancelledAt: '2026-11-01T08:50:00Z', tries: 1 };
+const found = { runId: 7, attempt: 1, cancelledAt: '2026-11-01T08:50:00Z', tries: 1, issued: true, confirmed: true };
 const record = async () => true;
 
-test('the recovery is stored before the cancel is issued, not after it', async () => {
+test('the recovery is written before the cancel is issued and confirmed after it', async () => {
   const calls = [];
   const api = async (path, method = 'GET') => {
     calls.push(`${method} ${path}`);
@@ -165,8 +165,15 @@ test('the recovery is stored before the cancel is issued, not after it', async (
   const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
     api, settle: async () => false, now, save: async (list) => { calls.push('save'); written.push(list); return true; },
   });
-  assert.deepEqual(calls, ['save', 'GET /repos/o/r/actions/runs/7', 'POST /repos/o/r/actions/runs/7/cancel']);
-  assert.deepEqual(written, [[{ runId: 7, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0 }]]);
+  assert.deepEqual(calls, [
+    'GET /repos/o/r/actions/runs/7',
+    'save',
+    'POST /repos/o/r/actions/runs/7/cancel',
+    'save',
+  ]);
+  assert.equal(written[0][0].issued, true);
+  assert.equal(written[0][0].confirmed, false);
+  assert.equal(written.at(-1)[0].confirmed, true);
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'cancel', rerun: false, reason: 'cancel did not settle' }]);
   assert.equal(outcome.saved, true);
 });
@@ -185,7 +192,7 @@ test('a cancel that does not settle is carried into the next sweep that finishes
     api, settle: async () => false, now, save: async (list) => { written.push(list); return true; },
   });
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'cancel', rerun: false, reason: 'cancel did not settle' }]);
-  assert.deepEqual(outcome.pending, [{ runId: 7, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0 }]);
+  assert.deepEqual(outcome.pending, [{ runId: 7, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0, issued: true, confirmed: true }]);
   assert.deepEqual(written.at(-1), outcome.pending);
   state.settled = true;
   const next = await resume('o/r', outcome.pending[0], { api, now: now + 60000 });
@@ -322,7 +329,7 @@ test('a full store refuses a new cancel instead of dropping a stored recovery', 
     calls.push(`${method} ${path}`);
     return { status: 'in_progress' };
   };
-  const full = Array.from({ length: PENDING_LIMIT }, (_, index) => ({ runId: 100 + index, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0 }));
+  const full = Array.from({ length: PENDING_LIMIT }, (_, index) => ({ runId: 100 + index, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0, issued: true, confirmed: true }));
   const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
     api, now, pending: full, save: record,
   });
@@ -343,14 +350,14 @@ test('a reservation the store refuses is a cancel that never happens', async () 
     api, now, save: async () => false,
   });
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'skip', rerun: false, reason: 'recovery storage refused the reservation' }]);
-  assert.deepEqual(calls, []);
+  assert.deepEqual(calls, ['GET /repos/o/r/actions/runs/7']);
   assert.equal(outcome.saved, false);
   assert.deepEqual(outcome.pending, []);
 });
 
-test('a cancel that never lands drops its reservation', async () => {
+test('a cancel GitHub refuses drops its reservation', async () => {
   const api = async (path, method = 'GET') => {
-    if (method === 'POST') throw new Error('gh api failed: HTTP 500');
+    if (method === 'POST') throw new Error('gh api failed: HTTP 403');
     return { status: 'in_progress' };
   };
   const written = [];
@@ -360,6 +367,52 @@ test('a cancel that never lands drops its reservation', async () => {
   assert.deepEqual(outcome.pending, []);
   assert.equal(outcome.done.at(-1).reason.startsWith('cancel request failed'), true);
   assert.deepEqual(written.at(-1), []);
+});
+
+test('a cancel whose answer never came back keeps its reservation for the next sweep', async () => {
+  const api = async (path, method = 'GET') => {
+    if (method === 'POST') throw new Error('gh api failed: HTTP 502');
+    return { status: 'in_progress' };
+  };
+  const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
+    api, now, save: record,
+  });
+  assert.equal(outcome.done.at(-1).definitive, false);
+  assert.deepEqual(outcome.pending, [{ runId: 7, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0, issued: true, confirmed: false }]);
+});
+
+test('a reservation this sweep never issued is never re-run', async () => {
+  let reads = 0;
+  const outcome = await resume('o/r', { ...found, issued: false, confirmed: false }, { api: async () => { reads += 1; return {}; }, now });
+  assert.deepEqual(outcome, { runId: 7, action: 'drop', reason: 'the cancel never reached GitHub' });
+  assert.equal(reads, 0);
+});
+
+test('stored recoveries are finished before anything is discovered', async () => {
+  const order = [];
+  const api = async (path, method = 'GET') => {
+    order.push(`${method} ${path}`);
+    if (path === '/repos/o/r/actions/runs/7') return { status: 'completed' };
+    if (path.endsWith('/jobs?per_page=100')) return { jobs: [{ name: 'test-shard (1)', conclusion: 'cancelled' }] };
+    return {};
+  };
+  const result = await sweep('o/r', {
+    now,
+    read: async () => ({ ok: true, pending: [found] }),
+    discover: async () => {
+      order.push('discover');
+      return { decisions: [], unread: [] };
+    },
+    save: record,
+    api,
+  });
+  assert.deepEqual(order, [
+    'GET /repos/o/r/actions/runs/7',
+    'GET /repos/o/r/actions/runs/7/jobs?per_page=100',
+    'POST /repos/o/r/actions/runs/7/rerun-failed-jobs',
+    'discover',
+  ]);
+  assert.deepEqual(result.recovery.pending, []);
 });
 
 test('a candidate whose job list fails does not stop the other candidates', async () => {
