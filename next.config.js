@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 
+if (process.env.NEXT_FONT_GOOGLE_MOCKED_RESPONSES) {
+  process.env.NEXT_FONT_GOOGLE_MOCKED_RESPONSES = require.resolve("./scripts/next-font-smoke-mock.cjs");
+}
+
 require("node:child_process").execFileSync(process.execPath, ["scripts/generate-flag-index.mjs"], {
   cwd: __dirname,
   stdio: ["ignore", "ignore", "inherit"],
