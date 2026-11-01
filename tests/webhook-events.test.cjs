@@ -1,6 +1,5 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..')
@@ -136,14 +135,4 @@ test('omitted subscriptions mean all events and invalid selections fail clearly'
   assert.match(invalid.error, /task\.updated/)
 
   assert.equal(parseWebhookEventSelection([undefined]).ok, false)
-})
-
-test('the MCP webhook route uses shared parsing and returns event definitions', () => {
-  const route = fs.readFileSync(
-    path.join(root, 'src/lib/mcp/operations/webhooks/operation.ts'),
-    'utf8'
-  )
-
-  assert.match(route, /parseWebhookEventSelection\(body\.events\)/)
-  assert.match(route, /eventDefinitions: WEBHOOK_EVENT_DEFINITIONS/)
 })

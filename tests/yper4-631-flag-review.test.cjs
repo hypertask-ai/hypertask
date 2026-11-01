@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const fs = require("node:fs");
 const test = require("node:test");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
@@ -552,26 +551,6 @@ for (const flagKey of [definitions.find((flag) => flag.releaseRisk?.highRisk).ke
 test("review is still valid just inside the 24-hour window", async () => {
   await seedReview({ createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 + 60000) });
   assert.equal((await switchFlag()).status, 200);
-});
-test("schema and migration retain all review evidence and use optional consumption fields", () => {
-  const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
-  const model = /model FeatureFlagReview \{([^}]+)\}/.exec(schema)?.[1];
-  assert.ok(model);
-  const sql = fs.readFileSync(path.join(root, "src/prisma/migrations/20261023100000_feature_flag_review/migration.sql"), "utf8");
-  for (const field of ["id", "key", "mode", "reviewerUserId", "reviewerAgentId", "aiReviewUrl", "independentReview", "liveQaUrl", "inboxCyclePassed", "deployedSha", "createdAt", "usedAt", "usedByChangeId"]) {
-    assert.match(model, new RegExp(`\\b${field}\\s+`));
-    assert.ok(sql.includes(`"${field}"`));
-  }
-  assert.match(model, /reviewerAgentId\s+String\s/);
-  assert.match(sql, /"reviewerAgentId" TEXT NOT NULL/);
-  for (const field of ["aiReviewUrl", "independentReview", "liveQaUrl"]) {
-    assert.match(model, new RegExp(`${field}\\s+String\\s+@db\\.VarChar\\(300\\)`));
-    assert.ok(sql.includes(`"${field}" VARCHAR(300) NOT NULL`));
-  }
-  assert.match(model, /createdAt\s+DateTime\s+@default\(now\(\)\)/);
-  assert.match(model, /usedAt\s+DateTime\?/);
-  assert.match(model, /usedByChangeId\s+Int\?/);
-  assert.match(sql, /"createdAt" TIMESTAMP\(3\) NOT NULL DEFAULT CURRENT_TIMESTAMP/);
 });
 for (const failurePoint of ["flag", "review"]) {
   test(`${failurePoint} write failure rolls back flag, audit and review consumption`, async (t) => {

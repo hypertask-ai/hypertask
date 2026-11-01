@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -117,46 +116,6 @@ const assigneesEntry = {
     },
   ],
 };
-
-test("view services broadcast board changes after create, update, apply, and delete", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/mcp/views/services.ts"),
-    "utf8",
-  );
-  const functionSource = (name, nextName) =>
-    source.slice(
-      source.indexOf(`export async function ${name}`),
-      nextName
-        ? source.indexOf(`export async function ${nextName}`)
-        : source.length,
-    );
-
-  assert.match(
-    functionSource("createView", "updateView"),
-    /broadcastBoardChange\(projectId, \{ originUserId: userId \}\)/,
-  );
-  assert.match(
-    functionSource("updateView", "applyView"),
-    /broadcastBoardChange\(projectId, \{ originUserId: userId \}\)/,
-  );
-  assert.match(
-    functionSource("applyView", "deleteView"),
-    /broadcastBoardChange\(projectId, \{ originUserId: userId \}\)/,
-  );
-  assert.match(
-    functionSource("deleteView"),
-    /broadcastBoardChange\(view\.project_view\.projectId, \{ originUserId: userId \}\)/,
-  );
-});
-
-test("browser view switching does not broadcast a user-local applied pointer", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/api/project-writes/views/switch-view.ts"),
-    "utf8",
-  );
-
-  assert.doesNotMatch(source, /broadcastBoardChange/);
-});
 
 test("updateView preserves stored filter dimensions when only match changes", async () => {
   const { updateView, updateCalls } = loadUpdateView({

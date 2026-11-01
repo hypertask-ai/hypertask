@@ -1,15 +1,4 @@
 {
-  "allowlist": [
-    "tests/ui-patterns.test.cjs",
-    "tests/user-profile-startup-cache.test.cjs",
-    "tests/ux-signoff-gate.test.cjs",
-    "tests/view-layout-preference.test.cjs",
-    "tests/view-services.test.cjs",
-    "tests/view-sorting-stack.test.cjs",
-    "tests/webhook-events.test.cjs",
-    "tests/yper4-401-app-smoke-superseded.test.cjs",
-    "tests/yper4-600-content-decoding.test.cjs",
-    "tests/yper4-631-flag-review.test.cjs"
-  ],
-  "count": 10
+  "allowlist": [],
+  "count": 0
 }

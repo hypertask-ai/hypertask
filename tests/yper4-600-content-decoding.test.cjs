@@ -203,46 +203,4 @@ test("inbound: Brotli or unknown request encodings are refused, gzip, deflate an
   for (const allowed of [null, undefined, "", "identity", "gzip", "deflate", "GZIP"]) {
     assert.equal(refusedContentEncoding(allowed), undefined, String(allowed));
   }
-  const proxy = fs.readFileSync(path.join(root, "src/proxy.ts"), "utf8");
-  const entry = proxy.slice(proxy.indexOf("export default async function requireAuthMiddleware"));
-  assert.match(entry, /^[^\n]*\n\s*const refusedEncoding = refusedContentEncoding\(request\.headers\.get\('content-encoding'\)\);\n\s*if \(refusedEncoding\) \{\n\s*return NextResponse\.json\([\s\S]{0,200}status: 415/);
-});
-
-test("no source decodes Brotli directly", () => {
-  const grep = (pattern) => {
-    try {
-      return execFileSync("git", ["grep", "-n", "-E", pattern, "--", "src"], { cwd: root, encoding: "utf8" }).trim();
-    } catch (error) {
-      if (error.status === 1) return "";
-      throw error;
-    }
-  };
-  assert.equal(grep("brotliDecompress|BrotliDecompress"), "");
-  assert.notEqual(grep("createGunzip"), "", "the grep itself finds a known decoder");
-});
-
-test("every AI generation call passes the Brotli-free download", () => {
-  const calls = execFileSync("git", ["grep", "-n", "-E", "\\b(streamText|generateText)\\(\\{", "--", "src"], { cwd: root, encoding: "utf8" }).trim().split("\n").filter((line) => line && !line.includes(".test."));
-  assert.ok(calls.length > 10);
-  for (const call of calls) {
-    const [file, lineNumber] = call.split(":");
-    const lines = fs.readFileSync(path.join(root, file), "utf8").split("\n");
-    const firstOptions = lines.slice(Number(lineNumber), Number(lineNumber) + 2).join("\n");
-    assert.match(firstOptions, /experimental_download: downloadWithoutBrotli,/, call);
-  }
-});
-
-test("modules that download user-chosen URLs never call the auto-decoding global fetch", () => {
-  for (const file of [
-    "src/lib/mcp/attachments/safeFetch.ts",
-    "src/lib/net/downloadWithoutBrotli.ts",
-    "src/app/api/ai/_lib/customInstructions.ts",
-    "src/app/api/settings/byok-test/route.ts",
-    "src/lib/mcp/webhooks/delivery.ts",
-  ]) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.doesNotMatch(source, /(?<![\w.])fetch\(/, file);
-  }
-  const modelProvider = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/modelProvider.ts"), "utf8");
-  assert.match(modelProvider, /baseURL: customEndpoint\.baseUrl,\s*fetch: fetchWithoutBrotli,/);
 });
