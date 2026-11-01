@@ -4,7 +4,7 @@ const path = require("node:path");
 const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 
-function load(file, mocks) {
+function load(file, mocks = {}) {
   const cache = new Map();
   function requireSource(specifier, directory) {
     if (specifier in mocks) {
