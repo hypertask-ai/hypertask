@@ -43,7 +43,14 @@ const PENDING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const SETTLE_FAILED = 'cancel did not settle';
 const RERUN_FAILED = 're-run request failed';
 const JOBS_UNAVAILABLE = 'job list unavailable after the cancel';
-const CARRY_ON = new Set([SETTLE_FAILED, RERUN_FAILED, JOBS_UNAVAILABLE]);
+const CANCEL_FAILED = 'cancel request failed';
+const NOT_FIRST_ATTEMPT = 'no longer a first attempt in progress';
+const NO_FAILURE_SEEN = 'a genuine failure appeared';
+const NOT_CANCELLED = 'no job left cancelled';
+// A cancel can land after the sweep that issued it gave up, so the recovery is
+// kept until something settles it: a re-run, a real failure, no cancelled job
+// left, or a newer attempt replacing the one this sweep cancelled.
+const SETTLED = new Set([NO_FAILURE_SEEN, NOT_CANCELLED, NOT_FIRST_ATTEMPT]);
 
 function stepEnd(step) {
   return step && step.completed_at ? Date.parse(step.completed_at) : null;
@@ -144,10 +151,20 @@ async function pages(path) {
   return found;
 }
 
-async function apply(repo, decisions, { api = json, settle = settleCancel } = {}) {
+async function apply(repo, decisions, { api = json, settle = settleCancel, beforeCancel = null, onCancelled = null } = {}) {
   const done = [];
   for (const decision of decisions.filter(entry => entry.action === 'cancel')) {
-    await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
+    try {
+      if (beforeCancel && !(await beforeCancel(decision))) {
+        done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: NOT_FIRST_ATTEMPT });
+        continue;
+      }
+      await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
+    } catch (error) {
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${String(error.message).slice(0, 80)}` });
+      continue;
+    }
+    if (onCancelled) await onCancelled(decision);
     if (!(await settle(repo, decision.runId, api))) {
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: SETTLE_FAILED });
       continue;
@@ -160,12 +177,12 @@ async function apply(repo, decisions, { api = json, settle = settleCancel } = {}
       continue;
     }
     if (jobs.some(holdsFailure)) {
-      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'a genuine failure appeared' });
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: NO_FAILURE_SEEN });
       continue;
     }
     const cutOff = jobs.filter(job => job.conclusion === 'cancelled').map(job => job.name);
     if (!cutOff.length) {
-      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'no job left cancelled' });
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: NOT_CANCELLED });
       continue;
     }
     try {
@@ -189,12 +206,15 @@ function pendingList(value) {
   }
 }
 
+// Only a confirmed missing variable is an empty store. Any other read failure
+// means the stored recoveries are unknown, and a save would overwrite them.
 async function readPending(repo, api = json) {
   try {
     const payload = await api(`/repos/${repo}/actions/variables/${PENDING_VARIABLE}`);
-    return pendingList(payload.value);
-  } catch {
-    return [];
+    return { ok: true, pending: pendingList(payload.value) };
+  } catch (error) {
+    const missing = /HTTP 404|Not Found/.test(String(error.message));
+    return { ok: missing, pending: [] };
   }
 }
 
@@ -224,16 +244,19 @@ async function resume(repo, entry, { api = json, now = Date.now(), attempts = RE
     return { runId: entry.runId, action: 'drop', reason: `still not re-run after ${attempts} sweeps` };
   }
   const run = await api(`/repos/${repo}/actions/runs/${entry.runId}`);
+  if ((entry.attempt ?? 1) !== (run.run_attempt ?? 1)) {
+    return { runId: entry.runId, action: 'drop', reason: 'a newer attempt replaced it' };
+  }
   if (run.status !== 'completed') {
     return { runId: entry.runId, action: 'wait', reason: 'the cancel has not settled yet', keep: true };
   }
   const jobs = await jobsOf(repo, entry.runId, api);
   if (jobs.some(holdsFailure)) {
-    return { runId: entry.runId, action: 'drop', reason: 'a genuine failure appeared' };
+    return { runId: entry.runId, action: 'drop', reason: NO_FAILURE_SEEN };
   }
   const cutOff = jobs.filter(job => job.conclusion === 'cancelled').map(job => job.name);
   if (!cutOff.length) {
-    return { runId: entry.runId, action: 'drop', reason: 'no job left cancelled' };
+    return { runId: entry.runId, action: 'drop', reason: NOT_CANCELLED };
   }
   try {
     await api(`/repos/${repo}/actions/runs/${entry.runId}/rerun-failed-jobs`, 'POST');
@@ -246,18 +269,40 @@ async function resume(repo, entry, { api = json, now = Date.now(), attempts = RE
 async function recover(repo, decisions, { api = json, settle = settleCancel, now = Date.now(), pending = [], save = null, attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS } = {}) {
   const done = [];
   const carried = [];
+  let stored = JSON.stringify(pending);
+  const write = async (value) => {
+    if (!save) return true;
+    const list = value.slice(0, PENDING_LIMIT).map(entry => ({ ...entry }));
+    if (JSON.stringify(list) === stored) return true;
+    if (!(await save(list))) return false;
+    stored = JSON.stringify(list);
+    return true;
+  };
+  let saved = true;
   for (const entry of pending) {
     const outcome = await resume(repo, entry, { api, now, attempts, maxAgeMs });
     done.push(outcome);
     if (outcome.keep) carried.push({ ...entry, tries: (entry.tries ?? 0) + 1 });
   }
-  for (const entry of await apply(repo, decisions, { api, settle })) {
-    done.push(entry);
-    if (CARRY_ON.has(entry.reason)) carried.push({ runId: entry.runId, cancelledAt: new Date(now).toISOString(), tries: 1 });
-  }
-  const next = carried.slice(0, PENDING_LIMIT);
-  const changed = JSON.stringify(next) !== JSON.stringify(pending);
-  const saved = !changed || !save ? true : await save(next);
+  const known = new Set(pending.map(entry => entry.runId));
+  const outcomes = await apply(repo, decisions.filter(decision => !known.has(decision.runId)), {
+    api,
+    settle,
+    beforeCancel: async (decision) => {
+      const run = await api(`/repos/${repo}/actions/runs/${decision.runId}`);
+      return run.status === 'in_progress' && (run.run_attempt ?? 1) === (decision.attempt ?? 1);
+    },
+    // Stored the moment the cancel lands, before this sweep reads anything else
+    // about the run: a sweep that dies after the cancel must not lose it.
+    onCancelled: async (decision) => {
+      carried.push({ runId: decision.runId, attempt: decision.attempt ?? 1, cancelledAt: new Date(now).toISOString(), tries: 0 });
+      if (!(await write(carried))) saved = false;
+    },
+  });
+  done.push(...outcomes);
+  const settled = new Set(outcomes.filter(outcome => outcome.rerun || SETTLED.has(outcome.reason)).map(outcome => outcome.runId));
+  const next = carried.filter(entry => !settled.has(entry.runId)).slice(0, PENDING_LIMIT);
+  if (!(await write(next))) saved = false;
   return { done, pending: next, saved };
 }
 
@@ -288,13 +333,15 @@ async function main() {
     ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
     : await plan(repo, options);
   const live = applyChanges && !fixture;
-  const pending = live ? await readPending(repo) : [];
+  const stored = live ? await readPending(repo) : { ok: true, pending: [] };
   const recovery = live
-    ? await recover(repo, decisions, { pending, now: options.now, save: list => writePending(repo, list) })
-    : { done: [], pending, saved: true };
-  const report = { repo, decisions, pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
+    ? await recover(repo, decisions, { pending: stored.pending, now: options.now, save: stored.ok ? list => writePending(repo, list) : null })
+    : { done: [], pending: stored.pending, saved: true };
+  const report = { repo, decisions, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
   console.log(JSON.stringify(report, null, 2));
-  if (!recovery.saved) {
+  if (!stored.ok) {
+    console.log(`::warning::${PENDING_VARIABLE} cannot be read, so no recovery is stored this sweep and the stored ones are left untouched.`);
+  } else if (!recovery.saved) {
     console.log('::warning::A recovery could not be stored, so the next sweep will not finish it.');
   }
   for (const outcome of recovery.done.filter(entry => entry.action === 'drop')) {

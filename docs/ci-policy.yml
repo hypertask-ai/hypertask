@@ -184,6 +184,9 @@ stuck_job_recovery:
     variable: STUCK_RECOVERY_PENDING
     attempts: 3
     max_age_hours: 6
+    checkpoint: on_cancel_lands
+    bound_to: run_attempt
+    unreadable_store: leaves_stored_entries_untouched
   never_act_on: [runs_holding_a_failed_job, runs_not_cancelled_by_this_sweep]
   job_list_after: eligibility_filter
   acts_on: [pull_request_runs]

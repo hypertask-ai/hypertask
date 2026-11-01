@@ -1401,9 +1401,17 @@ after it, so a run whose cancel did not settle, whose job list was unavailable
 after the cancel, or whose re-run request errored is written to the repository
 variable `STUCK_RECOVERY_PENDING` and finished by the next sweep: without that
 record the run was cancelled for good, because every later sweep reads
-in-progress runs only. Only ids this sweep cancelled are ever stored, a stored
-entry is tried at most three times and expires after six hours, and a stored run
-that holds a real failure or no cancelled job is dropped instead of re-run. A run that holds a real `failure`, `timed_out` or
+in-progress runs only. The entry is written the moment the cancel lands, before
+the sweep reads anything else about that run, and each candidate is handled in
+its own guard so one rejection cannot strand the rest. Only ids this sweep
+cancelled are ever stored, a stored entry is tried at most three times and
+expires after six hours, and a stored run that holds a real failure, has no
+cancelled job left, or has moved to a newer attempt is dropped instead of
+re-run. A run that already waits for its stored recovery is never cancelled
+again in the same sweep, and a decision is re-checked against the run's current
+attempt immediately before the cancel. Only a confirmed missing variable is read
+as an empty store: any other read failure leaves the stored recoveries untouched
+and is reported, because a save from an unknown state would erase them. A run that holds a real `failure`, `timed_out` or
 `startup_failure` job is left alone entirely, and so is a job whose steps include
 a completed `failure`: a job in progress reports no conclusion of its own, so a
 red test step is only visible on the step until the completion report arrives.
@@ -1426,4 +1434,5 @@ settle or that finished clean before the cancel landed, a second attempt or a
 stale run is ignored, and an empty job list never cancels blind. `recover()`
 carries an unsettled cancel into the next sweep, never carries a run this sweep
 did not cancel, finishes a stored recovery, and drops one that expired, ran out
-of tries, holds a real failure or has no cancelled job left.
+of tries, holds a real failure, has no cancelled job left or belongs to a
+replaced attempt.
