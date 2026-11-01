@@ -933,9 +933,6 @@ jobs:
           npx prisma generate
           # A restored node_modules skipped the npm postinstall that writes this file.
           npm run flags:generate
-      - name: Create the database schema
-        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        run: npx prisma migrate deploy
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
@@ -977,6 +974,9 @@ jobs:
             printf '%s\n' 'PUSHER_USE_TLS=false'
             printf '%s\n' 'PUSHER_CLUSTER=mt1'
           } >> "$GITHUB_ENV"
+      - name: Create the database schema
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: npx prisma migrate deploy
       - name: Restore Next.js build cache
         id: restore-nextjs-cache
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
