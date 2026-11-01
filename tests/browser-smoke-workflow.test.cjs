@@ -324,7 +324,6 @@ test("every build retry guard retries the log a real font failure prints", async
     source(".github/workflows/visual-regression.yml"),
   ]);
   const buildStep = (workflow, job, name) => yaml.load(workflow).jobs[job].steps.find((s) => s.name === name);
-  // HYCI-59 made the four browser shards share one build, so ci-tests has one retry loop.
   const steps = [
     buildStep(ciTests, "browser-build", "Build the local app (no migrations)"),
     buildStep(pilot, "pilot", "Build the local app (no migrations)"),
