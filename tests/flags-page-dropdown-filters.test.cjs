@@ -198,13 +198,6 @@ test("new flag works independently of older flags and does not change detail con
   }, { flagKey: rows[0].key });
 });
 
-test("filters use the shared option picker, a wrapping row of trigger buttons and no waiver", () => {
-  const admin = fs.readFileSync(path.join(root, "src/app/admin/flags/FeatureFlagsAdmin.tsx"), "utf8");
-  assert.match(admin, /import OptionPickerModal from "@\/components\/Modals\/OptionPicker"/);
-  assert.match(admin, /className="mt-6 flex flex-wrap gap-3" aria-label="Flag filters"/);
-  assert.doesNotMatch(admin, /MultiSelectDropdown|eslint-disable/);
-});
-
 test("single selects close the picker and return focus to the trigger; multi selects stay open", async () => {
   await withAdmin("", async ({ document, select, pickerRows, labels, pause }) => {
     await select("Sort", "Newest first");

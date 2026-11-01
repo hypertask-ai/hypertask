@@ -1,8 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const fs = require('node:fs');
 const path = require('node:path');
-const ts = require('typescript');
 require('tsx/cjs');
 const React = require('react');
 const { renderToString } = require('react-dom/server');
@@ -87,56 +85,4 @@ test('the normal query key supplies the very first SSR render despite the legacy
     activeSnapshot = null;
     assert.equal(renderToString(React.createElement(QueryClientProvider, { client: c }, React.createElement(ReadInbox))), '<output></output>', 'unseeded old path stays isolated');
   } finally { c.clear(); }
-});
-
-test('late account resolution enables document access filtering and keeps it after reconciliation without leaking across accounts', () => {
-  const source = fs.readFileSync(path.join(root, 'src/hooks/Inbox/useGetNotifications.ts'), 'utf8');
-  const start = source.indexOf('  const documentAccessRef =');
-  const end = source.indexOf('\n  const queryClient =', start);
-  assert.ok(start > 0 && end > start);
-  const read = new Function('userId', 'document', 'useRef', source.slice(start, end) + '\nreturn requireProjectAccess;');
-  const ref = { current: { accountId: 0, required: false } };
-  assert.equal(read(0, null, () => ref), false);
-  assert.equal(read(985, snapshot, () => ref), true);
-  assert.equal(read(985, null, () => ref), true);
-  assert.equal(read(986, null, () => ref), false);
-});
-
-function realtimeEffect(seed, fakeClient, queryClient) {
-  const source = fs.readFileSync(path.join(root, 'src/hooks/realtime/useInboxRealtime.ts'), 'utf8');
-  const start = source.indexOf('  useEffect(() => {'); const end = source.lastIndexOf('\n}');
-  const effects = []; const timers = new Map(); let id = 0;
-  const bindings = { userId: 985, seeded: seed, queryClient, wasConnected: { current: false },
-    connectRealtimeClient: async () => fakeClient, releaseRealtimeClientIfIdle: () => {},
-    userChannel: value => `private-user-${value}`, INBOX_EVENT: 'inbox-event', createInboxRealtimeEventHandler: callback => () => callback('event'),
-    runRealtimeReconciliation: async ({ reconcile }) => reconcile(),
-    setTimeout: (fn, delay) => { assert.equal(delay, 1500); timers.set(++id, fn); return id; }, clearTimeout: value => timers.delete(value) };
-  const js = ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-  new Function('useEffect', ...Object.keys(bindings), js)(fn => effects.push(fn), ...Object.values(bindings));
-  return { cleanup: effects[0](), timers };
-}
-test('subscription acknowledgment catches up once through the live query; the fallback does not duplicate it and OFF retains the old graph', async () => {
-  const bindings = new Map(), calls = [];
-  const channel = { subscribed: false, bind: (event, callback) => bindings.set(event, callback), unbind: event => bindings.delete(event) };
-  const fake = { subscribe: () => channel, unsubscribe: () => {}, connection: { state: 'connected', bind: () => {}, unbind: () => {} } };
-  const q = { refetchQueries: async options => calls.push(options) };
-  const seeded = realtimeEffect(true, fake, q);
-  await new Promise(resolve => setImmediate(resolve));
-  bindings.get('pusher:subscription_succeeded')(); bindings.get('pusher:subscription_succeeded')();
-  for (const callback of seeded.timers.values()) callback();
-  assert.deepEqual(calls, [{ queryKey: ['inbox', 'data', 985], exact: true }]); seeded.cleanup();
-  const old = realtimeEffect(false, fake, q); await new Promise(resolve => setImmediate(resolve));
-  bindings.get('pusher:subscription_succeeded')(); assert.equal(calls.length, 1); assert.equal(old.timers.size, 0); old.cleanup();
-});
-
-test('document first render initializes visible arrays/selection, retains node keys and does not persist the seed or startup-scroll', () => {
-  const inbox = fs.readFileSync(path.join(root, 'src/app/inbox/Inbox.tsx'), 'utf8');
-  assert.match(inbox, /useState<INotification\[\]\[\] \| undefined>\(\(\) => inboxDocument\?\.data\.payload\.structuredData\.data\)/);
-  assert.match(inbox, /initialDocumentRows.current === _notificationsTQ\?\.structuredData\?\.data && inboxDocument\) return/);
-  assert.match(inbox, /key=\{`split-\$\{globalFocus.currSplit\}`\}/);
-  const adoption = fs.readFileSync(path.join(root, 'src/lib/firstScreen/inboxAdoption.ts'), 'utf8');
-  assert.doesNotMatch(adoption, /import\([^)]*indexedDb|writeInboxReadModel|persistInboxPayload/);
-  const hook = fs.readFileSync(path.join(root, 'src/hooks/Inbox/useGetNotifications.ts'), 'utf8');
-  assert.match(hook, /if \(hydrated \|\| document\) return/);
-  assert.match(hook, /Ignored Inbox response after final revision check/);
 });

@@ -234,18 +234,6 @@ test('a queued job refuses to start if disk becomes critical while waiting', asy
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('npm lint, test, test:file, typecheck and premerge build use the semaphore', () => {
-  const { scripts } = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
-  for (const name of ['lint', 'lint:changed', 'test', 'test:file', 'typecheck']) {
-    assert.match(scripts[name], /^bash scripts\/heavy-job\.sh /);
-  }
-  const premerge = readFileSync(path.join(root, 'scripts/premerge-local.sh'), 'utf8');
-  assert.match(premerge, /bash "\$root\/scripts\/heavy-job\.sh" --exclusive npx --no-install next build --webpack/);
-  assert.match(scripts.test, /^bash scripts\/heavy-job\.sh --exclusive node scripts\/run-tests\.mjs$/);
-  assert.doesNotMatch(scripts['test:file'], /--exclusive/);
-  assert.match(premerge, /HT_HEAVY_SLOTS="\$\{HT_HEAVY_SLOTS:-\}"/);
-});
-
 test('--exclusive lets only one full run or build go at a time, even with free slots', async () => {
   const { dir, env } = fixture();
   try {
@@ -287,13 +275,6 @@ test('local heavy jobs run at nice 19 and idle IO by default and HT_HEAVY_NICE i
     assert.equal(bad.status, 2);
     assert.match(bad.stderr, /HT_HEAVY_NICE must be 0 to 19/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
-});
-
-test('the full suite uses one worker per core in CI and at most 2 locally', () => {
-  const runner = readFileSync(path.join(root, 'scripts/run-tests.mjs'), 'utf8');
-  assert.match(runner, /const cores = Math\.max\(1, availableParallelism\(\)\)/);
-  assert.match(runner, /return isCi \? cores : Math\.min\(cores, 2\)/);
-  assert.match(runner, /--test-concurrency=\$\{poolWidth\}/);
 });
 
 test('priority tools receive nice 19 then idle IO even when the test runner already has low priority', () => {

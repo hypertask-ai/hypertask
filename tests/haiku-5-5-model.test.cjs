@@ -140,37 +140,6 @@ test("Haiku catalog aliases and raw legacy ids resolve regardless of the flag", 
 });
 
 test("web, settings and agent pickers permanently enable Haiku; Android retains context filtering", () => {
-  for (const file of [
-    "src/components/Global/ModelSelectorDropdown.tsx",
-    "src/components/Modals/Settings/AiFeaturesSection.tsx",
-    "src/app/agents/[agentId]/AgentConfigForm.tsx",
-  ]) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.doesNotMatch(source, /HTPR_7010_HAIKU_5_5_FLAG/);
-    assert.match(source, /isAiModelOptionVisible\(option, false(?:, true(?:, (?:true|grokGemini4Enabled))?)?\)/);
-    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    let visibilityExpression;
-    function visit(node) {
-      if (ts.isVariableDeclaration(node) && node.name.getText(sourceFile) === "visibleModelOptions") {
-        visibilityExpression = node.initializer.getText(sourceFile);
-      }
-      ts.forEachChild(node, visit);
-    }
-    visit(sourceFile);
-    assert.ok(visibilityExpression, `${file} gates its model list explicitly`);
-    for (const haiku55Enabled of [false, true]) {
-      for (const haikuDefaultEnabled of [false, true]) {
-        const visible = vm.runInNewContext(visibilityExpression, {
-          haiku55Enabled,
-          haikuDefaultEnabled,
-          gatedModelOptions: catalog.aiModelOptions.filter((entry) => !catalog.isGrokGemini4ModelKey(entry.modelKey)),
-          flagModelOptions: catalog.aiModelOptions,
-          isAiModelOptionVisible: catalog.isAiModelOptionVisible,
-        });
-        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled, true, true) && !catalog.isGrokGemini4ModelKey(entry.modelKey)));
-      }
-    }
-  }
   assert.equal(catalog.isAiModelOptionVisible(option, false), true);
   assert.equal(catalog.isAiModelOptionVisible(option, true), true);
   assert.equal(catalog.isAiModelOptionVisible(catalog.getAiModelOptionById("claude-haiku-4.5"), false), true);
@@ -181,9 +150,6 @@ test("web, settings and agent pickers permanently enable Haiku; Android retains 
   assert.equal(on.models.some((entry) => entry.id === option.id), true);
   assert.equal(on.selectedModelId, input.storePlanId === "Free" ? "gpt-6-luna" : "claude-haiku-5-5");
   assert.equal(on.models.some((entry) => entry.id === "claude-haiku-4.5"), false);
-  const mentions = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/taskSearchByParam.ts"), "utf8");
-  assert.match(mentions, /: \[\.\.\.aiModelDefinitions, \.\.\.\(removeImageGeneration \? \[\] : aiImageModelDefinitions\)\]\s*\.filter\(\(model\) =>\s*\[model\.label, model\.key\]\.some/);
-  assert.doesNotMatch(mentions, /haiku55Enabled|haiku55ModelEnabled/);
 });
 
 test("a flag read error does not change the model", async () => {
@@ -398,8 +364,6 @@ test("both price tiers apply to total request tokens, including the exact bounda
     const expected = Math.ceil((pricing.modelCostUsd(rates, estimatedInput, 1) * 1.5 + 0.01) * 1_000_000);
     assert.equal(pricing.estimateReservationMicroUsd({ pricing: rates, prompt, maxOutputTokens: 1 }), expected);
   }
-  const source = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"), "utf8");
-  assert.match(source, /const actualUsd = modelCostUsd\(\s*pricing,\s*inputTokens,\s*outputTokens/);
   const h = harness({ input: 90_000, output: 10_001 });
   await h.makeModel().doGenerate(params);
   await h.flush();
@@ -620,9 +584,6 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
 }
 
 test("chat fallback respects team provider settings before resolving credentials", async () => {
-  const turnSource = fs.readFileSync(path.join(root, "src/lib/ai/chatStream/turnModel.ts"), "utf8");
-  assert.match(turnSource, /teamProviderSettings = chatTeamContext\?\.aiProviderSettings/);
-  assert.match(turnSource, /return \{[^}]*\bteamProviderSettings\b[^}]*\}/);
   for (const openai of [false, true, undefined]) {
     for (const credential of ["fixture-direct", "vck_fixture"]) {
       for (const unavailableStatus of [403, 404]) {

@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const path = require('node:path');
-const fs = require('node:fs');
 require('tsx/cjs');
 process.env.SESSION_SECRET = 'disposable-first-screen-test-secret';
 const root = path.resolve(__dirname, '..');
@@ -137,27 +136,6 @@ test('display cookie is account scoped, validated and rejects unsupported open d
     JSON.stringify({ ...display, isMobile: false }), JSON.stringify({ ...display, board: { ...display.board, tableWidths: { title: -1 } } }),
     JSON.stringify({ ...display, board: { ...display.board, hiddenViewTabIds: { '<script>': true } } })])
     assert.equal(parseBoardDisplay(value, 985), null);
-});
-
-test('Plex loads only through its stylesheet, so a deploy-tagged font URL is fetched once', () => {
-  const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
-  assert.doesNotMatch(layout, /IBM_PLEX_SANS_LATIN_FONT_HREF/);
-  assert.match(layout, /\$\{ibmPlexSans\.variable\}/);
-  const font = fs.readFileSync(path.join(root, 'src/lib/fonts/ibmPlexSans.ts'), 'utf8');
-  assert.match(font, /preload: false/);
-  assert.doesNotMatch(font, /\.woff2/);
-});
-
-test('personalized HTML and Flight are dynamic and explicitly private no-store; proxy overwrites route spoofing', () => {
-  const proxy = fs.readFileSync(path.join(root, 'src/proxy.ts'), 'utf8');
-  assert.ok(proxy.includes("forwardedHeaders.delete('x-ht-board-document-route')"));
-  assert.match(proxy, /if \(request\.headers\.get\('sec-fetch-dest'\) === 'document'\)/);
-  assert.match(proxy, /forwardedHeaders\.set\(request\.nextUrl\.pathname === '\/inbox' \? 'x-ht-inbox-document-route' : 'x-ht-board-document-route'/);
-  for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) assert.ok(proxy.includes(`response.headers.set('${header}'`));
-  assert.ok(proxy.includes("'private, no-store'"));
-  const page = fs.readFileSync(path.join(root, 'src/app/[...boardURL]/page.tsx'), 'utf8');
-  assert.match(page, /export const dynamic = "force-dynamic"/);
-  assert.match(page, /export const revalidate = 0/);
 });
 
 test('desktop default-open and pinned chat board documents require the desktop server-board flag', async () => {

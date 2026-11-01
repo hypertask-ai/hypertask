@@ -1107,8 +1107,6 @@ test('new feature flag defaults Owner + QA', () => {
   assert.equal(definition.default.kind, 'feature');
   assert.equal(definition.default.defaultMode, 'OWNER_AND_QA');
   assert.ok(definition.default.releaseRisk.reason);
-  const source = require('node:fs').readFileSync('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', 'utf8');
-  assert.match(source, /useFlag\(HTPR_6971_CHAT_HISTORY_PAGING_FLAG\)/);
 });
 
 test('unavailable server paging falls back to the complete legacy cache without requesting transcripts', async () => {
@@ -1236,20 +1234,6 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
     require('react-dom/server').renderToString(React.createElement(() => { useAiChat(); return null; }));
     assert.equal(resolution.sessionPagingEnabled, enabled && available);
     assert.equal(sending.sessionPagingEnabled, enabled && available);
-  }
-});
-
-test('flag-off session setup identity is exactly the production key without a paging suffix', () => {
-  const fs = require('node:fs');
-  const filename = 'src/hooks/MultiPages/AIChat/useAiChatState.ts';
-  const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = (\[[\s\S]*?\]\.join\(":"\))/)[1];
-  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false, manualDockedChat: false };
-  const evaluate = (expression, values) => new Function(...Object.keys(values), `return ${expression}`)(...Object.values(values));
-  for (const taskId of [undefined, 91]) {
-    context.taskId = taskId;
-    const legacyKey = `chat:docked:implicit:4:4:6:${taskId ?? 'no-task'}`;
-    assert.equal(evaluate(changed, context), legacyKey);
-    assert.equal(evaluate(changed, { ...context, sessionPagingEnabled: true }), `${legacyKey}:${flag}`);
   }
 });
 

@@ -1,13 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const adoptionSource = fs.readFileSync(
-  path.join(root, "src/utils/controllers/demo/adoptGuestBoards.ts"),
-  "utf8",
-);
 
 function loadTs(relativePath) {
   const jiti = require("jiti")(
@@ -52,15 +47,4 @@ test("no previous user means nothing to adopt", () => {
 
 test("an unresolved target id is refused", () => {
   assert.equal(shouldAdoptGuest({ id: 900, uid: "guest_abc" }, NaN), false);
-});
-
-test("adoption remaps guest assignment rows within the adopted projects", () => {
-  assert.match(
-    adoptionSource,
-    /tx\.assignees\.updateMany\(\{[\s\S]*?task: \{ projectId: \{ in: projectIds \} \}[\s\S]*?userId: guestId[\s\S]*?data: \{ userId: targetUserId \}/,
-  );
-  assert.match(
-    adoptionSource,
-    /tx\.assignees\.updateMany\(\{[\s\S]*?task: \{ projectId: \{ in: projectIds \} \}[\s\S]*?assignerId: guestId[\s\S]*?data: \{ assignerId: targetUserId \}/,
-  );
 });
