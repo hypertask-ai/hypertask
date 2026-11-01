@@ -250,16 +250,14 @@ jobs:
             exit 0
           fi
           npm run flags:generate
-          node --test --test-isolation=none --test-concurrency=1 \
-            tests/compose-task-palette.test.cjs \
-            tests/htpr-7307-ctrlj-footer-clickable.test.cjs \
-            tests/htpr-7306-ctrlj-footer-one-line.test.cjs \
-            tests/htpr-7305-board-from-text.test.cjs \
-            tests/htpr-7652-ctrlj-enter-queue.test.cjs \
-            tests/htpr-7656-ctrlj-skill-menu.test.cjs \
-            tests/htpr-7675-ctrlj-enter-before-text-renders.test.cjs \
-            tests/htpr-6891-phone-task-writer-sheet.test.cjs
-          echo "One-process fixture handoff passed: palette file then every file that compiles it"
+          lane=$(node scripts/palette-fixture-lane.mjs)
+          if [ -z "$lane" ]; then
+            echo "No palette reader shares a test lane; nothing to hand over."
+            exit 0
+          fi
+          echo "Shared lane: $lane"
+          node --test --test-timeout=1200000 --test-concurrency=1 --test-isolation=none $lane
+          echo "One-process fixture handoff passed: $lane"
 
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).

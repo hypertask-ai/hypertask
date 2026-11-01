@@ -1,3 +1,8 @@
+const processFixture = globalThis.__composeTaskPaletteFixture;
+if (processFixture) {
+  module.exports = processFixture;
+  return;
+}
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -160,8 +165,10 @@ const releaseFixture = () => {
   realModules.clear();
   for (const filename of stubTargets) if (isAppSource(filename) || proxies.get(filename) === require.cache[filename]) cacheSlot(filename, undefined);
   proxies.clear();
+  delete globalThis.__composeTaskPaletteFixture;
 };
 after(releaseFixture);
+globalThis.__composeTaskPaletteFixture = { withPalette };
 
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
