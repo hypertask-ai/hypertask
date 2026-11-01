@@ -55,6 +55,96 @@ const oneWindowPerFile = () => {
 };
 const windowState = oneWindowPerFile();
 
+const Module = require('node:module');
+const stubTargets = [...new Set([...fs.readFileSync(__filename, 'utf8').matchAll(/\b(?:source\('([^']+)'|stub\(require\.resolve\('([^']+)'\))/g)]
+  .map(([, file, id]) => file ? path.join(root, file) : require.resolve(id)))];
+const setupStubs = new Map();
+const testStubs = new Map();
+let replacingStubs = false;
+const proxies = new Map();
+const pinned = new Map();
+const realModules = new Map();
+const TaskContext = React.createContext(undefined);
+const MobileViewContext = React.createContext(false);
+
+const cacheSlot = (filename, value) => {
+  if (value === undefined) delete require.cache[filename];
+  else require.cache[filename] = value;
+};
+const realExports = (filename) => {
+  if (!realModules.has(filename)) {
+    realModules.set(filename, {});
+    const proxy = proxies.get(filename);
+    if (proxy) cacheSlot(filename, undefined);
+    try {
+      const loaded = jiti(filename);
+      realModules.set(filename, loaded === proxy?.exports ? {} : loaded);
+    } catch {
+      realModules.set(filename, {});
+    } finally {
+      if (proxy) cacheSlot(filename, proxy);
+    }
+  }
+  return realModules.get(filename);
+};
+const stubLayers = (filename) => [testStubs.get(filename), setupStubs.get(filename)];
+const readStub = (filename, prop) => {
+  for (const layer of stubLayers(filename)) if (layer && prop in layer) return layer[prop];
+  return realExports(filename)?.[prop];
+};
+const stubKeys = (filename) => [...new Set(stubLayers(filename).flatMap((layer) => layer ? Reflect.ownKeys(layer) : []))];
+const plainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value) && typeof value.$$typeof !== 'symbol';
+const resolving = new Set();
+const live = (key, read) => {
+  if (pinned.has(key)) return pinned.get(key);
+  if (resolving.has(key)) return read();
+  resolving.add(key);
+  let first;
+  try {
+    const current = () => read();
+    first = current();
+    if (typeof first === 'function') pinned.set(key, (...args) => {
+      const fn = current();
+      return fn === undefined || fn === pinned.get(key) ? undefined : fn(...args);
+    });
+    else if (!plainObject(first) && typeof first === 'object' && first !== null) pinned.set(key, first);
+    else if (plainObject(first)) pinned.set(key, new Proxy({}, {
+      get: (_, prop) => live(`${key}\u0000${String(prop)}`, () => read()?.[prop]),
+      has: (_, prop) => prop in (read() ?? {}),
+      ownKeys: () => Reflect.ownKeys(read() ?? {}),
+      set: (_, prop, value) => { const target = read(); if (!target) return false; target[prop] = value; return true; },
+      deleteProperty: (_, prop) => { const target = read(); if (!target) return true; delete target[prop]; return true; },
+      getOwnPropertyDescriptor: (_, prop) => {
+        const value = read()?.[prop];
+        return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
+      },
+    }));
+  } finally {
+    resolving.delete(key);
+  }
+  return pinned.has(key) ? pinned.get(key) : first;
+};
+const proxyModule = (filename) => {
+  if (!proxies.has(filename)) {
+    const cached = new Module(filename, null);
+    cached.filename = filename;
+    cached.loaded = true;
+    cached.exports = new Proxy({}, {
+      get: (_, prop) => live(`${filename}\u0000${String(prop)}`, () => readStub(filename, prop)),
+      has: (_, prop) => stubKeys(filename).length ? stubKeys(filename).includes(prop) : prop in (realExports(filename) ?? {}),
+      ownKeys: () => stubKeys(filename).length ? stubKeys(filename) : Reflect.ownKeys(realExports(filename) ?? {}),
+      getOwnPropertyDescriptor: (_, prop) => {
+        const value = readStub(filename, prop);
+        return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
+      },
+    });
+    proxies.set(filename, cached);
+  }
+  cacheSlot(filename, proxies.get(filename));
+  return proxies.get(filename);
+};
+stubTargets.forEach(proxyModule);
+
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
   const dom = shared.dom;
@@ -73,12 +163,9 @@ async function withPalette(t, config, check) {
     focus.call(focusProxy.current);
     focusProxy.current.setSelectionRange(2, 5);
   }
-  const cached = new Map(Object.entries(require.cache));
-  const stubbed = new Set();
-  const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
+  const stub = (filename, exports) => { (replacingStubs ? testStubs : setupStubs).set(filename, exports); proxyModule(filename); };
   const source = (file, exports) => stub(path.join(root, file), exports);
   const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
-  const TaskContext = React.createContext(undefined);
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskOriginalNoteAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
@@ -111,7 +198,7 @@ async function withPalette(t, config, check) {
     source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => flags[key] ?? false });
     source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { TaskContext, useTaskContext: () => React.useContext(TaskContext) });
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => config.apple ?? false });
-    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(config.mobile ?? false) });
+    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext });
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ resetShowCommands, toggleShowCommands }) });
     source('src/lib/contexts/TourContext.tsx', { useTourContext: () => ({ endTour() {} }) });
     source('src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx', { default: () => null });
@@ -135,10 +222,11 @@ async function withPalette(t, config, check) {
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
     source('src/lib/createTaskAttachmentUploads.ts', { discardUnboundCreateTaskUploads() {} });
     source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', {});
-    const compose = jiti(path.join(root, 'src/lib/ai/composeTask.ts'));
+    const compose = realExports(path.join(root, 'src/lib/ai/composeTask.ts'));
     source('src/lib/ai/composeTask.ts', { ...compose, createComposedTask: (body) => new Promise((resolve, reject) => requests.push({ body, resolve, reject })) });
     const Thumbnails = ({ files, handleRemove }) => React.createElement('div', { 'data-thumbnails': true }, files.map(({ file }) => React.createElement('button', { key: file.name, onClick: () => handleRemove(file.name), 'aria-label': `Remove ${file.name}` }, React.createElement('img', { alt: file.name }), file.name)));
-    source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails });
+    const gallery = config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails;
+    source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: (props) => React.createElement(gallery, props) });
     const commands = [{ group: 'Board', commandLists: [{ key: 'createTaskWithAiWriter', name: 'AI Task Writer', commandMode: 135 }] }];
     const enums = jiti(path.join(root, 'src/models/enums.ts'));
     commands[0].commandLists[0].commandMode = enums.CommandMode.CreateTaskWithAiWriter;
@@ -159,7 +247,7 @@ async function withPalette(t, config, check) {
       shells.push(props);
       return React.createElement('section', { 'data-shell': true, className: props.contentClassName }, props.aboveSlot, children, props.bottomSlot);
     };
-    const common = jiti(path.join(root, 'src/components/Common/CommonModalComponents/index.tsx'));
+    const common = realExports(path.join(root, 'src/components/Common/CommonModalComponents/index.tsx'));
     source('src/components/Common/CommonModalComponents/index.tsx', { ...common, ModalContainerCustom: shell });
     source('src/components/Modals/Sheets/index.ts', { MobileBottomSheet: shell });
     const { useCommandCenterShortcut } = jiti(path.join(root, 'src/hooks/General/useCommandCenterShortcut.ts'));
@@ -175,8 +263,9 @@ async function withPalette(t, config, check) {
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
         React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
+          React.createElement(MobileViewContext.Provider, { value: config.mobile ?? false },
           shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true, focusProxy: config.bufferedText !== undefined ? focusProxy : undefined })) : null,
-          React.createElement(Probe)));
+          React.createElement(Probe))));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
     await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
@@ -201,7 +290,7 @@ async function withPalette(t, config, check) {
       const current = document.getElementById('root').innerHTML;
       await React.act(async () => reactRoot.unmount());
       for (const [filename, module] of Object.entries(require.cache)) {
-        if (filename.startsWith(`${root}/src/`) && !cached.has(filename)) {
+        if (filename.startsWith(`${root}/src/`)) {
           stub(path.join(directory, path.relative(root, filename)), module.exports);
         }
       }
@@ -218,6 +307,7 @@ async function withPalette(t, config, check) {
       assert.ok(callbacks.length, 'a focus retry must be pending');
       callbacks.forEach((callback) => callback());
     });
+    replacingStubs = true;
     await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
@@ -225,8 +315,14 @@ async function withPalette(t, config, check) {
       if (reactRoot) await React.act(async () => reactRoot.unmount());
     } finally {
       queryClient.clear();
-      for (const key of Object.keys(require.cache)) if (!cached.has(key) && (stubbed.has(key) || !key.includes(`${path.sep}node_modules${path.sep}`))) delete require.cache[key];
-      for (const [key, value] of cached) require.cache[key] = value;
+      replacingStubs = false;
+      const replaced = testStubs.size > 0;
+      setupStubs.clear();
+      testStubs.clear();
+      if (replaced) {
+        for (const key of Object.keys(require.cache)) if (key.startsWith(`${root}/src/`)) cacheSlot(key, undefined);
+        stubTargets.forEach(proxyModule);
+      }
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
       dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
     }
