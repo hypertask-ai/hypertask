@@ -83,8 +83,8 @@ test('the page shows every app in both factories and keeps user text escaped', a
   const summaries = fixture.apps.map(appFromFixture);
   summaries[0].label = '<script>Hypertask</script>';
   const html = formatHtml(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
-  assert.match(html, /&lt;script&gt;Hypertask&lt;\/script&gt;/);
-  assert.doesNotMatch(html, /<script>/);
+  assert.ok(html.includes('&lt;script&gt;Hypertask&lt;/script&gt;'));
+  assert.ok(!html.includes('<script>'));
   assert.match(html, /push to all green/);
   assert.match(html, /browser-smoke|app-smoke/);
   assert.equal((html.match(/<h2>/g) ?? []).length, 2);

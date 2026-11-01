@@ -275,7 +275,8 @@ export function fmt(value) {
   return `${(value / 60).toFixed(1)}m`;
 }
 
-const escape = text => String(text ?? '').replace(/[&<>"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[character]));
+const ENTITIES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '\\': '&#92;', '|': '&#124;' };
+const escape = text => String(text ?? '').replace(/[&<>"'\\|]/g, character => ENTITIES[character]);
 
 export function formatHtml(summaries, { limit, generatedAt = new Date().toISOString(), command }) {
   const cell = (row, value) => `<td${row === 'push-to-green' ? ' class="lead"' : ''}>${escape(fmt(value))}</td>`;
@@ -321,7 +322,7 @@ export function formatMarkdown(summaries, { limit, generatedAt = new Date().toIS
     `| Run time outside jobs | ${fmt(summary.median.gap)} | - |`,
   ].join('\n');
   const spots = summary => [...summary.slowSpots, ...summary.setupSteps]
-    .map(spot => `| ${escape(spot.work).replace(/\|/g, '\\|')} | ${fmt(spot.median)} | ${spot.samples} |`).join('\n');
+    .map(spot => `| ${escape(spot.work)} | ${fmt(spot.median)} | ${spot.samples} |`).join('\n');
   return [
     '# Where check time goes',
     '',
