@@ -111,6 +111,13 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Reads the checkout and nothing else, so it runs before every other step:
+      # a session ledger is a private file, and the PR is red until it is gone.
+      # A docs-only PR skips every later step, which is exactly the shape a
+      # ledger-only PR takes, so this step carries no `if:` and no new job.
+      - name: Guard session ledgers
+        run: node scripts/check-session-ledgers.mjs
+
       # Never build a commit whose review already failed (owner, 2026-08-26).
       # This does NOT wait: a pending or absent verdict builds in parallel as
       # normal; only an existing red verdict stops the build before it starts.
