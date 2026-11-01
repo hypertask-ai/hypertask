@@ -121,7 +121,7 @@
       "detail": "A proposed release is built and started before it can merge.",
       "checkIds": ["pre-merge-app"],
       "sources": [
-        { "file": "scripts/run-app-smoke-isolated.sh", "token": "next build --webpack" },
+        { "file": "scripts/run-app-smoke-isolated.sh", "token": "next build" },
         { "file": "scripts/run-app-smoke-isolated.sh", "token": "next start -p 3100" }
       ]
     },

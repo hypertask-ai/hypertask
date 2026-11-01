@@ -84,7 +84,7 @@ const commands = phase => [
   "flushdb", "disconnect",
   `${phase}: npx prisma migrate deploy`,
   `${phase}: node scripts/seed-browser-smoke.mjs --visual`,
-  `${phase}: npx next build --webpack`,
+  `${phase}: npx next build`,
   "start server", "start server",
   `${phase}: npx playwright test -c e2e/visual/playwright.visual.config.ts --update-snapshots=${phase === "base" ? "all" : "none"}`,
   "stop SIGTERM", "stop SIGTERM",
@@ -112,7 +112,7 @@ test("five timing rows cover the entire unchanged paired lifecycle and match the
 });
 
 test("a failed base build still reports elapsed work, distinguishes unreached phases, and remains a failure", async () => {
-  const run = fixture({ fail: "base: npx next build --webpack" });
+  const run = fixture({ fail: "base: npx next build" });
   await assert.rejects(run.main(), /base: npx next build failed/);
   assert.deepEqual(rows(run.files.get("/summary.md")), [
     ["base build", "60.0 s"], ["base seed+capture", "11.0 s"],

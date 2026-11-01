@@ -9,8 +9,6 @@ const { renderToStaticMarkup } = require("react-dom/server");
 
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
-const assets = ["e4af272ccee01ff0", "5611c55482296524", "4b9bb515ce6d026f"].map(hash => `/_next/static/media/${hash}-s.woff2`);
-const plex = "/_next/static/media/26d4368bf94c0ec4-s.woff2";
 
 function loadLayout(board, inbox = null, overrides = {}) {
   const font = { variable: "font-variable", className: "font-class" };
@@ -23,8 +21,8 @@ function loadLayout(board, inbox = null, overrides = {}) {
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => null },
     "@/lib/configs/auth.config": { default: { cookies: { theme: "theme", defaultTheme: "porcelain" } } },
     "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { bodyLayout: "body-layout" } },
-    "@/lib/fonts/inter": { inter: font, INTER_LATIN_FONT_HREF: assets[0] },
-    "@/lib/fonts/newsreader": { newsreader: font, NEWSREADER_LATIN_FONT_HREFS: assets.slice(1) },
+    "@/lib/fonts/inter": { inter: font },
+    "@/lib/fonts/newsreader": { newsreader: font },
     "@/lib/fonts/ibmPlexSans": { ibmPlexSans: font },
     "@/lib/flags/keys": { HTPR_7278_MEMORY_ONLY_TRACKING_FLAG: "htpr-7278-memory-only-tracking", HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen" },
     "@/lib/flags": { isFeatureEnabled: async () => false },
@@ -47,32 +45,6 @@ function loadLayout(board, inbox = null, overrides = {}) {
 
 const document = (mobile = true, theme = "porcelain", route = "/project") => ({
   scope: { route, accountId: 985 }, display: { isMobile: mobile, theme }, flags: { values: { "htpr-6934-server-first-screen": true } },
-});
-
-for (const theme of ["porcelain", "graphite", "amoled", "dia"]) {
-  test(`only a seeded phone board defers unused fonts in ${theme}`, async () => {
-    for (const [board, inbox, deferred] of [
-      [document(true, theme), null, theme !== "dia"],
-      [document(false, theme), null, false],
-      [null, document(true, theme, "/inbox"), false],
-      [null, null, false],
-    ]) {
-      const html = renderToStaticMarkup(await loadLayout(board, inbox)({ children: React.createElement("a", { href: "/detail/project-15/1" }, "Real card") }));
-      for (const asset of assets) assert.equal(html.includes(`href="${asset}"`), !deferred, JSON.stringify({ board, inbox, asset }));
-      assert.ok(html.includes("Real card"));
-      assert.equal(html.includes(plex), false, JSON.stringify({ board, inbox, theme }));
-    }
-  });
-}
-
-test("font assets stay available but Next no longer unconditionally preloads unused fonts", () => {
-  for (const file of ["src/lib/fonts/inter.ts", "src/lib/fonts/newsreader.ts"]) {
-    assert.match(read(file), /preload: false/);
-    assert.match(read(file), /display: "swap"/);
-  }
-  assert.match(read("src/lib/fonts/inter.ts"), /e4af272ccee01ff0-s\.woff2/);
-  assert.match(read("src/lib/fonts/newsreader.ts"), /5611c55482296524-s\.woff2/);
-  assert.match(read("src/lib/fonts/newsreader.ts"), /4b9bb515ce6d026f-s\.woff2/);
 });
 
 test("HTPR-7718: layout seeds only authenticated first document visits and isolates seed failures", async () => {

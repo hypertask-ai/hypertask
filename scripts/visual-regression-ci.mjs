@@ -148,6 +148,12 @@ async function summarize(workspace, temp) {
   await appendFile(process.env.GITHUB_STEP_SUMMARY ?? path.join(workspace, "visual-summary.md"), lines.join("\n"));
 }
 
+export function buildArguments(root) {
+  const config = path.join(root, "next.config.js");
+  const usesWebpack = existsSync(config) && /webpack\(config/.test(readFileSync(config, "utf8"));
+  return usesWebpack ? ["npx", "next", "build", "--webpack"] : ["npx", "next", "build"];
+}
+
 async function main() {
   const workspace = process.env.GITHUB_WORKSPACE;
   const temp = process.env.RUNNER_TEMP;
@@ -220,7 +226,7 @@ async function main() {
         console.log("Visual head reuses the one app build from app-build; no second next build");
       } else {
         recordPhase(`${phase} build`);
-        command(root, env, ["npx", "next", "build"]);
+        command(root, env, buildArguments(root));
         recordPhase(`${phase} seed+capture`);
       }
       const stop = await startServer(root, env, path.join(temp, `visual-${phase}-server.log`));
