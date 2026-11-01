@@ -199,6 +199,14 @@ const nextConfig = {
       },
     ];
   },
+  webpack(config) {
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      "react-joyride$": require.resolve("react-joyride"),
+      "vfile-message$": require.resolve("./src/lib/vendor/vfile-message.mjs"),
+    };
+    return config;
+  },
   turbopack: {
     resolveAlias: {
       "react-joyride": require.resolve("react-joyride"),
