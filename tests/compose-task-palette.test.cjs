@@ -152,7 +152,6 @@ stubTargets.filter(isAppSource).forEach((filename) => {
   cacheSlot(filename, undefined);
   installStubProxy(filename);
 });
-// A second copy of this fixture in the same process shares require.cache, so leave none of ours behind.
 const releaseFixture = () => {
   replacingStubs = false;
   setupStubs.clear();
