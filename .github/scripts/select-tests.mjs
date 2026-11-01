@@ -571,6 +571,16 @@ export async function selectTests(changed) {
   const reachable = new Map(supported.map((t) => [t, reaches(t, sources)]));
   const changedTests = new Set(files.filter((f) => isTest(f) && inventory.has(f)));
   const selected = new Set(changedTests);
+  // A test that compiles another test's source runs that file's fixtures in its
+  // own process, so a fixture change has to run every file that loads it
+  // (HYCI-69: a fixture edit passed its own file and broke all seven hosts).
+  for (const fixture of changedTests) {
+    const name = path.posix.basename(fixture);
+    for (const [candidate, contents] of tests) {
+      if (changedTests.has(candidate)) continue;
+      if (contents.includes(fixture) || contents.includes(name)) selected.add(candidate);
+    }
+  }
   // Directory and prefix references (a test that scans a folder) select a test
   // but are not proof that the file is covered, and a test with an unresolvable
   // require runs for every change: neither may end the ALL check below.

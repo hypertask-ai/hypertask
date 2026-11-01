@@ -238,6 +238,15 @@ test("a changed test file is always run", async () => {
   assert.ok(selected.includes("tests/agent-slug.test.cjs"));
 });
 
+test("a changed test file also runs the files that compile its source (HYCI-69)", async () => {
+  const selected = await select(["tests/compose-task-palette.test.cjs"]);
+  assert.notEqual(selected, "ALL");
+  assert.ok(selected.includes("tests/compose-task-palette.test.cjs"));
+  for (const host of ["tests/htpr-7307-ctrlj-footer-clickable.test.cjs", "tests/htpr-7675-ctrlj-enter-before-text-renders.test.cjs"]) {
+    assert.ok(selected.includes(host), `${host} loads the changed fixture`);
+  }
+});
+
 test("selection always includes the cheap runner and demo guards", async () => {
   const selected = await select(["tests/agent-slug.test.cjs"]);
   assert.ok(selected.includes("tests/test-inventory.test.cjs"));
