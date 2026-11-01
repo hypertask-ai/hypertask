@@ -23,7 +23,9 @@ case "${1:-}" in
     P=${2:?usage: drain-board gates <project-id>}
     ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
     [ -n "$ID" ] || { echo "drain-board needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
-    F=$PWD/.unlazy/s-${ID:0:8}/gates/drain-$P.md
+    # One board ledger per session, under the home folder: a drain never shares a file with another
+    # drain (two runs would append the same ticket twice), and the project stays clean.
+    F=${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers/drain-$P/s-${ID:0:8}/gates/drain-$P.md
     mkdir -p "$(dirname "$F")"
     [ -f "$F" ] || printf '# Drain board %s\n' "$P" > "$F"
     list=$(hypertask tasks list --project "$P" --limit $LIMIT --json)
@@ -39,7 +41,7 @@ case "${1:-}" in
       n=$((n+1))
     done <<<"$rows"
     status=0
-    node "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" --approve "$F" >/dev/null || status=$?
+    node "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" --approve "$F" --root "$(dirname "$F")" >/dev/null || status=$?
     # Exit 1 only means tickets are still open, which is expected while draining.
     [ "$status" -le 1 ] || exit "$status"
     echo "$F: $n new ticket gates, $(grep -c '^- \[ \] drain-' "$F") open" ;;

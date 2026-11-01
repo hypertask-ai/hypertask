@@ -11,7 +11,7 @@ Valentin, 2026-10-03: "makes the agent go through all tickets in the board using
 
 ## Steps
 
-1. **Ledger.** Load `unlazy`. From `~/projects/hypertask`, run `~/.agents/skills/drain-board/scripts/drain-board gates <id>`. It adds one gate per open ticket to this session's ledger (`.unlazy/s-<session>/gates/drain-<id>.md`); `check <TICKET>` prints `settled` once the ticket is Done or in Valentin Review. Rerun `gates` after each pass: new tickets get gates, existing ones are kept.
+1. **Ledger.** Load `unlazy`. From `~/projects/hypertask`, run `~/.agents/skills/drain-board/scripts/drain-board gates <id>`. It adds one gate per open ticket to a board ledger in the home folder (`~/.unlazy/ledgers/drain-<id>/s-<session>/gates/drain-<id>.md`, one per session so two drains never share a file); `check <TICKET>` prints `settled` once the ticket is Done or in Valentin Review. Rerun `gates` after each pass: new tickets get gates, existing ones are kept.
 2. **Hands off.** Do not touch, and mark `ABANDON: drain-<id>.<TICKET> <reason>`:
    - assigned to Abdul;
    - "Claimed." and In Progress by another session or runner (say which);

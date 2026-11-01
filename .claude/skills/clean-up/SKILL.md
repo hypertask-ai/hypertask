@@ -23,7 +23,7 @@ Record each created branch with `ship-check branch <TICKET> <branch>` before wor
 5. `git push origin --delete <branch>` only when its PR is merged.
 6. Keep QA proof and reports in `~/.local/state/vcc-evidence/`; worktree cleanup never removes them. The separate [daily evidence pruner](../verify-qa/reference/evidence-storage.md) removes only old allowlisted build debris and Done-ticket videos under its age rules.
 
-From /ship, `~/.agents/skills/ship/scripts/ship-check cleaned <TICKET>` must print `cleaned ok`; it is the last gate on the /ship checklist. If the session's ledger (`.unlazy/`) sits inside the worktree you remove, it goes with it: run `ship-gates` from the main checkout so the ledger survives.
+From /ship, `~/.agents/skills/ship/scripts/ship-check cleaned <TICKET>` must print `cleaned ok`; it is the last gate on the /ship checklist. The ledger lives in the ticket's home folder (`~/.unlazy/ledgers/<TICKET>/`), outside every worktree, so removing the worktree cannot take it with it.
 
 ## Report
 
