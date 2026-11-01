@@ -333,7 +333,7 @@ jobs:
           set -o pipefail
           for attempt in 1 2; do
             npx next build 2>&1 | tee "verify-qa/build-${attempt}.log" && exit 0
-            grep -q 'next/font/google' "verify-qa/build-${attempt}.log" || exit 1
+            grep -qE 'An error occurred in `next/font`|next/font` error:|@next/font/dist/google/loader\.js' "verify-qa/build-${attempt}.log" || exit 1
           done
           exit 1
       - name: Launch, doctor, drive, and tear down

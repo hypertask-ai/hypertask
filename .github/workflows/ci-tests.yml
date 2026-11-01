@@ -990,11 +990,13 @@ jobs:
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         # YPER4-363: next/font downloads Google fonts at build time and about
         # 6% of builds lost that download. Retry once, only for that failure.
+        # The guard matches what the build prints: "An error occurred in
+        # `next/font`", "`next/font` error:" or the @next/font loader frame (HYCI-63).
         run: |
           set -o pipefail
           for attempt in 1 2; do
             npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
-            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
+            grep -qE 'An error occurred in `next/font`|next/font` error:|@next/font/dist/google/loader\.js' "$RUNNER_TEMP/next-build.log" || exit 1
             echo "::warning::Google font download failed during next build (attempt $attempt)"
           done
           exit 1

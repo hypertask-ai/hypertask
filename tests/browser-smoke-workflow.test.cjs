@@ -6,6 +6,30 @@ async function source(path) {
   return readFile(path, "utf8");
 }
 
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+const FONT_MISS_LOG = path.resolve("tests/fixtures/next-font-build-failure.log");
+
+function runBuildStep(step, outcomes) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hyci-63-"));
+  fs.mkdirSync(path.join(dir, "verify-qa"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
+n=$(( $(cat "${dir}/calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/calls"
+case "$(sed -n "\${n}p" "${dir}/outcomes")" in
+  ok) echo built; exit 0;;
+  font) cat "${FONT_MISS_LOG}"; exit 1;;
+  next) printf '%s\n' 'Failed to compile.' '' '\`next/font\` error:' 'Failed to fetch \`Inter\` from Google Fonts.'; exit 1;;
+  *) echo "Type error: something else" >&2; exit 1;;
+esac
+`, { mode: 0o755 });
+  fs.writeFileSync(path.join(dir, "outcomes"), outcomes.join("\n") + "\n");
+  const child = spawnSync("bash", ["-c", step.run], { cwd: dir, env: { PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir } });
+  return { status: child.status, calls: Number(fs.readFileSync(path.join(dir, "calls"), "utf8")) };
+}
+
 const SHARDS = ["browser-smoke-desktop", "browser-smoke-mobile", "browser-smoke-matrix", "browser-smoke-flags"];
 
 function browserHalf(workflow, key) {
@@ -282,30 +306,37 @@ test("required contract summary needs successful smoke and explicit contract or 
 
 test("browser smoke retries its build once, only after a Google font download failure", async () => {
   const yaml = require("js-yaml");
-  const fs = require("node:fs");
-  const os = require("node:os");
-  const path = require("node:path");
-  const { spawnSync } = require("node:child_process");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const step = workflow.jobs["browser-build"].steps.find((s) => s.name === "Build the local app (no migrations)");
-  const run = (outcomes) => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
-    fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
-n=$(( $(cat "${dir}/calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/calls"
-case "$(sed -n "\${n}p" "${dir}/outcomes")" in
-  ok) echo built; exit 0;;
-  font) echo "TypeError at node_modules/next/dist/compiled/@next/font/dist/google/loader.js" >&2; echo "next/font/google failed" >&2; exit 1;;
-  *) echo "Type error: something else" >&2; exit 1;;
-esac
-`, { mode: 0o755 });
-    fs.writeFileSync(path.join(dir, "outcomes"), outcomes.join("\n") + "\n");
-    const child = spawnSync("bash", ["-c", step.run], { env: { PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir } });
-    return { status: child.status, calls: Number(fs.readFileSync(path.join(dir, "calls"), "utf8")) };
-  };
+  const run = (outcomes) => runBuildStep(step, outcomes);
   assert.deepEqual(run(["ok"]), { status: 0, calls: 1 });
   assert.deepEqual(run(["font", "ok"]), { status: 0, calls: 2 });
   assert.deepEqual(run(["font", "font"]), { status: 1, calls: 2 });
+  assert.deepEqual(run(["next", "ok"]), { status: 0, calls: 2 });
   assert.deepEqual(run(["other", "ok"]), { status: 1, calls: 1 });
+});
+
+test("every build retry guard retries the log a real font failure prints", async () => {
+  const yaml = require("js-yaml");
+  const [ciTests, pilot, verifyQa] = await Promise.all([
+    source(".github/workflows/ci-tests.yml"),
+    source(".github/workflows/e2e-ai-pilot.yml"),
+    source(".github/workflows/visual-regression.yml"),
+  ]);
+  const buildStep = (workflow, job, name) => yaml.load(workflow).jobs[job].steps.find((s) => s.name === name);
+  // HYCI-59 made the four browser shards share one build, so ci-tests has one retry loop.
+  const steps = [
+    buildStep(ciTests, "browser-build", "Build the local app (no migrations)"),
+    buildStep(pilot, "pilot", "Build the local app (no migrations)"),
+    buildStep(verifyQa, "verify-qa", "Build once"),
+  ];
+  assert.equal(steps.filter(Boolean).length, 3);
+  for (const step of steps) {
+    assert.deepEqual(runBuildStep(step, ["font", "ok"]), { status: 0, calls: 2 });
+    assert.deepEqual(runBuildStep(step, ["next", "ok"]), { status: 0, calls: 2 });
+    assert.deepEqual(runBuildStep(step, ["font", "font"]), { status: 1, calls: 2 });
+    assert.deepEqual(runBuildStep(step, ["other", "ok"]), { status: 1, calls: 1 });
+  }
 });
 
 test("YPER4-629: required browser smoke runs the inbox cycle last, with every flag on and with live-like modes", async () => {
