@@ -80,16 +80,17 @@ const splitTicketGates = (source, ticket, cwd, accept) => {
 };
 await withFileLock(state, ledger, () => {
   const binding = `${dirname(ledger)}/session`;
-  const bound = read(binding);
+  const bound = read(binding).trim();
+  const handedOver = !!bound && bound !== session.trim();
   // One folder per ticket: a new session continues the ticket's ledger instead of failing,
   // because the ticket owns the ledger and ship-claim owns the work.
-  if (bound && bound.trim() !== session.trim()) {
-    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound.trim()} to ${session.trim()}\n`);
+  if (handedOver) {
+    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}\n`);
   }
   let text = read(ledger);
   // A new session owns new worktrees, so an earlier session's cleanup result would be a false
   // done. Clear that gate and its evidence whenever the ledger changes hands.
-  if (bound && bound.trim() !== session.trim() && text) {
+  if (handedOver && text) {
     const lines = text.split('\n');
     let inside = false;
     for (let i = 0; i < lines.length; i += 1) {
