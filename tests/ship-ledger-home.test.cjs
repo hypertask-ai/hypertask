@@ -224,7 +224,7 @@ test('a board drain keeps one ledger per session outside the project', needsUnla
     { mode: 0o755 });
   const drain = (session) => spawnSync('bash', [drainBoard, 'gates', '11514'], {
     cwd: f.project, encoding: 'utf8',
-    env: { PATH: `${bin}:${process.env.PATH}`, HOME: f.home, CLAUDE_CODE_SESSION_ID: session },
+    env: { PATH: `${bin}:${process.env.PATH}`, HOME: f.home, GATE_CALLS: f.calls, CLAUDE_CODE_SESSION_ID: session },
   });
   try {
     for (const session of ['sessionA-full', 'sessionB-full']) {
@@ -238,6 +238,7 @@ test('a board drain keeps one ledger per session outside the project', needsUnla
     assert.equal(fs.readFileSync(b, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1);
     assert.equal(drain('sessionA-full').status, 0);
     assert.equal(fs.readFileSync(a, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1, 'a rerun duplicated the gates');
+    assert.match(fs.readFileSync(f.calls, 'utf8'), /--approve\",\"\S*drain-11514\/s-sessionA\/gates\/drain-11514\.md/, 'the drain never ran the checker');
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false, 'the project is not clean');
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
@@ -328,6 +329,25 @@ test('a move refuses a taken-over gate that still points at the removed checkout
     assert.notEqual(refused.status, 0, 'a taken-over gate followed the move to a checkout it never ran in');
     assert.match(refused.stderr, new RegExp(`carried HTPR-6819\\.qa-note still runs in ${f.project}`));
     assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionA-full\n');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a taken-over gate does not have to be adopted again by the next session', needsUnlazy, () => {
+  const f = fixture();
+  const legacy = path.join(f.project, '.unlazy/s-abcdef12/GATES.md');
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, '# Gates: /ship\n\n' +
+    '- [ ] HTPR-6819.qa-note: the outcome this session still owes\n  CHECK: echo carried\n  EXPECT: carried\n');
+  const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+  const carried = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates/adopted.md');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', { SHIP_LEDGER_ADOPT: '1' });
+    const handover = gates(f, 'HTPR-6819', 'sessionB-full');
+    assert.match(handover.stderr, /9 generated gates written again/);
+    assert.equal(fs.readFileSync(ledger, 'utf8').match(/^- \[ \] HTPR-6819\./gm).length, 9);
+    assert.match(fs.readFileSync(carried, 'utf8'), /^- \[ \] HTPR-6819\.qa-note:/m, 'the taken-over gate was lost on handover');
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }

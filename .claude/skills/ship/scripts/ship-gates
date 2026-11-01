@@ -185,7 +185,9 @@ await withFileLock(state, ledger, () => {
     if (!/^- \[[ xX]\] \S+:/m.test(text)) text = '';
     process.stderr.write(`ship-gates: ${edited.join(', ')} written again; a standard gate is a runnable check, not a manual note\n`);
   }
-  const carried = text ? [] : legacyTicketGates();
+  // A gate already carried keeps its adopted definition, so a later session taking the ticket over
+  // is not asked to adopt it a second time. A project file edited since then still is.
+  const carried = (text ? [] : legacyTicketGates()).filter((gate) => adopted.get(gate.id) !== gate.digest);
   if (carried.length && process.env.SHIP_LEDGER_ADOPT !== '1') {
     throw new Error(`ship-gates: ${carried.map((gate) => gate.id).join(', ')} in ${carried[0].file} are not carried beside ${ledger}; run with SHIP_LEDGER_ADOPT=1 to copy them into ${extrasFile}, where a person reviews them`);
   }
