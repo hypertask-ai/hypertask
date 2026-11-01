@@ -821,15 +821,17 @@ jobs:
 
   browser-smoke-desktop:
     name: browser-smoke-desktop
-    # HYCI-32: the browser check used to be one 723 s job. It is now two halves
-    # that run in parallel, each with the proven four Chromium workers: desktop
-    # pages in `browser-smoke-desktop`, phone pages plus the layout matrix in
-    # `browser-smoke-mobile`. Both halves build the candidate themselves, because
-    # a shared build job would serialise the two halves behind it and give back
-    # the wall clock the split exists to remove. The required context stays
-    # `browser-smoke`, a summary job over both halves, so a red half still blocks
-    # a merge and every existing ruleset, merge guard and policy entry keeps
-    # working unchanged.
+    # HYCI-32 split the browser check in two; HYCI-57 splits the page tests in
+    # four, so the check is one build plus the slowest quarter of the pages:
+    # `browser-smoke-desktop` (default desktop pages, the instant-open control,
+    # the contract), `browser-smoke-mobile` (default phone pages),
+    # `browser-smoke-matrix` (the width matrix) and `browser-smoke-flags` (every
+    # flag on, then the inbox cycle). Each shard builds the candidate itself:
+    # a shared build job would put the whole build in front of every shard,
+    # which measured slower than four warm parallel builds (HYCI-57 has the
+    # numbers). The required context stays `browser-smoke`, a summary job over
+    # the four shards, so a red shard still blocks a merge and every existing
+    # ruleset, merge guard and policy entry keeps working unchanged.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1090,54 +1092,14 @@ jobs:
           done
           curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health" || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search did not become ready'; exit 1; }
           node scripts/mcp-cli-api-contract.mjs
-          # --project is what makes the halves halves: without it every run here
-          # would serve every project and the split would save nothing. The
-          # desktop half owns the Desktop and Inbox projects, the phone half owns
-          # Mobile and Matrix, so no spec/project pair runs twice
-          # (tests/browser-smoke-workflow.test.cjs proves the coverage is whole).
+          # HYCI-57: the desktop part keeps the build, the contract and the
+          # default desktop pages, and the instant-open control for both
+          # viewports. The flag modes, the inbox cycle and the phone pages are
+          # their own shards now, so one part never pays for another's pages.
           npx playwright test -c playwright.config.smoke.ts --project=Desktop e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts
           # Keep the instant-open regression covered even while its live mode is OFF.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
-          npx playwright test -c playwright.config.smoke.ts --project=Desktop e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
-          # Layout lock must also cover unreleased and newly registered flags.
-          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
-          npx playwright test -c playwright.config.smoke.ts --project=Desktop e2e/smoke/layout-lock.spec.ts e2e/smoke/agent-sidebar-chats.spec.ts
-          # YPER4-629 core release test: the inbox cycle, after layout lock so the
-          # lock still sees an empty inbox. Every flag on, then live-like modes.
-          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
-          npx playwright test -c playwright.config.smoke.ts --project=Inbox e2e/smoke/inbox-cycle.spec.ts
-          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --live-like-control
-          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
-          npx playwright test -c playwright.config.smoke.ts --project=Inbox e2e/smoke/inbox-cycle.spec.ts
-          set +e
-          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
-          reseed_status=$?
-          if [ "$reseed_status" -eq 0 ]; then
-            export VERIFY_QA_REPORT_ONLY=1
-            export VERIFY_QA_BASE="$BASE_URL"
-            export VERIFY_QA_STATE_FILE=e2e/smoke/.state/smoke-state.json
-            export VERIFY_QA_FIXTURE=e2e/smoke/.state/inbox-cycle-fixture.json
-            export VERIFY_QA_CHANGED_FILES="${RUNNER_TEMP}/changed-files.txt"
-            export VERIFY_QA_OUT=verify-qa-premerge
-            timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
-            verify_qa_status=$?
-            if grep -Eq '^(.github/scripts/verify-qa-premerge.mjs|tests/verify-qa-premerge.test.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
-              printf '%s\n' 'src/lib/auth/session.ts' > "$RUNNER_TEMP/verify-qa-matched-files.txt"
-              VERIFY_QA_CHANGED_FILES="$RUNNER_TEMP/verify-qa-matched-files.txt" VERIFY_QA_OUT=verify-qa-premerge/matched-control \
-                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
-              control_status=$?
-              if [ "$control_status" -ne 0 ]; then
-                echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
-              fi
-            fi
-          else
-            verify_qa_status=$reseed_status
-            echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
-          fi
-          set -e
-          if [ "${verify_qa_status:-0}" -ne 0 ]; then
-            echo "::warning::verify-qa premerge journey exited ${verify_qa_status}; evidence is report-only"
-          fi
+          npx playwright test -c playwright.config.smoke.ts --project=Desktop --project=Mobile e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
       - name: Upload failing smoke screenshots
         if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -1148,33 +1110,476 @@ jobs:
             test-results/**/error-context.md
           if-no-files-found: ignore
           retention-days: 7
-      - name: Upload premerge verify-qa evidence
-        id: verify-qa-evidence
-        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: verify-qa-premerge
-          path: verify-qa-premerge/
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: Link premerge verify-qa evidence
-        if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
-        run: |
-          printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
-
-
-
   browser-smoke-mobile:
     name: browser-smoke-mobile
-    # HYCI-32: the browser check used to be one 723 s job. It is now two halves
-    # that run in parallel, each with the proven four Chromium workers: desktop
-    # pages in `browser-smoke-desktop`, phone pages plus the layout matrix in
-    # `browser-smoke-mobile`. Both halves build the candidate themselves, because
-    # a shared build job would serialise the two halves behind it and give back
-    # the wall clock the split exists to remove. The required context stays
-    # `browser-smoke`, a summary job over both halves, so a red half still blocks
-    # a merge and every existing ruleset, merge guard and policy entry keeps
-    # working unchanged.
+    # HYCI-57: one quarter of the page tests. It builds the candidate itself,
+    # like every shard, so no shard waits behind another.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
+    services:
+      postgres:
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_DB: hypertask_smoke
+          POSTGRES_USER: browser_smoke
+          POSTGRES_PASSWORD: browser_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U browser_smoke -d hypertask_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      soketi:
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          SOKETI_DEFAULT_APP_ID: app-id
+          SOKETI_DEFAULT_APP_KEY: app-key
+          SOKETI_DEFAULT_APP_SECRET: app-secret
+        ports:
+          - 6001:6001
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:6001"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Keep both required jobs running: only their heavy steps may be skipped.
+      - name: Determine change scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A missing/broken detector must never suppress correctness checks.
+          if ! node .github/scripts/ci-change-scope.cjs; then
+            echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
+            : > "$RUNNER_TEMP/changed-files.txt"
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+      # YPER4-252: a layout lock baseline or ratchet only changes with the ticket where Valentin
+      # approved it, named in approvedIn and in a "Layout change approved: <URL>" PR body line.
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      # browser-smoke was the last install job outside the shared dependency cache,
+      # so every pull request rebuilt node_modules from the npm tarballs alone. It
+      # restores the same production-seeded key as ci-prepare and installs only on
+      # a miss.
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate client and install Chromium
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          npx prisma generate
+          # A restored node_modules skipped the npm postinstall that writes this file.
+          npm run flags:generate
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y strace
+      - name: Prepare disposable local credentials
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # Derived from the commit so one build serves every consumer.
+          seed="${{ github.event.pull_request.head.sha || github.sha }}-smoke"
+          session_secret=$(printf '%s' "$seed:session" | sha256sum | cut -d' ' -f1)
+          jwt_secret=$(printf '%s' "$seed:jwt" | sha256sum | cut -d' ' -f1)
+          better_auth_secret=$(printf '%s' "$seed:better-auth" | sha256sum | cut -d' ' -f1)
+          printf '::add-mask::%s\n' "$session_secret"
+          printf '::add-mask::%s\n' "$jwt_secret"
+          printf '::add-mask::%s\n' "$better_auth_secret"
+          {
+            printf '%s\n' 'DATABASE_URL=postgresql://browser_smoke:browser_smoke@127.0.0.1:5432/hypertask_smoke'
+            printf '%s\n' 'REDIS_URL=redis://127.0.0.1:6379'
+            printf 'SESSION_SECRET=%s\n' "$session_secret"
+            printf 'JWT_SECRET=%s\n' "$jwt_secret"
+            printf 'BETTER_AUTH_SECRET=%s\n' "$better_auth_secret"
+            printf '%s\n' 'BETTER_AUTH_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100'
+            printf '%s\n' 'TURBOPUFFER_BASE_URL=http://127.0.0.1:53101'
+            printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
+            printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
+            printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_PORT=6001'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_USE_TLS=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_CLUSTER=mt1'
+            printf '%s\n' 'PUSHER_APP_ID=app-id'
+            printf '%s\n' 'PUSHER_KEY=app-key'
+            printf '%s\n' 'PUSHER_SECRET=app-secret'
+            printf '%s\n' 'PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'PUSHER_PORT=6001'
+            printf '%s\n' 'PUSHER_USE_TLS=false'
+            printf '%s\n' 'PUSHER_CLUSTER=mt1'
+          } >> "$GITHUB_ENV"
+      - name: Create isolated database and logged-in fixtures
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        id: fixtures
+        env:
+          BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
+          BROWSER_SMOKE_SEARCH_FIXTURES: '1'
+        run: |
+          npx prisma migrate deploy
+          node scripts/seed-browser-smoke.mjs --qa-journeys
+      - name: Restore Next.js build cache
+        id: restore-nextjs-cache
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
+      - name: Build the local app (no migrations)
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        # YPER4-363: next/font downloads Google fonts at build time and about
+        # 6% of builds lost that download. Retry once, only for that failure.
+        run: |
+          set -o pipefail
+          for attempt in 1 2; do
+            npx next build --webpack 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
+            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
+            echo "::warning::Google font download failed during next build (attempt $attempt)"
+          done
+          exit 1
+      - name: Serve and check the layout matrix
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        id: smoke
+        env:
+          BASE_URL: http://127.0.0.1:3100
+          SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
+          SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
+          BROWSER_SMOKE_PR: '1'
+        run: |
+          set -euo pipefail
+          node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > "$RUNNER_TEMP/contract-search.log" 2>&1 &
+          search=$!
+          npx next start -H 127.0.0.1 -p 3100 > "$RUNNER_TEMP/browser-smoke-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS -o /dev/null "$BASE_URL/login"; then break; fi
+            kill -0 "$server" 2>/dev/null || { echo '::error::Local app exited before it became ready'; exit 1; }
+            sleep 2
+          done
+          curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
+          for attempt in {1..30}; do
+            if curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"; then break; fi
+            kill -0 "$search" 2>/dev/null || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search exited before it became ready'; exit 1; }
+            sleep 1
+          done
+          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health" || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search did not become ready'; exit 1; }
+          # HYCI-57: the layout matrix alone. The layout matrix
+          # and the every-flag-on passes moved to their own shards.
+          npx playwright test -c playwright.config.smoke.ts --project=Mobile e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts
+      # YPER4-939: a failing screen-spec test left no screenshot behind, so the flake could not be
+      # read back. Screenshots and Playwright's error context only; traces carry session traffic.
+      - name: Upload failing smoke screenshots
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-smoke-mobile-failures
+          path: |
+            test-results/**/*.png
+            test-results/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-smoke-matrix:
+    name: browser-smoke-matrix
+    # HYCI-57: one quarter of the page tests. It builds the candidate itself,
+    # like every shard, so no shard waits behind another.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
+    services:
+      postgres:
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_DB: hypertask_smoke
+          POSTGRES_USER: browser_smoke
+          POSTGRES_PASSWORD: browser_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U browser_smoke -d hypertask_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      soketi:
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          SOKETI_DEFAULT_APP_ID: app-id
+          SOKETI_DEFAULT_APP_KEY: app-key
+          SOKETI_DEFAULT_APP_SECRET: app-secret
+        ports:
+          - 6001:6001
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:6001"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Keep both required jobs running: only their heavy steps may be skipped.
+      - name: Determine change scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A missing/broken detector must never suppress correctness checks.
+          if ! node .github/scripts/ci-change-scope.cjs; then
+            echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
+            : > "$RUNNER_TEMP/changed-files.txt"
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+      # YPER4-252: a layout lock baseline or ratchet only changes with the ticket where Valentin
+      # approved it, named in approvedIn and in a "Layout change approved: <URL>" PR body line.
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      # browser-smoke was the last install job outside the shared dependency cache,
+      # so every pull request rebuilt node_modules from the npm tarballs alone. It
+      # restores the same production-seeded key as ci-prepare and installs only on
+      # a miss.
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Generate client and install Chromium
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          npx prisma generate
+          # A restored node_modules skipped the npm postinstall that writes this file.
+          npm run flags:generate
+          printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt > /dev/null
+          npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y strace
+      - name: Prepare disposable local credentials
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # Derived from the commit so one build serves every consumer.
+          seed="${{ github.event.pull_request.head.sha || github.sha }}-smoke"
+          session_secret=$(printf '%s' "$seed:session" | sha256sum | cut -d' ' -f1)
+          jwt_secret=$(printf '%s' "$seed:jwt" | sha256sum | cut -d' ' -f1)
+          better_auth_secret=$(printf '%s' "$seed:better-auth" | sha256sum | cut -d' ' -f1)
+          printf '::add-mask::%s\n' "$session_secret"
+          printf '::add-mask::%s\n' "$jwt_secret"
+          printf '::add-mask::%s\n' "$better_auth_secret"
+          {
+            printf '%s\n' 'DATABASE_URL=postgresql://browser_smoke:browser_smoke@127.0.0.1:5432/hypertask_smoke'
+            printf '%s\n' 'REDIS_URL=redis://127.0.0.1:6379'
+            printf 'SESSION_SECRET=%s\n' "$session_secret"
+            printf 'JWT_SECRET=%s\n' "$jwt_secret"
+            printf 'BETTER_AUTH_SECRET=%s\n' "$better_auth_secret"
+            printf '%s\n' 'BETTER_AUTH_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100'
+            printf '%s\n' 'TURBOPUFFER_BASE_URL=http://127.0.0.1:53101'
+            printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
+            printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
+            printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_PORT=6001'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_USE_TLS=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_CLUSTER=mt1'
+            printf '%s\n' 'PUSHER_APP_ID=app-id'
+            printf '%s\n' 'PUSHER_KEY=app-key'
+            printf '%s\n' 'PUSHER_SECRET=app-secret'
+            printf '%s\n' 'PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'PUSHER_PORT=6001'
+            printf '%s\n' 'PUSHER_USE_TLS=false'
+            printf '%s\n' 'PUSHER_CLUSTER=mt1'
+          } >> "$GITHUB_ENV"
+      - name: Create isolated database and logged-in fixtures
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        id: fixtures
+        env:
+          BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
+          BROWSER_SMOKE_SEARCH_FIXTURES: '1'
+        run: |
+          npx prisma migrate deploy
+          node scripts/seed-browser-smoke.mjs --qa-journeys
+      - name: Restore Next.js build cache
+        id: restore-nextjs-cache
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
+      - name: Build the local app (no migrations)
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        # YPER4-363: next/font downloads Google fonts at build time and about
+        # 6% of builds lost that download. Retry once, only for that failure.
+        run: |
+          set -o pipefail
+          for attempt in 1 2; do
+            npx next build --webpack 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
+            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
+            echo "::warning::Google font download failed during next build (attempt $attempt)"
+          done
+          exit 1
+      - name: Serve and check phone pages and the layout matrix
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        id: smoke
+        env:
+          BASE_URL: http://127.0.0.1:3100
+          SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
+          SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
+          BROWSER_SMOKE_PR: '1'
+        run: |
+          set -euo pipefail
+          node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > "$RUNNER_TEMP/contract-search.log" 2>&1 &
+          search=$!
+          npx next start -H 127.0.0.1 -p 3100 > "$RUNNER_TEMP/browser-smoke-server.log" 2>&1 &
+          server=$!
+          trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
+            if curl -fsS -o /dev/null "$BASE_URL/login"; then break; fi
+            kill -0 "$server" 2>/dev/null || { echo '::error::Local app exited before it became ready'; exit 1; }
+            sleep 2
+          done
+          curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
+          for attempt in {1..30}; do
+            if curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"; then break; fi
+            kill -0 "$search" 2>/dev/null || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search exited before it became ready'; exit 1; }
+            sleep 1
+          done
+          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health" || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search did not become ready'; exit 1; }
+          # HYCI-57: the layout matrix alone. Seven widths over five pages, once
+          # with live-like flags and once with every registry flag on.
+          npx playwright test -c playwright.config.smoke.ts --project=Matrix e2e/smoke/layout-lock-matrix.spec.ts
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
+          npx playwright test -c playwright.config.smoke.ts --project=Matrix e2e/smoke/layout-lock-matrix.spec.ts
+      - name: Upload layout lock screenshots
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: layout-lock-matrix
+          path: test-results/layout-lock-matrix/
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Upload failing smoke screenshots
+        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: browser-smoke-matrix-failures
+          path: |
+            test-results/**/*.png
+            test-results/**/error-context.md
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser-smoke-flags:
+    name: browser-smoke-flags
+    # HYCI-57: one quarter of the page tests. It builds the candidate itself,
+    # like every shard, so no shard waits behind another.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1384,28 +1789,63 @@ jobs:
             sleep 1
           done
           curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health" || { cat "$RUNNER_TEMP/contract-search.log"; echo '::error::Fixture search did not become ready'; exit 1; }
-          npx playwright test -c playwright.config.smoke.ts --project=Mobile --project=Matrix e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
-          # Keep the instant-open regression covered even while its live mode is OFF.
-          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
-          npx playwright test -c playwright.config.smoke.ts --project=Mobile e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
-          # Layout lock must also cover unreleased and newly registered flags.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
-          npx playwright test -c playwright.config.smoke.ts --project=Mobile --project=Matrix e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts e2e/smoke/agent-sidebar-chats.spec.ts
-      - name: Upload layout lock screenshots
-        if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
+          # HYCI-57: every registry flag on, both viewports, then the inbox
+          # cycle with every flag on and again with live-like modes. Layout
+          # lock still sees the empty inbox because it runs before the cycle.
+          npx playwright test -c playwright.config.smoke.ts --project=Desktop --project=Mobile e2e/smoke/layout-lock.spec.ts e2e/smoke/agent-sidebar-chats.spec.ts
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
+          npx playwright test -c playwright.config.smoke.ts --project=Inbox e2e/smoke/inbox-cycle.spec.ts
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --live-like-control
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
+          npx playwright test -c playwright.config.smoke.ts --project=Inbox e2e/smoke/inbox-cycle.spec.ts
+          set +e
+          BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --inbox-cycle
+          reseed_status=$?
+          if [ "$reseed_status" -eq 0 ]; then
+            export VERIFY_QA_REPORT_ONLY=1
+            export VERIFY_QA_BASE="$BASE_URL"
+            export VERIFY_QA_STATE_FILE=e2e/smoke/.state/smoke-state.json
+            export VERIFY_QA_FIXTURE=e2e/smoke/.state/inbox-cycle-fixture.json
+            export VERIFY_QA_CHANGED_FILES="${RUNNER_TEMP}/changed-files.txt"
+            export VERIFY_QA_OUT=verify-qa-premerge
+            timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+            verify_qa_status=$?
+            if grep -Eq '^(.github/scripts/verify-qa-premerge.mjs|tests/verify-qa-premerge.test.cjs)$' "$VERIFY_QA_CHANGED_FILES"; then
+              printf '%s\n' 'src/lib/auth/session.ts' > "$RUNNER_TEMP/verify-qa-matched-files.txt"
+              VERIFY_QA_CHANGED_FILES="$RUNNER_TEMP/verify-qa-matched-files.txt" VERIFY_QA_OUT=verify-qa-premerge/matched-control \
+                timeout --signal=TERM --kill-after=20s 160s node .github/scripts/verify-qa-premerge.mjs
+              control_status=$?
+              if [ "$control_status" -ne 0 ]; then
+                echo "::warning::verify-qa matched control exited ${control_status}; evidence is report-only"
+              fi
+            fi
+          else
+            verify_qa_status=$reseed_status
+            echo "::warning::inbox reseed failed (${reseed_status}); skipped premerge verify-qa"
+          fi
+          set -e
+          if [ "${verify_qa_status:-0}" -ne 0 ]; then
+            echo "::warning::verify-qa premerge journey exited ${verify_qa_status}; evidence is report-only"
+          fi
+      - name: Upload premerge verify-qa evidence
+        id: verify-qa-evidence
+        if: always() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: layout-lock-matrix
-          path: test-results/layout-lock-matrix/
+          name: verify-qa-premerge
+          path: verify-qa-premerge/
           if-no-files-found: ignore
           retention-days: 7
-      # YPER4-939: a failing screen-spec test left no screenshot behind, so the flake could not be
-      # read back. Screenshots and Playwright's error context only; traces carry session traffic.
+      - name: Link premerge verify-qa evidence
+        if: always() && steps.verify-qa-evidence.outputs.artifact-url != ''
+        run: |
+          printf '\nEvidence artifact: %s\n' "${{ steps.verify-qa-evidence.outputs.artifact-url }}" >> "$GITHUB_STEP_SUMMARY"
       - name: Upload failing smoke screenshots
         if: failure() && (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: browser-smoke-mobile-failures
+          name: browser-smoke-flags-failures
           path: |
             test-results/**/*.png
             test-results/**/error-context.md
@@ -1416,10 +1856,12 @@ jobs:
     name: browser-smoke
     # HYCI-32: the required context the ruleset, the merge guard and
     # docs/ci-policy.yml all name. It stays one green/red result because it is a
-    # summary over the two halves, not a test job: a red half, a cancelled half or
-    # a half that never reported is never a pass (a skipped required check reads
-    # as passing, so the skip path is gated here as well).
-    needs: [browser-smoke-desktop, browser-smoke-mobile]
+    # summary over the page shards, not a test job: a red shard, a cancelled shard
+    # or a shard that never reported is never a pass (a skipped required check
+    # reads as passing, so the skip path is gated here as well).
+    # HYCI-57: four shards, so the check is the slowest quarter of the page tests
+    # plus one build instead of the slower of two halves.
+    needs: [browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
     if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1431,14 +1873,18 @@ jobs:
       contract: ${{ needs.browser-smoke-desktop.outputs.contract }}
       docs_only: ${{ needs.browser-smoke-desktop.outputs.docs_only }}
     steps:
-      - name: Require both browser halves
+      - name: Require every browser shard
         env:
           DESKTOP: ${{ needs.browser-smoke-desktop.result }}
           MOBILE: ${{ needs.browser-smoke-mobile.result }}
+          MATRIX: ${{ needs.browser-smoke-matrix.result }}
+          FLAGS: ${{ needs.browser-smoke-flags.result }}
         run: |
           set -euo pipefail
           test "$DESKTOP" = success
           test "$MOBILE" = success
+          test "$MATRIX" = success
+          test "$FLAGS" = success
 
   visual-compare:
     name: visual-compare

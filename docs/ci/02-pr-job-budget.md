@@ -20,12 +20,14 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **22 jobs** per synchronize and opening event
+Static normal non-draft app PR budget: **24 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
-required summary job, see below). The last two are over the 20-job pool but never
-wait beside the browser halves: `browser-smoke` becomes ready only after both
-halves finish, so it asks for a runner slot that has just been freed.
+required summary job; HYCI-57 takes the page tests to four shards). The browser
+jobs are over the 20-job pool but never wait beside each other:
+`browser-smoke` becomes ready only after all four shards finish, so it asks for a
+runner slot that has just been freed, and the four page shards simply use the
+pool's spare capacity.
 Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
 extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
@@ -44,5 +46,12 @@ run in parallel, plus the small `browser-smoke` summary job that keeps the
 required context name and fails when either half fails. Both halves build the
 candidate themselves, because a shared build job would serialise them behind it
 and give back the wall clock the split removes. With HYCI-42's six pool lanes and
-HYCI-45's two serial lanes the merged count is 22 jobs per push; one of the extra
-two is the summary, which becomes ready only after both halves finish.
+HYCI-45's two serial lanes the merged count was 22 jobs per push; one of the extra
+two was the summary, which becomes ready only after both halves finish.
+
+HYCI-57 replaced the two browser halves with four page shards, because the page
+tests were 427 s spread over two machines while the check only waited for the
+slower one. Each shard runs one quarter of the pages on `ubuntu-latest` and
+builds its own candidate from the same warm Next.js cache, so the check costs one
+build plus the slowest quarter. Four builds cost nothing on this public repo, and
+the count is 24 jobs per push: four shards plus the summary.

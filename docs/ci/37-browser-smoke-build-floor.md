@@ -31,6 +31,7 @@ The decision, for the two alternatives HYCI-49 offers:
   revisit only with a run proving a shorter window still fails the same way.
 
 Required contexts do not change: `browser-smoke` stays the required summary,
-`browser-smoke-desktop` and `browser-smoke-mobile` keep their names and their
-work, and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
+`browser-smoke-desktop` and `browser-smoke-mobile` keep their names (HYCI-57 gave
+`browser-smoke-mobile` only the phone pages and split the rest into
+`browser-smoke-matrix` and `browser-smoke-flags`), and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
 config line, so the undo is that there is nothing to undo.
