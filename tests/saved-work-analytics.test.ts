@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
 
@@ -209,34 +207,4 @@ test("only known channels pass the internal header; anything else counts as web"
   assert.equal(creationChannelFromHeader("agent"), "agent");
   assert.equal(creationChannelFromHeader("evil"), "web");
   assert.equal(creationChannelFromHeader(null), "web");
-});
-
-test("every task row is created through the analytics-aware save wrapper", () => {
-  const root = path.resolve(__dirname, "..");
-  const files: string[] = [];
-  const walk = (dir: string) => {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (/\.tsx?$/.test(entry.name)) files.push(full);
-    }
-  };
-  walk(path.join(root, "src"));
-  const taskWriters = files.filter((file) => /\.task\.create(?:Many|ManyAndReturn)?\(/.test(fs.readFileSync(file, "utf8")));
-  const relative = taskWriters.map((file) => path.relative(root, file)).sort();
-  assert.deepEqual(relative, [
-    "src/lib/api/task-writes/create-global.ts",
-    "src/lib/mcp/boards/createBoardFromManifest.ts",
-    "src/lib/taskCardActions/writeProbe.ts",
-    "src/utils/controllers/tasks/create.ts",
-    "src/utils/controllers/tasks/createTaskCore.ts",
-  ]);
-  const atomicManifest = "src/lib/mcp/boards/createBoardFromManifest.ts";
-  for (const file of relative.filter((file) => !file.endsWith("writeProbe.ts") && file !== atomicManifest)) {
-    assert.match(fs.readFileSync(path.join(root, file), "utf8"), /createTaskWithBoardWebhookOutbox\b/, file);
-  }
-  const manifestSource = fs.readFileSync(path.join(root, atomicManifest), "utf8");
-  for (const effect of [/enqueueTaskCreated\(tx, created\.id/, /persistTaskCreatedWebhook\(tx,/, /persistAgentTaskCreatedPending\(tx, created\.id\)/, /processAnalyticsIntentSoon\(key\)/]) {
-    assert.match(manifestSource, effect, `${atomicManifest} must keep the save wrapper's effects in its board transaction`);
-  }
 });

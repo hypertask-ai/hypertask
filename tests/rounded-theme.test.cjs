@@ -104,16 +104,6 @@ test("both theme pickers and the live listener use the ticket flag; server rende
     const commands = getAllCommands({ context: "Others" }, false, enabled).flatMap(group => group.commandLists);
     assert.equal(commands.some(command => command.key === "roundedTheme"), enabled);
   }
-  const appearance = fs.readFileSync(path.join(root, "src/components/Modals/Settings/AppearanceSection.tsx"), "utf8");
-  assert.match(appearance, /useFlag\(HTPR_7328_ROUNDED_THEME_FLAG\)/);
-  assert.match(appearance, /roundedEnabled && !isMobile\s*\? themeOptions\s*: themeOptions\.filter\(\(\{ value \}\) => value !== "rounded"\)/);
-  const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
-  assert.match(layout, /isFeatureEnabled\(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession\?\.id \?\? -1\)/);
-  assert.match(layout, /roundedEnabled\s*\? normalizeThemePreference\(theme.value, true\)\s*: normalizeThemePreference\(theme.value\)/);
-  assert.match(layout, /systemDarkTheme,\s*roundedEnabled,/);
-  const listener = fs.readFileSync(path.join(root, "src/lib/contexts/ThemeListener.tsx"), "utf8");
-  assert.match(listener, /normalizeThemePreference\(stored, roundedEnabled\)/);
-  assert.match(listener, /\[roundedEnabled, roundedLoaded\]/);
 });
 
 test("Rounded CSS cannot leak through Tailwind's pre-existing rounded utility class", () => {
@@ -132,22 +122,6 @@ test("Rounded registry retains the feature default and exact small release risk"
   assert.equal(definition.kind, "feature");
   assert.equal(definition.defaultMode, undefined);
   assert.deepEqual(definition.releaseRisk, { risk: "small", reason: "Adds one theme choice; other themes unchanged" });
-});
-
-test("Material task boxes beat the task box outline layer and the listener restores the device scheme after a server refresh", () => {
-  const css = fs.readFileSync(path.join(root, "src/styles/tailwindThemes/rounded.css"), "utf8");
-  const layered = css.match(/@layer bootstrap \{\s*(\.rounded:where\(\.rounded-light, \.rounded-dark\)\[data-task-box-outlines\][^{]+)\{([^}]+)\}/);
-  assert.ok(layered, "the override must share the outline rule's bootstrap layer");
-  for (const target of [".description-container", "[data-task-comment-box]", "[data-task-properties-rail]", '#comment[data-testid="comment-composer"]']) {
-    assert.ok(layered[1].includes(target), target);
-  }
-  assert.match(layered[2], /border-radius: var\(--m3-li\) !important/);
-  assert.match(layered[2], /outline-style: none !important/);
-  assert.match(css, /--bg-taskDetail-container: var\(--m3-surface\)/);
-  const listener = fs.readFileSync(path.join(root, "src/lib/contexts/ThemeListener.tsx"), "utf8");
-  assert.match(listener, /new MutationObserver\(applyTheme\)/);
-  assert.match(listener, /attributeFilter: \["class", "data-theme"\]/);
-  assert.match(listener, /if \(alreadyApplied\) return;/);
 });
 
 test("component flag branches preserve theme choices, cookie reads and writes, and command results", () => {

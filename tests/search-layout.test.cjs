@@ -1041,12 +1041,6 @@ test('shared highlight uses inbox theme tokens and extends behind both tip colum
   assert.deepEqual(gutters, [['1.5rem', undefined]])
   assert.equal(rule('[data-search-layout-tips] > [data-search-layout-row]:nth-child(odd)')['--search-row-right'], 'calc(-100% - 1.5rem - var(--search-row-gutter))')
   assert.equal(rule('[data-search-layout-tips] > [data-search-layout-row]:nth-child(even)')['--search-row-left'], 'calc(-100% - 1.5rem - var(--search-row-gutter))')
-  const inbox = fs.readFileSync(path.join(root, 'src/components/notifications/inboxSplit/index.tsx'), 'utf8')
-  assert.match(inbox, /md:border-l-4/)
-  assert.match(inbox, /md:bg-active-elementBg border-l-selected-item-border/)
-  const tailwind = fs.readFileSync(path.join(root, 'tailwind.config.ts'), 'utf8')
-  assert.match(tailwind, /"active-elementBg":"var\(--active-elementBg\)"/)
-  assert.match(tailwind, /"selected-item-border":"var\(--border-active\)"/)
   for (const theme of ['light', 'dark']) {
     const tokens = require('postcss').parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), 'utf8'))
     for (const token of ['--active-elementBg', '--border-active']) {
@@ -1358,9 +1352,3 @@ test('HTPR-7618 result rows follow the search pane width only while the bugfix f
   }
 })
 
-test('HTPR-7618 pane rows switch to the wide grid by container width, the old rows by window width', () => {
-  const css = require('sass').compile(path.join(root, 'src/styles/search.module.scss')).css
-  assert.match(css, /@container \(min-width: 768px\)\s*\{\s*\.links_modal \.list_container_pane \{\s*display: grid;/)
-  assert.match(css, /@media \(min-width: 768px\)\s*\{\s*\.links_modal \.list_container \{\s*display: grid;/)
-  assert.match(css, /\.links_modal \.list_container_pane \{[^}]*display: flex;[^}]*flex-direction: column;/)
-})

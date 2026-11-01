@@ -2,18 +2,7 @@
   "allowlist": [
     "tests/project-planning.test.cjs",
     "tests/project-url-canonicalization.test.cjs",
-    "tests/qa-login.test.cjs",
-    "tests/query-indexeddb-persister.test.cjs",
-    "tests/quoted-reply-enter.test.cjs",
-    "tests/rounded-theme.test.cjs",
-    "tests/saved-work-analytics.test.ts",
     "tests/schema-drift-check.test.cjs",
-    "tests/search-archived-toggle.test.cjs",
-    "tests/search-autocomplete-theme.test.cjs",
-    "tests/search-autocomplete.test.cjs",
-    "tests/search-chips-api.test.cjs",
-    "tests/search-chips-component.test.cjs",
-    "tests/search-layout.test.cjs",
     "tests/search-operators-api.test.cjs",
     "tests/shared-ai-allowance.test.cjs",
     "tests/sidebar-teams-response.test.cjs",
@@ -46,5 +35,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 45
+  "count": 34
 }

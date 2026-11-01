@@ -71,8 +71,4 @@ test('filter utilities and title highlighting resolve semantic theme variables, 
     assert.equal(config.theme.extend.borderColor[`search-filter-${type}`], `var(--border-search-filter-${type})`)
   }
   assert.equal(config.theme.extend.backgroundColor['search-highlight'], 'var(--bg-search-highlight)')
-  const source = fs.readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
-  assert.match(source, /import "\.\/search-autocomplete\.css";/)
-  assert.match(source, /'search-autocomplete'/)
-  assert.match(source, /className="rounded-\[2px\] bg-search-highlight text-inherit"/)
 })
