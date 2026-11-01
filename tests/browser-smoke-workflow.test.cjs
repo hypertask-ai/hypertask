@@ -579,7 +579,6 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
     assert.equal(restore.uses, `actions/cache/restore@${CACHE_SHA}`, key);
     assert.equal(restore.with.path, BROWSERS, key);
     assert.equal(restore.with.key, CACHE_KEY, key);
-    // The install has to read the restored directory, so it must come next.
     assert.equal(job.steps.indexOf(byName(job, "Generate client and install Chromium")), job.steps.indexOf(restore) + 1, key);
   }
 
@@ -590,7 +589,6 @@ test("HYCI-62: every page shard restores the pinned Chromium before installing i
   assert.equal(save.with.path, BROWSERS);
   assert.equal(save.with.key, CACHE_KEY);
   assert.match(save.if, /steps\.restore-playwright-browsers\.outputs\.cache-hit != 'true'/);
-  // A save before the install would cache an empty directory.
   assert.ok(
     workflow.jobs["browser-smoke-desktop"].steps.indexOf(save) >
       workflow.jobs["browser-smoke-desktop"].steps.indexOf(byName(workflow.jobs["browser-smoke-desktop"], "Generate client and install Chromium")),
