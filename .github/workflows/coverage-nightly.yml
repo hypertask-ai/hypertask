@@ -146,6 +146,11 @@ jobs:
           # was green when it merged (HYCI-30). Compare against the commit this run
           # landed on instead of a moving branch.
           SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.sha }}^
+          # V8 coverage makes every test file several times slower, and
+          # tests/compose-task-palette.test.cjs SIGKILLs its own process when its
+          # stall guard (default 120s) fires. Lane 2 of 41274839094 lost its whole
+          # batch to that guard, so the guard is widened here only.
+          COMPOSE_PALETTE_STALL_MS: "600000"
         run: |
           set -euo pipefail
           LIST="coverage-lanes/shard-${LANE}.txt"
@@ -166,7 +171,10 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/coverage-lane-upload/coverage"
           if [ -d coverage/raw ]; then
-            tar -czf "$RUNNER_TEMP/coverage-lane-upload/coverage/raw.tgz" -C coverage raw
+            # A killed batch can still leave a dump being written; tar then reports
+            # "file changed as we read it" and exits 1 (41274839094). The archive is
+            # still complete, so only that one status is tolerated.
+            tar --warning=no-file-changed -czf "$RUNNER_TEMP/coverage-lane-upload/coverage/raw.tgz" -C coverage raw || [ $? -eq 1 ]
           fi
 
       - name: Collect test durations
@@ -256,6 +264,11 @@ jobs:
 
       - name: Build report-only coverage baseline
         continue-on-error: true
+        env:
+          # c8 reads every dump at once: 3270 merged files ran the default 4 GB heap
+          # out of memory and aborted (exit 134) in 41274839094 and in the 2026-10-30
+          # nightly, which left the uploaded baseline empty.
+          NODE_OPTIONS: --max-old-space-size=8192
         run: npm run coverage:report
 
       - name: Upload coverage baseline
