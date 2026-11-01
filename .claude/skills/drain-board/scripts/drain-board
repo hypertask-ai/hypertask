@@ -21,9 +21,7 @@ case "${1:-}" in
     esac ;;
   gates)
     P=${2:?usage: drain-board gates <project-id>}
-    ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
-    [ -n "$ID" ] || { echo "drain-board needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
-    F=$PWD/.unlazy/s-${ID:0:8}/gates/drain-$P.md
+    F=${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers/drain-$P/gates/drain-$P.md
     mkdir -p "$(dirname "$F")"
     [ -f "$F" ] || printf '# Drain board %s\n' "$P" > "$F"
     list=$(hypertask tasks list --project "$P" --limit $LIMIT --json)

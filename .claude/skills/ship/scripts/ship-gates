@@ -13,8 +13,8 @@ T=$1
 ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
 [ -n "$ID" ] || { echo "ship-gates needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
 [[ ${ID:0:8} =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ship-gates: invalid session id prefix" >&2; exit 1; }
-# The ledger is private working state: one folder per ticket under the home folder, never in
-# the project. Locks and extra gates live in the same folder, so a project stays clean.
+# The ledger is private working state: one folder per ticket under the home folder, never in the
+# project, so a project stays clean and a copied file cannot leak.
 STATE=${SHIP_STATE_ROOT:-$HOME}
 [[ $STATE == /* && $STATE != *$'\n'* ]] || { echo "ship-gates: SHIP_STATE_ROOT must be an absolute path" >&2; exit 1; }
 L=$STATE/.unlazy/ledgers/$T/GATES.md
@@ -34,13 +34,10 @@ if [ -n "${SHIP_REPO:-}" ] && [ "$SHIP_REPO" != hypertask-ai/hypertask ]; then
   fi
 fi
 node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" "$STATE" <<'JS'
-import { existsSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs';
 import { dirname } from 'node:path';
 const [ledger, session, ticket, check, scripts, root, envPrefix, state] = process.argv.slice(2);
 const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await import(`${scripts}/lib/gates.mjs`);
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
-const APP_REPO = 'hypertask-ai/hypertask';
-const currentRepo = process.env.SHIP_REPO || APP_REPO;
 const gates = {
   ticket: ['The ticket exists on the board', 'ticket ok'],
   deeper: ['A Deeper: agent activity names the field, raw source, method and outside proof, and its proof gate is a runnable CHECK', 'deeper ok'],
@@ -57,93 +54,13 @@ const read = (file) => {
   try { return readStableRegularFile(file, { root: state }); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
 };
-// Never let --approve authorize a CHECK added by another ledger author.
-// Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for other repos.
-const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
-const gateId = /^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/;
-const generated = (gate) => {
-  const match = gate.id.match(gateId);
-  if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-'))) return false;
-  return generatedCheck.test(gate.check ?? '') &&
-    gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) &&
-    gate.expect === gates[match[2]][1];
-};
-const repoOf = (gate) => (gate.check.startsWith('SHIP_REPO=') ? gate.check.split(' ')[0].replace('SHIP_REPO=', '') : APP_REPO);
-// The repository settings a generated gate carries. A handover in the same directory changes them
-// without changing the CWD, and a gate that keeps the old ones checks a checkout nobody uses.
-const prefixPattern = /^(SHIP_REPO=[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='\/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?/;
-const prefixOf = (gate) => prefixPattern.exec(gate.check ?? '')[0];
-// This ticket's gate blocks from one ledger file, split into what moves and what stays.
-// A moved block drops the old result: its check now runs from this ledger and checkout.
-const splitTicketGates = (source, ticket, cwd, accept) => {
-  const lines = source.split(/\r?\n/);
-  const all = parseGates(source, { requireGates: false }).gates;
-  const held = new Set();
-  const byLine = new Map(all.map((gate) => [gate.line, gate]));
-  for (const gate of all) {
-    if (!gate.id.startsWith(`${ticket}.`) || !accept(gate)) continue;
-    for (let i = gate.line; i < lines.length && (i === gate.line || /^[ \t]+\S/.test(lines[i])); i += 1) held.add(i);
-  }
-  const moved = [];
-  const kept = [];
-  let owner = null;
-  for (let i = 0; i < lines.length; i += 1) {
-    if (!held.has(i)) { kept.push(lines[i]); owner = null; continue; }
-    // The CHECK and CWD lines belong to the gate above them, so the settings come from its header.
-    if (byLine.has(i)) owner = byLine.get(i);
-    const line = lines[i];
-    if (/^- \[[ xX]\] /.test(line)) moved.push(line.replace(/^- \[[ xX]\] /, '- [ ] '));
-    else if (/^ {2}CWD: /.test(line)) moved.push(`  CWD: ${cwd}`);
-    // A moved gate runs here, so it keeps this session's repository settings: the old checkout or
-    // base branch it was written for may not exist any more.
-    else if (/^ {2}CHECK: /.test(line) && owner && generated(owner)) {
-      moved.push(`  CHECK: ${envPrefix}${line.slice('  CHECK: '.length + prefixOf(owner).length)}`);
-    } else if (/^ {2}EVIDENCE: /.test(line)) moved.push('  EVIDENCE: pending');
-    else moved.push(line);
-  }
-  return { moved: moved.join('\n').trim(), kept: kept.join('\n') };
-};
-const stateDir = `${root}/.unlazy`;
-// A legacy copy is read and removed under its own lock, so a session that is mid-ticket cannot
-// edit a gate file between the copy and the removal. Every run locks the ledger first and the
-// sources in sorted order, so two runs never wait on each other in a circle.
-const legacySources = () => {
-  let sessions = [];
-  try { sessions = readdirSync(stateDir).filter((name) => name.startsWith('s-')).sort(); } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-  }
-  const files = [];
-  for (const name of sessions) {
-    const project = `${stateDir}/${name}`;
-    files.push(`${project}/GATES.md`);
-    try {
-      for (const extra of readdirSync(`${project}/gates`).filter((file) => file.endsWith('.md')).sort()) {
-        files.push(`${project}/gates/${extra}`);
-      }
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-  }
-  return files;
-};
-const withSourceLocks = async (files, fn) => {
-  if (!files.length) return fn();
-  return withFileLock(state, files[0], () => withSourceLocks(files.slice(1), fn));
-};
-const apply = async () => {
+await withFileLock(state, ledger, () => {
   const binding = `${dirname(ledger)}/session`;
   const bound = read(binding).trim();
-  const handedOver = !!bound && bound !== session.trim();
-  // One folder per ticket: a new session continues the ticket's ledger instead of failing,
-  // because the ticket owns the ledger and ship-claim owns the work.
-  if (handedOver) {
-    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}\n`);
-  }
   let text = read(ledger);
-  // A new session owns new worktrees, so an earlier session's cleanup result would be a false
-  // done. Clear that gate and its evidence whenever the ledger changes hands.
-  if (handedOver && text) {
+  // The ticket owns its ledger, so a later session continues it instead of needing a new folder.
+  // That session also owns the cleanup, so the previous session's result cannot stand for it.
+  if (bound && bound !== session.trim() && text) {
     const lines = text.split('\n');
     let inside = false;
     for (let i = 0; i < lines.length; i += 1) {
@@ -155,158 +72,21 @@ const apply = async () => {
       else if (/^ {2}EVIDENCE: /.test(lines[i])) lines[i] = '  EVIDENCE: pending';
     }
     text = lines.join('\n');
+    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}\n`);
   }
-  let doc = parseGates(text, { requireGates: !!text });
+  const doc = parseGates(text, { requireGates: !!text });
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
-  // A ledger written before this change sits inside the project, where a session that is already
-  // mid-ticket would lose its gates. Adopt this ticket's gates from every old session folder, then
-  // delete what is left: the project must stay clean, and a copied file can still leak.
-  const pendingRemovals = [];
-  const adoptedExtras = [];
-  const touched = [];
-  // Read only: every check below runs before the first write, so a refused move cannot leave a
-  // half-migrated gate file behind for the retry to copy a second time.
-  const planProjectLedger = () => {
-    const source = (file) => {
-      try { return readStableRegularFile(file, { root }); } catch (error) {
-        if (error.code === 'ENOENT') return '';
-        throw error;
-      }
-    };
-    let sessions = [];
-    try { sessions = readdirSync(stateDir).filter((name) => name.startsWith('s-')).sort(); } catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-    }
-    for (const name of sessions) {
-      const project = `${stateDir}/${name}`;
-      const extraDir = `${project}/gates`;
-      let extras = [];
-      try { extras = readdirSync(extraDir).filter((file) => file.endsWith('.md')).sort(); } catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-      }
-      // The generated gates are rewritten below from this checkout, so the old copy only has to
-      // prove it belongs to this repository before it goes.
-      const ledgerFile = `${project}/GATES.md`;
-      const ledgerText = source(ledgerFile);
-      // A generated gate keeps the repository that wrote it, whichever file it sits in.
-      const mine = (gate) => {
-        if (!generated(gate)) return true;
-        if (repoOf(gate) !== currentRepo) {
-          throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
-        }
-        return true;
-      };
-      const main = splitTicketGates(ledgerText, ticket, root, (gate) => generated(gate) && mine(gate));
-      let adopted = main.moved ? 1 : 0;
-      if (main.moved) pendingRemovals.push({ file: ledgerFile, kept: main.kept, snapshot: ledgerText });
-      for (const extra of extras) {
-        const file = `${extraDir}/${extra}`;
-        const extraText = source(file);
-        const split = splitTicketGates(extraText, ticket, root, mine);
-        if (!split.moved) continue;
-        adoptedExtras.push({ dest: `${dirname(ledger)}/gates/${extra}`, moved: split.moved });
-        pendingRemovals.push({ file, kept: split.kept, snapshot: extraText });
-        adopted += 1;
-      }
-      if (!adopted) continue;
-      touched.push(project);
-      process.stderr.write(`ship-gates: ${ticket} ledger adopted from ${project}\n`);
-    }
-  };
-  // The home copy is written before the project one goes: a failed write must never be the only
-  // copy of a gate a person wrote by hand. A gate is copied home once, so a retry after a refused
-  // move replaces the same gate id instead of appending a second copy of it.
-  const mergeGates = (existing, incoming) => {
-    if (!existing) return incoming;
-    const arriving = new Set(parseGates(incoming, { requireGates: false }).gates.map((gate) => gate.id));
-    if (!arriving.size) return existing;
-    const kept = splitTicketGates(existing, ticket, root, (gate) => arriving.has(gate.id)).kept
-      .replace(/^\n+/, '').replace(/\n+$/, '');
-    return kept ? `${kept}\n\n${incoming}` : incoming;
-  };
-  const writeAdoptedExtras = () => {
-    for (const { dest, moved } of adoptedExtras) writeAtomic(dest, `${mergeGates(read(dest), moved)}\n`, { root: state });
-  };
-  // Only once the ticket's gates live in the home folder is the project copy dropped, together
-  // with the session binding a legacy ledger kept beside it.
-  const pruneProjectLedgers = () => {
-    for (const { file, kept, snapshot } of pendingRemovals) {
-      let current = '';
-      try { current = readStableRegularFile(file, { root }); } catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-      }
-      // A file that changed after its snapshot belongs to whoever wrote it now.
-      if (current !== snapshot) {
-        process.stderr.write(`ship-gates: ${file} changed while its gates were adopted; left in place\n`);
-        continue;
-      }
-      if (/^- \[[ xX]\] /m.test(kept)) writeAtomic(file, `${kept.replace(/\n+$/, '')}\n`, { root });
-      else unlinkSync(file);
-    }
-    for (const project of touched) {
-      const extraDir = `${project}/gates`;
-      try { rmdirSync(extraDir); } catch (error) {
-        if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
-      }
-      if (existsSync(`${project}/GATES.md`) || existsSync(extraDir)) continue;
-      try { unlinkSync(`${project}/session`); } catch (error) {
-        if (error.code !== 'ENOENT') throw error;
-      }
-      for (const dir of [project, stateDir]) {
-        try { rmdirSync(dir); } catch (error) {
-          if (!['ENOENT', 'ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error;
-        }
-      }
-    }
-  };
-  planProjectLedger();
-  // The ticket owns the ledger, so a later session may resume it from its own worktree, and a
-  // handover in the same directory may bring another checkout or base branch. Those gates run where
-  // this session works, but only when it asks for the move: a changed CWD or setting is never
-  // re-approved by accident.
-  const strays = doc.gates.filter((gate) => generated(gate) && (gate.cwd !== root || prefixOf(gate) !== envPrefix));
-  const strayWhere = (gate) => (gate.cwd !== root ? `from ${gate.cwd}` : `for ${prefixOf(gate).trim() || 'the app repository'}`);
-  // The ticket folder outlives the sessions that fill it, and a handover from another repository
-  // changes the settings too: name that repository before asking for a move it cannot perform.
-  for (const gate of strays) {
-    if (repoOf(gate) !== currentRepo) {
-      throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
-    }
-  }
-  if (strays.length && process.env.SHIP_LEDGER_MOVE !== '1') {
-    throw new Error(`ship-gates: ${ticket} ledger was written ${strayWhere(strays[0])}; re-run with SHIP_LEDGER_MOVE=1 to run its gates ${strays[0].cwd !== root ? `in ${root}` : "with this session's repository settings"}`);
-  }
-  if (strays.length) {
-    const rewritten = new Map();
-    for (const gate of strays) {
-      const [, gateTicket, name] = gate.id.match(gateId);
-      rewritten.set(gate.id, `  CHECK: ${envPrefix}${quote(check)} ${name} ${gateTicket}`);
-    }
-    const lines = text.split('\n');
-    let current = '';
-    for (let i = 0; i < lines.length; i += 1) {
-      const head = lines[i].match(/^- \[[ xX]\] ([^:]+):/);
-      if (head) current = head[1];
-      else if (/^[^ ]/.test(lines[i])) current = '';
-      if (rewritten.has(current) && /^ {2}CHECK: /.test(lines[i])) lines[i] = rewritten.get(current);
-      else if (rewritten.has(current) && /^ {2}CWD: /.test(lines[i])) lines[i] = `  CWD: ${root}`;
-    }
-    text = lines.join('\n');
-    doc = parseGates(text, { requireGates: true });
-    if (doc.errors.length) throw new Error(doc.errors.join('; '));
-    process.stderr.write(strays[0].cwd !== root
-      ? `ship-gates: ${ticket} ledger gates moved from ${strays[0].cwd} to ${root}\n`
-      : `ship-gates: ${ticket} ledger gates re-pointed at this session's repository settings\n`);
-  }
+  // Never let --approve authorize a CHECK added by another ledger author.
+  // Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for other repos.
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
   for (const gate of doc.gates) {
-    if (!gateId.test(gate.id) && !gate.check) continue;
-    if (!generated(gate) || gate.cwd !== root) {
-      throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in ${dirname(ledger)}/gates/extra.md and review them separately`);
-    }
-    // The ticket folder outlives the session that filled it, and a handover in the same directory
-    // changes the session but not the CWD: the repository still has to match.
-    if (repoOf(gate) !== currentRepo) {
-      throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
+    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/);
+    if (!match && !gate.check) continue;
+    if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
+        !generatedCheck.test(gate.check) || !gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) ||
+        gate.expect !== gates[match[2]][1] || gate.cwd !== root) {
+      throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
     }
   }
   if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
@@ -316,12 +96,9 @@ const apply = async () => {
     if (doc.gates.some((gate) => gate.id === id)) continue;
     text += `\n- [ ] ${id}: ${title}\n  CHECK: ${envPrefix}${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
   }
-  writeAdoptedExtras();
   writeAtomic(ledger, text, { root: state });
   writeAtomic(binding, session + '\n', { root: state });
-  pruneProjectLedgers();
-};
-await withFileLock(state, ledger, () => withSourceLocks(legacySources(), apply));
+});
 JS
 status=0
 node "$U/gate-check.mjs" --approve "$L" --root "$(dirname "$L")" >&2 || status=$?
