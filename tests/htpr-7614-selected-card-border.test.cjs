@@ -131,19 +131,26 @@ test("selection compiles to an important one-pixel border-box outline, independe
       }
     });
   }
-  const cardRules = theme => {
+  const cardStyle = theme => {
+    const sheet = postcss.parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), "utf8"));
     const rules = [];
-    postcss.parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), "utf8"))
-      .walkRules(".kanban-task-card", rule => rules.push(rule));
+    sheet.walkRules(/\.kanban-task-card$/, rule => rules.push(rule));
     assert.equal(rules.length, 1, `${theme} must style the kanban card once`);
-    return rules[0];
+    const declarations = new Map(rules[0].nodes.map(node => [node.prop, node.value]));
+    let cardWideShadowNone = false;
+    sheet.walkDecls("box-shadow", decl => {
+      const selector = decl.parent.selector ?? "";
+      if (selector.split(",").some(part => part.trim().endsWith("*")) && decl.value === "none") cardWideShadowNone = true;
+    });
+    return { radius: declarations.get("border-radius"), shadow: declarations.get("box-shadow"), cardWideShadowNone };
   };
-  const rounded = cardRules("rounded");
-  assert.equal(rounded.nodes.find(node => node.prop === "border-radius").value, "var(--m3-m)");
-  assert.equal(rounded.nodes.find(node => node.prop === "box-shadow").value, "none");
-  const dia = cardRules("dia");
-  assert.equal(dia.nodes.find(node => node.prop === "border-radius").value, "10px");
-  assert.ok(dia.nodes.some(node => node.prop === "box-shadow"));
+  const rounded = cardStyle("rounded");
+  assert.equal(rounded.radius, "var(--m3-m)");
+  assert.equal(rounded.shadow ?? (rounded.cardWideShadowNone ? "none" : undefined), "none",
+    "the rounded theme leaves the card without a shadow");
+  const dia = cardStyle("dia");
+  assert.equal(dia.radius, "10px");
+  assert.ok(dia.shadow && dia.shadow !== "none", "the dia theme keeps its own card shadow");
 });
 
 test("the discovered flag is a small default-Everyone bugfix", () => {
