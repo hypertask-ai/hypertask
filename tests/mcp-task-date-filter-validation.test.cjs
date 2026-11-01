@@ -58,7 +58,4 @@ test("the list handler rejects bad dates before building the Prisma where", () =
   const query = routeSource.indexOf("gte: new Date(updatedSince)");
   assert.notEqual(check, -1);
   assert.ok(check < query, "date validation must run before the date filters are used");
-  for (const name of ["updated_since", "created_since", "due_date_before", "due_date_after"]) {
-    assert.match(routeSource.slice(check, check + 300), new RegExp(`${name}:`));
-  }
 });

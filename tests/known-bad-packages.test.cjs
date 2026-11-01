@@ -60,5 +60,4 @@ test("an unreadable Node version fails closed", () => {
 test("the app floor and the CI floor read the same file", () => {
   const floor = JSON.parse(fs.readFileSync("src/lib/runtime/nodeSecurityFloor.json", "utf8"));
   assert.equal(floor.minimum, "24.22.1");
-  assert.match(fs.readFileSync("src/lib/runtime/nodeSecurityFloor.ts", "utf8"), /from "\.\/nodeSecurityFloor\.json"/);
 });

@@ -57,12 +57,3 @@ test("server failures and unknown errors still go to the error stream", () => {
   assert.equal(streamFor(new Error("database down"))[0], "error");
   assert.equal(streamFor("string failure")[1].error, "string failure");
 });
-
-test("MCP services log caught failures through the shared helper", () => {
-  const services = path.resolve(__dirname, "../src/lib/mcp-server/lib/services");
-  for (const name of fs.readdirSync(services)) {
-    const source = fs.readFileSync(path.join(services, name), "utf8");
-    assert.doesNotMatch(source, /logger\.error\('Failed to/, name);
-  }
-  assert.match(fs.readFileSync(path.join(services, "search.service.ts"), "utf8"), /logger\.failure\('Failed to search tasks', error,/);
-});

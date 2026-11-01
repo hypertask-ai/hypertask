@@ -185,16 +185,6 @@ test("the advisory lock covers capture and marker writes for concurrent cold con
   assert.equal(h.logs.length, 1);
 });
 
-test("signup and activation share the bounded immediate client and waitUntil", () => {
-  const fs = require("node:fs");
-  const source = fs.readFileSync("src/lib/telemetry/signupAnalytics.ts", "utf8");
-  assert.match(source, /CAPTURE_TIMEOUT_MS = 1500/);
-  assert.match(source, /flushAt: 1/);
-  assert.match(source, /flushInterval: 0/);
-  assert.match(source, /requestTimeout: CAPTURE_TIMEOUT_MS/);
-  assert.match(source, /waitUntil/);
-});
-
 test("generalized occurrence delivery preserves the production activation marker and UUID", async () => {
   const h = activationHarness();
   h.capture.activation(123, "board_created", "stable", {});

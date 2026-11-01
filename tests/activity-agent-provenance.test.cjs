@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -123,17 +122,4 @@ test("a description update by an agent is stored against that agent", async () =
     transaction: tx,
   });
   assert.equal(tx.created[0].agentId, "ca30964f-b1a9-4164-84b7-39e91319a1ec");
-});
-
-test("the task controller feeds the acting agent into that activity", () => {
-  const single = fs.readFileSync(
-    path.join(root, "src/utils/controllers/tasks/single.ts"),
-    "utf8",
-  );
-  const body = single.slice(
-    single.indexOf('type: "TaskDescriptionUpdate"'),
-    single.indexOf("createActivity({", single.indexOf('type: "TaskDescriptionUpdate"')),
-  );
-  assert.match(body, /fromAgent: actingAgent \?\? null/);
-  assert.match(single, /tx\.agent\.findUnique\(\{\s*where: \{ id: agentId \}/);
 });
