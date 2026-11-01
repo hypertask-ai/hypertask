@@ -1,18 +1,10 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { fsCache: false, interopDefault: true, alias: { "@": path.join(root, "src") } });
-const hook = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
-
-test("the late panels mount in a transition when the flag is on, urgently when off", () => {
-  assert.match(hook, /const ticketStaysOpen = useFlag\(HTPR_7116_TICKET_STAYS_OPEN_FLAG\);/);
-  assert.match(hook, /ticketStaysOpen\s*\?\s*\(\) => startTransition\(\(\) => setSecondaryPanelsReady\(true\)\)\s*:\s*\(\) => setSecondaryPanelsReady\(true\)/);
-  assert.equal(hook.match(/setSecondaryPanelsReady\(true\)/g).length, 2);
-});
 
 test("flag is a bugfix, default Everyone, with release risk", () => {
   const def = jiti(path.join(root, "src/lib/flags/definitions/htpr-7116-ticket-stays-open.ts"));

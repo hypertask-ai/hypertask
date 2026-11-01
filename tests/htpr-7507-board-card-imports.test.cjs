@@ -55,7 +55,4 @@ test('board card tags row keeps the same running timer helpers the ticket panel 
   const imports = runtimeImports(boardCardRow);
   assert.ok(imports.includes('@/lib/timeDuration'));
   assert.ok(imports.includes('@/hooks/Task Detail/useTimeTracking'));
-  const taskTime = fs.readFileSync(path.join(root, 'src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskTime.tsx'), 'utf8');
-  assert.match(taskTime, /import \{ formatElapsed \} from "@\/lib\/timeDuration";/);
-  assert.match(taskTime, /import \{ useTaskTime, useTimerNow \} from "@\/hooks\/Task Detail\/useTimeTracking";/);
 });

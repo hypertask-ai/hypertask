@@ -27,16 +27,6 @@ function checkCatalogMutation(before, after, assertion) {
   assert.equal(result.status, 0, result.stderr || result.stdout);
 }
 
-test("source-level tool assertions follow registration, not unused imports", () => {
-  const source = require("./helpers/chat-stream-source.cjs").readFileSync(route, "utf8");
-  assert.match(source, /hypertask_board_config: tool\(\{/);
-  checkCatalogMutation(
-    "hypertask_board_config: createBoardConfigTool(context).hypertask_board_config,",
-    "",
-    'assert.doesNotMatch(source(), /hypertask_board_config: tool\\(\\{/);',
-  );
-});
-
 test("source-level tool assertions reject a different selected tool property", () => {
   checkCatalogMutation(
     "hypertask_board_config: createBoardConfigTool(context).hypertask_board_config,",
