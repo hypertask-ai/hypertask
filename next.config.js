@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 
+if (process.env.NEXT_FONT_GOOGLE_MOCKED_RESPONSES) {
+  process.env.NEXT_FONT_GOOGLE_MOCKED_RESPONSES = require.resolve("./scripts/next-font-smoke-mock.cjs");
+}
+
 require("node:child_process").execFileSync(process.execPath, ["scripts/generate-flag-index.mjs"], {
   cwd: __dirname,
   stdio: ["ignore", "ignore", "inherit"],
@@ -107,6 +111,7 @@ const nextConfig = {
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
     cpus: 1,
+    turbopackPluginRuntimeStrategy: "workerThreads",
     // The smoke build runs server tracing beside the client compiler to stay
     // below ten minutes. Production keeps tracing sequential to limit memory.
     parallelServerBuildTraces: process.env.CORE_APP_SMOKE === "true",
