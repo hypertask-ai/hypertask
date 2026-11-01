@@ -1,52 +1,36 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { fsCache: false });
-const writer = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/ComposeTaskWriter.tsx"), "utf8");
 const { resolveComposeBoardTarget } = jiti(path.join(root, "src/components/Modals/commands/HTC/composeBoardTarget.ts"));
 const definition = jiti(path.join(root, "src/lib/flags/definitions/htpr-7313-ctrlj-always-board-chip.ts")).default;
 
-function chipDecisionBlock() {
-  const start = writer.indexOf("if (boardChipEnabled) {\n    const target = resolveComposeBoardTarget(");
-  assert.ok(start > 0, "board chip decision block not found");
-  return writer.slice(start, writer.indexOf("\n  }", start));
+function targetFor(url, extra = {}) {
+  return resolveComposeBoardTarget({ url, lastUsedBoardId: 7, ...extra });
 }
 
-function showChipFor(url, alwaysShowBoardChip) {
-  const target = resolveComposeBoardTarget({ url, lastUsedBoardId: 7 });
-  let showBoardChip = target.showChip;
-  const flagBranch = chipDecisionBlock().match(/\n\s*if \(alwaysShowBoardChip\) showBoardChip = true;/);
-  if (flagBranch && alwaysShowBoardChip) showBoardChip = true;
-  return { boardId: target.boardId, showBoardChip };
-}
-
-test("flag ships on for Everyone and is read with useFlag", () => {
+test("flag ships on for Everyone", () => {
   assert.equal(definition.key, "htpr-7313-ctrlj-always-board-chip");
   assert.equal(definition.defaultMode, "EVERYONE");
-  assert.match(writer, /const alwaysShowBoardChip = useFlag\(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG\);/);
 });
 
-test("flag on: board and ticket pages show the chip with their own board", () => {
+test("board and ticket pages resolve their own board, and hide the chip until the flag widens it", () => {
   for (const url of ["/project?id=8", "/project/8", "/detail/project-8/12"]) {
-    assert.deepEqual(showChipFor(url, true), { boardId: 8, showBoardChip: true });
+    assert.deepEqual(targetFor(url), { boardId: 8, showChip: false });
   }
 });
 
-test("flag off: board and ticket pages keep hiding the chip; inbox and mixed views unchanged either way", () => {
-  for (const url of ["/project?id=8", "/detail/project-8/12"]) {
-    assert.deepEqual(showChipFor(url, false), { boardId: 8, showBoardChip: false });
-  }
+test("inbox, search and my-tasks keep the last used board and show the chip", () => {
   for (const url of ["/inbox", "/search", "/my-tasks"]) {
-    assert.deepEqual(showChipFor(url, true), showChipFor(url, false));
+    assert.deepEqual(targetFor(url), { boardId: 7, showChip: true });
   }
 });
 
-test("the flag only widens visibility inside the existing board chip flag", () => {
-  const block = chipDecisionBlock();
-  assert.ok(block.indexOf("showBoardChip = target.showChip;") < block.indexOf("if (alwaysShowBoardChip) showBoardChip = true;"));
-  assert.match(writer, /\{boardChipEnabled && showBoardChip && <div/);
+test("an explicit destination board wins over the contextual board", () => {
+  assert.deepEqual(targetFor("/project?id=8", { destinationBoardId: 9 }), { boardId: 9, showChip: true });
+  assert.deepEqual(targetFor("/detail/project-8/12", { focusedTicketBoardId: 11 }), { boardId: 8, showChip: false });
+  assert.deepEqual(targetFor("/inbox", { focusedTicketBoardId: 11 }), { boardId: 11, showChip: true });
 });

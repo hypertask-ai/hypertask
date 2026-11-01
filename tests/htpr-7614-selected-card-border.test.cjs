@@ -116,9 +116,13 @@ test("selection compiles to an important one-pixel border-box outline, independe
   for (const name of added) {
     assert.ok(!/rounded|border-l-(?:\d|\[\d)|[wh]-|p[trblxy]?-/.test(name), "no selection layout or radius change");
   }
-  const bootstrap = fs.readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8");
-  assert.match(bootstrap, /\.shadow-sm\s*\{[^}]*box-shadow:[^}]*!important/s,
-    "phone shadows replace ring box-shadows, but cannot replace an outline");
+  const bootstrap = postcss.parse(fs.readFileSync(require.resolve("bootstrap/dist/css/bootstrap.css"), "utf8"));
+  const shadowSm = [];
+  bootstrap.walkDecls("box-shadow", decl => {
+    if (decl.parent.selector === ".shadow-sm") shadowSm.push(decl);
+  });
+  assert.equal(shadowSm.length, 1, "phone shadows replace ring box-shadows, but cannot replace an outline");
+  assert.ok(shadowSm[0].important);
   for (const theme of ["porcelain", "graphite", "amoled", "dia", "rounded"]) {
     const sheet = postcss.parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), "utf8"));
     sheet.walkDecls(/^outline(?:-|$)/, decl => {
@@ -127,11 +131,26 @@ test("selection compiles to an important one-pixel border-box outline, independe
       }
     });
   }
-  const rounded = fs.readFileSync(path.join(root, "src/styles/tailwindThemes/rounded.css"), "utf8");
-  assert.match(rounded, /\.kanban-task-card\s*\{[^}]*border-radius:\s*var\(--m3-m\)/s);
-  assert.match(rounded, /box-shadow:\s*none/);
-  const dia = fs.readFileSync(path.join(root, "src/styles/tailwindThemes/dia.css"), "utf8");
-  assert.match(dia, /\.kanban-task-card\s*\{[^}]*border-radius:\s*10px;[^}]*box-shadow:/s);
+  const cardStyle = theme => {
+    const sheet = postcss.parse(fs.readFileSync(path.join(root, `src/styles/tailwindThemes/${theme}.css`), "utf8"));
+    const rules = [];
+    sheet.walkRules(/\.kanban-task-card$/, rule => rules.push(rule));
+    assert.equal(rules.length, 1, `${theme} must style the kanban card once`);
+    const declarations = new Map(rules[0].nodes.map(node => [node.prop, node.value]));
+    let cardWideShadowNone = false;
+    sheet.walkDecls("box-shadow", decl => {
+      const selector = decl.parent.selector ?? "";
+      if (selector.split(",").some(part => part.trim().endsWith("*")) && decl.value === "none") cardWideShadowNone = true;
+    });
+    return { radius: declarations.get("border-radius"), shadow: declarations.get("box-shadow"), cardWideShadowNone };
+  };
+  const rounded = cardStyle("rounded");
+  assert.equal(rounded.radius, "var(--m3-m)");
+  assert.equal(rounded.shadow ?? (rounded.cardWideShadowNone ? "none" : undefined), "none",
+    "the rounded theme leaves the card without a shadow");
+  const dia = cardStyle("dia");
+  assert.equal(dia.radius, "10px");
+  assert.ok(dia.shadow && dia.shadow !== "none", "the dia theme keeps its own card shadow");
 });
 
 test("the discovered flag is a small default-Everyone bugfix", () => {

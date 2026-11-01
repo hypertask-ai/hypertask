@@ -311,9 +311,6 @@ test('the feature definition and UI entry explicitly gate Ctrl+J skills', () => 
   assert.equal(definition.defaultMode, 'EVERYONE');
   assert.equal(definition.releaseRisk.risk, 'small');
   assert.ok(definition.releaseRisk.reason.trim());
-  const ui = fs.readFileSync(path.join(root, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx'), 'utf8');
-  assert.match(ui, /const invokeSkills = useFlag\(HTPR_7312_CTRLJ_SKILLS_FLAG\)/);
-  assert.match(ui, /\.\.\.\(invokeSkills \? \{ invokeSkills \} : \{\}\)/);
 });
 
 test('compose requests opt in only when enabled and keep unknown text for server resolution', async () => {

@@ -130,11 +130,6 @@ test('ticket bugfix flag defaults to Everyone and also requires the original log
   assert.equal(flag.defaultMode, 'EVERYONE')
   assert.ok(flag.related.includes('htpr-6368-search-operator-logic'))
   assert.equal(flag.releaseRisk.risk, 'small')
-  const input = readFileSync(path.join(root, 'src/app/search/SearchChipsInput.tsx'), 'utf8')
-  assert.match(input, /useFlag\(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG\)/)
-  assert.match(input, /useFlag\(HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG\)/)
-  assert.match(input, /const logicEnabled = operatorLogicEnabled && operatorColoursEnabled;/)
-  assert.match(input, /const completion = operatorColoursEnabled\s*\? searchCompletion\(text, names, layoutEnabled, operatorLogicEnabled\)\s*: searchCompletion\(text, names, layoutEnabled\);/)
 })
 
 test('existing input keeps autocomplete on across all four logic/colour flag combinations and accepts priority/type suggestions', async () => {

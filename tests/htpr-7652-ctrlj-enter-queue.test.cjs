@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
 const { test } = require("node:test");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const React = require("react");
 const { notifyManager, defaultScheduler } = require("@tanstack/react-query");
 
@@ -114,10 +115,9 @@ test("flag off keeps the old behaviour where Enter during the board load does no
   });
 });
 
-test("bugfix flag defaults to Everyone and is read in the writer", () => {
-  const definition = fs.readFileSync(path.join(root, `src/lib/flags/definitions/${flag}.ts`), "utf8");
-  assert.match(definition, /kind: "bugfix"/);
-  assert.match(definition, /defaultMode: "EVERYONE"/);
-  const writer = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/ComposeTaskWriter.tsx"), "utf8");
-  assert.match(writer, /useFlag\(HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG\)/);
+test("bugfix flag defaults to Everyone", () => {
+  const definition = loadModule(`src/lib/flags/definitions/${flag}.ts`).default;
+  assert.equal(definition.key, flag);
+  assert.equal(definition.kind, "bugfix");
+  assert.equal(definition.defaultMode, "EVERYONE");
 });

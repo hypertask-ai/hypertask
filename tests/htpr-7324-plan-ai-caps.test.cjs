@@ -234,7 +234,6 @@ test("feature flag inherits Owner + QA and declares the registry's highest relea
   assert.equal(value.defaultMode, undefined); assert.equal(value.releaseRisk.risk, "new");
   assert.equal(value.releaseRisk.highRisk, "money");
   assert.match(value.releaseRisk.reason, /High risk/);
-  assert.match(fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });
 
 test("flag parser accepts money classification but rejects invalid or default-Everyone money flags", async () => {
@@ -591,9 +590,6 @@ test("plan batch admission is false; flag-off managed funding still uses batches
   assert.equal(jobs.batchEligibleFunding("managed", await policy.teamPlanAllowanceEnabled("batch-team")), true);
   assert.equal(jobs.batchEligibleFunding("shared"), false);
   assert.equal(jobs.batchEligibleFunding("customer"), false);
-  for (const [file, team] of [["src/lib/slack/threadSummaryBatch.ts", "context.teamId"], ["src/lib/ai/labelClassifier.ts", "teamId"]]) {
-    assert.ok(fs.readFileSync(path.join(root, file), "utf8").includes(`await teamPlanAllowanceEnabled(${team})`));
-  }
 });
 
 for (const [members, monthlyUsd] of [[3, 7.5], [10, 25]]) {

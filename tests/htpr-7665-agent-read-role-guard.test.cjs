@@ -596,17 +596,12 @@ test("7673 native tools: read tools never touch the flag or the agent row", asyn
 });
 
 test("the flag is defined as a high-risk access kill switch defaulting to Owner and QA", () => {
-  const source = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7665-agent-read-role-guard.ts"), "utf8");
-  assert.match(source, /key: HTPR_7665_AGENT_READ_ROLE_GUARD_FLAG/);
-  assert.match(source, /defaultMode: "OWNER_AND_QA"/);
-  assert.match(source, /highRisk: "access"/);
-  assert.match(source, /"htpr-7665-agent-read-role-guard"/);
-});
-
-test("verifyJwt carries the stored agent role on the auth context without a second query", () => {
-  const source = fs.readFileSync(path.join(root, "src/lib/mcp/auth/verifyJwt.ts"), "utf8");
-  assert.match(source, /permissions: true,/);
-  assert.match(source, /agentRole = \(agent\.permissions as AgentScopes \| null\)\?\.role \?\? 'write'/);
-  assert.match(source, /\.\.\.\(agentRole \? \{ agentRole \} : \{\}\),/);
-  assert.equal((source.match(/prisma\.agent\./g) ?? []).length, 1);
+  const definition = load("src/lib/flags/definitions/htpr-7665-agent-read-role-guard.ts", (request) => {
+    if (request === "../definitions") return {};
+    throw new Error(`Unexpected definition import: ${request}`);
+  });
+  assert.equal(definition.HTPR_7665_AGENT_READ_ROLE_GUARD_FLAG, FLAG_KEY);
+  assert.equal(definition.default.key, FLAG_KEY);
+  assert.equal(definition.default.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.default.releaseRisk.highRisk, "access");
 });

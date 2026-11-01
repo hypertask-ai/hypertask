@@ -1,17 +1,7 @@
 {
   "allowlist": [
-    "tests/htpr-7312-ctrlj-skills.test.cjs",
-    "tests/htpr-7313-ctrlj-always-board-chip.test.cjs",
-    "tests/htpr-7324-plan-ai-caps.test.cjs",
-    "tests/htpr-7327-legacy-route-hit.test.cjs",
-    "tests/htpr-7387-search-operator-colours.test.cjs",
     "tests/htpr-7395-cached-static-first.test.cjs",
-    "tests/htpr-7587-stale-flag-rows.test.cjs",
-    "tests/htpr-7614-selected-card-border.test.cjs",
     "tests/htpr-7638-description-sanitize.test.cjs",
-    "tests/htpr-7652-ctrlj-enter-queue.test.cjs",
-    "tests/htpr-7665-agent-read-role-guard.test.cjs",
-    "tests/htpr-7675-ctrlj-enter-before-text-renders.test.cjs",
     "tests/htpr-7680-inbox-playlist-restore.test.cjs",
     "tests/htpr-7684-desktop-ai-chat-bearer.test.cjs",
     "tests/htpr-7692-billed-cost.test.cjs",
@@ -100,5 +90,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 99
+  "count": 89
 }
