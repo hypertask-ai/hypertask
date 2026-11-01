@@ -17,7 +17,7 @@ const pull = (number, user, extra = {}) => ({
 });
 const agentPull = (number, extra) => pull(number, { login: 'app/hypertask-runners', type: 'Bot' }, extra);
 
-function fake({ pulls = [], files = {}, comments = {}, runs = [], labelError = null } = {}) {
+function fake({ pulls = [], files = {}, comments = {}, runs = [] } = {}) {
   const calls = { created: [], posts: [], labels: [], runQueries: [] };
   const route = fn => fn.route;
   const github = {
@@ -82,14 +82,14 @@ const context = {
 };
 
 async function run(options, { now = AFTER, eventName = 'schedule', token = 'app-token' } = {}) {
+  const { labelError = null, ...harnessOptions } = options;
   const posts = [];
   const requests = [];
   const savedFetch = globalThis.fetch;
   const savedToken = process.env.HYPERTASK_MCP_TOKEN;
   const savedDayOne = process.env.DAY_ONE_TOKEN;
-  // A dummy board token keeps the suite runnable with no secret of any kind.
-  process.env.HYPERTASK_MCP_TOKEN = savedToken ?? 'dummy-board-token';
-  if (token === undefined) delete process.env.DAY_ONE_TOKEN;
+  process.env.HYPERTASK_MCP_TOKEN = savedToken ?? 'test-only-board-token';
+  if (token === null) delete process.env.DAY_ONE_TOKEN;
   else process.env.DAY_ONE_TOKEN = token;
   globalThis.fetch = async (url, init) => {
     const request = { url, method: init.method, body: init.body ? JSON.parse(init.body) : undefined };
@@ -103,10 +103,14 @@ async function run(options, { now = AFTER, eventName = 'schedule', token = 'app-
     posts.push({ url, body: request.body, key: init.headers['Idempotency-Key'] });
     return { ok: true, status: 200, json: async () => ({ success: true }) };
   };
-  const harness = fake(options);
+  const harness = fake(harnessOptions);
+  const core = coreOf();
   try {
-    const result = await sweep({ github: harness.github, context: { ...context, eventName }, core: coreOf(), now });
-    return { result, posts, calls: harness.calls, requests };
+    const result = await sweep({ github: harness.github, context: { ...context, eventName }, core, now });
+    return { result, posts, calls: harness.calls, requests, lines: core.lines };
+  } catch (error) {
+    error.log = core.lines;
+    throw error;
   } finally {
     globalThis.fetch = savedFetch;
     if (savedToken === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
@@ -129,7 +133,7 @@ test('an over-cap agent change goes back to the guard and the rest are left alon
   const small = agentPull(2, { additions: 200, changed_files: 1 });
   const human = pull(3, { login: 'valentinyeo', type: 'User' }, { additions: 900, changed_files: 1 });
   const dependabot = pull(4, { login: 'app/dependabot', type: 'Bot' }, { additions: 700, changed_files: 1 });
-  const { posts } = await run({
+  const { posts, requests } = await run({
     pulls: [big, small, human, dependabot],
     files: { 1: [file('src/a.ts', 500)], 2: [file('src/b.ts', 200)] },
   });
@@ -168,10 +172,12 @@ test('an existing trigger label is reused, never recreated', async () => {
 });
 
 test('without the app token the sweep fails loudly instead of skipping the guard', async () => {
-  await assert.rejects(
-    run({ pulls: [agentPull(1, { additions: 500, changed_files: 1 })], files: { 1: [file('src/a.ts', 500)] } }, { token: undefined }),
-    /DAY_ONE_TOKEN is missing/,
-  );
+  const error = await run(
+    { pulls: [agentPull(1, { additions: 500, changed_files: 1 })], files: { 1: [file('src/a.ts', 500)] } },
+    { token: null },
+  ).then(() => null, failure => failure);
+  assert.match(error.message, /1 over-cap change\(s\) were not sent to the guards/);
+  assert.match(error.log.join('\n'), /was not sent to the guards: DAY_ONE_TOKEN is missing/);
 });
 
 test('a change that cannot be measured is named, never counted as passing', async () => {

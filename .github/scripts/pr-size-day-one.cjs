@@ -97,7 +97,7 @@ async function sweep({ github, context, core, now = Date.now(), log = message =>
     let report;
     try {
       const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number: pull.number });
-      report = await reportSize({ github, context, core: quiet, pr: current, reportDirectory: process.env.RUNNER_TEMP });
+      report = await reportSize({ github, context, core: quiet, pr: current, reportDirectory: process.env.RUNNER_TEMP, now });
     } catch (error) {
       counts.unavailable.push(pull.number);
       log(`Change #${pull.number} could not be measured: ${error.message}`);
