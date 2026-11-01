@@ -36,8 +36,8 @@ export const REASONS = {
   [RULES.access]: "access or security guard",
   [RULES.policy]: "guards repo policy, which no behaviour test can reach",
   [RULES.mixed]: "behaviour assertions already live in this file",
-  [RULES.covered]: "text-only guard and a behaviour test imports the same module",
-  [RULES.soleGuard]: "text-only guard and no behaviour test imports the module",
+  [RULES.covered]: "text-only guard and a behaviour test imports every file it reads",
+  [RULES.soleGuard]: "text-only guard and at least one file it reads has no behaviour test",
 };
 
 export function thousands(value) {
@@ -126,17 +126,23 @@ export function importIndex(rows) {
 }
 
 export function coveringTests(row, index) {
-  const found = new Set();
-  for (const target of row.targets) {
-    const key = target.replace(/\.[cm]?[jt]sx?$/, "");
-    for (const candidate of [key, `${key}/index`]) {
-      for (const file of index.get(candidate) ?? []) if (file !== row.file) found.add(file);
-    }
-  }
-  return [...found].sort();
+  return [...new Set(row.targets.flatMap((target) => importingTests(target, row.file, index)))].sort();
 }
 
-export function decideRow(row, coverage) {
+function importingTests(target, self, index) {
+  const key = target.replace(/\.[cm]?[jt]sx?$/, "");
+  const found = [];
+  for (const candidate of [key, `${key}/index`]) {
+    for (const file of index.get(candidate) ?? []) if (file !== self) found.push(file);
+  }
+  return found;
+}
+
+export function uncoveredTargets(row, index) {
+  return row.targets.filter((target) => importingTests(target, row.file, index).length === 0);
+}
+
+export function decideRow(row, coverage, uncovered = []) {
   const titles = [row.file, ...row.titles].join("\n");
   const ticket = titles.match(TICKET_PATTERN);
   if (ticket) return { decision: "keep", rule: RULES.ticket, evidence: ticket[0] };
@@ -148,8 +154,9 @@ export function decideRow(row, coverage) {
   if (row.class === "mixed") {
     return { decision: "rewrite", rule: RULES.mixed, evidence: `${row.behaviourTests} behaviour test${row.behaviourTests === 1 ? "" : "s"} in this file` };
   }
-  if (coverage.length > 0) return { decision: "delete", rule: RULES.covered, evidence: coverage[0] };
-  return { decision: "rewrite", rule: RULES.soleGuard, evidence: "no behaviour test imports it" };
+  if (coverage.length > 0 && uncovered.length === 0) return { decision: "delete", rule: RULES.covered, evidence: coverage[0] };
+  if (uncovered.length > 0) return { decision: "rewrite", rule: RULES.soleGuard, evidence: `no behaviour test imports ${uncovered[0]}` };
+  return { decision: "rewrite", rule: RULES.soleGuard, evidence: "reads no file, so no behaviour test can replace it" };
 }
 
 export function testFiles(root) {
@@ -170,7 +177,7 @@ export function buildInventory(root) {
     .sort((a, b) => (a.file < b.file ? -1 : 1))
     .map((row) => {
       const coverage = coveringTests(row, index);
-      const call = decideRow(row, coverage);
+      const call = decideRow(row, coverage, uncoveredTargets(row, index));
       return {
         file: row.file,
         class: row.class,
@@ -269,8 +276,8 @@ export function renderReport(inventory) {
     ["2", RULES.access, "keep", "The file or a test title names access, security or a refusal."],
     ["3", RULES.policy, "keep", "It only reads workflow, lint or config files, and no behaviour test can reach repo policy."],
     ["4", RULES.mixed, "rewrite", "Behaviour assertions already live here; drop the text assertions and keep the rest."],
-    ["5", RULES.covered, "delete", "Only text assertions, and a behaviour test imports the module they read."],
-    ["6", RULES.soleGuard, "rewrite", "Only text assertions and no behaviour test imports the module, so the guard must be ported, not dropped."],
+    ["5", RULES.covered, "delete", "Only text assertions, and a behaviour test imports every file the assertions read."],
+    ["6", RULES.soleGuard, "rewrite", "Only text assertions and at least one file they read has no behaviour test, so the guard must be ported, not dropped."],
   ];
   for (const entry of ladder) lines.push(row(...entry));
   lines.push("");
@@ -280,7 +287,7 @@ export function renderReport(inventory) {
   lines.push("## How to use a call", "");
   lines.push("| Call | Do |");
   lines.push("| --- | --- |");
-  lines.push("| delete | Read the named behaviour test. Removes the same guarantee? Remove the file and its allowlist entry in the same batch PR. |");
+  lines.push("| delete | Read the named behaviour test. Removes the same guarantee? Remove the file and its allowlist entry in the same batch PR. Every file the assertions read is imported by some behaviour test, which is still not proof that the exact assertion is redundant. |");
   lines.push("| rewrite | Remove the source-text assertions and keep the behaviour tests. Port an assertion into a behaviour test only when it guards something the file does not already check. |");
   lines.push("| keep | Leave it. The evidence column names the guard, so a later pass can challenge one row at a time. |");
   lines.push("");
@@ -512,6 +519,12 @@ function selfTest() {
   assert(coveredRow.rule === RULES.covered && coveredRow.decision === "delete", "covered rule");
   const soleRow = decideRow(base, []);
   assert(soleRow.rule === RULES.soleGuard && soleRow.decision === "rewrite", "sole guard rule");
+  const multiTarget = { ...base, targets: ["src/app/route.ts", "src/lib/other.ts"] };
+  assert(uncoveredTargets(multiTarget, index).join() === "src/lib/other.ts", "uncovered target");
+  assert(uncoveredTargets(base, index).length === 0, "covered target is not uncovered");
+  const partialRow = decideRow(multiTarget, ["tests/route.test.cjs"], ["src/lib/other.ts"]);
+  assert(partialRow.rule === RULES.soleGuard && partialRow.decision === "rewrite", "partial coverage is not a delete");
+  assert(partialRow.evidence === "no behaviour test imports src/lib/other.ts", "partial coverage names the uncovered file");
   const policyRow = decideRow({ ...base, targets: [".github/workflows/ci-tests.yml"] }, []);
   assert(policyRow.rule === RULES.policy && policyRow.decision === "keep", "policy rule");
 

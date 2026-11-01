@@ -93,6 +93,20 @@ test("ticket and access markers keep a source-text test, before any delete call"
   assert.equal(access.rule, RULES.access);
 });
 
+test("a delete needs a behaviour test on every file the assertions read", async () => {
+  const { decideRow, uncoveredTargets, RULES } = await loadAudit();
+  const index = new Map([["src/app/route", ["tests/route.test.cjs"]]]);
+  const row = { file: "tests/route-guard.test.cjs", class: "source-text", behaviourTests: 0, titles: [] };
+  const both = { ...row, targets: ["src/app/route.ts", "src/lib/other.ts"] };
+  assert.deepEqual(uncoveredTargets(both, index), ["src/lib/other.ts"]);
+  assert.deepEqual(uncoveredTargets({ ...row, targets: ["src/app/route.ts"] }, index), []);
+  const partial = decideRow(both, ["tests/route.test.cjs"], ["src/lib/other.ts"]);
+  assert.equal(partial.decision, "rewrite");
+  assert.equal(partial.rule, RULES.soleGuard);
+  assert.equal(partial.evidence, "no behaviour test imports src/lib/other.ts");
+  assert.equal(decideRow({ ...row, targets: ["src/app/route.ts"] }, ["tests/route.test.cjs"], []).decision, "delete");
+});
+
 test("policy guards stay, mixed files are rewritten, covered files are deleted, sole guards are ported", async () => {
   const { decideRow, RULES } = await loadAudit();
   const base = { file: "tests/route-guard.test.cjs", targets: ["src/app/route.ts"], titles: [], class: "source-text", behaviourTests: 0 };

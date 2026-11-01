@@ -18,6 +18,10 @@ node scripts/test-source-audit.mjs --self-test
 `--check` needs full git history only through the files it reads; nothing in the report depends
 on git history, so a shallow clone regenerates the same bytes.
 
+The report counts the tree it runs on, so every [HYCI-2](https://app.hypertask.ai/detail/project-11514/2)
+cleanup batch shrinks the rows and both headline totals. Regenerate in the batch PR: `--check` fails
+on stale bytes, and it is not a required CI gate because most test edits do not touch the audit.
+
 ## Where the seconds come from
 
 `ci-durations.json` is one `ci-tests` production push, per-file child-process wall time. Refresh it
