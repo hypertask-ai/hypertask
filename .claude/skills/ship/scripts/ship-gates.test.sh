@@ -83,6 +83,15 @@ print(markers[sys.argv[1]])
     assert not (repo/'.unlazy').exists()
     print('ok each ticket gets its own folder and repeat calls do not duplicate ids or reset evidence')
 
+    r = run('HYCI-44', CLAUDE_CODE_SESSION_ID=session)
+    ci = ledger('HYCI-44')
+    assert r.returncode == 0 and ci.exists(), (r.stdout, r.stderr)
+    assert ids(ci) == ['HYCI-44.'+g for g in ['ticket','deeper','pr','merged','deployed','docs','done','cleaned']], ids(ci)
+    r = run('HYCI-44', CLAUDE_CODE_SESSION_ID=session)
+    assert r.returncode == 0 and ids(ci) == ['HYCI-44.'+g for g in ['ticket','deeper','pr','merged','deployed','docs','done','cleaned']], ids(ci)
+    assert not (repo/'.unlazy').exists()
+    print('ok a CI ticket writes its own ledger outside the project and a repeat call keeps it')
+
     for key, sid in [('CODEX_SESSION_ID','codexses-full'), ('CODEX_THREAD_ID','codexthr-full')]:
         r = run('HYFA-12', **{key:sid})
         assert r.returncode == 0 and len(ids(ledger('HYFA-12'))) == 8, r.stderr
