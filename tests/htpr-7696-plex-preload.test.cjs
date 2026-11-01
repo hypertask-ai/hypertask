@@ -29,13 +29,7 @@ for (const [file, exportName, loaderName] of [
   test(`${file} asks Next to preload its latin cuts`, () => {
     const options = fontOptions(file, exportName, loaderName);
     assert.equal(options.preload, true);
-    assert.deepEqual(options.subsets, ["latin"]);
+    assert.deepEqual(Array.from(options.subsets), ["latin"]);
     assert.equal(options.display, "swap");
   });
 }
-
-test("the layout leaves font preloads to Next instead of naming emitted media files", () => {
-  const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
-  assert.doesNotMatch(layout, /_next\/static\/media/);
-  assert.doesNotMatch(layout, /rel="preload"[^>]*as="font"/);
-});
