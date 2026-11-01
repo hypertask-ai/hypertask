@@ -1194,6 +1194,11 @@ branch started from, `git merge-base HEAD origin/production`, never production's
 moving tip. `scripts/lib/source-text-allowlist-base.cjs` resolves that ceiling, and
 `SOURCE_TEXT_ALLOWLIST_BASE` still overrides it first.
 
+Both lanes that run the gate also pin the starting commit from the pull request's
+base SHA. `ci-checks` holds full history, but `test-shard` checks out one commit
+deep with no ancestry to walk, so `git merge-base` cannot answer there; the pin is
+the only thing that keeps that lane judging the branch instead of the tip.
+
 Before this, a cleanup batch that deleted allowlisted test files lowered
 production's allowlist while every open branch still held those files. Each such
 branch then looked like it had added them, so its own required check went red for

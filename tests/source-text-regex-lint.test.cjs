@@ -33,14 +33,14 @@ function branchBaseRef() {
   }
 }
 
-const baseRef = process.env.SOURCE_TEXT_ALLOWLIST_BASE || branchBaseRef();
+const baseRef = branchBaseRef();
 
 function readBaseAllowlist() {
   try {
     git(["rev-parse", "--verify", "--quiet", `${baseRef}^{commit}`]);
   } catch {
-    const branch = baseRef.startsWith("origin/") ? baseRef.slice("origin/".length) : baseRef;
-    git(["fetch", "--depth=1", "origin", `${branch}:refs/remotes/origin/${branch}`]);
+    const branch = baseRef.startsWith("origin/") ? baseRef.slice("origin/".length) : "";
+    git(["fetch", "--depth=1", "--no-tags", "origin", branch ? `${branch}:refs/remotes/origin/${branch}` : baseRef]);
   }
   try {
     const parsed = JSON.parse(git(["show", `${baseRef}:tests/source-text-regex-allowlist.json`]));
@@ -179,7 +179,7 @@ function branchFixture(t) {
       run("add", "-A");
       run("commit", "-q", "--allow-empty", "-m", message);
     },
-    resolver: () => resolveAllowlistBase((args) => run(...args)),
+    resolver: () => resolveAllowlistBase((args) => run(...args), {}),
   };
 }
 
@@ -225,6 +225,17 @@ test("a single-commit tree resolves to its own ceiling instead of throwing", (t)
   const only = repo.revParse("HEAD");
   repo.run("update-ref", "refs/remotes/origin/production", only);
   assert.equal(repo.resolver(), only);
+});
+
+test("a tree with no ancestry settles on the base commit its event pinned", (t) => {
+  const repo = branchFixture(t);
+  const pinned = "9f2c1d8e4b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d";
+  const shallow = (args) => {
+    if (args[0] === "merge-base") throw new Error("fatal: no merge base in a one-commit checkout");
+    return repo.run(...args);
+  };
+  assert.equal(resolveAllowlistBase(shallow, { SOURCE_TEXT_ALLOWLIST_BASE: pinned }), pinned);
+  assert.throws(() => resolveAllowlistBase(shallow, {}), /no merge base/);
 });
 
 test("a source path stored in an earlier string binding is detected", (t) => {
