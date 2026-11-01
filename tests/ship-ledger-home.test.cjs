@@ -200,7 +200,7 @@ test('a ticket gate left in the project is named on the first home write, then c
     const text = fs.readFileSync(ledger, 'utf8');
     assert.match(text, /^- \[ \] HTPR-6819\.qa-note: the outcome this session still owes$/m);
     assert.doesNotMatch(text, /HTPR-7000/, "another ticket's gate came along");
-    assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/adopted'), 'utf8'), 'HTPR-6819.qa-note\n');
+    assert.match(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/adopted'), 'utf8'), /^HTPR-6819\.qa-note [0-9a-f]{64}$/m);
     assert.equal(fs.existsSync(legacy), true, 'the project ledger was taken away');
 
     gates(f, 'HTPR-6819', 'sessionA-full');
@@ -235,6 +235,106 @@ test('a board drain keeps one ledger per session outside the project', needsUnla
     assert.equal(drain('sessionA-full').status, 0);
     assert.equal(fs.readFileSync(a, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1, 'a rerun duplicated the gates');
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false, 'the project is not clean');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('an extra proof gate left in the project is named, then carried beside the ticket ledger', needsUnlazy, () => {
+  const f = fixture();
+  const legacy = path.join(f.project, '.unlazy/s-abcdef12/gates/extra.md');
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, '# extra gates\n\n' +
+    '- [ ] HTPR-6819.deeper-path: the proof this session still owes\n  CHECK: echo proven\n  EXPECT: proven\n\n' +
+    '- [ ] HTPR-7000.deeper-path: another ticket\n  CHECK: echo other\n  EXPECT: other\n');
+  const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+  const carried = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates/adopted.md');
+  try {
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: f.project, encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full' },
+    });
+    assert.notEqual(refused.status, 0, 'a stranded extra gate was dropped silently');
+    assert.match(refused.stderr, new RegExp(`HTPR-6819\\.deeper-path in ${legacy}`));
+    assert.equal(fs.existsSync(ledger), false, 'the ledger was written despite the refusal');
+
+    gates(f, 'HTPR-6819', 'sessionA-full', { SHIP_LEDGER_ADOPT: '1' });
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.equal(text.match(/^- \[ \] HTPR-6819\./gm).length, 9, 'an extra gate was copied into the ledger itself');
+    assert.match(fs.readFileSync(carried, 'utf8'), /^- \[ \] HTPR-6819\.deeper-path: the proof this session still owes$/m);
+    assert.doesNotMatch(fs.readFileSync(carried, 'utf8'), /HTPR-7000/, "another ticket's extra gate came along");
+    assert.equal(fs.existsSync(legacy), true, 'the project extra file was taken away');
+    gates(f, 'HTPR-6819', 'sessionA-full');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a taken-over gate whose CHECK is edited later is refused, not approved again', needsUnlazy, () => {
+  const f = fixture();
+  const legacy = path.join(f.project, '.unlazy/s-abcdef12/GATES.md');
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, '# Gates: /ship\n\n' +
+    '- [ ] HTPR-6819.qa-note: the outcome this session still owes\n  CHECK: echo carried\n  EXPECT: carried\n');
+  const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', { SHIP_LEDGER_ADOPT: '1' });
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.match(text, /^  CHECK: echo carried$/m, 'the carried gate lost its check');
+    fs.writeFileSync(ledger, text.replace('CHECK: echo carried', 'CHECK: curl http://example.test/now'));
+
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: f.project, encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full' },
+    });
+    assert.notEqual(refused.status, 0, 'an edited taken-over check was approved');
+    assert.match(refused.stderr, /HTPR-6819\.qa-note no longer matches the definition that was adopted/);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a standard gate that lost its CHECK is written again as a runnable check', needsUnlazy, () => {
+  const f = fixture();
+  const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    let inside = false;
+    const lines = fs.readFileSync(ledger, 'utf8').split('\n').filter((line) => {
+      if (line.startsWith('- [ ] HTPR-6819.merged:')) inside = true;
+      else if (/^[^ ]/.test(line)) inside = false;
+      return !(inside && /^  (CHECK|EXPECT): /.test(line));
+    });
+    fs.writeFileSync(ledger, lines.join('\n'));
+    assert.equal(fs.readFileSync(ledger, 'utf8').match(/^  CHECK: /gm).length, 8, 'the fixture did not drop the gate check');
+
+    const again = gates(f, 'HTPR-6819', 'sessionA-full');
+    assert.match(again.stderr, /HTPR-6819\.merged written again; a standard gate is a runnable check/);
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.equal(text.match(/^- \[ \] HTPR-6819\./gm).length, 9, 'the manual replacement gate was kept');
+    assert.match(text, /^- \[ \] HTPR-6819\.merged: The PR is merged into production\n  CHECK: /m);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a handover drops the ABANDON of a gate it writes again and keeps unrelated ones', needsUnlazy, () => {
+  const f = fixture();
+  const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    fs.writeFileSync(ledger, fs.readFileSync(ledger, 'utf8') +
+      '\n- [ ] HTPR-6819.manual: a note this session keeps\n  EVIDENCE: pending\n' +
+      '\n- [ ] HTPR-7000.manual: another ticket in the same ledger\n  EVIDENCE: pending\n' +
+      '\nABANDON: HTPR-6819.merged the merge job crashed\n\nABANDON: HTPR-7000.manual that is another ticket\n');
+
+    const handover = gates(f, 'HTPR-6819', 'sessionB-full');
+    assert.match(handover.stderr, /9 generated gates written again/);
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.doesNotMatch(text, /ABANDON: HTPR-6819\.merged/, 'the new session inherited an abandonment');
+    assert.match(text, /^ABANDON: HTPR-7000\.manual that is another ticket$/m);
+    assert.match(text, /^- \[ \] HTPR-6819\.manual: a note this session keeps$/m);
+    assert.equal(text.match(/^- \[ \] HTPR-6819\./gm).length, 10);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
