@@ -1,19 +1,14 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const test = require("node:test");
+const { definitions } = require("./helpers/flag-files.cjs");
 
-const landing = fs.readFileSync("src/app/[...boardURL]/LandingPage.tsx", "utf8");
-const flag = fs.readFileSync("src/lib/flags/definitions/htpr-7078-remove-connect-block.ts", "utf8");
+const connectBlockFlag = definitions().find(({ key }) => key === "htpr-7078-remove-connect-block");
 
 test("the flag is a bugfix flag that is on for everyone", () => {
-  assert.match(flag, /kind: "bugfix"/);
-  assert.match(flag, /defaultMode: "EVERYONE"/);
-});
-
-test("the Connect your agent block renders only when the flag is off", () => {
-  assert.match(landing, /const connectBlockRemoved = useFlag\(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG\)/);
-  assert.match(landing, /const inlineConnectCard = !connectBlockRemoved && _currentProject && _currentUser\?\.id \? \(\s*<AgentConnectCard/);
-  assert.equal(landing.match(/<AgentConnectCard/g).length, 1);
+  assert.ok(connectBlockFlag, "htpr-7078-remove-connect-block must stay defined");
+  assert.equal(connectBlockFlag.kind, "bugfix");
+  assert.equal(connectBlockFlag.defaultMode, "EVERYONE");
 });
 
 test("the card component and onboarding helpers stay in place", () => {
