@@ -601,10 +601,15 @@ coverage_baseline:
   cron_utc: "17 2 * * *"
   workflow_dispatch: production_only
   trusted_code_ref: event_production_sha
-  timeout_minutes: 60
+  timeout_minutes: 45
   scope: full
+  lanes: 5
+  lane_planning: measured_duration_weights
   collection_env: NODE_V8_COVERAGE=coverage/raw
   report_command: npm run coverage:report
+  lane_artifact: coverage-lane-<lane>
+  lane_artifact_paths: [coverage/raw.tgz, shard-<lane>.txt, shard-<lane>.log, test-durations.json]
+  merge_command: node .github/scripts/merge-coverage-raw.mjs coverage/raw <lane raw dirs>
   report_only: true
   report_continue_on_error: true
   artifact_name: automated-test-coverage-${{ github.sha }}

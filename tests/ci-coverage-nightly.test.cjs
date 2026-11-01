@@ -52,37 +52,69 @@ test("metadata changes cannot restart or skip required CI, and PR/push tests col
   assert.equal(prove.run, 'node .github/scripts/shard-tests.mjs --prove --serial-lanes "$CI_SERIAL_SHARDS" --out ci-test-shards --results ci-shard-results');
 });
 
-test("nightly diagnostics run the full production suite without publishing a required check", () => {
+test("nightly diagnostics run the full production suite in lanes without publishing a required check", () => {
   const nightly = workflow("coverage-nightly");
   assert.deepEqual(Object.keys(nightly.on).sort(), ["schedule", "workflow_dispatch"]);
   assert.deepEqual(nightly.on.schedule, [{ cron: "17 2 * * *" }]);
-  assert.deepEqual(Object.keys(nightly.jobs), ["coverage-nightly"]);
-  const job = nightly.jobs["coverage-nightly"];
-  assert.equal(job.name, "coverage-nightly");
-  assert.equal(job.if, "github.ref == 'refs/heads/production'");
-  assert.equal(job["runs-on"], "ubuntu-latest");
-  assert.equal(job.steps[0].with.ref, "${{ github.sha }}");
-  assert.equal(job.steps[0].with["persist-credentials"], false);
-  assert.equal(job.steps[0].with["fetch-depth"], 2);
-  assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
-  assert.equal(job["timeout-minutes"], 60);
+  assert.deepEqual(Object.keys(nightly.jobs), ["coverage-plan", "coverage-lane", "coverage-nightly"]);
   assert.deepEqual(nightly.concurrency, { group: "coverage-nightly-production", "cancel-in-progress": false });
-  const collect = job.steps.find((step) => step.name === "Test with coverage collection");
-  assert.equal(collect.run, "npm test");
+  assert.equal(String(nightly.env.COVERAGE_POOL_LANES), "4");
+  assert.equal(String(nightly.env.COVERAGE_SERIAL_LANES), "1");
+  for (const [name, job] of Object.entries(nightly.jobs)) {
+    assert.notEqual(job.name, "ci-tests", name);
+    assert.ok(job["timeout-minutes"] < 55, `${name} must finish inside the 55-minute target, not the old 60-minute cap`);
+    assert.equal(job["runs-on"], "ubuntu-latest", name);
+    assert.equal(job.steps[0].with.ref, "${{ github.sha }}", name);
+    assert.equal(job.steps[0].with["persist-credentials"], false, name);
+  }
+  assert.equal(nightly.jobs["coverage-plan"].if, "github.ref == 'refs/heads/production'");
+  assert.equal(nightly.jobs["coverage-lane"].if, "github.ref == 'refs/heads/production'");
+  assert.equal(nightly.jobs["coverage-nightly"].if, "always() && github.ref == 'refs/heads/production'");
+  assert.deepEqual(nightly.jobs["coverage-nightly"].needs, ["coverage-plan", "coverage-lane"]);
+
+  const plan = nightly.jobs["coverage-plan"];
+  assert.equal(plan.outputs.lanes, "${{ steps.lanes.outputs.indexes }}");
+  const write = plan.steps.find((step) => step.name === "Write coverage lanes");
+  assert.match(write.run, /LANES=\$\(\(COVERAGE_POOL_LANES \+ COVERAGE_SERIAL_LANES\)\)/);
+  assert.match(write.run, /--discover --count "\$LANES" --serial-lanes "\$COVERAGE_SERIAL_LANES" --out "\$OUT"/);
+  assert.match(write.run, /--check --serial-lanes "\$COVERAGE_SERIAL_LANES" --out "\$OUT"/);
+  const planUpload = plan.steps.find((step) => step.name === "Upload coverage lanes");
+  assert.equal(planUpload.with.name, "coverage-lanes");
+
+  const lane = nightly.jobs["coverage-lane"];
+  assert.equal(lane.strategy["fail-fast"], false);
+  assert.equal(lane.strategy.matrix.lane, "${{ fromJSON(needs.coverage-plan.outputs.lanes || '[\"0\"]') }}");
+  assert.equal(lane.env.HTPR_PG_IMAGE, workflow("ci-tests").jobs["ci-test"].env.HTPR_PG_IMAGE);
+  const collect = lane.steps.find((step) => step.name === "Test lane with coverage collection");
   assert.deepEqual(collect.env, {
+    LANE: "${{ matrix.lane }}",
     NODE_V8_COVERAGE: "coverage/raw",
     HT_REQUIRE_PG_TESTS: "1",
     SOURCE_TEXT_ALLOWLIST_BASE: "${{ github.sha }}^",
   });
-  assert.equal(collect.if, undefined);
-  const report = job.steps.find((step) => step.name === "Build report-only coverage baseline");
-  assert.equal(report.run, "npm run coverage:report");
-  assert.equal(report["continue-on-error"], true);
-  const upload = job.steps.find((step) => step.name === "Upload coverage baseline");
+  assert.match(collect.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/coverage-lane-upload\/shard-\$\{LANE\}\.log"/);
+  const pack = lane.steps.find((step) => step.name === "Pack lane coverage");
+  assert.equal(pack.if, "always() && steps.lane-test.outcome != 'skipped'");
+  assert.match(pack.run, /tar -czf "\$RUNNER_TEMP\/coverage-lane-upload\/coverage\/raw\.tgz" -C coverage raw/);
+  const laneUpload = lane.steps.find((step) => step.name === "Upload lane result");
+  assert.equal(laneUpload.if, "always()");
+  assert.equal(laneUpload.with.name, "coverage-lane-${{ matrix.lane }}");
+
+  const report = nightly.jobs["coverage-nightly"];
+  const merge = report.steps.find((step) => step.name === "Merge lane coverage");
+  assert.match(merge.run, /node \.github\/scripts\/merge-coverage-raw\.mjs coverage\/raw "\$\{dirs\[@\]}"/);
+  const baseline = report.steps.find((step) => step.name === "Build report-only coverage baseline");
+  assert.equal(baseline.run, "npm run coverage:report");
+  assert.equal(baseline["continue-on-error"], true);
+  const upload = report.steps.find((step) => step.name === "Upload coverage baseline");
   assert.equal(upload.if, "always()");
   assert.equal(upload.with.name, "automated-test-coverage-${{ github.sha }}");
   assert.equal(upload.with.path, "coverage/report/\ncoverage/critical-domains.json\ncoverage/critical-domains.md\n");
   assert.equal(upload.with["retention-days"], 30);
+  const prove = report.steps.find((step) => step.name === "Prove every test file ran once");
+  assert.equal(prove.run, 'node .github/scripts/shard-tests.mjs --prove --serial-lanes "$COVERAGE_SERIAL_LANES" --out coverage-lanes --results coverage-results');
+  const fail = report.steps.find((step) => step.name === "Fail when a lane failed");
+  assert.equal(fail.if, "needs.coverage-lane.result != 'success'");
 });
 
 test("contract rejects restored instrumentation, metadata triggers, and label skips", () => {
