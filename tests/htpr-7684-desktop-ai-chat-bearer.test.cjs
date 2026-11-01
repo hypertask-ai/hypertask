@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const jwt = require("jsonwebtoken");
 const { NextRequest } = require("next/server");
@@ -203,13 +202,6 @@ test("no log line carries token material", async () => {
   await getCliBearerChatUser(requestWith(token), "chat-stream");
   await getCliBearerChatUser(requestWith(token, { "x-hypertask-sidebar-project": "15" }), "chat-stream");
   assert.ok(!JSON.stringify(decisions).includes(token.split(".")[2]));
-});
-
-test("stream and cancel try the desktop login only after the existing resolver", () => {
-  const stream = fs.readFileSync(path.join(root, "src/app/api/ai/chat/stream/route.ts"), "utf8");
-  const cancel = fs.readFileSync(path.join(root, "src/app/api/ai/chat/cancel/route.ts"), "utf8");
-  assert.match(stream, /\(await getAiRequestUser\(request\)\) \?\?\s*\(await getCronServiceRequestUser\(request\)\);\s*const requestUser = sessionOrServiceUser \?\? \(await getCliBearerChatUser\(request, "chat-stream"\)\);/);
-  assert.match(cancel, /const user = \(await getAiRequestUser\(request\)\) \?\? \(await getCliBearerChatUser\(request, "chat-cancel"\)\);/);
 });
 
 function sessionList({ sessionUser, cliUser, headers = {} }) {

@@ -93,14 +93,3 @@ for (const isMbl of [true, false]) {
   });
 }
 
-test("static and live description widths use the same enclosing task query container", () => {
-  const main = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/TaskDetailMainContainer.tsx"), "utf8");
-  assert.equal((main.match(/@container/g) ?? []).length, 2);
-  for (const relative of [`${directory}StaticDescriptionShell.tsx`, "src/components/RTE/TaskDetailEditorPanels.tsx", "src/components/RTE/Components/TiptapMainContainer.tsx", "src/components/RTE/Components/TiptapEditor.tsx"]) {
-    assert.doesNotMatch(fs.readFileSync(path.join(root, relative), "utf8"), /@container|containerType:|container-type:/);
-  }
-  const drag = fs.readFileSync(path.join(root, "src/styles/FileDragAndDrop.module.scss"), "utf8");
-  assert.match(drag, /\.container\s*\{\s*position: relative;\s*width: 100%;\s*height: 100%;/);
-  const config = fs.readFileSync(path.join(root, "src/lib/configs/taskDetail.config.ts"), "utf8");
-  assert.match(config, /descriptionContainer:\s*"xs:py-2 xs:px-\[10px\]"/);
-});

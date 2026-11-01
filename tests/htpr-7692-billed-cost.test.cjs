@@ -751,8 +751,4 @@ test("flag registry is file-local, money-gated, and dated 2026-10-24", () => {
   const flag = definition.default ?? definition;
   assert.equal(flag.key, FLAG); assert.equal(flag.kind, "bugfix"); assert.equal(flag.defaultMode, "OWNER_AND_QA");
   assert.equal(flag.releaseRisk.risk, "small"); assert.equal(flag.releaseRisk.highRisk, "money"); assert.equal(flag.shippedOn, "2026-10-24");
-  const source = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"), "utf8");
-  assert.ok(!source.includes("createHash"));
-  const stream = fs.readFileSync(path.join(root, "src/lib/ai/chatStream/runStream.ts"), "utf8");
-  assert.match(stream, /client disconnected; completing in background/);
 });

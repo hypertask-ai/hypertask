@@ -1,28 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
+const { load } = require("./task-route-loader.cjs");
 
-const root = path.resolve(__dirname, "..");
-
-function resolveHyperMentionComposition(input) {
-  const useComposed = input.composedForTaskId != null;
-  const taskId = useComposed ? input.composedForTaskId : input.currentTaskId;
-  const ownerId = useComposed
-    ? input.composedForOwnerId
-    : input.currentOwnerId;
-  const projectId = useComposed
-    ? input.composedForProjectId
-    : input.currentProjectId;
-  return {
-    taskId,
-    ownerId,
-    projectId,
-    taskIds: [taskId].filter(
-      (id) => typeof id === "number" && Number.isFinite(id),
-    ),
-  };
-}
+const { resolveHyperMentionComposition } = load("src/lib/ai/hyperMentionComposition.ts");
 
 test("composed HyperAI targets win over live current task and project", () => {
   const result = resolveHyperMentionComposition({
@@ -70,14 +50,4 @@ test("falls back to live current values when composition is missing", () => {
     projectId: 15,
     taskIds: [55],
   });
-});
-
-test("source helper stays all-or-nothing on composedForTaskId", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/ai/hyperMentionComposition.ts"),
-    "utf8",
-  );
-  assert.match(source, /const useComposed = input\.composedForTaskId != null/);
-  assert.match(source, /composedForProjectId/);
-  assert.doesNotMatch(source, /composedRelatedTaskIds/);
 });
