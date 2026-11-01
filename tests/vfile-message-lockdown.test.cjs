@@ -81,18 +81,18 @@ test("the vendored constructor stays upstream-identical", () => {
   assert.equal(constructor(patchedPath), constructor(upstreamPath));
 });
 
-for (const options of [
-  { dev: false, isServer: false },
-  { dev: true, isServer: false },
-  { dev: false, isServer: true, nextRuntime: "nodejs" },
-  { dev: false, isServer: true, nextRuntime: "edge" },
-]) {
-  test(`Next webpack aliases vfile-message for ${JSON.stringify(options)}`, () => {
-    const config = nextConfig.webpack({ resolve: { alias: { existing: "kept" } } }, options);
-    assert.equal(config.resolve.alias["vfile-message$"], patchedPath);
-    assert.equal(config.resolve.alias.existing, "kept");
-  });
-}
+test("Turbopack aliases vfile-message to the patched module", () => {
+  assert.equal(nextConfig.turbopack.resolveAlias["vfile-message"], patchedPath);
+});
+
+test("Turbopack keeps react-joyride on its CJS entry and the edge redis shim conditional", () => {
+  assert.equal(nextConfig.turbopack.resolveAlias["react-joyride"], require.resolve("react-joyride"));
+  assert.equal(
+    nextConfig.turbopack.resolveAlias.ioredis["edge-light"],
+    path.resolve(__dirname, "../src/lib/ioredis-edge-shim.ts"),
+  );
+  assert.equal(typeof nextConfig.webpack, "undefined");
+});
 
 test("the real webpack markdown bundle renders under normal and locked Error intrinsics", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "htpr-6876-"));
@@ -102,7 +102,7 @@ test("the real webpack markdown bundle renders under normal and locked Error int
       export { default as Markdown } from ${JSON.stringify(require.resolve("react-markdown"))};
       export { VFileMessage as AliasedMessage } from "vfile-message";
     `);
-    const config = nextConfig.webpack({ resolve: { alias: {} } }, { dev: false, isServer: false });
+    const config = { resolve: { alias: { "vfile-message": patchedPath } } };
     const compiler = webpack({
       mode: "production",
       target: "web",
