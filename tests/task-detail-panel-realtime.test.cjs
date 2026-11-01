@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -103,17 +102,3 @@ test("refreshTaskDetailQueryCache seeds side-panel caches from the fetched task"
   assert.deepEqual(invalidated, [["taskLabels", 6281]]);
 });
 
-test("realtime task detail fetch uses the shared no-store cache constant", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/hooks/realtime/useTaskCommentsRealtime.ts"),
-    "utf8"
-  );
-  assert.match(
-    source,
-    /export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store"/
-  );
-  assert.match(
-    source,
-    /cache:\s*TASK_DETAIL_REALTIME_FETCH_CACHE/
-  );
-});

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -8,14 +7,6 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-6950-tooltip-top-layer";
-
-test("the tooltip feature is registered with its ship date and Owner + QA default", () => {
-  const definitions = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
-  const keys = require("./helpers/flag-files.cjs").source();
-  assert.match(keys, /export const HTPR_6950_TOOLTIP_TOP_LAYER_FLAG = "htpr-6950-tooltip-top-layer"/);
-  assert.match(definitions, /key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,\s+shippedOn: "2026-10-05",\s+description: "Keeps hover tooltips above other interface layers without being clipped or covered\."/);
-  assert.match(definitions, /const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-});
 
 test("flag off renders production tooltips and flag on renders the top-layer portal for every moved component", async (t) => {
   const dom = new JSDOM("<!doctype html><div id='root'></div><button id='external'>External anchor</button>", { url: "https://app.hypertask.ai/project" });

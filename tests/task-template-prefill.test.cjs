@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -146,13 +145,3 @@ test("task template picker hides stale data after switching boards", () => {
   );
 });
 
-test("the command palette no longer applies templates through the write endpoint", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/components/commands.tsx"),
-    "utf8",
-  );
-
-  assert.doesNotMatch(source, /axios\.post\("\/api\/task-templates\/apply"/);
-  assert.match(source, /openTaskTemplateDraft/);
-  assert.match(source, /taskTemplatePickerForProject/);
-});

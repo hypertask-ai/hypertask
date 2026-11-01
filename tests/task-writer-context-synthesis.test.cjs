@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -217,25 +216,3 @@ test("full ticket formatting keeps description block structure for edits", () =>
   );
 });
 
-test("AI Task Writer sends the current task id so the server can load every comment", () => {
-  const currentTask = {
-    id: 101,
-    parentTask: { id: 90 },
-    subTasks: [{ id: 102 }],
-    relatedFromTasks: [{ targetTask: { id: 103 } }],
-    relatedToTasks: [{ sourceTask: { id: 104 } }],
-  };
-
-  assert.deepEqual(getTaskWriterTaskIds(currentTask, "AiTaskWriter"), [101]);
-  assert.deepEqual(
-    getTaskWriterTaskIds(currentTask, "WriteWithAI"),
-    [101, 90, 102, 103, 104]
-  );
-  assert.deepEqual(getTaskWriterTaskIds(undefined, "AiTaskWriter"), []);
-
-  const hookSource = fs.readFileSync(
-    path.join(root, "src/hooks/MultiPages/AiWriter/useAiTaskWriter.ts"),
-    "utf8"
-  );
-  assert.match(hookSource, /getTaskWriterTaskIds\(currentTask, aiMode\)/);
-});

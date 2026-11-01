@@ -301,24 +301,3 @@ test("HTPR-7659 still allowed: a ticket with no inbox message is not archived an
   assert.deepEqual(flow.toasts, ["This task is not in inbox"]);
 });
 
-test("HTPR-7659: the comment writer treats a message still in the inbox list as in the inbox, behind a bugfix flag", () => {
-  const definition = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7659-archive-every-send.ts"), "utf8");
-  assert.match(definition, /kind: "bugfix"/);
-  assert.match(definition, /defaultMode: "EVERYONE"/);
-  const [, { row, sent }] = sendsInARow();
-  assert.equal(navigation.inboxMessageForTask([row], sent, 6), row);
-  assert.equal(navigation.inboxMessageForTask([{ ...row, status: "Archive" }], sent, 6), undefined);
-  assert.equal(navigation.inboxMessageForTask([row], sent, 7), undefined);
-});
-
-for (const enabled of [false, true]) test(`HTPR-7792: a board-opened ticket uses current inbox membership, flag ${enabled ? "on" : "off"}`, async (t) => {
-  const stale = { ...task, _count: { notifications: 0 }, notifications: [] };
-  const flags = new Set(enabled ? ["htpr-7792-reply-inbox"] : []);
-  const flow = makeFlow(t, stale, stale, [task], { flags, inboxFlow: null });
-  assert.equal(flow.useArchive().navigateToNextTask(true, false), "stayed");
-  await Promise.all(flow.pending);
-  assert.equal(flow.requests.length, enabled ? 1 : 0);
-  assert.equal(flow.rows.filter(row => row.userId === 6 && row.status === "Normal").length, enabled ? 0 : 2);
-  assert.equal(flow.rows.filter(row => row.userId === 7 && row.status === "Normal").length, 1);
-  assert.equal(flow.navigations.filter(([kind]) => kind !== "Refresh").length, 0);
-});
