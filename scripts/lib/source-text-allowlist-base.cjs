@@ -1,15 +1,16 @@
+function isAncestor(run, commit, descendant) {
+  try {
+    run(["merge-base", "--is-ancestor", commit, descendant]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resolveAllowlistBase(run, env = process.env) {
   const pinned = env.SOURCE_TEXT_ALLOWLIST_BASE;
   const head = run(["rev-parse", "HEAD"]).trim();
-  if (pinned) {
-    if (pinned === head) return pinned;
-    try {
-      run(["merge-base", "--is-ancestor", pinned, "HEAD"]);
-      return pinned;
-    } catch {
-      // The pin is the base tip its event fired on, which can be newer than the branch's start.
-    }
-  }
+  if (pinned && (pinned === head || isAncestor(run, pinned, head))) return pinned;
   let fork = "";
   let forkError = null;
   try {
