@@ -111,7 +111,7 @@ const digest = (gate) => createHash('sha256')
 // over or named, never silently dropped.
 const legacyTicketGates = () => {
   const found = [];
-  const seen = new Set();
+  const seen = new Map();
   let entries = [];
   try { entries = readdirSync(join(root, '.unlazy'), { withFileTypes: true }); } catch { return found; }
   const folders = entries.filter((entry) => entry.isDirectory() && /^s-[A-Za-z0-9._-]{1,8}$/.test(entry.name))
@@ -132,9 +132,15 @@ const legacyTicketGates = () => {
     for (const block of gateBlocks(legacy)) {
       if (!block.id.startsWith(`${ticket}.`)) continue;
       const gate = doc.gates.find((candidate) => candidate.id === block.id);
-      if (!gate || isGenerated(gate) || seen.has(gate.id)) continue;
-      seen.add(gate.id);
-      found.push({ id: block.id, text: block.text, file, digest: digest(gate) });
+      if (!gate || isGenerated(gate)) continue;
+      const gateDigest = digest(gate);
+      const earlier = seen.get(gate.id);
+      if (earlier) {
+        if (earlier.digest === gateDigest) continue;
+        throw new Error(`ship-gates: ${earlier.file} and ${file} both define ${gate.id} with different checks; keep one, or remove one before the home ledger is written`);
+      }
+      seen.set(gate.id, { file, digest: gateDigest });
+      found.push({ id: block.id, text: block.text, file, digest: gateDigest });
     }
   };
   for (const folder of folders) {
