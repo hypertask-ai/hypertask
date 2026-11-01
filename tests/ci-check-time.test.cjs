@@ -80,7 +80,7 @@ test('the slowest spots are named from job durations with at least two samples',
 
 test('the page shows every app in both factories and keeps user text escaped', async () => {
   const { formatHtml, formatMarkdown, formatText, appFromFixture } = await subject;
-  const summaries = fixture.apps.map(appFromFixture);
+  const summaries = fixture.apps.map(entry => appFromFixture(entry));
   summaries[0].label = '<script>Hypertask</script>';
   const html = formatHtml(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
   assert.ok(html.includes('&lt;script&gt;Hypertask&lt;/script&gt;'));
@@ -231,12 +231,24 @@ test('skipped jobs and steps never rank as slow spots', async () => {
   assert.deepEqual(summary.setupSteps.map(spot => spot.work), ['ci / Run npm ci']);
 });
 
+test('a tiny fixture limit still times a commit from its whole run list', () => {
+  const result = spawnSync(process.execPath, ['scripts/ci-check-time.mjs', '--fixture', fixturePath, '--json', '--limit', '1'], {
+    cwd: path.join(__dirname, '..'), encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const [hypertask] = JSON.parse(result.stdout).apps;
+  assert.equal(hypertask.runs, 1);
+  assert.equal(hypertask.pushToGreen.median, 330);
+});
+
 test('the fixture replay honours repo and run limits', () => {
   const one = spawnSync(process.execPath, ['scripts/ci-check-time.mjs', '--fixture', fixturePath, '--json', '--limit', '2'], {
     cwd: path.join(__dirname, '..'), encoding: 'utf8',
   });
   assert.equal(one.status, 0, one.stderr);
-  assert.deepEqual(JSON.parse(one.stdout).apps.map(app => app.runs), [2, 2]);
+  const limited = JSON.parse(one.stdout);
+  assert.deepEqual(limited.apps.map(app => app.runs), [2, 2]);
+  assert.equal(limited.apps[0].pushToGreen.median, 330);
   const narrowed = spawnSync(process.execPath, ['scripts/ci-check-time.mjs', '--fixture', fixturePath, '--json', '--repos', 'valentinyeo/postbox'], {
     cwd: path.join(__dirname, '..'), encoding: 'utf8',
   });

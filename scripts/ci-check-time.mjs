@@ -187,11 +187,11 @@ export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new 
   };
 }
 
-export function appFromFixture(entry) {
+export function appFromFixture(entry, limit = Infinity) {
   const rows = entry.runs.map(run => decomposeRun(run, entry.jobs?.[String(run.id)] ?? [])).filter(Boolean);
   const jobsByRun = new Map(entry.runs.map(run => [run.id, entry.jobs?.[String(run.id)] ?? []]));
   const excluded = new Set(entry.runs.filter(run => run.status && run.status !== 'completed').map(run => run.head_sha));
-  return summarize(entry, rows, jobsByRun, { excluded });
+  return summarize(entry, rows.slice(0, limit), jobsByRun, { excluded, commits: commitRuns(rows) });
 }
 
 function fetchJson(repo, path) {
@@ -300,7 +300,7 @@ export function formatHtml(summaries, { limit, generatedAt = new Date().toISOStr
 <html lang="en"><head><meta charset="utf-8"><title>Where check time goes</title>
 <style>
 :root{--bg-pageBackground:#0e0e0e;--bg-containerBackground:#212429;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e}
-body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:32px;background:var(--bg-pageBackground);color:var(--color-white-black)}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.5;margin:0;padding:32px;background:var(--bg-pageBackground);color:var(--color-white-black)}
 h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px}.meta{color:var(--color-text-light-gray);font-size:13px;font-weight:400}
 table{border-collapse:collapse;margin:0 0 8px;min-width:520px}th,td{text-align:left;padding:6px 14px 6px 0;border-bottom:1px solid var(--border-light-gray-thin)}
 th{color:var(--color-text-light-gray);font-weight:600;font-size:13px}.lead td{font-weight:700;color:var(--color-white-black)}.spots td:first-child{color:var(--color-white-black)}
@@ -395,7 +395,7 @@ export async function main(args = process.argv.slice(2)) {
     const wanted = new Set(apps.map(app => app.repo));
     summaries.push(...(payload.apps ?? [])
       .filter(entry => wanted.has(entry.repo))
-      .map(entry => appFromFixture({ ...entry, runs: entry.runs.slice(0, options.limit) })));
+      .map(entry => appFromFixture(entry, options.limit)));
   } else {
     for (const app of apps) {
       const { rows, jobsByRun, excluded, commits } = await collectApp(app, { limit: options.limit });
