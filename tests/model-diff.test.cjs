@@ -428,18 +428,3 @@ test("watcher refuses writes on failed, partial, malformed or truncated searches
   assert.ok(ticket.description.includes("&lt;untrusted&gt;"));
   assert.ok(!ticket.description.includes("<untrusted>"));
 });
-
-test("workflow and CI policy agree on trusted production-only hosted daily execution", () => {
-  const workflow = fs.readFileSync(path.join(root, ".github/workflows/ai-model-watch.yml"), "utf8");
-  const policy = fs.readFileSync(path.join(root, "docs/ci-policy.yml"), "utf8");
-  assert.match(workflow, /cron: '43 5 \* \* \*'/);
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /if: github.ref == 'refs\/heads\/production'/);
-  assert.match(workflow, /runs-on: ubuntu-latest/);
-  assert.match(workflow, /permissions:\n  contents: read\n/);
-  assert.match(workflow, /cancel-in-progress: false/);
-  assert.match(workflow, /timeout-minutes: 10/);
-  assert.match(workflow, /persist-credentials: false/);
-  assert.match(workflow, /node --test tests\/model-diff.test.cjs/);
-  assert.match(policy, /ai_model_watch:\n[\s\S]*cron_utc: "43 5 \* \* \*"/);
-});

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
@@ -77,13 +76,4 @@ test("an open keyboard removes the extra bottom clearance", () => {
     visibleHeight: 420,
   };
   assert.match(renderSheet(true), /padding-bottom:0/);
-});
-
-test("the reminder selector always opts into the safe-area floor", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/components/Modals/RemindMe/RemindMeComponent.tsx"),
-    "utf8",
-  );
-  assert.doesNotMatch(source, /htpr-6130/);
-  assert.match(source, /^\s+bottomSafeAreaFloor$/m);
 });

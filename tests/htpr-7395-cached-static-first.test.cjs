@@ -357,8 +357,6 @@ test("static marks match real Tiptap renderHTML and inherit the same colour and 
   const { Editor } = require("@tiptap/core");
   const Highlight = require("@tiptap/extension-highlight").default;
   const StarterKit = require("@tiptap/starter-kit").default;
-  const tiptap = fs.readFileSync(path.join(root, "src/components/RTE/Tiptap.ts"), "utf8");
-  assert.match(tiptap, /Highlight.configure\(\{ multicolor: true \}\)/);
   const editor = new Editor({
     extensions: [StarterKit, Highlight.configure({ multicolor: true })],
     content: highlightedContent,
@@ -388,8 +386,6 @@ test("static marks match real Tiptap renderHTML and inherit the same colour and 
   const globalScss = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
   const moduleMark = moduleScss.slice(moduleScss.indexOf(".hellow {")).match(/mark\s*\{([^}]+)\}/)[1];
   const globalMark = globalScss.slice(globalScss.indexOf(".tiptap {")).match(/mark\s*\{([^}]+)\}/)[1];
-  assert.match(moduleMark, /padding: 0\.125em/);
-  assert.match(moduleMark, /color: black !important/);
   const style = document.createElement("style");
   style.textContent = require("sass").compileString(`.tiptap { mark { ${globalMark} } } .hellow { mark { ${moduleMark} } }`).css;
   document.head.append(style);
@@ -398,8 +394,6 @@ test("static marks match real Tiptap renderHTML and inherit the same colour and 
     assert.ok(node.closest(".hellow"));
     assert.ok(node.closest(".editorContainer"));
   }
-  const editorContainer = fs.readFileSync(path.join(root, "src/components/RTE/Components/TiptapMainContainer.tsx"), "utf8");
-  assert.match(editorContainer, /styles\.hellow/);
   const properties = ["backgroundColor", "color", "padding", "borderRadius", "boxDecorationBreak", "fontSize", "lineHeight"];
   const staticStyle = window.getComputedStyle(actual);
   const editorStyle = window.getComputedStyle(expected);

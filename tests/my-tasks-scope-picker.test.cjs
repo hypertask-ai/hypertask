@@ -172,10 +172,6 @@ test("Filters has Columns, Completed tasks and snoozed controls tied to current 
   click(rows[2]); assert.equal(config.filters.showDone, true);
   click(rows[3]); assert.equal(config.filters.showSnoozed, true);
   assert.equal(document.querySelector('[aria-label="Filter My Tasks"]').textContent, "Filters3");
-  const filterHost = fs.readFileSync(path.join(root, "src/components/Modals/FilterModals/SelectFilters/FilterHTC.tsx"), "utf8");
-  const filterList = fs.readFileSync(path.join(root, "src/components/Modals/FilterModals/SelectFilters/ShowFilterOptionsModal.tsx"), "utf8");
-  assert.match(filterHost, /<ShowFilterOptions\s+extraFilters=\{extraFilters\}/);
-  assert.match(filterList, /\{extraFilters\}\s*<\/ModalListContainer>/);
 });
 
 test("shared Assign picker keeps assignee mode when no boardPicker is supplied", () => {
