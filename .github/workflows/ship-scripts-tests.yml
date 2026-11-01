@@ -87,7 +87,6 @@ jobs:
           python3 .claude/skills/ship/scripts/runner-domain-admit.test.py
           python3 .claude/skills/ship/scripts/runner-pickup.domain.test.py
           bash .claude/skills/ship/scripts/runner-pickup.test.sh
-          node --test tests/ship-ledger-home.test.cjs
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
@@ -150,6 +149,7 @@ jobs:
           node --test .claude/skills/ship/scripts/error-collector/vercel-logs.test.mjs
           bash .claude/skills/ship/scripts/mcp-contract-watch.test.sh
           bash .claude/skills/ship/scripts/ship-gates.test.sh
+          node --test tests/ship-ledger-home.test.cjs
           python3 scripts/daily-stats.test.py
           python3 scripts/proc-watchdog.test.py
           node --test scripts/premerge-local-flags.test.mjs

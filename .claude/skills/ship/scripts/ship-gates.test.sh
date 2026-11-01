@@ -144,11 +144,11 @@ print(markers[sys.argv[1]])
     assert cfile.read_text().count('  CHECK: '+prefix) == 9
     new = calls()[count:]
     assert len(new) == 9 and all(c[2] == 'hypertask-ai/cli' and c[3] == '/home/u/hypertask cli' for c in new), new
-    r = run('HTPR-6819', CLAUDE_CODE_SESSION_ID='cliSessA-full')
-    assert r.returncode == 0 and len(ids(cfile)) == 9, r.stderr
-    assert len(ids(ledger('HTPR-6819'))) == 9
+    r = run('HTPR-6818', CLAUDE_CODE_SESSION_ID='cliSessA-full')
+    assert r.returncode == 0 and len(ids(ledger('HTPR-6818'))) == 9, r.stderr
+    assert len(ids(ledger('HTPR-6806'))) == 9
     assert all(c[2] is None for c in calls()[-9:])
-    print('ok CLI tickets carry SHIP_REPO, SHIP_BASE and SHIP_CHECKOUT into every check; app tickets append without them')
+    print('ok CLI tickets carry SHIP_REPO, SHIP_BASE and SHIP_CHECKOUT into every check; app tickets carry none of them')
 
     before = cfile.read_text()
     for tainted in [before.replace('SHIP_BASE=main ', 'SHIP_BASE=main;touch${IFS}bad ', 1),

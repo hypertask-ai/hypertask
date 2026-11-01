@@ -105,6 +105,11 @@ eq "non-runner session: silent" "$(hook 'HTPR-1 | something' "$pl")" ""
 eq "unnamed session: silent" "$(hook '' "$pl")" ""
 eq "stop_hook_active: silent" "$(hook 'RUNNER 3' '{"session_id":"abcdef123456","stop_hook_active":true}')" ""
 eq "another runner: silent" "$(hook 'RUNNER 5' "$pl")" ""
+# A session that started before the move still has its gates inside the project it works in.
+mkdir -p "$T/work/.unlazy/s-abcdef12"
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+eq "legacy project ledger still makes the runner busy" "$(hook 'RUNNER 3' "$pl")|$(jq '[.items[]|select(.delivered|not)]|length' "$inbox")" "|1"
+rm -rf "$T/work/.unlazy"
 # Ship keeps one ledger folder per ticket under the home folder, tagged with its session.
 mkdir -p "$T/home/.unlazy/ledgers/HTPR-1"
 printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
