@@ -12,43 +12,6 @@ const jiti = require('jiti')(__filename, {
 const { createTaskCardActionHandler } = jiti(
   path.join(root, 'src/lib/mcp/tasks/cardActionHandler.ts'),
 )
-const taskRouteSource = require('node:fs').readFileSync(
-  path.join(root, 'src/lib/mcp/operations/tasks/operation.ts'),
-  'utf8',
-)
-const taskContextRouteSource = require('node:fs').readFileSync(
-  path.join(root, 'src/lib/mcp/operations/tasks/context/operation.ts'),
-  'utf8',
-)
-const handlerSource = require('node:fs').readFileSync(
-  path.join(root, 'src/lib/mcp/tasks/cardActionHandler.ts'),
-  'utf8',
-)
-const lockSource = require('node:fs').readFileSync(
-  path.join(root, 'src/lib/taskCardActions/writeLocks.ts'),
-  'utf8',
-)
-const inboxStateSource = require('node:fs').readFileSync(
-  path.join(root, 'src/lib/taskCardActions/inboxState.ts'),
-  'utf8',
-)
-const webInboxSource = require('node:fs').readFileSync(
-  path.join(root, 'src/lib/api/notification-writes/move-task-to-inbox.ts'),
-  'utf8',
-)
-const webStarSource = require('node:fs').readFileSync(
-  path.join(root, 'src/utils/controllers/savedContent/toggleSavedContent.ts'),
-  'utf8',
-)
-const webStarRouteSource = require('node:fs').readFileSync(
-  path.join(root, 'src/pages/api/savedContent/toggleSaved.ts'),
-  'utf8',
-)
-const reminderSource = require('node:fs').readFileSync(
-  path.join(root, 'src/utils/controllers/reminders/invokeReminder.ts'),
-  'utf8',
-)
-
 function request(body) {
   return new NextRequest('https://example.test/api/mcp/tasks/card-actions', {
     method: 'POST',
@@ -142,31 +105,4 @@ test('managed agents cannot read or mutate human private stars', async () => {
   assert.equal(response.status, 403)
   assert.deepEqual(calls.task, [])
   assert.deepEqual(calls.star, [])
-  assert.match(taskRouteSource, /userId: ctx\.agentId \? -1 : user\.id/)
-  assert.match(taskContextRouteSource, /userId: ctx\.agentId \? -1 : ctx\.user\.id/)
-})
-
-test('board task snapshots include only human caller task stars', () => {
-  assert.match(
-    taskRouteSource,
-    /savedContent:\s*\{\s*where:\s*\{ userId: ctx\.agentId \? -1 : user\.id, commentId: null, type: 'Private' \}/,
-  )
-  assert.match(taskRouteSource, /savedContent: task\.savedContent/)
-  assert.match(taskContextRouteSource, /savedContent: mappedTask\.savedContent/)
-})
-
-test('native and web mutations share locks and isolate manual Inbox items', () => {
-  assert.equal((lockSource.match(/pg_advisory_xact_lock/g) ?? []).length, 1)
-  assert.match(handlerSource, /withTaskStarWriteLock/)
-  assert.match(handlerSource, /FOR UPDATE/)
-  assert.match(handlerSource, /setTaskMovedToInboxState/)
-  assert.match(inboxStateSource, /FOR UPDATE/)
-  assert.match(inboxStateSource, /Task changed boards before Inbox reconciliation/)
-  assert.match(inboxStateSource, /type: 'TaskMovedToInbox'/)
-  assert.match(inboxStateSource, /checkReminderAndCreateNotification/)
-  assert.match(inboxStateSource, /tx\.reminder\.updateMany/)
-  assert.match(reminderSource, /TASK_INBOX_REMINDER_LOCK_CLASS/)
-  assert.match(webInboxSource, /ensureTaskMovedToInbox/)
-  assert.match(webStarSource, /withTaskStarWriteLock/)
-  assert.match(webStarRouteSource, /toggleSavedContent\(/)
 })

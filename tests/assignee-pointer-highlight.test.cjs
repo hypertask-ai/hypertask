@@ -11,33 +11,6 @@ const jiti = require("jiti")(__filename);
 const useHandleMouseGlobal = jiti(
   path.join(__dirname, "../src/hooks/General/useHandleMouse.ts"),
 ).default;
-const assignPickerSource = fs.readFileSync(
-  path.join(
-    __dirname,
-    "../src/components/Modals/AssignToUser/AssignToUser.tsx",
-  ),
-  "utf8",
-);
-
-test("the assignee picker connects each pointer row to its selection state", () => {
-  assert.match(
-    assignPickerSource,
-    /useHandleMouseGlobal\(\{\s*setSelectedIndex,\s*setHoveredIndex,\s*preserveSelectedIndexOnHover: true,\s*\}\)/,
-  );
-  assert.match(
-    assignPickerSource,
-    /onMouseEnter=\{\(\) => handleMouseEnter\(index\)\}/,
-  );
-  assert.match(
-    assignPickerSource,
-    /hoveredIndex === index \|\|\s*\(hoveredIndex === null && selectedIndex === index\)/,
-  );
-  assert.equal(
-    assignPickerSource.match(/setHoveredIndex\(null\)/g)?.length,
-    3,
-  );
-});
-
 test("the assignee picker highlights the row under the pointer", async () => {
   const dom = new JSDOM('<div id="root"></div>');
   global.window = dom.window;

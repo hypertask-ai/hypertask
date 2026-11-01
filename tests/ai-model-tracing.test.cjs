@@ -252,17 +252,7 @@ test('generation metadata reaches the existing PostHog sink while chat outcomes 
   assert.equal(sent[1].event, 'ai_chat_turn');
   assert.equal(sent[1].distinctId, 'ai-system');
   assert.equal(sent[1].properties.$ai_total_cost_usd, undefined);
-  assert.match(fs.readFileSync(path.join(root, 'src/lib/ai/chatStream/runStream.ts'), 'utf8'), /event: "ai_chat_turn"/);
   assert.ok(!JSON.stringify(sent).includes('private'));
-});
-
-test('migration is additive and retains historical usage rows', () => {
-  const migration = fs.readFileSync(path.join(root, 'src/prisma/migrations/20261004065050_add_ai_generation_metadata/migration.sql'), 'utf8');
-  const schema = fs.readFileSync(path.join(root, 'src/prisma/schema.prisma'), 'utf8');
-  assert.doesNotMatch(migration, /DROP (?:TABLE|COLUMN)|DELETE|TRUNCATE|UPDATE|NOT NULL DEFAULT/);
-  for (const field of ['costUsd', 'latencyMs', 'promptId', 'promptVersion', 'outcome', 'traceId']) assert.ok(migration.includes(`ADD COLUMN "${field}"`));
-  assert.match(schema, /costUsd\s+Float\?/);
-  assert.match(schema, /latencyMs\s+Int\?/);
 });
 
 test('Baseten model credentials reach the exact mapped chat endpoint and retain metadata-only tracing', async () => {

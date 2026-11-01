@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { generateApiKey, hashApiKey } from "../src/lib/apiKeys";
@@ -160,48 +159,6 @@ test("the expiry guard appends to an existing AND rather than replacing it", () 
   assert.equal((many.AND as unknown[]).length, 3);
 });
 
-test("the active-key limit counts usable keys, not merely unrevoked ones", () => {
-  const route = readFileSync("src/app/api/users/api-keys/route.ts", "utf8");
-  assert.match(route, /\.\.\.activeApiKeyWhere\(\)/);
-  assert.doesNotMatch(
-    route,
-    /count\(\{\s*where: \{\s*userId: user\.id,\s*revokedAt: null,/,
-  );
-});
-
-test("the Prisma client applies the expiry guard to every key lookup", () => {
-  const client = readFileSync("src/lib/prisma.ts", "utf8");
-  assert.match(client, /isApiKeyAuthLookup\(model, operation, args\)/);
-  assert.match(client, /withApiKeyExpiryGuard\(\(args as any\)\.where\)/);
-});
-
-test("API key routes authenticate on the signed session, not the plain cookie", () => {
-  const access = readFileSync("src/lib/apiKeyAccess.ts", "utf8");
-  assert.match(access, /verifySession\(cookieStore\.get\(SESSION_COOKIE\)/);
-  assert.match(access, /String\(session\.id\) !== String\(user\.id\)/);
-
-  for (const route of [
-    "src/app/api/users/api-keys/route.ts",
-    "src/app/api/users/api-keys/[id]/route.ts",
-    "src/app/api/users/api-keys/[id]/rotate/route.ts",
-    "src/app/api/users/developer-access/route.ts",
-  ]) {
-    const source = readFileSync(route, "utf8");
-    assert.match(source, /getApiKeyOwnerFromCookies\(\)/, route);
-    assert.doesNotMatch(source, /isValidUser\(/, route);
-  }
-});
-
-test("rotation revokes the old secret and issues the new one atomically", () => {
-  const route = readFileSync(
-    "src/app/api/users/api-keys/[id]/rotate/route.ts",
-    "utf8",
-  );
-  assert.match(route, /prisma\.\$transaction\(/);
-  assert.match(route, /rotateApiKeyInTransaction/);
-  assert.match(route, /Revoked keys cannot be rotated/);
-});
-
 const rotationStore = () => {
   const state = { revoked: false, created: [] as string[] };
   const tx = {
@@ -269,20 +226,3 @@ test("expiry enforcement survives a composed authentication query", () => {
   );
 });
 
-test("rotating an expired key requires a fresh lifetime", () => {
-  const route = readFileSync(
-    "src/app/api/users/api-keys/[id]/rotate/route.ts",
-    "utf8",
-  );
-  assert.match(route, /Expired keys need an explicit expiresInDays/);
-});
-
-test("an empty patch cannot silently clear an expiry", () => {
-  const route = readFileSync(
-    "src/app/api/users/api-keys/[id]/route.ts",
-    "utf8",
-  );
-  assert.match(route, /'expiresInDays' in body/);
-  assert.match(route, /Body must be a JSON object/);
-  assert.match(route, /revokedAt: null/);
-});

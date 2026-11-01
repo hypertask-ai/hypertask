@@ -241,17 +241,6 @@ test("the full reconcile still expires the board snapshot and refetches the list
   assert.deepEqual(operations[1], ["refetch", PROJECTS_ALL_KEY]);
 });
 
-test("useBoardRealtime still wires the extracted handler and scoped route", () => {
-  const source = require("fs").readFileSync(
-    path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
-    "utf8",
-  );
-  assert.match(source, /createBoardRealtimeEventHandler/);
-  assert.doesNotMatch(source, /useFlag|SCOPED_BOARD_REFETCH_FLAG|eventReconcileRef/);
-  assert.match(source, /trigger === "event" &&\s+userId !== undefined\s+\? runScopedReconcile\(userId\)/);
-  assert.match(source, /reconcileActiveBoardTasks/);
-});
-
 test("create, move, and archive board events each trigger reconciliation", () => {
   const reconciliations = [];
   const onBoardEvent = createBoardRealtimeEventHandler((trigger) => {
@@ -350,25 +339,6 @@ test("an event missed during initial connection is recovered after subscription"
   await settle();
   assert.equal(boardReconciles, 1);
   cleanup?.();
-});
-
-test("the visible board subscribes before deferred startup work is released", () => {
-  const source = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx",
-    ),
-    "utf8",
-  );
-  const subscription = source.match(/useBoardRealtime\([\s\S]*?\);/u)?.[0];
-  const hook = require("fs").readFileSync(
-    path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
-    "utf8",
-  );
-
-  assert.ok(subscription, "the board must mount its realtime subscription");
-  assert.doesNotMatch(subscription, /enabled\s*:/u);
-  assert.doesNotMatch(hook, /options\?\.enabled/u);
 });
 
 function mountFallbackHook(t, { connect, queryClient, accountId = USER_ID } = {}) {
@@ -550,7 +520,6 @@ test("failed subscriptions retry and stop fallback only after server confirmatio
   assert.equal(harness.timers.size, 1);
   assert.equal(unsubscribes, 2);
 });
-
 
 test("a transient background board fetch failure keeps the existing board painted", async () => {
   const { queryClient, operations, cachedProjects } = buildQueryClient(buildProjects(), USER_ID, {

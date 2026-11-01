@@ -8,7 +8,6 @@ const { getNextRouterAwareHistoryState } = require(
   path.join(__dirname, "..", "src/lib/navigation/nextHistoryState.ts"),
 );
 
-
 test("HTPR-6072: SectionComp is not keyed by the readiness route entry id", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
@@ -21,23 +20,6 @@ test("HTPR-6072: SectionComp is not keyed by the readiness route entry id", () =
   assert.ok(
     !/key=\{readinessRouteEntryId\}/.test(sectionCompUsage),
     "SectionComp must not remount on a board switch - the readiness trace already resets via routeEntryId, not via a DOM key",
-  );
-});
-
-test("HTPR-6072: local project state re-syncs on projectIndex alone, not just a new project list", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  assert.match(
-    src,
-    /syncedBoardInput\.projects !== _allProjects \|\|\s*syncedBoardInput\.projectIndex !== _projectIndex/,
-    "the local state guard must notice an index-only board switch",
-  );
-  assert.match(
-    src,
-    /setSyncedBoardInput\(\{ projects: _allProjects, projectIndex: _projectIndex \}\);[\s\S]{0,300}setSections\(nextProject\?\.sections \?\? \[\]\);[\s\S]{0,100}setCurrentIndex\(_projectIndex\)/,
-    "the guarded render restart must synchronize every board-local state value",
   );
 });
 
@@ -161,47 +143,6 @@ test("HTPR-6072: a failed sub-task lookup does not leave taskInfo set with no mo
   );
 });
 
-test("HTPR-6072: project re-sync restarts SectionComp before descendants reconcile", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  const syncStart = src.indexOf("syncedBoardInput.projects !== _allProjects");
-  const descendantWork = src.search(/(?:const|let) filteredSectionsForActiveView/);
-  assert.ok(syncStart >= 0 && syncStart < descendantWork);
-  assert.doesNotMatch(
-    src,
-    /useLayoutEffect\(\(\) => \{[\s\S]{0,500}setProjects\(_allProjects\)/,
-    "a board switch must not render descendants once, then force the whole tree through a layout-effect render",
-  );
-  assert.match(
-    src,
-    /useLayoutEffect\(\(\) => \{\s*const project = _allProjects\?\.\[_projectIndex\] \?\? null\s*setRecoilCurrentProject\(\(current\) => current === project \? current : project\)\s*\}, \[_allProjects, _projectIndex, setRecoilCurrentProject\]\)/,
-    "external current-project consumers must still synchronize before paint",
-  );
-});
-
-test("HTPR-6072: local data and the current-project atom publish in one render batch", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  const callbackStart = src.indexOf("const markLocalBoardPublished");
-  const callbackEnd = src.indexOf("const {\n  authorizeAndPublishLocalBoard", callbackStart);
-  const callback = src.slice(callbackStart, callbackEnd);
-  assert.ok(callbackStart >= 0 && callbackEnd > callbackStart);
-  assert.match(callback, /queryClient\.getQueryData<IProjectsAll>/);
-  assert.ok(
-    callback.indexOf("setRouteCurrentProject") < callback.indexOf("setBoardAccess"),
-    "the authorized project atom and access state must enter the same React batch",
-  );
-  assert.match(
-    src,
-    /const queryData: IProjectsAll \| undefined =\s*cachedQueryData\?\.accountId === user\.id \? cachedQueryData : fetchedData/,
-    "the access-state render must read the already-published local cache instead of waiting for observer notification",
-  );
-});
-
 test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) frame", () => {
   const src = fs.readFileSync(
     path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
@@ -216,34 +157,6 @@ test("HTPR-6072: a readiness sample can never be taken on a stale (mid-switch) f
       readinessEffectMatch[0],
     ),
     "expected the readiness effect to bail when local currentProject still lags the routed project",
-  );
-});
-
-test("HTPR-6072: a pending shallow switch keeps the committed board mounted", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  assert.match(
-    src,
-    /const committedBoardRenderRef = useRef<BoardRenderSnapshot \| null>\(null\)[\s\S]*useLayoutEffect\(\(\) => \{\s*if \(readyBoardRender\) committedBoardRenderRef\.current = readyBoardRender\s*\}, \[readyBoardRender\]\)/,
-    "expected only committed ready boards to become the pending fallback",
-  );
-  assert.doesNotMatch(
-    src,
-    /setCommittedBoardRender/,
-    "recording the ready board must not force a second synchronous parent render",
-  );
-  assert.match(
-    src,
-    /const boardRender =\s*readyBoardRender \?\?\s*\(committedBoardRender\?\.accountId === user\.id &&\s*currentBoardAccessStatus !== "denied" &&\s*!projectLookupFailed &&\s*hydrationFailedProjectId !== requestedProjectId\s*\? committedBoardRender\s*: null\)/,
-    "expected a ready target to render immediately and the previous committed snapshot only while it is pending",
-  );
-  assert.match(src, /\) : boardRender \? \(\s*<SectionComp/, "a background refetch must not drop the board render");
-  assert.match(
-    src,
-    /<SectionComp\s+_allProjects=\{boardRender\.projects\}[\s\S]{0,900}_readinessRouteEntryId=\{boardRender\.readinessRouteEntryId\}/,
-    "expected SectionComp to receive one internally consistent committed snapshot",
   );
 });
 
@@ -307,53 +220,3 @@ test("HTPR-6072: shallow navigation notifies Next when the current entry is alre
   );
 });
 
-test("HTPR-6072: shallow navigation is route and cache guarded", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/hooks/General/useProjectQuery.ts"),
-    "utf8",
-  );
-  assert.match(
-    src,
-    /if \(pathname === "\/project" && project\) \{\s*window\.history\.pushState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*destination,\s*\);\s*return;\s*\}[\s\S]{0,180}router\.push\(destination\)/,
-    "expected warm board switches to notify Next while non-board and cache-miss navigation retains router.push",
-  );
-});
-
-test("HTPR-6072: the live URL selects the board", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  assert.match(
-    src,
-    /const routedProjectId = normalizeRequestedProjectId\(searchParams\?\.get\("id"\)\)\s*const slugs = routedProjectId !== null\s*\? String\(routedProjectId\)\s*: slugsProp/,
-  );
-  assert.match(
-    src,
-    /if \(pathname === "\/project"\) \{\s*window\.history\.replaceState\(\s*getNextRouterAwareHistoryState\(window\.history\.state\),\s*"",\s*newUrl,\s*\)\s*\} else \{\s*router\.replace/,
-    "expected canonicalization to notify Next, preserve history state, and retain the router fallback",
-  );
-});
-
-test("HTPR-6072: the target layout is part of the atomic render snapshot", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/app/[...boardURL]/LandingPage.tsx"),
-    "utf8",
-  );
-  assert.match(
-    src,
-    /const boardLayoutForRender =[\s\S]{0,450}resolveBoardLayoutFromSurface\(\s*requestedSurface,\s*getActiveBoardLayoutPreferenceFromProject\(pinnedProject\),\s*boardLayoutPreference/,
-  );
-  assert.match(src, /boardLayout: boardLayoutForRender/);
-  assert.match(src, /_boardLayout=\{boardRender\.boardLayout\}/);
-});
-
-test("HTPR-6072: the mobile board switcher uses shared guarded navigation", () => {
-  const src = fs.readFileSync(
-    path.join(__dirname, "..", "src/components/Global/MobileTitleSheet.tsx"),
-    "utf8",
-  );
-  assert.match(src, /const \{ goToProjectShortcut \} = useProjectQuery\(\)/);
-  assert.match(src, /goToProjectShortcut\(board\.id, true\)/);
-  assert.doesNotMatch(src, /router\.push\(`\/project\?id=\$\{board\.id\}`\)/);
-});

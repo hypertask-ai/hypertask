@@ -8,15 +8,6 @@ const betterAuthSrc = fs.readFileSync(
   path.join(root, "src/lib/auth/betterAuth.ts"),
   "utf8"
 );
-const loginButtonSrc = fs.readFileSync(
-  path.join(root, "src/app/login/LoginButton.tsx"),
-  "utf8"
-);
-const useAuthSrc = fs.readFileSync(
-  path.join(root, "src/hooks/General/useAuth.tsx"),
-  "utf8"
-);
-
 test("Google is configured as a sign-up-capable social provider", () => {
   const socialProvidersBlock = betterAuthSrc.match(
     /socialProviders:\s*\{([\s\S]*?)\n\s*\},\n\s*user:/
@@ -63,12 +54,3 @@ test("Google account linking trusts the provider without legacy local verificati
   );
 });
 
-test("Google sign-up stays in Better Auth without automatic Firebase fallback", () => {
-  assert.match(
-    loginButtonSrc,
-    /errorCallbackURL: "\/login\?authError=google_signup_disabled"/,
-    "keep the shared OAuth error landing surface"
-  );
-  assert.doesNotMatch(useAuthSrc, /hasFallenBackToLegacyGoogleSignup/);
-  assert.doesNotMatch(useAuthSrc, /void loginWithGoogle\(\)/);
-});

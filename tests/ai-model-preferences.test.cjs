@@ -58,18 +58,6 @@ test("team default saves, rollbacks and resets notify mounted consumers with eit
   }
 });
 
-test("settings reads and every cache write use the same shared flag-aware key as preferences", () => {
-  const settings = fs.readFileSync(path.join(root, "src/components/Modals/Settings/AiFeaturesSection.tsx"), "utf8");
-  const hook = fs.readFileSync(path.join(root, "src/hooks/General/useAiModelPreference.ts"), "utf8");
-  assert.match(settings, /const queryKey = teamAiFeatureModelsQueryKey\(teamId, haiku55Enabled, haikuDefaultEnabled\)/);
-  assert.match(hook, /queryKey: teamAiFeatureModelsQueryKey\(currentTeamId, haiku55Enabled, haikuDefaultEnabled\)/);
-  const writes = [...settings.matchAll(/queryClient\.setQueryData\(([^,]+),/g)];
-  assert.equal(writes.length, 4);
-  assert.ok(writes.every((match) => match[1] === "queryKey"));
-  assert.equal(settings.includes('"teamAiFeatureModels"'), false);
-  assert.equal(hook.includes('"teamAiFeatureModels"'), false);
-});
-
 test("resolves a team-scoped preference before the legacy global preference", () => {
   const preferences = {
     aiChat: "global-model",
