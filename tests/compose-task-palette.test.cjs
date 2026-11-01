@@ -3,14 +3,23 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test: nodeTest } = require('node:test');
 const { Worker } = require('node:worker_threads');
-const test = (name, check) => nodeTest(name, { timeout: 30_000 }, check);
+const STALL_MS = Number(process.env.COMPOSE_PALETTE_STALL_MS ?? 120_000);
 const watchdog = new Worker(`
-  setTimeout(() => {
-    require('node:fs').writeSync(2, 'compose-task-palette exceeded its 120 second deadline\\n');
+  const { parentPort } = require('node:worker_threads');
+  const stall = setTimeout(() => {
+    require('node:fs').writeSync(2, 'compose-task-palette made no progress for ${STALL_MS}ms\\n');
     process.kill(process.pid, 'SIGKILL');
-  }, 120_000);
+  }, ${STALL_MS});
+  parentPort.on('message', () => stall.refresh());
 `, { eval: true });
 watchdog.unref();
+const test = (name, check) => nodeTest(name, { timeout: 30_000 }, async (t) => {
+  try {
+    return await check(t);
+  } finally {
+    watchdog.postMessage(0);
+  }
+});
 const React = require('react');
 const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
