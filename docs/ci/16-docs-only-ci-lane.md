@@ -1,7 +1,8 @@
 ## Docs-only CI lane (YPER4-548 / YPER4-663)
 
 Required `app-smoke` and `browser-smoke` still report success when every changed
-file is documentation, skills or `tests/**` outside `src/`. The shared
+file is documentation, skills or `tests/**` outside `src/`; both browser halves
+skip their heavy steps and the summary job reads their success (HYCI-32). The shared
 `.github/scripts/ci-change-scope.cjs` emits `heavy_needed=false` for `docs/**`,
 `.claude/**`, `skills/**`, `.agents/skills/**`, `tests/**` and Markdown outside
 `src/`. Source files (even Markdown), dependency files and CI/harness code run

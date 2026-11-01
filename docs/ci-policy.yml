@@ -43,10 +43,17 @@ runner_policy:
 
 pr_job_budget:
   parallel_job_limit: 20
-  normal_synchronize_before: 17
-  normal_synchronize_after: 19
-  opened_before: 18
-  opened_after: 19
+  # HYCI-42 took the test pool to six lanes and HYCI-45 added a second serial
+  # lane: 17 -> 20 jobs per push. HYCI-32 replaces the single browser job with
+  # two halves and keeps the required context name as a small summary over them:
+  # 20 -> 22 jobs listed. The last two are past the 20-job pool but cost no
+  # wall clock, because the summary only becomes ready once both halves have
+  # finished and the halves are the jobs that wait. The count is measured per
+  # push with scripts/ci-jobs-per-push.sh.
+  normal_synchronize_before: 20
+  normal_synchronize_after: 22
+  opened_before: 20
+  opened_after: 22
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:
@@ -448,6 +455,23 @@ ci_tests:
   file: .github/workflows/ci-tests.yml
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
+  browser_halves:
+    ticket: https://app.hypertask.ai/detail/project-11514/32
+    required_context: browser-smoke
+    required_context_kind: summary_over_halves
+    halves: [browser-smoke-desktop, browser-smoke-mobile]
+    workers_per_half: 4
+    workers_source: playwright.config.smoke.ts
+    desktop_projects: [Desktop, Inbox]
+    mobile_projects: [Mobile, Matrix]
+    project_filter: explicit_project_flag_on_every_playwright_line
+    build: one_per_half
+    app_build_producer: browser-smoke-desktop
+    nextjs_cache_saver: browser-smoke-desktop
+    contract_executor: browser-smoke-desktop
+    premerge_verify_qa_executor: browser-smoke-desktop
+    job_budget_cost: 2
+    coverage_guard: tests/browser-smoke-workflow.test.cjs
   docs_only:
     jobs: [ci-tests, browser-smoke]
     heavy_jobs: [app-smoke, browser-smoke]

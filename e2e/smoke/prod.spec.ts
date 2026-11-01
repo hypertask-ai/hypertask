@@ -216,8 +216,12 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
       await page.locator(`#mobile-board-option-${board.id}`).click()
     } else {
       await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
-      await page.keyboard.press('Control+b')
-      await page.locator(`#project-${board.id}:visible`).click()
+      const entry = page.locator(`#project-${board.id}:visible`)
+      if (!(await entry.count())) {
+        await page.keyboard.press('Control+b')
+        await expect(entry).toBeVisible({ timeout: 5_000 })
+      }
+      await entry.click({ timeout: 5_000 })
     }
     await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id))
     await expect(page).toHaveTitle(`${board.title} • Hypertask`, { timeout: BOARD_SWITCH_TIMEOUT })

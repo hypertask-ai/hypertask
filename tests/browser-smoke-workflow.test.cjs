@@ -6,12 +6,29 @@ async function source(path) {
   return readFile(path, "utf8");
 }
 
+function browserHalf(workflow, key) {
+  const markers = ["  browser-smoke-desktop:", "  browser-smoke-mobile:", "  browser-smoke:\n"];
+  const start = workflow.indexOf(`  ${key}:`);
+  assert.ok(start > 0, key);
+  const next = markers
+    .map((marker) => workflow.indexOf(marker, start + 1))
+    .filter((index) => index > start)
+    .sort((a, b) => a - b)[0];
+  return workflow.slice(start, next);
+}
+
+function browserHalves(workflow) {
+  const halves = workflow.slice(
+    workflow.indexOf("  browser-smoke-desktop:"),
+    workflow.indexOf("  browser-smoke:\n"),
+  );
+  assert.ok(halves.includes("  browser-smoke-mobile:"));
+  return halves;
+}
+
 test("browser smoke exposes no repository or production credentials to PR code", async () => {
   const workflow = await source(".github/workflows/ci-tests.yml");
-  const job = workflow.slice(
-    workflow.indexOf("  browser-smoke:"),
-    workflow.indexOf("  production-test-warning:"),
-  );
+  const job = browserHalves(workflow);
 
   assert.ok(job.length > 0);
   assert.doesNotMatch(job, /user\.login/);
@@ -71,7 +88,7 @@ test("required browser smoke clicks its seeded ticket under live modes and the i
   for (const mode of Object.values(snapshot.modes)) {
     assert.ok(["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(mode));
   }
-  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  const job = browserHalves(workflow);
   assert.match(job, /name: browser-smoke/);
   assert.match(job, /node scripts\/seed-browser-smoke\.mjs --instant-open-control/);
   assert.match(job, /playwright test[^\n]+--grep 'seeded board card opens'/);
@@ -101,11 +118,13 @@ test("required browser smoke runs layout lock with live modes and every registry
     source("playwright.config.smoke.ts"),
     source("e2e/smoke/layout-lock.spec.ts"),
   ]);
-  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
-  const runs = job.match(/npx playwright test[^\n]*e2e\/smoke\/layout-lock\.spec\.ts/g);
-  assert.equal(runs?.length, 2);
-  assert.ok(job.indexOf(runs[0]) < job.indexOf("--all-flags-on"));
-  assert.ok(job.indexOf(runs[1], job.indexOf("--all-flags-on")) > job.indexOf("--all-flags-on"));
+  for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
+    const half = browserHalf(workflow, key);
+    const runs = half.match(/npx playwright test[^\n]*e2e\/smoke\/layout-lock\.spec\.ts/g);
+    assert.equal(runs?.length, 2, key);
+    assert.ok(half.indexOf(runs[0]) < half.indexOf("--all-flags-on"), key);
+    assert.ok(half.indexOf(runs[1], half.indexOf("--all-flags-on")) > half.indexOf("--all-flags-on"), key);
+  }
   assert.match(seed, /FEATURE_FLAG_KEYS\.map\(key => \[key, "EVERYONE"\]\)/);
   assert.match(seed, /instantOpenControl \|\| allFlagsOn \|\| liveLikeControl/);
   assert.match(seed, /process\.argv\.includes\("--live-like-control"\)/);
@@ -126,13 +145,14 @@ test("required browser smoke runs the layout lock matrix in both flag runs and c
     source("e2e/smoke/layout-lock-matrix.spec.ts"),
     source("e2e/smoke/lib/layout-lock-matrix.ts"),
   ]);
-  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  const job = browserHalf(workflow, "browser-smoke-mobile");
+  const desktop = browserHalf(workflow, "browser-smoke-desktop");
   const runs = job.match(/npx playwright test[^\n]*e2e\/smoke\/layout-lock-matrix\.spec\.ts/g);
   assert.equal(runs?.length, 2);
   assert.ok(job.indexOf(runs[0]) < job.indexOf("--all-flags-on"));
   assert.ok(job.indexOf(runs[1], job.indexOf("--all-flags-on")) > job.indexOf("--all-flags-on"));
-  assert.match(job, /name: Layout change needs a recorded approval[\s\S]*node \.github\/scripts\/layout-lock-approval\.mjs/);
-  assert.match(job, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(desktop, /name: Layout change needs a recorded approval[\s\S]*node \.github\/scripts\/layout-lock-approval\.mjs/);
+  assert.match(desktop, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
   assert.match(job, /name: Upload layout lock screenshots[\s\S]*test-results\/layout-lock-matrix\//);
   assert.match(config, /name: 'Matrix', testMatch: \/layout-lock-matrix/);
   assert.match(lib, /MATRIX_WIDTHS = \[1920, 1440, 1280, 1100, 950, 768, 390\]/);
@@ -180,7 +200,7 @@ test("MCP CLI API contract stays fatal inside the required browser-smoke job", a
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const policy = yaml.load(await source("docs/ci-policy.yml"));
   assert.ok(policy.required_checks.contexts.includes("browser-smoke"));
-  const smoke = workflow.jobs["browser-smoke"];
+  const smoke = workflow.jobs["browser-smoke-desktop"];
   assert.notEqual(smoke["continue-on-error"], true);
   const step = smoke.steps.find(s => s.id === "smoke");
   assert.notEqual(step["continue-on-error"], true);
@@ -195,7 +215,7 @@ test("MCP CLI API contract stays fatal inside the required browser-smoke job", a
 test("MCP CLI API contract reuses smoke server before reseeding with explicit passed output", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
-  const smoke = workflow.jobs["browser-smoke"];
+  const smoke = workflow.jobs["browser-smoke-desktop"];
   assert.equal(smoke.outputs.contract, "${{ steps.smoke.outputs.contract }}");
   const fixtures = smoke.steps.find(step => step.id === "fixtures");
   assert.equal(fixtures.env.MCP_CLI_API_CONTRACT, "1");
@@ -256,7 +276,7 @@ test("browser smoke retries its build once, only after a Google font download fa
   const path = require("node:path");
   const { spawnSync } = require("node:child_process");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
-  const step = workflow.jobs["browser-smoke"].steps.find((s) => s.name === "Build the local app (no migrations)");
+  const step = workflow.jobs["browser-smoke-desktop"].steps.find((s) => s.name === "Build the local app (no migrations)");
   const run = (outcomes) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
     fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
@@ -284,7 +304,7 @@ test("YPER4-629: required browser smoke runs the inbox cycle last, with every fl
     source("playwright.config.smoke.ts"),
     source("e2e/smoke/inbox-cycle.spec.ts"),
   ]);
-  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  const job = browserHalf(workflow, "browser-smoke-desktop");
   const runs = [...job.matchAll(/npx playwright test[^\n]*e2e\/smoke\/inbox-cycle\.spec\.ts/g)].map((match) => match.index);
   assert.equal(runs.length, 2);
   const allFlagsOn = job.indexOf("--all-flags-on");
@@ -366,11 +386,8 @@ esac
 
 test("every required PR smoke spec navigates through the shared readiness gate", async () => {
   const workflow = await source(".github/workflows/ci-tests.yml");
-  const job = workflow.slice(
-    workflow.indexOf("  browser-smoke:"),
-    workflow.indexOf("  production-test-warning:"),
-  );
-  assert.ok(job.length > 0, "the browser smoke job is missing from ci-tests.yml");
+  const job = browserHalves(workflow);
+  assert.ok(job.length > 0, "the browser smoke halves are missing from ci-tests.yml");
   const specs = [...new Set(job.match(/e2e\/smoke\/[\w.-]+\.spec\.ts/g) ?? [])].sort();
   assert.deepEqual(
     specs,
@@ -381,7 +398,7 @@ test("every required PR smoke spec navigates through the shared readiness gate",
       "e2e/smoke/layout-lock.spec.ts",
       "e2e/smoke/prod.spec.ts",
     ],
-    "the browser smoke job runs a spec this gate has never covered (HYCI-41): list it here and take its test from ./lib/appReady",
+    "a browser smoke half runs a spec this gate has never covered (HYCI-41): list it here and take its test from ./lib/appReady",
   );
   const gate = await source("e2e/smoke/lib/appReady.ts");
 
@@ -396,4 +413,140 @@ test("every required PR smoke spec navigates through the shared readiness gate",
   assert.match(gate, /page\.goto =/, "the gate does not wrap page.goto");
   assert.match(gate, /page\.reload =/, "the gate does not wrap page.reload");
   assert.match(gate, /timeout: MAX_WAIT_MS/, "the gate has no bounded wait");
+});
+
+test("HYCI-32: the required browser-smoke context is a summary over two parallel halves", async () => {
+  const yaml = require("js-yaml");
+  const { spawnSync } = require("node:child_process");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const aggregate = workflow.jobs["browser-smoke"];
+  const desktop = workflow.jobs["browser-smoke-desktop"];
+  const mobile = workflow.jobs["browser-smoke-mobile"];
+
+  assert.deepEqual(aggregate.needs, ["browser-smoke-desktop", "browser-smoke-mobile"]);
+  assert.equal(desktop.needs, undefined);
+  assert.equal(mobile.needs, undefined);
+  assert.equal(desktop.if, mobile.if);
+  assert.match(desktop.if, /pull_request\.draft == false/);
+  assert.ok(desktop["timeout-minutes"] <= 20 && mobile["timeout-minutes"] <= 20);
+  const desktopSteps = desktop.steps.map((step) => step.name);
+  assert.ok(desktopSteps.includes("Upload the one build"));
+  assert.ok(!mobile.steps.some((step) => step.name === "Upload the one build"));
+  assert.ok(!mobile.steps.some((step) => step.name === "Download checksum-verified pinned native CLI"));
+  assert.equal(aggregate.outputs.contract, "${{ needs.browser-smoke-desktop.outputs.contract }}");
+  assert.equal(aggregate.outputs.docs_only, "${{ needs.browser-smoke-desktop.outputs.docs_only }}");
+  assert.equal(workflow.jobs["mcp-cli-api-contract"].needs, "browser-smoke");
+  assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-smoke"]);
+
+  const step = aggregate.steps[0];
+  assert.equal(step.env.DESKTOP, "${{ needs.browser-smoke-desktop.result }}");
+  assert.equal(step.env.MOBILE, "${{ needs.browser-smoke-mobile.result }}");
+  for (const [desktopResult, mobileResult] of [
+    ["success", "success"],
+    ["success", "failure"],
+    ["failure", "success"],
+    ["cancelled", "success"],
+    ["success", "skipped"],
+    ["skipped", "skipped"],
+  ]) {
+    const child = spawnSync("bash", ["-c", step.run], {
+      env: { PATH: process.env.PATH, DESKTOP: desktopResult, MOBILE: mobileResult },
+    });
+    assert.equal(
+      child.status === 0,
+      desktopResult === "success" && mobileResult === "success",
+      `${desktopResult}/${mobileResult}`,
+    );
+  }
+});
+
+test("HYCI-32: the two halves split the browser projects with nothing lost and nothing run twice", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const config = await source("playwright.config.smoke.ts");
+  assert.match(config, /workers: 4/);
+
+  const seen = new Map();
+  for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
+    const serve = workflow.jobs[key].steps.find((step) => step.id === "smoke").run;
+    let state = "default";
+    let liveLike = false;
+    for (const line of serve.split("\n")) {
+      const seed = line.match(/seed-browser-smoke\.mjs (--[a-z-]+)/);
+      if (seed) {
+        if (seed[1] === "--live-like-control") liveLike = true;
+        else state = seed[1].slice(2);
+        continue;
+      }
+      const run = line.match(/npx playwright test[^\n]*$/);
+      if (!run) continue;
+      const projects = [...run[0].matchAll(/--project=([A-Za-z-]+)/g)].map((match) => match[1]);
+      assert.ok(projects.length > 0, `${key} runs a project filter on every playwright line: ${line}`);
+      const label = liveLike ? `live-like+${state}` : state;
+      for (const project of projects) {
+        const id = `${label}/${project}`;
+        assert.equal(seen.has(id), false, `${id} runs in both halves`);
+        seen.set(id, key);
+      }
+    }
+  }
+
+  const expected = [
+    "default/Desktop",
+    "default/Mobile",
+    "default/Matrix",
+    "instant-open-control/Desktop",
+    "instant-open-control/Mobile",
+    "all-flags-on/Desktop",
+    "all-flags-on/Mobile",
+    "all-flags-on/Matrix",
+    "inbox-cycle/Inbox",
+    "live-like+inbox-cycle/Inbox",
+  ].sort();
+  assert.deepEqual([...seen.keys()].sort(), expected);
+});
+
+test("HYCI-32: the two halves never publish an artifact under one name", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const names = [];
+  for (const key of ["browser-smoke-desktop", "browser-smoke-mobile"]) {
+    for (const step of workflow.jobs[key].steps) {
+      if (!step.uses?.startsWith("actions/upload-artifact@")) continue;
+      assert.ok(step.with?.name, `${key} uploads an artifact with no name`);
+      names.push(step.with.name);
+    }
+  }
+  assert.equal(names.length, 5);
+  assert.deepEqual(new Set(names).size, names.length, `duplicate artifact names: ${names.join(", ")}`);
+  assert.ok(names.includes("app-build"));
+});
+
+test("HYCI-32: a half that starts the fixture search server asks the seed for search rows", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const seed = await source("scripts/seed-browser-smoke.mjs");
+  const halves = ["browser-smoke-desktop", "browser-smoke-mobile"];
+  const searchRowSwitches = ["BROWSER_SMOKE_SEARCH_FIXTURES", "MCP_CLI_API_CONTRACT"];
+
+  const unaskedHalves = (jobs) => halves.filter((key) => {
+    const serve = jobs[key].steps.find((step) => step.id === "smoke").run;
+    if (!serve.includes("scripts/premerge-local-search.mjs")) return false;
+    const fixtures = jobs[key].steps.find((step) => step.id === "fixtures");
+    const env = fixtures.env ?? {};
+    return !searchRowSwitches.some((name) => env[name] === "1");
+  });
+
+  assert.deepEqual(unaskedHalves(workflow.jobs), []);
+  for (const key of halves) {
+    const serve = workflow.jobs[key].steps.find((step) => step.id === "smoke").run;
+    assert.match(serve, /premerge-local-search\.mjs e2e\/smoke\/\.state\/card-fixture\.json 53101/, key);
+  }
+  assert.equal(workflow.jobs["browser-smoke-desktop"].steps.find((step) => step.id === "fixtures").env.MCP_CLI_API_CONTRACT, "1");
+  assert.match(seed, /const searchFixtures = process\.env\.BROWSER_SMOKE_SEARCH_FIXTURES === "1"/);
+  assert.match(seed, /localPremerge \|\| contractEnabled \|\| visual \|\| searchFixtures/);
+
+  const stripped = structuredClone(workflow.jobs);
+  delete stripped["browser-smoke-mobile"].steps.find((step) => step.id === "fixtures").env.BROWSER_SMOKE_SEARCH_FIXTURES;
+  assert.deepEqual(unaskedHalves(stripped), ["browser-smoke-mobile"]);
 });

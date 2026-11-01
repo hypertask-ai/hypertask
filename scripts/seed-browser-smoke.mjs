@@ -23,6 +23,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureFile = path.join(path.dirname(stateFile), "card-fixture.json");
 let { modes } = JSON.parse(await readFile(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
 const contractEnabled = process.env.MCP_CLI_API_CONTRACT === "1";
+const searchFixtures = process.env.BROWSER_SMOKE_SEARCH_FIXTURES === "1";
 const localPremerge = process.env.PREMERGE_LOCAL === "1";
 const instantOpenControl = process.argv.includes("--instant-open-control");
 const allFlagsOn = process.argv.includes("--all-flags-on");
@@ -507,7 +508,7 @@ async function seedSessionFixtures(flags) {
     longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
     agentDescriptionDetailPath: `/detail/project-${agentDescriptionBoard.id}/${agentDescriptionBoard.task.uniqueIndex}`,
     flags,
-    ...((localPremerge || contractEnabled || visual) ? { searchRows: [board, demoBoard, ...(contract?.boards ?? [])].map(project => ({
+    ...((localPremerge || contractEnabled || visual || searchFixtures) ? { searchRows: [board, demoBoard, ...(contract?.boards ?? [])].map(project => ({
       id: String(project.task.id),
       ticketNumber: project.task.ticketNumber,
       title: project.task.title,
