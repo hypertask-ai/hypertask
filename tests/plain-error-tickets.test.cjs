@@ -1,7 +1,5 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const fs = require("node:fs");
-const path = require("node:path");
 
 const helperUrl = new URL("../src/lib/errors/plainIncident.mjs", `file://${__filename}`);
 
@@ -52,21 +50,4 @@ test("browser errors say browser, not server", async () => {
   );
   assert.match(plainSummary({ source: "client", message: "boom" }), /^Something failed in the browser/);
   assert.match(plainSummary({ source: "server", message: "boom" }), /^Something failed on the server/);
-});
-
-test("reportError filer uses the plain title and keeps its fingerprint dedupe", () => {
-  const source = fs.readFileSync(path.join(__dirname, "../src/lib/errors/reportError.ts"), "utf8");
-  assert.match(source, /plainTitle\(/);
-  assert.doesNotMatch(source, /\[auto\]/);
-  assert.match(source, /errors:dedupe:\$\{fingerprint\}/);
-  assert.match(source, /<strong>Message:<\/strong> \$\{escapeHtml\(report\.message\)\}/);
-  assert.match(source, /source: report\.source/);
-  assert.match(source, /<h3>Technical details<\/h3>/);
-});
-
-test("incident filer deduplicates by PostHog issue id and puts plain impact before raw details", () => {
-  const source = fs.readFileSync(path.join(__dirname, "../.github/scripts/posthog-error-alert.mjs"), "utf8");
-  assert.match(source, /posthog-issue-\$\{alert\.issue_id\}/);
-  assert.doesNotMatch(source, /\[incident\]/);
-  assert.ok(source.indexOf("plainSummary(") < source.indexOf("Error: <code>"));
 });

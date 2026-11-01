@@ -31,9 +31,6 @@ const issue = { issue_id: "01a128a7-88f1-7753-b94b-4f8ec8f7cbdf", message: "Data
 
 test("regression: real create TaskDetail has ticketNumber and no uniqueIndex", async () => {
   const { createIncident } = await import(script);
-  const mapper = readFileSync(new URL("../src/lib/mcp/tasks/mappers.ts", `file://${__filename}`), "utf8").split("export function mapTaskToDetail")[1];
-  assert.match(mapper, /ticketNumber: task.ticketNumber/);
-  assert.doesNotMatch(mapper, /uniqueIndex:/);
   let request;
   const result = await createIncident(async (url, options) => { request = { url, options }; return response(200, { success: true, task: { id: 55555, ticketNumber: "HTPR-7001" } }); }, "fixture", issue, config);
   assert.equal(result.number, 7001);

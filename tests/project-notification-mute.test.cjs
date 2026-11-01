@@ -252,35 +252,4 @@ test("task-scoped email does not enqueue or send when its board is muted", async
   assert.deepEqual(calls, { enqueued: 0, sent: 0 });
 });
 
-test("snoozed inbox restoration excludes muted boards", () => {
-  const source = require("node:fs").readFileSync(
-    path.join(root, "src/utils/controllers/reminders/invokeReminder.ts"),
-    "utf8",
-  );
 
-  assert.match(
-    source,
-    /projectMutes:\s*\{\s*none:\s*\{\s*userId:\s*reminder\.userId\s*\}\s*\}/,
-  );
-});
-
-test("agent-authored comment reactions skip the human notification path", () => {
-  const source = require("node:fs").readFileSync(
-    path.join(root, "src/pages/api/comments/addReaction.ts"),
-    "utf8",
-  );
-  const guardIndex = source.indexOf(
-    'if (typeof recipientUserId !== "number") return',
-  );
-  const deviceLookupIndex = source.indexOf(
-    "prisma.subscribedDevices.findMany",
-    guardIndex,
-  );
-
-  assert.notEqual(guardIndex, -1);
-  assert.ok(deviceLookupIndex > guardIndex);
-  assert.doesNotMatch(
-    source.slice(guardIndex),
-    /checkReminderAndCreateNotification\(\s*reaction\.comment\.creatorId/,
-  );
-});

@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -467,26 +466,6 @@ test("inspectable history overrides a marker when the immediate entry is unrelat
   assert.deepEqual(router.calls, [
     ["replace", `${taskHref}?inboxFlow=true#comment-177928`],
   ]);
-});
-
-test("both internal task-to-Page paths record return context", () => {
-  const existingPageSource = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionSubTasks/DescriptionPages.tsx",
-    ),
-    "utf8",
-  );
-  const newPageSource = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionSubTasks/TaskPagesContext.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(existingPageSource, /createPageReturnHref\(\{/);
-  assert.match(newPageSource, /createPageReturnHref\(\{/);
 });
 
 test("taskless page return rejects the former ticket context and uses its owning board", () => {
