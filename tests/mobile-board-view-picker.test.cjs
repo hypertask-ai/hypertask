@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { afterEach, test } = require("node:test");
 const React = require("react");
@@ -216,17 +215,4 @@ test("an empty view list renders a stable board label instead of a dead picker",
 
   assert.equal(container.querySelector("button"), null);
   assert.equal(container.textContent.trim(), "Fallback Board");
-});
-
-test("the board header reuses rendered-view labels, order, and counts", () => {
-  const header = fs.readFileSync(
-    path.join(repositoryRoot, "src/components/Global/MobileHeaderStrip.tsx"),
-    "utf8",
-  );
-
-  assert.match(header, /<MobileBoardViewPicker/);
-  assert.match(header, /items=\{renderedViews\.map/);
-  assert.match(header, /view\.id === defaultViewId[\s\S]*project\.title \|\| project\.name/);
-  assert.match(header, /count: viewTaskCounts\.get\(view\.id\) \?\? 0/);
-  assert.doesNotMatch(header, /<Strip\s+items=\{renderedViews\.map/);
 });

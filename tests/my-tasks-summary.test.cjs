@@ -1,7 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
-const fs = require("node:fs");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(path.join(root, "tests/my-tasks-summary-entry.cjs"), {
@@ -179,12 +178,4 @@ test("the SQL page stays narrow and matches the my-tasks ordering index", async 
   query = undefined;
   await call(db, { includeTasks: false });
   assert.equal(query, undefined);
-
-  const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
-  assert.match(schema, /@@index\(\[dueDate, updatedAt\(sort: Desc\)\]\)/);
-  const migration = fs.readFileSync(path.join(root,
-    "src/prisma/migrations/20261012011000_mcp_my_tasks_order_index/migration.sql"), "utf8");
-  const statements = migration.replace(/--[^\n]*/g, "").trim();
-  assert.equal(statements,
-    'CREATE INDEX CONCURRENTLY IF NOT EXISTS "Task_dueDate_updatedAt_idx" ON "Task"("dueDate", "updatedAt" DESC);');
 });

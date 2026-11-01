@@ -172,9 +172,6 @@ test("still allowed: HTML block payloads survive unchanged for the existing sand
   const block = result.querySelector('div[data-html-block="true"]');
   assert.ok(block);
   assert.equal(decodeHtmlPayload(block.getAttribute("data-html")), payload);
-  const frame = fs.readFileSync(path.join(root, "src/components/RTE/Extensions/HtmlBlock/HtmlCanvasFrame.tsx"), "utf8");
-  assert.match(frame, /sandbox="allow-scripts"/);
-  assert.doesNotMatch(frame, /sandbox="[^"]*allow-same-origin/);
 });
 
 test("description hooks are removed on success and failure without changing AI sanitization", () => {
@@ -218,8 +215,6 @@ test("both real description render boundaries sanitize content, including ungate
     assert.ok(result.querySelector("a"));
     assert.equal(result.querySelector("a").hasAttribute("href"), false);
   }
-  const source = fs.readFileSync(path.join(root, `${descriptionDir}InnerHtmlDescription.tsx`), "utf8");
-  assert.match(source, /sanitizeDescriptionHtml\(linkifyHtml\(normalizeImageSourcesInHtml\(/);
 });
 
 const helperMocks = {
@@ -296,17 +291,6 @@ test("inert AI clipboard parsing preserves normal text in both clipboard modes",
   assert.equal(await copied[0].data["text/html"].text(), html);
 });
 
-test("all migrated readers parse inert documents rather than assigning live-document innerHTML", () => {
-  for (const file of [
-    "src/utils/htmlToString.js", "src/utils/helperFunctions/helperFunctions.ts",
-    "src/components/notifications/NotificationRow.tsx", "src/hooks/MultiPages/AIChat/useAiChatPresentation.ts",
-  ]) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /new window\.DOMParser\(\)\.parseFromString\(html, "text\/html"\)/, file);
-    assert.doesNotMatch(source, /\.innerHTML\s*=/, file);
-  }
-});
-
 test("both HTML sanitizers share the existing embed policy without changing stored-rich-text sanitization", () => {
   const { sanitizeRichHtml } = jiti(path.join(root, "src/utils/helperFunctions/sanitizeRichHtml.ts"));
   for (const [src, allowed] of [
@@ -318,10 +302,5 @@ test("both HTML sanitizers share the existing embed policy without changing stor
     const html = `<iframe src="${src}"></iframe>`;
     assert.equal(sanitizeRichHtml(html).includes("iframe"), allowed, src);
     assert.equal(sanitizeDescriptionHtml(html).includes("iframe"), allowed, src);
-  }
-  for (const file of ["sanitizeRichHtml.ts", "sanitizeHtml.ts"]) {
-    const source = fs.readFileSync(path.join(root, "src/utils/helperFunctions", file), "utf8");
-    assert.match(source, /import \{ isAllowedIframeUrl \} from "\.\/allowedIframeSources"/);
-    assert.doesNotMatch(source, /const ALLOWED_IFRAME_SOURCES\s*=/);
   }
 });

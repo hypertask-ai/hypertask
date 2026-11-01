@@ -1,14 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
-const sheet = fs.readFileSync(
-  path.join(root, "src/components/Global/MobileTitleSheet.tsx"),
-  "utf8",
-);
 const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
   interopDefault: true,
@@ -91,18 +86,6 @@ test("mobile board keyboard selection stays within the filtered list", () => {
   assert.equal(getNextMobileBoardSelection(0, 0, "ArrowDown"), 0);
 });
 
-test("mobile switcher wires focus, filtering, selection, and Enter navigation", () => {
-  assert.match(sheet, /<ModalInput[\s\S]*autoFocus/);
-  assert.match(sheet, /keyboardAware/);
-  assert.match(sheet, /getMobileBoardSwitcherOptions\(/);
-  assert.match(sheet, /getNextMobileBoardSelection\(/);
-  assert.match(sheet, /event\.key === "Enter"/);
-  assert.match(sheet, /goToProjectShortcut\(board\.id, true\)/);
-  assert.match(sheet, /role="option"/);
-  assert.match(sheet, /aria-selected=\{index === selectedIndex\}/);
-});
-
 test("mobile board rows have stable ids for keyboard scrolling", () => {
   assert.equal(getMobileBoardOptionId(42), "mobile-board-option-42");
-  assert.match(sheet, /getMobileBoardOptionId\(board\.id\)/);
 });

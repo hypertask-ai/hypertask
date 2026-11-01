@@ -1,32 +1,9 @@
-const { readAgentChatSource } = require("./helpers/agent-chat-source.cjs");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
-
-const chat = readAgentChatSource();
-const sendButton = fs.readFileSync(
-  path.join(root, "src/components/AI_CHAT/SendMessageButton.tsx"),
-  "utf8",
-);
-const actionRow = fs.readFileSync(
-  path.join(root, "src/components/AI_CHAT/AiChatComposerActionRow.tsx"),
-  "utf8",
-);
-const tipTap = fs.readFileSync(
-  path.join(root, "src/components/AI_CHAT/AI_Tiptap_Container.tsx"),
-  "utf8",
-);
-const controlledEditor = fs.readFileSync(
-  path.join(root, "src/lib/controlledComposerEditor.tsx"),
-  "utf8",
-);
-const viewport = fs.readFileSync(
-  path.join(root, "src/lib/mobileCommentViewport.ts"),
-  "utf8",
-);
 
 const { load } = require("./task-route-loader.cjs");
 
@@ -101,58 +78,6 @@ test("mobile roster keeps its normal shell when no agent is selected", () => {
   view.cleanup.forEach((cleanup) => cleanup());
   assert.deepEqual(view.fullscreen, [false, false]);
   assert.deepEqual(view.titles, ["Agents", null]);
-});
-
-test("mobile fullscreen renders the AI chat composer component itself", () => {
-  assert.match(sendButton, /export function SendMessageButton/);
-  assert.match(tipTap, /from "\.\/SendMessageButton"/);
-  assert.match(
-    chat,
-    /import \{ AI_Tiptap_Container \} from "@\/components\/AI_CHAT\/AI_Tiptap_Container"/,
-  );
-
-  const flaggedStart = chat.indexOf("reuseAiComposer ? (");
-  const flaggedEnd = chat.indexOf(") : (", flaggedStart);
-  assert.ok(flaggedStart > 0 && flaggedEnd > flaggedStart);
-  const flaggedComposer = chat.slice(flaggedStart, flaggedEnd);
-  assert.match(flaggedComposer, /<AI_Tiptap_Container/);
-  assert.doesNotMatch(flaggedComposer, /<textarea/);
-  assert.doesNotMatch(flaggedComposer, /<AiChatComposerActionRow/);
-  assert.doesNotMatch(flaggedComposer, /<AudioButton/);
-  assert.doesNotMatch(flaggedComposer, /<SendMessageButton/);
-  assert.match(tipTap, /<ControlledComposerEditor/);
-  assert.match(tipTap, /from "@\/lib\/controlledComposerEditor"/);
-  assert.match(controlledEditor, /<EditorContent editor=\{editor\}/);
-  assert.match(tipTap, /useTiptapEditor/);
-  assert.match(chat, /useTiptapEditor: true/);
-});
-
-test("action row skips empty mobile overflow menus", () => {
-  assert.match(actionRow, /hasMobileOverflow/);
-  assert.match(actionRow, /attachmentControl \|\| contextControl \|\| screenshotControl/);
-});
-
-test("hideDock drops tab-bar pad; keyboard still clears inset", () => {
-  assert.match(
-    viewport,
-    /if \(hideDock\) return 0;/,
-  );
-  assert.match(chat, /pb-\[env\(safe-area-inset-bottom\)\]/);
-  assert.match(chat, /hideDock:\s*hideDockInset/);
-});
-
-test("6476 fullscreen chrome applies only while an agent is open", () => {
-  assert.match(chat, /mobileFullscreenChrome/);
-  assert.match(chat, /const mobileChromeAwareHeight = isMbl;/);
-  assert.match(
-    chat,
-    /isMbl &&\s*\n\s*"mobile-agent-chat/,
-  );
-});
-
-test("slim header keeps back + name only when fullscreen", () => {
-  assert.match(chat, /!mobileFullscreenChrome && \(/);
-  assert.match(chat, /isNarrow && !mobileFullscreenChrome/);
 });
 
 test("first-screen chrome hides during fullscreen and returns afterwards", () => {
