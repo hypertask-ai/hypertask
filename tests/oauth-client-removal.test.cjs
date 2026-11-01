@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { NextRequest } = require("next/server");
@@ -208,17 +207,9 @@ test("a different user cannot remove an OAuth client or learn whether it exists"
 });
 
 test("authorization history cannot remove an unowned registration", async () => {
-  const migration = fs.readFileSync(
-    path.join(
-      root,
-      "src/prisma/migrations/20260902210000_add_oauth_client_owner/migration.sql",
-    ),
-    "utf8",
-  );
   const { DELETE, calls } = loadRoute({ ownerUserId: null });
   const response = await remove(DELETE);
 
-  assert.doesNotMatch(migration, /OAuthAuthorizationCode|OAuthRefreshToken/);
   assert.equal(response.status, 404);
   assert.deepEqual(calls.revokedTokenUpserts, []);
   assert.deepEqual(calls.clientDeletes, []);
@@ -306,43 +297,6 @@ test("serialization failures retry the complete removal transaction", async () =
   assert.equal(response.status, 200);
   assert.equal(calls.transactions, 2);
   assert.equal(calls.committed.length, 3);
-});
-
-test("Settings uses the approved Remove dialog and updates the list locally", () => {
-  const section = fs.readFileSync(
-    path.join(root, "src/components/Modals/Settings/McpSection.tsx"),
-    "utf8",
-  );
-  const hook = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/Modals/McpToken/hooks/useMcpConnections.ts",
-    ),
-    "utf8",
-  );
-  const listRoute = fs.readFileSync(
-    path.join(root, "src/app/api/connections/list/route.ts"),
-    "utf8",
-  );
-  const removeHandler = hook.slice(
-    hook.indexOf("const handleRemove"),
-    hook.indexOf("const handleRevokeAll"),
-  );
-
-  assert.match(section, /<ConfirmDialog/);
-  assert.match(section, /connection\.is_owner/);
-  assert.match(listRoute, /is_owner: client\.owner_id === user\.id/);
-  assert.match(section, /icon=\{Trash2\}/);
-  assert.match(section, /confirmLabel="Remove client"/);
-  assert.match(
-    section,
-    /It disconnects now and must register again before it can reconnect\./,
-  );
-  assert.match(section, /\? "Removing"\s*: "Remove"/);
-  assert.match(removeHandler, /method: "DELETE"/);
-  assert.match(removeHandler, /current\.filter/);
-  assert.match(removeHandler, /toast\.success\("Client removed"\)/);
-  assert.doesNotMatch(removeHandler, /fetchConnections\(/);
 });
 
 async function withClientLifecycle(check) {

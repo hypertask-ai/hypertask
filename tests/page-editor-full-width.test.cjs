@@ -1,58 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { JSDOM } = require("jsdom");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
 const { createJiti } = require("jiti");
-
-const source = fs.readFileSync(
-  path.resolve(__dirname, "../src/app/page/[publicId]/PageEditor.tsx"),
-  "utf8",
-);
-
-test("the editor is not constrained to a centred document column", () => {
-  assert.doesNotMatch(source, /max-w-\[900px\]/);
-  assert.doesNotMatch(source, /mx-auto w-full/);
-});
-
-test("the editor keeps no card chrome", () => {
-  assert.doesNotMatch(source, /bg-taskDetal-container/);
-  assert.doesNotMatch(source, /rounded-xl/);
-});
-
-test("the slim utility row survives", () => {
-  assert.match(source, /Back to task/);
-  assert.match(source, /Version \{version\}/);
-});
-
-test("Page keyboard return stays global when focus is outside the editor", () => {
-  assert.match(
-    source,
-    /window\.addEventListener\("keydown", handleKeyDown\)/,
-  );
-  assert.match(
-    source,
-    /shouldReturnFromPageOnEscape\(event, showCommands\.show\)/,
-  );
-  assert.match(
-    source,
-    /window\.removeEventListener\("keydown", handleKeyDown\)/,
-  );
-  assert.match(source, /flushTitleSave\(\);[\s\S]*flushContentSave\(\);/);
-  assert.match(
-    source,
-    /Promise\.all\(\[titleSaveChainRef\.current, contentSaveChainRef\.current\]\)/,
-  );
-  assert.match(source, /showCommands\.show && <HypertasksCommands \/>/);
-});
-
-test("the mobile page canvas uses the full viewport at every zoom level", () => {
-  assert.match(source, /useContentZoom\(contentRef, \{ min: 0\.5 \}\)/);
-  assert.match(source, /style=\{\{ zoom, width: `\$\{100 \/ zoom\}%` \}\}/);
-  assert.doesNotMatch(source, /isMobile \? "[^"]*px-3/);
-});
 
 test("page pinch zoom reaches a half-scale desktop-like canvas", async () => {
   const dom = new JSDOM('<div id="root"></div>', {

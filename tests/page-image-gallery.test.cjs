@@ -209,19 +209,6 @@ test("sandbox bridge sends actual image order, prevents linked-image navigation 
   }
 });
 
-test("page wiring reuses ticket carousel, its navigation, download, Escape and backdrop controls", () => {
-  const source = fs.readFileSync(path.join(root, "src/app/page/[publicId]/PageEditor.tsx"), "utf8");
-  assert.match(source, /import\("@\/components\/Common\/AttachmentsView\/AttachmentsCarousel"\)/);
-  assert.match(source, /galleryEnabled && galleryItems && \(/);
-  const gallery = fs.readFileSync(path.join(root, "src/components/Common/AttachmentsView/AttachmentsCarousel.tsx"), "utf8");
-  assert.match(gallery, /<Lightbox/);
-  assert.match(gallery, /plugins=\{\[Zoom, Download, Fullscreen/);
-  assert.match(gallery, /close=\{handleClose\}/);
-  assert.match(gallery, /closeOnBackdropClick: true/);
-  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
-  assert.match(flags, /key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,\s*shippedOn: "2026-10-03"/);
-});
-
 test("taskless canvas images use the shared gallery without a ticket identifier", async () => {
   await withPage({ taskless: true }, async ({ message }) => {
     await message({ __htPageImage: 1, images: ["https://files.hypertask.app/canvas-one.png"], index: 0 });

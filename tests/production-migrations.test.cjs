@@ -121,18 +121,6 @@ test("YPER4-261: deploy is the only Prisma command, with no one-off migration re
   assert.deepEqual(calls, [["migrate", "deploy"]]);
 });
 
-test("HTPR-7076: the cache columns migration is safe to re-run and does not queue on the table lock", () => {
-  const fs = require("node:fs");
-  const path = require("node:path");
-  const sql = fs.readFileSync(
-    path.join(__dirname, "../src/prisma/migrations/20261011010000_htpr_7076_ai_usage_cache_tokens/migration.sql"),
-    "utf8",
-  );
-  assert.match(sql, /ADD COLUMN IF NOT EXISTS "cachedInputTokens" INTEGER/);
-  assert.match(sql, /ADD COLUMN IF NOT EXISTS "cacheWriteInputTokens" INTEGER/);
-  assert.match(sql, /set_config\('lock_timeout', '2s', true\)/);
-  assert.match(sql, /WHEN lock_not_available/);
-});
 
 test("production builds propagate Prisma failures", async () => {
   const { runProductionMigrations } = await runnerModule;

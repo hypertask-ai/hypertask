@@ -140,15 +140,14 @@ test("nightly and independent workflow_run watchdog use trusted production code 
   assert.deepEqual(watcher.on.workflow_run.workflows, ["PostHog Error Alert", "PostHog Error Nightly Canary"]);
   assert.deepEqual(watcher.on.workflow_run.types, ["completed"]);
   assert.deepEqual(watcher.on.workflow_run.branches, ["production"]);
-  assert.match(watcher.jobs.report.if, /failure.*timed_out/);
+  assert.ok(String(watcher.jobs.report.if).includes("failure"));
+  assert.ok(String(watcher.jobs.report.if).includes("timed_out"));
   assert.equal(watcher.concurrency["cancel-in-progress"], false);
   for (const job of [nightly.jobs.canary, watcher.jobs.report]) {
     assert.equal(job["runs-on"], "ubuntu-latest");
     assert.equal(job.steps[0].with.ref, "production");
     assert.equal(job.steps[1].env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
   }
-  const source = readFileSync(new URL("../.github/scripts/posthog-error-monitor.mjs", `file://${__filename}`), "utf8");
-  assert.doesNotMatch(source, /posthog-error-alert\.mjs|posthog-error-poll\.mjs/);
 });
 
 

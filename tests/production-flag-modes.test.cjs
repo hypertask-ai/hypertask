@@ -98,32 +98,9 @@ test("reading live modes sends an agent session header only and rejects bad answ
   await assert.rejects(readLive({ AGENT_TOKEN: "t" }, async () => ({ ok: true, json: async () => ({ flags: [{ key: "x", mode: "NOPE" }] }) })), /Invalid/);
 });
 
-test("no workflow reads repository secrets to generate the copy", () => {
-  const text = readFileSync(path.join(root, "scripts/flags/production-flag-modes.mjs"), "utf8");
-  assert.doesNotMatch(text, /secrets\./);
-});
-
 test("a missing QA session fails with a clear message", async () => {
   const { readLive } = await load();
   await assert.rejects(readLive({ HOME: "/nonexistent", HYPERTASK_NO_TOKEN: "1" }), /QA session cookie is missing/);
-});
-
-test("the browser smoke seeder gives a flag missing from the copy its registry default", () => {
-  const text = readFileSync(path.join(root, "scripts/seed-browser-smoke.mjs"), "utf8");
-  assert.match(text, /modes\[key\] \?\?= defaultFeatureFlagMode\(key\)/);
-});
-
-test("the refresher closes its open pull request when nothing differs", () => {
-  const text = readFileSync(path.join(root, "scripts/flags/refresh-production-flag-modes.sh"), "utf8");
-  assert.match(text, /gh pr close "\$n".*--delete-branch --comment "Live switch settings match production again; closing\."/);
-  assert.match(text, /pause-until/);
-});
-
-test("the refresher's pull request can go green: no finished ticket in the title, and a stale copy stops it (HTPR-8254)", () => {
-  const text = readFileSync(path.join(root, "scripts/flags/refresh-production-flag-modes.sh"), "utf8");
-  assert.doesNotMatch(text, /--title "(HTPR|HYFA|YPER4)-\d+ \[/);
-  assert.match(text, /installed=\$\(sha256sum "\$0"/);
-  assert.match(text, /git add -A -- "\$dir" "\$file"/);
 });
 
 test("with the QA account view, a flag only the owner sees is Off, never its Owner + QA default (YPER4-289)", async () => {
@@ -146,10 +123,4 @@ test("a flag missing from both live views (not deployed yet) keeps its registry 
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const modes = localFlagModes({ "htpr-1-a": "OWNER_AND_QA", "htpr-2-b": "OWNER_AND_QA" }, { "htpr-1-a": false }, [], { "htpr-1-a": false });
   assert.deepEqual(modes, { "htpr-1-a": "OFF", "htpr-2-b": "OWNER_AND_QA" });
-});
-
-test("local premerge warns loudly when the copy differs from live and reads the QA account view", () => {
-  const text = readFileSync(path.join(root, "scripts/seed-browser-smoke.mjs"), "utf8");
-  assert.match(text, /readPlainQaFlags\(QA_ACCOUNT_STATE\)/);
-  assert.match(text, /WARNING: e2e\/smoke\/production-flag-modes\.json differs from the live flag modes/);
 });

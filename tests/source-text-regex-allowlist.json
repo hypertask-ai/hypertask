@@ -1,17 +1,5 @@
 {
   "allowlist": [
-    "tests/oauth-client-removal.test.cjs",
-    "tests/optional-shell-splitting.test.cjs",
-    "tests/page-editor-full-width.test.cjs",
-    "tests/page-image-gallery.test.cjs",
-    "tests/page-task-back-navigation.test.cjs",
-    "tests/paywall-escape.test.cjs",
-    "tests/plain-error-tickets.test.cjs",
-    "tests/posthog-error-monitor.test.cjs",
-    "tests/posthog-error-workflow.test.cjs",
-    "tests/production-flag-modes.test.cjs",
-    "tests/production-migrations.test.cjs",
-    "tests/project-notification-mute.test.cjs",
     "tests/project-planning.test.cjs",
     "tests/project-url-canonicalization.test.cjs",
     "tests/qa-login.test.cjs",
@@ -58,5 +46,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 57
+  "count": 45
 }
