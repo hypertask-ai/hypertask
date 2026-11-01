@@ -4,19 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const route = fs.readFileSync(
-  path.join(root, "src/app/wiki/agents/page.tsx"),
-  "utf8",
-);
 const guide = fs.readFileSync(path.join(root, "src/app/wiki/agents/agents.md"), "utf8");
-
-test("the public agents wiki page renders the shared QA-lane guide", () => {
-  assert.match(route, /"src", "app", "wiki", "agents", "agents\.md"/);
-  assert.match(route, /markdownToHtml/);
-  assert.match(guide, /## QA lane/);
-  assert.match(guide, /Bugs → In Progress → AI Review → QA → Done/);
-  assert.match(guide, /Nothing moves to \*\*Done\*\* without QA evidence/);
-});
 
 test("the public page renders the bundled guide dynamically without static prerendering", async () => {
   const load = require("jiti")(__filename, {

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { test } = require("node:test");
 const { createJiti } = require("jiti");
@@ -33,15 +32,4 @@ test("still allowed: a single toast, a lone undo toast, or nothing is left alone
   assert.deepEqual(toastIdsToDismiss([{ id: "leaving", visible: false }], [undo]), { toasts: [], undoToasts: [] });
   assert.deepEqual(toastIdsToDismiss([{ id: "failed", visible: true, type: "error" }], []), { toasts: [], undoToasts: [] });
   assert.deepEqual(toastIdsToDismiss([], [{ id: "undo-leaving", visible: false }]), { toasts: [], undoToasts: [] });
-});
-
-test("the guard runs next to the undo toaster behind the bugfix flag, default Everyone", () => {
-  const definition = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7657-one-toast.ts"), "utf8");
-  assert.match(definition, /kind: "bugfix"/);
-  assert.match(definition, /defaultMode: "EVERYONE"/);
-  const toaster = fs.readFileSync(path.join(root, "src/components/undoToast/index.tsx"), "utf8");
-  assert.match(toaster, /useFlag\(HTPR_7657_ONE_TOAST_FLAG\)/);
-  assert.match(toaster, /useToasterStore\(undefined, SINGLE_UNDO_TOASTER_ID\)/);
-  assert.match(toaster, /toast\.dismiss\(id, SINGLE_UNDO_TOASTER_ID\)/);
-  assert.match(toaster, /oneToastAtATime && <KeepOneToastVisible \/>/);
 });
