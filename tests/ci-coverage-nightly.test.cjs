@@ -91,11 +91,12 @@ test("nightly diagnostics run the full production suite in lanes without publish
     NODE_V8_COVERAGE: "coverage/raw",
     HT_REQUIRE_PG_TESTS: "1",
     SOURCE_TEXT_ALLOWLIST_BASE: "${{ github.sha }}^",
+    COMPOSE_PALETTE_STALL_MS: "600000",
   });
   assert.match(collect.run, /npm test -- "\$\{FILES\[@\]\}" 2>&1 \| tee "\$RUNNER_TEMP\/coverage-lane-upload\/shard-\$\{LANE\}\.log"/);
   const pack = lane.steps.find((step) => step.name === "Pack lane coverage");
   assert.equal(pack.if, "always() && steps.lane-test.outcome != 'skipped'");
-  assert.match(pack.run, /tar -czf "\$RUNNER_TEMP\/coverage-lane-upload\/coverage\/raw\.tgz" -C coverage raw/);
+  assert.match(pack.run, /tar --warning=no-file-changed -czf "\$RUNNER_TEMP\/coverage-lane-upload\/coverage\/raw\.tgz" -C coverage raw \|\| \[ \$\? -eq 1 \]/);
   const laneUpload = lane.steps.find((step) => step.name === "Upload lane result");
   assert.equal(laneUpload.if, "always()");
   assert.equal(laneUpload.with.name, "coverage-lane-${{ matrix.lane }}");
