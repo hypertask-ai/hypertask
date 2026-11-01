@@ -148,7 +148,7 @@ const releaseStubProxy = (filename) => {
   const proxy = proxies.get(filename);
   if (proxy && require.cache[filename] === proxy) cacheSlot(filename, undefined);
 };
-const isAppSource = (filename) => filename.startsWith(`${root}${path.sep}`);
+const isAppSource = (filename) => filename.startsWith(`${path.join(root, 'src')}${path.sep}`);
 stubTargets.filter(isAppSource).forEach(installStubProxy);
 
 async function withPalette(t, config, check) {
