@@ -61,24 +61,31 @@ function splitByWork(unique, shardCount, weights) {
 }
 
 // HYCI-6: a serial file holds one worker for its whole run, so a lane that mixes
-// serial and pooled files leaves three of its four workers idle while it waits.
-// The last lane takes every serial file, so each earlier lane packs the pool and
-// the serial lane runs beside them.
-function splitWithSerialLane(unique, shardCount, weights) {
+// serial and pooled files leaves three of its four workers idle while it waits, and
+// a lane of serial files costs the sum of their times. The serial files take the
+// last lanes, so each earlier lane packs the pool and the serial lanes run beside
+// them. HYCI-45: one serial lane spent 364s on files whose own work totals 280s, so
+// the serial files are spread over their own lane count instead of one lane.
+function splitWithSerialLanes(unique, shardCount, serialLanes, weights) {
   const pooled = unique.filter((file) => !isSerialTestFile(file));
   const serial = unique.filter((file) => isSerialTestFile(file));
-  const lanes = weights ? splitByWork(pooled, shardCount - 1, weights) : splitByCount(pooled, shardCount - 1);
-  return [...lanes, orderByWork(serial, weights)];
+  const poolLanes = shardCount - serialLanes;
+  const pack = (files, lanes) => (weights ? splitByWork(files, lanes, weights) : splitByCount(files, lanes));
+  return [...pack(pooled, poolLanes), ...pack(serial, serialLanes)];
 }
 
 export function partition(files, count, weights, options = {}) {
   const shardCount = Number(count);
+  const serialLanes = Number(options.serialLanes ?? 0);
   if (!Number.isInteger(shardCount) || shardCount < 1) {
     throw new Error(`CI_TEST_SHARDS must be a positive integer, got ${count}`);
   }
+  if (!Number.isInteger(serialLanes) || serialLanes < 0) {
+    throw new Error(`CI_SERIAL_SHARDS must be a non-negative integer, got ${options.serialLanes}`);
+  }
   const unique = uniqueFiles(files);
-  if (options.serialLane && shardCount > 1) {
-    return splitWithSerialLane(unique, shardCount, weights);
+  if (serialLanes > 0 && serialLanes < shardCount) {
+    return splitWithSerialLanes(unique, shardCount, serialLanes, weights);
   }
   return weights ? splitByWork(unique, shardCount, weights) : splitByCount(unique, shardCount);
 }
@@ -259,9 +266,9 @@ function seconds(workMs) {
 async function main() {
   const argv = process.argv.slice(2);
   const outDir = argValue(argv, "--out");
-  if (!outDir) throw new Error("Usage: shard-tests.mjs --out DIR [--discover|--check|--prove --results DIR] [--count N] [--weights FILE] [--serial-lane]");
+  if (!outDir) throw new Error("Usage: shard-tests.mjs --out DIR [--discover|--check|--prove --results DIR] [--count N] [--weights FILE] [--serial-lanes N]");
   const weights = await loadDurationWeights(argValue(argv, "--weights") ?? DURATION_WEIGHTS_PATH);
-  const lanes = { serialLane: argv.includes("--serial-lane") };
+  const lanes = { serialLanes: argValue(argv, "--serial-lanes") ?? process.env.CI_SERIAL_SHARDS ?? 0 };
   if (argv.includes("--check")) {
     const planned = await readPartition(outDir);
     const summary = assertPartition(planned.all, planned.shards, weights, lanes);

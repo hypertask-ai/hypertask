@@ -505,12 +505,13 @@ ci_tests:
     additional_required_context: false
   test_lanes:
     pool_lanes: 6
-    serial_lanes: 1
-    lane_count: 7
+    serial_lanes: 2
+    lane_count: 8
     shard_constant: CI_TEST_SHARDS
+    serial_shard_constant: CI_SERIAL_SHARDS
     required_check: ci-tests
     split: measured work from config/test-duration-weights.json, one file on exactly one lane
-    serial_lane: scripts/test-isolation.mjs lists the files that hold one worker for their whole run; the last lane runs only those, beside the pool lanes
+    serial_lane: scripts/test-isolation.mjs lists the files that hold one worker for their whole run; the last CI_SERIAL_SHARDS lanes run only those, beside the pool lanes
     container_fixtures: .github/scripts/shard-containers.mjs reads the lane's own test files; a lane that starts a CI image container gets the registry login and the PostgreSQL image, whatever its tests are named
     pull_request: scoped via .github/scripts/select-tests.mjs from the trusted base-branch commit; full suite on dependency/schema changes
     push_production:
