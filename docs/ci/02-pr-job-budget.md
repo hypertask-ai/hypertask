@@ -46,11 +46,12 @@ run in parallel, plus the small `browser-smoke` summary job that keeps the
 required context name and fails when either half fails. Both halves build the
 candidate themselves, because a shared build job would serialise them behind it
 and give back the wall clock the split removes. With HYCI-42's six pool lanes and
-HYCI-45's two serial lanes the merged count is 22 jobs per push; one of the extra
-two is the summary, which becomes ready only after both halves finish.
+HYCI-45's two serial lanes the merged count was 22 jobs per push; one of the extra
+two was the summary, which becomes ready only after both halves finish.
 
 HYCI-57 replaced the two browser halves with four page shards, because the page
 tests were 427 s spread over two machines while the check only waited for the
 slower one. Each shard runs one quarter of the pages on `ubuntu-latest` and
 builds its own candidate from the same warm Next.js cache, so the check costs one
-build plus the slowest quarter. Four builds cost nothing on this public repo.
+build plus the slowest quarter. Four builds cost nothing on this public repo, and
+the count is 24 jobs per push: four shards plus the summary.

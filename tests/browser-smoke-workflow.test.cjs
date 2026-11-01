@@ -120,9 +120,6 @@ test("required browser smoke runs layout lock with live modes and every registry
     source("playwright.config.smoke.ts"),
     source("e2e/smoke/layout-lock.spec.ts"),
   ]);
-  // HYCI-57: the two flag runs may live in different shards, so the rule is per
-  // playwright line: a layout-lock run before any every-flag-on seed is the
-  // live-mode run, and one after it is the every-flag-on run for the same project.
   const liveRun = /npx playwright test[^\n]*e2e\/smoke\/layout-lock\.spec\.ts/g;
   const beforeFlags = [];
   const afterFlags = [];

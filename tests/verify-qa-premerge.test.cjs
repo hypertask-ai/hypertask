@@ -171,8 +171,6 @@ test('report-only mode records a production refusal as a warning and still exits
 test('browser-smoke runs report-only on the existing build and uploads evidence', () => {
   const workflow = fs.readFileSync('.github/workflows/ci-tests.yml', 'utf8')
   const policy = fs.readFileSync('docs/ci-policy.yml', 'utf8')
-  // HYCI-57: the contract shard and the report-only journey shard are different
-  // jobs now, so each assertion is made against the shard that carries it.
   const job = workflow.slice(workflow.indexOf('\n  browser-smoke-flags:'), workflow.indexOf('\n  browser-smoke:\n'))
   assert.ok(job.length > 0)
   assert.doesNotMatch(job, /continue-on-error:\s*true/)

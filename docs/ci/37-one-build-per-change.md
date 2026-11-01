@@ -5,8 +5,9 @@ as part of a required page check. Right after `next build` it publishes that out
 as the `app-build` artifact (`.next/cache` excluded, one day retained), before the
 page checks run, so a failing page check still leaves the build for its consumer.
 HYCI-32 added a second browser half (`browser-smoke-mobile`) that builds its own
-copy in parallel, so a screen change now builds twice, once per machine, and the
-visual comparison still adds no third build. The Next.js
+copy in parallel, and HYCI-57 took the page tests to four shards, so a screen
+change builds four times, once per machine, and the visual comparison still adds
+no fifth build. The Next.js
 incremental cache is restored on every run and saved only on a successful `production`
 push, exactly as before.
 

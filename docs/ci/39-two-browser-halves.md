@@ -4,7 +4,7 @@
 > contract, the `app-build` artifact and the Next.js cache saver stay in
 > `browser-smoke-desktop`; the inbox cycle and the report-only premerge QA moved
 > to `browser-smoke-flags`; the layout matrix has its own `browser-smoke-matrix`.
-> Numbers and the rejected shared build are in `docs/ci.md`.
+> Numbers and the rejected shared build are in the four-shard section below.
 
 The browser check used to be one job that served every project in sequence. On a
 production run on 2026-10-31 it took 723 s of wall clock inside a 12-minute CI
