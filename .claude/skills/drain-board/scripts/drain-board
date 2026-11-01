@@ -21,7 +21,11 @@ case "${1:-}" in
     esac ;;
   gates)
     P=${2:?usage: drain-board gates <project-id>}
-    F=${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers/drain-$P/gates/drain-$P.md
+    ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
+    [ -n "$ID" ] || { echo "drain-board needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
+    # One board ledger per session, under the home folder: a drain never shares a file with another
+    # drain (two runs would append the same ticket twice), and the project stays clean.
+    F=${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers/drain-$P/s-${ID:0:8}/gates/drain-$P.md
     mkdir -p "$(dirname "$F")"
     [ -f "$F" ] || printf '# Drain board %s\n' "$P" > "$F"
     list=$(hypertask tasks list --project "$P" --limit $LIMIT --json)
