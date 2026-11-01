@@ -17,7 +17,7 @@ const pr = {
 const limited = (headers = { 'retry-after': '1' }) => Object.assign(
   new Error('API rate limit exceeded for installation'), { status: 403, response: { headers } });
 
-async function run({ limitedRead = false, limitedPost = false, limitedMetadataRead = false, event = {}, current = {}, outcomes = {}, evaluated = {}, baseline = false, runId = 1, initialStatus = 'success', afterPending = async () => {} } = {}) {
+async function run({ limitedRead = false, limitedPost = false, limitedMetadataRead = false, event = {}, current = {}, outcomes = {}, evaluated = {}, baseline = false, runId = 1 } = {}) {
   const { retryGithubRequest } = await gate;
   const calls = [];
   const waits = [];
@@ -26,7 +26,7 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
   const results = {};
   const eventPr = { ...pr, ...event };
   const visibleWhileWaiting = [];
-  let visibleStatus = initialStatus;
+  let visibleStatus = 'success';
   let clock = 1000000;
   const retry = request => retryGithubRequest(request, {
     now: () => clock, sleep: async ms => { waits.push(ms); visibleWhileWaiting.push(visibleStatus); clock += ms; }, log() {},
@@ -50,7 +50,6 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
         if (limitedPost && (baseline || post.state !== 'pending')) { limitedPost = false; throw limited(); }
         posts.push(post);
         visibleStatus = post.state;
-        if (post.state === 'pending') await afterPending();
       } },
       issues: { listComments() {} },
     },
@@ -235,6 +234,6 @@ test('one group per pull request cancels the older evaluation instead of racing 
   assert.ok(!workflow.concurrency.group.includes('github.run_id'));
   assert.match(workflow.concurrency.group, /github\.event\.pull_request\.number/);
   assert.equal(workflow.concurrency['cancel-in-progress'], true);
-  const superseded = await run({ event: { title: 'Older event title' } });
+  const superseded = await run({ event: { title: 'Older event title' }, current: { title: 'Newer title' } });
   assert.deepEqual(superseded.posts, []);
 });
