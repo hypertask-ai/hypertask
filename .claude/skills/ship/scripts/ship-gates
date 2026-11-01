@@ -140,7 +140,7 @@ const legacyTicketGates = () => {
         throw new Error(`ship-gates: ${earlier.file} and ${file} both define ${gate.id} with different checks; keep one, or remove one before the home ledger is written`);
       }
       seen.set(gate.id, { file, digest: gateDigest });
-      found.push({ id: block.id, text: block.text, file, digest: gateDigest });
+      found.push({ id: block.id, text: block.text, file, digest: gateDigest, cwd: gate.cwd ?? '' });
     }
   };
   for (const folder of folders) {
@@ -211,8 +211,13 @@ await withFileLock(state, ledger, () => {
     process.stderr.write(`ship-gates: ${edited.join(', ')} written again; a standard gate is a runnable check, not a manual note\n`);
   }
   // A gate already carried keeps its adopted definition, so a later session taking the ticket over
-  // is not asked to adopt it a second time. A project file edited since then still is.
-  const carried = (text ? [] : legacyTicketGates()).filter((gate) => adopted.get(gate.id) !== gate.digest);
+  // is not asked to adopt it a second time. A project file added to or edited since then still is,
+  // which is why the project folders are read on every run and not only when the ledger is new.
+  const carried = legacyTicketGates().filter((gate) => adopted.get(gate.id) !== gate.digest);
+  const changed = carried.filter((gate) => adopted.has(gate.id));
+  if (changed.length && process.env.SHIP_LEDGER_ADOPT !== '1') {
+    throw new Error(`ship-gates: ${changed.map((gate) => gate.id).join(', ')} changed in ${changed[0].file} after it was carried into ${extrasFile}; remove it from there and its line in ${adoptedFile}, then run with SHIP_LEDGER_ADOPT=1 to carry the new definition in for review`);
+  }
   if (carried.length && process.env.SHIP_LEDGER_ADOPT !== '1') {
     throw new Error(`ship-gates: ${carried.map((gate) => gate.id).join(', ')} in ${carried[0].file} are not carried beside ${ledger}; run with SHIP_LEDGER_ADOPT=1 to copy them into ${extrasFile}, where a person reviews them`);
   }
@@ -261,6 +266,12 @@ await withFileLock(state, ledger, () => {
       throw new Error(`ship-gates: ${reCarried.map((gate) => gate.id).join(', ')} in ${extrasFile} no longer match their adopted definitions; remove them from ${extrasFile} and their lines in ${adoptedFile}, then re-run with SHIP_LEDGER_ADOPT=1 to carry the new definitions in for review`);
     }
     const add = carried.filter((gate) => !have.has(gate.id));
+    // A carried gate keeps the checkout it was written in, so one that never ran here is named
+    // before its definition and digest are recorded, not refused on the next identical run.
+    const misplaced = add.filter((gate) => gate.cwd && gate.cwd !== root);
+    if (misplaced.length) {
+      throw new Error(`ship-gates: carried ${misplaced.map((gate) => gate.id).join(', ')} runs in ${misplaced[0].cwd}, not ${root}; write it again in ${root} in ${misplaced[0].file} and re-run, or remove it from that file`);
+    }
     if (add.length) {
       if (!extraText.trim()) extraText = '# Extra gates carried out of the project\n';
       for (const gate of add) extraText += `\n${gate.text}\n`;
