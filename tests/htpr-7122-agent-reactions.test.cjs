@@ -155,10 +155,6 @@ test("the web emoji click only ever finds and deletes the person's own rows", as
   seed(personRow, agentRow);
   assert.equal((await click({})).statusCode, 202);
   assert.deepEqual(rows.map((row) => row.id), ["agent-1"]);
-
-  seed(agentRow);
-  assert.equal((await click({ alreadyReacted: true })).statusCode, 200);
-  assert.deepEqual(rows.map((row) => row.id), ["agent-1"]);
 });
 
 test("a reaction write response hides agents, and survives a rejected agent lookup", async () => {

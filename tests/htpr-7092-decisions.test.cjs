@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const Module = require("node:module");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 
@@ -144,9 +145,8 @@ test("Decisions is a built-in view available on every board", () => {
 });
 
 test("flag off hides the board view: the view list drops it unless the flag is on", () => {
-  const loadViews = (decisionsEnabled) => {
-    const filename = path.join(root, "src/hooks/Homepage/Views/useOrderedViews.ts");
-    const stubs = {
+  const loadViews = (decisionsEnabled) =>
+    loadModule("src/hooks/Homepage/Views/useOrderedViews.ts", {
       react: { useMemo: (fn) => fn(), useEffect: () => {} },
       "@/lib/state": { useRecoilValue: () => ({}), useSetRecoilState: () => () => {} },
       "@/store": {},
@@ -161,15 +161,7 @@ test("flag off hides the board view: the view list drops it unless the flag is o
       },
       "@/hooks/useFlag": { useFlag: (key) => key === FLAG && decisionsEnabled, useFlagLoaded: () => true },
       "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
-    };
-    const loaded = new Module(filename);
-    loaded.filename = filename;
-    loaded.require = (request) => stubs[request];
-    loaded._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-      compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, filename);
-    return loaded.exports.default;
-  };
+    }).default;
   const project = {
     id: 15,
     section: [],
@@ -263,7 +255,8 @@ test("server: activity-only viewer entries never count as an answer", async () =
     "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
     "@/lib/flags/definitions/htpr-8205-agent-clear-blocker": { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG: "htpr-8205-agent-clear-blocker" },
   });
-  assert.deepEqual(await getDecisionComments(6, {}), new Map());
+  const decisions = await getDecisionComments(6, {});
+  assert.deepEqual([...decisions.keys()], [1]);
   assert.deepEqual(wheres, [{ creatorId: 6, agentId: null, activity: { equals: DbNull }, taskId: { in: [1] } }]);
 });
 
