@@ -102,6 +102,8 @@ const nextConfig = {
     ],
   },
   experimental: {
+    // Release each compiler's heap before page collection and file tracing.
+    // Otherwise webpack stays in the main process through the peak (YPER4-184).
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
     cpus: 1,
@@ -202,9 +204,16 @@ const nextConfig = {
     ];
   },
   webpack(config) {
+    // react-joyride's ESM build references ReactDOM.unmountComponentAtNode /
+    // unstable_renderSubtreeIntoContainer in a dead `!isReact16` branch that
+    // React 19 no longer exports, which trips webpack's strict ESM named-export
+    // check. Force its CJS build, where the same dead code is a plain
+    // require() call webpack doesn't statically validate.
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       "react-joyride$": require.resolve("react-joyride"),
+      // Browser lockdown can freeze inherited Error fields; preserve markdown's
+      // behavior with own prototype defaults rather than strict-mode assignment.
       "vfile-message$": require.resolve("./src/lib/vendor/vfile-message.mjs"),
     };
     return config;
