@@ -104,6 +104,7 @@ async function run(options, { now = AFTER, eventName = 'schedule' } = {}) {
     return { result, posts, calls: harness.calls, requests, lines: core.lines };
   } catch (error) {
     error.log = core.lines;
+    error.posts = posts;
     throw error;
   } finally {
     globalThis.fetch = savedFetch;
@@ -175,12 +176,16 @@ test('a guard run at another head, another change or a skip is never re-run', as
   assert.deepEqual(calls.reruns.map(query => query.run_id), [6]);
 });
 
-test('a change with no guard run at its head fails loudly instead of keeping its pass', async () => {
+test('a change with no guard run at its head still posts the counts and then fails loudly', async () => {
   const error = await run(
     { pulls: [agentPull(1, { additions: 500, changed_files: 1 })], files: { 1: [file('src/a.ts', 500)] } },
   ).then(() => null, failure => failure);
   assert.match(error.message, /1 over-cap change\(s\) were not sent to the guards/);
   assert.match(error.log.join('\n'), /was not sent to the guards: no completed pr-guards-trusted\.yml run at sha1/);
+  assert.equal(error.posts.length, 1, 'the counts reach the ticket even when the sweep is incomplete');
+  assert.equal(error.posts[0].body.ticket_number, 'HYCI-51');
+  assert.match(error.posts[0].body.text, /sent to fail: 0\./);
+  assert.match(error.posts[0].body.text, /Could not check or ask: 1\. <a href="https:\/\/github.com\/hypertask-ai\/hypertask\/pull\/1">#1<\/a>/);
 });
 
 test('a change that cannot be measured is named, never counted as passing', async () => {

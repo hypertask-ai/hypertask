@@ -93,8 +93,11 @@ async function sweep({ github, context, core, now = Date.now(), log = message =>
     else counts.unavailable.push(pull.number);
   }
   log(`Day one: ${counts.sent.length} of ${counts.agentChanges} open agent changes go back to the guards.`);
-  if (unrequested) throw new Error(`${unrequested} over-cap change(s) were not sent to the guards; the sweep is incomplete.`);
+  // HYCI-58: post first, then fail. A sweep that could not ask every guard used
+  // to fail closed with nothing on the ticket, so nobody could see which change
+  // was left and the day-one numbers never landed. The run stays red either way.
   await postCounts({ context, core, counts, enforcing });
+  if (unrequested) throw new Error(`${unrequested} over-cap change(s) were not sent to the guards; the sweep is incomplete.`);
   return { swept: true, enforcing, counts };
 }
 
