@@ -60,7 +60,10 @@ has finished. Keeping them in one job holds the budget below unchanged.
 Static normal non-draft app PR budget: **22 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
 HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
-required summary job, see below). Path-specific evals, the
+required summary job, see below). The last two are over the 20-job pool but never
+wait beside the browser halves: `browser-smoke` becomes ready only after both
+halves finish, so it asks for a runner slot that has just been freed.
+Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
 extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
 scan-publication job. Snapshot actual
@@ -72,16 +75,14 @@ which splits setup, fetch and working-tree time from the run's own log.
 CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
 
-HYCI-32 spends two job slots on the browser check: the single 723 s lane became
-`browser-smoke-desktop` and `browser-smoke-mobile`, which run in parallel, plus the
-small `browser-smoke` summary job that keeps the required context name and fails
-when either half fails. Both halves build the candidate themselves, because a
-shared build job would serialise them behind it and give back the wall clock the
-split removes. That puts a non-draft PR at 22 jobs, two past the 20-job pool. The
-summary is the job that waits: it becomes ready only when both halves have
-finished, so it takes a slot that has just been freed and adds no concurrent
-load, and the halves themselves are the longest legs of the run either way.
-Count it on the PR, not from this page: `scripts/ci-jobs-per-push.sh <pr>`.
+HYCI-32 spent two of the remaining three job slots on the browser check: the
+single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, which
+run in parallel, plus the small `browser-smoke` summary job that keeps the
+required context name and fails when either half fails. Both halves build the
+candidate themselves, because a shared build job would serialise them behind it
+and give back the wall clock the split removes. With HYCI-42's six pool lanes and
+HYCI-45's two serial lanes the merged count is 22 jobs per push; one of the extra
+two is the summary, which becomes ready only after both halves finish.
 
 ## PR size observation (YPER4-711)
 
@@ -1068,10 +1069,13 @@ when both halves are green, and a cancelled, failed or missing half never reads
 as a pass. It passes `contract` and `docs_only` through from the desktop half, so
 `mcp-cli-api-contract` and `visual-compare` keep their existing wiring.
 
-Same job set per push except for the timing: `browser-smoke-desktop` and
-`browser-smoke-mobile` have no dependency on each other, and the run waits on the
-slower half. Docs-only PRs still start their heavy steps as skips and succeed, so
-they grow by the same two jobs and no heavy minute.
+The budget cost is two jobs per push. HYCI-42 took the pool to six lanes and
+HYCI-45 added a second serial lane before this merged, so the merged count is 22
+jobs rather than the 20 that landed ahead of it: two past the 20-job pool, which
+costs nothing to wait for because the summary only becomes ready once both halves
+have finished and the halves are the longest legs either way. Docs-only PRs still
+start their heavy steps as skips and succeed, so their job count grows by the same
+two.
 
 Both halves start the fixture search server, so both seed steps must ask
 `scripts/seed-browser-smoke.mjs` for search rows: `BROWSER_SMOKE_SEARCH_FIXTURES: '1'`
@@ -1095,11 +1099,13 @@ and the URL still named the board being viewed. The switch now presses the short
 only when the rail is closed, and it retries inside a bounded `toPass` until the
 document really renders the board it asked for.
 
-That last part matters on its own. The rail click is a client-side `pushState`
+That last part matters on its own. A rail click is a client-side `pushState`
 (`src/hooks/General/useProjectQuery.ts`), so the board changes when the app applies
-the new URL a render later. On [run 41252735437](https://github.com/hypertask-ai/hypertask/actions/runs/41252735437)
+the new URL one render later. On
+[run 41252735437](https://github.com/hypertask-ai/hypertask/actions/runs/41252735437)
 the URL named the requested board and the desktop half still rendered the previous
-one for the whole 15 s title wait: the app dropped the update and never retried it.
+one for the whole 15 s title wait: the app dropped that render and never retried it.
 Clicking the same row again is free and asks the app a second time, so the switch
-asserts the rendered title inside the retry instead of the URL alone. The dropped
-update itself is a product bug, not a test one; it is filed on its own ticket.
+asserts the rendered title inside its retry instead of the URL alone. The dropped
+render is a product bug, not a test one, and it is worth its own ticket: the same
+class of late update is what HYCI-1's readiness gate covers for page loads.
