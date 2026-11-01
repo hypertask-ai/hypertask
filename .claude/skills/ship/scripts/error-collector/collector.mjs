@@ -440,7 +440,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           if (!dryRun) { temp = path; await fs.writeFile(path, text, { mode: 0o600, flag: 'wx' }); }
           state.created.push(iso(now));
           await checkpoint();
-          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'Error Log', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path], undefined, { VCC_VOICE_BYPASS: 'error collector raw evidence' });
           if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
           else found = { ticket: ticketRef(payload(output).task), deleted: false };
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, incident: group.incident, lastActivityAt: iso(now) };

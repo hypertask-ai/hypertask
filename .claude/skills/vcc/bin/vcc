@@ -31,8 +31,9 @@ if helper_run; then
   esac
 fi
 
+VCC_DEV_WORDS='(?i)\bsrc/[^\s]*|\b[\w./-]+\.(?:tsx?|js|md)\b|[^\s]*/api/[^\s]*|\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\b'
 question_check() {
-  jq -nr --arg text "$1" --arg markdown "${2:-false}" '
+  jq -nr --arg text "$1" --arg markdown "${2:-false}" --arg dev "$VCC_DEV_WORDS" '
     def visible:
       gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
@@ -58,7 +59,7 @@ question_check() {
     ] + [
       (if any($plain[]; startswith("Why:") or (startswith("My recommendation:") and test("\\bWhy:")))
        then empty else "Why:" end),
-      ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
+      ($visible | scan($dev)),
       ($visible | scan("\\bCI\\b")),
       ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|#[0-9]+\\b"))
     ] | unique | join("; ")
@@ -154,6 +155,124 @@ people_content() {
 people_content "$@"
 question_comment "$@"
 
+voice_check() {
+  jq -nr --arg text "$1" --arg markdown "${2:-false}" --arg dev "$VCC_DEV_WORDS" '
+    def visible:
+      gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") | gsub("&quot;"; "\"") |
+      gsub("&#39;|&apos;"; "\u0027") | gsub("&lt;"; "<") | gsub("&gt;"; ">") | gsub("&amp;"; "&");
+    ($markdown == "true") as $md |
+    def lines:
+      (if $md then gsub("@Valentin Yeo|\\*\\*|__"; " ")
+       else gsub("<span\\b[^>]*data-type=[\"\u0027]mention[\"\u0027][^>]*>.*?</span>"; " "; "is")
+         | gsub("<br\\s*/?>|</(?:p|li|h[1-6]|div|blockquote|tr)>|<li\\b[^>]*>"; "\n"; "i") | visible end)
+      | gsub("https?://[^\\s<>\"]+"; " ");
+    ($text | if $md then gsub("\\[(?<l>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.l)") else . end | lines) as $plain |
+    ($text | if $md then gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; " ") else gsub("<a\\b[^>]*>.*?</a>"; " "; "is") end | lines) as $countable |
+    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; " ")
+     else $text | gsub("<a\\b[^>]*>.*?</a>"; " "; "is") | visible end) as $unlinked |
+    [$countable | gsub("\\b[A-Z][A-Z0-9]{1,9}-[0-9]+\\b"; " ") | gsub("\"[^\"\n]+\"|\u201c[^\u201d\n]+\u201d"; " ") | split("\n")[]
+      | sub("^\\s*(?:[-*+]|[0-9]+[.)])\\s+"; "")
+      | splits("(?<=[.!?;])\\s+")
+      | sub("^\\s*(?:Question|My recommendation|Recommendation|Why|Yes|No|Next|Problem|Fix|Done when|Risk|Decision|Result|Done|QA|Proof|Live|Status)\\s*:\\s*"; ""; "i")
+      | select([scan("\\S*[[:alnum:]]\\S*")] | length > 8)
+      | ([scan("\\S+")][:6] | join(" ")) + " ..."] as $long |
+    [
+      (if ($long | length) > 0 then "\($long | length) sentence(s) over 8 words, e.g. \"\($long[0])\"" else empty end),
+      (if $text | test("<code\\b|<pre\\b|`") then "code formatting" else empty end),
+      ($plain | scan($dev)),
+      ($plain | scan("\\bCI\\b")),
+      ($plain | scan("\\b[a-z][a-z0-9]*_[a-z0-9_]+\\b|\\b[a-z]{2,}[A-Z][a-z]+[A-Za-z0-9]*\\b|\\b[A-Za-z_][A-Za-z0-9_.]*\\(\\)|(?<![\\w.])~?/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+|\\b[A-Za-z0-9_./-]+\\.(?:jsx?|mjs|cjs|tsx?|md|json|ya?ml|zig|sh|py|sql|toml|css|html?)\\b")),
+      ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|#[0-9]+\\b"))
+    ] | unique | join("; ")
+  '
+}
+voice_refuse() {
+  printf 'vcc: Human lane refused (%s): %s; rewrite it for a product owner (pospeak): caveman, max 8 words per sentence, no file paths or code words. Agent detail goes to vcc activity add <TICKET> "<text>".\n' "$1" "$2" >&2
+  exit 5
+}
+voice_logged=false
+voice_lint() {
+  local reason
+  if [ -n "${VCC_VOICE_BYPASS:-}" ]; then
+    if [ "$voice_logged" = false ]; then
+      voice_logged=true
+      { mkdir -p "$HOME/.local/state/vcc" &&
+        printf '%s\t%s\t%s\t%s\n' "$(date -Is)" "${SHIP_SESSION_NAME:-unknown}" "$1" "$VCC_VOICE_BYPASS" >> "$HOME/.local/state/vcc/voice-bypass.log"; } 2>/dev/null || true
+    fi
+    return 0
+  fi
+  reason=$(voice_check "$2" "$3") || voice_refuse "$1" 'cannot check text'
+  [ -z "$reason" ] || voice_refuse "$1" "$reason"
+}
+html_plain() {
+  jq -nr --arg t "$1" '$t | gsub("<a\\b[^>]*href=[\"\u0027](?<u>[^\"\u0027]*)[\"\u0027][^>]*>(?<l>.*?)</a>"; "\(.l) (\(.u))"; "is") | gsub("<br\\s*/?>|</(?:p|li|h[1-6]|div|blockquote|tr)>"; "\n"; "i") | gsub("<[^>]*>"; "") |
+    gsub("&nbsp;|&#160;"; " ") | gsub("&quot;"; "\"") | gsub("&#39;|&apos;"; "\u0027") | gsub("&lt;"; "<") |
+    gsub("&gt;"; ">") | gsub("&amp;"; "&") | gsub("\\n\\s*\\n+"; "\n") | gsub("^\\s+|\\s+$"; "")'
+}
+VOICE_REROUTE=()
+VOICE_JSON=false
+voice_route() {
+  local -a pos=() unsupported=()
+  local kind='' text='' file='' markdown=false human=false title='' desc='' descfile='' has_title=false has_desc=false arg ticket plain
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    case "$arg" in
+      --kind|--text|--body|--file|--title|--description|--description-file|--reply-to-comment-id|--reply-to-invocation-id|--attach|--mentions|--project|--improve-command|--priority|--estimate|--labels|--due|--parent-task|--section|--assignee|--to|--to-section)
+        [ "$#" -ge 2 ] || { unsupported+=("$arg"); break; }
+        case "$arg" in
+          --title|--description|--description-file|--project|--improve-command|--priority|--estimate|--labels|--due|--parent-task|--section|--assignee|--to|--to-section) unsupported+=("$arg") ;;
+        esac
+        case "$arg" in
+          --kind) kind=$2 ;;
+          --text|--body) text=$2; file='' ;;
+          --file) file=$2; text='' ;;
+          --title) title=$2; has_title=true ;;
+          --description) desc=$2; has_desc=true ;;
+          --description-file) descfile=$2 ;;
+          --reply-to-comment-id|--reply-to-invocation-id|--attach|--mentions) human=true ;;
+        esac
+        shift ;;
+      --kind=*) kind=${arg#*=} ;;
+      --text=*|--body=*) text=${arg#*=}; file='' ;;
+      --file=*) file=${arg#*=}; text='' ;;
+      --title=*) unsupported+=("${arg%%=*}"); title=${arg#*=}; has_title=true ;;
+      --description=*) unsupported+=("${arg%%=*}"); desc=${arg#*=}; has_desc=true ;;
+      --description-file=*) unsupported+=("${arg%%=*}"); descfile=${arg#*=} ;;
+      --reply-to-comment-id=*|--reply-to-invocation-id=*|--attach=*|--mentions=*) human=true ;;
+      --markdown) markdown=true ;;
+      --json) VOICE_JSON=true ;;
+      --help|-h) return 0 ;;
+      --) unsupported+=("$arg"); shift; pos+=("$@"); break ;;
+      -*) unsupported+=("$arg") ;;
+      *) pos+=("$arg") ;;
+    esac
+    shift
+  done
+  case "${pos[0]:-} ${pos[1]:-}" in
+    'comment add'|'comments add')
+      if [ -n "$file" ]; then text=$(cat -- "$file" 2>/dev/null) || voice_refuse comment 'cannot read --file'; fi
+      [ -z "$kind" ] || human=true
+      [[ "$text" =~ data-type[[:space:]]*=[[:space:]]*[\"\']mention[\"\']|(^|[[:space:]])@[[:alnum:]] || $text =~ data-type=[\"\']mention || $text =~ (^|[[:space:]>])@[A-Za-z] ]] && human=true
+      if [ "$human" = true ]; then voice_lint comment "$text" "$markdown"; return 0; fi
+      ticket=${pos[2]:-}
+      [[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || return 0
+      if [ "$markdown" = true ]; then plain=$text; else plain=$(html_plain "$text"); fi
+      [ -n "${plain//[[:space:]]/}" ] || return 0
+      if [ "${#pos[@]}" -gt 3 ]; then unsupported+=("${pos[3]}"); fi
+      if [ "${#unsupported[@]}" -gt 0 ]; then
+        printf "vcc: unsupported reroute option: %s\n" "${unsupported[0]}" >&2
+        exit 2
+      fi
+      VOICE_REROUTE=(activity add "$ticket" "$plain")
+      printf 'vcc: no --kind, @mention or reply target: sent to the agent lane (vcc activity add %s), not a visible comment. For a person use --kind question|qa|done, an @mention, or --reply-to-comment-id.\n' "$ticket" >&2 ;;
+    'task create'|'tasks create'|'task update'|'tasks update')
+      if [ -n "$descfile" ]; then desc=$(cat -- "$descfile" 2>/dev/null) || voice_refuse description 'cannot read --description-file'; has_desc=true; fi
+      [ "$has_title" = false ] || voice_lint title "$title" false
+      [ "$has_desc" = false ] || [ -z "$desc" ] || voice_lint description "$desc" "$markdown" ;;
+  esac
+}
+voice_route "$@"
+
 completion_move() {
   local section='' project='' destination='' target_section='' out arg checker="$HOME/.agents/skills/ship/scripts/ship-check"
   local -a positional=()
@@ -236,6 +355,7 @@ review_move() {
   reason=$(question_check "$(jq -r '.text // ""' <<< "$newest")") || review_refuse "$ticket" 'cannot check Question'
   [ -z "$reason" ] || review_refuse "$ticket" "$reason; rewrite it for a product owner (pospeak)"
 }
+[ "${#VOICE_REROUTE[@]}" = 0 ] || set -- "${VOICE_REROUTE[@]}"
 if [ "${1:-}" != activity ]; then
   review_move "$@"
   exec /usr/bin/env -S hypertask "$@"
@@ -322,4 +442,8 @@ if [ "$code" = 404 ] || { [ "$code" = 409 ] && jq -e '.error | test("(not|no lon
   request POST "agents/runs/$run/activities" "$data"
 fi
 success
-jq -er '.activity.id' "$body"
+if [ "${#VOICE_REROUTE[@]}" -gt 0 ] && [ "$VOICE_JSON" = true ]; then
+  jq -e '.activity | select(.id != null) | {activity: .}' "$body"
+else
+  jq -er '.activity.id' "$body"
+fi
