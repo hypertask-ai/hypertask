@@ -6,10 +6,6 @@ const Module = require("node:module");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const routeSource = fs.readFileSync(
-  path.join(root, "src/lib/mcp/operations/tasks/operation.ts"),
-  "utf8",
-);
 const mapperPath = path.join(root, "src/lib/mcp/tasks/mappers.ts");
 const mapperSource = fs.readFileSync(mapperPath, "utf8");
 
@@ -58,37 +54,39 @@ function loadMappers() {
   return loaded.exports;
 }
 
-test("the MCP task list applies the shared query, filter, fields contract", () => {
-  assert.match(routeSource, /readListQuery/);
-  assert.match(routeSource, /hasPrWhere/);
-  assert.doesNotMatch(routeSource, /HTPR_6530_MCP_LIST_QUERY_FLAG/);
-  assert.match(routeSource, /projectRows/);
-  assert.match(routeSource, /withTaskPresentation/);
-});
-
-test("the MCP task list selects labels in the paginated task query", () => {
-  const listQueryStart = routeSource.lastIndexOf("const tasks = await prisma.task.findMany({");
-  const listQueryEnd = routeSource.indexOf("const uniqueProjects = new Set(tasks.map");
-  assert.notEqual(listQueryStart, -1);
-  assert.notEqual(listQueryEnd, -1);
-
-  const listQuery = routeSource.slice(listQueryStart, listQueryEnd);
-  assert.match(
-    listQuery,
-    /taskLabels:\s*{\s*select:\s*{\s*label:\s*{\s*select:\s*mcpTaskLabelSelect/,
-  );
-  assert.match(
-    routeSource,
-    /labels:\s*task\.taskLabels\.map\(mapMcpTaskLabel\)/,
-  );
-});
-
 test("task list counts only assignees visible to the task board", () => {
-  assert.match(routeSource, /assigneeCount:\s*assignees\.length/);
-  assert.match(
-    routeSource,
-    /mapTaskAssignee\(assignee, user\.id, task\.projectId\)/,
-  );
+  const { mapTaskAssignee } = loadMappers();
+  const owner = {
+    user: { id: 9, email: "owner@example.test", displayName: "Owner" },
+  };
+  const privateAgent = {
+    id: "private-agent",
+    displayName: "Private helper",
+    userId: 9,
+    visibility: "PRIVATE",
+    members: [],
+  };
+  const teamAgent = {
+    id: "team-agent",
+    displayName: "Team helper",
+    userId: 9,
+    visibility: "TEAM",
+    members: [{ projectId: 15 }],
+  };
+
+  const assignees = [
+    owner,
+    { ...owner, agent: privateAgent },
+    { ...owner, agent: teamAgent },
+  ]
+    .map((assignee) => mapTaskAssignee(assignee, 6, 15))
+    .filter(Boolean);
+
+  assert.equal(assignees.length, 2);
+  assert.equal(assignees[0].agent, undefined);
+  assert.equal(assignees[0].displayName, "Owner");
+  assert.equal(assignees[1].agent.id, "team-agent");
+  assert.equal(assignees[1].displayName, "Team helper");
 });
 
 test("list and detail labels share the exact id/name mapping", () => {
@@ -239,32 +237,6 @@ test("task responses expose the permanent-delete deadline", () => {
   assert.equal(withoutDeadline.permanentlyDeleteAt, null);
 });
 
-test("the paginated task list selects and serializes the permanent-delete deadline", () => {
-  const listQueryStart = routeSource.lastIndexOf("const tasks = await prisma.task.findMany({");
-  const listQueryEnd = routeSource.indexOf("const uniqueProjects = new Set(tasks.map", listQueryStart);
-  const listResponseStart = routeSource.indexOf(
-    "const taskList: TaskListItem[] = tasks.map",
-    listQueryEnd,
-  );
-  const listResponseEnd = routeSource.indexOf(
-    "const presentedTasks = taskList.map",
-    listResponseStart,
-  );
-  assert.notEqual(listQueryStart, -1);
-  assert.notEqual(listQueryEnd, -1);
-  assert.notEqual(listResponseStart, -1);
-  assert.notEqual(listResponseEnd, -1);
-
-  const listQuery = routeSource.slice(listQueryStart, listQueryEnd);
-  const listResponse = routeSource.slice(listResponseStart, listResponseEnd);
-
-  assert.match(listQuery, /permanentlyDeleteAt:\s*true/);
-  assert.match(
-    listResponse,
-    /permanentlyDeleteAt:\s*task\.permanentlyDeleteAt\?\.toISOString\(\) \|\| null/,
-  );
-});
-
 test("task get returns linked pull requests in selected order", () => {
   const { mapTaskToMcpGetResponse } = loadMappers();
   const updatedAt = new Date("2026-09-02T03:28:24.064Z");
@@ -335,10 +307,6 @@ test("task get returns linked pull requests in selected order", () => {
         updatedAt: "2026-09-02T03:28:24.064Z",
       },
     ],
-  );
-  assert.match(
-    mapperSource,
-    /pullRequests:\s*{\s*orderBy:\s*{\s*createdAt:\s*['"]asc['"] as const\s*}/,
   );
 });
 

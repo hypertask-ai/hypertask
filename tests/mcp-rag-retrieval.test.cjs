@@ -1,7 +1,6 @@
 require("./helpers/register-server-only.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./helpers/chat-stream-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -38,38 +37,6 @@ test("rag_retrieval schema requires a query", () => {
 test("rag_retrieval is registered in MCP_TOOLS", () => {
   assert.ok(
     MCP_TOOLS.some((tool) => tool.name === "hypertask_rag_retrieval"),
-  );
-});
-
-test("chat and MCP import the shared board-knowledge retrieval", () => {
-  const chatSource = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
-  const serviceSource = fs.readFileSync(
-    path.join(
-      root,
-      "src/lib/mcp-server/lib/services/rag-retrieval.service.ts",
-    ),
-    "utf8",
-  );
-  const sharedSource = fs.readFileSync(
-    path.join(root, "src/lib/rag/retrieveBoardKnowledge.ts"),
-    "utf8",
-  );
-
-  assert.match(
-    chatSource,
-    /from "@\/lib\/rag\/retrieveBoardKnowledge"/,
-  );
-  assert.match(
-    serviceSource,
-    /from '@\/lib\/rag\/retrieveBoardKnowledge'/,
-  );
-  assert.match(serviceSource, /agentId: ctx\.agentId/);
-  assert.match(
-    sharedSource,
-    /getProjectWhere\(principal\.userId, principal\.agentId, principal\.teamScope\)/,
   );
 });
 

@@ -2,17 +2,7 @@
   "allowlist": [
     "tests/htpr-7395-cached-static-first.test.cjs",
     "tests/htpr-7638-description-sanitize.test.cjs",
-    "tests/lazy-emoji-editor.test.ts",
-    "tests/manage-columns-modal-design.test.cjs",
-    "tests/manage-views-delete.test.cjs",
     "tests/management-key-team-scope.test.cjs",
-    "tests/mcp-agent-management.test.cjs",
-    "tests/mcp-deferred-tools.test.ts",
-    "tests/mcp-inline-attachments.test.cjs",
-    "tests/mcp-rag-retrieval.test.cjs",
-    "tests/mcp-task-list-labels.test.cjs",
-    "tests/mcp-token-bearer.test.cjs",
-    "tests/mcp-waiting-on-tool.test.cjs",
     "tests/mobile-agent-chat-fullscreen-6476.test.cjs",
     "tests/mobile-agent-chat-layout-6407.test.cjs",
     "tests/mobile-board-sheet.test.cjs",
@@ -80,5 +70,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 79
+  "count": 69
 }

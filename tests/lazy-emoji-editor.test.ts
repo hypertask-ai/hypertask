@@ -160,58 +160,9 @@ test("dataset install activates lookup, storage, and the emoticon rule", async (
   assert.equal((found as { name: string }).name, emoticonItem.name);
 });
 
-test("the editor always uses lazy emoji loading without a feature flag or eager effect", () => {
-  const tiptap = fs.readFileSync(
-    path.join(root, "src/components/RTE/Tiptap.ts"),
-    "utf8",
+test("the retired lazy emoji list flag never ships again", () => {
+  const { modes } = JSON.parse(
+    fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"),
   );
-  const retired = /LAZY_EMOJI_LIST_FLAG|htpr-6059-lazy-emoji-list|lazyEmojiList|ensureEmojiData/;
-  assert.throws(() => assert.doesNotMatch("void ensureEmojiData()", retired));
-  assert.doesNotMatch(tiptap, retired);
-  assert.doesNotMatch(
-    require("./helpers/flag-files.cjs").source(),
-    retired,
-  );
-  assert.equal(
-    Object.hasOwn(
-      JSON.parse(fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8")).modes,
-      "htpr-6059-lazy-emoji-list",
-    ),
-    false,
-  );
-  assert.match(tiptap, /LazyEmoji\.configure\(\{\s*enableEmoticons: true,\s*suggestion: suggestion,/);
-  const suggestion = fs.readFileSync(
-    path.join(root, "src/components/RTE/suggestion.js"),
-    "utf8",
-  );
-  assert.match(suggestion, /items: async[\s\S]*await ensureEmojiData\(\)[\s\S]*return editor\.storage\.emoji\.emojis/);
-});
-
-test("no source file statically imports the emoji package data", () => {
-  const tiptap = fs.readFileSync(
-    path.join(root, "src/components/RTE/Tiptap.ts"),
-    "utf8",
-  );
-  assert.ok(!tiptap.includes('@tiptap/extension-emoji"'), tiptap);
-  const lazyEmoji = fs.readFileSync(
-    path.join(root, "src/components/RTE/Extensions/LazyEmoji.ts"),
-    "utf8",
-  );
-  const valueImports = lazyEmoji
-    .split("\n")
-    .filter(
-      (line) =>
-        line.trimStart().startsWith("import") &&
-        !line.trimStart().startsWith("import type") &&
-        line.includes("@tiptap/extension-emoji"),
-    );
-  const dataFile = fs.readFileSync(
-    path.join(root, "src/components/RTE/Extensions/lazyEmojiData.ts"),
-    "utf8",
-  );
-  assert.ok(
-    !dataFile.match(/^import(?! type).*@tiptap\/extension-emoji/m),
-    "lazyEmojiData must not statically import the package (type imports are fine)",
-  );
-  assert.deepEqual(valueImports, []);
+  assert.equal(Object.hasOwn(modes, "htpr-6059-lazy-emoji-list"), false);
 });

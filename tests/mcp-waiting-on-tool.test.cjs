@@ -1,6 +1,5 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const fs = require("node:fs");
 const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
 
@@ -68,9 +67,6 @@ test("flag on: waiting-on tool reaches the gated operation and keeps all waiting
   assert.deepEqual(f.calls, [9, null].map((userId) => ({ endpoint: "/mcp/tasks/waiting-on", method: "POST", body: { taskId: 42, userId } })));
   assert.deepEqual(f.writes, [9, null].map((userId) => ({ taskId: 42, userId })));
   assert.deepEqual(f.flags, [9, null].map(() => ({ key: "htpr-7723-task-waiting-on", userId: 7 })));
-  const registry = fs.readFileSync(path.join(__dirname, "../src/lib/mcp-server/tools/index.ts"), "utf8");
-  assert.match(registry, /import \{ setTaskWaitingOnTool \} from '\.\/set-task-waiting-on\.tool'/);
-  assert.match(registry, /^  setTaskWaitingOnTool,$/m);
 });
 
 test("flag off: legacy and consolidated tools propagate the operation refusal without writing", async () => {
