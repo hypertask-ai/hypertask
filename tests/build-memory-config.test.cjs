@@ -75,3 +75,14 @@ test("production build heap cap leaves half the build machine for native memory"
       "(YPER4-957)",
   );
 });
+
+test("production build names the builder the heap cap bounds", () => {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+  assert.match(
+    pkg.scripts.build,
+    /next build --webpack\b/,
+    "the build script must name --webpack: --max-old-space-size caps the V8 heap only, and Turbopack's Rust " +
+      "side ignores it, so an implicit builder OOM-kills the 8 GB build container instead of failing with a " +
+      "heap error (HYCI-61)",
+  );
+});
