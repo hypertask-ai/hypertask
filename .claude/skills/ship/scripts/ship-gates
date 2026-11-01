@@ -85,14 +85,23 @@ await withFileLock(state, ledger, () => {
     throw new Error(`ship-gates: ${ticket} ledger was written from ${strays[0].cwd}; re-run with SHIP_LEDGER_MOVE=1 to run its gates in ${root}`);
   }
   if (strays.length) {
-    const moved = new Set(strays.map((gate) => gate.id));
+    const rewritten = new Map();
+    for (const gate of strays) {
+      const [, gateTicket, name] = gate.id.match(gateId);
+      const repo = gate.check.startsWith('SHIP_REPO=') ? gate.check.split(' ')[0].replace('SHIP_REPO=', '') : '';
+      if (repo && repo !== process.env.SHIP_REPO) {
+        throw new Error(`ship-gates: ${ticket} ledger belongs to ${repo}, not ${process.env.SHIP_REPO || 'an app checkout'}; run those gates from that repository`);
+      }
+      rewritten.set(gate.id, `  CHECK: ${repo ? envPrefix : ''}${quote(check)} ${name} ${gateTicket}`);
+    }
     const lines = text.split('\n');
     let current = '';
     for (let i = 0; i < lines.length; i += 1) {
       const head = lines[i].match(/^- \[[ xX]\] ([^:]+):/);
       if (head) current = head[1];
       else if (/^[^ ]/.test(lines[i])) current = '';
-      if (moved.has(current) && /^ {2}CWD: /.test(lines[i])) lines[i] = `  CWD: ${root}`;
+      if (rewritten.has(current) && /^ {2}CHECK: /.test(lines[i])) lines[i] = rewritten.get(current);
+      else if (rewritten.has(current) && /^ {2}CWD: /.test(lines[i])) lines[i] = `  CWD: ${root}`;
     }
     text = lines.join('\n');
     doc = parseGates(text, { requireGates: true });

@@ -721,8 +721,9 @@ env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval),
 for _ in range(2):
     r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo, env=env, text=True, capture_output=True)
     assert r.returncode == 0 and 'ALL MET' in r.stderr, r.stdout + r.stderr
-ledger = repo / '.unlazy/s-worker-g/GATES.md'
+ledger = home / '.unlazy' / 'ledgers' / 'YPER4-999' / 'GATES.md'
 text = ledger.read_text()
+assert not (repo/'.unlazy').exists(), 'a ship run left session state in the worker project'
 prefix = "SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT='/tmp/worker checkout' SHIP_WORKER='workers/docs agent' "
 assert text.count('  CHECK: ' + prefix) == 8
 assert text.count('automatic-evidence=v1') == 8
