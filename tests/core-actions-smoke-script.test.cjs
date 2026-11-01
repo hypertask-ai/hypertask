@@ -299,6 +299,102 @@ test("an unrunnable probe stays failed and cannot request rollback", async () =>
   }
 });
 
+const transportTimeout = {
+  ok: false,
+  kind: "unrunnable",
+  action: "move task",
+  detail: "The operation was aborted due to timeout",
+  steps: ["open board", "open task", "load comments"],
+  cleanup: ["deleted run comments and activity"],
+};
+
+function probeSequence(results) {
+  let calls = 0;
+  return {
+    get calls() {
+      return calls;
+    },
+    overrides: {
+      "/api/ops/core-actions-smoke": async () => {
+        const result = results[Math.min(calls, results.length - 1)];
+        calls += 1;
+        return Response.json({ result });
+      },
+    },
+  };
+}
+
+test("a transport timeout passes when the confirmation retry passes", async () => {
+  const originalFetch = global.fetch;
+  const probe = probeSequence([
+    transportTimeout,
+    {
+      ok: true,
+      kind: "pass",
+      action: "complete",
+      detail: "all actions passed",
+      steps: [],
+      cleanup: [],
+    },
+  ]);
+  global.fetch = fixtureFetch({ overrides: probe.overrides });
+
+  try {
+    const { run, shouldRollback } = await import(scriptUrl);
+    const result = await run({ sleep: async () => undefined });
+    assert.equal(result.ok, true);
+    assert.match(result.detail, /passed confirmation retry after move task/);
+    assert.equal(probe.calls, 2);
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("a transport timeout that happens twice stays failed and files the incident", async () => {
+  const originalFetch = global.fetch;
+  const probe = probeSequence([transportTimeout, transportTimeout]);
+  global.fetch = fixtureFetch({ overrides: probe.overrides });
+
+  try {
+    const { run, shouldRollback } = await import(scriptUrl);
+    const result = await run({ sleep: async () => undefined });
+    assert.equal(result.ok, false);
+    assert.equal(result.kind, "unrunnable");
+    assert.equal(result.action, "move task");
+    assert.match(result.detail, /confirmed twice: The operation was aborted due to timeout/);
+    assert.equal(probe.calls, 2);
+    assert.equal(shouldRollback(result, "push"), false);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("an unrunnable result that is not a transport failure is not retried", async () => {
+  const originalFetch = global.fetch;
+  const probe = probeSequence([
+    {
+      ok: false,
+      kind: "unrunnable",
+      action: "check feature flag",
+      detail: "the core-actions smoke flag is disabled for this user",
+      steps: [],
+      cleanup: [],
+    },
+  ]);
+  global.fetch = fixtureFetch({ overrides: probe.overrides });
+
+  try {
+    const { run } = await import(scriptUrl);
+    const result = await run({ sleep: async () => undefined });
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "check feature flag");
+    assert.equal(probe.calls, 1);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test("the probe resolves its fixture by name, never from a stored id", async () => {
   const originalFetch = global.fetch;
   let sent;
