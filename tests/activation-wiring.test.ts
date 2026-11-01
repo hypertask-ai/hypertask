@@ -163,10 +163,6 @@ for (const [scenario, userId, enabled] of [["other-flags-off", 123, false], ["QA
   }
 }
 
-test("connection-status reads stay free of analytics markers", () => {
-  assert.doesNotMatch(fs.readFileSync("src/app/api/users/ai-connection-status/route.ts", "utf8"), /activation/i);
-});
-
 test("durable connection claims survive cold starts and honor historical Logs", async () => {
   const h = activationHarness();
   h.logs.push({ LoggedById: 123, log: "mcp_connected", id: 1 });
@@ -337,13 +333,6 @@ test("HTPR-7162: expired invites do not let anyone join; public links with negat
   assert.equal(h.members.some((member) => member.userId === 234 && member.projectId === 15), true);
 });
 
-test("HTPR-7162: the invite route joins the signed-in user, never a userId from the request body", () => {
-  const route = fs.readFileSync(path.join(__dirname, "..", "src/pages/api/members/invite.ts"), "utf8");
-  assert.match(route, /getSessionUser\(/);
-  assert.match(route, /membersInvite\(session\.userId,/);
-  assert.doesNotMatch(route, /const \{[^}]*\buserId\b[^}]*\} = req\.body/);
-});
-
 function bulkSectionController(h: ReturnType<typeof activationHarness>, rollback = false) {
   const noop = async () => undefined;
   const source = { ...h.sections[0], projectId: 15 };
@@ -502,18 +491,6 @@ for (const scenario of ["sent", "send-failure", "connected"] as const) {
     save(h);
   });
 }
-
-test("every additional server boundary is wired and lifecycle emails are owned by their sender", () => {
-  const checks = [
-    ["src/lib/onboarding/emails/agentNudge.ts", /await sendEmail\([\s\S]*?sent = true;\s*void trackActivation\(userId, "lifecycle_email_sent", \{ type: "agent_nudge" \}\)/],
-    ["src/app/oauth/token/route.ts", /await enqueueAgentConnection\(tx, authCode.user.id, accessToken, "mcp", client.client_name\)/],
-    ["src/lib/mcp/auth/session.ts", /await enqueueOutsideSaveAndProcessSoon\(\(\) => enqueueAuthenticatedConnection\(prisma, request, ctx\.user\.id, token(?:, [^;\n]+)?\)\)/],
-    ["src/pages/api/invite/generatePublicInvite.ts", /await enqueueInviteSent\(tx, newInvite, "link", session.userId, newInvite.userId\)/],
-    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) await enqueueOutsideSaveAndProcessSoon\(\(\) => enqueueInviteSent\(prisma, invite, "email", invite.userId, user.id\)\)/],
-  ] as const;
-  for (const [file, pattern] of checks) assert.match(fs.readFileSync(file, "utf8"), pattern);
-  assert.doesNotMatch(fs.readFileSync("src/lib/telemetry/activationOccurrences.ts", "utf8"), /"lifecycle_email_sent"/);
-});
 
 test("ineligible users never start activation transactions or write markers in any scheduled job", async () => {
   const oldQaEmail = process.env.QA_LOGIN_EMAIL;

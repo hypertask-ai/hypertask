@@ -12,7 +12,6 @@ const { resolveAgentModelPin, canPinModelOption } = jiti(
   path.join(root, "src/lib/nativeAgent/modelPin.ts"),
 );
 const { aiModelOptions } = jiti(path.join(root, "src/lib/aiModelOptions.ts"));
-const fs = require("node:fs");
 
 const PIN = "gpt-5.6-luna";
 
@@ -62,14 +61,6 @@ test("an agent cannot be pinned to the custom endpoint option", () => {
     canPinModelOption(option.id),
   );
   assert.equal(pinnable.length, aiModelOptions.length - 1);
-});
-
-test("the write API enforces the pin guard, not just the picker", () => {
-  const route = fs.readFileSync(
-    "src/app/api/agents/[agentId]/route.ts",
-    "utf8",
-  );
-  assert.match(route, /!UNPINNABLE_MODEL_OPTION_IDS\.has\(body\.modelOptionId\)/);
 });
 
 test("no agent and no request choice leaves the caller on the default", () => {

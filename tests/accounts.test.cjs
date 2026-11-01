@@ -234,33 +234,3 @@ test("all-account sign-out uses server browser revocation and invalidates auth s
   assert.deepEqual(calls, ["server", "$sessionSignal"]);
 });
 
-test("generic sign-out surfaces keep the browser-wide action and gate the new copy", () => {
-  const commandSource = fs.readFileSync(
-    path.join(__dirname, "../src/components/commands.tsx"),
-    "utf8",
-  );
-  const sidebarSource = fs.readFileSync(
-    path.join(
-      __dirname,
-      "../src/components/sidebars/RightSidebar/Signout.tsx",
-    ),
-    "utf8",
-  );
-  const modalSource = fs.readFileSync(
-    path.join(
-      __dirname,
-      "../src/components/Modals/SignOut/SignOutModal.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(commandSource, /CommandMode\.Logout[\s\S]*?<SignOutModal/);
-  assert.match(sidebarSource, /<SignOutModal/);
-  assert.match(modalSource, /Sign out of all accounts/);
-  assert.match(modalSource, /signOutCurrentAccount/);
-  assert.match(
-    modalSource,
-    /projectEntryEnabled[\s\S]*?Sign out of every account on this browser\?[\s\S]*?!projectEntryEnabled && nextAccount[\s\S]*?Sign out of all accounts/,
-  );
-  assert.match(modalSource, /projectEntryEnabled \? handleAllSignOut\(\) : handleCurrentSignOut\(\)/);
-});

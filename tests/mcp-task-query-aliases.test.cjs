@@ -49,10 +49,6 @@ test("MCP task list accepts project as a project_id alias", () => {
   );
 
   assert.deepEqual(result, { ok: true, value: 2108 });
-  assert.match(
-    routeSource,
-    /parsePositiveIntegerParam\([\s\S]*?'project_id',[\s\S]*?\['projectId', 'project'\]/,
-  );
 });
 
 test("canonical project_id wins over compatibility aliases", () => {

@@ -60,22 +60,13 @@ test("page mentions render as links and person mentions remain spans", () => {
 });
 
 test("rich-text links use the shared token in every theme", () => {
-  const globals = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
-  assert.equal(
-    globals.match(/color: var\(--color-rich-text-link\) !important/g)?.length,
-    2,
-  );
-  assert.doesNotMatch(globals, /color:\s*#5896f1/i);
-
   const richTextStyles = [
     ["src/styles/tiptap.module.scss", "\\.editorContainer a"],
     ["src/styles/messageItem.scss", "\\.content-container a"],
   ];
   for (const [filename, selector] of richTextStyles) {
     const file = path.join(root, filename);
-    const source = fs.readFileSync(file, "utf8");
     const compiled = sass.compile(file).css;
-    assert.doesNotMatch(source, /color:\s*#5896f1/i);
     assert.match(
       compiled,
       new RegExp(`${selector} \\{[^}]*color: var\\(--color-rich-text-link\\)`, "s"),

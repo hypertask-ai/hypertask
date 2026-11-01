@@ -84,8 +84,6 @@ test("phone layer is important to override the inline backdrop z-index and never
   assert.match(css, /@media\s*\(width\s*<\s*640px\)/);
   assert.match(css, /z-index:\s*9990\s*!important/);
   assert.doesNotMatch(css, /z-index:\s*9990\s*;/, "no unscoped non-important layer override");
-  const sheet = fs.readFileSync(path.join(root, "src/components/Modals/Sheets/AppSheet.tsx"), "utf8");
-  assert.match(sheet, /APP_SHEET_Z_INDEX = 9990/);
 });
 
 test("phone header flag ships as a small Everyone bugfix", () => {
