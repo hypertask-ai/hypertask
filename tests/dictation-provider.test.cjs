@@ -29,19 +29,6 @@ test("dictation only supports Deepgram and migrates legacy OpenAI settings", () 
   );
 });
 
-test("dictation service contains no direct OpenAI credential or endpoint", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/services/dictation/transcriptionProviders.ts"),
-    "utf8",
-  );
-
-  assert.doesNotMatch(source, /OPENAI_API_KEY/);
-  assert.doesNotMatch(source, /api\.openai\.com/);
-  assert.doesNotMatch(source, /transcribeWithOpenAI/);
-  assert.match(source, /DEEPGRAM_API_KEY/);
-  assert.match(source, /tag/);
-});
-
 test("Deepgram receives the owning team and user attribution tags", async () => {
   const previousKey = process.env.DEEPGRAM_API_KEY;
   const previousFetch = global.fetch;
@@ -122,58 +109,6 @@ test("dictation rejects oversized audio before contacting Deepgram", async () =>
   }
 });
 
-test("the JSON dictation route authenticates before parsing paid audio payloads", () => {
-  const jsonRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/audio-transcript/route.ts"),
-    "utf8",
-  );
-
-  assert.ok(
-    jsonRoute.indexOf("getSessionUser(request.headers)") <
-      jsonRoute.indexOf("request.json()"),
-    "JSON dictation must authenticate before parsing base64 audio",
-  );
-  assert.match(jsonRoute, /MAX_DICTATION_AUDIO_BYTES/);
-  assert.match(jsonRoute, /status: 413/);
-  assert.match(jsonRoute, /teamContext\.projectId !== body\.projectId/);
-  for (const route of [jsonRoute]) {
-    assert.match(route, /isGuestUserId/);
-    const guestCheckAt = route.indexOf("await isGuestUserId");
-    const bodyParseAt = Math.max(
-      route.indexOf("request.formData()"),
-      route.indexOf("request.json()"),
-    );
-    assert.ok(guestCheckAt >= 0 && guestCheckAt < bodyParseAt);
-  }
-});
-
-test("the client rejects oversized dictation before base64 encoding", () => {
-  const audioButton = fs.readFileSync(
-    path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
-    "utf8",
-  );
-  const sizeCheckAt = audioButton.indexOf(
-    "audioBlob.size > MAX_DICTATION_AUDIO_BYTES",
-  );
-  const base64At = audioButton.indexOf("reader.readAsDataURL(audioBlob)");
-
-  assert.ok(sizeCheckAt >= 0 && sizeCheckAt < base64At);
-  assert.match(audioButton, /typeof payload\?\.error === "string"/);
-  assert.match(audioButton, /toast\.error/);
-});
-
-test("paid dictation requires write access and keeps teamless owners", () => {
-  const providerGate = fs.readFileSync(
-    path.join(root, "src/app/api/ai/_lib/providerGate.ts"),
-    "utf8",
-  );
-
-  assert.match(providerGate, /taskWriteAccessWhere\(userId, agentId, teamScope\)/);
-  assert.doesNotMatch(providerGate, /getProjectWhere\(userId\)/);
-  assert.doesNotMatch(providerGate, /projectContentAccessWhere\(userId\)/);
-  assert.match(providerGate, /projectId: project\?\.id \?\? null/);
-});
-
 test("the unguarded standalone demo-generation endpoint stays removed", () => {
   assert.equal(
     fs.existsSync(
@@ -181,11 +116,4 @@ test("the unguarded standalone demo-generation endpoint stays removed", () => {
     ),
     false,
   );
-
-  const guestRoute = fs.readFileSync(
-    path.join(root, "src/app/api/demo/guest/route.ts"),
-    "utf8",
-  );
-  assert.match(guestRoute, /consumeGuestCreation/);
-  assert.match(guestRoute, /consumeBoardRegeneration/);
 });

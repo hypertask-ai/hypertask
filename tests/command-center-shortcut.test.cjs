@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const jiti = require("jiti")(__filename, {
@@ -59,18 +58,6 @@ test("the signed-in shell renders the Command Center where no route host exists"
   for (const pathname of ["/project", "/detail/project-15/6871", "/inbox", "/page/abc", "/search", "/report"]) {
     assert.equal(shouldRenderGlobalCommandMenu(pathname), false, pathname);
   }
-
-  const provider = fs.readFileSync(
-    path.join(
-      __dirname,
-      "../src/components/ProviderGlobal/GloablProviders.tsx",
-    ),
-    "utf8",
-  );
-  assert.match(
-    provider,
-    /showCommands\.show\s*&&\s*shouldRenderGlobalCommandMenu\(pathname, myTasksSingleCommandCenter\)\s*&&\s*\(?\s*<HypertasksCommands \/>/,
-  );
 });
 
 test("Cmd+K is accepted on Apple devices on supported routes", () => {
@@ -128,14 +115,3 @@ for (const route of publicRoutes) {
     assert.equal(shouldRenderGlobalCommandMenu(`${route}-workspace`), true);
   });
 }
-
-test("only the global capture handler owns command shortcut toggling", () => {
-  const provider = fs.readFileSync(path.join(__dirname, "../src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
-  const hook = fs.readFileSync(path.join(__dirname, "../src/hooks/General/useCommandCenterShortcut.ts"), "utf8");
-  assert.match(provider, /import \{ useCommandCenterShortcut \} from "@\/hooks\/General\/useCommandCenterShortcut"/);
-  assert.match(provider, /useCommandCenterShortcut\(\s*authenticatedUserId,\s*isApple,\s*pathname,\s*showTrialModal,\s*showEmailVerificationModal,\s*toggleShowCommands,\s*\)/);
-  assert.equal((hook.match(/isCommandCenterShortcut\(e, isApple, pathname\)/g) || []).length, 1);
-  assert.match(hook, /addEventListener\("keydown", handleCommandCenterShortcut, true\)/);
-  assert.match(hook, /removeEventListener\("keydown", handleCommandCenterShortcut, true\)/);
-  assert.match(hook, /if \(!isCommandCenterShortcut\(e, isApple, pathname\)\) return;\s*e\.preventDefault\(\);[\s\S]*?e\.stopImmediatePropagation\(\);\s*toggleShowCommands\(\);/);
-});

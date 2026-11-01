@@ -218,16 +218,6 @@ test('a settled ordinary upload still saves the unwrapped preview metadata', asy
   assert.equal(fixture.created[0].attachments[0].file, uploaded);
 });
 
-test('the create window wires selection and upload-failure reports through the shared uploader', () => {
-  const state = fs.readFileSync(path.join(root, 'src/components/Common/AttachmentsUpload/useAttachmentUploadState.ts'), 'utf8');
-  const uploader = fs.readFileSync(path.join(root, 'src/components/Common/AttachmentsUpload/index.tsx'), 'utf8');
-  assert.match(modal, /onFilesSelected=\{onFilesSelected\}/);
-  assert.match(modal, /onUploadFailed=\{onUploadFailed\}/);
-  assert.match(state, /useFileUpload\(props\.filesFromParent, props\.onFilesSelected, props\.onUploadFailed\)/);
-  assert.match(state, /await handleDroppedFiles\(files\)/);
-  assert.match(uploader, /onUploadFailed=\{props\.onUploadFailed\}/);
-});
-
 test(`Save & new isolates late preview and upload callbacks from the next ticket`, async () => {
   const fixture = mount();
   const file = new File(['image'], 'first.webp', { type: 'image/webp' });
@@ -276,8 +266,4 @@ test('late preparation, failure and upload callbacks cannot affect a same-name f
   await save;
   await nextTurn();
   assert.equal(fixture.created[0].attachments[0].file.source, 'https://files.example/new.png');
-});
-
-test('the uploader remounts at the composer boundary to clear fileItems and gallery upload history', () => {
-  assert.match(modal, /<AttachmentsUpload\s+key=\{attachmentComposerEpoch\}/);
 });

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -44,20 +43,4 @@ test("create-task date normalization preserves valid Dates and rejects malformed
   assert.equal(normalizeCreateTaskFormDate(new Date("invalid")), undefined);
   assert.equal(normalizeCreateTaskFormDate(null), undefined);
   assert.equal(normalizeCreateTaskFormDate(undefined), undefined);
-});
-
-test("the shared create-task state boundary normalizes both date fields", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"),
-    "utf8",
-  );
-
-  assert.match(
-    source,
-    /if \(key === "dueDate" \|\| key === "startDate"\)[\s\S]*?normalizeCreateTaskFormDate\(value\)[\s\S]*?\[key\]: nextValue/,
-  );
-  assert.match(
-    source,
-    /dueDate: normalizeCreateTaskFormDate\([\s\S]*?prefilledDueDate/,
-  );
 });

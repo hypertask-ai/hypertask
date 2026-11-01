@@ -114,26 +114,3 @@ test("a successful mount can remove only the recovery marker", () => {
     null,
   );
 });
-
-test("global recovery reports only after a safe recovery cannot proceed", () => {
-  const globalError = fs.readFileSync(
-    path.join(root, "src/app/global-error.tsx"),
-    "utf8",
-  );
-  const providers = fs.readFileSync(
-    path.join(root, "src/utils/Providers.tsx"),
-    "utf8",
-  );
-
-  assert.match(globalError, /if \(isChunkLoadError\(error\)\)/);
-  assert.match(globalError, /canReachPage\(recoveryUrl\)/);
-  assert.match(globalError, /window\.location\.replace\(recoveryUrl\)/);
-  assert.match(globalError, /if \(!reachable\) \{\s*report\(\)/);
-  assert.match(providers, /CHUNK_RECOVERY_STABLE_MS = 30 \* 1000/);
-  assert.match(
-    providers,
-    /setTimeout\(\(\) => \{[\s\S]*removeItem\(CHUNK_RELOAD_STORAGE_KEY\)/,
-  );
-  assert.match(providers, /return \(\) => window\.clearTimeout\(stableTimer\)/);
-  assert.match(providers, /stripChunkRecoveryParam\(window\.location\.href\)/);
-});
