@@ -170,12 +170,19 @@ stuck_job_recovery:
   required: false
   triggers: [schedule, workflow_dispatch]
   cron_utc: "*/10 * * * *"
+  cron_role: restart a chain that died, never the tick itself
+  chain:
+    wait_seconds: 180
+    dispatch: workflow_dispatch on production
+    guard: the dispatch is skipped while another link of this workflow is queued or running
+    cost: one of the twenty parallel jobs, free hosted minutes only, because the repository is public
+    measured_schedule_delivery: 17 of 349 at 15 minutes, 16 of 87 at 60 minutes, 33 of about 1049 at 5 minutes, over the 87 hours from 2026-10-29T00:00Z
   trusted_code_ref: production
   runs_on: ubuntu-latest
-  timeout_minutes: 5
+  timeout_minutes: 10
   contributes_jobs_to_pr: false
   reads: [actions_runs, actions_jobs, repository_variable]
-  stuck_after_minutes: 8
+  stuck_after_minutes: 3
   recent_minutes: 30
   attempts_touched: 1
   actions: [cancel_run, wait_for_cancel, rerun_failed_jobs]
