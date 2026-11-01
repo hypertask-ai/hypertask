@@ -954,7 +954,7 @@ jobs:
 
       # HYCI-62: the browser revision only moves when package-lock.json does, so a
       # push restores Chromium from the cache instead of downloading it again.
-      # The key is the one prod-health already fills, so the first run is warm.
+      # prod-health uses the same key, so the two jobs share one entry.
       - name: Restore Playwright browser cache
         id: restore-playwright-browsers
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
@@ -1235,7 +1235,7 @@ jobs:
 
       # HYCI-62: the browser revision only moves when package-lock.json does, so a
       # push restores Chromium from the cache instead of downloading it again.
-      # The key is the one prod-health already fills, so the first run is warm.
+      # prod-health uses the same key, so the two jobs share one entry.
       - name: Restore Playwright browser cache
         id: restore-playwright-browsers
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
@@ -1474,7 +1474,7 @@ jobs:
 
       # HYCI-62: the browser revision only moves when package-lock.json does, so a
       # push restores Chromium from the cache instead of downloading it again.
-      # The key is the one prod-health already fills, so the first run is warm.
+      # prod-health uses the same key, so the two jobs share one entry.
       - name: Restore Playwright browser cache
         id: restore-playwright-browsers
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
@@ -1721,7 +1721,7 @@ jobs:
 
       # HYCI-62: the browser revision only moves when package-lock.json does, so a
       # push restores Chromium from the cache instead of downloading it again.
-      # The key is the one prod-health already fills, so the first run is warm.
+      # prod-health uses the same key, so the two jobs share one entry.
       - name: Restore Playwright browser cache
         id: restore-playwright-browsers
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
