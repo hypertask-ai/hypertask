@@ -63,6 +63,17 @@ for (const smoke of [false, true]) {
   }
 }
 
+test("production build keeps the webpack compiler its memory levers belong to", () => {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+  assert.match(
+    pkg.scripts.build,
+    /next build --webpack(\s|$)/,
+    "the production build must run webpack: webpackBuildWorker, webpackMemoryOptimizations and cpus are " +
+      "webpack-only, and Turbopack ignores them, so `next build` alone fills the 8 GB Vercel machine and is " +
+      "killed with exit 137 (HYCI-60). Re-adding Turbopack here needs a measured green Production deploy first",
+  );
+});
+
 test("production build heap cap leaves half the build machine for native memory", () => {
   const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
   const cap = /--max-old-space-size=(\d+)/.exec(pkg.scripts.build);

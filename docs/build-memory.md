@@ -84,3 +84,34 @@ is dropped.
 If a Turbopack build still dies with 137 at this setting, the next levers are turning
 `productionBrowserSourceMaps` off (PostHog would lose its maps) and the paid Enhanced
 Build Machine, which is Valentin's decision.
+## Back to webpack after the Turbopack switch (2026-11-01, HYCI-60)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/60
+
+HTPR-8245 moved every build to Turbopack and dropped `--webpack` from the
+production build command. `experimental.webpackBuildWorker`,
+`webpackMemoryOptimizations` and `cpus` are webpack-only settings, so the levers
+in the notes above stopped applying, and Turbopack's own memory is native: the
+`NODE_OPTIONS` heap cap cannot bound it.
+
+Two Turbopack Production deploys were killed with exit 137 on Vercel's 8 GB
+machine, both with Vercel's Out of Memory event during "Creating an optimized
+production build":
+
+| Commit | Turbopack setting | Killed at | Log |
+| --- | --- | --- | --- |
+| `ea23ee008` | default | 13m 57s | `hypertasks-prod-jdxosr0hq`, `dpl_92NFG73VbLGkAHiUV5b3umZVaDaB` |
+| `16617d97e` | `turbopackMemoryEviction: "full"` (HTPR-8244) | 5m 32s | `dpl_E388XZ4HHbbtsXKDrGnWTERujmmG` |
+
+Every Production deploy before the switch was Ready with the webpack build in 4
+to 7 minutes, and HTPR-8244's own mock fix made `app-smoke` green again, so the
+only thing still red was the shipped build itself.
+
+The change here is one word: the production build passes `--webpack` again, so
+the build that ships is the build the memory levers were measured on. The
+`turbopack` block and its eviction setting stay in `next.config.js`, and the CI
+jobs that build with `npx next build` keep exercising Turbopack on GitHub's
+16 GB runner, so a later attempt still starts from a green compile.
+`tests/build-memory-config.test.cjs` fails if the production build command drops
+`--webpack` again, so returning to Turbopack needs a measured green Production
+deploy instead of a one-word edit.
