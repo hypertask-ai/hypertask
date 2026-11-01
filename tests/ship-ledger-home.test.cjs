@@ -31,9 +31,9 @@ function fixture() {
   return { root, home, project, calls };
 }
 
-function gates(f, ticket, session, extraEnv = {}) {
+function gates(f, ticket, session, extraEnv = {}, cwd = f.project) {
   const result = spawnSync('bash', [shipGates, ticket], {
-    cwd: f.project,
+    cwd,
     encoding: 'utf8',
     env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: session, ...extraEnv },
   });
@@ -73,7 +73,7 @@ test('a ship run writes its ledger to the home ticket folder and leaves the proj
   }
 });
 
-test('a later session continues the same ticket ledger and takes over its cleanup', needsUnlazy, () => {
+test('a later session continues the same ticket ledger and earns its gates again', needsUnlazy, () => {
   const f = fixture();
   try {
     gates(f, 'HTPR-6819', 'sessionA-full');
@@ -87,12 +87,35 @@ test('a later session continues the same ticket ledger and takes over its cleanu
     fs.writeFileSync(ledger, lines.join('\n'));
 
     const handover = gates(f, 'HTPR-6819', 'sessionB-full');
-    assert.match(handover.stderr, /HTPR-6819 ledger moved from session sessionA-full to sessionB-full/);
+    assert.match(handover.stderr, /HTPR-6819 ledger moved from session sessionA-full to sessionB-full; 9 generated gates written again/);
     const text = fs.readFileSync(ledger, 'utf8');
-    assert.match(text, /^- \[x\] HTPR-6819\.merged:/m, 'a handover dropped a finished gate');
-    assert.match(text, /^- \[ \] HTPR-6819\.cleaned:/m, 'a handover kept the previous session cleanup result');
+    assert.equal(text.match(/^- \[ \] HTPR-6819\./gm).length, 9, 'a handover kept a previous session result');
     assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionB-full\n');
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a handover from another worktree or repository re-points the ledger at this session', needsUnlazy, () => {
+  const f = fixture();
+  const other = path.join(f.root, 'other');
+  const cli = path.join(f.root, 'cli');
+  for (const dir of [other, cli]) fs.mkdirSync(dir);
+  const cwds = (text) => text.match(/^ {2}CWD: (.*)$/gm).map((line) => line.slice(7));
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', {
+      SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: cli,
+    });
+    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+    assert.match(fs.readFileSync(ledger, 'utf8'), /^  CHECK: SHIP_REPO=hypertask-ai\/cli /m);
+
+    const moved = gates(f, 'HTPR-6819', 'sessionB-full', {}, other);
+    assert.match(moved.stderr, /9 generated gates written again/);
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.deepEqual([...new Set(cwds(text))], [other], 'a gate still points at the previous worktree');
+    assert.doesNotMatch(text, /SHIP_REPO=/, 'a gate still points at the previous repository');
+    assert.equal(fs.existsSync(path.join(other, '.unlazy')), false, 'the new worktree is not clean');
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }

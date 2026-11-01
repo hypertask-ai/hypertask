@@ -92,13 +92,16 @@ print(markers[sys.argv[1]])
     assert (ledger('HYFA-13').parent/'session').read_text() == 'codexses-full\n'
     print('ok Codex session/thread fallback and precedence')
 
-    before = file.read_text()
     r = run(CLAUDE_CODE_SESSION_ID='sessionA-another-full-id')
     assert r.returncode == 0, r.stderr
-    assert 'HTPR-6819 ledger moved from session sessionA-full-id to sessionA-another-full-id' in r.stderr, r.stderr
-    assert file.read_text() == before
+    assert ('HTPR-6819 ledger moved from session sessionA-full-id to sessionA-another-full-id; '
+            '9 generated gates written again at '+str(repo)) in r.stderr, r.stderr
+    after = file.read_text()
+    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','deeper','pr','merged','deployed','proof','docs','done','cleaned']]
+    assert after.count('  CWD: '+str(repo)) == 9, after
+    assert after.count('- [ ] HTPR-6819.') + after.count('- [x] HTPR-6819.') == 9, after
     assert (file.parent/'session').read_text() == 'sessionA-another-full-id\n'
-    print('ok a later session continues the same ticket ledger and keeps its gates')
+    print('ok a later session continues the same ticket ledger and earns its gates again')
 
     result = subprocess.run(['node', str(unlazy/'scripts/gate-check.mjs'), '--reverify', '--root', str(file.parent),
                              str(file)], cwd=repo, env=dict(env, DONE='yes'), text=True, capture_output=True)
@@ -123,7 +126,9 @@ print(markers[sys.argv[1]])
         file.write_text(tainted)
         count = len(calls())
         approved = sorted(f.name for f in approval.iterdir())
-        r = run(CLAUDE_CODE_SESSION_ID=session)
+        # The ledger now belongs to the session that took it over, so a tampered gate is refused
+        # there instead of being re-pointed by a handover.
+        r = run(CLAUDE_CODE_SESSION_ID='sessionA-another-full-id')
         assert r.returncode != 0, r.stderr
         assert len(calls()) == count and sorted(f.name for f in approval.iterdir()) == approved
         assert file.read_text() == tainted and not (p/'bad').exists()
