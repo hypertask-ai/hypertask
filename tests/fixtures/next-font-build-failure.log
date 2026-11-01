@@ -1,0 +1,14 @@
+Failed to compile.
+
+src/app/login/LoginComponent.tsx
+An error occurred in `next/font`.
+
+TypeError: Cannot read properties of null (reading '1')
+    at /home/runner/work/hypertask/hypertask/node_modules/next/dist/compiled/@next/font/dist/google/loader.js:122:78
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async Promise.all (index 0)
+    at async nextFontGoogleFontLoader (/home/runner/work/hypertask/hypertask/node_modules/next/dist/compiled/@next/font/dist/google/loader.js:104:33)
+    at async Span.traceAsyncFn (/home/runner/work/hypertask/hypertask/node_modules/next/dist/trace/trace.js:168:20)
+    at async /home/runner/work/hypertask/hypertask/node_modules/next/dist/build/webpack/loaders/next-font-loader/index.js:82:87
+
+> Build failed because of webpack errors
