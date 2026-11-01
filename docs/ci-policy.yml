@@ -1,5 +1,5 @@
-version: 12
-last_updated: 2026-10-31
+version: 13
+last_updated: 2026-11-01
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -162,6 +162,26 @@ pr_size_day_one:
   no_reads_before_block_from: true
   rehearsal_triggers_no_guard: true
   fail_closed_on: [missing_board_token, missing_day_one_ticket, no_guard_run_at_head, trigger_error, post_error]
+
+stuck_job_recovery:
+  ticket: https://app.hypertask.ai/detail/project-11514/66
+  workflow: .github/workflows/stuck-job-recovery.yml
+  script: .github/scripts/ci-stuck-jobs.cjs
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  cron_utc: "*/10 * * * *"
+  trusted_code_ref: production
+  runs_on: ubuntu-latest
+  timeout_minutes: 5
+  contributes_jobs_to_pr: false
+  reads: [actions_runs, actions_jobs]
+  stuck_after_minutes: 8
+  recent_minutes: 30
+  attempts_touched: 1
+  actions: [cancel_run, rerun_failed_jobs]
+  acts_on: [pull_request_runs]
+  report_only: [production_push_runs, other_run_events]
+  never: [self_hosted_runners, other_repositories, paid_services]
 
 required_check_settings_monitor:
   ticket: https://app.hypertask.ai/detail/project-4060/780
