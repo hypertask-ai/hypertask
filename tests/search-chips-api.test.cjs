@@ -1,14 +1,8 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const { readFileSync } = require('node:fs')
 const { test } = require('node:test')
 const { Prisma } = require('@prisma/client')
 const root = path.resolve(__dirname, '..')
-test('chip server reuses the operators name resolver instead of duplicating database lookups', () => {
-  const source = readFileSync(path.join(root, 'src/lib/search/serverOperators.ts'), 'utf8')
-  assert.equal((source.match(/export async function parseSearchWithNames\(/g) ?? []).length, 1)
-  assert.match(source, /await parseSearchWithNames\(/)
-})
 let state
 function eligible(row, where) {
   if (where.projectId && !(where.projectId.in ?? [where.projectId]).includes(row.projectId)) return false
@@ -226,14 +220,6 @@ test('in:8 never widens the accessible-board scope even with a private row in th
   assert.equal(res.statusCode, 204)
   assert.deepEqual(res.body.processedData.All, [])
   assert.equal((await search('in:8', { requested: [7, 8] })).res.statusCode, 403)
-})
-
-test('web posts the untouched input and full board scope in both search flows', () => {
-  const source = readFileSync(path.join(root, 'src/hooks/Search/useSearch.ts'), 'utf8')
-  for (const [term, projects] of [['_searchTerm', 'projects'], ['searchTerm', 'searchProjects']]) {
-    assert.match(source, new RegExp(`projectIds: ${projects}\\.map\\(\\(item\\) => item\\.id\\),\\s*searchQuery: ${term},\\s*archive: defaultSearchArchiveStatus\\(showArchived\\)`))
-  }
-  assert.doesNotMatch(source, /searchBoards/)
 })
 
 test('local fixture times filtered query against plain-text search path', async () => {

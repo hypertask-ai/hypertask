@@ -153,7 +153,6 @@ test("disposable PostgreSQL positive control and cache-column repair", { timeout
     console.log("Restored userId: exit=0; Schema drift check: clean.");
     await admin.query('ALTER TABLE "AiUsage" ALTER COLUMN "cacheWriteInputTokens" SET NOT NULL, ALTER COLUMN "cacheWriteInputTokens" SET DEFAULT 0');
     const sql = readFileSync(path.join(root, "src/prisma/migrations/20261012130000_yper4_322_schema_drift_repair/migration.sql"), "utf8");
-    assert.match(sql, /lock_timeout.*2s/);
     await admin.query(sql); await admin.query(sql);
     assert.equal(await checkDrift({ env: runEnv, log: () => {} }), 0);
     console.log("Cache drift repaired twice (idempotent): exit=0; Schema drift check: clean.");

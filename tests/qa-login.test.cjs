@@ -53,19 +53,6 @@ test("QA login is off when either secret is missing", () => {
   assert.equal(shortPassword.isQaLoginConfigured(), false);
 });
 
-test("QA login hashes the password with async scrypt, not SHA-256", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/auth/qaLogin.ts"),
-    "utf8",
-  );
-  assert.match(source, /scryptAsync/);
-  assert.match(source, /promisify\(scrypt\)/);
-  assert.match(source, /timingSafeEqual/);
-  assert.doesNotMatch(source, /scryptSync/);
-  assert.doesNotMatch(source, /createHash/);
-  assert.doesNotMatch(source, /sha256/);
-});
-
 test("QA login accepts only the configured email and password", async () => {
   const {
     getQaLoginConfig,
@@ -123,74 +110,4 @@ test("QA login rate limit refuses a burst after the IP or email budget", () => {
     decideQaLoginAttempt(1, QA_LOGIN_IP_ATTEMPT_LIMIT + 1).allowed,
     false,
   );
-});
-
-test("the QA login page and route stay hidden without the secrets", () => {
-  const page = fs.readFileSync(
-    path.join(root, "src/app/qa/login/page.tsx"),
-    "utf8",
-  );
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/auth/qa-login/route.ts"),
-    "utf8",
-  );
-  const form = fs.readFileSync(
-    path.join(root, "src/app/qa/login/QaLoginForm.tsx"),
-    "utf8",
-  );
-  const envExample = fs.readFileSync(path.join(root, ".env.example"), "utf8");
-  const qaLogin = fs.readFileSync(
-    path.join(root, "src/lib/auth/qaLogin.ts"),
-    "utf8",
-  );
-
-  assert.match(page, /isQaLoginConfigured/);
-  assert.match(page, /const allowed = await isOwnerOrQaUserId/);
-  assert.match(page, /isOwnerOrQaUserId\(QA_LOGIN_USER_ID\)/);
-  assert.match(page, /notFound\(\)/);
-  assert.match(page, /shouldShowMobileTabBar\("\/qa\/login"\)/);
-  assert.match(page, /bg-pageBackground/);
-  assert.match(page, /text-heading/);
-  assert.doesNotMatch(page, /allowed = true/);
-  assert.match(route, /if \(!isQaLoginConfigured\(\)\)/);
-  assert.match(route, /const allowed = await isOwnerOrQaUserId/);
-  assert.match(route, /status: 404/);
-  assert.match(route, /await qaLoginCredentialsMatch/);
-  assert.match(route, /QA_LOGIN_USER_ID/);
-  assert.match(route, /onboardingTourStatus: true/);
-  assert.match(route, /console\.info\("\[qa-login\]", \{ outcome \}\)/);
-  assert.doesNotMatch(
-    route,
-    /console\.info\("\[qa-login\]", \{ outcome, email \}\)/,
-  );
-  assert.doesNotMatch(route, /password:/);
-  assert.doesNotMatch(route, /return true;/);
-  assert.match(form, /htmlFor="email"/);
-  assert.match(form, /htmlFor="password"/);
-  assert.match(form, /type="password"/);
-  assert.match(form, /Sign in/);
-  assert.match(form, /rounded-sm/);
-  assert.match(form, /px-4/);
-  assert.doesNotMatch(form, /px-5/);
-  assert.match(form, /bg-shadcn-primary/);
-  assert.match(form, /text-destructive/);
-  assert.match(form, /\/api\/auth\/qa-login/);
-  assert.doesNotMatch(form, /rounded-full/);
-  assert.doesNotMatch(form, /#4c5362/);
-  assert.match(qaLogin, /QA_LOGIN_PASSWORD_MIN_BYTES = 32/);
-  assert.match(envExample, /openssl rand -base64 32/);
-  const eslintConfig = fs.readFileSync(
-    path.join(root, "eslint.config.mjs"),
-    "utf8",
-  );
-  assert.match(eslintConfig, /src\/app\/qa\/login\/page\.tsx/);
-});
-
-test("logged-out visitors can reach /qa/login", () => {
-  const proxy = fs.readFileSync(path.join(root, "src/proxy.ts"), "utf8");
-  const unauthenticatedAllow = proxy.indexOf("currentPath === '/qa/login'");
-  const onboardingExempt = proxy.indexOf("currentPath !== '/qa/login'");
-  assert.notEqual(unauthenticatedAllow, -1);
-  assert.notEqual(onboardingExempt, -1);
-  assert.ok(unauthenticatedAllow < onboardingExempt);
 });

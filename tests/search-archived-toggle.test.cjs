@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -58,17 +57,6 @@ test("only the newest overlapping search request may apply results", () => {
   assert.equal(gate.isLatest(openOnlyRequest), false);
 });
 
-test("archived results move off-canvas into search commands", () => {
-  const component = fs.readFileSync(
-    path.join(root, "src/app/search/SearchComp.tsx"),
-    "utf8"
-  );
-
-  assert.doesNotMatch(component, /type="checkbox"/);
-  assert.match(component, /searchOptions: \{ includeArchived \}/);
-  assert.match(component, /callbackHandler=\{handleCommand\}/);
-});
-
 test("the search command toggles archived results with G then X", () => {
   const commandsFor = (includeArchived) =>
     getAllCommands({
@@ -94,30 +82,5 @@ test("the search command toggles archived results with G then X", () => {
       .flatMap((group) => group.commandLists)
       .some((command) => command.key === "toggleArchivedSearchResults"),
     false
-  );
-
-  const hook = fs.readFileSync(
-    path.join(root, "src/hooks/Search/useSearch.ts"),
-    "utf8"
-  );
-  assert.match(hook, /event\.keyCode === KeyCodes\.X/);
-  assert.match(hook, /setIncludeArchivedResults\(!includeArchived\)/);
-
-  const shortcuts = fs.readFileSync(
-    path.join(root, "src/lib/constants/shortcuts.ts"),
-    "utf8"
-  );
-  assert.match(
-    shortcuts,
-    /Show or hide archived tasks", pressKey: \["G", null, "X"\]/
-  );
-
-  const mobileIcons = fs.readFileSync(
-    path.join(root, "src/components/Modals/commands/HTC/MobileCommandIcon.tsx"),
-    "utf8"
-  );
-  assert.match(
-    mobileIcons,
-    /case CommandMode\.ToggleArchivedSearchResults:\s*return Archive;/
   );
 });

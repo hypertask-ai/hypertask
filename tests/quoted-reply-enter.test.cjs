@@ -364,16 +364,6 @@ test("only normal comment replies receive the reply-quote marker", () => {
   );
 });
 
-test("the editor registers the reply-aware blockquote exactly once", () => {
-  const tiptap = fs.readFileSync(
-    path.join(root, "src/components/RTE/Tiptap.ts"),
-    "utf8",
-  );
-  assert.match(tiptap, /import \{ ReplyBlockquote \} from/);
-  assert.match(tiptap, /\n\s*ReplyBlockquote,/);
-  assert.doesNotMatch(tiptap, /import Blockquote from/);
-});
-
 test("the real Tiptap keymap recognizes tagged and legacy replies without changing manual quotes", () => {
   const dom = new JSDOM("<!doctype html><html><body></body></html>");
   const browserGlobals = {

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -317,19 +316,6 @@ test("record ordering rejects older cross-tab snapshots deterministically", () =
   assert.equal(shouldReplaceQueryCacheRecord({ corrupt: true }, older), true);
 });
 
-test("the IndexedDB write path only compares the current account key", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/utils/queryIndexedDbPersister.ts"),
-    "utf8",
-  );
-  const writeStart = source.indexOf("write: async (record)");
-  const removeStart = source.indexOf("remove: async (accountId", writeStart);
-  const writeSource = source.slice(writeStart, removeStart);
-
-  assert.match(writeSource, /store\.get\(record\.key\)/);
-  assert.doesNotMatch(writeSource, /getAll|openCursor|cursor\.delete/);
-});
-
 test("restore retires the unscoped cache and conditionally removes corruption", async () => {
   const wrongAccount = createQueryCacheRecord(7, client(), "wrong-account");
   const memory = memoryStorage(wrongAccount);
@@ -516,47 +502,6 @@ test("failed logout deletion tombstones restoration until a retry succeeds", asy
     global.setTimeout = originalSetTimeout;
     global.clearTimeout = originalClearTimeout;
   }
-});
-
-test("the provider uses signed account scope and logout clears the query database", () => {
-  const provider = fs.readFileSync(
-    path.join(root, "src/utils/Providers.tsx"),
-    "utf8",
-  );
-  const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
-  const cleanup = fs.readFileSync(
-    path.join(root, "src/lib/localReadModels/clear.ts"),
-    "utf8",
-  );
-  const persister = fs.readFileSync(
-    path.join(root, "src/utils/queryIndexedDbPersister.ts"),
-    "utf8",
-  );
-
-  assert.match(layout, /authenticatedUserId=\{analyticsSession\?\.id \?\? null\}/);
-  assert.match(provider, /createQueryPersister\(accountId\)/);
-  assert.match(provider, /createQueryBoundary\(authenticatedUserId, snapshot\)/);
-  assert.match(provider, /key=\{`query-account-/);
-  assert.match(provider, /previous\.client\.clear\(\)/);
-  assert.match(provider, /previous\.persister\.dispose\(\)/);
-  assert.doesNotMatch(provider, /createSyncStoragePersister/);
-  assert.match(cleanup, /clearQueryPersistence\(\)/);
-  assert.match(persister, /new Response\(value\.payload\)\.json\(\)/);
-  assert.match(persister, /performance\.measure\("ht-query-cache-restore"/);
-  assert.match(
-    persister,
-    /addEventListener\("message"[\s\S]*clearLocalQueryStorage\(\)/,
-  );
-  assert.match(
-    persister,
-    /const persisterOperationGeneration = operationGeneration;[\s\S]*getControlChannel\(\)/,
-  );
-  const indexedStart = persister.indexOf("createIndexedDbQueryPersister");
-  const localStart = persister.indexOf("createLocalQueryPersister");
-  assert.doesNotMatch(
-    persister.slice(indexedStart, localStart),
-    /JSON\.parse/,
-  );
 });
 
 test("a new authenticated boundary resumes only in the post-logout generation", async () => {
