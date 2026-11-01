@@ -107,6 +107,11 @@ const nextConfig = {
     webpackBuildWorker: true,
     webpackMemoryOptimizations: true,
     cpus: 1,
+    // Turbopack keeps its cache in one native process that the 4096 MB Node
+    // heap does not cap, so 'auto' eviction let the 8 GB build machine die with
+    // exit 137 on the first Turbopack production build (HTPR-8244, dpl
+    // 92NFG73VbLGkAHiUV5b3umZVaDaB). 'full' evicts under pressure.
+    turbopackMemoryEviction: "full",
     // The smoke build runs server tracing beside the client compiler to stay
     // below ten minutes. Production keeps tracing sequential to limit memory.
     parallelServerBuildTraces: process.env.CORE_APP_SMOKE === "true",

@@ -63,3 +63,24 @@ Every production deployment from 17:14 on died the same way as the two in the 5 
 The 5120 MB cap therefore no longer describes the build. Vercel's standard build machine has 8 GB, and the compiler heap is only one term in the process tree: the parent Next process, native webpack and minifier memory, and the single page worker share the rest. A silent SIGKILL rather than "JavaScript heap out of memory" says the container, not V8, hit the ceiling, so the heap was still inside its cap while the tree was not.
 
 The cap is now 4096 MB, half the machine, so native memory and the parent process keep the other half. `tests/build-memory-config.test.cjs` fails if the cap ever rises above half the build machine again. If this build reports "Reached heap limit", the compiler genuinely needs more than 4 GB, and the next step is the paid Enhanced Build Machine, which is Valentin's decision.
+
+## Turbopack cache eviction (2026-11-01)
+
+Ticket: https://app.hypertask.ai/detail/project-15/8244
+
+The build moved to Turbopack in HTPR-8245. The first Turbopack production deployment,
+`ea23ee008` (deployment `dpl_92NFG73VbLGkAHiUV5b3umZVaDaB`), died with
+`Command "npm run build" exited with 137` and Vercel's Out of Memory event during
+"Creating an optimized production build", while the same build finished in 105 s on a
+CI runner and in both browser halves.
+
+`experimental.turbopackMemoryEviction: "full"` is the lever that fits this build. The
+4096 MB cap above limits V8 in the Next process; Turbopack's own cache lives in a
+separate native process that the cap does not touch, and the default `"auto"` eviction
+did not release it early enough for an 8 GB machine. `"full"` evicts as the build
+progresses. `tests/build-memory-config.test.cjs` fails if that setting or the heap cap
+is dropped.
+
+If a Turbopack build still dies with 137 at this setting, the next levers are turning
+`productionBrowserSourceMaps` off (PostHog would lose its maps) and the paid Enhanced
+Build Machine, which is Valentin's decision.
