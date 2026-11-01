@@ -1,7 +1,7 @@
 {
   "counts": {
-    "testFiles": 1808,
-    "behaviour": 1603,
+    "testFiles": 1809,
+    "behaviour": 1604,
     "sourceText": 7,
     "mixed": 198,
     "allowlisted": 200,
@@ -16,12 +16,12 @@
     "run": 41250991814,
     "sha": "0bf3a774e",
     "measuredSeconds": 4467.3,
-    "untimedFiles": 872,
+    "untimedFiles": 873,
     "classes": {
       "behaviour": {
-        "files": 1603,
+        "files": 1604,
         "timed": 829,
-        "untimed": 774,
+        "untimed": 775,
         "seconds": 3473.3,
         "share": 77.7
       },
