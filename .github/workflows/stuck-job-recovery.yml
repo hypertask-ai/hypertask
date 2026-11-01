@@ -6,8 +6,8 @@ name: Stuck Job Recovery
 # recorded completed_at 3601-3604 s later, which made one push 68.0 minutes for
 # 8.0 minutes of work. Nothing inside the job can un-stick it, so this workflow
 # caps the wait: a pull-request run whose finished job has taken no step for
-# three minutes is cancelled, and once that cancellation settles the same sweep
-# re-runs its failed jobs so a second attempt reports on a fresh runner. Only a
+# forty-five seconds is cancelled, and once that cancellation settles the same
+# sweep re-runs its failed jobs so a second attempt reports on a fresh runner. Only a
 # run this sweep cancelled may be re-run, and a run holding a real failure is
 # never touched. Production push runs are reported in the job summary and never
 # cancelled, because a push run verifies a deploy.
@@ -16,11 +16,22 @@ name: Stuck Job Recovery
 # 2026-10-29T00:00Z GitHub delivered 17 of the 349 scheduled runs
 # feature-flag-gate asks for, 16 of 87 for the hourly ux-signoff-gate, and 33 of
 # about 1049 for prod-health's five-minute crons, so this ten-minute sweep was a
-# sweep every few hours and the three-minute rule almost never got to fire. Each
-# sweep now waits three minutes and dispatches the next one, and the schedule
-# only restarts a chain that died. One chain link is always either sweeping or
-# waiting, which costs one of the twenty parallel jobs and only free hosted
-# minutes, because this repository is public.
+# sweep every few hours and the rule almost never got to fire. Each sweep now
+# waits and dispatches the next one, and the schedule only restarts a chain that
+# died. One chain link is always either sweeping or waiting, which costs one of
+# the twenty parallel jobs and only free hosted minutes, because this repository
+# is public.
+#
+# HYCI-73. The rule and the tick add up, so a three-minute rule on a three-minute
+# tick still left 184-411 s of idle on the nine real stuck jobs of run
+# 41286623269. The rule is forty-five seconds now, and the tick is cheap: one link
+# sweeps every thirty seconds for eight ticks and then dispatches the next link,
+# so runner startup is paid once per eight ticks instead of once per tick, and
+# discovery reads only in-progress runs in one request. Stuck idle is 45 s of rule
+# plus at most one 45-second tick plus a cancel that settles in a few seconds,
+# which is under the two-minute target. A forty-five-second rule is safe on this
+# repository: 216 real finished jobs of 30 pull-request runs closed 0-4 s after
+# their last step, median 2 s, so no healthy job is ever quiet that long.
 on:
   schedule:
     - cron: '*/10 * * * *'
@@ -38,10 +49,10 @@ jobs:
   recover:
     name: stuck-job-recovery
     runs-on: ubuntu-latest
-    # The sweep itself finishes in about a minute; the rest is the three-minute
-    # wait before the next link is dispatched, so a link that overruns the chain
-    # wait is still a chain link and not a lost tick.
-    timeout-minutes: 10
+    # Eight ticks of a thirty-second gap and a fifteen-second sweep are about six
+    # minutes, plus a cancel that does not settle in one tick; the rest is slack so
+    # an overrunning link is still a chain link and not a lost tick.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -58,7 +69,7 @@ jobs:
       # (prod-health.yml). Without it the store cannot be read, and a sweep with no
       # store cancels nothing: a cancelled run nobody can finish is worse than a
       # slow one.
-      - name: Cancel or re-run stuck runs, then start the next sweep
+      - name: Cancel or re-run stuck runs for eight ticks, then start the next sweep
         env:
           GH_TOKEN: ${{ github.token }}
           STORE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}

@@ -1399,7 +1399,7 @@ needle matched none of them, so the retry never ran.
 `tests/browser-smoke-workflow.test.cjs` runs every guard against the failure
 log of a real run, `tests/fixtures/next-font-build-failure.log`.
 
-## Stuck jobs that hold a check for an hour (HYCI-66, HYCI-71)
+## Stuck jobs that hold a check for an hour (HYCI-66, HYCI-71, HYCI-73)
 
 On 2026-11-01 one production push took 68.0 minutes for 8.0 minutes of work.
 Nine jobs of run [41286623269](https://github.com/hypertask-ai/hypertask/actions/runs/41286623269)
@@ -1414,12 +1414,11 @@ of ours caused or can prevent it.
 
 `.github/workflows/stuck-job-recovery.yml` caps the wait instead.
 `.github/scripts/ci-stuck-jobs.cjs` reads the active pull-request runs and cancels
-one that has a job with every step completed and no step for three minutes, waits
-for that cancellation to settle, and then re-runs the run's failed jobs, so a
-second attempt reports normally on a fresh runner and the push ends about 18
-minutes after it starts instead of 68.0: 11 minutes to finish the work, 3-7
-minutes of capped idle (the three-minute rule on a chain link that sweeps about
-every four), then a rerun of the same 306-478 s jobs.
+one that has a job with every step completed and no step for forty-five seconds,
+waits for that cancellation to settle, and then re-runs the run's failed jobs, so
+a second attempt reports normally on a fresh runner and the push ends about 13
+minutes after it starts instead of 68.0: 11 minutes to finish the work, under two
+minutes of capped idle, then a rerun of the same 306-478 s jobs.
 
 The tick is the part HYCI-71 fixed. A cron is not a tick on a repository this
 busy: in the 87 hours from 2026-10-29T00:00Z GitHub delivered 17 of the 349
@@ -1427,9 +1426,9 @@ scheduled runs `feature-flag-gate` asks for on a 15-minute cron, 16 of 87 for th
 hourly `ux-signoff-gate`, and 33 of about 1049 for `prod-health`'s five-minute
 crons, so the ten-minute sweep HYCI-66 shipped was a sweep every few hours and its
 eight-minute rule almost never fired: a job whose last step is older than the
-thirty-minute read window is not even read. Each sweep therefore waits three
-minutes and dispatches the next one itself with `workflow_dispatch`, which is not
-throttled, and the cron plus a manual dispatch only restart a chain that died. The
+thirty-minute read window is not even read. Each sweep therefore waits and
+dispatches the next one itself with `workflow_dispatch`, which is not throttled,
+and the cron plus a manual dispatch only restart a chain that died. The
 dispatch is skipped while another link of the workflow is queued or running, so a
 backstop landing on a live chain never starts a second one, and a scheduled or
 pushed run stands down when a link is already in flight instead of sweeping twice.
@@ -1437,6 +1436,29 @@ One link is always either sweeping or waiting, which costs one of the twenty
 parallel jobs and only free hosted minutes, because the repository is public. A
 chain that cannot read its own run list, or whose dispatch is refused, says so and
 stops; the next scheduled run restarts it.
+
+HYCI-73 is the rest of the target. The rule and the tick add up: a three-minute
+rule on a chain link that started eight seconds of setup and then waited three
+minutes meant 184-411 s of idle on the nine real stuck jobs of run 41286623269,
+and the ticket asked for two minutes. Both terms are now short. The rule is
+forty-five seconds, one link sweeps every thirty seconds for eight ticks and only
+then hands the tick to the next link, and discovery reads only in-progress runs,
+so a sweep is one run-list request instead of five. A tick therefore costs a
+thirty-second gap and about fifteen seconds of API work, runner startup is paid
+once per eight ticks instead of once per tick, and a stuck job pays 45 s of rule
+plus at most one 45-second tick plus a cancel that settles in a few seconds: 94 s
+typically and 110 s at the worst settle on the same nine jobs, against 396 s
+before, which is under the two-minute target and about a third of what the push
+paid. A tick that throws is reported and the loop keeps ticking, because one bad
+sweep is forty-five seconds and not a dead chain.
+
+Forty-five seconds is safe because a job is only ever judged once every one of its
+steps has completed: a healthy job in progress has an unfinished step, so it is
+never touched whatever the rule. On the 216 real finished jobs of the thirty most
+recent pull-request runs, `completed_at` came 0-4 s after the last step, median
+2 s, so nothing healthy is ever quiet that long. A job whose post-step work is not
+a step of its own, such as a cache save, is the one shape a tight rule can catch;
+the same sweep re-runs it on a fresh runner and the undo is one revert.
 
 The sweep re-runs only a run it cancelled itself: the cancel call is the
 provenance, so a run cancelled by a person or by a superseded push is history and
@@ -1494,9 +1516,13 @@ the job summary and never cancelled, because it verifies a deploy.
 The decision is the pure function `decide()`, with one case per rule in
 `tests/ci-stuck-jobs.test.cjs`: a finished job on a pull-request run is
 cancelled, a job still running a step is left alone, a job quiet for under three
-minutes is not yet stuck and one quiet for four is, `chain()` waits and then
-dispatches the next link and never starts a second chain while one is queued or
-running, `sweepInFlight()` never counts the sweep's own run, and a chain that
+seconds is not yet stuck and one quiet for forty-five is, `tick()` sweeps its
+eight ticks and waits the gap between them and keeps ticking when one throws,
+`handOff()` dispatches the next link and never starts a second chain while one is
+queued or running, the run list is read with `status=in_progress`, the worst stuck
+idle computed from the shipped constants is under the two-minute budget, and the
+nine real stuck jobs come out under it, together with `sweepInFlight()` never
+counting the sweep's own run, and a chain that
 cannot read its run list or whose dispatch is refused reports that it stopped, a push run is reported only, a cancelled run recovery
 did not cancel is never re-run, a run holding a genuine failure or a failed step is
 never touched, `apply()` refuses the rerun when a failure appears during the
