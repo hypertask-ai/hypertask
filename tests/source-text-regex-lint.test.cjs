@@ -107,6 +107,15 @@ test("the allowlist equals the detected offenders exactly", () => {
   assertExactAllowlist(allowlist, currentOffenders);
 });
 
+test("the allowlist declares the number of paths it lists", () => {
+  const declared = JSON.parse(fs.readFileSync(allowlistPath, "utf8"));
+  assert.equal(
+    declared.count,
+    declared.allowlist.length,
+    "Regenerate with scripts/generate-source-text-test-allowlist.mjs so count matches the paths.",
+  );
+});
+
 test("the allowlist may only shrink against the production allowlist", () => {
   if (baseAllowlist === null) return;
   const { added } = allowlistDiff(allowlist, baseAllowlist);
