@@ -148,6 +148,22 @@ premerge_evidence:
   production_enforcement: production-required-checks-ruleset
   activation_prerequisite: statuses_seeded_on_all_open_production_pull_requests
 
+ci_failure_log:
+  ticket: https://app.hypertask.ai/detail/project-11514/17
+  workflow: .github/workflows/ci-failure-log.yml
+  script: scripts/ci-failure-log.mjs
+  runs_on: ubuntu-latest
+  required: false
+  triggers: [workflow_run, schedule, workflow_dispatch]
+  log_branch: ci-failure-log
+  log_path: ci-failure-log.jsonl
+  group_interval_days: 3
+  min_lines_to_file: 2
+  board: 11514
+  labels: [CI, Hypertask CI]
+  reuses: [scripts/ci-failure-census.mjs, scripts/flaky-log.mjs]
+  cost: zero
+
 ship_scripts_tests:
   context: ship-scripts-tests
   workflow: .github/workflows/ship-scripts-tests.yml

@@ -1,0 +1,116 @@
+{
+ "workflow": "jobs:\n  test:\n    name: ci-tests\n  browser:\n    name: browser-smoke\n  contract:\n    name: mcp-cli-api-contract\n    needs: [browser]\n",
+ "runs": [
+  {
+   "id": 101,
+   "event": "pull_request",
+   "head_branch": "ci-runner-5/hyci-40",
+   "head_sha": "abc101",
+   "path": ".github/workflows/ci-tests.yml",
+   "run_attempt": 1,
+   "conclusion": "failure",
+   "created_at": "2026-10-20T10:00:00Z",
+   "pull_requests": [
+    {
+     "number": 3001
+    }
+   ]
+  },
+  {
+   "id": 102,
+   "event": "pull_request",
+   "head_branch": "runner-7/htpr-8000",
+   "head_sha": "abc102",
+   "path": ".github/workflows/ci-tests.yml",
+   "run_attempt": 2,
+   "conclusion": "failure",
+   "created_at": "2026-10-21T10:00:00Z",
+   "pull_requests": [
+    {
+     "number": 3002
+    }
+   ]
+  },
+  {
+   "id": 103,
+   "event": "pull_request",
+   "head_branch": "runner-2/yper4-900",
+   "head_sha": "abc103",
+   "path": ".github/workflows/ci-tests.yml",
+   "run_attempt": 1,
+   "conclusion": "failure",
+   "created_at": "2026-10-22T10:00:00Z",
+   "pull_requests": [
+    {
+     "number": 3003
+    }
+   ]
+  }
+ ],
+ "jobs": {
+  "101": [
+   {
+    "id": 11,
+    "name": "ci-tests",
+    "conclusion": "failure",
+    "steps": [
+     {
+      "name": "Test",
+      "conclusion": "failure",
+      "started_at": "2026-10-20T10:00:00Z",
+      "completed_at": "2026-10-20T10:05:00Z"
+     }
+    ]
+   }
+  ],
+  "102": [
+   {
+    "id": 21,
+    "name": "ci-tests",
+    "conclusion": "failure",
+    "steps": [
+     {
+      "name": "Test",
+      "conclusion": "failure",
+      "started_at": "2026-10-21T10:00:00Z",
+      "completed_at": "2026-10-21T10:05:00Z"
+     }
+    ]
+   }
+  ],
+  "103": [
+   {
+    "id": 31,
+    "name": "browser-smoke",
+    "conclusion": "failure",
+    "steps": [
+     {
+      "name": "Browser test",
+      "conclusion": "failure",
+      "started_at": "2026-10-22T10:00:00Z",
+      "completed_at": "2026-10-22T10:05:00Z"
+     }
+    ]
+   },
+   {
+    "id": 32,
+    "name": "mcp-cli-api-contract",
+    "conclusion": "failure",
+    "steps": [
+     {
+      "name": "Publish result",
+      "conclusion": "failure",
+      "started_at": "2026-10-22T10:00:00Z",
+      "completed_at": "2026-10-22T10:05:00Z"
+     }
+    ]
+   }
+  ]
+ },
+ "logs": {
+  "11": "2026-10-20T10:01:00Z not ok 3 - expected comment\n2026-10-20T10:05:00Z ##[error]Process completed with exit code 1.",
+  "21": "2026-10-21T10:01:00Z AssertionError: expected 2, got 1\n2026-10-21T10:05:00Z ##[error]Process completed with exit code 1.",
+  "31": "2026-10-22T10:01:00Z Error: layout shifted\n2026-10-22T10:05:00Z ##[error]Process completed with exit code 1.",
+  "32": "2026-10-22T10:01:00Z ##[error]browser-smoke did not pass"
+ }
+}
