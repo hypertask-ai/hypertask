@@ -42,7 +42,18 @@ function assertParallelChecks(ci) {
   assert.equal(checks.if, "needs.ci-prepare.outputs.run_tests == 'true' || needs.ci-prepare.outputs.boundary_needed == 'true'");
   assert.equal(checks["runs-on"], "ubuntu-latest");
   assert.deepEqual(checks.permissions, { contents: "read" });
-  assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test"]);
+  assert.deepEqual(ci.jobs["ci-tests"].needs, ["ci-prepare", "ci-checks", "ci-test", "ci-fixtures"]);
+  const fixtures = ci.jobs["ci-fixtures"];
+  assert.ok(fixtures, "fixture regressions need their own lane");
+  assert.equal(fixtures.needs, "ci-prepare");
+  assert.equal(
+    fixtures.if,
+    "needs.ci-prepare.outputs.stress_fixtures == 'true' || needs.ci-prepare.outputs.handoff_fixture == 'true'",
+  );
+  for (const name of ["Stress cold-board query fixtures", "Fixture handoff in one process"]) {
+    assert.ok(!ci.jobs["ci-prepare"].steps.some((step) => step.name === name), `${name} blocks ci-prepare`);
+    assert.equal(fixtures.steps.filter((step) => step.name === name).length, 1, name);
+  }
 
   const launchers = checks.steps.filter((step) => step.name === launcherName);
   assert.equal(launchers.length, 1, "one launcher runs every static gate");
@@ -157,7 +168,7 @@ test("static gates run together, so a serialised gate fails the contract", () =>
   })), "a TypeScript or lint gate lost");
 });
 
-function publish(ci, prepare, runTests, checks, shards, proof, boundaryNeeded = "false") {
+function publish(ci, prepare, runTests, checks, shards, proof, boundaryNeeded = "false", fixtures = "skipped") {
   const step = ci.jobs["ci-tests"].steps.find((step) => step.name === "Publish ci-tests result");
   const values = {
     "needs.ci-prepare.result": prepare,
@@ -165,6 +176,7 @@ function publish(ci, prepare, runTests, checks, shards, proof, boundaryNeeded = 
     "needs.ci-prepare.outputs.boundary_needed": boundaryNeeded,
     "needs.ci-checks.result": checks,
     "needs.ci-test.result": shards,
+    "needs.ci-fixtures.result": fixtures,
     "steps.prove.outcome": proof,
   };
   const command = step.run.replace(/\$\{\{\s*([^}]+?)\s*\}\}/g, (_, expression) => {
@@ -194,6 +206,25 @@ test("static checks and shards share preparation, not a serial dependency", () =
     .find((step) => step.name === "Restore TypeScript cache")
     .with["restore-keys"] += "\n            tsc-pr-${{ runner.os }}-\n";
   assert.throws(() => assertParallelChecks(leakedTypeScriptCache));
+});
+
+test("a fixture regression still fails ci-tests from its own lane", () => {
+  const ci = workflow();
+  assert.equal(publish(ci, "success", "true", "success", "success", "success", "false", "success"), 0);
+  assert.equal(publish(ci, "success", "true", "success", "success", "success", "false", "skipped"), 0);
+  for (const result of ["failure", "cancelled", ""]) {
+    assert.notEqual(
+      publish(ci, "success", "true", "success", "success", "success", "false", result),
+      0,
+      `fixtures ${result}`,
+    );
+  }
+  const serialised = structuredClone(ci);
+  serialised.jobs["ci-prepare"].steps.push(serialised.jobs["ci-fixtures"].steps.at(-1));
+  assert.throws(() => assertParallelChecks(serialised), "a fixture run back in front of every shard");
+  const ungated = structuredClone(ci);
+  delete ungated.jobs["ci-tests"].needs;
+  assert.throws(() => assertParallelChecks(ungated));
 });
 
 test("real summary shell rejects failed, cancelled, skipped or missing static checks", () => {
