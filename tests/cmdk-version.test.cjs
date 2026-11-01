@@ -8,6 +8,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
 const { getNextConfigEnv } = require("next/dist/lib/static-env");
 const { spawnSync } = require("node:child_process");
+const { createRequire } = require("node:module");
 
 const root = path.resolve(__dirname, "..");
 const paletteFile = "src/components/Modals/commands/HTC/commands.tsx";
@@ -117,7 +118,7 @@ function buildConfig(env = {}, gitSha = "a91d448", gitAvailable = true) {
     } };
     throw new Error(`Unexpected config import: ${specifier}`);
   };
-  configRequire.resolve = require.resolve;
+  configRequire.resolve = createRequire(path.join(root, "next.config.js")).resolve;
   new Function("require", "module", "process", "__dirname", read("next.config.js"))(
     configRequire, configModule, { env, execPath: process.execPath }, root,
   );
