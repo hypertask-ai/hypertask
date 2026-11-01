@@ -78,7 +78,34 @@ const splitTicketGates = (source, ticket, cwd, accept) => {
   }
   return { moved: moved.join('\n').trim(), kept: kept.join('\n') };
 };
-await withFileLock(state, ledger, () => {
+const stateDir = `${root}/.unlazy`;
+// A legacy copy is read and removed under its own lock, so a session that is mid-ticket cannot
+// edit a gate file between the copy and the removal. Every run locks the ledger first and the
+// sources in sorted order, so two runs never wait on each other in a circle.
+const legacySources = () => {
+  let sessions = [];
+  try { sessions = readdirSync(stateDir).filter((name) => name.startsWith('s-')).sort(); } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
+  const files = [];
+  for (const name of sessions) {
+    const project = `${stateDir}/${name}`;
+    files.push(`${project}/GATES.md`);
+    try {
+      for (const extra of readdirSync(`${project}/gates`).filter((file) => file.endsWith('.md')).sort()) {
+        files.push(`${project}/gates/${extra}`);
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  return files;
+};
+const withSourceLocks = async (files, fn) => {
+  if (!files.length) return fn();
+  return withFileLock(state, files[0], () => withSourceLocks(files.slice(1), fn));
+};
+const apply = async () => {
   const binding = `${dirname(ledger)}/session`;
   const bound = read(binding).trim();
   const handedOver = !!bound && bound !== session.trim();
@@ -121,10 +148,12 @@ await withFileLock(state, ledger, () => {
   // A ledger written before this change sits inside the project, where a session that is already
   // mid-ticket would lose its gates. Adopt this ticket's gates from every old session folder, then
   // delete what is left: the project must stay clean, and a copied file can still leak.
-  const stateDir = `${root}/.unlazy`;
   const pendingRemovals = [];
+  const adoptedExtras = [];
   const touched = [];
-  const adoptProjectLedger = () => {
+  // Read only: every check below runs before the first write, so a refused move cannot leave a
+  // half-migrated gate file behind for the retry to copy a second time.
+  const planProjectLedger = () => {
     const source = (file) => {
       try { return readStableRegularFile(file, { root }); } catch (error) {
         if (error.code === 'ENOENT') return '';
@@ -144,7 +173,9 @@ await withFileLock(state, ledger, () => {
       }
       // The generated gates are rewritten below from this checkout, so the old copy only has to
       // prove it belongs to this repository before it goes.
-      const main = splitTicketGates(source(`${project}/GATES.md`), ticket, root, (gate) => {
+      const ledgerFile = `${project}/GATES.md`;
+      const ledgerText = source(ledgerFile);
+      const main = splitTicketGates(ledgerText, ticket, root, (gate) => {
         if (!generated(gate)) return false;
         if (repoOf(gate) !== currentRepo) {
           throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
@@ -152,17 +183,14 @@ await withFileLock(state, ledger, () => {
         return true;
       });
       let adopted = main.moved ? 1 : 0;
-      if (main.moved) pendingRemovals.push([`${project}/GATES.md`, main.kept]);
+      if (main.moved) pendingRemovals.push({ file: ledgerFile, kept: main.kept, snapshot: ledgerText });
       for (const extra of extras) {
         const file = `${extraDir}/${extra}`;
-        const split = splitTicketGates(source(file), ticket, root, () => true);
+        const extraText = source(file);
+        const split = splitTicketGates(extraText, ticket, root, () => true);
         if (!split.moved) continue;
-        // The home copy is written before the project one goes: a failed write must never be the
-        // only copy of a gate a person wrote by hand.
-        const dest = `${dirname(ledger)}/gates/${extra}`;
-        const existing = read(dest);
-        writeAtomic(dest, `${existing ? `${existing.replace(/\n+$/, '')}\n\n` : ''}${split.moved}\n`, { root: state });
-        pendingRemovals.push([file, split.kept]);
+        adoptedExtras.push({ dest: `${dirname(ledger)}/gates/${extra}`, moved: split.moved });
+        pendingRemovals.push({ file, kept: split.kept, snapshot: extraText });
         adopted += 1;
       }
       if (!adopted) continue;
@@ -170,11 +198,33 @@ await withFileLock(state, ledger, () => {
       process.stderr.write(`ship-gates: ${ticket} ledger adopted from ${project}\n`);
     }
   };
-  adoptProjectLedger();
+  // The home copy is written before the project one goes: a failed write must never be the only
+  // copy of a gate a person wrote by hand. A gate is copied home once, so a retry after a refused
+  // move replaces the same gate id instead of appending a second copy of it.
+  const mergeGates = (existing, incoming) => {
+    if (!existing) return incoming;
+    const arriving = new Set(parseGates(incoming, { requireGates: false }).gates.map((gate) => gate.id));
+    if (!arriving.size) return existing;
+    const kept = splitTicketGates(existing, ticket, root, (gate) => arriving.has(gate.id)).kept
+      .replace(/^\n+/, '').replace(/\n+$/, '');
+    return kept ? `${kept}\n\n${incoming}` : incoming;
+  };
+  const writeAdoptedExtras = () => {
+    for (const { dest, moved } of adoptedExtras) writeAtomic(dest, `${mergeGates(read(dest), moved)}\n`, { root: state });
+  };
   // Only once the ticket's gates live in the home folder is the project copy dropped, together
   // with the session binding a legacy ledger kept beside it.
   const pruneProjectLedgers = () => {
-    for (const [file, kept] of pendingRemovals) {
+    for (const { file, kept, snapshot } of pendingRemovals) {
+      let current = '';
+      try { current = readStableRegularFile(file, { root }); } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      // A file that changed after its snapshot belongs to whoever wrote it now.
+      if (current !== snapshot) {
+        process.stderr.write(`ship-gates: ${file} changed while its gates were adopted; left in place\n`);
+        continue;
+      }
       if (/^- \[[ xX]\] /m.test(kept)) writeAtomic(file, `${kept.replace(/\n+$/, '')}\n`, { root });
       else unlinkSync(file);
     }
@@ -194,6 +244,7 @@ await withFileLock(state, ledger, () => {
       }
     }
   };
+  planProjectLedger();
   // The ticket owns the ledger, so a later session may resume it from its own worktree. Those
   // gates run where that session works, but only when the session asks for the move: an edited
   // CWD is never re-approved by accident.
@@ -242,10 +293,12 @@ await withFileLock(state, ledger, () => {
     if (doc.gates.some((gate) => gate.id === id)) continue;
     text += `\n- [ ] ${id}: ${title}\n  CHECK: ${envPrefix}${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
   }
-  writeAtomic(binding, session + '\n', { root: state });
+  writeAdoptedExtras();
   writeAtomic(ledger, text, { root: state });
+  writeAtomic(binding, session + '\n', { root: state });
   pruneProjectLedgers();
-});
+};
+await withFileLock(state, ledger, () => withSourceLocks(legacySources(), apply));
 JS
 status=0
 node "$U/gate-check.mjs" --approve "$L" --root "$(dirname "$L")" >&2 || status=$?
