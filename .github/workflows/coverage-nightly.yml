@@ -27,6 +27,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.sha }}
+          # The parent commit is the allowlist ceiling this run compares against.
+          fetch-depth: 2
           persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -68,6 +70,11 @@ jobs:
         env:
           NODE_V8_COVERAGE: coverage/raw
           HT_REQUIRE_PG_TESTS: "1"
+          # A nightly tests one committed SHA for up to an hour. Production's
+          # allowlist can shrink meanwhile (HYCI-2 batches), which turned these
+          # tests red on a tree that was green when it merged (HYCI-30). Compare
+          # against the commit this run landed on instead of a moving branch.
+          SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.sha }}^
         run: npm test
 
       - name: Build report-only coverage baseline
