@@ -1091,5 +1091,14 @@ an already-open rail, and a flyout row re-renders under the pointer because its
 [run 41244897378](https://github.com/hypertask-ai/hypertask/actions/runs/41244897378)
 the click landed, the rail closed through the row's own `setShowBoardManager(false)`,
 and the URL still named the board being viewed. The switch now presses the shortcut
-only when the rail is closed and retries the click inside a bounded `toPass`, so a
-lost click names the board it could not reach.
+only when the rail is closed, and it retries inside a bounded `toPass` until the
+document really renders the board it asked for.
+
+That last part matters on its own. The rail click is a client-side `pushState`
+(`src/hooks/General/useProjectQuery.ts`), so the board changes when the app applies
+the new URL a render later. On [run 41252735437](https://github.com/hypertask-ai/hypertask/actions/runs/41252735437)
+the URL named the requested board and the desktop half still rendered the previous
+one for the whole 15 s title wait: the app dropped the update and never retried it.
+Clicking the same row again is free and asks the app a second time, so the switch
+asserts the rendered title inside the retry instead of the URL alone. The dropped
+update itself is a product bug, not a test one; it is filed on its own ticket.

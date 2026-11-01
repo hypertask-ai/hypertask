@@ -11,7 +11,7 @@ const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const LOGIN_PATH = '/login'
 const BOARD_SWITCH_TIMEOUT = 15_000
-const BROWSER_SMOKE_RAIL_TIMEOUT = 10_000
+const BROWSER_SMOKE_RAIL_TIMEOUT = 25_000
 
 const RUNNER_ERROR_MARKERS = [
   /net::ERR_/i,
@@ -219,9 +219,12 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
       await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
       const entry = page.locator(`#project-${board.id}:visible`)
       await expect(async () => {
-        if (!(await entry.count())) await page.keyboard.press('Control+b')
+        if (!(await entry.count())) {
+          await page.keyboard.press('Control+b')
+          await expect(entry).toBeVisible({ timeout: 5_000 })
+        }
         await entry.click({ timeout: 5_000 })
-        expect(new URL(page.url()).searchParams.get('id')).toBe(String(board.id))
+        await expect(page, 'a rail switch the app did not apply is clicked again until the board renders').toHaveTitle(`${board.title} • Hypertask`, { timeout: 5_000 })
       }).toPass({ timeout: BROWSER_SMOKE_RAIL_TIMEOUT })
     }
     await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id))

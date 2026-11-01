@@ -43,5 +43,6 @@ single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, whi
 run in parallel, plus the small `browser-smoke` summary job that keeps the
 required context name and fails when either half fails. Both halves build the
 candidate themselves, because a shared build job would serialise them behind it
-and give back the wall clock the split removes. The plan's 20-parallel-job limit
-still holds at 19.
+and give back the wall clock the split removes. With HYCI-42's six test lanes the
+merged count is 21 jobs per push; the extra one is the summary, which becomes ready
+only after both halves finish.

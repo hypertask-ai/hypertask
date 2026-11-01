@@ -386,11 +386,8 @@ esac
 
 test("every required PR smoke spec navigates through the shared readiness gate", async () => {
   const workflow = await source(".github/workflows/ci-tests.yml");
-  const job = workflow.slice(
-    workflow.indexOf("  browser-smoke:"),
-    workflow.indexOf("  production-test-warning:"),
-  );
-  assert.ok(job.length > 0, "the browser smoke job is missing from ci-tests.yml");
+  const job = browserHalves(workflow);
+  assert.ok(job.length > 0, "the browser smoke halves are missing from ci-tests.yml");
   const specs = [...new Set(job.match(/e2e\/smoke\/[\w.-]+\.spec\.ts/g) ?? [])].sort();
   assert.deepEqual(
     specs,
@@ -401,7 +398,7 @@ test("every required PR smoke spec navigates through the shared readiness gate",
       "e2e/smoke/layout-lock.spec.ts",
       "e2e/smoke/prod.spec.ts",
     ],
-    "the browser smoke job runs a spec this gate has never covered (HYCI-41): list it here and take its test from ./lib/appReady",
+    "a browser smoke half runs a spec this gate has never covered (HYCI-41): list it here and take its test from ./lib/appReady",
   );
   const gate = await source("e2e/smoke/lib/appReady.ts");
 
