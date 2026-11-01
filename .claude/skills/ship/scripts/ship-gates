@@ -129,6 +129,10 @@ const legacyTicketGates = () => {
       if (!legacy.includes(`${ticket}.`)) return;
       throw new Error(`ship-gates: ${file} cannot be parsed (${doc.errors.join('; ')}); repair or remove it before the home ledger is written`);
     }
+    // A gate the project session gave up on stays given up on: carrying its block without its
+    // ABANDON would hand the next session work someone already decided not to do.
+    const givenUp = new Map(legacy.split('\n').map((line) => [abandonId(line), line.trim()])
+      .filter(([id]) => id && id.startsWith(`${ticket}.`)));
     for (const block of gateBlocks(legacy)) {
       if (!block.id.startsWith(`${ticket}.`)) continue;
       const gate = doc.gates.find((candidate) => candidate.id === block.id);
@@ -140,7 +144,8 @@ const legacyTicketGates = () => {
         throw new Error(`ship-gates: ${earlier.file} and ${file} both define ${gate.id} with different checks; keep one, or remove one before the home ledger is written`);
       }
       seen.set(gate.id, { file, digest: gateDigest });
-      found.push({ id: block.id, text: block.text, file, digest: gateDigest, cwd: gate.cwd ?? '' });
+      found.push({ id: block.id, text: block.text, file, digest: gateDigest,
+        cwd: gate.cwd ?? '', abandon: givenUp.get(block.id) ?? '' });
     }
   };
   for (const folder of folders) {
@@ -274,7 +279,7 @@ await withFileLock(state, ledger, () => {
     }
     if (add.length) {
       if (!extraText.trim()) extraText = '# Extra gates carried out of the project\n';
-      for (const gate of add) extraText += `\n${gate.text}\n`;
+      for (const gate of add) extraText += `\n${gate.text}\n${gate.abandon ? `${gate.abandon}\n` : ''}`;
       writeAtomic(extrasFile, extraText, { root: state });
     }
     process.stderr.write(`ship-gates: carried ${carried.map((gate) => gate.id).join(', ')} over from ${carried[0].file} into ${extrasFile}\n`);

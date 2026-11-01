@@ -235,6 +235,28 @@ test('a ticket gate left in the project is named on the first home write, then c
   }
 });
 
+test('a gate the project session gave up on is carried over with its ABANDON', needsUnlazy, () => {
+  const f = fixture();
+  const legacy = path.join(f.project, '.unlazy/s-abcdef12/GATES.md');
+  const carried = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates/adopted.md');
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, '# Gates: /ship\n\n' +
+    '- [ ] HTPR-6819.qa-note: the outcome this session still owes\n  CHECK: echo carried\n  EXPECT: carried\n' +
+    `  CWD: ${f.project}\n  EVIDENCE: pending\n\n` +
+    'ABANDON: HTPR-6819.qa-note the surface is gone from this app\n');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', { SHIP_LEDGER_ADOPT: '1' });
+    const extras = fs.readFileSync(carried, 'utf8');
+    assert.match(extras, /^- \[ \] HTPR-6819\.qa-note:/m, 'the gate was dropped instead of carried');
+    assert.match(extras, /^ABANDON: HTPR-6819\.qa-note the surface is gone from this app$/m,
+      'the carried gate came back to life without the exemption its author wrote');
+    const ledger = fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md'), 'utf8');
+    assert.doesNotMatch(ledger, /ABANDON/, 'the auto-approved ledger inherited a handoff');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 test('a board drain keeps one ledger per session outside the project', needsUnlazy, () => {
   const f = fixture();
   const drainBoard = path.join(repo, '.claude/skills/drain-board/scripts/drain-board');
