@@ -554,8 +554,8 @@ test('a tick that throws does not stop the rest of the link', async () => {
 test('a link catches a job that goes idle between two ticks, not on the next link', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'hyci73-'));
   const fixture = join(dir, 'stuck.json');
-  // Idle for 30 s when the link starts, so under the 45 s rule; 60 s by the next tick.
-  const jobs = [job('test-shard (1)', 'in_progress', [step('Test shard', new Date(now - 30000).toISOString())])];
+  const idleAtLinkStartMs = 30 * 1000;
+  const jobs = [job('test-shard (1)', 'in_progress', [step('Test shard', new Date(now - idleAtLinkStartMs).toISOString())])];
   writeFileSync(fixture, JSON.stringify({ repo: 'o/r', runs: [stuckRun], jobs: { [stuckRun.id]: jobs } }));
   let clock = now;
   const once = () => sweepOnce('o/r', {
@@ -566,10 +566,12 @@ test('a link catches a job that goes idle between two ticks, not on the next lin
   });
   const first = await once();
   const later = await tick('o/r', { sweeps: 2, gapMs: TICK_GAP_MS, once, sleep: async ms => { clock += ms; } });
+  assert.ok(idleAtLinkStartMs / 1000 < STUCK_SECONDS);
+  assert.ok((idleAtLinkStartMs + TICK_GAP_MS) / 1000 > STUCK_SECONDS);
   assert.equal(first.decisions.length, 0);
   assert.equal(later.length, 1);
   assert.equal(later[0].decisions[0].action, 'cancel');
-  assert.equal(later[0].decisions[0].stuck[0].idle, 60);
+  assert.equal(later[0].decisions[0].stuck[0].idle, (idleAtLinkStartMs + TICK_GAP_MS) / 1000);
 });
 
 test('a sweep never starts a second chain while a link is still running', async () => {
