@@ -59,12 +59,17 @@ test("nightly diagnostics run the full production suite without publishing a req
   assert.equal(job["runs-on"], "ubuntu-latest");
   assert.equal(job.steps[0].with.ref, "${{ github.sha }}");
   assert.equal(job.steps[0].with["persist-credentials"], false);
+  assert.equal(job.steps[0].with["fetch-depth"], 2);
   assert.deepEqual(job.permissions, { contents: "read", packages: "read" });
   assert.equal(job["timeout-minutes"], 60);
   assert.deepEqual(nightly.concurrency, { group: "coverage-nightly-production", "cancel-in-progress": false });
   const collect = job.steps.find((step) => step.name === "Test with coverage collection");
   assert.equal(collect.run, "npm test");
-  assert.deepEqual(collect.env, { NODE_V8_COVERAGE: "coverage/raw", HT_REQUIRE_PG_TESTS: "1" });
+  assert.deepEqual(collect.env, {
+    NODE_V8_COVERAGE: "coverage/raw",
+    HT_REQUIRE_PG_TESTS: "1",
+    SOURCE_TEXT_ALLOWLIST_BASE: "${{ github.sha }}^",
+  });
   assert.equal(collect.if, undefined);
   const report = job.steps.find((step) => step.name === "Build report-only coverage baseline");
   assert.equal(report.run, "npm run coverage:report");
