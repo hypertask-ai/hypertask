@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert");
-const fs = require("node:fs");
 const path = require("node:path");
 const axios = require("axios");
 
@@ -26,16 +25,6 @@ test("the axiosClient sidebar path does not repeat its /api base URL", () => {
     axios.create({ baseURL: "/api" }).getUri({ url: SIDEBAR_TEAMS_PATH }),
     "/api/teams/getAllSidebar"
   );
-
-  const homepageApi = fs.readFileSync(
-    path.join(root, "src/utils/api/Homepage/index.ts"),
-    "utf8"
-  );
-  assert.match(
-    homepageApi,
-    /axiosClient\.post\(SIDEBAR_TEAMS_PATH, body\)/
-  );
-  assert.doesNotMatch(homepageApi, /axiosClient\.post\(`?\/api\/teams\/getAllSidebar/);
 });
 
 test("the request rejects catch-all HTML instead of caching it as teams", () => {
@@ -50,13 +39,6 @@ test("hydrated HTML from the broken deployment is harmless while refetching", ()
     selectSidebarTeams("<!DOCTYPE html><html>Product</html>"),
     []
   );
-
-  const queryHook = fs.readFileSync(
-    path.join(root, "src/hooks/MultiPages/useGetAllTeamsMinimal.ts"),
-    "utf8"
-  );
-  assert.match(queryHook, /select:selectSidebarTeams/);
-  assert.match(queryHook, /queryKey:sidebarTeamsQueryKey\(currentUserId\)/);
 });
 
 test("the fixed deployment bypasses the poisoned persisted query", () => {

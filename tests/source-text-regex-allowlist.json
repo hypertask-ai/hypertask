@@ -1,17 +1,5 @@
 {
   "allowlist": [
-    "tests/project-planning.test.cjs",
-    "tests/project-url-canonicalization.test.cjs",
-    "tests/schema-drift-check.test.cjs",
-    "tests/search-operators-api.test.cjs",
-    "tests/shared-ai-allowance.test.cjs",
-    "tests/sidebar-teams-response.test.cjs",
-    "tests/slack-integration.test.cjs",
-    "tests/smart-splits.test.cjs",
-    "tests/stripe-checkout-authorization.test.cjs",
-    "tests/subtask-default-setting.test.cjs",
-    "tests/table-ctrl-e-archive.test.cjs",
-    "tests/task-agent-run-activity-feed.test.cjs",
     "tests/task-comment-background-realtime.test.cjs",
     "tests/task-create-fast-path.test.cjs",
     "tests/task-detail-panel-realtime.test.cjs",
@@ -35,5 +23,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 34
+  "count": 22
 }

@@ -1,19 +1,10 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 let jitiEntryId = 0;
-
-test("board realtime refreshes an open planning query", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/hooks/realtime/useBoardRealtime.ts"),
-    "utf8",
-  );
-  assert.match(source, /projectPlanningQueryKey\(projectId\)/);
-});
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
