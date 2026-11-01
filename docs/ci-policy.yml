@@ -509,21 +509,24 @@ ci_tests:
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
   browser_halves:
-    ticket: https://app.hypertask.ai/detail/project-11514/32
+    ticket: https://app.hypertask.ai/detail/project-11514/57
     required_context: browser-smoke
-    required_context_kind: summary_over_halves
-    halves: [browser-smoke-desktop, browser-smoke-mobile]
+    required_context_kind: summary_over_shards
+    halves: [browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
     workers_per_half: 4
     workers_source: playwright.config.smoke.ts
-    desktop_projects: [Desktop, Inbox]
-    mobile_projects: [Mobile, Matrix]
+    desktop_projects: [Desktop]
+    mobile_projects: [Mobile]
+    matrix_projects: [Matrix]
+    flags_projects: [Desktop, Mobile, Inbox]
     project_filter: explicit_project_flag_on_every_playwright_line
-    build: one_per_half
+    build: one_per_shard
     app_build_producer: browser-smoke-desktop
     nextjs_cache_saver: browser-smoke-desktop
     contract_executor: browser-smoke-desktop
-    premerge_verify_qa_executor: browser-smoke-desktop
-    job_budget_cost: 2
+    premerge_verify_qa_executor: browser-smoke-flags
+    shard_target_seconds: 360
+    job_budget_cost: 4
     coverage_guard: tests/browser-smoke-workflow.test.cjs
   docs_only:
     jobs: [ci-tests, browser-smoke]

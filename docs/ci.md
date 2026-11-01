@@ -76,7 +76,7 @@ CodeQL uses GitHub default setup; path filtering would require advanced setup,
 which this change does not introduce.
 
 HYCI-32 spent two of the remaining three job slots on the browser check: the
-single 723 s lane became `browser-smoke-desktop` and `browser-smoke-mobile`, which
+single 723 s lane became four shards (`browser-smoke-desktop`, `browser-smoke-mobile`, `browser-smoke-matrix`, `browser-smoke-flags`), which
 run in parallel, plus the small `browser-smoke` summary job that keeps the
 required context name and fails when either half fails. Both halves build the
 candidate themselves, because a shared build job would serialise them behind it
@@ -561,7 +561,7 @@ This v1 signal is not required by a ruleset and does not replace existing browse
 
 ## Layout lock matrix (YPER4-252)
 
-The `browser-smoke-mobile` half also runs `e2e/smoke/layout-lock-matrix.spec.ts`, once with live-like flags and once with every flag on (HYCI-32 put the phone pages and the matrix on the same machine). It opens the ticket page (short and long comment thread), board, inbox and search once per sidebar state (AI sidebar open or closed, left sidebar collapsed or expanded) and resizes the window through 1920, 1440, 1280, 1100, 950, 768 and 390 wide. Each main part (title, description, comment list, comment box, properties panel, board columns, left sidebar, AI sidebar) is compared with `e2e/smoke/layout-lock-matrix.baseline.json`. A part that moves more than 8px, changes column, wraps below its neighbour, or leaves the comment box above the last comment fails with `<page> @ <width>px, AI sidebar <open|closed>, left sidebar <collapsed|expanded>: <part> moved <dx>,<dy>px`. Failing runs upload an "after" screenshot with the baseline boxes outlined (artifact `layout-lock-matrix`). A failing screen-spec test uploads its screenshot and Playwright error context as an artifact named after its half, `browser-smoke-desktop-failures` or `browser-smoke-mobile-failures` (YPER4-939; HYCI-32 gave the halves distinct names because one run cannot hold two artifacts under one name), so the next flake can be read back; traces stay off because they carry the smoke session's traffic.
+The `browser-smoke-matrix` shard runs `e2e/smoke/layout-lock-matrix.spec.ts` once with live-like flags and once with every flag on (HYCI-57 gave the matrix its own machine). It opens the ticket page (short and long comment thread), board, inbox and search once per sidebar state (AI sidebar open or closed, left sidebar collapsed or expanded) and resizes the window through 1920, 1440, 1280, 1100, 950, 768 and 390 wide. Each main part (title, description, comment list, comment box, properties panel, board columns, left sidebar, AI sidebar) is compared with `e2e/smoke/layout-lock-matrix.baseline.json`. A part that moves more than 8px, changes column, wraps below its neighbour, or leaves the comment box above the last comment fails with `<page> @ <width>px, AI sidebar <open|closed>, left sidebar <collapsed|expanded>: <part> moved <dx>,<dy>px`. Failing runs upload an "after" screenshot with the baseline boxes outlined (artifact `layout-lock-matrix`). A failing screen-spec test uploads its screenshot and Playwright error context as an artifact named after its half, `browser-smoke-desktop-failures` or `browser-smoke-mobile-failures` (YPER4-939; HYCI-32 gave the halves distinct names because one run cannot hold two artifacts under one name), so the next flake can be read back; traces stay off because they carry the smoke session's traffic.
 
 Ticket measurements in both layout-lock specs wait for `data-ticket-initial-scroll-ready="true"`: the unread snapshot is ready and the server-to-live row handoff is finished, matching `useTaskDetailInitialScroll`'s prerequisites. This test-only attribute does not change positioning. The screen spec's desktop comment expansion clicks (YPER4-939) wait for it too, so a click never lands on a server-rendered row the live list replaces; each click is bounded at 15s so a stalled thread names its step instead of using the whole test budget. The harness then waits the maximum relevant positioning delay from `taskDetailConfig.delays` (not a navigation-relative sleep), waits for scroll offsets and scroll extents to stay unchanged across two animation frames, uses `scrollToBaselinePosition` to reset scroll containers to their captured baseline position (desktop: top; phone: maximum scroll offset, except the long-thread matrix with AI open and rail expanded), and reapplies that target until scroll offsets and extents stay unchanged for two animation frames before sampling boxes. This follows phone bottom-padding growth when scrolling past 200px. Phone means the Mobile project in the screen spec and widths below 768px in the matrix, matching the app layout breakpoint. The phone title is sticky and the composer fixed; the flowing thread, not each landmark, scrolls to the bottom. The long-thread matrix at phone width with AI open and the rail expanded instead restores the window and the ticket’s own `[data-task-detail-path]` ancestor of `[data-testid="ticket-thread"]` to the top, without touching AI-sheet, rail or descendant scrollers. That state was captured at title y=64, properties y=126 and description y=502; forcing the long thread to the bottom can virtualize away its required properties row. Short-thread and AI-closed matrix states, the collapsed-rail state, and the screen spec retain exactly their previous targets and scroll paths. Non-ticket matrix pages retain their top reset. The matrix waits once per ticket navigation before resizing, then resets and stabilizes after each width's composer readiness check. The composer-below-thread guard and existing tolerances remain unchanged.
 
@@ -574,11 +574,11 @@ GitHub-only verification for [YPER4-562](https://app.hypertask.ai/detail/project
 
 ## Premerge verify-qa (YPER4-673)
 
-`browser-smoke-desktop` reuses its existing disposable PR build at `http://127.0.0.1:3100` (HYCI-32 put this report-only journey in the desktop half, after its live-like inbox cycle). After the live-like inbox cycle, `.github/scripts/verify-qa-premerge.mjs` selects the feature-map page with the most changed files (longest prefix per file). Inbox changes run the seeded inbox cycle; supported login, board, task, comment, creation, AI-chat and billing changes run that page's tagged IDs from `e2e/smoke/journeys.spec.ts`, with `HT_QA_JOURNEYS=1`, one worker and no retries. The initial `--qa-journeys` seed provides a private QA runner board, so setup does not need to create another board after the Free account reaches its board limit. Writes stay on the disposable database, never a production preview. Ties, unsupported pages and unmatched diffs record `UNREACHABLE: no driver`; they never substitute inbox. Skipped or missing selected tests cannot count as PASS.
+`browser-smoke-flags` reuses its existing disposable PR build at `http://127.0.0.1:3100` for this report-only journey, after its live-like inbox cycle (HYCI-57 moved the journey to the shard that seeds the inbox). After the live-like inbox cycle, `.github/scripts/verify-qa-premerge.mjs` selects the feature-map page with the most changed files (longest prefix per file). Inbox changes run the seeded inbox cycle; supported login, board, task, comment, creation, AI-chat and billing changes run that page's tagged IDs from `e2e/smoke/journeys.spec.ts`, with `HT_QA_JOURNEYS=1`, one worker and no retries. The initial `--qa-journeys` seed provides a private QA runner board, so setup does not need to create another board after the Free account reaches its board limit. Writes stay on the disposable database, never a production preview. Ties, unsupported pages and unmatched diffs record `UNREACHABLE: no driver`; they never substitute inbox. Skipped or missing selected tests cannot count as PASS.
 
 Changes to the dispatcher or its tests also run an explicitly synthetic login matched-control against the same PR build, saved under `verify-qa-premerge/matched-control/`. The top-level result always reports the real diff, including an unmatched infra-only diff. This control proves dispatch and opt-in without adding an unrelated app change.
 
-Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke-desktop`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
+Screenshots, `result.json` and `summary.md` upload as `verify-qa-premerge` for 7 days. The job summary names the journey, the feature-map page and the artifact URL. The step is report-only: `VERIFY_QA_REPORT_ONLY=1` and a non-zero exit become a warning, not a failed `browser-smoke-flags`. It is not a ruleset context and does not block merges. A later unit can make it required after a clean week.
 
 Sharing that `.next` build with app-smoke is deferred. `app-smoke.yml` is loaded from `production`, and its build runs inside a locked-down container with `CORE_APP_SMOKE`, a mocked Google font file and a docker-network callback URL. browser-smoke bakes different `NEXT_PUBLIC_*` values, including `NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100`. The two workflows also run in parallel, so waiting on a large `.next` upload would slow a required check. The container build at `scripts/run-app-smoke-isolated.sh` stays.
 
@@ -948,8 +948,7 @@ The decision, for the two alternatives HYCI-49 offers:
   revisit only with a run proving a shorter window still fails the same way.
 
 Required contexts do not change: `browser-smoke` stays the required summary,
-`browser-smoke-desktop` and `browser-smoke-mobile` keep their names and their
-work, and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
+`browser-smoke` keeps its name and its work, and `app-smoke` is untouched. Nothing here edits a workflow, a spec or a
 config line, so the undo is that there is nothing to undo.
 
 ## One app build per change (HYCI-10)
@@ -959,8 +958,9 @@ as part of a required page check. Right after `next build` it publishes that out
 as the `app-build` artifact (`.next/cache` excluded, one day retained), before the
 page checks run, so a failing page check still leaves the build for its consumer.
 HYCI-32 added a second browser half (`browser-smoke-mobile`) that builds its own
-copy in parallel, so a screen change now builds twice, once per machine, and the
-visual comparison still adds no third build. The Next.js
+copy in parallel, and HYCI-57 took the page tests to four shards, so a screen
+change builds four times, once per machine, and the visual comparison still adds
+no fifth build. The Next.js
 incremental cache is restored on every run and saved only on a successful `production`
 push, exactly as before.
 
@@ -1133,31 +1133,36 @@ production run on 2026-10-31 it took 723 s of wall clock inside a 12-minute CI
 at a time. Eight parallel workers on that one machine was measured and rejected,
 because one desktop page test failed in all three attempts.
 
-`.github/workflows/ci-tests.yml` now runs the same checks as two jobs on two
-machines, each with the proven four Chromium workers:
+`.github/workflows/ci-tests.yml` now runs the same checks as four jobs on four
+machines, each with the proven four Chromium workers (HYCI-57 split the page
+tests in four):
 
 | Job | Owns | Projects |
 | --- | --- | --- |
-| `browser-smoke-desktop` | the build and the `app-build` artifact, the MCP/CLI/API contract, the inbox cycle, the report-only premerge QA | `Desktop`, `Inbox` |
-| `browser-smoke-mobile` | phone pages and the layout matrix | `Mobile`, `Matrix` |
+| `browser-smoke-desktop` | the build and the `app-build` artifact, the MCP/CLI/API contract, the default desktop pages, the instant-open control for both viewports | `Desktop` |
+| `browser-smoke-mobile` | the default phone pages | `Mobile` |
+| `browser-smoke-matrix` | the width matrix, live-like and every flag on | `Matrix` |
+| `browser-smoke-flags` | every flag on for both viewports, the inbox cycle, the report-only premerge QA | `Desktop`, `Mobile`, `Inbox` |
 
 Every `npx playwright test` line names its projects with `--project`, so no
-spec/project pair runs in both halves and none was dropped by the split.
+spec/project pair runs in two shards and none was dropped by the split.
 `tests/browser-smoke-workflow.test.cjs` holds that contract as a table of
 state runs: live-like, instant-open control, all-flags-on, inbox cycle and the
 live-like inbox cycle, each with the projects that must run it.
 
-Both halves restore and build their own candidate. A shared build job was
-rejected: the phone half would then start only after the build, which serialises
-the two halves behind it and gives back the wall clock the split exists to
-remove. The desktop half is still the only saver of the shared Next.js cache and
-the only publisher of `app-build`, so the visual comparison adds no third build.
+Every shard restores and builds its own candidate. A shared build job was
+rejected twice, by HYCI-32 and again by HYCI-57 with the step times below: the
+build would run before every shard's pages start, which serialises the shards
+behind it and gives back the wall clock the split exists to remove. Four warm
+parallel builds are free on hosted runners for this public repo. The desktop
+shard is still the only saver of the shared Next.js cache and the only publisher
+of `app-build`, so the visual comparison adds no build.
 
 The required ruleset context stays `browser-smoke`. That name is now a summary
-job with `needs: [browser-smoke-desktop, browser-smoke-mobile]`; it is green only
-when both halves are green, and a cancelled, failed or missing half never reads
-as a pass. It passes `contract` and `docs_only` through from the desktop half, so
-`mcp-cli-api-contract` and `visual-compare` keep their existing wiring.
+job over all four shards; it is green only when every shard is green, and a
+cancelled, failed or missing shard never reads as a pass. It passes `contract`
+and `docs_only` through from the desktop shard, so `mcp-cli-api-contract` and
+`visual-compare` keep their existing wiring.
 
 The budget cost is two jobs per push. HYCI-42 took the pool to six lanes and
 HYCI-45 added a second serial lane before this merged, so the merged count is 22
@@ -1166,6 +1171,29 @@ costs nothing to wait for because the summary only becomes ready once both halve
 have finished and the halves are the longest legs either way. Docs-only PRs still
 start their heavy steps as skips and succeed, so their job count grows by the same
 two.
+
+### The page tests in four shards (HYCI-57)
+
+Measured on production push [run 41280591758](https://github.com/hypertask-ai/hypertask/actions/runs/41280591758), per two-half job:
+
+| Part | `browser-smoke-desktop` | `browser-smoke-mobile` |
+| --- | --- | --- |
+| job wall clock | 451 s | 561 s |
+| containers, checkout, node_modules, Chromium, fixtures | 105 s | 103 s |
+| build (`next build --webpack`) | 124 s | 196 s |
+| page tests | 177 s | 250 s |
+| upload, cache save | 20 s | none |
+
+The check is the slower half, so 561 s. Three things set that floor: a build the
+app owns (HYCI-49), about 105 s of one-time setup per job, and 427 s of page
+tests that were spread over only two machines. HYCI-57 keeps the warm Next.js
+cache and splits the page tests into four shards, so the check costs one build
+plus the slowest quarter of the pages. A shared build shard was measured out:
+its build would sit in front of every shard, which is slower than four parallel
+builds on free hosted runners.
+
+Cost: four jobs instead of two, still `ubuntu-latest`, still free minutes on this
+public repo. `tests/browser-smoke-workflow.test.cjs` holds the coverage table.
 
 Both halves start the fixture search server, so both seed steps must ask
 `scripts/seed-browser-smoke.mjs` for search rows: `BROWSER_SMOKE_SEARCH_FIXTURES: '1'`

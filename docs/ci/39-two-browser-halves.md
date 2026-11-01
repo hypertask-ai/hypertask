@@ -1,5 +1,11 @@
 ## Two browser halves under one required check (HYCI-32)
 
+> Superseded by HYCI-57: the page tests now run in four shards. The build, the
+> contract, the `app-build` artifact and the Next.js cache saver stay in
+> `browser-smoke-desktop`; the inbox cycle and the report-only premerge QA moved
+> to `browser-smoke-flags`; the layout matrix has its own `browser-smoke-matrix`.
+> Numbers and the rejected shared build are in `docs/ci.md`.
+
 The browser check used to be one job that served every project in sequence. On a
 production run on 2026-10-31 it took 723 s of wall clock inside a 12-minute CI
 ([run 41236373520](https://github.com/hypertask-ai/hypertask/actions/runs/41236373520)):

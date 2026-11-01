@@ -171,17 +171,20 @@ test('report-only mode records a production refusal as a warning and still exits
 test('browser-smoke runs report-only on the existing build and uploads evidence', () => {
   const workflow = fs.readFileSync('.github/workflows/ci-tests.yml', 'utf8')
   const policy = fs.readFileSync('docs/ci-policy.yml', 'utf8')
-  const job = workflow.slice(workflow.indexOf('\n  browser-smoke-desktop:'), workflow.indexOf('\n  browser-smoke-mobile:'))
+  // HYCI-57: the contract shard and the report-only journey shard are different
+  // jobs now, so each assertion is made against the shard that carries it.
+  const job = workflow.slice(workflow.indexOf('\n  browser-smoke-flags:'), workflow.indexOf('\n  browser-smoke:\n'))
   assert.ok(job.length > 0)
   assert.doesNotMatch(job, /continue-on-error:\s*true/)
   assert.match(policy, /premerge_verify_qa:[\s\S]*?required: false\n  report_only: true\n  blocks_merge: false\n/)
   assert.match(policy, /unmatched_verdict: "UNREACHABLE: no driver"/)
   const required = policy.slice(policy.indexOf('required_checks:'), policy.indexOf('\n\n', policy.indexOf('required_checks:')))
   assert.doesNotMatch(required, /verify-qa-premerge/)
-  const contractAt = job.indexOf('node scripts/mcp-cli-api-contract.mjs')
+  const desktop = workflow.slice(workflow.indexOf('\n  browser-smoke-desktop:'), workflow.indexOf('\n  browser-smoke-mobile:'))
+  assert.match(desktop, /node scripts\/mcp-cli-api-contract\.mjs/)
   const reportAt = job.indexOf('set +e')
   const journeyAt = job.indexOf('node .github/scripts/verify-qa-premerge.mjs')
-  assert.ok(contractAt > 0 && contractAt < reportAt && reportAt < journeyAt)
+  assert.ok(reportAt > 0 && reportAt < journeyAt)
   assert.match(job, /VERIFY_QA_REPORT_ONLY=1/)
   assert.match(job, /timeout --signal=TERM --kill-after=20s 160s node \.github\/scripts\/verify-qa-premerge\.mjs/)
   assert.match(job, /verify-qa premerge journey exited/)
