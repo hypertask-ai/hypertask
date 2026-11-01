@@ -630,8 +630,9 @@ ci_tests:
     job: visual-compare
     workflow: .github/workflows/ci-tests.yml
     moved_from: .github/workflows/visual-regression.yml
-    needs: browser-smoke
-    runs_after_required_check: true
+    needs: browser-build
+    runs_after_required_check: false
+    runs_alongside_page_shards: true
     trigger: non_draft_pull_request_touching_screen_or_harness_paths
     path_scope: .github/scripts/visual-change-scope.cjs
     head_build: reused_from_app_build
