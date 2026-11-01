@@ -32,22 +32,39 @@ const tooltipFlag = 'htpr-6950-tooltip-top-layer';
 const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
 const boardChipFlag = 'htpr-7053-compose-board-chip';
 
+const oneWindowPerFile = () => {
+  const state = { dom: null };
+  return (url) => {
+    if (!state.dom) {
+      state.dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${url}` });
+      const proto = state.dom.window.HTMLElement.prototype;
+      proto.attachEvent = () => {};
+      proto.detachEvent = () => {};
+      proto.scrollIntoView = () => {};
+      state.focus = proto.focus;
+      proto.focus = function (...args) {
+        if (this.tagName === 'TEXTAREA' && state.focusFailures-- > 0) return;
+        return state.focus.apply(this, args);
+      };
+    } else {
+      state.dom.window.history.replaceState({}, '', url);
+      state.dom.window.localStorage.clear();
+    }
+    return state;
+  };
+};
+const windowState = oneWindowPerFile();
+
 async function withPalette(t, config, check) {
-  const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
+  const shared = windowState(config.url ?? '/project?id=7');
+  const dom = shared.dom;
+  shared.focusFailures = config.focusFailures ?? 0;
   const globals = ['window', 'document', 'navigator', 'HTMLElement', 'localStorage', 'IS_REACT_ACT_ENVIRONMENT', 'File', 'requestAnimationFrame', 'fetch', 'DOMParser']
     .map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   const animationFrames = [];
   Object.assign(global, { DOMParser: dom.window.DOMParser, window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, localStorage: dom.window.localStorage, File: dom.window.File, IS_REACT_ACT_ENVIRONMENT: true, requestAnimationFrame: (fn) => config.deferAnimationFrames ? animationFrames.push(fn) : fn() });
   Object.defineProperty(global, 'navigator', { configurable: true, value: dom.window.navigator });
-  dom.window.HTMLElement.prototype.attachEvent = () => {};
-  dom.window.HTMLElement.prototype.detachEvent = () => {};
-  dom.window.HTMLElement.prototype.scrollIntoView = () => {};
-  let focusFailures = config.focusFailures ?? 0;
-  const focus = dom.window.HTMLElement.prototype.focus;
-  dom.window.HTMLElement.prototype.focus = function (...args) {
-    if (this.tagName === 'TEXTAREA' && focusFailures-- > 0) return;
-    return focus.apply(this, args);
-  };
+  const focus = shared.focus;
   const focusProxy = { current: null, compose: !config.legacyProxy, pendingEnter: config.pendingEnter };
   if (config.bufferedText !== undefined) {
     focusProxy.current = document.createElement('textarea');
@@ -211,7 +228,7 @@ async function withPalette(t, config, check) {
       for (const key of Object.keys(require.cache)) if (!cached.has(key) && (stubbed.has(key) || !key.includes(`${path.sep}node_modules${path.sep}`))) delete require.cache[key];
       for (const [key, value] of cached) require.cache[key] = value;
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
-      dom.window.close();
+      dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
     }
   }
 }
