@@ -43,17 +43,17 @@ runner_policy:
 
 pr_job_budget:
   parallel_job_limit: 20
-  # HYCI-42 took the test pool to six lanes: 17 -> 19 jobs per push. HYCI-32
-  # replaces the single browser job with two halves and keeps the required
-  # context name as a small summary over them: 19 -> 21 jobs listed. That is one
-  # past the 20-job pool, and it costs nothing to wait for, because the summary
-  # only becomes ready once both halves have finished and so never holds a
-  # runner slot beside them. The count is measured per push with
-  # scripts/ci-jobs-per-push.sh.
-  normal_synchronize_before: 19
-  normal_synchronize_after: 21
-  opened_before: 19
-  opened_after: 21
+  # HYCI-42 took the test pool to six lanes and HYCI-45 added a second serial
+  # lane: 17 -> 20 jobs per push. HYCI-32 replaces the single browser job with
+  # two halves and keeps the required context name as a small summary over them:
+  # 20 -> 22 jobs listed. The last two are past the 20-job pool but cost no
+  # wall clock, because the summary only becomes ready once both halves have
+  # finished and the halves are the jobs that wait. The count is measured per
+  # push with scripts/ci-jobs-per-push.sh.
+  normal_synchronize_before: 20
+  normal_synchronize_after: 22
+  opened_before: 20
+  opened_after: 22
   excludes: [path_specific_jobs, previews, external_review]
   measurement: scripts/ci-jobs-per-push.sh
   pull_request_guards:

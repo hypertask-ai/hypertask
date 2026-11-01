@@ -33,11 +33,13 @@ when both halves are green, and a cancelled, failed or missing half never reads
 as a pass. It passes `contract` and `docs_only` through from the desktop half, so
 `mcp-cli-api-contract` and `visual-compare` keep their existing wiring.
 
-The budget cost is two jobs per push. HYCI-42 took the pool to six test lanes
-before this merged, so the merged count is 21 jobs rather than 19: one past the
-20-job pool, which costs nothing to wait for because the summary only becomes
-ready once both halves have finished. Docs-only PRs still start their heavy steps
-as skips and succeed, so their job count grows by the same two.
+The budget cost is two jobs per push. HYCI-42 took the pool to six lanes and
+HYCI-45 added a second serial lane before this merged, so the merged count is 22
+jobs rather than the 20 that landed ahead of it: two past the 20-job pool, which
+costs nothing to wait for because the summary only becomes ready once both halves
+have finished and the halves are the longest legs either way. Docs-only PRs still
+start their heavy steps as skips and succeed, so their job count grows by the same
+two.
 
 Both halves start the fixture search server, so both seed steps must ask
 `scripts/seed-browser-smoke.mjs` for search rows: `BROWSER_SMOKE_SEARCH_FIXTURES: '1'`

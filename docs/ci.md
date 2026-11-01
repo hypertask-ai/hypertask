@@ -57,10 +57,10 @@ None reads another's output, so the job costs its slowest lane instead of their 
 A lane that fails is named in its own log group and the step fails once every lane
 has finished. Keeping them in one job holds the budget below unchanged.
 
-Static normal non-draft app PR budget: **21 jobs** per synchronize and opening event
+Static normal non-draft app PR budget: **22 jobs** per synchronize and opening event
 (YPER4-721 adds one tiny native scanner summary job; HYCI-42 adds two test lanes;
-HYCI-32 adds the second browser half and its required summary job, see below).
-Path-specific evals, the
+HYCI-45 adds a second serial lane; HYCI-32 adds the second browser half and its
+required summary job, see below). Path-specific evals, the
 path-specific `visual-compare` check, preview deployments and external review are
 extra. Docs-only PRs start 17 jobs; Dependabot/fork PRs no longer add a trusted
 scan-publication job. Snapshot actual
@@ -77,10 +77,11 @@ HYCI-32 spends two job slots on the browser check: the single 723 s lane became
 small `browser-smoke` summary job that keeps the required context name and fails
 when either half fails. Both halves build the candidate themselves, because a
 shared build job would serialise them behind it and give back the wall clock the
-split removes. That puts a non-draft PR at 21 jobs, one past the 20-job pool. The
+split removes. That puts a non-draft PR at 22 jobs, two past the 20-job pool. The
 summary is the job that waits: it becomes ready only when both halves have
 finished, so it takes a slot that has just been freed and adds no concurrent
-load. Measured on the PR, not assumed: `scripts/ci-jobs-per-push.sh 2623`.
+load, and the halves themselves are the longest legs of the run either way.
+Count it on the PR, not from this page: `scripts/ci-jobs-per-push.sh <pr>`.
 
 ## PR size observation (YPER4-711)
 
