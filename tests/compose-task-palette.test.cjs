@@ -20,12 +20,15 @@ const test = (name, check) => nodeTest(name, { timeout: 30_000 }, async (t) => {
     watchdog.postMessage(0);
   }
 });
+const diagStartedAt = require('node:perf_hooks').performance.now();
+process.env.JITI_DEBUG = '1';
 const React = require('react');
 const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
 const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
 const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
+console.log('PALETTE_DIAG_LOAD_MS', Math.round(require('node:perf_hooks').performance.now() - diagStartedAt));
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
@@ -316,6 +319,7 @@ async function withPalette(t, config, check) {
     replacingStubs = true;
     await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
+    console.log('PALETTE_DIAG_SETUP_MS', Math.round(require('node:perf_hooks').performance.now() - diagStartedAt));
     document.removeEventListener('keydown', legacy);
     try {
       if (reactRoot) await React.act(async () => reactRoot.unmount());
