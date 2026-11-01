@@ -9,7 +9,7 @@ const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
 const READ_BUDGET = 120;
 const HEARTBEAT_MS = 60 * 60 * 1000;
 const DEFERRED = 'Ticket not read this sweep; rechecked within 10 minutes';
-const TICKET_TITLE = /^(HTPR|HYFA|YPER4)-(\d+) \[([^\]]+)\] \S/;
+const TICKET_TITLE = /^(HTPR|HYFA|YPER4|HYCI)-(\d+) \[([^\]]+)\] \S/;
 const WIREFRAME = /https:\/\/(?:hypertask\.app\/(?:wireframes|explorations)|claude\.ai\/artifact)\/[A-Za-z0-9_-]+/;
 
 function ticketFromTitle(title) {
@@ -640,7 +640,7 @@ export function evaluate({ title, author, files, comments = [], parentComments =
 
 export function ticketUrl(title, runUrl) {
   const ticket = ticketFromTitle(title);
-  const project = { HTPR: 15, YPER4: 4060 }[ticket?.prefix];
+  const project = { HTPR: 15, YPER4: 4060, HYCI: 11514 }[ticket?.prefix];
   return project ? `https://app.hypertask.ai/detail/project-${project}/${ticket.number}` : runUrl;
 }
 
@@ -777,7 +777,7 @@ async function readParentTicket(ticket, { env, fetchImpl, budget }) {
   }
   const parent = task.parent_task?.ticketNumber;
   if (parent == null && task.parent_id == null && task.parent_task == null) return null;
-  if (typeof parent !== 'string' || !/^(HTPR|HYFA|YPER4)-[1-9]\d*$/.test(parent) || parent === ticket) {
+  if (typeof parent !== 'string' || !/^(HTPR|HYFA|YPER4|HYCI)-[1-9]\d*$/.test(parent) || parent === ticket) {
     throw new Error('Hypertask API did not expose a valid parent ticket number');
   }
   return parent;

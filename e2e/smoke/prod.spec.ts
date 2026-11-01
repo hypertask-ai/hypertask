@@ -194,19 +194,22 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
   }, b.id)
   const sidebar = page.getByTestId('ai-sidebar')
   const chip = sidebar.locator('[data-ai-chat-scope]:visible > button').first()
+  const renderedBoard = (board: typeof a) =>
+    page.locator(`[data-board-id="${board.id}"][data-board-tasks-hydrated="true"]`)
   const openChat = async () => {
     if (await sidebar.isVisible()) return
     await page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true }).click()
     await expect(sidebar).toBeVisible()
   }
-  const assertScope = async (title: string) => {
+  const assertScope = async (board: typeof a) => {
+    await expect(renderedBoard(board)).toBeAttached({ timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page.locator('.kanban-column-title').first()).toBeVisible()
     await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
     await openChat()
     await expect(sidebar).toBeVisible()
     await expect(chip).toBeVisible()
-    await expect(chip).toHaveAttribute('title', title)
-    await expect(chip).toContainText(title)
+    await expect(chip).toHaveAttribute('title', board.title)
+    await expect(chip).toContainText(board.title)
   }
   const switchBoard = async (board: typeof a) => {
     if (mobile) {
@@ -224,26 +227,26 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
       await entry.click({ timeout: 5_000 })
     }
     await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id), { timeout: BOARD_SWITCH_TIMEOUT })
+    await expect(renderedBoard(board), 'the switch did not render the board the rail asked for').toBeAttached({ timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page).toHaveTitle(`${board.title} • Hypertask`, { timeout: BOARD_SWITCH_TIMEOUT })
-    await expect(page.locator('[data-board-tasks-hydrated="true"]')).toBeAttached({ timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page.locator('[id^="task-"]').filter({ hasText: `${board.title} fixture` }).first()).toBeVisible({ timeout: BOARD_SWITCH_TIMEOUT })
   }
   await page.goto(withRealtime(a.path), { waitUntil: 'load' })
-  await assertScope(a.title)
+  await assertScope(a)
   let documentRequests = 0
   page.on('request', (request) => {
     if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentRequests++
   })
   await switchBoard(b)
-  await assertScope(b.title)
+  await assertScope(b)
   await chip.click()
   await page.locator('#option-picker').getByText(a.title, { exact: true }).click()
   await expect(chip).toHaveAttribute('title', a.title)
   await expect(chip).toContainText(a.title)
   await switchBoard(a)
-  await assertScope(a.title)
+  await assertScope(a)
   await switchBoard(b)
-  await assertScope(b.title)
+  await assertScope(b)
   expect(documentRequests, 'board switches must preserve client state rather than reload it').toBe(0)
 })
 })

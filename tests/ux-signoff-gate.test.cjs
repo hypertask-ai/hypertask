@@ -1333,8 +1333,22 @@ test('ticket title is strict; unknown project links fall back to the workflow ru
   const { ticketUrl } = await gate;
   assert.equal(ticketUrl(title, 'run'), 'https://app.hypertask.ai/detail/project-15/7072');
   assert.equal(ticketUrl('YPER4-254 [INFRA] Gate', 'run'), 'https://app.hypertask.ai/detail/project-4060/254');
+  assert.equal(ticketUrl('HYCI-75 [INFRA] Gate', 'run'), 'https://app.hypertask.ai/detail/project-11514/75');
   assert.equal(ticketUrl('HYFA-1 [FEATURE] UI', 'run'), 'run');
   assert.equal(ticketUrl('unknown', 'run'), 'run');
+});
+
+test('HYCI-75: a CI ticket that touches UI is read on its own ticket, and a new component file still needs his yes', async () => {
+  const ciTitle = 'HYCI-75 [INFRA] Wait for the board the switch asked for';
+  const reused = await decision({ title: ciTitle, files: [modified] });
+  assert.equal(reused.state, 'success', JSON.stringify(reused));
+  assert.match(reused.description, /^No new component file; reused UI/);
+  const newPanel = await decision({ title: ciTitle, files: [modified, added] });
+  assert.equal(newPanel.state, 'failure');
+  assert.deepEqual(newPanel.details, [
+    `UI change needs Valentin's yes on a wireframe on HYCI-75`,
+    `New element ExamplePanel needs Valentin's yes by name on HYCI-75`,
+  ]);
 });
 
 test('lookalike links and unapproved wireframes do not count', async () => {
