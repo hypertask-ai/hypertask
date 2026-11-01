@@ -1,6 +1,7 @@
 export const isolatedCjsTests = new Set([
   "tests/action-archive-cache.test.cjs",
   "tests/agent-run-activities.test.cjs",
+  "tests/failed-payment-plan-gate.test.cjs",
   "tests/feature-flags.test.cjs",
   "tests/htpr-6478-regressions.test.cjs",
   "tests/management-key-route.test.cjs",
