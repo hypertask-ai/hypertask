@@ -179,7 +179,7 @@ function branchFixture(t) {
       run("add", "-A");
       run("commit", "-q", "--allow-empty", "-m", message);
     },
-    resolver: () => resolveAllowlistBase((args) => run(...args), {}),
+    resolver: (env = {}) => resolveAllowlistBase((args) => run(...args), env),
   };
 }
 
@@ -238,6 +238,29 @@ test("a tree with no ancestry settles on the base commit its event pinned", (t) 
   };
   assert.equal(resolveAllowlistBase(shallow, { SOURCE_TEXT_ALLOWLIST_BASE: pinned }), pinned);
   assert.throws(() => resolveAllowlistBase(shallow, {}), /no merge base/);
+});
+
+test("a pin newer than the branch start loses to the branch's real start", (t) => {
+  const repo = branchFixture(t);
+  const offender = join(repo.dir, "tests/offender.test.cjs");
+  fs.mkdirSync(join(repo.dir, "tests"));
+  fs.writeFileSync(offender, "const s = readFileSync('src/x.ts', 'utf8'); assert.match(s, /x/);\n");
+  fs.writeFileSync(join(repo.dir, "tests/source-text-regex-allowlist.json"), JSON.stringify({ allowlist: ["tests/offender.test.cjs"] }));
+  repo.commit("production holds one allowlisted offender");
+  const fork = repo.revParse("HEAD");
+  repo.run("checkout", "-q", "-b", "ci-runner-3/hyci-47");
+  fs.writeFileSync(join(repo.dir, "branch.txt"), "branch work\n");
+  repo.commit("branch work");
+  repo.run("checkout", "-q", "-B", "production", fork);
+  fs.rmSync(offender);
+  fs.writeFileSync(join(repo.dir, "tests/source-text-regex-allowlist.json"), JSON.stringify({ allowlist: [] }));
+  repo.commit("cleanup batch deletes the offender");
+  const baseTipAtEvent = repo.revParse("HEAD");
+  repo.run("checkout", "-q", "ci-runner-3/hyci-47");
+  fs.writeFileSync(join(repo.dir, "later.txt"), "a push after the cleanup batch\n");
+  repo.commit("the branch is pushed after the cleanup batch");
+  repo.run("update-ref", "refs/remotes/origin/production", baseTipAtEvent);
+  assert.equal(repo.resolver({ SOURCE_TEXT_ALLOWLIST_BASE: baseTipAtEvent }), fork);
 });
 
 test("a source path stored in an earlier string binding is detected", (t) => {

@@ -10,6 +10,13 @@ base SHA. `ci-checks` holds full history, but `test-shard` checks out one commit
 deep with no ancestry to walk, so `git merge-base` cannot answer there; the pin is
 the only thing that keeps that lane judging the branch instead of the tip.
 
+That base SHA is the tip its event fired on, which is not always the branch's
+start: a branch pushed after a cleanup batch is pinned to a commit newer than its
+fork point, where that cleanup already removed the files it still holds. So the
+resolver keeps the pin only when it is an ancestor of the checked-out commit, and
+otherwise uses `git merge-base`. Where ancestry exists the branch's real start
+wins; where it does not, the pin is the only answer and is used as before.
+
 Before this, a cleanup batch that deleted allowlisted test files lowered
 production's allowlist while every open branch still held those files. Each such
 branch then looked like it had added them, so its own required check went red for
