@@ -37,8 +37,8 @@ test('a run splits into queue, worker time and between-job wait', async () => {
   }];
   const row = decomposeRun(run, jobs);
   assert.deepEqual(
-    { waiting: row.waiting, wall: row.wall, setup: row.setup, tests: row.tests, other: row.other, overhead: row.overhead, clipped: row.clipped },
-    { waiting: 20, wall: 210, setup: 65, tests: 135, other: 0, overhead: 10, clipped: false },
+    { waiting: row.waiting, wall: row.wall, setup: row.setup, tests: row.tests, other: row.other, gap: row.gap, clipped: row.clipped },
+    { waiting: 20, wall: 210, setup: 65, tests: 135, other: 0, gap: 10, clipped: false },
   );
   assert.equal(row.total, 230);
 });
@@ -63,7 +63,7 @@ test('push to green counts only commits where every run passed', async () => {
   assert.ok(hypertask.pushToGreen.p90 >= hypertask.pushToGreen.median);
   assert.equal(hypertask.clipped, 0);
   assert.equal(hypertask.median.waiting, 10);
-  assert.equal(hypertask.median.overhead, 5);
+  assert.equal(hypertask.median.gap, 0);
 });
 
 test('the slowest spots are named from job durations with at least two samples', async () => {
@@ -79,7 +79,7 @@ test('the slowest spots are named from job durations with at least two samples',
 });
 
 test('the page shows every app in both factories and keeps user text escaped', async () => {
-  const { formatHtml, formatText, appFromFixture } = await subject;
+  const { formatHtml, formatMarkdown, formatText, appFromFixture } = await subject;
   const summaries = fixture.apps.map(appFromFixture);
   summaries[0].label = '<script>Hypertask</script>';
   const html = formatHtml(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
@@ -90,7 +90,13 @@ test('the page shows every app in both factories and keeps user text escaped', a
   assert.equal((html.match(/<h2>/g) ?? []).length, 2);
   assert.match(html, /Software Factory/);
   assert.match(html, /node scripts\/ci-check-time\.mjs/);
-  assert.match(formatText(summaries, { limit: 150 }), /Postbox \(valentinyeo\/postbox, 2 runs, 2 green commits\)/);
+  assert.match(formatText(summaries, { limit: 150 }), /Postbox \(valentinyeo\/postbox, 2 runs measured, 0 skipped, 2 green commits\)/);
+  const markdown = formatMarkdown(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
+  assert.match(markdown, /## Postbox \(Software Factory\)/);
+  assert.match(markdown, /\| Push to all green \| 5\.5m \| 5\.5m \|/);
+  assert.match(markdown, /\| Run time outside jobs \| 0s \| - \|/);
+  assert.match(markdown, /\| ci-tests \/ ci-tests \| 2\.2m \| 2 \|/);
+  assert.match(markdown, /Rerun: `node scripts\/ci-check-time\.mjs`/);
 });
 
 test('the command replays a saved fixture without network access', () => {
@@ -148,4 +154,31 @@ test('skipped runs never block green and never count as CI time', async () => {
   assert.equal(summary.greenPushes, 2);
   assert.equal(summary.median.waiting, 10);
   assert.equal(summary.median.wall, 100);
+});
+
+test('two back-to-back jobs leave no uncovered wall clock', async () => {
+  const { decomposeRun } = await subject;
+  const run = { id: 9, created_at: '2026-10-31T10:00:00Z', run_started_at: '2026-10-31T10:00:10Z', updated_at: '2026-10-31T10:02:20Z' };
+  const jobs = [
+    { name: 'one', started_at: '2026-10-31T10:00:10Z', completed_at: '2026-10-31T10:01:15Z', steps: [] },
+    { name: 'two', started_at: '2026-10-31T10:01:15Z', completed_at: '2026-10-31T10:02:20Z', steps: [] },
+  ];
+  const row = decomposeRun(run, jobs);
+  assert.equal(row.wall, 130);
+  assert.equal(row.gap, 0);
+});
+
+test('a commit whose runs are unfinished, cut off or unreadable is never called green', async () => {
+  const { summarize } = await subject;
+  const row = (overrides) => ({
+    id: 1, sha: 'abc', workflow: 'ci', waiting: 5, wall: 60, setup: 20, tests: 35, other: 5, gap: 0,
+    clipped: false, createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:01:00Z', conclusion: 'success',
+    ...overrides,
+  });
+  const rows = [row({ id: 1 }), row({ id: 2, sha: 'def' }), row({ id: 3, sha: 'ghi', unreadable: true })];
+  const settled = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map());
+  assert.equal(settled.greenPushes, 2);
+  assert.equal(settled.unreadable, 1);
+  const pendingApp = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map(), { pending: new Set(['abc']) });
+  assert.equal(pendingApp.greenPushes, 1);
 });

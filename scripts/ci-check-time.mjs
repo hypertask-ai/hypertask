@@ -12,7 +12,7 @@ export const APPS = [
 
 const SETUP = /set ?up job|setup|checkout|cache|restore|install|npm ci|yarn install|pnpm install|build|compile|bundle|download|acquire|prepare/i;
 const TESTS = /test|lint|typecheck|type check|tsc|playwright|vitest|jest|mocha|smoke|check|guard|audit|eval|verify|drive|prove|proof|journey/i;
-const usage = 'Usage: node scripts/ci-check-time.mjs [--repos owner/name,...] [--limit 150] [--fixture file] [--json] [--out file.html]';
+const usage = 'Usage: node scripts/ci-check-time.mjs [--repos owner/name,...] [--limit 150] [--fixture file] [--json] [--markdown] [--out file]';
 
 export function classifyStep(name = '') {
   if (SETUP.test(name)) return 'setup';
@@ -26,16 +26,33 @@ const seconds = (from, to) => {
   return Number.isFinite(start) && Number.isFinite(end) && end >= start ? (end - start) / 1000 : null;
 };
 
+function mergeIntervals(intervals) {
+  const sorted = intervals.filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end >= start)
+    .sort((left, right) => left[0] - right[0]);
+  let total = 0;
+  let current = null;
+  for (const [start, end] of sorted) {
+    if (!current || start > current[1]) {
+      if (current) total += current[1] - current[0];
+      current = [start, end];
+    } else if (end > current[1]) {
+      current[1] = end;
+    }
+  }
+  if (current) total += current[1] - current[0];
+  return total / 1000;
+}
+
 export function decomposeRun(run, jobs = []) {
   const waiting = seconds(run.created_at, run.run_started_at);
   const wall = seconds(run.run_started_at, run.updated_at);
   if (waiting === null || wall === null) return null;
   const buckets = { setup: 0, tests: 0, other: 0 };
-  const spans = [];
+  const intervals = [];
   let clipped = false;
   for (const job of jobs) {
     const span = seconds(job.started_at, job.completed_at);
-    if (span !== null) spans.push(span);
+    if (span !== null) intervals.push([Date.parse(job.started_at), Date.parse(job.completed_at)]);
     let measured = 0;
     for (const step of job.steps ?? []) {
       const length = seconds(step.started_at, step.completed_at);
@@ -45,7 +62,8 @@ export function decomposeRun(run, jobs = []) {
     }
     if (span !== null && measured > span + 1) clipped = true;
   }
-  const longest = spans.length ? Math.max(...spans) : 0;
+  const covered = mergeIntervals(intervals);
+  const runStart = Date.parse(run.run_started_at);
   return {
     id: run.id,
     attempt: run.run_attempt ?? 1,
@@ -59,9 +77,10 @@ export function decomposeRun(run, jobs = []) {
     setup: buckets.setup,
     tests: buckets.tests,
     other: buckets.other,
-    overhead: Math.max(0, wall - longest),
-    clipped: clipped || longest > wall + 1,
+    gap: Math.max(0, wall - covered),
+    clipped: clipped || covered > wall + 1,
     total: waiting + wall,
+    startedAt: runStart,
   };
 }
 
@@ -81,7 +100,7 @@ export function percentile(values, share) {
 const RED = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
 const IDLE = new Set(['skipped', 'cancelled']);
 
-function pushToGreen(rows) {
+function pushToGreen(rows, pending = new Set()) {
   const shas = new Map();
   for (const row of rows) {
     if (!row.sha) continue;
@@ -90,7 +109,8 @@ function pushToGreen(rows) {
     shas.set(row.sha, group);
   }
   const greens = [];
-  for (const group of shas.values()) {
+  for (const [sha, group] of shas) {
+    if (pending.has(sha)) continue;
     if (!group.some(row => row.conclusion === 'success')) continue;
     if (group.some(row => RED.has(row.conclusion))) continue;
     const first = Math.min(...group.map(row => Date.parse(row.createdAt)));
@@ -104,9 +124,10 @@ function groups(entries, key, value) {
   const found = new Map();
   for (const entry of entries) {
     const name = key(entry);
-    if (!name) continue;
+    const length = value(entry);
+    if (!name || !Number.isFinite(length)) continue;
     const list = found.get(name) ?? [];
-    list.push(value(entry));
+    list.push(length);
     found.set(name, list);
   }
   return [...found.entries()]
@@ -115,10 +136,12 @@ function groups(entries, key, value) {
     .sort((left, right) => right.median - left.median);
 }
 
-export function summarize(app, rows, jobsByRun = new Map()) {
+export function summarize(app, allRows, jobsByRun = new Map(), { pending = new Set(), unreadable = 0 } = {}) {
+  const rows = allRows.filter(row => row);
+  const measured = rows.filter(row => !IDLE.has(row.conclusion));
   const jobEntries = [];
   const stepEntries = [];
-  for (const row of rows) {
+  for (const row of measured) {
     for (const job of jobsByRun.get(row.id) ?? []) {
       jobEntries.push({ work: `${row.workflow} / ${job.name}`, seconds: seconds(job.started_at, job.completed_at) });
       for (const step of job.steps ?? []) {
@@ -126,8 +149,8 @@ export function summarize(app, rows, jobsByRun = new Map()) {
       }
     }
   }
-  const greens = pushToGreen(rows.filter(row => row));
-  const completed = rows.filter(row => row && !IDLE.has(row.conclusion));
+  const greens = pushToGreen(rows, pending);
+  const completed = measured;
   const pick = field => completed.map(row => row[field]);
   return {
     name: app.name,
@@ -138,6 +161,7 @@ export function summarize(app, rows, jobsByRun = new Map()) {
     skipped: rows.filter(row => row && IDLE.has(row.conclusion)).length,
     greenPushes: greens.length,
     clipped: completed.filter(row => row.clipped).length,
+    unreadable: unreadable + rows.filter(row => row.unreadable).length,
     pushToGreen: { median: median(greens), p90: percentile(greens, 0.9) },
     median: {
       waiting: median(pick('waiting')),
@@ -146,7 +170,7 @@ export function summarize(app, rows, jobsByRun = new Map()) {
       setup: median(pick('setup')),
       tests: median(pick('tests')),
       other: median(pick('other')),
-      overhead: median(pick('overhead')),
+      gap: median(pick('gap')),
     },
     p90: { waiting: percentile(pick('waiting'), 0.9), wall: percentile(pick('wall'), 0.9) },
     slowSpots: groups(jobEntries, entry => entry.work, entry => entry.seconds).slice(0, 3),
@@ -157,7 +181,8 @@ export function summarize(app, rows, jobsByRun = new Map()) {
 export function appFromFixture(entry) {
   const rows = entry.runs.map(run => decomposeRun(run, entry.jobs?.[String(run.id)] ?? [])).filter(Boolean);
   const jobsByRun = new Map(entry.runs.map(run => [run.id, entry.jobs?.[String(run.id)] ?? []]));
-  return summarize(entry, rows, jobsByRun);
+  const pending = new Set(entry.runs.filter(run => run.status && run.status !== 'completed').map(run => run.head_sha));
+  return summarize(entry, rows, jobsByRun, { pending });
 }
 
 function fetchJson(repo, path) {
@@ -189,19 +214,27 @@ async function pool(tasks, width = 8) {
 }
 
 export async function collectApp(app, { limit, gh = fetchJson }) {
-  const runs = [];
-  for (let page = 1; runs.length < limit; page++) {
+  const all = [];
+  for (let page = 1; all.length < limit + 1; page++) {
     const payload = await gh(app.repo, `/actions/runs?per_page=100&page=${page}`);
     const batch = payload.workflow_runs ?? [];
-    runs.push(...batch.filter(run => run.status === 'completed'));
+    all.push(...batch);
     if (batch.length < 100) break;
   }
-  const kept = runs.slice(0, limit);
-  const jobs = await pool(kept.map(run => () => gh(app.repo, `/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`)
-    .then(payload => payload.jobs ?? []).catch(() => [])));
-  const jobsByRun = new Map(kept.map((run, index) => [run.id, jobs[index]]));
-  const rows = kept.map(run => decomposeRun(run, jobsByRun.get(run.id))).filter(Boolean);
-  return { app, rows, jobsByRun };
+  const completed = all.filter(run => run.status === 'completed');
+  const kept = completed.slice(0, limit);
+  const cut = completed.slice(limit);
+  const fetched = await pool(kept.map(run => () => gh(app.repo, `/actions/runs/${run.id}/attempts/${run.run_attempt ?? 1}/jobs?per_page=100`)
+    .then(payload => ({ jobs: payload.jobs ?? [] })).catch(() => ({ jobs: null }))));
+  const jobsByRun = new Map(kept.map((run, index) => [run.id, fetched[index].jobs ?? []]));
+  const rows = kept.map((run, index) => fetched[index].jobs === null
+    ? { id: run.id, sha: run.head_sha ?? '', unreadable: true, conclusion: run.conclusion ?? '' }
+    : decomposeRun(run, fetched[index].jobs)).filter(Boolean);
+  const pending = new Set([...all.filter(run => run.status !== 'completed').map(run => run.head_sha),
+    ...cut.map(run => run.head_sha)].filter(Boolean));
+  const newest = all[0]?.head_sha;
+  if (newest) pending.add(newest);
+  return { app, rows, jobsByRun, pending };
 }
 
 export function fmt(value) {
@@ -215,13 +248,13 @@ const escape = text => String(text ?? '').replace(/[&<>"]/g, character => ({ '&'
 export function formatHtml(summaries, { limit, generatedAt = new Date().toISOString(), command }) {
   const cell = (row, value) => `<td${row === 'push-to-green' ? ' class="lead"' : ''}>${escape(fmt(value))}</td>`;
   const appTable = summaries.map(summary => `
-    <h2>${escape(summary.label)} <span class="meta">${escape(summary.factory)} · ${escape(summary.repo)} · ${summary.runs} runs measured${summary.skipped ? ` · ${summary.skipped} skipped` : ''}</span></h2>
+    <h2>${escape(summary.label)} <span class="meta">${escape(summary.factory)} · ${escape(summary.repo)} · ${summary.runs} runs measured${summary.skipped ? ` · ${summary.skipped} skipped` : ''}${summary.unreadable ? ` · ${summary.unreadable} unreadable` : ''}</span></h2>
     <table>
       <tr><th>Measure</th><th>Median</th><th>p90</th></tr>
       <tr class="lead"><td>push to all green</td><td>${escape(fmt(summary.pushToGreen.median))}</td><td>${escape(fmt(summary.pushToGreen.p90))}</td></tr>
       ${[['waiting (queue)', summary.median.waiting, summary.p90.waiting], ['run wall clock', summary.median.wall, summary.p90.wall]]
     .map(([name, middle, tail]) => `<tr><td>${escape(name)}</td>${cell('m', middle)}${cell('m', tail)}</tr>`).join('')}
-      ${[['setup (worker time)', summary.median.setup], ['tests (worker time)', summary.median.tests], ['other work (worker time)', summary.median.other], ['between-job wait', summary.median.overhead]]
+      ${[['setup (worker time)', summary.median.setup], ['tests (worker time)', summary.median.tests], ['other work (worker time)', summary.median.other], ['run time outside jobs', summary.median.gap]]
     .map(([name, middle]) => `<tr><td>${escape(name)}</td>${cell('m', middle)}<td>-</td></tr>`).join('')}
     </table>
     <table class="spots">
@@ -244,14 +277,53 @@ ${appTable}
 </body></html>`;
 }
 
+export function formatMarkdown(summaries, { limit, generatedAt = new Date().toISOString(), command }) {
+  const rows = summary => [
+    `| Push to all green | ${fmt(summary.pushToGreen.median)} | ${fmt(summary.pushToGreen.p90)} |`,
+    `| Waiting (queue) | ${fmt(summary.median.waiting)} | ${fmt(summary.p90.waiting)} |`,
+    `| Run wall clock | ${fmt(summary.median.wall)} | ${fmt(summary.p90.wall)} |`,
+    `| Setup (worker time) | ${fmt(summary.median.setup)} | - |`,
+    `| Tests (worker time) | ${fmt(summary.median.tests)} | - |`,
+    `| Other work (worker time) | ${fmt(summary.median.other)} | - |`,
+    `| Run time outside jobs | ${fmt(summary.median.gap)} | - |`,
+  ].join('\n');
+  const spots = summary => [...summary.slowSpots, ...summary.setupSteps]
+    .map(spot => `| ${escape(spot.work).replace(/\|/g, '\\|')} | ${fmt(spot.median)} | ${spot.samples} |`).join('\n');
+  return [
+    '# Where check time goes',
+    '',
+    `Last ${limit} completed check runs per app, generated ${generatedAt}.`,
+    '',
+    'Waiting is the queue from a run being created to a runner starting it. Setup covers checkout, installs and builds; tests covers the checks themselves. Both are summed across every job, so parallel jobs add up to more than the wall clock. Run time outside jobs is wall clock no job was executing. Push to all green counts commits with no failed, timed-out or action-required run, from the first run created for that commit to the last one finishing; skipped runs never block it.',
+    '',
+    ...summaries.flatMap(summary => [
+      `## ${escape(summary.label)} (${escape(summary.factory)})`,
+      '',
+      `${escape(summary.repo)}. ${summary.runs} runs measured, ${summary.skipped} skipped, ${summary.greenPushes} green commits${summary.unreadable ? `, ${summary.unreadable} unreadable runs left out` : ''}.`,
+      '',
+      '| Measure | Median | p90 |',
+      '|---|---|---|',
+      rows(summary),
+      '',
+      '**Slowest spots**',
+      '',
+      '| Spot | Median | Samples |',
+      '|---|---|---|',
+      spots(summary),
+      '',
+    ]),
+    `Rerun: \`${command}\``,
+  ].join('\n');
+}
+
 export function formatText(summaries, { limit }) {
   const lines = [`Check time, last ${limit} completed runs per app`];
   for (const summary of summaries) {
     lines.push('');
-    lines.push(`${summary.label} (${summary.repo}, ${summary.runs} runs measured, ${summary.skipped} skipped, ${summary.greenPushes} green commits)`);
+    lines.push(`${summary.label} (${summary.repo}, ${summary.runs} runs measured, ${summary.skipped} skipped, ${summary.greenPushes} green commits${summary.unreadable ? `, ${summary.unreadable} unreadable left out` : ''})`);
     lines.push(`  push to all green: median ${fmt(summary.pushToGreen.median)}, p90 ${fmt(summary.pushToGreen.p90)}`);
     lines.push(`  waiting ${fmt(summary.median.waiting)} | wall ${fmt(summary.median.wall)}`);
-    lines.push(`  worker time: setup ${fmt(summary.median.setup)} | tests ${fmt(summary.median.tests)} | other ${fmt(summary.median.other)} | between-job wait ${fmt(summary.median.overhead)}`);
+    lines.push(`  worker time: setup ${fmt(summary.median.setup)} | tests ${fmt(summary.median.tests)} | other ${fmt(summary.median.other)} | outside jobs ${fmt(summary.median.gap)}`);
     for (const spot of summary.slowSpots) lines.push(`  slow: ${spot.work} ${fmt(spot.median)} (${spot.samples})`);
     for (const spot of summary.setupSteps) lines.push(`  setup: ${spot.work} ${fmt(spot.median)} (${spot.samples})`);
   }
@@ -263,10 +335,11 @@ export async function main(args = process.argv.slice(2)) {
     console.log(usage);
     return;
   }
-  const options = { limit: 150, json: false, out: null, fixture: null, repos: null };
+  const options = { limit: 150, json: false, markdown: false, out: null, fixture: null, repos: null };
   for (let index = 0; index < args.length; index++) {
     const value = args[index];
     if (value === '--json') options.json = true;
+    else if (value === '--markdown') options.markdown = true;
     else if (value === '--out') options.out = args[++index];
     else if (value === '--fixture') options.fixture = args[++index];
     else if (value === '--repos') options.repos = args[++index];
@@ -286,8 +359,8 @@ export async function main(args = process.argv.slice(2)) {
     summaries.push(...(payload.apps ?? []).map(appFromFixture));
   } else {
     for (const app of apps) {
-      const { rows, jobsByRun } = await collectApp(app, { limit: options.limit });
-      summaries.push(summarize(app, rows, jobsByRun));
+      const { rows, jobsByRun, pending } = await collectApp(app, { limit: options.limit });
+      summaries.push(summarize(app, rows, jobsByRun, { pending }));
     }
   }
   const command = `node scripts/ci-check-time.mjs --limit ${options.limit}${options.repos ? ` --repos ${options.repos}` : ''} --out ci-check-time.html`;
@@ -296,7 +369,8 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   if (options.out) {
-    writeFileSync(options.out, formatHtml(summaries, { limit: options.limit, command }));
+    const write = options.markdown ? formatMarkdown : formatHtml;
+    writeFileSync(options.out, write(summaries, { limit: options.limit, command }));
     console.log(`Wrote ${options.out}`);
     console.log(formatText(summaries, { limit: options.limit }));
     return;
