@@ -51,9 +51,21 @@ concurrency:
 # longest file so a 270-322s file never runs at the tail. Seven test jobs put a
 # non-draft PR at 19 jobs of the 20-job pool; the added queue cost is measured
 # after this ships, and the required check stays ci-tests.
+#
+# HYCI-45 splits the serial lane, which HYCI-42 turned into the slowest leg: on
+# production push 41254186616 the serial lane's Test step ran 364s while the
+# slowest pool lane ran 331s, against a 346s target. A serial lane costs the sum
+# of its files, and the 163 serial files total 280s of measured work, so its
+# count, not its balance, sets that lane's wall. CI_SERIAL_SHARDS gives them two
+# lanes that plan 140s each; the pool lanes keep their 225s plan and every lane
+# still opens with its longest file. Eight test jobs put a non-draft PR at
+# 20 jobs of the 20-job pool, which is the queue cost the ticket accepts; the
+# slowest leg on a real run is recorded on the ticket, and the required check
+# stays ci-tests.
 env:
-  # 6 pool lanes; the plan adds one serial lane, so CI Test is 7 lanes.
+  # 6 pool lanes plus 2 serial lanes, so CI Test is 8 lanes.
   CI_TEST_SHARDS: "6"
+  CI_SERIAL_SHARDS: "2"
 
 jobs:
   ci-prepare:
@@ -272,18 +284,19 @@ jobs:
           fi
           OUT="$RUNNER_TEMP/ci-shards"
           mkdir -p "$OUT"
-          # HYCI-6: the pool lanes plus one serial lane, so a lane never waits on
-          # a serial file with three workers idle.
-          LANES=$((CI_TEST_SHARDS + 1))
+          # HYCI-6/HYCI-45: the pool lanes plus the serial lanes, so a lane never
+          # waits on a serial file with three workers idle and no lane pays for every
+          # serial file.
+          LANES=$((CI_TEST_SHARDS + CI_SERIAL_SHARDS))
           if [ "$GITHUB_EVENT_NAME" = "push" ] || grep -qx ALL "$RUNNER_TEMP/selected-tests.txt"; then
-            node .github/scripts/shard-tests.mjs --discover --count "$LANES" --serial-lane --out "$OUT"
+            node .github/scripts/shard-tests.mjs --discover --count "$LANES" --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT"
           elif ! grep -q '[^[:space:]]' "$RUNNER_TEMP/selected-tests.txt"; then
             echo "selected test list is empty; refusing to skip the suite" >&2
             exit 1
           else
-            node .github/scripts/shard-tests.mjs --count "$LANES" --serial-lane --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
+            node .github/scripts/shard-tests.mjs --count "$LANES" --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT" < "$RUNNER_TEMP/selected-tests.txt"
           fi
-          node .github/scripts/shard-tests.mjs --check --serial-lane --out "$OUT"
+          node .github/scripts/shard-tests.mjs --check --serial-lanes "$CI_SERIAL_SHARDS" --out "$OUT"
           # State how much of the suite this run covers. A pick that quietly
           # widened back to everything is then visible in the run itself.
           TOTAL=$(node -e 'import("./scripts/test-inventory.mjs").then(async (m) => {
@@ -737,7 +750,7 @@ jobs:
       - name: Prove every test file ran once
         id: prove
         if: always() && needs.ci-prepare.outputs.run_tests == 'true'
-        run: node .github/scripts/shard-tests.mjs --prove --serial-lane --out ci-test-shards --results ci-shard-results
+        run: node .github/scripts/shard-tests.mjs --prove --serial-lanes "$CI_SERIAL_SHARDS" --out ci-test-shards --results ci-shard-results
 
       - name: Combine shard logs
         if: always() && needs.ci-prepare.outputs.run_tests == 'true'
