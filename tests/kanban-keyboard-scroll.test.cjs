@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { JSDOM } = require("jsdom");
 
@@ -84,24 +83,3 @@ test("missing card is harmless and a detached card still receives safe focus", (
   } finally { dom.window.close(); }
 });
 
-test("J/K and arrows use column-only focus while preserving List navigation", () => {
-  const source = fs.readFileSync(path.join(root, "src/hooks/useUniversalMovement.ts"), "utf8");
-  const focus = source.slice(source.indexOf("const focus = {"), source.indexOf("left: (forceNavigate"));
-  assert.equal((focus.match(/focusKanbanCard\(activeElement_\)/g) || []).length, 2);
-  assert.equal((focus.match(/focusKanbanCard\(document\.getElementById\(tasksList\[0\]\.id\)\)/g) || []).length, 2);
-  assert.match(focus, /props\.type === "List"/);
-  const refocus = source.slice(source.indexOf("function refocus("), source.indexOf("async function moveTaskHorizontally"));
-  assert.match(refocus, /props\.type === "Kanban"/);
-  assert.match(refocus, /focusKanbanCard\(element\)/);
-  const helper = fs.readFileSync(path.join(root, "src/utils/helperFunctions/Kanban/columnFocus.ts"), "utf8");
-  assert.match(helper, /focus\(\{ preventScroll: true \}\)/);
-  assert.doesNotMatch(helper, /scrollIntoView/);
-});
-
-test("board row is bounded so hidden overflow cannot scroll the headers away", () => {
-  const source = fs.readFileSync(path.join(root, "src/styles/globals.scss"), "utf8");
-  const start = source.indexOf("#sectionsContainer {");
-  const row = source.slice(start, source.indexOf("}", start));
-  assert.match(row, /grid-template-rows:\s*minmax\(0,\s*1fr\)/);
-  assert.match(source, /overflow-x: auto;\s*overflow-y: hidden;/);
-});

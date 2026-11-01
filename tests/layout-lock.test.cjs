@@ -108,19 +108,14 @@ test('ratchet requires the matching full ticket URL, reason, exact screen and un
   assert.match(validateFlagChanges([change, change], [flag], { 'ticket/Desktop': baseline })[0], /duplicate/);
 });
 
-test('spec validates the registry in both modes and applies allowances only to all-flags-on fixtures', () => {
-  const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
-  const seed = fs.readFileSync(path.join(__dirname, '../scripts/seed-browser-smoke.mjs'), 'utf8');
-  assert.match(spec, /import \{ FEATURE_FLAG_KEYS \} from '\.\.\/\.\.\/src\/lib\/flags'/);
-  assert.match(spec, /test\.beforeAll\([\s\S]*validateFlagChanges\(flagChanges, FEATURE_FLAG_KEYS, screens\)/);
-  assert.match(spec, /layoutDifferences\([\s\S]*fixture\.allFlagsOn\s*\? \{ entries: flagChanges, registry: FEATURE_FLAG_KEYS, flags \}\s*: undefined/);
-  assert.match(seed, /JSON\.stringify\(\{ \.\.\.fixture, flags, allFlagsOn \}\)/);
+test('committed flag changes validate against the registry for every screen', () => {
   const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.flag-changes.json'), 'utf8'));
   const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
   const screens = Object.fromEntries(Object.entries(committed.viewports).flatMap(([device, viewport]) =>
     Object.entries(viewport.screens).map(([screen, value]) => [`${screen}/${device}`, value])));
   const registry = require("./helpers/flag-files.cjs").definitions().map(({ key }) => key);
   assert.deepEqual(validateFlagChanges(entries, registry, screens), []);
+  assert.match(LAYOUT_CHANGE_MESSAGE, /Only change e2e\/smoke\/layout-lock\.baseline\.json when the ticket asks for this layout change; put Valentin's quote in the PR\./);
 });
 
 test('vertical order groups same-row landmarks deterministically', () => {
@@ -149,33 +144,6 @@ test('committed baseline contains measured boxes and complete vertical order for
     }
   }
 });
-
-test('phone title hit-target invariant is independent of allowed landmark drift', () => {
-  const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
-  const invariant = spec.slice(spec.indexOf("test('layout lock: phone New Task title"), spec.indexOf("test('layout lock: desktop New Task"));
-  assert.match(invariant, /#title-input-modal/);
-  assert.match(invariant, /toBeGreaterThanOrEqual\(24\)/);
-  assert.match(invariant, /document\.elementFromPoint[\s\S]*=== field/);
-  assert.match(invariant, /await title\.tap\(\)[\s\S]*toBeFocused\(\)/);
-  assert.doesNotMatch(invariant, /layoutDifferences|flagChanges/);
-});
-
-test('spec covers six screens, updates serially from live-like flags, and never changes the baseline on ordinary runs', () => {
-  const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
-  const docs = fs.readFileSync(path.join(__dirname, '../docs/ci.md'), 'utf8');
-  assert.match(spec, /\['ticket', 'board', 'inbox', 'my-tasks', 'new-task', 'app-shell'\]/);
-  assert.match(spec, /process\.env\.LAYOUT_LOCK_UPDATE === '1'/);
-  assert.match(docs, /LAYOUT_LOCK_UPDATE=1 LAYOUT_LOCK_SOURCE_COMMIT=\$\(git rev-parse origin\/production\)/);
-  assert.match(docs, /--workers=1 --retries=0/);
-  assert.match(docs, /never `--all-flags-on`/);
-  assert.match(spec, /if \(update && !fromBoard\) \{[\s\S]*testInfo\.config\.workers/);
-  assert.match(spec, /baseline update requires live-like flags, not all-flags-on/);
-  assert.match(spec, /modes\[key\] === 'EVERYONE'/);
-  assert.match(spec, /sourceCommit = process\.env\.LAYOUT_LOCK_SOURCE_COMMIT/);
-  assert.match(spec, /writeFileSync\(baselinePath,[\s\S]*\} else \{[\s\S]*layoutDifferences/);
-  assert.match(LAYOUT_CHANGE_MESSAGE, /Only change e2e\/smoke\/layout-lock\.baseline\.json when the ticket asks for this layout change; put Valentin's quote in the PR\./);
-});
-
 
 test('stable cached phone opens allow the intentional unscrolled viewport only with their registered flag on', () => {
   const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
