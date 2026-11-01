@@ -398,3 +398,62 @@ test('a handover drops the ABANDON of a gate it writes again and keeps unrelated
     fs.rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('a move refuses a hand-written proof gate still on the old checkout', needsUnlazy, () => {
+  const f = fixture();
+  const main = path.join(f.root, 'main');
+  fs.mkdirSync(main);
+  const extra = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates/extra.md');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    fs.mkdirSync(path.dirname(extra), { recursive: true });
+    fs.writeFileSync(extra, `- [ ] HTPR-6819.extra-path: the proof this session still owes\n  CHECK: echo proven\n  EXPECT: proven\n  CWD: ${f.project}\n`);
+    const moved = spawnSync('bash', [shipGates, 'HTPR-6819'], { cwd: main, encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full', SHIP_LEDGER_MOVE: '1' } });
+    assert.notEqual(moved.status, 0, 'a stale hand-written gate followed the move silently');
+    assert.match(moved.stderr, new RegExp(`HTPR-6819\\.extra-path in ${extra} still runs in ${f.project}`));
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a legacy ledger that cannot be parsed is refused, not silently dropped', needsUnlazy, () => {
+  const f = fixture();
+  const legacy = path.join(f.project, '.unlazy/s-abcdef12/GATES.md');
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  fs.writeFileSync(legacy, '# Gates: /ship\n\n' +
+    '- [ ] HTPR-6819.qa-note: the outcome this session still owes\n  CHECK: echo carried\n  EXPECT: carried\n\n' +
+    '- [ ] HTPR-6819.qa-note: a duplicate id\n  CHECK: echo again\n  EXPECT: again\n');
+  try {
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], { cwd: f.project, encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full' } });
+    assert.notEqual(refused.status, 0, 'a malformed legacy ledger was dropped silently');
+    assert.match(refused.stderr, new RegExp(`${legacy} cannot be parsed`));
+    assert.match(refused.stderr, /duplicate gate id HTPR-6819\.qa-note/);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a re-adoption refuses when the project copy changed, not recording a digest it did not copy', needsUnlazy, () => {
+  const f = fixture();
+  const legacy = path.join(f.project, '.unlazy/s-abcdef12/GATES.md');
+  fs.mkdirSync(path.dirname(legacy), { recursive: true });
+  const gate = (check) => '# Gates: /ship\n\n' +
+    `- [ ] HTPR-6819.qa-note: the outcome this session still owes\n  CHECK: ${check}\n  EXPECT: carried\n`;
+  fs.writeFileSync(legacy, gate('echo carried'));
+  const carried = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates/adopted.md');
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', { SHIP_LEDGER_ADOPT: '1' });
+    assert.match(fs.readFileSync(carried, 'utf8'), /CHECK: echo carried/);
+    fs.writeFileSync(legacy, gate('echo changed'));
+    fs.rmSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md'));
+    const again = spawnSync('bash', [shipGates, 'HTPR-6819'], { cwd: f.project, encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full', SHIP_LEDGER_ADOPT: '1' } });
+    assert.notEqual(again.status, 0, 'a changed project gate was re-adopted without copying its new definition');
+    assert.match(again.stderr, new RegExp(`HTPR-6819\\.qa-note in ${carried} no longer match`));
+    assert.match(again.stderr, /SHIP_LEDGER_ADOPT=1/);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
