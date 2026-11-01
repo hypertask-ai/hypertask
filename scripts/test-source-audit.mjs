@@ -264,8 +264,9 @@ export function renderReport(inventory) {
     `- ${counts.allowlisted} allowlisted source-text files: ${counts.decisions.delete} delete, ${counts.decisions.rewrite} rewrite, ${counts.decisions.keep} keep.`,
   );
   const carrying = Number((cost.classes["source-text"].seconds + cost.classes.mixed.seconds).toFixed(1));
+  const timedFiles = counts.testFiles - cost.untimedFiles;
   lines.push(
-    `- Measured cost: ${thousands(carrying)} s, or ${((100 * carrying) / cost.measuredSeconds).toFixed(1)}% of the ${thousands(cost.measuredSeconds)} s measured across all ${thousands(counts.testFiles)} files.`,
+    `- Measured cost: ${thousands(carrying)} s, or ${((100 * carrying) / cost.measuredSeconds).toFixed(1)}% of the ${thousands(cost.measuredSeconds)} s timed across ${thousands(timedFiles)} of those files.`,
     "",
   );
   lines.push("## Decision ladder", "");

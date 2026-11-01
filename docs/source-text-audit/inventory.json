@@ -1,14 +1,14 @@
 {
   "counts": {
-    "testFiles": 1809,
-    "behaviour": 1604,
+    "testFiles": 1808,
+    "behaviour": 1642,
     "sourceText": 7,
-    "mixed": 198,
-    "allowlisted": 200,
+    "mixed": 159,
+    "allowlisted": 161,
     "unlisted": 5,
     "decisions": {
-      "keep": 34,
-      "rewrite": 171,
+      "keep": 27,
+      "rewrite": 139,
       "delete": 0
     }
   },
@@ -16,14 +16,14 @@
     "run": 41250991814,
     "sha": "0bf3a774e",
     "measuredSeconds": 4467.3,
-    "untimedFiles": 873,
+    "untimedFiles": 872,
     "classes": {
       "behaviour": {
-        "files": 1604,
-        "timed": 829,
-        "untimed": 775,
-        "seconds": 3473.3,
-        "share": 77.7
+        "files": 1642,
+        "timed": 850,
+        "untimed": 792,
+        "seconds": 3546.4,
+        "share": 79.4
       },
       "source-text": {
         "files": 7,
@@ -33,702 +33,15 @@
         "share": 0
       },
       "mixed": {
-        "files": 198,
-        "timed": 107,
-        "untimed": 91,
-        "seconds": 994,
-        "share": 22.3
+        "files": 159,
+        "timed": 86,
+        "untimed": 73,
+        "seconds": 920.9,
+        "share": 20.6
       }
     }
   },
   "rows": [
-    {
-      "file": "tests/accounts.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 7,
-      "targets": [
-        "@/lib/auth/betterAuthClient",
-        "@/lib/configs/auth.config",
-        "src/components/Modals/SignOut/SignOutModal.tsx",
-        "src/components/commands.tsx",
-        "src/components/sidebars/RightSidebar/Signout.tsx",
-        "src/lib/auth/accounts.ts"
-      ],
-      "coverage": [
-        "tests/inbox-startup.test.cjs"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "7 behaviour tests in this file"
-    },
-    {
-      "file": "tests/activation-analytics.test.ts",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 11,
-      "targets": [
-        "src/lib/telemetry/signupAnalytics.ts"
-      ],
-      "coverage": [
-        "tests/signup-analytics.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "11 behaviour tests in this file"
-    },
-    {
-      "file": "tests/activation-wiring.test.ts",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 3,
-      "behaviourTests": 25,
-      "targets": [
-        "@/lib/agentWebhooks/outbox",
-        "@/lib/agents/writing",
-        "@/lib/agents/writingEnforcement",
-        "@/lib/ai/bulkConfirmation",
-        "@/lib/ai/labelClassifier",
-        "@/lib/ai/tools/execution",
-        "@/lib/ai/tools/helpers",
-        "@/lib/cycleService",
-        "@/lib/mcp/sections/services",
-        "@/lib/mcp/tasks/agentDoneLifecycle",
-        "@/lib/mcp/tasks/agentMutationFence",
-        "@/lib/mcp/tasks/services",
-        "@/lib/mcp/webhooks/outbox",
-        "@/lib/realtime/server",
-        "@/lib/tasks/sameBoardRelations",
-        "@/pages/api/queues/FAST/generateSummary",
-        "src/app/api/users/ai-connection-status/route.ts",
-        "src/app/oauth/token/route.ts",
-        "src/lib/agents/writing.ts",
-        "src/lib/ai/tools/section.ts",
-        "src/lib/mcp/auth/session.ts",
-        "src/lib/mcp/sections/services.ts",
-        "src/lib/onboarding/emails/agentNudge.ts",
-        "src/lib/tasks/sameBoardRelations.ts",
-        "src/lib/telemetry/activationOccurrences.ts",
-        "src/pages/api/invite/generatePublicInvite.ts",
-        "src/pages/api/invite/reSendInvite.ts",
-        "src/pages/api/members/invite.ts",
-        "src/utils/controllers/section/sectionService.ts",
-        "src/utils/controllers/tasks/parentTaskAccess.ts",
-        "src/utils/controllers/tasks/single.ts"
-      ],
-      "coverage": [
-        "tests/security/generatePublicInvite.test.ts"
-      ],
-      "decision": "keep",
-      "rule": "keep:ticket",
-      "reason": "past-fix guard: a test title names a ticket",
-      "evidence": "HTPR-7162"
-    },
-    {
-      "file": "tests/activity-agent-provenance.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 4,
-      "targets": [
-        "@/lib/prisma",
-        "@/pages/api/queues/FAST/generateSummary",
-        "src/lib/agents/activityAttribution.ts",
-        "src/utils/controllers/activities/createActivity.ts",
-        "src/utils/controllers/tasks/single.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "4 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-actor-archive.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 2,
-      "behaviourTests": 18,
-      "targets": [
-        "@/lib/mcp/boards/columnRole",
-        "@/lib/planLimits",
-        "src/lib/auth/resolveActingAgent.ts",
-        "src/lib/auth/session.ts",
-        "src/lib/mcp/boards/columnRole.ts",
-        "src/lib/mcp/tasks/agentDoneLifecycle.ts",
-        "src/lib/mcp/tasks/updateTask.ts",
-        "src/pages/api/queues/tasks/taskDeleteReminder.ts"
-      ],
-      "coverage": [
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/firstScreen-ticket-document.test.cjs",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "18 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-assignment-parity.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 2,
-      "behaviourTests": 9,
-      "targets": [
-        "src/app/api/ai/chat/stream/bulkTools.ts",
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/lib/mcp-server/lib/services/task.service.ts",
-        "src/lib/mcp-server/tool-response.ts",
-        "src/lib/mcp-server/validations/task.validation.ts"
-      ],
-      "coverage": [
-        "tests/lib/mcp-server/validations/parity-tools.validation.test.ts",
-        "tests/mcp-task-input-normalization.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "9 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-chat-durable-conversation.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 3,
-      "behaviourTests": 38,
-      "targets": [
-        "src/app/api/agent-chat/[sessionId]/messages/route.ts",
-        "src/app/api/agent-chat/[sessionId]/participant/route.ts",
-        "src/app/api/agent-chat/[sessionId]/route.ts",
-        "src/app/api/ai-chat/add-message/route.ts",
-        "src/app/api/ai-chat/create-session/route.ts",
-        "src/app/api/ai/chat/stream/ensureNativeChatTurn.ts",
-        "src/app/api/ai/chat/stream/persistAssistantMessage.ts",
-        "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
-        "src/lib/agentRuns/service.ts",
-        "src/lib/agents/agentChatActivity.ts",
-        "src/lib/agents/chatAccess.ts",
-        "src/lib/agents/chatBroadcast.ts",
-        "src/lib/agents/chatService.ts",
-        "src/lib/agents/visibility.ts",
-        "src/lib/auth/getSessionUser.ts",
-        "src/lib/flags.ts",
-        "src/lib/prisma.ts",
-        "src/lib/realtime/server.ts",
-        "src/lib/telemetry/activationOccurrences.ts",
-        "src/utils/controllers/agents/boardMembers.ts"
-      ],
-      "coverage": [
-        "tests/agent-access-delegation.test.ts",
-        "tests/agent-visibility.test.ts",
-        "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
-        "tests/app/api/mcp/agents/agentId/get.test.ts",
-        "tests/app/api/mcp/agents/agentId/rename.test.ts",
-        "tests/app/api/mcp/agents/create/create.test.ts",
-        "tests/app/api/mcp/agents/revoke/revoke.test.ts",
-        "tests/app/api/mcp/agents/rotate-token/rotate-token.test.ts",
-        "tests/app/api/mcp/hello/hello.test.ts",
-        "tests/app/api/mcp/tasks/batch/batch.test.ts",
-        "tests/app/api/mcp/tasks/related/related.test.ts",
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/domain-boundary.test.cjs",
-        "tests/feature-flags-cluster.test.ts",
-        "tests/feature-flags-removal.test.ts",
-        "tests/lib/mcp/agents/presence.test.ts",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/lib/mcp/webhooks/outbox.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/task-lease-claim-route.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts",
-        "tests/utils/controllers/pages/pageService.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "38 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-chat-parked-reply-removal.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 12,
-      "targets": [
-        "src/app/api/agent-chat/[sessionId]/messages/route.ts",
-        "src/lib/agentRuns/model.ts",
-        "src/lib/agentWebhooks/outbox.ts",
-        "src/lib/agents/chatBrief.ts",
-        "src/lib/agents/chatBroadcast.ts",
-        "src/lib/agents/visibility.ts",
-        "src/lib/auth/getSessionUser.ts",
-        "src/lib/flags.ts",
-        "src/lib/prisma.ts",
-        "src/lib/realtime/server.ts",
-        "src/prisma/migrations"
-      ],
-      "coverage": [
-        "tests/agent-access-delegation.test.ts",
-        "tests/agent-visibility.test.ts",
-        "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
-        "tests/app/api/mcp/agents/agentId/get.test.ts",
-        "tests/app/api/mcp/agents/agentId/rename.test.ts",
-        "tests/app/api/mcp/agents/create/create.test.ts",
-        "tests/app/api/mcp/agents/revoke/revoke.test.ts",
-        "tests/app/api/mcp/agents/rotate-token/rotate-token.test.ts",
-        "tests/app/api/mcp/hello/hello.test.ts",
-        "tests/app/api/mcp/tasks/batch/batch.test.ts",
-        "tests/app/api/mcp/tasks/related/related.test.ts",
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/domain-boundary.test.cjs",
-        "tests/feature-flags-cluster.test.ts",
-        "tests/feature-flags-removal.test.ts",
-        "tests/lib/mcp/agents/presence.test.ts",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/lib/mcp/webhooks/outbox.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/task-lease-claim-route.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts",
-        "tests/utils/controllers/pages/pageService.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "12 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-chat-revocation.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 3,
-      "targets": [
-        "src/app/api/agent-chat/[sessionId]/messages/route.ts",
-        "src/app/api/agent-chat/[sessionId]/proposals/[proposalId]/route.ts",
-        "src/app/api/agent-chat/[sessionId]/route.ts",
-        "src/app/api/mcp/chat/sessions/[sessionId]/messages/route.ts",
-        "src/lib/agents/chatAccess.ts"
-      ],
-      "coverage": [],
-      "decision": "keep",
-      "rule": "keep:access",
-      "reason": "access or security guard",
-      "evidence": "\"refus\""
-    },
-    {
-      "file": "tests/agent-connection.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 12,
-      "targets": [
-        "@/lib/email/sendEmail",
-        "@/lib/flags",
-        "@/lib/flags/keys",
-        "@/lib/onboarding/emails/agentConnected",
-        "@/lib/prisma",
-        "@/lib/telemetry/activationAnalytics",
-        "src/lib/onboarding/agentConnection.ts",
-        "src/prisma/schema.prisma"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "12 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-description-mention-invocation.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 15,
-      "targets": [
-        "@/lib/flags/definitions/${SELF_FOLLOW_FLAG}",
-        "@/lib/prisma",
-        "src/lib/mcp-server/validations/comment.validation.ts",
-        "src/lib/mcp/operations/comments/operation.ts",
-        "src/utils/controllers/comments/agentInvocationCorrelation.ts",
-        "src/utils/controllers/followers/createFollowerService.ts"
-      ],
-      "coverage": [
-        "tests/lib/mcp-server/validations/parity-tools.validation.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "15 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-provider-key.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 10,
-      "targets": [
-        "src/app/api/agents/[agentId]/provider-key/route.ts",
-        "src/app/api/ai/_lib/byokKeys.ts",
-        "src/app/api/ai/_lib/modelProvider.ts",
-        "src/app/api/ai/_lib/planGate.ts",
-        "src/lib/agents/ownedSlugs.ts",
-        "src/lib/crypto/byokCipher.ts",
-        "src/lib/prisma.ts",
-        "src/utils/controllers/projects/getAllIncludes.ts"
-      ],
-      "coverage": [
-        "tests/agent-access-delegation.test.ts",
-        "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
-        "tests/app/api/mcp/agents/agentId/get.test.ts",
-        "tests/app/api/mcp/agents/agentId/rename.test.ts",
-        "tests/app/api/mcp/agents/create/create.test.ts",
-        "tests/app/api/mcp/agents/revoke/revoke.test.ts",
-        "tests/app/api/mcp/agents/rotate-token/rotate-token.test.ts",
-        "tests/app/api/mcp/hello/hello.test.ts",
-        "tests/app/api/mcp/tasks/batch/batch.test.ts",
-        "tests/app/api/mcp/tasks/related/related.test.ts",
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/chat-task-tree.test.ts",
-        "tests/lib/mcp/agents/presence.test.ts",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/lib/mcp/webhooks/outbox.test.ts",
-        "tests/oauth-token-cipher.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/slack-uninstall.test.ts",
-        "tests/task-lease-claim-route.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts",
-        "tests/utils/controllers/pages/pageService.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "10 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-run-activities.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 29,
-      "targets": [
-        "src/lib/agentRuns/model.ts",
-        "src/lib/agentRuns/persistence.ts",
-        "src/lib/agentWebhooks/outbox.ts",
-        "src/lib/ai/hyperAiConfirmation.ts",
-        "src/lib/configs/general.config.ts",
-        "src/lib/mcp/webhooks/outbox.ts",
-        "src/lib/prisma.ts",
-        "src/lib/realtime/server.ts",
-        "src/pages/api/queues/FAST/generateCommentSummary.ts",
-        "src/pages/api/queues/FAST/generateSummary.ts",
-        "src/prisma/migrations/20260904152000_add_agent_run_activities/migration.sql",
-        "src/prisma/migrations/20260904184500_add_agent_run_activity_comment_replay/migration.sql",
-        "src/utils/controllers/FCM/index.ts",
-        "src/utils/controllers/comments/agentInvocationCorrelation.ts",
-        "src/utils/controllers/comments/createCommentService.ts",
-        "src/utils/controllers/comments/extractTaskReferences.ts",
-        "src/utils/controllers/comments/inboundEmailReceipt.ts",
-        "src/utils/controllers/comments/processMentions.ts",
-        "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts",
-        "src/utils/controllers/notifications/agentActionRecipients.ts",
-        "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts",
-        "src/utils/controllers/notifications/sendNotification.ts",
-        "src/utils/controllers/notifications/shouldNotify.ts",
-        "src/utils/controllers/projects/getAllIncludes.ts",
-        "src/utils/controllers/tasks/addRelatedTasks.ts",
-        "src/utils/controllers/tasks/single.ts",
-        "src/utils/controllers/turbopuffer/turbopufferHelper.ts",
-        "src/utils/helperFunctions/normalizeRichTextStructure.ts"
-      ],
-      "coverage": [
-        "tests/agent-access-delegation.test.ts",
-        "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
-        "tests/app/api/mcp/agents/agentId/get.test.ts",
-        "tests/app/api/mcp/agents/agentId/rename.test.ts",
-        "tests/app/api/mcp/agents/create/create.test.ts",
-        "tests/app/api/mcp/agents/revoke/revoke.test.ts",
-        "tests/app/api/mcp/agents/rotate-token/rotate-token.test.ts",
-        "tests/app/api/mcp/hello/hello.test.ts",
-        "tests/app/api/mcp/tasks/batch/batch.test.ts",
-        "tests/app/api/mcp/tasks/related/related.test.ts",
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/chat-task-tree.test.ts",
-        "tests/lib/mcp/agents/presence.test.ts",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/lib/mcp/webhooks/outbox.test.ts",
-        "tests/page-mention-links.test.ts",
-        "tests/search-preview-entities.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/task-lease-claim-route.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts",
-        "tests/utils/controllers/pages/pageService.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "29 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-runs.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 18,
-      "targets": [
-        "src/lib/agentWebhooks/outbox.ts",
-        "src/lib/agentWebhooks/queue.ts",
-        "src/lib/flags.ts",
-        "src/lib/prisma.ts",
-        "src/prisma/migrations/20260904130000_add_agent_runs/migration.sql"
-      ],
-      "coverage": [
-        "tests/agent-access-delegation.test.ts",
-        "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
-        "tests/app/api/mcp/agents/agentId/get.test.ts",
-        "tests/app/api/mcp/agents/agentId/rename.test.ts",
-        "tests/app/api/mcp/agents/create/create.test.ts",
-        "tests/app/api/mcp/agents/revoke/revoke.test.ts",
-        "tests/app/api/mcp/agents/rotate-token/rotate-token.test.ts",
-        "tests/app/api/mcp/hello/hello.test.ts",
-        "tests/app/api/mcp/tasks/batch/batch.test.ts",
-        "tests/app/api/mcp/tasks/related/related.test.ts",
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/domain-boundary.test.cjs",
-        "tests/feature-flags-cluster.test.ts",
-        "tests/feature-flags-removal.test.ts",
-        "tests/lib/mcp/agents/presence.test.ts",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/lib/mcp/webhooks/outbox.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/task-lease-claim-route.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts",
-        "tests/utils/controllers/pages/pageService.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "18 behaviour tests in this file"
-    },
-    {
-      "file": "tests/agent-status-chip.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 11,
-      "targets": [
-        "@/lib/agentStatus/chip",
-        "@/lib/prisma",
-        "src/lib/agentRuns/service.ts",
-        "src/lib/agentStatus/chip.ts",
-        "src/utils/controllers/tasks/attachAgentStatus.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "11 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-bulk-confirmation.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 11,
-      "targets": [
-        "@/lib/redis",
-        "src/app/api/ai/chat/stream/bulkTools.ts",
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/lib/ai/bulkConfirmation.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "11 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-chat-background-persistence.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 11,
-      "targets": [
-        "src/app/api/ai/chat/cancel/route.ts",
-        "src/app/api/ai/chat/stream/ensureNativeChatTurn.ts",
-        "src/app/api/ai/chat/stream/persistAssistantMessage.ts",
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/app/api/ai/chat/stream/streamLease.ts",
-        "src/app/api/cron/native-agent-heartbeat/route.ts",
-        "src/hooks/MultiPages/AIChat/useAiChat.ts",
-        "src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts"
-      ],
-      "coverage": [
-        "tests/ai-chat-cancellation.test.ts",
-        "tests/ai-chat-turn-failure-state.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "11 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-chat-board-config.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 2,
-      "behaviourTests": 2,
-      "targets": [
-        "src/app/api/ai/_lib/customInstructions.ts",
-        "src/app/api/ai/chat/stream/route.ts"
-      ],
-      "coverage": [],
-      "decision": "keep",
-      "rule": "keep:access",
-      "reason": "access or security guard",
-      "evidence": "\"access\""
-    },
-    {
-      "file": "tests/ai-chat-observability.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 3,
-      "behaviourTests": 5,
-      "targets": [
-        "src/app/api/ai/_lib/modelProvider.ts",
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/lib/telemetry/aiChatObservability.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "5 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-chat-page-history.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 3,
-      "targets": [
-        "src/app/api/ai/chat/stream/route.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "3 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-chat-project-admin.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 2,
-      "behaviourTests": 8,
-      "targets": [
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/utils/controllers/projects/boardQuota.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "8 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-chat-user-facing-errors.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 5,
-      "behaviourTests": 9,
-      "targets": [
-        "@/lib/ai/tools/constants",
-        "@/lib/api/errorMessage",
-        "@/lib/errors/reportError",
-        "src/app/api/ai/_lib/planGate.ts",
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/lib/ai/chatStream/errors.ts",
-        "src/lib/ai/settings/catalog.ts",
-        "src/lib/api/errorMessage.ts"
-      ],
-      "coverage": [],
-      "decision": "keep",
-      "rule": "keep:access",
-      "reason": "access or security guard",
-      "evidence": "\"access\""
-    },
-    {
-      "file": "tests/ai-error-tracking.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 3,
-      "targets": [
-        ".github/workflows/posthog-error-alert.yml",
-        "src/app/api/ai/${route}/route.ts",
-        "src/lib/errors/reportError.ts",
-        "src/lib/telemetry/errorSanitization.ts"
-      ],
-      "coverage": [
-        "tests/ai-usage-persistence-error.test.ts",
-        "tests/htpr-7399-request-aborted.test.ts",
-        "tests/posthog-error-alert.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "3 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-eval.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 8,
-      "targets": [
-        ".github/workflows/ai-evals.yml"
-      ],
-      "coverage": [],
-      "decision": "keep",
-      "rule": "keep:policy",
-      "reason": "guards repo policy, which no behaviour test can reach",
-      "evidence": ".github/workflows/ai-evals.yml"
-    },
     {
       "file": "tests/ai-gateway-key-routing.test.cjs",
       "class": "mixed",
@@ -815,22 +128,6 @@
       "evidence": "9 behaviour tests in this file"
     },
     {
-      "file": "tests/ai-label-update-confirmation.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 7,
-      "targets": [
-        "src/app/api/ai/chat/stream/bulkTools.ts",
-        "src/lib/ai/tools/updateTask.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "7 behaviour tests in this file"
-    },
-    {
       "file": "tests/ai-model-preferences.test.cjs",
       "class": "mixed",
       "allowlisted": true,
@@ -887,76 +184,6 @@
       "rule": "rewrite:mixed",
       "reason": "behaviour assertions already live in this file",
       "evidence": "10 behaviour tests in this file"
-    },
-    {
-      "file": "tests/ai-native-bearer-auth.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 4,
-      "behaviourTests": 12,
-      "targets": [
-        "src/app/api/ai/_lib/editorAi.ts",
-        "src/app/api/ai/_lib/requestUser.ts",
-        "src/app/api/ai/chat/stream/route.ts",
-        "src/app/api/ai/task-writer/route.ts",
-        "src/lib/mcp/auth.ts",
-        "src/lib/mcp/auth/verifyJwt.ts",
-        "src/lib/mcp/oauthTokenContract.ts",
-        "src/lib/prisma.ts",
-        "src/lib/telemetry/activationOccurrences.ts"
-      ],
-      "coverage": [
-        "tests/agent-access-delegation.test.ts",
-        "tests/app/api/mcp/agents/agentId/archive/archive.test.ts",
-        "tests/app/api/mcp/agents/agentId/get.test.ts",
-        "tests/app/api/mcp/agents/agentId/rename.test.ts",
-        "tests/app/api/mcp/agents/create/create.test.ts",
-        "tests/app/api/mcp/agents/revoke/revoke.test.ts",
-        "tests/app/api/mcp/agents/rotate-token/rotate-token.test.ts",
-        "tests/app/api/mcp/hello/hello.test.ts",
-        "tests/app/api/mcp/tasks/batch/batch.test.ts",
-        "tests/app/api/mcp/tasks/related/related.test.ts",
-        "tests/app/api/mcp/token/route.test.ts",
-        "tests/archive-draft-api.test.ts",
-        "tests/lib/mcp/__tests__/rateLimitTier.test.ts",
-        "tests/lib/mcp/agents/presence.test.ts",
-        "tests/lib/mcp/agents/scopes.test.ts",
-        "tests/lib/mcp/tasks/contractFields.test.ts",
-        "tests/lib/mcp/webhooks/outbox.test.ts",
-        "tests/security/generatePublicInvite.test.ts",
-        "tests/security/getCount.test.ts",
-        "tests/task-lease-claim-route.test.ts",
-        "tests/task-move-opaque-error.test.ts",
-        "tests/task-update-not-found.test.ts",
-        "tests/update-task-pull-request.test.ts",
-        "tests/utils/controllers/pages/pageService.test.ts"
-      ],
-      "decision": "keep",
-      "rule": "keep:access",
-      "reason": "access or security guard",
-      "evidence": "\"auth\""
-    },
-    {
-      "file": "tests/analytics-intents.test.ts",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 16,
-      "targets": [
-        "@/lib/mcp/webhooks/outbox",
-        "@/lib/telemetry/analyticsOutbox",
-        "@/lib/telemetry/savedWork",
-        "src/lib/mcp/webhooks/taskEvents.ts",
-        "src/lib/telemetry/analyticsIntents.ts",
-        "src/lib/telemetry/savedWork.ts",
-        "src/prisma/migrations/20261017140000_htpr_7288_analytics_intent/migration.sql",
-        "src/prisma/schema.prisma"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "16 behaviour tests in this file"
     },
     {
       "file": "tests/android-native-card-actions.test.cjs",
@@ -1026,30 +253,6 @@
       "evidence": "\"revok\""
     },
     {
-      "file": "tests/app-performance-scope.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 8,
-      "behaviourTests": 10,
-      "targets": [
-        "dist/modules/lib/observe.js",
-        "scripts/report-app-project-vitals.mjs",
-        "src/app/layout.tsx",
-        "src/components/Analytics/PostHogAnalytics.tsx",
-        "src/hooks/General/useAuth.tsx",
-        "src/hooks/MultiPages/HTC/useSignout.ts",
-        "src/lib/analytics/appPerformanceScope.ts",
-        "src/lib/analytics/appWebVitals.ts",
-        "src/lib/analytics/productPerformance.ts",
-        "src/lib/auth/accounts.ts"
-      ],
-      "coverage": [],
-      "decision": "keep",
-      "rule": "keep:access",
-      "reason": "access or security guard",
-      "evidence": "\"auth\""
-    },
-    {
       "file": "tests/assignee-pointer-highlight.test.cjs",
       "class": "mixed",
       "allowlisted": true,
@@ -1064,43 +267,6 @@
       "rule": "rewrite:mixed",
       "reason": "behaviour assertions already live in this file",
       "evidence": "1 behaviour test in this file"
-    },
-    {
-      "file": "tests/attachment-url-row-allowlist.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 2,
-      "behaviourTests": 8,
-      "targets": [
-        "src/lib/attachments/urlRowData.ts",
-        "src/utils/controllers/urls/addIntoTask.ts",
-        "src/utils/controllers/urls/addIntoTaskDesc.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "8 behaviour tests in this file"
-    },
-    {
-      "file": "tests/avatar-initials.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 2,
-      "behaviourTests": 3,
-      "targets": [
-        "src/app/api/agents/[agentId]/route.ts",
-        "src/components/Modals/Agent/agent.modal.tsx",
-        "src/components/sidebars/RightSidebar/CurrentUserSidebar.tsx",
-        "src/lib/avatar.ts"
-      ],
-      "coverage": [
-        "tests/lib/avatar.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "3 behaviour tests in this file"
     },
     {
       "file": "tests/better-auth-phase2.test.cjs",
@@ -1156,25 +322,6 @@
       "evidence": "\"auth\""
     },
     {
-      "file": "tests/board-readiness-phases.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 3,
-      "behaviourTests": 12,
-      "targets": [
-        "src/app/[...boardURL]/LandingPage.tsx",
-        "src/lib/analytics/boardReadinessPhases.ts",
-        "src/utils/api/Homepage/index.ts"
-      ],
-      "coverage": [
-        "tests/firstScreen-board-adoption.test.cjs"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "12 behaviour tests in this file"
-    },
-    {
       "file": "tests/board-realtime-scoped-refetch.test.cjs",
       "class": "mixed",
       "allowlisted": true,
@@ -1215,22 +362,6 @@
       "rule": "rewrite:mixed",
       "reason": "behaviour assertions already live in this file",
       "evidence": "4 behaviour tests in this file"
-    },
-    {
-      "file": "tests/board-route-title.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 3,
-      "targets": [
-        "src/app/[...boardURL]/page.tsx",
-        "src/lib/boardRouteTitle.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "3 behaviour tests in this file"
     },
     {
       "file": "tests/board-startup-priority.test.cjs",
@@ -1666,6 +797,7 @@
         "src/lib/flags/keys.ts"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/search-commenter.test.ts"
       ],
       "decision": "keep",
@@ -1740,6 +872,7 @@
         "src/lib/flags/releaseRisk.ts"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/domain-boundary.test.cjs",
         "tests/feature-flags-cluster.test.ts",
         "tests/feature-flags-removal.test.ts",
@@ -2071,6 +1204,7 @@
         "src/utils/controllers/tasks/taskSearchByParam.ts"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/android-ai-composer-config.test.ts",
         "tests/search-commenter.test.ts"
       ],
@@ -2250,6 +1384,7 @@
         "src/prisma/schema.prisma"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/search-commenter.test.ts"
       ],
       "decision": "rewrite",
@@ -2479,6 +1614,7 @@
         "src/utils/api/global/apiHelpers/moveTaskHandler.ts"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/firstScreen-board-adoption.test.cjs",
         "tests/search-commenter.test.ts"
       ],
@@ -2510,22 +1646,6 @@
       "rule": "keep:access",
       "reason": "access or security guard",
       "evidence": "\"access\""
-    },
-    {
-      "file": "tests/htpr-7255-mcp-caller-error-logs.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 3,
-      "targets": [
-        "src/lib/mcp-server/lib/services",
-        "src/lib/mcp-server/utils"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "3 behaviour tests in this file"
     },
     {
       "file": "tests/htpr-7298-browser.test.cjs",
@@ -2594,6 +1714,7 @@
         "src/lib/flags/keys.ts"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/search-commenter.test.ts",
         "tests/task-writer-board-research.test.ts"
       ],
@@ -2760,34 +1881,6 @@
       "rule": "rewrite:mixed",
       "reason": "behaviour assertions already live in this file",
       "evidence": "24 behaviour tests in this file"
-    },
-    {
-      "file": "tests/htpr-7564-phone-shortcuts-header.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 2,
-      "targets": [
-        "@/lib/configs/general.config",
-        "@/lib/constants/keyboard-handler",
-        "@/lib/constants/shortcuts",
-        "@/lib/contexts/deviceContext",
-        "@/lib/contexts/mobileContext",
-        "@/lib/flags/keys",
-        "@/lib/state",
-        "src/components/Modals/Sheets/AppSheet.tsx",
-        "src/components/sidebars/BackDropContainer.tsx",
-        "src/components/sidebars/keyboardShortcuts.tsx",
-        "src/lib/constants/shortcuts.ts",
-        "src/lib/flags/keys.ts"
-      ],
-      "coverage": [
-        "tests/search-commenter.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "2 behaviour tests in this file"
     },
     {
       "file": "tests/htpr-7587-stale-flag-rows.test.cjs",
@@ -3179,22 +2272,6 @@
       "evidence": "2 behaviour tests in this file"
     },
     {
-      "file": "tests/known-bad-packages.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 8,
-      "targets": [
-        "src/lib/runtime/nodeSecurityFloor.json",
-        "src/lib/runtime/nodeSecurityFloor.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "8 behaviour tests in this file"
-    },
-    {
       "file": "tests/layout-lock.test.cjs",
       "class": "mixed",
       "allowlisted": true,
@@ -3225,27 +2302,6 @@
       "rule": "rewrite:mixed",
       "reason": "behaviour assertions already live in this file",
       "evidence": "5 behaviour tests in this file"
-    },
-    {
-      "file": "tests/linkable-mention.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 2,
-      "targets": [
-        "src/components/RTE/Extensions/LinkableMention.ts",
-        "src/styles/globals.scss",
-        "src/styles/messageItem.scss",
-        "src/styles/tailwindThemes/${theme}.css",
-        "src/styles/tiptap.module.scss"
-      ],
-      "coverage": [
-        "tests/page-mention-links.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "2 behaviour tests in this file"
     },
     {
       "file": "tests/manage-columns-modal-design.test.cjs",
@@ -3420,25 +2476,6 @@
       "evidence": "3 behaviour tests in this file"
     },
     {
-      "file": "tests/mcp-task-date-filter-validation.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 2,
-      "targets": [
-        "src/lib/mcp/listQuery.ts",
-        "src/lib/mcp/operations/tasks/operation.ts"
-      ],
-      "coverage": [
-        "tests/lib/mcp/listQuery.test.ts",
-        "tests/mcp-task-status-param.test.ts"
-      ],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "2 behaviour tests in this file"
-    },
-    {
       "file": "tests/mcp-task-list-labels.test.cjs",
       "class": "mixed",
       "allowlisted": true,
@@ -3460,21 +2497,6 @@
       "rule": "rewrite:mixed",
       "reason": "behaviour assertions already live in this file",
       "evidence": "5 behaviour tests in this file"
-    },
-    {
-      "file": "tests/mcp-task-query-aliases.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 2,
-      "targets": [
-        "src/lib/mcp/operations/tasks/operation.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "2 behaviour tests in this file"
     },
     {
       "file": "tests/mcp-token-bearer.test.cjs",
@@ -3740,23 +2762,6 @@
       "evidence": "5 behaviour tests in this file"
     },
     {
-      "file": "tests/native-agent-model-pin.test.cjs",
-      "class": "mixed",
-      "allowlisted": true,
-      "sourceTests": 1,
-      "behaviourTests": 5,
-      "targets": [
-        "src/app/api/agents/[agentId]/route.ts",
-        "src/lib/aiModelOptions.ts",
-        "src/lib/nativeAgent/modelPin.ts"
-      ],
-      "coverage": [],
-      "decision": "rewrite",
-      "rule": "rewrite:mixed",
-      "reason": "behaviour assertions already live in this file",
-      "evidence": "5 behaviour tests in this file"
-    },
-    {
       "file": "tests/node-version-guard.test.cjs",
       "class": "mixed",
       "allowlisted": false,
@@ -3886,6 +2891,7 @@
         "src/utils/helperFunctions/isContentCarouselImage.ts"
       ],
       "coverage": [
+        "tests/activation-wiring.test.ts",
         "tests/domain-boundary.test.cjs",
         "tests/feature-flags-cluster.test.ts",
         "tests/feature-flags-removal.test.ts",
