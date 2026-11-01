@@ -514,15 +514,6 @@ test("late subscription callbacks cannot refresh after cleanup", async () => {
   });
 });
 
-test("realtime events still refetch without a timeout (HTPR-5594)", () => {
-  const src = fs.readFileSync(
-    require.resolve("../src/hooks/realtime/useTaskCommentsRealtime.ts"),
-    "utf8",
-  );
-  assert.doesNotMatch(src, /setTimeout/);
-  assert.match(src, /const runRefetch = async \(\) =>/);
-});
-
 test("the shared task-comment refresh uses the existing exact query key", async () => {
   const helper = loadTypeScriptModule(
     path.join(root, "src/lib/realtime/taskCommentsRefresh.ts"),
@@ -545,22 +536,3 @@ test("the shared task-comment refresh uses the existing exact query key", async 
   assert.deepEqual(calls, [{ queryKey: ["comments-", 42] }]);
 });
 
-test("successful AI stream completion refreshes the task captured before streaming", () => {
-  const src = fs.readFileSync(
-    require.resolve("../src/hooks/MultiPages/AIChat/useAiChat.ts"),
-    "utf8",
-  );
-  const captureIndex = src.indexOf("const streamTaskId =");
-  const sessionAwaitIndex = src.indexOf("await waitForChatSession()", captureIndex);
-  const successIndex = src.indexOf("} else if (!streamErrorHandled) {", sessionAwaitIndex);
-  const refreshIndex = src.indexOf(
-    "refreshTaskComments(queryClient, streamTaskId)",
-    successIndex,
-  );
-
-  assert.ok(captureIndex > -1 && captureIndex < sessionAwaitIndex);
-  assert.ok(successIndex > sessionAwaitIndex && refreshIndex > successIndex);
-  assert.match(src, /surface === "task_detail"/);
-  assert.match(src, /surface === "inbox"/);
-  assert.match(src, /\.\.\.\(streamTaskId \? \{ task_id: streamTaskId \} : \{\}\)/);
-});

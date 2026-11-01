@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const vm = require("node:vm");
 const { NextRequest, NextResponse } = require("next/server");
@@ -212,35 +211,3 @@ test("Ctrl+K exposes five direct theme choices without duplicate routes", () => 
   assert.ok(!appearanceSettings.keywords.split(" ").includes("theme"));
 });
 
-test("pre-paint and live listeners resolve system mode through the shared model", () => {
-  const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
-  const listener = fs.readFileSync(
-    path.join(root, "src/lib/contexts/ThemeListener.tsx"),
-    "utf8",
-  );
-  assert.match(layout, /resolveThemePreference\("system", "dark"\)/);
-  assert.match(layout, /buildThemeBootScript\(/);
-  assert.ok(
-    layout.indexOf('name="theme-color"') <
-      layout.indexOf("buildThemeBootScript("),
-  );
-  assert.match(listener, /resolveThemePreference\(/);
-  assert.match(listener, /resolvedThemeDomMetadata\[resolved\]\.themeColor/);
-  assert.doesNotMatch(listener, /match\.matches \? "amoled"/);
-});
-
-test("retired numeric theme modes redirect to Appearance settings", () => {
-  const commands = fs.readFileSync(
-    path.join(root, "src/components/commands.tsx"),
-    "utf8",
-  );
-
-  assert.match(
-    commands,
-    /case CommandMode\.SetTheme:\s*case CommandMode\.ToggleDarkMode:[\s\S]*?openSettings\("appearance"\)/,
-  );
-  assert.match(
-    commands,
-    /showCommands\.mode !== CommandMode\.SetTheme[\s\S]*?showCommands\.mode !== CommandMode\.ToggleDarkMode[\s\S]*?openSettings\("appearance"\)/,
-  );
-});

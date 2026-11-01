@@ -6,22 +6,6 @@ const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
-const picker = fs.readFileSync(
-  path.join(root, "src/components/Modals/commands/searchTasks.tsx"),
-  "utf8",
-);
-const route = fs.readFileSync(
-  path.join(root, "src/lib/api/task-writes/search-all.ts"),
-  "utf8",
-);
-const routeCore = fs.readFileSync(
-  path.join(root, "src/lib/api/task-writes/route.ts"),
-  "utf8",
-);
-const recentTasks = fs.readFileSync(
-  path.join(root, "src/utils/controllers/tasks/getRecentlyWorkedTasks.ts"),
-  "utf8",
-);
 
 function loadTypeScript(relativePath, stubs) {
   const filename = path.join(root, relativePath);
@@ -198,24 +182,6 @@ function loadRecentController({ fail = false } = {}) {
   return { controller, queries };
 }
 
-test("the relation picker loads recently worked tasks before a search", () => {
-  assert.match(picker, /mode:\s*"recent"/);
-  assert.match(picker, /currentTaskId/);
-  assert.match(picker, /Recently worked/);
-  assert.match(picker, /No recently worked tasks yet/);
-  assert.match(picker, /Couldn&apos;t load tasks\. Try searching again\./);
-  assert.match(picker, /<ModalHintBar\s*\/>/);
-});
-
-test("recent task lookup is authenticated and board-scoped", () => {
-  assert.match(route, /mode === "recent"/);
-  assert.match(routeCore, /getSessionUser\(/);
-  assert.match(routeCore, /if \(!session\) \{[\s\S]*?status: 401/);
-  assert.match(route, /userId: session\.userId/);
-  assert.match(recentTasks, /project:\s*getProjectWhere\(userId\)/);
-  assert.match(recentTasks, /updatedByUserIds:\s*\{ has: userId \}/);
-});
-
 test("the recent route rejects an unverified identity before querying tasks", async () => {
   const { handler, recentCalls } = loadRecentRoute({
     status: "unauthenticated",
@@ -268,11 +234,3 @@ test("the controller fails closed when its task query fails", async () => {
   }
 });
 
-test("the current, archived, and deleted tasks are absent from suggestions", () => {
-  assert.match(recentTasks, /id:\s*\{ not: currentTaskId \}/);
-  assert.match(recentTasks, /deletedAt:\s*null/);
-  assert.match(recentTasks, /archivedAt:\s*null/);
-  assert.match(recentTasks, /status:\s*"Normal"/);
-  assert.match(recentTasks, /take:\s*10/);
-  assert.match(recentTasks, /orderBy:\s*\{ updatedAt: "desc" \}/);
-});

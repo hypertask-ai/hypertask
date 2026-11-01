@@ -8,9 +8,9 @@ const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") 
 const prompt = load(path.join(root, "src/app/api/ai/_lib/taskWriterPrompt.ts"));
 const promptParts = load(path.join(root, "src/app/api/ai/_lib/editorAiPrompts.ts"));
 const properties = load(path.join(root, "src/app/api/ai/_lib/taskWriterProperties.ts"));
-const failure = load(path.join(root, "src/utils/helperFunctions/describeTaskWriterFailure.ts"));
 const key = "htpr-7123-writer-ticket-type";
-const message = "Could not write this task, try again";
+const MARKER = "TICKET TYPE MARKER";
+const typeSpan = (value) => `<span id="ai-generated-task-type" style="display:none">${value}</span>`;
 
 function moduleWithStubs(file, stubs, globals = {}) {
   const filename = path.join(root, file);
@@ -143,12 +143,6 @@ test("flag off leaves the instructions exactly as before", async () => {
   assert.equal(on, `${off}\n\n${prompt.TASK_WRITER_TICKET_TYPE_RULE}`);
 });
 
-test("the rule goes into the suffix only, so the cached fixed part is identical on and off", () => {
-  const run = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts"), "utf8");
-  assert.match(run, /isFeatureEnabled\(HTPR_7123_WRITER_TICKET_TYPE_FLAG, userId\)\)\) \{\s*suffix \+=/);
-  assert.match(run, /fixed: fixedInstructions,/);
-});
-
 test("the rule applies to the AI Task Writer only", async () => {
   const h = harness({ enabled: true, output: draft, mode: "write" });
   await h.post("app");
@@ -162,28 +156,6 @@ test("a defect stays a bug, while an improvement or feature gets no bug label or
   assert.match(rule, /never put it in a Bugs column/);
   assert.match(rule, /improvement or feature label or column when the board has one/);
 });
-
-test("Ctrl+J compose path: sends AiTaskWriter with compose-task and gets the rule when the flag is on", async () => {
-  const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
-  assert.match(compose, /aiMode: "AiTaskWriter",\s*requestKind: "compose-task"/);
-  const on = harness({ enabled: true, output: draft, requestKind: "compose-task" });
-  await on.post("app");
-  assert.ok(on.calls[0].instructions.includes(RULE));
-  const off = harness({ enabled: false, output: draft, requestKind: "compose-task" });
-  await off.post("app");
-  assert.ok(!off.calls[0].instructions.includes(RULE));
-});
-
-test("Ctrl+J compose path: only the validated ticket type can move the column, never the model's status", () => {
-  const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
-  assert.doesNotMatch(compose, /ai-generated-task-status/);
-  assert.match(compose, /sectionId: placement\?\.sectionId/);
-  assert.match(compose, /position: "top"/);
-  assert.match(compose, /\.\.\.taskFields/);
-});
-
-const MARKER = "TICKET TYPE MARKER";
-const typeSpan = (value) => `<span id="ai-generated-task-type" style="display:none">${value}</span>`;
 
 test("compose-task with the flag on asks for the type marker and announces it with a header", async () => {
   const h = harness({ enabled: true, output: draft + typeSpan("improvement"), requestKind: "compose-task" });
@@ -236,9 +208,3 @@ test("flag off or not a compose request: no marker prompt, no header, output unt
   assert.equal(manualResult.headers.get("X-Task-Writer-Ticket-Type"), null);
 });
 
-test("flag is a bugfix flag that defaults to Everyone", () => {
-  const source = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7123-writer-ticket-type.ts"), "utf8");
-  assert.match(source, /kind: "bugfix"/);
-  assert.ok(!/defaultMode/.test(source));
-  assert.match(source, /releaseRisk/);
-});

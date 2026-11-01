@@ -1,17 +1,5 @@
 {
   "allowlist": [
-    "tests/task-comment-background-realtime.test.cjs",
-    "tests/task-create-fast-path.test.cjs",
-    "tests/task-detail-panel-realtime.test.cjs",
-    "tests/task-info-content-height.test.cjs",
-    "tests/task-page-inbox-removal.test.cjs",
-    "tests/task-relation-picker-recents.test.cjs",
-    "tests/task-template-prefill.test.cjs",
-    "tests/task-writer-board-templates.test.cjs",
-    "tests/task-writer-context-synthesis.test.cjs",
-    "tests/task-writer-ticket-type-7123.test.cjs",
-    "tests/theme-preferences.test.cjs",
-    "tests/tooltip-feature-flag.test.cjs",
     "tests/ui-patterns.test.cjs",
     "tests/user-profile-startup-cache.test.cjs",
     "tests/ux-signoff-gate.test.cjs",
@@ -23,5 +11,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 22
+  "count": 10
 }
