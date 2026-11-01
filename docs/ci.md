@@ -108,6 +108,7 @@ two is the summary, which becomes ready only after both halves finish.
 - The window is `observation` in `.github/scripts/pr-size-policy.json`.
 - Blocking starts at `blockFrom` in the same file, after the window closes.
 - A run after a successful post does nothing, so the counts are posted once.
+- Only a run created after the window closes counts as that post; earlier runs post nothing.
 - The job reads no pull request on days before the window closes.
 - Existing required check contexts stay unchanged.
 
@@ -808,9 +809,10 @@ operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.
 No required ruleset context changes.
 
-Trusted guard concurrency includes the workflow run ID.
-Older event reruns cannot cancel newer evaluations.
-Reruns still share their original event's group.
+Trusted guard concurrency is one run per pull request, so a newer event cancels
+an older evaluation before it can publish. A label read by the older run can
+never reach a status after the newer event blocked or cleared it. Reruns cancel
+and re-evaluate the same pull request.
 
 `node tests/guard-quota.test.cjs` executes the saved production scripts and
 candidate workflow entry points with isolated GitHub responses. For a small,

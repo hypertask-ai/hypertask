@@ -231,22 +231,10 @@ test('stale title rechecks cannot invalidate a newer result', async () => {
 });
 
 
-test('old-event rerun after current pending cannot cancel the current title verdict', async () => {
-  const oldGroup = workflow.concurrency.group.replace('${{ github.run_id }}', '1');
-  const currentGroup = workflow.concurrency.group.replace('${{ github.run_id }}', '2');
-  assert.notEqual(oldGroup.toLowerCase(), currentGroup.toLowerCase());
+test('one group per pull request cancels the older evaluation instead of racing it', async () => {
+  assert.ok(!workflow.concurrency.group.includes('github.run_id'));
+  assert.match(workflow.concurrency.group, /github\.event\.pull_request\.number/);
   assert.equal(workflow.concurrency['cancel-in-progress'], true);
-  let stale;
-  const latest = await run({
-    runId: 2, event: { title: 'Invalid current title' },
-    afterPending: async () => {
-      stale = await run({
-        runId: 1, current: { title: 'Invalid current title' }, initialStatus: 'pending',
-      });
-    },
-  });
-  assert.deepEqual(stale.posts, []);
-  assert.equal(stale.visibleStatus, 'pending');
-  assert.deepEqual(latest.posts.map(post => post.state), ['pending', 'failure']);
-  assert.equal(latest.visibleStatus, 'failure');
+  const superseded = await run({ event: { title: 'Older event title' } });
+  assert.deepEqual(superseded.posts, []);
 });

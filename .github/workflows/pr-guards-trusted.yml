@@ -16,7 +16,9 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}-${{ github.run_id }}
+  # One run per pull request: a newer event cancels the older run before it can
+  # publish a status from labels it read earlier.
+  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:

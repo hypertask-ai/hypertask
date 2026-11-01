@@ -54,11 +54,14 @@ async function pullRequestFiles({ fetchImpl = fetch, token, repository, number }
 
 async function postedAlready({ fetchImpl = fetch, token, repository, workflowFile, runId, log = () => {} }) {
   if (!workflowFile) return false;
+  const since = new Date(endsAt).toISOString();
+  const query = new URLSearchParams({ status: 'success', per_page: '20', created: `>=${since}` });
   const runs = await readPage({
     fetchImpl, token,
-    path: `/repos/${repository}/actions/workflows/${workflowFile}/runs?status=success&per_page=20&created=${new Date(startedAt).toISOString()}`,
+    path: `/repos/${repository}/actions/workflows/${workflowFile}/runs?${query}`,
   });
-  const posted = (runs.workflow_runs ?? []).find(run => String(run.id) !== String(runId));
+  const posted = (runs.workflow_runs ?? []).find(run =>
+    String(run.id) !== String(runId) && Date.parse(run.created_at) >= endsAt);
   if (posted) log(`Counts already posted by run ${posted.id}; nothing to do.`);
   return Boolean(posted);
 }

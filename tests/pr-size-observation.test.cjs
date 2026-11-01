@@ -86,13 +86,23 @@ test('a run before the window closes reads nothing and posts nothing', async () 
 });
 
 test('a successful earlier run stops a second post', async () => {
-  const { fetchImpl, calls } = github({}, { runs: [{ id: 7 }] });
+  const { fetchImpl, calls } = github({}, { runs: [{ id: 7, created_at: new Date(END + 600_000).toISOString() }] });
   const posted = await postedAlready({
     fetchImpl, token: 'token', repository: 'hypertask-ai/hypertask',
     workflowFile: 'pr-size-observation.yml', runId: '8',
   });
   assert.equal(posted, true);
   assert.deepEqual(calls.posts, []);
+  assert.equal(new URL(calls.paths[0]).searchParams.get('created'), `>=${new Date(END).toISOString()}`);
+});
+
+test('a run from before the window closed is not proof that the counts were posted', async () => {
+  const { fetchImpl } = github({}, { runs: [{ id: 7, created_at: new Date(END - 3600_000).toISOString() }] });
+  const posted = await postedAlready({
+    fetchImpl, token: 'token', repository: 'hypertask-ai/hypertask',
+    workflowFile: 'pr-size-observation.yml', runId: '8',
+  });
+  assert.equal(posted, false);
 });
 
 test('the counts reach the ticket once, under one window key', async () => {

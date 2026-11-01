@@ -22,5 +22,6 @@
 - The window is `observation` in `.github/scripts/pr-size-policy.json`.
 - Blocking starts at `blockFrom` in the same file, after the window closes.
 - A run after a successful post does nothing, so the counts are posted once.
+- Only a run created after the window closes counts as that post; earlier runs post nothing.
 - The job reads no pull request on days before the window closes.
 - Existing required check contexts stay unchanged.
