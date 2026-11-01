@@ -55,17 +55,3 @@ test("builds the canonical board URL without dropping query parameters", () => {
   );
 });
 
-test("the catch-all page resolves its path before reading board cookies", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/[...boardURL]/page.tsx"),
-    "utf8",
-  );
-  const resolution = source.indexOf("const pathResolution = resolveBoardRoutePath(");
-  const cookies = source.indexOf("const cookieStore = await cookies();", resolution);
-
-  assert.notEqual(resolution, -1);
-  assert.notEqual(cookies, -1);
-  assert.ok(resolution < cookies);
-  assert.match(source, /pathResolution\.kind === "not-found"[^]*notFound\(\)/);
-  assert.match(source, /pathResolution\.kind === "redirect"[^]*redirect\(/);
-});

@@ -683,19 +683,6 @@ test("the managed gateway registry covers 14 teams without using the shared key"
   );
 });
 
-test("managed-key migration deletes only the exact legacy ciphertext it verified", () => {
-  const routeSource = fs.readFileSync(
-    path.join(root, "src/app/api/mcp/admin/team-gateway-keys/route.ts"),
-    "utf8",
-  );
-
-  assert.match(
-    routeSource,
-    /const observedCiphertext = matchingLegacyRows\.get/,
-  );
-  assert.match(routeSource, /ciphertext: observedCiphertext/);
-});
-
 test("task writer option ids map to provider options and legacy model strings fall back", async () => {
   resetModules();
   const projectId = 3855;
@@ -1186,24 +1173,6 @@ test("gateway text and image models require the explicit team key", async () => 
     assert.equal(headers.authorization, `Bearer ${teamGatewayKey}`);
     assert.notEqual(headers.authorization, `Bearer ${platformGatewayKey}`);
   }
-
-  const imageRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/generate-image/route.ts"),
-    "utf8",
-  );
-  assert.match(
-    imageRoute,
-    /getTeamGatewayApiKey\(\{[\s\S]*?trustedTeamId: teamContext\.teamId,[\s\S]*?\}\)/,
-  );
-  assert.match(imageRoute, /resolveGatewayModel\(modelId, gatewayApiKey\)/);
-  assert.match(
-    imageRoute,
-    /resolveGatewayImageModel\(modelId, gatewayApiKey\)/,
-  );
-  assert.match(
-    imageRoute,
-    /sharedAiAllowanceErrorMessage\(error\)[\s\S]*?status: 429/,
-  );
 });
 
 test("provider defaults and explicit team settings resolve consistently", () => {

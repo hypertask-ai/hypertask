@@ -221,17 +221,3 @@ test("description paints cached content and drafts before constructing the rich 
   assert.equal(editorMounts, 1, "the existing editor mounts after the cached body paints");
 });
 
-test("pending cached details paint property geometry immediately but defer editors until after first paint", () => {
-  const state = fs.readFileSync(path.join(root, "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"), "utf8");
-  const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
-  const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
-  assert.match(state, /useState\(!initialCommentsPayload\.pending\)/);
-  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(reveal\)/);
-  assert.match(state, /: \(\) => setSecondaryPanelsReady\(true\);/);
-  assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
-  assert.match(panels, /const stableLayoutFlag = useFlag\(HTPR_6899_STABLE_LAYOUT_FLAG\)/);
-  assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
-  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
-  assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
-  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(\s*<SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
-});

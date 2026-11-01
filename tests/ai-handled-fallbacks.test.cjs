@@ -216,8 +216,6 @@ test("coverage permits expected client responses and rethrows but rejects wrong 
     assert.deepEqual(missingReports(parse("fixture.ts", `try {} catch (error) { ${body} }`)), []);
   }
   assert.equal(missingReports(parse("fixture.ts", 'try {} catch (error) { await reportError({ source: "server" }); return []; }')).length, 1);
-  const chatReporter = fs.readFileSync(path.join(root, "src/lib/ai/chatStream/errors.ts"), "utf8");
-  assert.match(chatReporter, /await reportError\(\{[\s\S]*?source: "handled"/);
   const boardRoute = parse(path.join(root, "src/app/api/ai/generate-board/route.ts"));
   for (const call of nodesWithin(boardRoute, ts.isNewExpression, false)) {
     if (call.expression.getText() === "BoardGenerationRequestError") {

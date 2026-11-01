@@ -1,19 +1,5 @@
 {
   "allowlist": [
-    "tests/ai-gateway-key-routing.test.cjs",
-    "tests/ai-handled-fallbacks.test.cjs",
-    "tests/ai-model-preferences.test.cjs",
-    "tests/ai-model-tracing.test.cjs",
-    "tests/android-native-card-actions.test.cjs",
-    "tests/api-key-lifecycle.test.ts",
-    "tests/assignee-pointer-highlight.test.cjs",
-    "tests/better-auth-phase2.test.cjs",
-    "tests/better-auth-phase3.test.cjs",
-    "tests/board-realtime-scoped-refetch.test.cjs",
-    "tests/board-route-path.test.cjs",
-    "tests/board-startup-priority.test.cjs",
-    "tests/board-switch-no-remount.test.cjs",
-    "tests/cached-task-detail-render.test.cjs",
     "tests/calendar-session-draft.test.cjs",
     "tests/calendar-timeframe-bars.test.cjs",
     "tests/chat-history-on-demand.test.cjs",
@@ -162,5 +148,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 161
+  "count": 147
 }

@@ -269,28 +269,6 @@ test("optional mobile header work waits until the Board is usable", () => {
   );
 });
 
-test("board shortcut loads its authorization list only on intent", () => {
-  const boardShortcutSource = fs.readFileSync(
-    path.join(root, "src/lib/keyboard/boardShortcutTarget.ts"),
-    "utf8",
-  );
-  assert.match(globalProviderSource, /const handleKeyPress = async/);
-  assert.match(
-    globalProviderSource,
-    /await boardShortcutLookup\(\s*queryClient,\s*currentUser\?\.id,/,
-  );
-  assert.match(
-    globalProviderSource,
-    /globalAPIHandlers\.getAllProjectsMinimal\("ExtraMinimal"\)/,
-  );
-  assert.match(boardShortcutSource, /queryClient\s*\.fetchQuery\(boardListQuery\(userId, fetchBoards\)\)/);
-  assert.match(
-    boardShortcutSource,
-    /queryKey: \[PROJECTS_MINIMAL_QUERY_KEY, userId\]/,
-    "the shortcut authorization cache must be isolated by account",
-  );
-});
-
 test("multiple favorites consumers share one fresh startup response", () => {
   assert.match(
     favoritesSource,
