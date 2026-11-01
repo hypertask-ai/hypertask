@@ -103,6 +103,10 @@ const live = (key, read) => {
         get: (_, prop) => live(`${key}\u0000${String(prop)}`, () => read()?.[prop]),
         has: (_, prop) => prop in (read() ?? {}),
         ownKeys: () => Reflect.ownKeys(read() ?? {}),
+        // A test that replaces a stub's export at runtime (htpr-7305, htpr-7652 override
+        // getAllProjectsMinimal) must reach the app, so writes land on the active setup's stub.
+        set: (_, prop, value) => { const target = read(); if (!target) return false; target[prop] = value; return true; },
+        deleteProperty: (_, prop) => { delete read()?.[prop]; return true; },
         getOwnPropertyDescriptor: (_, prop) => {
           const value = read()?.[prop];
           return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
@@ -213,7 +217,7 @@ async function withPalette(t, config, check) {
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
     source('src/lib/createTaskAttachmentUploads.ts', { discardUnboundCreateTaskUploads() {} });
     source('src/utils/api/global/apiHelpers/createTaskGloballycontroller.ts', {});
-    const compose = jiti(path.join(root, 'src/lib/ai/composeTask.ts'));
+    const compose = realExports(path.join(root, 'src/lib/ai/composeTask.ts'));
     source('src/lib/ai/composeTask.ts', { ...compose, createComposedTask: (body) => new Promise((resolve, reject) => requests.push({ body, resolve, reject })) });
     const Thumbnails = ({ files, handleRemove }) => React.createElement('div', { 'data-thumbnails': true }, files.map(({ file }) => React.createElement('button', { key: file.name, onClick: () => handleRemove(file.name), 'aria-label': `Remove ${file.name}` }, React.createElement('img', { alt: file.name }), file.name)));
     const gallery = config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails;
@@ -238,7 +242,7 @@ async function withPalette(t, config, check) {
       shells.push(props);
       return React.createElement('section', { 'data-shell': true, className: props.contentClassName }, props.aboveSlot, children, props.bottomSlot);
     };
-    const common = jiti(path.join(root, 'src/components/Common/CommonModalComponents/index.tsx'));
+    const common = realExports(path.join(root, 'src/components/Common/CommonModalComponents/index.tsx'));
     source('src/components/Common/CommonModalComponents/index.tsx', { ...common, ModalContainerCustom: shell });
     source('src/components/Modals/Sheets/index.ts', { MobileBottomSheet: shell });
     const { useCommandCenterShortcut } = jiti(path.join(root, 'src/hooks/General/useCommandCenterShortcut.ts'));
