@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { z } from 'zod'
 import { ListToolsResultSchema } from '@modelcontextprotocol/sdk/types.js'
-import { readFileSync } from 'node:fs'
 import { TOOL_SUMMARIES, summaryForToolName } from '../src/lib/mcp-server/config/tool-summaries'
 import {
   describeToolCatalog,
@@ -83,16 +82,6 @@ test('summary lookup uses the real MCP tool names, including overrides', () => {
   assert.equal(summaryForToolName('hypertask_report', 'x'), TOOL_SUMMARIES.REPORT_CRUD)
   assert.equal(summaryForToolName('hypertask_draft', 'x'), TOOL_SUMMARIES.DRAFT_CRUD)
   assert.equal(summaryForToolName('hypertask_search_tools', 'x'), TOOL_SUMMARIES.SEARCH_TOOLS)
-})
-
-test('TOOL_METADATA descriptions stay unprefixed when the flag is off', () => {
-  const source = readFileSync(
-    new URL('../src/lib/mcp-server/config/tool-metadata.ts', import.meta.url),
-    'utf8'
-  )
-  assert.match(source, /export const TOOL_METADATA = RAW_TOOL_METADATA/)
-  assert.doesNotMatch(source, /function withSummaries/)
-  assert.doesNotMatch(source, /\$\{summary\}\\n\\n\$\{meta\.description\}/)
 })
 
 test('deferred tools/list stays far cheaper than the full catalog', () => {

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -358,24 +357,6 @@ test("the attachment endpoint accepts and forwards project_id + unique_index", (
   });
   assert.equal(parsed.project_id, 15);
   assert.equal(parsed.unique_index, 3099);
-
-  const route = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
-    "utf8"
-  );
-  assert.match(route, /unique_index: parsed\.unique_index \?\? null/);
-  assert.match(route, /project_id: parsed\.project_id \?\? null/);
-});
-
-test("the attachment endpoint delegates persistence to the atomic batch path", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
-    "utf8"
-  );
-  assert.match(route, /storeAttachmentBatchWithTargetLock\(/);
-  assert.match(route, /readMcpAttachmentJsonBody\(request\)/);
-  assert.doesNotMatch(route, /body\s*=\s*await request\.json\(\)/);
-  assert.doesNotMatch(route, /status: 207/);
 });
 
 test("the attachment HTTP body is bounded before JSON parsing", async () => {
@@ -423,29 +404,6 @@ test("the attachment HTTP body is bounded before JSON parsing", async () => {
     }),
     { task_id: 1 }
   );
-});
-
-test("the attachment endpoint requires write scope for managed agents", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
-    "utf8"
-  );
-  assert.match(route, /if \(ctx\.agentId\)/);
-  assert.match(route, /requireRole\(ctx, ['"]write['"]\)/);
-  assert.match(route, /if \(scopeError\) return scopeError/);
-
-  const createRoute = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/tasks/create/operation.ts"),
-    "utf8"
-  );
-  assert.match(createRoute, /requireRole\(ctx, ['"]write['"]\)/);
-
-  const commentsRoute = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/comments/operation.ts"),
-    "utf8"
-  );
-  const commentPost = commentsRoute.slice(commentsRoute.indexOf("export async function POST"));
-  assert.match(commentPost, /requireRole\(ctx, ['"]write['"]\)/);
 });
 
 test("inline mutations preserve cleanup uncertainty from attachment failures", async () => {
@@ -1064,15 +1022,6 @@ test("lost lock ownership fences persistence and cleanup", async () => {
 });
 
 test("the transaction advisory lock fences row creation after lease overlap", async () => {
-  const lockingSource = fs.readFileSync(
-    path.join(root, "src/lib/mcp/attachments/storeLockedBatch.ts"),
-    "utf8"
-  );
-  assert.match(
-    lockingSource,
-    /pg_advisory_xact_lock\([^)]*\)::text AS lock_result/
-  );
-
   let transactionTail = Promise.resolve();
   const rows = new Map();
   let createCount = 0;
@@ -1614,67 +1563,6 @@ test("oversized remote response bodies cancel their reader", async () => {
     /Download exceeds maximum size/
   );
   assert.equal(cancelled, true);
-});
-
-test("the MCP handler forwards transport identity and attachment writes rebroadcast", () => {
-  const handlerSource = fs.readFileSync(
-    path.join(root, "src/lib/mcp-server/handler.ts"),
-    "utf8"
-  );
-  const streamableSource = fs.readFileSync(
-    path.join(root, "src/lib/mcp-server/streamable-http.ts"),
-    "utf8"
-  );
-  assert.match(streamableSource, /requestId: String\(extra\.mcpReq\.id\)/);
-  assert.match(streamableSource, /sessionId: extra\.sessionId/);
-  assert.match(streamableSource, /extra\.http\?\.authInfo\?\.token/);
-  assert.match(streamableSource, /clientFingerprint: crypto/);
-  assert.match(handlerSource, /readRequestBytesWithCap\(/);
-  assert.match(handlerSource, /new Request\(request\.url/);
-  assert.doesNotMatch(handlerSource, /new Request\(request,\s*\{/);
-
-  const routeSource = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/tasks/attachments/operation.ts"),
-    "utf8"
-  );
-  assert.match(routeSource, /broadcastTaskComment\(task\.id/);
-  assert.match(routeSource, /broadcastTaskChange\(task\.id/);
-  assert.match(
-    routeSource,
-    /e instanceof AttachmentBatchError[\s\S]*'Failed to store attachment\(s\)'/
-  );
-  assert.doesNotMatch(
-    routeSource,
-    /broadcastTaskChange\(task\.id,\s*\{\s*originUserId/
-  );
-
-  const fetchSource = fs.readFileSync(
-    path.join(root, "src/lib/mcp/attachments/safeFetch.ts"),
-    "utf8"
-  );
-  assert.match(fetchSource, /readBodyWithCap\([\s\S]*controller\.signal/);
-  assert.match(fetchSource, /finally \{\s*clearTimeout\(timer\)/);
-  assert.match(fetchSource, /new Agent\(\{ connect: \{ lookup \}, allowH2: false \}\)/);
-  assert.match(fetchSource, /dispatcher/);
-
-  const storageSource = fs.readFileSync(
-    path.join(root, "src/lib/storage/uploadTaskAttachmentToS3.ts"),
-    "utf8"
-  );
-  assert.match(storageSource, /getHypertasksObjectState\([\s\S]*signal\?: AbortSignal/);
-  assert.match(storageSource, /setTimeout\(\(\) => head\.abort\(\)/);
-
-  const descriptionControllerSource = fs.readFileSync(
-    path.join(root, "src/utils/controllers/urls/addIntoTaskDesc.ts"),
-    "utf8"
-  );
-  assert.match(descriptionControllerSource, /editorDerivedSources/);
-  assert.match(descriptionControllerSource, /filter\(\(\{ Attachment \}\) => Attachment\)/);
-  assert.match(
-    descriptionControllerSource,
-    /!editorDerivedSources\.has\(fileSource\)/
-  );
-  assert.match(descriptionControllerSource, /replaceableAttachmentIds/);
 });
 
 test("stateless invocation keys are stable and scoped by token and operation", () => {

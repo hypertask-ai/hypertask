@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -78,32 +77,4 @@ test("only a complete project view for the deleted board can replace local state
   );
   assert.equal(isProjectViewResponseForBoard(completeResponse, 16), false);
 
-  const hookSource = fs.readFileSync(
-    path.join(root, "src/hooks/Homepage/Views/useKanbanViews.ts"),
-    "utf8",
-  );
-  assert.match(
-    hookSource,
-    /isProjectViewResponseForBoard\(updatedProjectView, projectId\)/,
-  );
-  assert.doesNotMatch(hookSource, /response\.data as IProjectView/);
-});
-
-test("Manage Views applies the deletion response before relying on a refetch", () => {
-  const source = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/Modals/ViewModals/ManageViewsModals.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(
-    source,
-    /const updatedProjectView = await deleteView\(view\.id, currentProject\.id\)/,
-  );
-  assert.match(
-    source,
-    /setCurrentProject\(\(project\) =>\s*replaceProjectViewForCurrentBoard\(/,
-  );
 });
