@@ -102,6 +102,8 @@ const nextConfig = {
     ],
   },
   experimental: {
+    webpackBuildWorker: true,
+    webpackMemoryOptimizations: true,
     cpus: 1,
     // The smoke build runs server tracing beside the client compiler to stay
     // below ten minutes. Production keeps tracing sequential to limit memory.

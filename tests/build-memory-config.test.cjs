@@ -48,8 +48,8 @@ for (const smoke of [false, true]) {
         : configModule.exports;
       assert.equal(wrapped, posthog);
       if (posthog) assert.equal(config.env.POSTHOG_RELEASE_ID, "build-memory-test-release");
-      assert.equal(config.experimental.webpackBuildWorker, undefined);
-      assert.equal(config.experimental.webpackMemoryOptimizations, undefined);
+      assert.equal(config.experimental.webpackBuildWorker, true);
+      assert.equal(config.experimental.webpackMemoryOptimizations, true);
       assert.equal(typeof config.webpack, "function");
       assert.equal(config.turbopack.resolveAlias["vfile-message"], path.resolve(__dirname, "..", "src/lib/vendor/vfile-message.mjs"));
       assert.equal(config.experimental.cpus, 1);

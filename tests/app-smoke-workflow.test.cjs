@@ -351,8 +351,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /--read-only/);
   assert.match(isolated, /--log-opt max-size=10m/);
   assert.match(isolated, /--log-opt max-file=1/);
-  assert.match(nextConfig, /cpus: 1/);
-  assert.doesNotMatch(nextConfig, /webpackBuildWorker: true|webpackMemoryOptimizations: true/);
+  assert.match(nextConfig, /webpackBuildWorker: true/);
   assert.match(
     nextConfig,
     /parallelServerBuildTraces: process\.env\.CORE_APP_SMOKE === "true"/,
