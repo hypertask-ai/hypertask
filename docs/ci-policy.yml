@@ -1,5 +1,5 @@
-version: 12
-last_updated: 2026-10-31
+version: 13
+last_updated: 2026-11-01
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -162,6 +162,48 @@ pr_size_day_one:
   no_reads_before_block_from: true
   rehearsal_triggers_no_guard: true
   fail_closed_on: [missing_board_token, missing_day_one_ticket, no_guard_run_at_head, trigger_error, post_error]
+
+stuck_job_recovery:
+  ticket: https://app.hypertask.ai/detail/project-11514/66
+  workflow: .github/workflows/stuck-job-recovery.yml
+  script: .github/scripts/ci-stuck-jobs.cjs
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  cron_utc: "*/10 * * * *"
+  trusted_code_ref: production
+  runs_on: ubuntu-latest
+  timeout_minutes: 5
+  contributes_jobs_to_pr: false
+  reads: [actions_runs, actions_jobs, repository_variable]
+  stuck_after_minutes: 8
+  recent_minutes: 30
+  attempts_touched: 1
+  actions: [cancel_run, wait_for_cancel, rerun_failed_jobs]
+  rerun_provenance: run cancelled by this sweep, stored in STUCK_RECOVERY_PENDING until the re-run lands
+  tokens:
+    run_control: github.token
+    recovery_store: secrets.AUTOMERGE_TOKEN
+    reason: repository variables are their own permission and github.token holds none of it, so the store uses the token prod-health.yml already uses for the same endpoints
+  pending_recovery:
+    variable: STUCK_RECOVERY_PENDING
+    attempts: 3
+    max_age_hours: 6
+    checkpoint: before_the_cancel
+    states: [reserved, issued, confirmed]
+    unissued_reservation: dropped_never_rerun
+    unconfirmed_cancel: reported_never_rerun
+    ambiguous_cancel: kept_and_reported_for_a_person, drops after the attempt or age limit
+    capacity: reserved_before_cancel, never_dropped, full_store_cancels_nothing
+    bound_to: run_attempt
+    unreadable_store: leaves_stored_entries_untouched
+    unwritable_store: cancels_nothing
+  sweep_order: [read_store, finish_stored_recoveries, discover_runs, start_new_recoveries]
+  discovery_isolation: [run_list_failure_keeps_stored_recoveries, job_list_failure_skips_only_that_run]
+  never_act_on: [runs_holding_a_failed_job, runs_not_cancelled_by_this_sweep]
+  job_list_after: eligibility_filter
+  acts_on: [pull_request_runs]
+  report_only: [production_push_runs, other_run_events]
+  never: [self_hosted_runners, other_repositories, paid_services]
 
 required_check_settings_monitor:
   ticket: https://app.hypertask.ai/detail/project-4060/780

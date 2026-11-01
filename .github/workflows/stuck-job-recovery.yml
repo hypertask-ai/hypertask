@@ -1,0 +1,53 @@
+name: Stuck Job Recovery
+
+# HYCI-66. A job whose every step has finished can still be held open by GitHub
+# for exactly one hour while the completion report is missing: on 2026-11-01 nine
+# jobs of run 41286623269 closed their last step at 08:00-08:05Z and the API
+# recorded completed_at 3601-3604 s later, which made one push 68.0 minutes for
+# 8.0 minutes of work. Nothing inside the job can un-stick it, so this workflow
+# caps the wait: a pull-request run whose finished job has taken no step for
+# eight minutes is cancelled, and once that cancellation settles the same sweep
+# re-runs its failed jobs so a second attempt reports on a fresh runner. Only a
+# run this sweep cancelled may be re-run, and a run holding a real failure is
+# never touched. Production push runs are reported in the job summary and never
+# cancelled, because a push run verifies a deploy.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: stuck-job-recovery
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    name: stuck-job-recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+
+      # STORE_TOKEN carries the recovery store: repository variables are their own
+      # permission and `github.token` holds none of it, so the store uses the same
+      # token the production alarms already use for those two endpoints
+      # (prod-health.yml). Without it the store cannot be read, and a sweep with no
+      # store cancels nothing: a cancelled run nobody can finish is worse than a
+      # slow one.
+      - name: Cancel or re-run stuck runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STORE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/ci-stuck-jobs.cjs --apply
