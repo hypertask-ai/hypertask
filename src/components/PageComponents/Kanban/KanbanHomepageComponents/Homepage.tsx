@@ -893,6 +893,7 @@ const HomePage = ({
       <>
       {!connectOverlayActive && inlineConnectCard}
       <span
+        data-board-id={_currentProject.id}
         data-board-tasks-hydrated={tasksHydrated ? "true" : "false"}
         hidden
       />

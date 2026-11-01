@@ -1250,6 +1250,17 @@ The switch therefore asserts the rendered board from the one click, so a dropped
 render is red here and stays a product bug for the app to fix, the same class of
 late update that HYCI-1's readiness gate covers for page loads.
 
+That assertion is the app's own commit marker, not the previous board's. The
+hidden `[data-board-tasks-hydrated]` span in
+`src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx` is
+true for whichever board is on screen, so waiting on it alone is satisfied by the
+board the switch is leaving. HYCI-75 gave the span `data-board-id` and the docked
+chat test waits on `[data-board-id="<new board>"][data-board-tasks-hydrated="true"]`
+before it reads the fixture card or the tab title. The card is content, not a
+switch signal: it arrives from a separate per-board tasks read and is rendered in
+chunks, so on a loaded runner it can trail the commit that already happened. A
+dropped render still fails, because the marker keeps naming the old board.
+
 ## Where check time goes (HTPR-8228)
 
 `node scripts/ci-check-time.mjs --limit 150 --out ci-check-time.html` measures
