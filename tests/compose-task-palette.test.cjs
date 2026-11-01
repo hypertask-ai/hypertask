@@ -23,9 +23,20 @@ const test = (name, check) => nodeTest(name, { timeout: 30_000 }, async (t) => {
 const React = require('react');
 const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
+const esbuild = require('esbuild');
 const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
-const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
+const babelJiti = createJiti(__filename, { jsx: { runtime: 'automatic' } });
+const loaders = { '.ts': 'ts', '.mts': 'ts', '.cts': 'ts', '.tsx': 'tsx', '.jsx': 'jsx', '.js': 'jsx' };
+const transform = (options) => {
+  if (options.source.includes('import.meta')) return { code: babelJiti.transform(options) };
+  try {
+    return { code: esbuild.transformSync(options.source, { loader: loaders[path.extname(options.filename)] ?? 'js', format: 'cjs', jsx: 'automatic', sourcefile: options.filename }).code };
+  } catch {
+    return { code: babelJiti.transform(options) };
+  }
+};
+const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' }, transform });
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
