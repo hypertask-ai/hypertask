@@ -1,17 +1,5 @@
 {
   "allowlist": [
-    "tests/compose-task-palette.test.cjs",
-    "tests/core-actions-inbox-smoke.test.cjs",
-    "tests/direct-agent-reply-notification.test.cjs",
-    "tests/draft-sync.test.cjs",
-    "tests/editor-writing-assistance.test.ts",
-    "tests/email-code-security.test.cjs",
-    "tests/empty-board-columns-toggle.test.ts",
-    "tests/ensure-default-team-agent.test.ts",
-    "tests/error-pipeline.test.cjs",
-    "tests/feature-flag-gate.test.cjs",
-    "tests/feature-flag-reconcile-workflow.test.cjs",
-    "tests/files-image-fallback.test.cjs",
     "tests/first-screen-inbox-adoption.test.cjs",
     "tests/first-screen-inbox-document.test.cjs",
     "tests/firstScreen-board-document.test.cjs",
@@ -136,5 +124,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 135
+  "count": 123
 }

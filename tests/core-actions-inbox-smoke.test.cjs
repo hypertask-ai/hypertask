@@ -1,7 +1,6 @@
 const SELF_FOLLOW_FLAG = "yper4-651-self-follow-quiet";
 const assert = require("node:assert/strict");
 const test = require("node:test");
-const fs = require("node:fs");
 const { load } = require("./task-route-loader.cjs");
 require("tsx/cjs");
 const { runCoreActionsSmoke } = require("../src/lib/productionSmoke/coreActions.ts");
@@ -139,12 +138,6 @@ test("all named inbox routines use the UI paths and clean up their notification"
   assert.deepEqual(result.steps.filter((step) => step.startsWith("inbox ")), inboxSteps);
   assert.ok(result.cleanup.includes("inbox deleted smoke notifications"));
   assertClean(app);
-  const ui = fs.readFileSync("src/hooks/Inbox/useGlobalFocusHandler.tsx", "utf8");
-  const undo = fs.readFileSync("src/utils/undoActions/helperFuncs.ts", "utf8");
-  assert.match(ui, /toggleNotificationArchive\(/);
-  assert.match(undo, /"\/api\/notifications\/markAsDone", \{\s*method: "POST"/);
-  assert.match(fs.readFileSync("src/utils/controllers/tasks/getTask.ts", "utf8"), /fetchTaskDetail\(project, uniqueIndex, user.id\)/);
-  assert.match(fs.readFileSync("src/app/detail/[...slug]/page.tsx", "utf8"), /fetchTaskDetail\(params.slug\[0\], params.slug\[1\], userObj.id\)/);
 });
 
 test("smoke requests mention only the agent and keep inbox coverage without direct follower or email requests", async () => {

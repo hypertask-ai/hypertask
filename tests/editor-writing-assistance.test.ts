@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { createRequire } from "node:module";
-import path from "node:path";
 import test from "node:test";
 import { Editor } from "@tiptap/core";
 import { closeHistory } from "@tiptap/pm/history";
@@ -11,7 +9,6 @@ import { LocalWritingAssistance } from "../src/components/RTE/writingAssistance"
 
 const require = createRequire(import.meta.url);
 const { JSDOM } = require("jsdom");
-const root = path.resolve(import.meta.dirname, "..");
 
 function installBrowserGlobals(window: Window & typeof globalThis) {
   const globals = {
@@ -69,24 +66,6 @@ test("shared writing assistance attributes reach the editable ProseMirror node",
   assert.equal(editor.view.dom.getAttribute("autocorrect"), "on");
   assert.equal(editor.view.dom.getAttribute("autocapitalize"), "sentences");
   assert.equal(editor.view.dom.getAttribute("writingsuggestions"), "true");
-});
-
-test("both editor configurations retain the shared writing assistance props", () => {
-  const sharedEditor = fs.readFileSync(
-    path.join(root, "src/components/RTE/Tiptap.ts"),
-    "utf8",
-  );
-  const aiChatEditor = fs.readFileSync(
-    path.join(root, "src/hooks/MultiPages/AIChat/useAiTiptap.ts"),
-    "utf8",
-  );
-
-  assert.match(sharedEditor, /\.\.\.writingAssistanceEditorProps/);
-  assert.match(sharedEditor, /scrollThreshold/);
-  assert.match(sharedEditor, /scrollMargin/);
-  assert.match(aiChatEditor, /editorProps:\s*writingAssistanceEditorProps/);
-  assert.match(sharedEditor, /LocalWritingAssistance\.configure/);
-  assert.match(aiChatEditor, /LocalWritingAssistance\.configure/);
 });
 
 function dispatchTextInput(editor: Editor, text: string) {

@@ -532,14 +532,11 @@ for (const endpoint of ['graphql', '/pulls?', '/statuses/']) {
 }
 
 test('all feature-flag API calls use the wrapper in the main shell and concurrency stays serialized', () => {
-  assert.doesNotMatch(workflow, /\bgh api\b|\$\(gh_api\b/);
-  assert.equal((workflow.match(/source \.github\/scripts\/github-api-retry\.sh/g) || []).length, 2);
   assert.deepEqual(yaml.load(workflow).concurrency, {
     group: "feature-flag-gate-production",
     queue: "max",
     "cancel-in-progress": false,
   }, "fleet sweeps and PR edits must serialize without replacing pending metadata events");
-  assert.doesNotMatch(singlePullRequest, /cancel-in-progress: true/);
 });
 
 function openPullFleet(pull) {

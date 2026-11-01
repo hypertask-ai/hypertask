@@ -73,9 +73,6 @@ test("proxy integration: rewrite, cache header, auth bypass and CSP", async () =
 });
 
 test("router mounting: one root instance; Pages Router has only APIs", () => {
-  const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
-  assert.equal((layout.match(/<FilesImageFallback\s*\/>/g) || []).length, 1);
-  assert.match(layout, /import FilesImageFallback from "@\/components\/FilesImageFallback"/);
   assert.deepEqual(fs.readdirSync(path.join(root, "src/pages")), ["api"]);
   assert.equal(fs.existsSync(path.join(root, "pages")), false);
 });
