@@ -7,7 +7,7 @@ const policy = require('../.github/scripts/pr-size-policy.json');
 
 const BEFORE = Date.parse(policy.blockFrom) - 1000;
 const AFTER = Date.parse(policy.blockFrom) + 1000;
-const LABEL = policy.dayOne.triggerLabel;
+const GUARD = policy.dayOne.guardWorkflow;
 
 const file = (filename, additions, deletions = 0) => ({ filename, additions, deletions });
 const pull = (number, user, extra = {}) => ({
@@ -17,8 +17,8 @@ const pull = (number, user, extra = {}) => ({
 });
 const agentPull = (number, extra) => pull(number, { login: 'app/hypertask-runners', type: 'Bot' }, extra);
 
-function fake({ pulls = [], files = {}, comments = {}, runs = [] } = {}) {
-  const calls = { created: [], posts: [], labels: [], runQueries: [] };
+function fake({ pulls = [], files = {}, comments = {}, runs = [], guardRuns = [] } = {}) {
+  const calls = { created: [], posts: [], reruns: [], runQueries: [] };
   const route = fn => fn.route;
   const github = {
     paginate: async (fn, params) => {
@@ -47,8 +47,9 @@ function fake({ pulls = [], files = {}, comments = {}, runs = [] } = {}) {
       actions: {
         listWorkflowRuns: async query => {
           calls.runQueries.push(query);
-          return { data: { workflow_runs: runs } };
+          return { data: { workflow_runs: query.head_sha ? guardRuns : runs } };
         },
+        rerunWorkflowRun: async query => { calls.reruns.push(query); return { data: {} }; },
       },
       repos: {
         createCommitStatus: async () => {
@@ -81,29 +82,22 @@ const context = {
   payload: {},
 };
 
-async function run(options, { now = AFTER, eventName = 'schedule', token = 'app-token' } = {}) {
-  const { labelError = null, ...harnessOptions } = options;
+async function run(options, { now = AFTER, eventName = 'schedule' } = {}) {
   const posts = [];
   const requests = [];
   const savedFetch = globalThis.fetch;
   const savedToken = process.env.HYPERTASK_MCP_TOKEN;
-  const savedDayOne = process.env.DAY_ONE_TOKEN;
   process.env.HYPERTASK_MCP_TOKEN = savedToken ?? 'test-only-board-token';
-  if (token === null) delete process.env.DAY_ONE_TOKEN;
-  else process.env.DAY_ONE_TOKEN = token;
   globalThis.fetch = async (url, init) => {
     const request = { url, method: init.method, body: init.body ? JSON.parse(init.body) : undefined };
     if (String(url).startsWith('https://api.github.com/')) {
       requests.push(request);
-      if (labelError && request.method === 'POST' && new URL(url).pathname === '/repos/hypertask-ai/hypertask/labels') {
-        return { ok: false, status: labelError.status, text: async () => labelError.message, json: async () => ({}) };
-      }
       return { ok: true, status: 200, text: async () => '', json: async () => ({}) };
     }
     posts.push({ url, body: request.body, key: init.headers['Idempotency-Key'] });
     return { ok: true, status: 200, json: async () => ({ success: true }) };
   };
-  const harness = fake(harnessOptions);
+  const harness = fake(options);
   const core = coreOf();
   try {
     const result = await sweep({ github: harness.github, context: { ...context, eventName }, core, now });
@@ -115,10 +109,13 @@ async function run(options, { now = AFTER, eventName = 'schedule', token = 'app-
     globalThis.fetch = savedFetch;
     if (savedToken === undefined) delete process.env.HYPERTASK_MCP_TOKEN;
     else process.env.HYPERTASK_MCP_TOKEN = savedToken;
-    if (savedDayOne === undefined) delete process.env.DAY_ONE_TOKEN;
-    else process.env.DAY_ONE_TOKEN = savedDayOne;
   }
 }
+
+const guardRun = (id, number, sha, extra = {}) => ({
+  id, head_sha: sha, created_at: `2026-10-30T0${id}:00:00Z`, conclusion: 'success',
+  pull_requests: [{ number }], ...extra,
+});
 
 test('a scheduled run before blocking starts sweeps nothing', async () => {
   const { result, posts, requests } = await run({ pulls: [agentPull(1)] }, { now: BEFORE });
@@ -133,14 +130,17 @@ test('an over-cap agent change goes back to the guard and the rest are left alon
   const small = agentPull(2, { additions: 200, changed_files: 1 });
   const human = pull(3, { login: 'valentinyeo', type: 'User' }, { additions: 900, changed_files: 1 });
   const dependabot = pull(4, { login: 'dependabot[bot]', type: 'Bot' }, { additions: 700, changed_files: 1 });
-  const { posts, requests } = await run({
+  const guardRuns = [guardRun(3, 1, 'sha1'), guardRun(5, 1, 'sha1')];
+  const { posts, requests, calls } = await run({
     pulls: [big, small, human, dependabot],
     files: { 1: [file('src/a.ts', 500)], 2: [file('src/b.ts', 200)] },
+    guardRuns,
   });
-  assert.deepEqual(requests.map(request => [request.method, new URL(request.url).pathname]), [
-    ['POST', '/repos/hypertask-ai/hypertask/labels'],
-    ['POST', '/repos/hypertask-ai/hypertask/issues/1/labels'],
-    ['DELETE', `/repos/hypertask-ai/hypertask/issues/1/labels/${LABEL}`],
+  assert.deepEqual(requests, [], 'no GitHub REST call by hand; only the client may write');
+  assert.deepEqual(calls.reruns, [{ owner: 'hypertask-ai', repo: 'hypertask', run_id: 5 }], 'the newest guard run at this head is re-run');
+  const guardQueries = calls.runQueries.filter(query => query.head_sha);
+  assert.deepEqual(guardQueries.map(query => [query.workflow_id, query.head_sha, query.status]), [
+    [GUARD, 'sha1', 'completed'],
   ]);
   assert.deepEqual(posts.map(post => post.body.ticket_number), ['HYCI-51']);
   assert.match(posts[0].body.text, /Open agent changes: 2\./);
@@ -153,31 +153,34 @@ test('a big change is left alone only with the size-ok label and a human reason'
   const big = agentPull(1, { additions: 500, changed_files: 1, labels: [{ name: 'size-ok' }] });
   const files = { 1: [file('src/a.ts', 500)] };
   const reason = [{ user: { login: 'valentinyeo', type: 'User' }, body: 'size-ok: read it by hand' }];
-  const allowed = await run({ pulls: [big], files, comments: { 1: reason } });
+  const allowed = await run({ pulls: [big], files, comments: { 1: reason }, guardRuns: [guardRun(3, 1, 'sha1')] });
   assert.deepEqual(allowed.result.counts.allowed, [1]);
-  assert.deepEqual(allowed.requests, [], 'an allowed change needs no guard run');
-  const alone = await run({ pulls: [big], files });
-  assert.deepEqual(alone.requests.map(request => request.method), ['POST', 'POST', 'DELETE']);
+  assert.deepEqual(allowed.calls.reruns, [], 'an allowed change needs no guard run');
+  const alone = await run({ pulls: [big], files, guardRuns: [guardRun(3, 1, 'sha1')] });
+  assert.deepEqual(alone.calls.reruns.map(query => query.run_id), [3]);
 });
 
-test('an existing trigger label is reused, never recreated', async () => {
-  const existed = Object.assign(new Error('already exists'), { status: 422 });
-  const { result, requests } = await run({
+test('a guard run at another head, another change or a skip is never re-run', async () => {
+  const { result, calls } = await run({
     pulls: [agentPull(1, { additions: 500, changed_files: 1 })],
     files: { 1: [file('src/a.ts', 500)] },
-    labelError: existed,
+    guardRuns: [
+      guardRun(1, 1, 'sha1', { conclusion: 'skipped' }),
+      guardRun(2, 1, 'sha9'),
+      guardRun(4, 2, 'sha1'),
+      guardRun(6, 1, 'sha1', { conclusion: 'failure' }),
+    ],
   });
   assert.deepEqual(result.counts.sent, [1]);
-  assert.deepEqual(requests.map(request => request.method), ['POST', 'POST', 'DELETE']);
+  assert.deepEqual(calls.reruns.map(query => query.run_id), [6]);
 });
 
-test('without the app token the sweep fails loudly instead of skipping the guard', async () => {
+test('a change with no guard run at its head fails loudly instead of keeping its pass', async () => {
   const error = await run(
     { pulls: [agentPull(1, { additions: 500, changed_files: 1 })], files: { 1: [file('src/a.ts', 500)] } },
-    { token: null },
   ).then(() => null, failure => failure);
   assert.match(error.message, /1 over-cap change\(s\) were not sent to the guards/);
-  assert.match(error.log.join('\n'), /was not sent to the guards: DAY_ONE_TOKEN is missing/);
+  assert.match(error.log.join('\n'), /was not sent to the guards: no completed pr-guards-trusted\.yml run at sha1/);
 });
 
 test('a change that cannot be measured is named, never counted as passing', async () => {
@@ -223,6 +226,9 @@ test('the workflow keeps no way to publish a verdict and triggers on a schedule 
   assert.equal(workflow.jobs.sweep.if, "github.ref == 'refs/heads/production'");
   const checkout = workflow.jobs.sweep.steps.find(step => String(step.uses).startsWith('actions/checkout'));
   assert.equal(checkout.with.ref, 'production');
-  const mint = workflow.jobs.sweep.steps.find(step => String(step.uses).startsWith('actions/create-github-app-token'));
-  assert.equal(mint.with['permission-issues'], 'write');
+  assert.equal(workflow.permissions.actions, 'write', 're-running the guard is the only trigger');
+  const mints = workflow.jobs.sweep.steps.filter(step => String(step.uses).startsWith('actions/create-github-app-token'));
+  assert.deepEqual(mints, [], 'the Issues-write app token is what the CI App does not grant (HYCI-51)');
+  const measure = workflow.jobs.sweep.steps.find(step => step.name === 'Measure every open agent change once');
+  assert.deepEqual(Object.keys(measure.env), ['HYPERTASK_MCP_TOKEN']);
 });

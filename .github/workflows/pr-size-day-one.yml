@@ -16,7 +16,10 @@ concurrency:
 
 permissions:
   contents: read
-  actions: read
+  # Re-running the trusted guard's own run: the only way to make it look at an
+  # unchanged change again. The App token path needed Issues write, which the CI
+  # App is not granted, so the sweep could never trigger the guard (HYCI-51).
+  actions: write
   # Comments only: the size comment matches the guard's. No statuses scope, so
   # this workflow cannot publish a verdict even by mistake.
   pull-requests: write
@@ -33,21 +36,10 @@ jobs:
           fetch-depth: 1
           sparse-checkout: .github/scripts
           persist-credentials: false
-      - name: Mint the label token the guard triggers need
-        id: trigger-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          # A github.token label write starts no workflow run, so the guard would
-          # never look again. The app token is what makes the label an event.
-          app-id: ${{ secrets.CI_APP_ID }}
-          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
-          permission-issues: write
-          permission-pull-requests: read
       - name: Measure every open agent change once
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         env:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
-          DAY_ONE_TOKEN: ${{ steps.trigger-token.outputs.token }}
         with:
           script: |
             await require('./.github/scripts/pr-size-day-one.cjs')({ github, context, core });
