@@ -23,7 +23,7 @@ function readJobsByIndentation(file, text) {
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
   const jobs = [];
   const start = lines.findIndex((line) => /^jobs:\s*(#.*)?$/.test(line));
-  if (start === -1) return jobs;
+  assert.notEqual(start, -1, `${file}: no "jobs:" at column 0 - this guard cannot read the workflow, so it refuses to pass`);
   let blockScalarIndent = -1;
   for (const line of lines.slice(start + 1)) {
     if (line.trim() === "" || /^\s*#/.test(line)) continue;
@@ -48,6 +48,10 @@ function readJobsByIndentation(file, text) {
       jobs[jobs.length - 1].timeout ??= Number(field[1]);
     }
   }
+  assert.ok(
+    jobs.length,
+    `${file}: the "jobs:" block yielded no jobs, so nothing was checked - rewrite job ids with 2-space indents under "jobs:"`,
+  );
   return jobs;
 }
 
@@ -87,6 +91,25 @@ test("the jobs that hung without a limit keep their bound", () => {
 test("the lint discovers the whole workflow directory", () => {
   assert.ok(workflows.includes("ci-tests.yml"), "the lint found no workflows, so it proves nothing");
   assert.ok(workflows.length > 20, `expected the whole workflow directory, found ${workflows.length} files`);
+});
+
+const parseFixture = (text) => readJobsByIndentation("fixture.yml", text);
+
+test("fixture: a four-space-indented jobs block fails closed instead of passing with no jobs", () => {
+  const fourSpace = "jobs:\n    build:\n        runs-on: ubuntu-latest\n        steps:\n          - run: echo hi\n";
+  assert.throws(() => parseFixture(fourSpace), /yielded no jobs|as a job id/);
+});
+
+test("fixture: a workflow with no jobs at column 0 fails closed", () => {
+  assert.throws(() => parseFixture("on: push\n"), /no "jobs:" at column 0/);
+});
+
+test("fixture: an empty jobs block fails closed", () => {
+  assert.throws(() => parseFixture("jobs:\n"), /yielded no jobs/);
+});
+
+test("fixture: the two-space control still parses a job and its timeout", () => {
+  assert.deepEqual(parseFixture("jobs:\n  build:\n    timeout-minutes: 10\n"), [{ id: "build", timeout: 10 }]);
 });
 
 test("the indentation reader agrees with a real YAML parser", (t) => {
