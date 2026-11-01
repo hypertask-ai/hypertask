@@ -510,7 +510,7 @@ ci_tests:
   runs_on: [ubuntu-latest]
   checks: [dependencies, prisma, typescript, lint, tests]
   browser_halves:
-    ticket: https://app.hypertask.ai/detail/project-11514/57
+    ticket: https://app.hypertask.ai/detail/project-11514/59
     required_context: browser-smoke
     required_context_kind: summary_over_shards
     halves: [browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
@@ -521,13 +521,14 @@ ci_tests:
     matrix_projects: [Matrix]
     flags_projects: [Desktop, Mobile, Inbox]
     project_filter: explicit_project_flag_on_every_playwright_line
-    build: one_per_shard
-    app_build_producer: browser-smoke-desktop
-    nextjs_cache_saver: browser-smoke-desktop
+    build: one_per_change
+    build_job: browser-build
+    app_build_producer: browser-build
+    nextjs_cache_saver: browser-build
     contract_executor: browser-smoke-desktop
     premerge_verify_qa_executor: browser-smoke-flags
     shard_target_seconds: 360
-    job_budget_cost: 4
+    job_budget_cost: 5
     coverage_guard: tests/browser-smoke-workflow.test.cjs
   docs_only:
     jobs: [ci-tests, browser-smoke]
