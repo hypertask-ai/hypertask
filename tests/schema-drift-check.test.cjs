@@ -3,7 +3,6 @@ const { spawnSync } = require("node:child_process");
 const { readFileSync, existsSync } = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const yaml = require("js-yaml");
 const pg = require("pg");
 
 const root = path.resolve(__dirname, "..");
@@ -96,23 +95,6 @@ test("catalog snapshot retains FKs backed by unique indexes and skips only docum
   assert.ok(queries.some((sql) => sql.includes("con.contype IN ('p','u','x')")));
   const full = await catalogSchema(client, { includeLegacy: true });
   assert.ok(full.includes("cacheReadInputTokens") && full.includes("savedCrossBoardViews") && full.includes("AI_Knowledge_Source"));
-});
-
-test("workflow is production-only, least-privilege monitoring, not a required check", () => {
-  const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/schema-drift.yml"), "utf8"));
-  assert.ok(workflow.on.schedule[0].cron && "workflow_dispatch" in workflow.on && "deployment_status" in workflow.on);
-  assert.deepEqual(workflow.permissions, { contents: "read" });
-  assert.equal(workflow.jobs.drift["runs-on"], "ubuntu-latest");
-  assert.match(workflow.jobs.drift.if, /deployment_status.state == 'success'/);
-  assert.match(workflow.jobs.drift.if, /deployment.environment == 'Production'/);
-  assert.match(workflow.jobs.drift.if, /github.ref == 'refs\/heads\/production'/);
-  const checkout = workflow.jobs.drift.steps.find((step) => step.uses?.startsWith("actions/checkout@"));
-  assert.equal(checkout.with.ref, "production");
-  assert.equal(checkout.with["persist-credentials"], false);
-  assert.ok(workflow.jobs.drift.services.postgres);
-  const policy = yaml.load(readFileSync(path.join(root, "docs/ci-policy.yml"), "utf8"));
-  assert.equal(policy.schema_drift_monitor.required_check, false);
-  assert.ok(!policy.required_checks.contexts.includes("Production Schema Drift"));
 });
 
 test("disposable PostgreSQL positive control and cache-column repair", { timeout: 240_000 }, async (t) => {

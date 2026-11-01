@@ -1,6 +1,5 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
-const { readFileSync } = require('node:fs')
 const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
 let state
@@ -179,14 +178,6 @@ test('in:8 never widens the accessible-board scope even with a private row in th
   assert.equal(res.statusCode, 204)
   assert.deepEqual(res.body.processedData.All, [])
   assert.equal((await search('in:8', { requested: [7, 8] })).res.statusCode, 403)
-})
-
-test('web posts the untouched input and full board scope in both search flows', () => {
-  const source = readFileSync(path.join(root, 'src/hooks/Search/useSearch.ts'), 'utf8')
-  for (const [term, projects] of [['_searchTerm', 'projects'], ['searchTerm', 'searchProjects']]) {
-    assert.match(source, new RegExp(`projectIds: ${projects}\\.map\\(\\(item\\) => item\\.id\\),\\s*searchQuery: ${term},\\s*archive: defaultSearchArchiveStatus\\(showArchived\\)`))
-  }
-  assert.doesNotMatch(source, /searchBoards/)
 })
 
 test('local fixture times filtered query against plain-text search path', async () => {

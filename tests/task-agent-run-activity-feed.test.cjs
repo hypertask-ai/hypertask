@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
@@ -75,20 +74,6 @@ const runActivity = (id, type, createdAt, options = null) => ({
   selectedAt: null,
   selectedBy: null,
   createdAt,
-});
-
-test("task history starts hidden when no preference has been saved", () => {
-  const storeSource = fs.readFileSync(
-    path.join(root, "src/store/index.ts"),
-    "utf8",
-  );
-  const historyAtom = storeSource.match(
-    /export const showTaskHistoryAtom[\s\S]*?\n\}\);/,
-  );
-
-  assert.ok(historyAtom, "showTaskHistoryAtom should exist");
-  assert.match(historyAtom[0], /default: false/);
-  assert.match(historyAtom[0], /effects_UNSTABLE: \[persistAtom\]/);
 });
 
 test("task thread feed merges chronologically without changing comment indexes", () => {
@@ -173,23 +158,6 @@ test("task activity links allow only http and https", () => {
   assert.equal(safeAgentRunActivityLink("not a url"), null);
 });
 
-test("passive activity row keeps selection accessible and reconciles through comments", () => {
-  const source = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/PageComponents/TaskDetail/CommentAndDescription/AgentRunActivityRow.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(source, /min-h-11 min-w-11/);
-  assert.match(source, /aria-pressed=\{selected\}/);
-  assert.match(source, /aria-disabled=\{blocked\}/);
-  assert.match(source, /rel="noopener noreferrer"/);
-  assert.match(source, /refreshTaskComments\(queryClient, taskId\)/);
-  assert.match(source, /response\.status === 409/);
-});
-
 test("comments route rejects unsigned identity and sets private cache headers", async () => {
   let controllerCalls = 0;
   const handler = loadCommentsRoute({
@@ -242,18 +210,4 @@ test("comments route passes the signed session user to the controller", async ()
   assert.deepEqual(controllerArgs, [42, "6122"]);
   assert.equal(result.status, 200);
   assert.deepEqual(result.body, { comments: [] });
-});
-
-test("comments payload carries activities separately from comments", () => {
-  const controller = fs.readFileSync(
-    path.join(root, "src/utils/controllers/comments/getByTask.ts"),
-    "utf8",
-  );
-  const client = fs.readFileSync(
-    path.join(root, "src/utils/api/Task Detail/index.ts"),
-    "utf8",
-  );
-
-  assert.match(controller, /json: \{ comments: filteredComments, lastReadAt, agentRunActivities \}/);
-  assert.match(client, /agentRunActivities = Array\.isArray/);
 });

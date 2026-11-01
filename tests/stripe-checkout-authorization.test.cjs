@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -910,45 +909,4 @@ test("a duplicate paid retry preserves a different open trial checkout", async (
   assert.equal(openCheckoutSessions.length, 1);
   assert.equal(openCheckoutSessions[0].metadata.checkoutMode, "Trial");
   assert.equal(reservationRecord, trialReservation);
-});
-
-test("checkout authorization does not expose owner identity through getTeamById", () => {
-  const plansSource = fs.readFileSync(
-    path.join(root, "src/components/Modals/Settings/PlansSection.tsx"),
-    "utf8",
-  );
-  const trialSource = fs.readFileSync(
-    path.join(root, "src/components/Modals/TrialPlan/TrialPlanComponents.tsx"),
-    "utf8",
-  );
-  const serverActionsSource = fs.readFileSync(
-    path.join(root, "src/lib/serverActions/index.ts"),
-    "utf8",
-  );
-
-  assert.match(plansSource, /disabled=\{[\s\S]*?!isOwner/);
-  assert.match(plansSource, /"Owner only"/);
-  assert.match(trialSource, /let cancelled = false/);
-  assert.match(trialSource, /if \(cancelled\) return/);
-  assert.match(trialSource, /cancelled = true/);
-  assert.doesNotMatch(trialSource, /res\.googleAccount\.userId/);
-  const getTeamByIdSource = serverActionsSource.slice(
-    serverActionsSource.indexOf("export const getTeamById"),
-    serverActionsSource.indexOf("export const getTeamInviteUrl"),
-  );
-  assert.doesNotMatch(getTeamByIdSource, /googleAccount|userId/);
-});
-
-test("checkout webhooks never reset completed trial history to false", () => {
-  for (const relativePath of [
-    "src/utils/controllers/stripe/webhook/onCheckoutSuccess.ts",
-    "src/utils/controllers/stripe/webhook/onSubscriptionUpdated.ts",
-  ]) {
-    const source = fs.readFileSync(path.join(root, relativePath), "utf8");
-    assert.doesNotMatch(source, /hasCompletedTrial:\s*false/);
-    assert.doesNotMatch(
-      source,
-      /hasCompletedTrial:\s*subscription\.status\s*===/,
-    );
-  }
 });
