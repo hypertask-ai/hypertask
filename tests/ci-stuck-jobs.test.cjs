@@ -1,6 +1,12 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { decide, apply, plan, resume, recover, sweep, chain, sweepInFlight, readPending, STUCK_MINUTES, PENDING_LIMIT } = require('../.github/scripts/ci-stuck-jobs.cjs');
+const { mkdtempSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
+const {
+  decide, apply, plan, resume, recover, sweep, tick, handOff, sweepInFlight, readPending, sweepOnce,
+  STUCK_SECONDS, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, PENDING_LIMIT,
+} = require('../.github/scripts/ci-stuck-jobs.cjs');
 
 const now = Date.parse('2026-11-01T09:00:00Z');
 const step = (name, finished) => ({ name, conclusion: 'success', completed_at: finished });
@@ -483,31 +489,89 @@ test('a cancel with no answer is reported until it leaves the recovery window', 
   assert.deepEqual(written.at(-1), [{ ...uncertain, tries: 2 }]);
 });
 
-test('the rule is three minutes and both sides of it are pinned', () => {
+test('the rule is forty-five seconds and both sides of it are pinned', () => {
   const at = (iso) => job('test-shard (1)', 'in_progress', [step('Test shard', iso)]);
-  assert.equal(STUCK_MINUTES, 3);
-  assert.equal(decide(stuckRun, [at('2026-11-01T08:58:00Z')], { now }), null);
-  assert.equal(decide(stuckRun, [at('2026-11-01T08:57:01Z')], { now }), null);
-  const decision = decide(stuckRun, [at('2026-11-01T08:56:00Z')], { now });
+  assert.equal(STUCK_SECONDS, 45);
+  assert.equal(decide(stuckRun, [at('2026-11-01T08:59:16Z')], { now }), null);
+  const decision = decide(stuckRun, [at('2026-11-01T08:59:15Z')], { now });
   assert.equal(decision.action, 'cancel');
-  assert.equal(decision.stuck[0].idle, 240);
+  assert.equal(decision.stuck[0].idle, 45);
+  assert.equal(decide(stuckRun, [at('2026-11-01T08:59:14Z')], { now }).stuck[0].idle, 46);
 });
 
-test('a sweep waits and then dispatches the next one', async () => {
+test('a link that used its ticks dispatches the next one', async () => {
   const calls = [];
-  let waited = 0;
   const api = async (path, method = 'GET') => {
     calls.push(`${method} ${path}`);
     if (path.includes('/workflows/stuck-job-recovery.yml/runs')) return { workflow_runs: [{ id: 5, status: 'completed' }] };
     return {};
   };
-  const outcome = await chain('o/r', { api, waitMs: 180000, ownRunId: '5', sleep: async (ms) => { waited += ms; } });
+  const outcome = await handOff('o/r', { api, ownRunId: '5' });
   assert.deepEqual(outcome, { dispatched: true, ref: 'production' });
-  assert.equal(waited, 180000);
   assert.deepEqual(calls, [
     'GET /repos/o/r/actions/workflows/stuck-job-recovery.yml/runs?per_page=30',
     'POST /repos/o/r/actions/workflows/stuck-job-recovery.yml/dispatches',
   ]);
+});
+
+test('one link sweeps eight ticks and waits the gap between them', async () => {
+  const waits = [];
+  let sweeps = 0;
+  const done = await tick('o/r', {
+    sweeps: TICKS_PER_LINK,
+    gapMs: TICK_GAP_MS,
+    once: async () => {
+      sweeps += 1;
+      return { swept: sweeps };
+    },
+    sleep: async (ms) => {
+      waits.push(ms);
+    },
+  });
+  assert.equal(TICKS_PER_LINK, 8);
+  assert.equal(sweeps, TICKS_PER_LINK - 1);
+  assert.deepEqual(done.map(entry => entry.swept), [1, 2, 3, 4, 5, 6, 7]);
+  assert.deepEqual(waits, Array(TICKS_PER_LINK - 1).fill(TICK_GAP_MS));
+  assert.equal(TICK_GAP_MS, 30000);
+});
+
+test('a tick that throws does not stop the rest of the link', async () => {
+  let calls = 0;
+  const done = await tick('o/r', {
+    sweeps: 3,
+    once: async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('gh api timed out');
+      return { swept: calls };
+    },
+    sleep: async () => {},
+  });
+  assert.equal(calls, 2);
+  assert.match(done[0].error, /timed out/);
+  assert.deepEqual(done[1], { swept: 2 });
+});
+
+test('a link catches a job that goes idle between two ticks, not on the next link', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hyci73-'));
+  const fixture = join(dir, 'stuck.json');
+  const idleAtLinkStartMs = 30 * 1000;
+  const jobs = [job('test-shard (1)', 'in_progress', [step('Test shard', new Date(now - idleAtLinkStartMs).toISOString())])];
+  writeFileSync(fixture, JSON.stringify({ repo: 'o/r', runs: [stuckRun], jobs: { [stuckRun.id]: jobs } }));
+  let clock = now;
+  const once = () => sweepOnce('o/r', {
+    live: false,
+    fixture,
+    options: { stuckSeconds: STUCK_SECONDS, now: () => clock },
+    quiet: true,
+  });
+  const first = await once();
+  const later = await tick('o/r', { sweeps: 2, gapMs: TICK_GAP_MS, once, sleep: async ms => { clock += ms; } });
+  assert.ok(idleAtLinkStartMs / 1000 < STUCK_SECONDS);
+  assert.ok((idleAtLinkStartMs + TICK_GAP_MS) / 1000 > STUCK_SECONDS);
+  assert.equal(first.decisions.length, 0);
+  assert.equal(later.length, 1);
+  assert.equal(later[0].decisions[0].action, 'cancel');
+  assert.equal(later[0].decisions[0].stuck[0].idle, (idleAtLinkStartMs + TICK_GAP_MS) / 1000);
 });
 
 test('a sweep never starts a second chain while a link is still running', async () => {
@@ -516,9 +580,25 @@ test('a sweep never starts a second chain while a link is still running', async 
     calls.push(`${method} ${path}`);
     return { workflow_runs: [{ id: 9, status: 'in_progress' }, { id: 5, status: 'completed' }] };
   };
-  const outcome = await chain('o/r', { api, ownRunId: '5', sleep: async () => {} });
-  assert.deepEqual(outcome, { dispatched: false, reason: 'another sweep is already in_progress' });
+  const outcome = await handOff('o/r', { api, ownRunId: '5', tries: 3, sleep: async () => {} });
+  assert.deepEqual(outcome, { dispatched: false, reason: 'another sweep is still in_progress after 3 tries' });
   assert.equal(calls.filter(call => call.startsWith('POST')).length, 0);
+  assert.equal(calls.filter(call => call.startsWith('GET')).length, 3);
+});
+
+test('a hand-off waits out a link that stands down instead of losing the chain', async () => {
+  let listing = 1;
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    if (method === 'POST') return {};
+    listing += 1;
+    return { workflow_runs: listing <= 3 ? [{ id: 9, status: 'queued' }] : [] };
+  };
+  const waits = [];
+  const outcome = await handOff('o/r', { api, ownRunId: '5', tries: 4, gapMs: 30000, sleep: async (ms) => { waits.push(ms); } });
+  assert.deepEqual(outcome, { dispatched: true, ref: 'production' });
+  assert.deepEqual(waits, [30000, 30000]);
 });
 
 test('a sweep gives way to a link that is already on its way', async () => {
@@ -529,7 +609,7 @@ test('a sweep gives way to a link that is already on its way', async () => {
 });
 
 test('a chain that cannot read the run list dispatches nothing', async () => {
-  const outcome = await chain('o/r', { api: async () => { throw new Error('gh api failed: HTTP 500'); }, ownRunId: '5', sleep: async () => {} });
+  const outcome = await handOff('o/r', { api: async () => { throw new Error('gh api failed: HTTP 500'); }, ownRunId: '5' });
   assert.equal(outcome.dispatched, false);
   assert.match(outcome.reason, /run list could not be read/);
 });
@@ -539,7 +619,57 @@ test('a chain whose dispatch fails says so instead of claiming a tick', async ()
     if (method === 'POST') throw new Error('gh api failed: HTTP 422');
     return { workflow_runs: [] };
   };
-  const outcome = await chain('o/r', { api, ownRunId: '5', sleep: async () => {} });
+  const outcome = await handOff('o/r', { api, ownRunId: '5' });
   assert.equal(outcome.dispatched, false);
   assert.match(outcome.reason, /not dispatched/);
+});
+
+test('live runs are read with a status filter, so a sweep costs one run-list request', async () => {
+  const calls = [];
+  const api = async (path) => {
+    calls.push(path);
+    return { workflow_runs: [stuckRun] };
+  };
+  const decisions = await plan('o/r', { now, api, jobsFor: () => [] });
+  assert.deepEqual(decisions, { decisions: [], unread: [] });
+  assert.deepEqual(calls, ['/repos/o/r/actions/runs?status=in_progress&per_page=100&page=1']);
+});
+
+const SWEEP_COST_MS = 15000;
+const RERUN_COST_MS = 1000;
+const realStuckLastSteps = [
+  '2026-11-01T08:01:21Z', '2026-11-01T08:02:23Z', '2026-11-01T08:02:03Z',
+  '2026-11-01T08:00:56Z', '2026-11-01T08:00:14Z', '2026-11-01T08:00:44Z',
+  '2026-11-01T08:01:09Z', '2026-11-01T08:02:30Z', '2026-11-01T08:02:36Z',
+];
+
+function worstIdle(lastStep, ruleSeconds, periodMs, settleMs) {
+  let worst = 0;
+  for (let phase = 0; phase < periodMs; phase += 1000) {
+    const firstTick = phase + Math.ceil((lastStep + ruleSeconds * 1000 - phase) / periodMs) * periodMs;
+    const idle = firstTick - lastStep + settleMs + RERUN_COST_MS;
+    if (idle > worst) worst = idle;
+  }
+  return worst;
+}
+
+function measuredIdle(settleMs) {
+  return Math.max(...realStuckLastSteps.map(iso => worstIdle(Date.parse(iso), STUCK_SECONDS, TICK_GAP_MS + SWEEP_COST_MS, settleMs)));
+}
+
+test('the cap ends a stuck push within two minutes', () => {
+  assert.equal(CAP_BUDGET_MS, 120000);
+  const worstSettle = SETTLE_ATTEMPTS * SETTLE_DELAY_MS;
+  const worst = measuredIdle(worstSettle);
+  assert.ok(worst < CAP_BUDGET_MS, `worst idle ${worst} ms must be under ${CAP_BUDGET_MS} ms`);
+  assert.ok(STUCK_SECONDS * 1000 + TICK_GAP_MS + SWEEP_COST_MS + worstSettle + RERUN_COST_MS <= CAP_BUDGET_MS);
+  assert.ok(measuredIdle(2 * SETTLE_DELAY_MS) < measuredIdle(worstSettle));
+});
+
+test('the nine real stuck jobs of run 41286623269 paid minutes and now pay seconds', () => {
+  const oldWorst = Math.max(120000, Math.max(...realStuckLastSteps.map(iso => worstIdle(Date.parse(iso), 180, 211000, 5000))));
+  const newWorst = measuredIdle(2 * SETTLE_DELAY_MS);
+  assert.equal(realStuckLastSteps.length, 9);
+  assert.ok(oldWorst > 180000, `the old cadence paid ${oldWorst} ms`);
+  assert.ok(newWorst < CAP_BUDGET_MS, `the new cadence pays ${newWorst} ms`);
 });

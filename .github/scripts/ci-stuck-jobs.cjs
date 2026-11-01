@@ -11,7 +11,7 @@
 //
 // This cannot be un-stuck from inside a job, so the wait is capped instead.
 // A job whose every step has completed and whose newest step is older than
-// STUCK_MINUTES is not doing anything, so this sweep cancels that run and, once
+// STUCK_SECONDS is not doing anything, so this sweep cancels that run and, once
 // the cancellation settles, re-runs its failed jobs: the second attempt reports
 // normally on a fresh runner. Provenance is the sweep's own cancel call, so a
 // run that was cancelled by anything else (a person, a superseded push) is
@@ -28,15 +28,26 @@
 // ux-signoff-gate, and 33 of about 1049 for prod-health's five-minute crons. A
 // ten-minute sweep is therefore a sweep every few hours, and a job whose last
 // step is older than RECENT_MINUTES is not read at all, so the cap almost never
-// fired. Each sweep now waits CHAIN_WAIT_MS and dispatches the next one, which
-// is a real tick; a scheduled or pushed run only restarts a chain that died.
+// fired. Each sweep now waits and dispatches the next one, which is a real tick;
+// a scheduled or pushed run only restarts a chain that died.
+//
+// HYCI-73: the three-minute rule on a three-minute tick still left 184-411 s of
+// idle on the nine real stuck jobs, because the rule and the tick add up. Both
+// are now short and the tick is cheap: the rule is STUCK_SECONDS, one chain link
+// sweeps every TICK_GAP_MS for TICKS_PER_LINK ticks and then hands the tick on,
+// so runner startup is paid once per eight ticks instead of once per tick, and
+// discovery reads only in-progress runs in one request. Measured on the same nine
+// jobs, 216 real finished jobs of 30 PR runs close 0-4 s after their last step
+// (median 2 s), so a forty-five-second rule never touches a healthy job.
 const { execFile } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 
-const STUCK_MINUTES = 3;
+const STUCK_SECONDS = 45;
 const RECENT_MINUTES = 30;
-const SETTLE_ATTEMPTS = 12;
-const SETTLE_DELAY_MS = 5000;
+// A cancel usually settles in one or two polls; a slower one is now carried by a
+// tick that is TICK_GAP_MS away instead of a whole chain wait.
+const SETTLE_ATTEMPTS = 10;
+const SETTLE_DELAY_MS = 2000;
 const PR_EVENT = 'pull_request';
 const REPORT_ONLY = 'report';
 const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
@@ -52,7 +63,17 @@ const RECOVERY_ATTEMPTS = 3;
 const PENDING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 const WORKFLOW_FILE = 'stuck-job-recovery.yml';
 const CHAIN_REF = 'production';
-const CHAIN_WAIT_MS = 3 * 60 * 1000;
+// One link is one runner: it sweeps, sleeps TICK_GAP_MS, sweeps again, and after
+// TICKS_PER_LINK ticks it dispatches the next link. A tick's period is therefore
+// the gap plus one sweep (about fifteen seconds of API work), and runner startup
+// is in the path once per link instead of once per tick.
+const TICK_GAP_MS = 30 * 1000;
+const TICKS_PER_LINK = 8;
+const HANDOFF_TRIES = 4;
+// What a stuck job pays before its second attempt starts: the rule, the wait for
+// the next tick, one sweep, the cancel settling, and the re-run request. This is
+// the number HYCI-73 holds under two minutes, and `decide` is only one term of it.
+const CAP_BUDGET_MS = 120 * 1000;
 const SETTLE_FAILED = 'cancel did not settle';
 const RERUN_FAILED = 're-run request failed';
 const JOBS_UNAVAILABLE = 'job list unavailable after the cancel';
@@ -83,7 +104,7 @@ function holdsFailure(job) {
   return (job.steps ?? []).some(step => step.completed_at && FAILED.has(step.conclusion));
 }
 
-function finishedJob(job, now, stuckMinutes) {
+function finishedJob(job, now, stuckSeconds) {
   const steps = job.steps ?? [];
   if (!steps.length) return null;
   if (job.status !== 'in_progress') return null;
@@ -92,7 +113,7 @@ function finishedJob(job, now, stuckMinutes) {
   const last = Math.max(...ends);
   if (!Number.isFinite(last)) return null;
   const idle = (now - last) / 1000;
-  return idle >= stuckMinutes * 60 ? { name: job.name, idle: Math.round(idle), lastStepAt: new Date(last).toISOString() } : null;
+  return idle >= stuckSeconds ? { name: job.name, idle: Math.round(idle), lastStepAt: new Date(last).toISOString() } : null;
 }
 
 function fresh(run, now, recentMinutes) {
@@ -106,12 +127,12 @@ function liveRun(run, now, recentMinutes) {
   return fresh(run, now, recentMinutes);
 }
 
-function decide(run, jobs, { now = Date.now(), stuckMinutes = STUCK_MINUTES, recentMinutes = RECENT_MINUTES } = {}) {
+function decide(run, jobs, { now = Date.now(), stuckSeconds = STUCK_SECONDS, recentMinutes = RECENT_MINUTES } = {}) {
   if (!fresh(run, now, recentMinutes)) return null;
   if ((run.run_attempt ?? 1) !== 1) return null;
   if (jobs.some(holdsFailure)) return null;
   if (run.status !== 'in_progress') return null;
-  const stuck = jobs.map(job => finishedJob(job, now, stuckMinutes)).filter(Boolean);
+  const stuck = jobs.map(job => finishedJob(job, now, stuckSeconds)).filter(Boolean);
   if (!stuck.length) return null;
   return {
     runId: run.id,
@@ -157,22 +178,26 @@ function storeJson(path, method = 'GET', fields = undefined) {
   return request(path, method, fields, process.env.STORE_TOKEN);
 }
 
-async function plan(repo, { now = Date.now(), stuckMinutes = STUCK_MINUTES, recentMinutes = RECENT_MINUTES, runs = null, jobsFor = null } = {}) {
-  const listed = runs ?? (await pages(`/repos/${repo}/actions/runs?per_page=100`));
+// Only in-progress runs can hold a stuck job, and the endpoint filters them
+// server-side, so discovery is one request on a quiet repository instead of five
+// pages of everything. At a tick every forty-five seconds that difference is the
+// sweep's whole API budget.
+async function plan(repo, { now = Date.now(), stuckSeconds = STUCK_SECONDS, recentMinutes = RECENT_MINUTES, runs = null, jobsFor = null, api = json } = {}) {
+  const listed = runs ?? (await pages(`/repos/${repo}/actions/runs?status=in_progress&per_page=100`, api));
   const decisions = [];
   const unread = [];
   for (const run of listed) {
     if (!liveRun(run, now, recentMinutes)) continue;
     let jobs;
     try {
-      jobs = jobsFor ? jobsFor(run.id) ?? [] : await jobsOf(repo, run.id);
+      jobs = jobsFor ? jobsFor(run.id) ?? [] : await jobsOf(repo, run.id, api);
     } catch (error) {
       // One unreadable job list is one run this sweep cannot judge, not the end
       // of the sweep: the others are still read and the store is still finished.
       unread.push({ runId: run.id, reason: String(error.message).slice(0, 80) });
       continue;
     }
-    const decision = decide(run, jobs, { now, stuckMinutes, recentMinutes });
+    const decision = decide(run, jobs, { now, stuckSeconds, recentMinutes });
     if (decision) decisions.push(decision);
   }
   return { decisions, unread };
@@ -183,10 +208,10 @@ async function jobsOf(repo, runId, api = json) {
   return payload.jobs ?? [];
 }
 
-async function pages(path) {
+async function pages(path, api = json) {
   const found = [];
   for (let page = 1; page <= 5; page++) {
-    const payload = await json(`${path}&page=${page}`);
+    const payload = await api(`${path}&page=${page}`);
     const batch = payload.workflow_runs ?? [];
     found.push(...batch);
     if (batch.length < 100) break;
@@ -494,7 +519,7 @@ async function sweep(repo, { now = Date.now(), read = null, discover = null, sav
 }
 
 // The sweep a scheduled or pushed run should not duplicate: a chain link is
-// already on its way, and it sweeps within CHAIN_WAIT_MS. Its own run is never
+// already on its way, and it sweeps within TICK_GAP_MS. Its own run is never
 // counted, because a link is still running when the sweep it dispatched starts.
 async function sweepInFlight(repo, { api = json, ownRunId = null } = {}) {
   const payload = await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=30`);
@@ -502,74 +527,96 @@ async function sweepInFlight(repo, { api = json, ownRunId = null } = {}) {
   return live.find(run => String(run.id) !== String(ownRunId)) ?? null;
 }
 
-// A real tick. The scheduled trigger is a backstop that fires every few hours,
-// so the sweep that just ran starts the next one after CHAIN_WAIT_MS and the
-// chain keeps ticking until a run fails, the repository has no runner, or a
-// production push restarts it. Waiting here rather than dispatching at once keeps
-// one chain link per tick: the dispatch is skipped when another link is still
-// running, so a backstop that lands on a live chain never starts a second one.
-async function chain(repo, { api = json, waitMs = CHAIN_WAIT_MS, ownRunId = process.env.GITHUB_RUN_ID, ref = CHAIN_REF, sleep = wait } = {}) {
-  await sleep(waitMs);
-  let busy;
-  try {
-    busy = await sweepInFlight(repo, { api, ownRunId });
-  } catch (error) {
-    return { dispatched: false, reason: `the run list could not be read: ${String(error.message).slice(0, 80)}` };
+// The ticks inside one link. Each link sweeps, then waits TICK_GAP_MS, and does
+// that TICKS_PER_LINK times, so the runner startup and the two setup steps are
+// paid once per eight ticks instead of once per tick. A tick that throws is
+// reported and the loop keeps ticking: one bad sweep is forty-five seconds, not
+// a dead chain.
+async function tick(repo, { sweeps = TICKS_PER_LINK, gapMs = TICK_GAP_MS, once, sleep = wait } = {}) {
+  const done = [];
+  for (let index = 1; index < Math.max(1, sweeps); index++) {
+    await sleep(gapMs);
+    try {
+      done.push(await once());
+    } catch (error) {
+      done.push({ error: String(error.message).slice(0, 120) });
+    }
   }
-  if (busy) return { dispatched: false, reason: `another sweep is already ${busy.status}` };
-  try {
-    await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`, 'POST', { ref });
-    return { dispatched: true, ref };
-  } catch (error) {
-    return { dispatched: false, reason: `the next sweep was not dispatched: ${String(error.message).slice(0, 80)}` };
+  return done;
+}
+
+// The scheduled trigger is a backstop that fires every few hours, so a link that
+// has used its ticks dispatches the next one and the chain keeps ticking until a
+// run fails, the repository has no runner, or a production push restarts it. The
+// dispatch never starts a second chain while another link is queued or running,
+// so it waits instead of giving up: the link it gave way to may be a backstop
+// that stands down, and a chain that stops there waits for the next cron, which
+// is minutes. Waiting here keeps one link per tick and costs nothing when no
+// other link appears.
+async function handOff(repo, { api = json, ownRunId = process.env.GITHUB_RUN_ID, ref = CHAIN_REF, tries = HANDOFF_TRIES, gapMs = TICK_GAP_MS, sleep = wait } = {}) {
+  for (let attempt = 1; attempt <= Math.max(1, tries); attempt++) {
+    let busy;
+    try {
+      busy = await sweepInFlight(repo, { api, ownRunId });
+    } catch (error) {
+      return { dispatched: false, reason: `the run list could not be read: ${String(error.message).slice(0, 80)}` };
+    }
+    if (!busy) {
+      try {
+        await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`, 'POST', { ref });
+        return { dispatched: true, ref };
+      } catch (error) {
+        return { dispatched: false, reason: `the next sweep was not dispatched: ${String(error.message).slice(0, 80)}` };
+      }
+    }
+    if (attempt === Math.max(1, tries)) return { dispatched: false, reason: `another sweep is still ${busy.status} after ${tries} tries` };
+    await sleep(gapMs);
   }
+  return { dispatched: false, reason: 'no dispatch was attempted' };
 }
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
-  const repo = argValue(argv, '--repo') ?? process.env.REPO ?? process.env.GITHUB_REPOSITORY;
-  const fixture = argValue(argv, '--fixture');
-  const applyChanges = argv.includes('--apply');
-  const options = {
-    stuckMinutes: Number(argValue(argv, '--stuck-minutes') ?? STUCK_MINUTES),
-    now: Date.parse(argValue(argv, '--now')) || Date.now(),
-  };
-  const live = applyChanges && !fixture;
-  const chaining = argv.includes('--chain');
+// The clock is read when a sweep starts, not when the link starts. A link's
+// ticks share one options object, so a time captured once would judge every
+// later tick against the first one and a job that goes idle between two ticks
+// would wait for the next link, minutes away, instead of the next tick.
+function nowFrom(options = {}) {
+  const clock = options.now;
+  if (typeof clock === 'function') return clock();
+  return clock ?? Date.now();
+}
+
+// One sweep, with its report. A tick in the middle of a link says less than the
+// first one: the JSON is for a person reading a run, and eight copies of it bury
+// the notices that matter.
+async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = {}) {
+  const now = nowFrom(options);
   let decisions = [];
   let unread = [];
   let discovery = null;
   let stored = { ok: true, pending: [] };
   let recovery = { done: [], pending: [], saved: true };
-  // A scheduled or pushed run only exists to restart a chain that died, so it
-  // gives way to a link that is already running instead of sweeping twice.
-  const backstop = ['schedule', 'push'].includes(process.env.GITHUB_EVENT_NAME ?? '');
-  let skipped = null;
-  if (live && backstop) {
-    try {
-      const busy = await sweepInFlight(repo, { ownRunId: process.env.GITHUB_RUN_ID });
-      if (busy) skipped = `run ${busy.id} is already ${busy.status}`;
-    } catch {
-      skipped = null;
-    }
-  }
-  if (live && !skipped) {
-    ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now: options.now }));
-  } else if (!skipped) {
+  if (live) {
+    ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now }));
+  } else {
     try {
       ({ decisions, unread } = fixture
-        ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
-        : await plan(repo, options));
+        ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), { ...options, now })
+        : await plan(repo, { ...options, now }));
     } catch (error) {
       discovery = String(error.message).slice(0, 120);
     }
   }
   const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
-  console.log(JSON.stringify(report, null, 2));
+  if (quiet) {
+    const recovered = recovery.done.filter(outcome => outcome.action === 'recover').length;
+    console.log(`::notice::tick: ${decisions.length} candidate run(s), ${recovered} recovered, ${recovery.pending.length} carried.`);
+  } else {
+    console.log(JSON.stringify(report, null, 2));
+  }
   if (discovery) {
     console.log(`::warning::the run list could not be read this sweep (${discovery}); stored recoveries were still finished.`);
   }
@@ -602,12 +649,49 @@ async function main() {
     const names = decision.stuck.map(entry => entry.name).join(', ');
     console.log(`::notice::${decision.workflow} run ${decision.runId} ${decision.action}: ${names}`);
   }
-  if (skipped) {
-    console.log(`::notice::this sweep stood down: ${skipped} and sweeps again within ${Math.round(CHAIN_WAIT_MS / 60000)} minutes.`);
-    return;
+  return report;
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  const repo = argValue(argv, '--repo') ?? process.env.REPO ?? process.env.GITHUB_REPOSITORY;
+  const fixture = argValue(argv, '--fixture');
+  const applyChanges = argv.includes('--apply');
+  const sweeps = Math.max(1, Number(argValue(argv, '--ticks') ?? TICKS_PER_LINK));
+  const gapMs = Number(argValue(argv, '--gap-ms') ?? TICK_GAP_MS);
+  // A live link reads the wall clock per sweep. A replay pins its clock and
+  // advances it by one gap per sweep, so a fixture chain crosses the rule the
+  // way a live one does instead of freezing at the first tick.
+  let pinned = Date.parse(argValue(argv, '--now') ?? '');
+  const clock = Number.isNaN(pinned) ? () => Date.now() : () => (pinned += gapMs);
+  const options = {
+    stuckSeconds: Number(argValue(argv, '--stuck-seconds') ?? STUCK_SECONDS),
+    now: clock,
+  };
+  const live = applyChanges && !fixture;
+  const chaining = argv.includes('--chain');
+  // A scheduled or pushed run only exists to restart a chain that died, so it
+  // gives way to a link that is already running instead of sweeping twice.
+  const backstop = ['schedule', 'push'].includes(process.env.GITHUB_EVENT_NAME ?? '');
+  if (live && backstop) {
+    let busy = null;
+    try {
+      busy = await sweepInFlight(repo, { ownRunId: process.env.GITHUB_RUN_ID });
+    } catch {
+      busy = null;
+    }
+    if (busy) {
+      console.log(`::notice::this sweep stood down: run ${busy.id} is already ${busy.status} and sweeps again within ${Math.round(gapMs / 1000)} seconds.`);
+      return;
+    }
   }
+  await sweepOnce(repo, { live, fixture, options });
   if (!chaining) return;
-  const next = await chain(repo, { waitMs: Number(argValue(argv, '--chain-wait-ms') ?? CHAIN_WAIT_MS) });
+  const later = await tick(repo, { sweeps, gapMs, once: () => sweepOnce(repo, { live, fixture, options, quiet: true }) });
+  for (const outcome of later) {
+    if (outcome && outcome.error) console.log(`::warning::a tick failed: ${outcome.error}.`);
+  }
+  const next = await handOff(repo);
   if (next.dispatched) console.log(`::notice::the next sweep is dispatched on ${next.ref}.`);
   else console.log(`::warning::the chain stopped: ${next.reason}. The next scheduled or production push run restarts it.`);
 }
@@ -617,7 +701,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, chain, sweepInFlight, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, CHAIN_WAIT_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {

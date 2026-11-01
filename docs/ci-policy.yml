@@ -164,25 +164,37 @@ pr_size_day_one:
   fail_closed_on: [missing_board_token, missing_day_one_ticket, no_guard_run_at_head, trigger_error, post_error]
 
 stuck_job_recovery:
-  ticket: https://app.hypertask.ai/detail/project-11514/66
+  ticket: https://app.hypertask.ai/detail/project-11514/73
+  tickets: [https://app.hypertask.ai/detail/project-11514/66, https://app.hypertask.ai/detail/project-11514/71]
   workflow: .github/workflows/stuck-job-recovery.yml
   script: .github/scripts/ci-stuck-jobs.cjs
   required: false
   triggers: [schedule, workflow_dispatch]
   cron_utc: "*/10 * * * *"
   cron_role: restart a chain that died, never the tick itself
+  tick_seconds: 45
+  tick_gap_seconds: 30
+  ticks_per_link: 8
+  idle_budget_seconds: 120
+  measured_idle_seconds:
+    before: 396
+    after: 110
+    sample: the nine real stuck jobs of run 41286623269, worst case over every tick phase
+  healthy_job_idle: 216 real finished jobs of 30 pull-request runs closed 0-4 s after their last step, median 2 s
   chain:
-    wait_seconds: 180
+    hand_off: a link that used its ticks dispatches the next one at once
     dispatch: workflow_dispatch on production
     guard: the dispatch is skipped while another link of this workflow is queued or running
     cost: one of the twenty parallel jobs, free hosted minutes only, because the repository is public
     measured_schedule_delivery: 17 of 349 at 15 minutes, 16 of 87 at 60 minutes, 33 of about 1049 at 5 minutes, over the 87 hours from 2026-10-29T00:00Z
   trusted_code_ref: production
   runs_on: ubuntu-latest
-  timeout_minutes: 10
+  timeout_minutes: 15
   contributes_jobs_to_pr: false
   reads: [actions_runs, actions_jobs, repository_variable]
-  stuck_after_minutes: 3
+  run_list_filter: status=in_progress, one request per sweep
+  stuck_after_seconds: 45
+  settle_max_seconds: 20
   recent_minutes: 30
   attempts_touched: 1
   actions: [cancel_run, wait_for_cancel, rerun_failed_jobs]
