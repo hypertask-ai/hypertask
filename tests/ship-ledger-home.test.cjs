@@ -13,7 +13,7 @@ const needsUnlazy = fs.existsSync(path.join(pinnedUnlazy, 'lib/gates.mjs'))
   ? {}
   : { skip: `ship-gates imports ${pinnedUnlazy}/lib/gates.mjs; the ship-scripts-tests-siblings job installs that checkout` };
 
-function fixture() {
+function fixture({ realChecker = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-ledger-home-'));
   const home = path.join(root, 'home');
   const project = path.join(root, 'project');
@@ -24,10 +24,15 @@ function fixture() {
   fs.symlinkSync(path.join(pinnedUnlazy, 'lib'), path.join(home, '.agents/skills/unlazy/scripts/lib'), 'dir');
   fs.writeFileSync(path.join(home, '.agents/skills/ship/scripts/ship-check'),
     '#!/usr/bin/env bash\necho "marker ok"\n', { mode: 0o755 });
-  fs.writeFileSync(path.join(home, '.agents/skills/unlazy/scripts/gate-check.mjs'),
-    'import { appendFileSync } from "node:fs";\n' +
-    'appendFileSync(process.env.GATE_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n");\n' +
-    'console.log("UNMET: 9 (met: 0)");\nprocess.exit(1);\n');
+  if (realChecker) {
+    fs.symlinkSync(path.join(pinnedUnlazy, 'gate-check.mjs'),
+      path.join(home, '.agents/skills/unlazy/scripts/gate-check.mjs'));
+  } else {
+    fs.writeFileSync(path.join(home, '.agents/skills/unlazy/scripts/gate-check.mjs'),
+      'import { appendFileSync } from "node:fs";\n' +
+      'appendFileSync(process.env.GATE_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n");\n' +
+      'console.log("UNMET: 9 (met: 0)");\nprocess.exit(1);\n');
+  }
   return { root, home, project, calls };
 }
 
@@ -281,8 +286,43 @@ test('a board drain keeps one ledger per session outside the project', needsUnla
     assert.equal(fs.readFileSync(b, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1);
     assert.equal(drain('sessionA-full').status, 0);
     assert.equal(fs.readFileSync(a, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1, 'a rerun duplicated the gates');
-    assert.match(fs.readFileSync(f.calls, 'utf8'), /--approve\",\"\S*drain-11514\/s-sessionA\/gates\/drain-11514\.md/, 'the drain never ran the checker');
+    const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+    assert.deepEqual(calls.at(-1), ['--approve', a, '--root', path.dirname(a)],
+      'the checker was not handed the home ledger root as its state root');
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false, 'the project is not clean');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a board drain keeps the real checker out of the project', needsUnlazy, () => {
+  const f = fixture({ realChecker: true });
+  const drainBoard = path.join(repo, '.claude/skills/drain-board/scripts/drain-board');
+  const noRoot = path.join(f.root, 'drain-board-no-root');
+  fs.writeFileSync(noRoot,
+    fs.readFileSync(drainBoard, 'utf8').replace(' --root "$(dirname "$F")"', ''), { mode: 0o755 });
+  const bin = path.join(f.root, 'bin');
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(path.join(bin, 'hypertask'),
+    '#!/usr/bin/env bash\nprintf \'{"success":true,"tasks":[{"ticketNumber":"HTPR-1","title":"one","section":"Backlog"}]}\\n\'\n',
+    { mode: 0o755 });
+  const drain = (script) => spawnSync('bash', [script, 'gates', '11514'], {
+    cwd: f.project, encoding: 'utf8',
+    env: { PATH: `${bin}:${process.env.PATH}`, HOME: f.home, CLAUDE_CODE_SESSION_ID: 'sessionA-full' },
+  });
+  const state = path.join(f.home, '.unlazy/ledgers/drain-11514/s-sessionA');
+  try {
+    assert.equal(drain(noRoot).status, 0);
+    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), true,
+      'the checker left no state in the project, so this fixture cannot show the fix');
+
+    fs.rmSync(path.join(f.project, '.unlazy'), { recursive: true, force: true });
+    fs.rmSync(path.join(f.home, '.unlazy/ledgers'), { recursive: true, force: true });
+    fs.rmSync(path.join(f.home, '.unlazy/approved'), { recursive: true, force: true });
+
+    assert.equal(drain(drainBoard).status, 0);
+    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false, 'the checker state landed in the project');
+    assert.equal(fs.existsSync(state), true, 'the checker wrote no state at the home ledger root');
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }

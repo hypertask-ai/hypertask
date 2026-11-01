@@ -41,7 +41,7 @@ case "${1:-}" in
       n=$((n+1))
     done <<<"$rows"
     status=0
-    node "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" --approve "$F" >/dev/null || status=$?
+    node "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" --approve "$F" --root "$(dirname "$F")" >/dev/null || status=$?
     # Exit 1 only means tickets are still open, which is expected while draining.
     [ "$status" -le 1 ] || exit "$status"
     echo "$F: $n new ticket gates, $(grep -c '^- \[ \] drain-' "$F") open" ;;
