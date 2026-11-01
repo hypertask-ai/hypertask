@@ -293,6 +293,7 @@ export function formatHtml(summaries, { limit, generatedAt = new Date().toISOStr
     <table>
       <tr><th>Measure</th><th>Median</th><th>p90</th></tr>
       <tr class="lead"><td>push to all green</td><td>${escape(fmt(summary.pushToGreen.median))}</td><td>${escape(fmt(summary.pushToGreen.p90))}</td></tr>
+      <tr><td>green pushes inside ${TARGET_SECONDS / 60} minutes</td><td>${summary.pushToGreen.withinTarget} of ${summary.greenPushes} (${summary.pushToGreen.share}%)</td><td>-</td></tr>
       ${[['waiting (queue)', summary.median.waiting, summary.p90.waiting], ['run wall clock', summary.median.wall, summary.p90.wall]]
     .map(([name, middle, tail]) => `<tr><td>${escape(name)}</td>${cell('m', middle)}${cell('m', tail)}</tr>`).join('')}
       ${[['setup (worker time)', summary.median.setup], ['tests (worker time)', summary.median.tests], ['other work (worker time)', summary.median.other], ['run time outside jobs', summary.median.gap]]

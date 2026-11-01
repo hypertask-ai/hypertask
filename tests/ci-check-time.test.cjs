@@ -110,6 +110,8 @@ test('the page shows every app in both factories and keeps user text escaped', a
   assert.equal((html.match(/<h2>/g) ?? []).length, 2);
   assert.match(html, /Software Factory/);
   assert.match(html, /node scripts\/ci-check-time\.mjs/);
+  assert.match(html, /green pushes inside 10 minutes<\/td><td>2 of 2 \(100%\)/);
+  assert.match(formatText(summaries, { limit: 150 }), /green pushes inside 10 minutes: 2 of 2 \(100%\)/);
   assert.match(formatText(summaries, { limit: 150 }), /Postbox \(valentinyeo\/postbox, 2 runs measured, 0 skipped, 2 green commits\)/);
   const markdown = formatMarkdown(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
   assert.match(markdown, /## Postbox \(Software Factory\)/);
