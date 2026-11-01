@@ -296,11 +296,12 @@ export function formatHtml(summaries, { limit, generatedAt = new Date().toISOStr
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Where check time goes</title>
 <style>
-body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:32px;background:#0b0e14;color:#e6e9ef}
-h1{font-size:24px;margin:0 0 4px}h2{font-size:20px;margin:28px 0 8px}.meta{color:#8b93a7;font-size:13px;font-weight:400}
-table{border-collapse:collapse;margin:0 0 8px;min-width:520px}th,td{text-align:left;padding:6px 14px 6px 0;border-bottom:1px solid #1d222d}
-th{color:#8b93a7;font-weight:600;font-size:13px}.lead td{font-weight:700;color:#8fd4a4}.spots td:first-child{color:#cbd2e0}
-p.def{color:#9aa3b8;font-size:13px;max-width:820px}code{background:#161b25;padding:2px 6px;border-radius:4px;font-size:12px}
+:root{--bg-pageBackground:#0e0e0e;--bg-containerBackground:#212429;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e}
+body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;margin:0;padding:32px;background:var(--bg-pageBackground);color:var(--color-white-black)}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:28px 0 8px}.meta{color:var(--color-text-light-gray);font-size:13px;font-weight:400}
+table{border-collapse:collapse;margin:0 0 8px;min-width:520px}th,td{text-align:left;padding:6px 14px 6px 0;border-bottom:1px solid var(--border-light-gray-thin)}
+th{color:var(--color-text-light-gray);font-weight:600;font-size:13px}.lead td{font-weight:700;color:var(--color-white-black)}.spots td:first-child{color:var(--color-white-black)}
+p.def{color:var(--color-text-light-gray);font-size:13px;max-width:820px}code{background:var(--bg-containerBackground);padding:2px 6px;border-radius:4px;font-size:12px}
 </style></head><body>
 <h1>Where check time goes</h1>
 <p class="def">Last ${limit} completed check runs per app, generated ${escape(generatedAt)}. Waiting is the queue from a run being created to a runner starting it. Setup covers checkout, installs and builds; tests covers the checks themselves. Both sum step time across every job, so parallel jobs add up to more than the wall clock. Run time outside jobs is wall clock no job was executing. Push to all green counts commits with no failed, timed-out or action-required run, from the first run created for that commit to the last one finishing; skipped runs from path filters never block it.</p>
