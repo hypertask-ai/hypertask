@@ -50,6 +50,12 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 
 Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
 
+## Stay active until Done
+
+Nobody prompts a runner again after its turn ends. Ending the turn while CI, review bots, merge, deploy, or QA are pending stops the ticket. Keep working from claim to Done. To wait, run one bounded watcher, such as `gh pr checks <pr> --watch --interval 300`, then act on what it reports. Stop early only for a blocker or a Valentin Question from the exceptions below.
+
+The done comment lists every decision you made on Valentin's behalf, one line each with its reason. Write "Decisions: none" when there were none.
+
 ## Helpers
 
 The runner itself runs Codex gpt-6.1-sol at medium effort and delegates by default, with helpers in the background. Code edits: `hax --provider=codex --model=gpt-6.1-terra --effort=medium --no-session -p "<task>"`. Lookups, logs and summaries: `hax --provider=codex --model=gpt-6-luna --effort=low --no-session -p "<task>"`. Sol high (`--model=gpt-6.1-sol --effort=high`) only for hard bugs, security and money.
