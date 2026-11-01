@@ -579,22 +579,33 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// The clock is read when a sweep starts, not when the link starts. A link's
+// ticks share one options object, so a time captured once would judge every
+// later tick against the first one and a job that goes idle between two ticks
+// would wait for the next link, minutes away, instead of the next tick.
+function nowFrom(options = {}) {
+  const clock = options.now;
+  if (typeof clock === 'function') return clock();
+  return clock ?? Date.now();
+}
+
 // One sweep, with its report. A tick in the middle of a link says less than the
 // first one: the JSON is for a person reading a run, and eight copies of it bury
 // the notices that matter.
-async function sweepOnce(repo, { live, fixture, options, quiet = false } = {}) {
+async function sweepOnce(repo, { live, fixture, options = {}, quiet = false } = {}) {
+  const now = nowFrom(options);
   let decisions = [];
   let unread = [];
   let discovery = null;
   let stored = { ok: true, pending: [] };
   let recovery = { done: [], pending: [], saved: true };
   if (live) {
-    ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now: options.now }));
+    ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now }));
   } else {
     try {
       ({ decisions, unread } = fixture
-        ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
-        : await plan(repo, options));
+        ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), { ...options, now })
+        : await plan(repo, { ...options, now }));
     } catch (error) {
       discovery = String(error.message).slice(0, 120);
     }
@@ -646,12 +657,17 @@ async function main() {
   const repo = argValue(argv, '--repo') ?? process.env.REPO ?? process.env.GITHUB_REPOSITORY;
   const fixture = argValue(argv, '--fixture');
   const applyChanges = argv.includes('--apply');
-  const options = {
-    stuckSeconds: Number(argValue(argv, '--stuck-seconds') ?? STUCK_SECONDS),
-    now: Date.parse(argValue(argv, '--now')) || Date.now(),
-  };
   const sweeps = Math.max(1, Number(argValue(argv, '--ticks') ?? TICKS_PER_LINK));
   const gapMs = Number(argValue(argv, '--gap-ms') ?? TICK_GAP_MS);
+  // A live link reads the wall clock per sweep. A replay pins its clock and
+  // advances it by one gap per sweep, so a fixture chain crosses the rule the
+  // way a live one does instead of freezing at the first tick.
+  let pinned = Date.parse(argValue(argv, '--now') ?? '');
+  const clock = Number.isNaN(pinned) ? () => Date.now() : () => (pinned += gapMs);
+  const options = {
+    stuckSeconds: Number(argValue(argv, '--stuck-seconds') ?? STUCK_SECONDS),
+    now: clock,
+  };
   const live = applyChanges && !fixture;
   const chaining = argv.includes('--chain');
   // A scheduled or pushed run only exists to restart a chain that died, so it
@@ -685,7 +701,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, tick, handOff, sweepInFlight, sweepOnce, nowFrom, finishPending, startRecoveries, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_SECONDS, RECENT_MINUTES, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, WORKFLOW_FILE, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {

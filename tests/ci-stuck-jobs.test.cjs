@@ -1,7 +1,10 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const { mkdtempSync, writeFileSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const { join } = require('node:path');
 const {
-  decide, apply, plan, resume, recover, sweep, tick, handOff, sweepInFlight, readPending,
+  decide, apply, plan, resume, recover, sweep, tick, handOff, sweepInFlight, readPending, sweepOnce,
   STUCK_SECONDS, TICK_GAP_MS, TICKS_PER_LINK, CAP_BUDGET_MS, SETTLE_ATTEMPTS, SETTLE_DELAY_MS, PENDING_LIMIT,
 } = require('../.github/scripts/ci-stuck-jobs.cjs');
 
@@ -546,6 +549,27 @@ test('a tick that throws does not stop the rest of the link', async () => {
   assert.equal(calls, 2);
   assert.match(done[0].error, /timed out/);
   assert.deepEqual(done[1], { swept: 2 });
+});
+
+test('a link catches a job that goes idle between two ticks, not on the next link', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hyci73-'));
+  const fixture = join(dir, 'stuck.json');
+  // Idle for 30 s when the link starts, so under the 45 s rule; 60 s by the next tick.
+  const jobs = [job('test-shard (1)', 'in_progress', [step('Test shard', new Date(now - 30000).toISOString())])];
+  writeFileSync(fixture, JSON.stringify({ repo: 'o/r', runs: [stuckRun], jobs: { [stuckRun.id]: jobs } }));
+  let clock = now;
+  const once = () => sweepOnce('o/r', {
+    live: false,
+    fixture,
+    options: { stuckSeconds: STUCK_SECONDS, now: () => clock },
+    quiet: true,
+  });
+  const first = await once();
+  const later = await tick('o/r', { sweeps: 2, gapMs: TICK_GAP_MS, once, sleep: async ms => { clock += ms; } });
+  assert.equal(first.decisions.length, 0);
+  assert.equal(later.length, 1);
+  assert.equal(later[0].decisions[0].action, 'cancel');
+  assert.equal(later[0].decisions[0].stuck[0].idle, 60);
 });
 
 test('a sweep never starts a second chain while a link is still running', async () => {
