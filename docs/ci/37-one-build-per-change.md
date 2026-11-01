@@ -43,6 +43,7 @@ the App Smoke container build. That trailing dead time is 55-78s on the two runs
 the change (runs 41259147670, 41261876740), below the fastest run without it. The
 build stays on one page-generation worker (`experimental.cpus: 1`), so the trace
 worker competes with the client compile and the traces still cost 46-66s, down from
-49-85s. The build output, the `app-build` artifact and the required check name are
-unchanged, and the page check is still the slowest job in the run: the rest of it is
-387s of tests and about 120s of fixed setup.
+49-85s. Both browser halves run this same build step, so each half gains that time.
+The build output, the `app-build` artifact and the required check name are unchanged.
+The build is not what holds the run: a half spends 387s of its 657s on tests and about
+120s on fixed setup.
