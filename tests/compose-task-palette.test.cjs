@@ -104,11 +104,14 @@ const live = (key, read) => {
   try {
     const current = () => read();
     first = current();
-    if (typeof first === 'function') pinned.set(key, (...args) => {
-      const fn = current();
-      return fn === undefined || fn === pinned.get(key) ? undefined : fn(...args);
-    });
-    else if (!plainObject(first) && typeof first === 'object' && first !== null) pinned.set(key, first);
+    if (typeof first === 'function') {
+      const wrapper = function (...args) {
+        const fn = current();
+        if (fn === undefined || fn === wrapper) return undefined;
+        return new.target ? Reflect.construct(fn, args, new.target === wrapper ? fn : new.target) : fn(...args);
+      };
+      pinned.set(key, wrapper);
+    } else if (!plainObject(first) && typeof first === 'object' && first !== null) pinned.set(key, first);
     else if (plainObject(first)) pinned.set(key, new Proxy({}, {
       get: (_, prop) => live(`${key}\u0000${String(prop)}`, () => read()?.[prop]),
       has: (_, prop) => prop in (read() ?? {}),
