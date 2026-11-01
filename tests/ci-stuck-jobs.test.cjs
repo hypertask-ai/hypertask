@@ -295,3 +295,23 @@ test('a carried re-run that fails again stays carried with one more try', async 
   assert.deepEqual(outcome.pending, [{ ...found, tries: 2 }]);
   assert.deepEqual(written.at(-1), [{ ...found, tries: 2 }]);
 });
+
+test('nothing is cancelled while the recovery store cannot be read', async () => {
+  const calls = [];
+  const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
+    api: async (path) => { calls.push(path); return { status: 'in_progress' }; }, now,
+  });
+  assert.deepEqual(calls, []);
+  assert.deepEqual(outcome.done, [{ runId: 7, action: 'skip', rerun: false, reason: 'recovery storage is unreadable' }]);
+  assert.equal(outcome.refused, 1);
+});
+
+test('a stored entry whose request fails is kept for the next sweep', async () => {
+  const written = [];
+  const outcome = await recover('o/r', [], {
+    api: async () => { throw new Error('gh api failed: HTTP 502'); }, now, pending: [found], save: async (list) => { written.push(list); return true; },
+  });
+  assert.deepEqual(outcome.done, [{ runId: 7, action: 'wait', reason: 'gh api failed: HTTP 502', keep: true }]);
+  assert.deepEqual(outcome.pending, [{ ...found, tries: 2 }]);
+  assert.deepEqual(written.at(-1), [{ ...found, tries: 2 }]);
+});

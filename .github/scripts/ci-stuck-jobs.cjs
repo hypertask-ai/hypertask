@@ -47,6 +47,7 @@ const CANCEL_FAILED = 'cancel request failed';
 const NOT_FIRST_ATTEMPT = 'no longer a first attempt in progress';
 const NO_FAILURE_SEEN = 'a genuine failure appeared';
 const NOT_CANCELLED = 'no job left cancelled';
+const STORE_UNAVAILABLE = 'recovery storage is unreadable';
 // A cancel can land after the sweep that issued it gave up, so the recovery is
 // kept until something settles it: a re-run, a real failure, no cancelled job
 // left, or a newer attempt replacing the one this sweep cancelled.
@@ -280,12 +281,26 @@ async function recover(repo, decisions, { api = json, settle = settleCancel, now
   };
   let saved = true;
   for (const entry of pending) {
-    const outcome = await resume(repo, entry, { api, now, attempts, maxAgeMs });
+    let outcome;
+    try {
+      outcome = await resume(repo, entry, { api, now, attempts, maxAgeMs });
+    } catch (error) {
+      outcome = { runId: entry.runId, action: 'wait', reason: String(error.message).slice(0, 80), keep: true };
+    }
     done.push(outcome);
     if (outcome.keep) carried.push({ ...entry, tries: (entry.tries ?? 0) + 1 });
   }
   const known = new Set(pending.map(entry => entry.runId));
-  const outcomes = await apply(repo, decisions.filter(decision => !known.has(decision.runId)), {
+  const candidates = decisions.filter(decision => !known.has(decision.runId));
+  // A cancel that cannot be stored is a cancel nobody can finish, so nothing is
+  // cancelled while the store is unreadable: the run keeps its own lease instead.
+  if (!save) {
+    const refused = candidates.filter(decision => decision.action === 'cancel')
+      .map(decision => ({ runId: decision.runId, action: 'skip', rerun: false, reason: STORE_UNAVAILABLE }));
+    done.push(...refused);
+    return { done, pending: carried.slice(0, PENDING_LIMIT), saved: true, refused: refused.length };
+  }
+  const outcomes = await apply(repo, candidates, {
     api,
     settle,
     beforeCancel: async (decision) => {
@@ -341,6 +356,8 @@ async function main() {
   console.log(JSON.stringify(report, null, 2));
   if (!stored.ok) {
     console.log(`::warning::${PENDING_VARIABLE} cannot be read, so no recovery is stored this sweep and the stored ones are left untouched.`);
+  } else if (recovery.refused) {
+    console.log(`::warning::${recovery.refused} stuck run(s) left to their own lease: ${STORE_UNAVAILABLE}.`);
   } else if (!recovery.saved) {
     console.log('::warning::A recovery could not be stored, so the next sweep will not finish it.');
   }

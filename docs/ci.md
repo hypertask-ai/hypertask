@@ -1411,7 +1411,10 @@ re-run. A run that already waits for its stored recovery is never cancelled
 again in the same sweep, and a decision is re-checked against the run's current
 attempt immediately before the cancel. Only a confirmed missing variable is read
 as an empty store: any other read failure leaves the stored recoveries untouched
-and is reported, because a save from an unknown state would erase them. A run that holds a real `failure`, `timed_out` or
+and is reported, because a save from an unknown state would erase them, and no
+run is cancelled in that sweep, because a cancel that cannot be stored is a
+cancel nobody can finish. A stored entry whose own request fails is kept for the
+sweep after instead of stopping the rest. A run that holds a real `failure`, `timed_out` or
 `startup_failure` job is left alone entirely, and so is a job whose steps include
 a completed `failure`: a job in progress reports no conclusion of its own, so a
 red test step is only visible on the step until the completion report arrives.
