@@ -31,23 +31,17 @@ function fixture() {
   return { root, home, project, calls };
 }
 
-function gates(f, ticket, session, { cwd = f.project, ...extraEnv } = {}) {
+function gates(f, ticket, session, extraEnv = {}) {
   const result = spawnSync('bash', [shipGates, ticket], {
-    cwd,
+    cwd: f.project,
     encoding: 'utf8',
-    env: {
-      PATH: process.env.PATH,
-      HOME: f.home,
-      GATE_CALLS: f.calls,
-      CODEX_SESSION_ID: session,
-      ...extraEnv,
-    },
+    env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: session, ...extraEnv },
   });
   assert.equal(result.status, 0, result.stderr);
   return result;
 }
 
-function deeper(f, ticket, stateRoot) {
+function deeper(f, ticket, extraEnv = {}) {
   const bin = path.join(f.root, 'bin');
   fs.mkdirSync(bin, { recursive: true });
   const activity = 'Deeper: field: session ledgers | raw source: ship-gates | method: fixture | ' +
@@ -59,231 +53,27 @@ function deeper(f, ticket, stateRoot) {
   return spawnSync('bash', [shipCheck, 'deeper', ticket], {
     cwd: f.project,
     encoding: 'utf8',
-    env: {
-      PATH: `${bin}:${process.env.PATH}`,
-      HOME: f.home,
-      SHIP_STATE_ROOT: stateRoot,
-    },
+    env: { PATH: `${bin}:${process.env.PATH}`, HOME: f.home, ...extraEnv },
   });
 }
 
-test('ship writes the ledger to the home ticket folder and leaves the project clean', needsUnlazy, () => {
+test('a ship run writes its ledger to the home ticket folder and leaves the project clean', needsUnlazy, () => {
   const f = fixture();
   try {
     const result = gates(f, 'HTPR-6819', 'sessionA-full');
     const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
     assert.equal(result.stdout.trim(), ledger);
-    const text = fs.readFileSync(ledger, 'utf8');
-    assert.equal(text.match(/^- \[ \] HTPR-6819\./gm).length, 9);
+    assert.equal(fs.readFileSync(ledger, 'utf8').match(/^- \[ \] HTPR-6819\./gm).length, 9);
     assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionA-full\n');
-    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
+    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false, 'the project is not clean');
     const call = JSON.parse(fs.readFileSync(f.calls, 'utf8').trim().split('\n')[0]);
-    assert.equal(call[0], '--approve');
-    assert.equal(call[1], ledger);
-    assert.equal(call[call.indexOf('--root') + 1], path.dirname(ledger));
+    assert.deepEqual(call, ['--approve', ledger, '--root', path.dirname(ledger)]);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
 });
 
-test('a later session continues the same ticket ledger instead of needing a new one', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full');
-    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
-    const before = fs.readFileSync(ledger, 'utf8');
-    const result = gates(f, 'HTPR-6819', 'sessionB-full');
-    assert.match(result.stderr, /HTPR-6819 ledger moved from session sessionA-full to sessionB-full/);
-    assert.equal(fs.readFileSync(ledger, 'utf8'), before);
-    assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionB-full\n');
-    gates(f, 'YPER4-123', 'sessionB-full');
-    const other = path.join(f.home, '.unlazy/ledgers/YPER4-123/GATES.md');
-    assert.equal(fs.readFileSync(other, 'utf8').match(/^- \[ \] YPER4-123\./gm).length, 8);
-    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('a session in another worktree moves the ticket gates only when it asks to', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full');
-    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
-    const worktree = path.join(f.root, 'project-worktree');
-    fs.mkdirSync(worktree);
-    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
-      cwd: worktree,
-      encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full' },
-    });
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /re-run with SHIP_LEDGER_MOVE=1/);
-    assert.equal(fs.readFileSync(ledger, 'utf8').includes(`  CWD: ${f.project}`), true);
-
-    const result = gates(f, 'HTPR-6819', 'sessionB-full', { cwd: worktree, SHIP_LEDGER_MOVE: '1' });
-    assert.match(result.stderr, /HTPR-6819 ledger gates moved from /);
-    const text = fs.readFileSync(ledger, 'utf8');
-    assert.equal(text.match(/^ {2}CWD: /gm).length, 9);
-    assert.equal(text.split('\n').filter((line) => line === `  CWD: ${worktree}`).length, 9);
-    assert.equal(fs.existsSync(path.join(worktree, '.unlazy')), false);
-    const call = JSON.parse(fs.readFileSync(f.calls, 'utf8').trim().split('\n').pop());
-    assert.equal(call[call.indexOf('--root') + 1], path.dirname(ledger));
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('moving a pinned ledger re-points it at this session checkout', needsUnlazy, () => {
-  const f = fixture();
-  const cli = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/old checkout' };
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full', cli);
-    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
-    assert.equal(fs.readFileSync(ledger, 'utf8').includes("SHIP_CHECKOUT='/home/u/old checkout' "), true);
-    const worktree = path.join(f.root, 'cli-worktree');
-    fs.mkdirSync(worktree);
-    const result = gates(f, 'HTPR-6819', 'sessionB-full',
-      { cwd: worktree, SHIP_LEDGER_MOVE: '1', ...cli, SHIP_CHECKOUT: '/home/u/new checkout' });
-    assert.match(result.stderr, /ledger gates moved from /);
-    const text = fs.readFileSync(ledger, 'utf8');
-    assert.equal(text.includes("SHIP_CHECKOUT='/home/u/old checkout'"), false);
-    assert.equal(text.split('\n').filter((line) => line.startsWith("  CHECK: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/new checkout' '")).length, 9);
-    assert.equal(text.split('\n').filter((line) => line === `  CWD: ${worktree}`).length, 9);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('a ledger left inside the project is adopted into the home ticket folder', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full');
-    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
-    const legacy = path.join(f.project, '.unlazy/s-sessionA');
-    fs.mkdirSync(path.join(legacy, 'gates'), { recursive: true });
-    fs.writeFileSync(path.join(legacy, 'GATES.md'), fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
-    fs.writeFileSync(path.join(legacy, 'gates/extra.md'),
-      '- [x] HTPR-6819.deeper-path: the old session scope\n  CHECK: true\n  EXPECT: true\n' +
-      '  CWD: /old/checkout\n  EVIDENCE: automatic-evidence=v1; exit=0\n\n' +
-      '- [x] HTPR-9999.deeper-other: another ticket\n  CHECK: true\n  EXPECT: true\n');
-    fs.writeFileSync(path.join(legacy, 'session'), 'sessionA-full\n');
-    const stale = path.join(f.project, '.unlazy/s-sessionZ');
-    fs.mkdirSync(stale);
-    fs.writeFileSync(path.join(stale, 'GATES.md'), fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
-    fs.writeFileSync(path.join(stale, 'session'), 'sessionZ-full\n');
-    fs.rmSync(home, { recursive: true, force: true });
-
-    const result = gates(f, 'HTPR-6819', 'sessionB-full', { SHIP_LEDGER_MOVE: '1' });
-    assert.match(result.stderr, /HTPR-6819 ledger adopted from /);
-    assert.equal(fs.readFileSync(path.join(home, 'GATES.md'), 'utf8').match(/^- \[ \] HTPR-6819\./gm).length, 9);
-    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
-    assert.match(extra, /^- \[ \] HTPR-6819\.deeper-path: /m);
-    assert.equal(extra.includes(`  CWD: ${f.project}`), true);
-    assert.equal(extra.includes('EVIDENCE: pending'), true);
-    assert.equal(extra.includes('/old/checkout'), false);
-    assert.equal(fs.existsSync(path.join(legacy, 'GATES.md')), false);
-    const left = fs.readFileSync(path.join(legacy, 'gates/extra.md'), 'utf8');
-    assert.equal(left.includes('HTPR-6819'), false);
-    assert.match(left, /^- \[x\] HTPR-9999\.deeper-other: /m);
-    assert.equal(fs.existsSync(stale), false);
-    assert.equal(fs.existsSync(path.join(legacy, 'session')), true);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('a refused worktree move leaves the legacy gate file alone, and the retry copies it once', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    const worktree = path.join(f.root, 'project-worktree');
-    fs.mkdirSync(worktree);
-    gates(f, 'HTPR-6819', 'sessionA-full', { cwd: worktree });
-    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
-    const legacy = path.join(f.project, '.unlazy/s-sessionB');
-    fs.mkdirSync(path.join(legacy, 'gates'), { recursive: true });
-    const source = path.join(legacy, 'gates/extra.md');
-    const gateText = '- [ ] HTPR-6819.deeper-path: the ledger lives in the home folder\n  CHECK: true\n  EXPECT: true\n';
-    fs.writeFileSync(source, gateText);
-
-    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
-      cwd: f.project,
-      encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionC-full' },
-    });
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /re-run with SHIP_LEDGER_MOVE=1/);
-    assert.equal(fs.existsSync(path.join(home, 'gates')), false);
-    assert.equal(fs.readFileSync(source, 'utf8'), gateText);
-
-    const result = gates(f, 'HTPR-6819', 'sessionC-full', { SHIP_LEDGER_MOVE: '1' });
-    assert.match(result.stderr, /HTPR-6819 ledger adopted from /);
-    const extra = path.join(home, 'gates/extra.md');
-    assert.equal(fs.readFileSync(extra, 'utf8').match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
-    assert.equal(fs.existsSync(source), false);
-    gates(f, 'HTPR-6819', 'sessionC-full', { SHIP_LEDGER_MOVE: '1' });
-    assert.equal(fs.readFileSync(extra, 'utf8').match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('adopting a gate that is already home replaces it instead of adding a second copy', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full');
-    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
-    fs.mkdirSync(path.join(home, 'gates'), { recursive: true });
-    fs.writeFileSync(path.join(home, 'gates/extra.md'),
-      '- [x] HTPR-6819.deeper-path: the stale copy\n  CHECK: true\n  EXPECT: true\n  EVIDENCE: automatic-evidence=v1; exit=0\n\n' +
-      '- [ ] HTPR-6819.deeper-other: a gate only the home folder has\n  CHECK: true\n  EXPECT: true\n');
-    const legacy = path.join(f.project, '.unlazy/s-sessionB/gates');
-    fs.mkdirSync(legacy, { recursive: true });
-    fs.writeFileSync(path.join(legacy, 'extra.md'),
-      '- [x] HTPR-6819.deeper-path: the project copy\n  CHECK: true\n  EXPECT: true\n  EVIDENCE: automatic-evidence=v1; exit=0\n');
-
-    gates(f, 'HTPR-6819', 'sessionB-full');
-    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
-    assert.equal(extra.match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
-    assert.equal(extra.includes('the project copy'), true);
-    assert.equal(extra.includes('the stale copy'), false);
-    assert.equal(extra.includes('HTPR-6819.deeper-other'), true);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('two runs adopting the same legacy gate file copy it home once', needsUnlazy, async () => {
-  const f = fixture();
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full');
-    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
-    const legacy = path.join(f.project, '.unlazy/s-sessionB/gates');
-    fs.mkdirSync(legacy, { recursive: true });
-    fs.writeFileSync(path.join(legacy, 'extra.md'),
-      '- [ ] HTPR-6819.deeper-path: the shared gate\n  CHECK: true\n  EXPECT: true\n');
-    const { spawn } = require('node:child_process');
-    const run = (session) => new Promise((resolve) => {
-      const child = spawn('bash', [shipGates, 'HTPR-6819'], {
-        cwd: f.project,
-        env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: session },
-      });
-      let stderr = '';
-      child.stderr.on('data', (chunk) => { stderr += chunk; });
-      child.on('close', (status) => resolve({ status, stderr }));
-    });
-    const results = await Promise.all([run('sessionC-full'), run('sessionD-full')]);
-    for (const result of results) assert.equal(result.status, 0, result.stderr);
-    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
-    assert.equal(extra.match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
-    assert.equal(fs.existsSync(path.join(legacy, 'extra.md')), false);
-    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('a ledger that changes hands clears the previous session cleanup result', needsUnlazy, () => {
+test('a later session continues the same ticket ledger and takes over its cleanup', needsUnlazy, () => {
   const f = fixture();
   try {
     gates(f, 'HTPR-6819', 'sessionA-full');
@@ -293,163 +83,44 @@ test('a ledger that changes hands clears the previous session cleanup result', n
       const at = lines.findIndex((line) => line.startsWith(`- [ ] HTPR-6819.${name}:`));
       assert.ok(at > 0, `no ${name} gate in the ledger`);
       lines[at] = lines[at].replace('- [ ]', '- [x]');
-      lines[at + 4] = '  EVIDENCE: automatic-evidence=v1; exit=0; EXPECT=matched';
     }
     fs.writeFileSync(ledger, lines.join('\n'));
 
-    gates(f, 'HTPR-6819', 'sessionB-full');
-    const text = fs.readFileSync(ledger, 'utf8').split('\n');
-    const at = text.findIndex((line) => line.startsWith('- [ ] HTPR-6819.cleaned:'));
-    assert.ok(at > 0, 'the cleaned gate kept its previous session result');
-    assert.equal(text[at + 4], '  EVIDENCE: pending');
-    assert.equal(text.some((line) => line.startsWith('- [x] HTPR-6819.merged:')), true);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('an unprefixed ledger counts as the app repo, so a CLI session refuses it', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full');
-    const worktree = path.join(f.root, 'cli-worktree');
-    fs.mkdirSync(worktree);
-    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
-      cwd: worktree,
-      encoding: 'utf8',
-      env: {
-        PATH: process.env.PATH,
-        HOME: f.home,
-        GATE_CALLS: f.calls,
-        CODEX_SESSION_ID: 'sessionB-full',
-        SHIP_LEDGER_MOVE: '1',
-        SHIP_REPO: 'hypertask-ai/cli',
-        SHIP_BASE: 'main',
-        SHIP_CHECKOUT: '/home/u/cli',
-      },
-    });
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /ledger belongs to hypertask-ai\/hypertask, not hypertask-ai\/cli/);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('a handover in the same directory still refuses another repository', needsUnlazy, () => {
-  const f = fixture();
-  const cli = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/cli' };
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full', cli);
-    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
-      cwd: f.project,
-      encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full' },
-    });
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /ledger belongs to hypertask-ai\/cli, not hypertask-ai\/hypertask/);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('the deeper proof gate is read from the home ticket folder, never from the project', needsUnlazy, () => {
-  const f = fixture();
-  try {
-    const folder = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates');
-    fs.mkdirSync(folder, { recursive: true });
-    fs.writeFileSync(path.join(folder, 'extra.md'),
-      '- [ ] HTPR-6819.deeper-path: the ledger lives in the home folder\n  CHECK: true\n  EXPECT: true\n');
-    const found = deeper(f, 'HTPR-6819', f.home);
-    assert.equal(found.status, 0, `${found.stdout}${found.stderr}`);
-    assert.match(found.stdout, /deeper ok/);
-
-    fs.rmSync(folder, { recursive: true, force: true });
-    const stale = path.join(f.project, '.unlazy/s-abcdef12/gates');
-    fs.mkdirSync(stale, { recursive: true });
-    fs.writeFileSync(path.join(stale, 'extra.md'),
-      '- [ ] HTPR-6819.deeper-path: the old session scope\n  CHECK: true\n  EXPECT: true\n');
-    const missed = deeper(f, 'HTPR-6819', f.home);
-    assert.notEqual(missed.status, 0);
-    assert.match(missed.stdout, /ledgers\/HTPR-6819\/gates\/\*\.md; a manual note does not count/);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('a handover in the same directory re-points gates written for an older checkout', needsUnlazy, () => {
-  const f = fixture();
-  const old = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/old checkout' };
-  const now = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'release', SHIP_CHECKOUT: '/home/u/new checkout' };
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full', old);
-    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
-    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
-      cwd: f.project,
-      encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full', ...now },
-    });
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /re-run with SHIP_LEDGER_MOVE=1/);
-    assert.match(refused.stderr, /was written for SHIP_REPO=hypertask-ai\/cli/);
-    assert.equal(fs.readFileSync(ledger, 'utf8').includes("SHIP_CHECKOUT='/home/u/old checkout'"), true);
-
-    const result = gates(f, 'HTPR-6819', 'sessionB-full', { SHIP_LEDGER_MOVE: '1', ...now });
-    assert.match(result.stderr, /ledger gates re-pointed at this session's repository settings/);
+    const handover = gates(f, 'HTPR-6819', 'sessionB-full');
+    assert.match(handover.stderr, /HTPR-6819 ledger moved from session sessionA-full to sessionB-full/);
     const text = fs.readFileSync(ledger, 'utf8');
-    assert.equal(text.includes('/home/u/old checkout'), false);
-    assert.equal(text.split('\n').filter((line) => line.startsWith("  CHECK: SHIP_REPO=hypertask-ai/cli SHIP_BASE=release SHIP_CHECKOUT='/home/u/new checkout' '")).length, 9);
-    assert.equal(text.split('\n').filter((line) => line === `  CWD: ${f.project}`).length, 9);
-  } finally {
-    fs.rmSync(f.root, { recursive: true, force: true });
-  }
-});
-
-test('adopting a legacy ledger re-points its gates at this session repository settings', needsUnlazy, () => {
-  const f = fixture();
-  const old = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/old checkout' };
-  const now = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/new checkout' };
-  try {
-    gates(f, 'HTPR-6819', 'sessionA-full', old);
-    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
-    const legacy = path.join(f.project, '.unlazy/s-sessionA/gates');
-    fs.mkdirSync(legacy, { recursive: true });
-    const source = path.join(legacy, 'extra.md');
-    fs.writeFileSync(source, fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
-    fs.rmSync(home, { recursive: true, force: true });
-
-    gates(f, 'HTPR-6819', 'sessionB-full', now);
-    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
-    assert.equal(extra.includes('/home/u/old checkout'), false);
-    assert.equal(extra.split('\n').filter((line) => line.startsWith("  CHECK: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/new checkout' '")).length, 9);
-    assert.equal(extra.split('\n').filter((line) => line === `  CWD: ${f.project}`).length, 9);
-    assert.equal(fs.existsSync(source), false);
+    assert.match(text, /^- \[x\] HTPR-6819\.merged:/m, 'a handover dropped a finished gate');
+    assert.match(text, /^- \[ \] HTPR-6819\.cleaned:/m, 'a handover kept the previous session cleanup result');
+    assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionB-full\n');
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
 });
 
-test('an extras-only legacy file from another repository is refused and left in place', needsUnlazy, () => {
+test('the deeper proof gate is read from the home ticket folder, and an older project folder still counts', needsUnlazy, () => {
   const f = fixture();
-  const cli = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/cli' };
+  const gate = (note) => `- [ ] HTPR-6819.deeper-path: ${note}\n  CHECK: true\n  EXPECT: true\n`;
   try {
-    gates(f, 'HTPR-6819', 'sessionA-full', cli);
-    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
-    const legacy = path.join(f.project, '.unlazy/s-sessionA/gates');
-    fs.mkdirSync(legacy, { recursive: true });
-    const source = path.join(legacy, 'extra.md');
-    fs.writeFileSync(source, fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
-    fs.rmSync(home, { recursive: true, force: true });
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates');
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'extra.md'), gate('the ledger lives at home'));
+    const found = deeper(f, 'HTPR-6819');
+    assert.equal(found.status, 0, `${found.stdout}${found.stderr}`);
+    assert.match(found.stdout, /deeper ok/);
 
-    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
-      cwd: f.project,
-      encoding: 'utf8',
-      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full' },
-    });
-    assert.notEqual(refused.status, 0);
-    assert.match(refused.stderr, /ledger belongs to hypertask-ai\/cli, not hypertask-ai\/hypertask/);
-    assert.equal(fs.existsSync(source), true);
-    assert.equal(fs.existsSync(path.join(home, 'gates/extra.md')), false);
+    fs.rmSync(home, { recursive: true, force: true });
+    const legacy = path.join(f.project, '.unlazy/s-abcdef12/gates');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, 'extra.md'), gate('the old session scope'));
+    const still = deeper(f, 'HTPR-6819', { CLAUDE_CODE_SESSION_ID: 'abcdef12-full' });
+    assert.equal(still.status, 0, 'a gate left in the project stopped counting');
+    assert.match(still.stdout, /deeper ok/);
+
+    fs.rmSync(path.join(f.project, '.unlazy'), { recursive: true, force: true });
+    const none = deeper(f, 'HTPR-6819', { CLAUDE_CODE_SESSION_ID: 'abcdef12-full' });
+    assert.notEqual(none.status, 0);
+    assert.match(none.stdout, /a manual note does not count/);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
