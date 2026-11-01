@@ -125,6 +125,8 @@ jobs:
             const { retryGithubRequest } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
             const results = JSON.parse(process.env.RESULTS);
             const eventPr = context.payload.pull_request;
+            const evaluated = JSON.parse(results.metadata?.outputs?.pr || '{}');
+            const labelNames = labels => (labels ?? []).map(label => label.name).sort().join(',');
             const sizeBlocked = results.size?.outputs?.blocked === 'true';
             const passed = !sizeBlocked && ['outside', 'title', 'runner-policy'].every(id =>
               results[id]?.outcome === 'success' && results[id]?.outputs?.sha === eventPr.head.sha);
@@ -134,7 +136,8 @@ jobs:
               });
               if (current.state !== 'open' || current.base.ref !== 'production' ||
                   current.head.sha !== eventPr.head.sha || current.title !== eventPr.title ||
-                  current.title !== (results.title?.outputs?.title ?? eventPr.title)) {
+                  current.title !== (results.title?.outputs?.title ?? eventPr.title) ||
+                  (evaluated.labels && labelNames(current.labels) !== labelNames(evaluated.labels))) {
                 core.info('Skipping stale guard result; a newer event owns it.');
                 return;
               }

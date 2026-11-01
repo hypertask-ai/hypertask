@@ -12,11 +12,12 @@
 - A human allows a big agent PR with the `size-ok` label and a reason.
 - The reason is a `size-ok: <reason>` comment written by a human account.
 - A label alone never allows the change, so an agent cannot approve itself.
-- The guard re-runs on `labeled` and `unlabeled`, so adding the label clears the block.
+- The guard re-runs on `labeled` and `unlabeled`, so the label clears the block.
+- Post the `size-ok: <reason>` comment first, then add the label last.
 - The block publishes through the existing required `pr-title` context.
 - Artifacts preserve each head, count and verdict.
 - Artifact name: `pr-size-<PR>-<run>-<attempt>`; retention: 14 days.
-- `pr-size-observation.yml` runs daily and posts one comment to HYCI-29.
+- `pr-size-observation.yml` runs twice a day and posts one comment to HYCI-29.
 - The comment holds the week-one counts: agent PRs measured, how many are over the cap, the biggest, and human PRs.
 - The window is `observation` in `.github/scripts/pr-size-policy.json`.
 - Blocking starts at `blockFrom` in the same file, after the window closes.

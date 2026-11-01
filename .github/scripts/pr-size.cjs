@@ -58,7 +58,7 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
   const enforcing = now >= Date.parse(policy.blockFrom);
   const report = {
     runId: context.runId,
-    runAttempt: process.env.GITHUB_RUN_ATTEMPT || context.runAttempt || 1,
+    runAttempt: context.runAttempt || Number(process.env.GITHUB_RUN_ATTEMPT) || 1,
     phase: enforcing ? 'blocking' : 'observation',
     pr: pr?.number || context.payload?.pull_request?.number,
   };
@@ -108,7 +108,7 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
       heading,
       `- Hand-written changed lines: ${lines}`,
       `- ${next}`,
-      report.overCap ? `- A human allows it with the ${policy.exceptionLabel} label and a "${policy.exceptionLabel}: <reason>" comment.` : '- No exception needed.',
+      report.overCap ? `- A human allows it: comment "${policy.exceptionLabel}: <reason>", then add the ${policy.exceptionLabel} label.` : '- No exception needed.',
       exception.allowed ? `- Allowed by ${exception.by}: ${exception.reason}` : '',
     ].filter(Boolean).join('\n');
     summary = body;
@@ -122,7 +122,7 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
     if (blocked) {
       core.setFailed(
         `PR size: ${report.counted} hand-written lines is over the ${policy.cap}-line cap. ${SPLIT} ` +
-        `A human allows it with the ${policy.exceptionLabel} label and a "${policy.exceptionLabel}: <reason>" comment.`,
+        `A human allows it: comment "${policy.exceptionLabel}: <reason>", then add the ${policy.exceptionLabel} label.`,
       );
     }
     core.info(`PR #${pr.number}: ${report.verdict} in ${report.phase}; counted=${report.counted}, ignored=${report.ignored}`);

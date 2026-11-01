@@ -152,7 +152,7 @@ async function main({
   if (!token) throw new Error('GITHUB_TOKEN is missing; the counts cannot be measured.');
   if (!boardToken) throw new Error('HYPERTASK_MCP_TOKEN is missing; the counts cannot reach the ticket.');
   if (!repository) throw new Error('GITHUB_REPOSITORY is missing; the counts cannot be measured.');
-  const workflowFile = workflowRef.split('/').pop()?.split('@')[0];
+  const workflowFile = workflowRef.split('@')[0].split('/').pop();
   if (await postedAlready({ fetchImpl, token, repository, workflowFile, runId, log })) {
     return { posted: false, alreadyPosted: true };
   }

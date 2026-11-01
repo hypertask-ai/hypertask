@@ -85,8 +85,8 @@ test('400 is inclusive; an agent PR at 401 reports only until the blocking date'
     assert.equal(f.artifact().phase, 'observation');
     if (n === 401) {
       assert.match(f.calls.comments[0].body, /Blocking starts 2026-11-08T00:00:00Z/);
-      assert.match(f.calls.comments[0].body, /split it into smaller changes that each build green/i);
-      assert.match(f.calls.comments[0].body, /size-ok label and a "size-ok: <reason>" comment/);
+      assert.match(f.calls.comments[0].body, /Would be blocked once blocking starts\./);
+      assert.match(f.calls.comments[0].body, /comment "size-ok: <reason>", then add the size-ok label/);
     }
   });
 });
@@ -103,7 +103,7 @@ test('an agent PR over the cap fails with the ticket message once blocking start
     assert.equal(f.calls.comments.length, 1);
     assert.match(f.calls.comments[0].body, /PR size: blocked/);
     assert.equal(f.calls.outputs.blocked, 'true');
-  });
+  }, BLOCKING);
 });
 
 test('the size block reddens the existing required context instead of a new check', () => {
@@ -113,6 +113,12 @@ test('the size block reddens the existing required context instead of a new chec
   assert.match(publish, /context: 'pr-title'/);
   assert.deepEqual(steps.filter(step => step.id).map(step => step.id), ['metadata', 'outside', 'size', 'title', 'runner-policy']);
   assert.equal(steps.find(step => step.id === 'metadata').with.script.includes('labels: pr.labels'), true);
+});
+
+test('an evaluation whose labels changed before publication never publishes', () => {
+  const publish = steps.at(-1).with.script;
+  assert.match(publish, /const evaluated = JSON\.parse\(results\.metadata\?\.outputs\?\.pr \|\| '\{\}'\);/);
+  assert.match(publish, /evaluated\.labels && labelNames\(current\.labels\) !== labelNames\(evaluated\.labels\)/);
 });
 
 test('a 200-line agent PR and a 1108-line human PR never fail', async () => {

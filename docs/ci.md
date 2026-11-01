@@ -89,17 +89,26 @@ two is the summary, which becomes ready only after both halves finish.
 - Trusted production code counts additions and deletions.
 - One config excludes generated and fixture files.
 - Renames crossing exclusion boundaries still count.
-- Incomplete measurements produce errors, never passing counts. An error never blocks a merge.
-- Agent PRs over 400 hand-written lines fail with `Split it into smaller changes that each build green.`
+- Incomplete measurements produce errors, never passing counts.
+- An error warns and never blocks a merge.
+- Agent PRs over 400 hand-written lines fail.
+- The failure says: split it into smaller changes that each build green.
 - Human PRs are measured and never blocked.
 - Dependabot PRs are measured and never blocked.
-- A human allows a big agent PR with the `size-ok` label plus a `size-ok: <reason>` comment from a human account.
-- A label alone, or an agent-written reason, never allows the change.
-- The blocked result publishes through the existing required `pr-title` context.
+- A human allows a big agent PR with the `size-ok` label and a reason.
+- The reason is a `size-ok: <reason>` comment written by a human account.
+- A label alone never allows the change, so an agent cannot approve itself.
+- The guard re-runs on `labeled` and `unlabeled`, so the label clears the block.
+- Post the `size-ok: <reason>` comment first, then add the label last.
+- The block publishes through the existing required `pr-title` context.
 - Artifacts preserve each head, count and verdict.
 - Artifact name: `pr-size-<PR>-<run>-<attempt>`; retention: 14 days.
-- `pr-size-observation.yml` posts the week-one counts to the ticket before blocking starts.
-- Blocking starts at `blockFrom` in `.github/scripts/pr-size-policy.json`. Until then the check reports only.
+- `pr-size-observation.yml` runs twice a day and posts one comment to HYCI-29.
+- The comment holds the week-one counts: agent PRs measured, how many are over the cap, the biggest, and human PRs.
+- The window is `observation` in `.github/scripts/pr-size-policy.json`.
+- Blocking starts at `blockFrom` in the same file, after the window closes.
+- A run after a successful post does nothing, so the counts are posted once.
+- The job reads no pull request on days before the window closes.
 - Existing required check contexts stay unchanged.
 
 ## Review gate
@@ -792,8 +801,8 @@ outside, size and title outcomes. A size block reddens that context and sends no
 extra status write. A fresh pending status
 invalidates an earlier same-head success before metadata reevaluation, so an
 invalid title cannot keep its prior approval during later quota retries.
-Publication rereads the open PR, production base, exact head, event title
-and evaluated title. A rate-limit refusal
+Publication rereads the open PR, production base, exact head, event title,
+evaluated title and evaluated labels. A rate-limit refusal
 waits until the supplied reset and retries that whole fresh-read/publication
 operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.

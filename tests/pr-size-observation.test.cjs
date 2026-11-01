@@ -69,7 +69,7 @@ test('one unreadable change fails the pass instead of posting short counts', asy
 test('the ticket text carries the counts, the cap and the start date', () => {
   const text = ticketText({ agentPullRequests: 331, humanPullRequests: 161, overCap: 52, biggest: 11057, unreadable: 0 }, 'https://run', false);
   assert.match(text, /Agent changes measured: 331\./);
-  assert.match(text, /Over 400 hand-written lines: 52 \\(16%\\)\./);
+  assert.match(text, /Over 400 hand-written lines: 52 \(16%\)\./);
   assert.match(text, /Biggest single change: 11057 lines\./);
   assert.match(text, /Human and Dependabot changes measured: 161, never blocked\./);
   assert.match(text, /Blocking starts 8 November 2026, 00:00 UTC\./);
@@ -108,6 +108,7 @@ test('the counts reach the ticket once, under one window key', async () => {
   assert.equal(calls.posts[0].key, `pr-size-observation-${policy.observation.endsAt}`);
   assert.equal(calls.posts[0].body.ticket_number, policy.observation.ticket);
   assert.equal(calls.posts[0].body.kind, 'qa');
+  assert.ok(calls.paths.some(url => url.includes('/actions/workflows/pr-size-observation.yml/runs')));
   assert.match(calls.posts[0].body.text, /Over 400 hand-written lines: 1 \(100%\)/);
 });
 
