@@ -1,0 +1,151 @@
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+const fixturePath = path.join(__dirname, 'fixtures/ci-check-time/factory.json');
+const fixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
+const subject = import('../scripts/ci-check-time.mjs');
+
+test('step names fall into setup, tests or other without guessing', async () => {
+  const { classifyStep } = await subject;
+  assert.equal(classifyStep('Set up job'), 'setup');
+  assert.equal(classifyStep('Run actions/checkout@v4'), 'setup');
+  assert.equal(classifyStep('Run actions/setup-node@v4'), 'setup');
+  assert.equal(classifyStep('Run npm ci'), 'setup');
+  assert.equal(classifyStep('Run npm test'), 'tests');
+  assert.equal(classifyStep('Run npm run lint'), 'tests');
+  assert.equal(classifyStep('Run npx playwright test'), 'tests');
+  assert.equal(classifyStep('Run actions/upload-artifact@v4'), 'other');
+  assert.equal(classifyStep(''), 'other');
+});
+
+test('a run splits into queue, worker time and between-job wait', async () => {
+  const { decomposeRun } = await subject;
+  const run = {
+    id: 1, head_sha: 'abc', name: 'ci-tests', conclusion: 'success', created_at: '2026-10-31T10:00:00Z',
+    run_started_at: '2026-10-31T10:00:20Z', updated_at: '2026-10-31T10:03:50Z',
+  };
+  const jobs = [{
+    name: 'ci-tests', started_at: '2026-10-31T10:00:20Z', completed_at: '2026-10-31T10:03:40Z',
+    steps: [
+      { name: 'Run actions/checkout@v4', started_at: '2026-10-31T10:00:20Z', completed_at: '2026-10-31T10:00:25Z' },
+      { name: 'Run npm ci', started_at: '2026-10-31T10:00:25Z', completed_at: '2026-10-31T10:01:25Z' },
+      { name: 'Run npm test', started_at: '2026-10-31T10:01:25Z', completed_at: '2026-10-31T10:03:40Z' },
+    ],
+  }];
+  const row = decomposeRun(run, jobs);
+  assert.deepEqual(
+    { waiting: row.waiting, wall: row.wall, setup: row.setup, tests: row.tests, other: row.other, overhead: row.overhead, clipped: row.clipped },
+    { waiting: 20, wall: 210, setup: 65, tests: 135, other: 0, overhead: 10, clipped: false },
+  );
+  assert.equal(row.total, 230);
+});
+
+test('a run missing timestamps is skipped, and steps longer than their job are flagged', async () => {
+  const { decomposeRun } = await subject;
+  assert.equal(decomposeRun({ id: 2, created_at: '2026-10-31T10:00:00Z', updated_at: '2026-10-31T10:01:00Z' }), null);
+  const run = { id: 3, created_at: '2026-10-31T10:00:00Z', run_started_at: '2026-10-31T10:00:10Z', updated_at: '2026-10-31T10:01:00Z' };
+  const jobs = [{
+    name: 'ci-tests', started_at: '2026-10-31T10:00:10Z', completed_at: '2026-10-31T10:00:20Z',
+    steps: [{ name: 'Run npm test', started_at: '2026-10-31T10:00:10Z', completed_at: '2026-10-31T10:00:40Z' }],
+  }];
+  assert.equal(decomposeRun(run, jobs).clipped, true);
+});
+
+test('push to green counts only commits where every run passed', async () => {
+  const { appFromFixture } = await subject;
+  const hypertask = appFromFixture(fixture.apps[0]);
+  assert.equal(hypertask.runs, 5);
+  assert.equal(hypertask.greenPushes, 2);
+  assert.equal(hypertask.pushToGreen.median, 330);
+  assert.ok(hypertask.pushToGreen.p90 >= hypertask.pushToGreen.median);
+  assert.equal(hypertask.clipped, 0);
+  assert.equal(hypertask.median.waiting, 10);
+  assert.equal(hypertask.median.overhead, 5);
+});
+
+test('the slowest spots are named from job durations with at least two samples', async () => {
+  const { appFromFixture } = await subject;
+  const hypertask = appFromFixture(fixture.apps[0]);
+  assert.deepEqual(hypertask.slowSpots, [
+    { work: 'ci-tests / ci-tests', samples: 2, median: 130 },
+    { work: 'app-smoke / app-smoke', samples: 2, median: 119 },
+    { work: 'ci-tests / lint', samples: 2, median: 85 },
+  ]);
+  assert.equal(hypertask.setupSteps[0].work, 'ci-tests / Run npm ci');
+  assert.equal(hypertask.setupSteps[0].median, 57.5);
+});
+
+test('the page shows every app in both factories and keeps user text escaped', async () => {
+  const { formatHtml, formatText, appFromFixture } = await subject;
+  const summaries = fixture.apps.map(appFromFixture);
+  summaries[0].label = '<script>Hypertask</script>';
+  const html = formatHtml(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
+  assert.match(html, /&lt;script&gt;Hypertask&lt;\/script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+  assert.match(html, /push to all green/);
+  assert.match(html, /browser-smoke|app-smoke/);
+  assert.equal((html.match(/<h2>/g) ?? []).length, 2);
+  assert.match(html, /Software Factory/);
+  assert.match(html, /node scripts\/ci-check-time\.mjs/);
+  assert.match(formatText(summaries, { limit: 150 }), /Postbox \(valentinyeo\/postbox, 2 runs, 2 green commits\)/);
+});
+
+test('the command replays a saved fixture without network access', () => {
+  const result = spawnSync(process.execPath, ['scripts/ci-check-time.mjs', '--fixture', fixturePath, '--json', '--limit', '150'], {
+    cwd: path.join(__dirname, '..'), encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.apps.length, 2);
+  assert.equal(payload.clipped, 0);
+  assert.deepEqual(payload.apps.map(app => app.repo), ['hypertask-ai/hypertask', 'valentinyeo/postbox']);
+  assert.equal(payload.apps[0].slowSpots.length, 3);
+});
+
+test('collecting runs pages through GitHub and reads jobs for each attempt', async () => {
+  const { collectApp, summarize } = await subject;
+  const seen = [];
+  const gh = async (repo, url) => {
+    seen.push(`${repo}${url}`);
+    if (url.startsWith('/actions/runs?')) {
+      const page = Number(new URLSearchParams(url.split('?')[1]).get('page'));
+      return { workflow_runs: page === 1 ? fixture.apps[0].runs.slice(0, 3) : [] };
+    }
+    const id = Number(url.match(/\/actions\/runs\/(\d+)\//)[1]);
+    return { jobs: fixture.apps[0].jobs[String(id)] ?? [] };
+  };
+  const { rows, jobsByRun } = await collectApp({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, { limit: 2, gh });
+  assert.equal(rows.length, 2);
+  assert.deepEqual(seen.slice(0, 3), [
+    'hypertask-ai/hypertask/actions/runs?per_page=100&page=1',
+    'hypertask-ai/hypertask/actions/runs/101/attempts/1/jobs?per_page=100',
+    'hypertask-ai/hypertask/actions/runs/102/attempts/1/jobs?per_page=100',
+  ]);
+  assert.equal(jobsByRun.get(101).length, 2);
+  assert.equal(summarize({ name: 'hypertask', repo: 'hypertask-ai/hypertask' }, rows, jobsByRun).runs, 2);
+});
+
+test('skipped runs never block green and never count as CI time', async () => {
+  const { summarize } = await subject;
+  const row = (overrides) => ({
+    id: 1, sha: 'abc', workflow: 'ci-tests', waiting: 10, wall: 100, setup: 40, tests: 50, other: 10,
+    overhead: 0, clipped: false, createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:01:40Z', conclusion: 'success',
+    ...overrides,
+  });
+  const rows = [
+    row({ id: 1 }),
+    row({ id: 2, conclusion: 'skipped', wall: 1, waiting: 1, setup: 0, tests: 0, other: 0 }),
+    row({ id: 3, sha: 'def', conclusion: 'failure' }),
+    row({ id: 4, sha: 'ghi' }),
+    row({ id: 5, sha: 'ghi', conclusion: 'skipped', wall: 1 }),
+  ];
+  const summary = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map());
+  assert.equal(summary.runs, 3);
+  assert.equal(summary.skipped, 2);
+  assert.equal(summary.greenPushes, 2);
+  assert.equal(summary.median.waiting, 10);
+  assert.equal(summary.median.wall, 100);
+});
