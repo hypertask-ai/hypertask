@@ -34,8 +34,9 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
     appendFile: async (file, text) => files.set(file, (files.get(file) ?? "") + text),
     readFileSync: file => JSON.stringify({ packages: { "node_modules/@playwright/test": { version: lockVersions[path.basename(path.dirname(file))] } } }),
     readFile: async file => {
-      if (file.endsWith("next.config.js")) {
-        return webpackBase && path.basename(path.dirname(file)) === "base" ? "webpack(config) {}" : "const nextConfig = {};";
+      if (file.endsWith("package.json")) {
+        const webpack = webpackBase && path.basename(path.dirname(file)) === "base";
+        return JSON.stringify({ scripts: { build: webpack ? "next build --webpack" : "next build" } });
       }
       if (file.endsWith(".png")) {
         const png = Buffer.alloc(24);
@@ -114,7 +115,7 @@ test("five timing rows cover the entire unchanged paired lifecycle and match the
   assert.deepEqual(run.logs, ["Visual Regression timings: base build=60.0 s; base seed+capture=25.9 s; head build=120.0 s; head seed+capture=11.8 s; compare=16.1 s; total=233.8 s"]);
 });
 
-test("an older baseline keeps webpack while the migrated head builds with Turbopack", async () => {
+test("an older baseline build command keeps webpack while the migrated head builds with Turbopack", async () => {
   const run = fixture({ webpackBase: true });
   await run.main();
   assert.deepEqual(run.calls.filter(call => call.includes(": npx next build")), [

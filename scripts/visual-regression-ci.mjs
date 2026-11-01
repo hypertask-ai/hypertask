@@ -149,8 +149,9 @@ async function summarize(workspace, temp) {
 }
 
 export async function buildArguments(root) {
-  const config = await readFile(path.join(root, "next.config.js"), "utf8").catch(() => "");
-  return /webpack\(config/.test(config) ? ["npx", "next", "build", "--webpack"] : ["npx", "next", "build"];
+  const manifest = await readFile(path.join(root, "package.json"), "utf8").catch(() => "{}");
+  const build = JSON.parse(manifest).scripts?.build ?? "";
+  return build.includes("next build --webpack") ? ["npx", "next", "build", "--webpack"] : ["npx", "next", "build"];
 }
 
 async function main() {
