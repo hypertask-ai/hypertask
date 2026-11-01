@@ -554,9 +554,25 @@ test('a sweep never starts a second chain while a link is still running', async 
     calls.push(`${method} ${path}`);
     return { workflow_runs: [{ id: 9, status: 'in_progress' }, { id: 5, status: 'completed' }] };
   };
-  const outcome = await handOff('o/r', { api, ownRunId: '5' });
-  assert.deepEqual(outcome, { dispatched: false, reason: 'another sweep is already in_progress' });
+  const outcome = await handOff('o/r', { api, ownRunId: '5', tries: 3, sleep: async () => {} });
+  assert.deepEqual(outcome, { dispatched: false, reason: 'another sweep is still in_progress after 3 tries' });
   assert.equal(calls.filter(call => call.startsWith('POST')).length, 0);
+  assert.equal(calls.filter(call => call.startsWith('GET')).length, 3);
+});
+
+test('a hand-off waits out a link that stands down instead of losing the chain', async () => {
+  let listing = 1;
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    if (method === 'POST') return {};
+    listing += 1;
+    return { workflow_runs: listing <= 3 ? [{ id: 9, status: 'queued' }] : [] };
+  };
+  const waits = [];
+  const outcome = await handOff('o/r', { api, ownRunId: '5', tries: 4, gapMs: 30000, sleep: async (ms) => { waits.push(ms); } });
+  assert.deepEqual(outcome, { dispatched: true, ref: 'production' });
+  assert.deepEqual(waits, [30000, 30000]);
 });
 
 test('a sweep gives way to a link that is already on its way', async () => {

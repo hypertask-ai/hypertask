@@ -1450,7 +1450,11 @@ plus at most one 45-second tick plus a cancel that settles in a few seconds: 94 
 typically and 110 s at the worst settle on the same nine jobs, against 396 s
 before, which is under the two-minute target and about a third of what the push
 paid. A tick that throws is reported and the loop keeps ticking, because one bad
-sweep is forty-five seconds and not a dead chain.
+sweep is forty-five seconds and not a dead chain. A link that has used its ticks
+waits out another link instead of giving up on it: the link it gave way to may be
+a backstop that stands down, and a chain that stops there waits for the next cron,
+which is minutes, so the hand-off retries four times before it reports the
+chain stopped.
 
 Forty-five seconds is safe because a job is only ever judged once every one of its
 steps has completed: a healthy job in progress has an unfinished step, so it is

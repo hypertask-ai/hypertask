@@ -69,6 +69,7 @@ const CHAIN_REF = 'production';
 // is in the path once per link instead of once per tick.
 const TICK_GAP_MS = 30 * 1000;
 const TICKS_PER_LINK = 8;
+const HANDOFF_TRIES = 4;
 // What a stuck job pays before its second attempt starts: the rule, the wait for
 // the next tick, one sweep, the cancel settling, and the re-run request. This is
 // the number HYCI-73 holds under two minutes, and `decide` is only one term of it.
@@ -547,22 +548,31 @@ async function tick(repo, { sweeps = TICKS_PER_LINK, gapMs = TICK_GAP_MS, once, 
 // The scheduled trigger is a backstop that fires every few hours, so a link that
 // has used its ticks dispatches the next one and the chain keeps ticking until a
 // run fails, the repository has no runner, or a production push restarts it. The
-// dispatch is skipped when another link is still running, so a backstop that
-// lands on a live chain never starts a second one.
-async function handOff(repo, { api = json, ownRunId = process.env.GITHUB_RUN_ID, ref = CHAIN_REF } = {}) {
-  let busy;
-  try {
-    busy = await sweepInFlight(repo, { api, ownRunId });
-  } catch (error) {
-    return { dispatched: false, reason: `the run list could not be read: ${String(error.message).slice(0, 80)}` };
+// dispatch never starts a second chain while another link is queued or running,
+// so it waits instead of giving up: the link it gave way to may be a backstop
+// that stands down, and a chain that stops there waits for the next cron, which
+// is minutes. Waiting here keeps one link per tick and costs nothing when no
+// other link appears.
+async function handOff(repo, { api = json, ownRunId = process.env.GITHUB_RUN_ID, ref = CHAIN_REF, tries = HANDOFF_TRIES, gapMs = TICK_GAP_MS, sleep = wait } = {}) {
+  for (let attempt = 1; attempt <= Math.max(1, tries); attempt++) {
+    let busy;
+    try {
+      busy = await sweepInFlight(repo, { api, ownRunId });
+    } catch (error) {
+      return { dispatched: false, reason: `the run list could not be read: ${String(error.message).slice(0, 80)}` };
+    }
+    if (!busy) {
+      try {
+        await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`, 'POST', { ref });
+        return { dispatched: true, ref };
+      } catch (error) {
+        return { dispatched: false, reason: `the next sweep was not dispatched: ${String(error.message).slice(0, 80)}` };
+      }
+    }
+    if (attempt === Math.max(1, tries)) return { dispatched: false, reason: `another sweep is still ${busy.status} after ${tries} tries` };
+    await sleep(gapMs);
   }
-  if (busy) return { dispatched: false, reason: `another sweep is already ${busy.status}` };
-  try {
-    await api(`/repos/${repo}/actions/workflows/${WORKFLOW_FILE}/dispatches`, 'POST', { ref });
-    return { dispatched: true, ref };
-  } catch (error) {
-    return { dispatched: false, reason: `the next sweep was not dispatched: ${String(error.message).slice(0, 80)}` };
-  }
+  return { dispatched: false, reason: 'no dispatch was attempted' };
 }
 
 function wait(ms) {
