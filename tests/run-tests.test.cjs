@@ -131,6 +131,7 @@ test("process-wide state, loader edits and their helpers keep their own process"
     "prototype-patch.test.cjs": `Date.prototype.toISOString = () => '';`,
     "loader-edit.test.cjs": `require('node:module')._resolveFilename = () => '';`,
     "self-kill.test.cjs": `process.kill(process.pid, 'SIGKILL');`,
+    "module-compile.test.cjs": `const fixture = new (require('node:module'))(__filename); fixture._compile('module.exports = 1;', __filename);`,
     "helper-user.test.cjs": `require('./helpers/env-poison.cjs');`,
     "clean.test.cjs": `require('node:test')('clean', () => {});`,
   };

@@ -24,6 +24,7 @@ const STATIC_HAZARDS = [
   /\b(?:Module|require)\.(?:_load|_resolveFilename|_extensions)\s*=[^=]/,
   /\.(?:_load|_resolveFilename|_extensions)\s*=[^=]/,
   /\brequire\.cache/,
+  /\._compile\s*\(/,
   /\bmock\.(?:method|module|reset|restore|timers|fn|getter|setter|property)\b/,
   /\.listen\s*\(/,
 ];
