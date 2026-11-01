@@ -75,14 +75,15 @@ const realExports = (filename) => {
   if (!realModules.has(filename)) {
     realModules.set(filename, {});
     const proxy = proxies.get(filename);
-    if (proxy) cacheSlot(filename, undefined);
+    const installed = proxy !== undefined && require.cache[filename] === proxy;
+    if (installed) cacheSlot(filename, undefined);
     try {
       const loaded = jiti(filename);
       realModules.set(filename, loaded === proxy?.exports ? {} : loaded);
     } catch {
       realModules.set(filename, {});
     } finally {
-      if (proxy) cacheSlot(filename, proxy);
+      if (installed) cacheSlot(filename, proxy);
     }
   }
   return realModules.get(filename);
@@ -124,7 +125,7 @@ const live = (key, read) => {
   }
   return pinned.has(key) ? pinned.get(key) : first;
 };
-const proxyModule = (filename) => {
+const moduleProxy = (filename) => {
   if (!proxies.has(filename)) {
     const cached = new Module(filename, null);
     cached.filename = filename;
@@ -140,10 +141,13 @@ const proxyModule = (filename) => {
     });
     proxies.set(filename, cached);
   }
-  cacheSlot(filename, proxies.get(filename));
   return proxies.get(filename);
 };
-stubTargets.forEach(proxyModule);
+const installStubProxy = (filename) => cacheSlot(filename, moduleProxy(filename));
+const releaseStubProxy = (filename) => {
+  const proxy = proxies.get(filename);
+  if (proxy && require.cache[filename] === proxy) cacheSlot(filename, undefined);
+};
 
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
@@ -163,7 +167,7 @@ async function withPalette(t, config, check) {
     focus.call(focusProxy.current);
     focusProxy.current.setSelectionRange(2, 5);
   }
-  const stub = (filename, exports) => { (replacingStubs ? testStubs : setupStubs).set(filename, exports); proxyModule(filename); };
+  const stub = (filename, exports) => { (replacingStubs ? testStubs : setupStubs).set(filename, exports); installStubProxy(filename); };
   const source = (file, exports) => stub(path.join(root, file), exports);
   const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskOriginalNoteAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
@@ -319,10 +323,8 @@ async function withPalette(t, config, check) {
       const replaced = testStubs.size > 0;
       setupStubs.clear();
       testStubs.clear();
-      if (replaced) {
-        for (const key of Object.keys(require.cache)) if (key.startsWith(`${root}/src/`)) cacheSlot(key, undefined);
-        stubTargets.forEach(proxyModule);
-      }
+      if (replaced) for (const key of Object.keys(require.cache)) if (key.startsWith(`${root}/src/`)) cacheSlot(key, undefined);
+      stubTargets.forEach(releaseStubProxy);
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
       dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
     }
