@@ -1,7 +1,5 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
-const Module = require("node:module");
 const { test } = require("node:test");
 const { loadModule } = require("./helpers/loadModule.cjs");
 const React = require("react");
@@ -14,13 +12,7 @@ const boards = [
   { id: 7, title: "QA Sandbox", uniqueIdentifier: "QASA" },
   { id: 8, title: "Hypertask Product", uniqueIdentifier: "HTPR" },
 ];
-const fixturePath = path.join(__dirname, "compose-task-palette.test.cjs");
-const fixtureSource = fs.readFileSync(fixturePath, "utf8");
-const fixture = new Module(fixturePath, module);
-fixture.filename = fixturePath;
-fixture.paths = module.paths;
-fixture._compile(`${fixtureSource.slice(0, fixtureSource.indexOf("\ntest("))}\nmodule.exports = { withPalette };`, fixturePath);
-const { withPalette } = fixture.exports;
+const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
 async function withColdBoards(t, queueEnabled, check) {
   notifyManager.setScheduler(queueMicrotask);

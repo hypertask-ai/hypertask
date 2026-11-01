@@ -239,12 +239,29 @@ test("a changed test file is always run", async () => {
 });
 
 test("a changed test file also runs the files that compile its source (HYCI-69)", async () => {
-  const selected = await select(["tests/compose-task-palette.test.cjs"]);
+  const selected = await select(["tests/htpr-6478-regressions.test.cjs"]);
   assert.notEqual(selected, "ALL");
-  assert.ok(selected.includes("tests/compose-task-palette.test.cjs"));
-  for (const host of ["tests/htpr-7307-ctrlj-footer-clickable.test.cjs", "tests/htpr-7675-ctrlj-enter-before-text-renders.test.cjs"]) {
-    assert.ok(selected.includes(host), `${host} loads the changed fixture`);
-  }
+  assert.ok(selected.includes("tests/htpr-6478-regressions.test.cjs"));
+  const host = "tests/htpr-6478-regression-runner.test.cjs";
+  assert.ok(selected.includes(host), `${host} loads the changed fixture`);
+});
+
+test("a shared test fixture run, not compiled, still runs every file that loads it (HYCI-68)", async () => {
+  const fixture = "tests/helpers/compose-task-palette-fixture.cjs";
+  const selected = await select([fixture]);
+  assert.notEqual(selected, "ALL");
+  const hosts = [
+    "tests/compose-task-palette.test.cjs",
+    "tests/compose-task-palette-writer.test.cjs",
+    "tests/htpr-6891-phone-task-writer-sheet.test.cjs",
+    "tests/htpr-7305-board-from-text.test.cjs",
+    "tests/htpr-7306-ctrlj-footer-one-line.test.cjs",
+    "tests/htpr-7307-ctrlj-footer-clickable.test.cjs",
+    "tests/htpr-7652-ctrlj-enter-queue.test.cjs",
+    "tests/htpr-7656-ctrlj-skill-menu.test.cjs",
+    "tests/htpr-7675-ctrlj-enter-before-text-renders.test.cjs",
+  ];
+  for (const host of hosts) assert.ok(selected.includes(host), `${host} requires the changed fixture`);
 });
 
 test("selection always includes the cheap runner and demo guards", async () => {

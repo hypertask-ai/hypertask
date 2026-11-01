@@ -1,19 +1,11 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
 const path = require('node:path');
-const Module = require('node:module');
 const test = require('node:test');
 const React = require('react');
 const { loader, mount } = require('./helpers/htpr-7260-ui.cjs');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-6891-phone-task-writer-sheet';
-const fixturePath = path.join(__dirname, 'compose-task-palette.test.cjs');
-const fixtureSource = fs.readFileSync(fixturePath, 'utf8');
-const fixture = new Module(fixturePath, module);
-fixture.filename = fixturePath;
-fixture.paths = module.paths;
-fixture._compile(`${fixtureSource.slice(0, fixtureSource.indexOf('\ntest('))}\nmodule.exports = { withPalette };`, fixturePath);
-const { withPalette } = fixture.exports;
+const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
 for (const mobile of [false, true]) {
   test(`phone writer flag preserves ${mobile ? 'legacy phone output and fills only compose when enabled' : 'desktop output byte-for-byte'}`, async (t) => {
