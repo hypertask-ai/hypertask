@@ -466,3 +466,19 @@ test('a store the sweep cannot read cancels nothing but still reports the store'
   assert.equal(result.stored.ok, false);
   assert.deepEqual(result.recovery.done, [{ runId: 7, action: 'skip', rerun: false, reason: 'recovery storage is unreadable' }]);
 });
+
+test('a cancel with no answer from GitHub is never re-run on its own', async () => {
+  let calls = 0;
+  const outcome = await resume('o/r', { ...found, confirmed: false }, { api: async () => { calls += 1; return {}; }, now });
+  assert.deepEqual(outcome, { runId: 7, action: 'report', reason: 'the cancel outcome is unknown', keep: true });
+  assert.equal(calls, 0);
+});
+
+test('a cancel with no answer is reported until it leaves the recovery window', async () => {
+  const uncertain = { runId: 7, attempt: 1, cancelledAt: '2026-11-01T08:50:00Z', tries: 1, issued: true, confirmed: false };
+  const written = [];
+  const outcome = await recover('o/r', [], { api: async () => { throw new Error('must not be called'); }, now, pending: [uncertain], save: async (list) => { written.push(list); return true; } });
+  assert.deepEqual(outcome.done, [{ runId: 7, action: 'report', reason: 'the cancel outcome is unknown', keep: true }]);
+  assert.deepEqual(outcome.pending, [{ ...uncertain, tries: 2 }]);
+  assert.deepEqual(written.at(-1), [{ ...uncertain, tries: 2 }]);
+});

@@ -1416,8 +1416,12 @@ was sent and its answer is unknown) and confirmed (GitHub accepted it). A
 reservation nobody issued is dropped and never re-run, so a cancellation by a
 person or by a superseded push is never restarted because a sweep died between
 writing and cancelling; a cancel whose answer was lost (a network error, a
-timeout, a 5xx, 408 or 429) keeps its issued entry and is reconciled on a later
-sweep, while only a 4xx refusal is treated as nothing cancelled. The store is a
+timeout, a 5xx, 408 or 429) keeps its issued entry, while only a 4xx refusal is
+treated as nothing cancelled. Only a cancel GitHub accepted is ever re-run
+automatically: an entry whose answer never came back is reported in the job
+summary with its run link and left for a person, because the run may equally have
+been cancelled by somebody else, and it leaves the store at the attempt or age
+limit like any other. The store is a
 repository variable, which is its own permission, so it is read and written with
 the token `prod-health.yml` already uses for those two endpoints rather than
 `github.token`; run control keeps `github.token`, which is the only one with

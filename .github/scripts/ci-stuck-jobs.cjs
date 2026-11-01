@@ -298,6 +298,13 @@ async function resume(repo, entry, { api = json, now = Date.now(), attempts = RE
   if (entry.issued !== true) {
     return { runId: entry.runId, action: 'drop', reason: UNISSUED };
   }
+  // Only a cancel GitHub accepted is proof that this sweep cancelled anything. An
+  // answer that never came back is kept for a person to look at and is never
+  // re-run on our own, because the run may equally have been cancelled by a
+  // person or by a superseded push.
+  if (entry.confirmed !== true) {
+    return { runId: entry.runId, action: 'report', reason: CANCEL_AMBIGUOUS, keep: true };
+  }
   const run = await api(`/repos/${repo}/actions/runs/${entry.runId}`);
   if ((entry.attempt ?? 1) !== (run.run_attempt ?? 1)) {
     return { runId: entry.runId, action: 'drop', reason: 'a newer attempt replaced it' };
@@ -519,6 +526,9 @@ async function main() {
   }
   for (const outcome of recovery.done.filter(entry => entry.action === 'drop')) {
     console.log(`::warning::run ${outcome.runId} was cancelled by this sweep and abandoned: ${outcome.reason}.`);
+  }
+  for (const outcome of recovery.done.filter(entry => entry.action === 'report')) {
+    console.log(`::warning::run ${outcome.runId}: ${outcome.reason}; re-run it by hand if its jobs are cancelled: https://github.com/${repo}/actions/runs/${outcome.runId}`);
   }
   for (const outcome of recovery.done.filter(entry => entry.action === 'recover' && entry.rerun)) {
     console.log(`::notice::run ${outcome.runId} re-runs after its cancel: ${outcome.jobs.join(', ')}`);

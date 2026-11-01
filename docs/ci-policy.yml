@@ -191,7 +191,8 @@ stuck_job_recovery:
     checkpoint: before_the_cancel
     states: [reserved, issued, confirmed]
     unissued_reservation: dropped_never_rerun
-    ambiguous_cancel: kept_and_reconciled_by_the_next_sweep
+    unconfirmed_cancel: reported_never_rerun
+    ambiguous_cancel: kept_and_reported_for_a_person, drops after the attempt or age limit
     capacity: reserved_before_cancel, never_dropped, full_store_cancels_nothing
     bound_to: run_attempt
     unreadable_store: leaves_stored_entries_untouched
