@@ -48,10 +48,13 @@ const NOT_FIRST_ATTEMPT = 'no longer a first attempt in progress';
 const NO_FAILURE_SEEN = 'a genuine failure appeared';
 const NOT_CANCELLED = 'no job left cancelled';
 const STORE_UNAVAILABLE = 'recovery storage is unreadable';
+const STORE_FULL = 'recovery store is full';
+const STORE_UNWRITABLE = 'recovery storage refused the reservation';
 // A cancel can land after the sweep that issued it gave up, so the recovery is
 // kept until something settles it: a re-run, a real failure, no cancelled job
 // left, or a newer attempt replacing the one this sweep cancelled.
-const SETTLED = new Set([NO_FAILURE_SEEN, NOT_CANCELLED, NOT_FIRST_ATTEMPT]);
+// The only outcomes that leave a landed cancel still needing the next sweep.
+const UNFINISHED = new Set([SETTLE_FAILED, JOBS_UNAVAILABLE, RERUN_FAILED]);
 
 function stepEnd(step) {
   return step && step.completed_at ? Date.parse(step.completed_at) : null;
@@ -106,17 +109,18 @@ function decide(run, jobs, { now = Date.now(), stuckMinutes = STUCK_MINUTES, rec
   };
 }
 
-function ghApi(args, fields) {
+function ghApi(args, fields, token) {
   const body = fields ? Object.entries(fields).flatMap(([key, value]) => ['-f', `${key}=${value}`]) : [];
+  const env = token ? { ...process.env, GH_TOKEN: token } : process.env;
   return new Promise((resolve, reject) => {
-    execFile('gh', ['api', ...args, ...body], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 60000 }, (error, stdout) =>
+    execFile('gh', ['api', ...args, ...body], { env, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 60000 }, (error, stdout) =>
       error ? reject(new Error(`gh api ${args[0]} failed: ${String(error.message).slice(0, 200)}`)) : resolve(stdout));
   });
 }
 
-async function json(path, method = 'GET', fields = undefined) {
+async function request(path, method = 'GET', fields = undefined, token = undefined) {
   const args = method === 'GET' ? [path] : ['-X', method, path];
-  const stdout = await ghApi(args, fields);
+  const stdout = await ghApi(args, fields, token);
   try {
     return JSON.parse(stdout || '{}');
   } catch {
@@ -124,16 +128,39 @@ async function json(path, method = 'GET', fields = undefined) {
   }
 }
 
+function json(path, method = 'GET', fields = undefined) {
+  return request(path, method, fields);
+}
+
+// Repository variables are their own permission and `github.token` carries none
+// of it, so the store is read and written with the token the alarms already use
+// for the same endpoints (prod-health.yml). Run control keeps `github.token`,
+// which is the only token with actions: write. No token means no store, and no
+// store means no cancel: a cancelled run nobody can finish is worse than a slow
+// one.
+function storeJson(path, method = 'GET', fields = undefined) {
+  return request(path, method, fields, process.env.STORE_TOKEN);
+}
+
 async function plan(repo, { now = Date.now(), stuckMinutes = STUCK_MINUTES, recentMinutes = RECENT_MINUTES, runs = null, jobsFor = null } = {}) {
   const listed = runs ?? (await pages(`/repos/${repo}/actions/runs?per_page=100`));
   const decisions = [];
+  const unread = [];
   for (const run of listed) {
     if (!liveRun(run, now, recentMinutes)) continue;
-    const jobs = jobsFor ? jobsFor(run.id) ?? [] : await jobsOf(repo, run.id);
+    let jobs;
+    try {
+      jobs = jobsFor ? jobsFor(run.id) ?? [] : await jobsOf(repo, run.id);
+    } catch (error) {
+      // One unreadable job list is one run this sweep cannot judge, not the end
+      // of the sweep: the others are still read and the store is still finished.
+      unread.push({ runId: run.id, reason: String(error.message).slice(0, 80) });
+      continue;
+    }
     const decision = decide(run, jobs, { now, stuckMinutes, recentMinutes });
     if (decision) decisions.push(decision);
   }
-  return decisions;
+  return { decisions, unread };
 }
 
 async function jobsOf(repo, runId, api = json) {
@@ -152,7 +179,7 @@ async function pages(path) {
   return found;
 }
 
-async function apply(repo, decisions, { api = json, settle = settleCancel, beforeCancel = null, onCancelled = null } = {}) {
+async function apply(repo, decisions, { api = json, settle = settleCancel, beforeCancel = null } = {}) {
   const done = [];
   for (const decision of decisions.filter(entry => entry.action === 'cancel')) {
     try {
@@ -165,7 +192,6 @@ async function apply(repo, decisions, { api = json, settle = settleCancel, befor
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: `${CANCEL_FAILED}: ${String(error.message).slice(0, 80)}` });
       continue;
     }
-    if (onCancelled) await onCancelled(decision);
     if (!(await settle(repo, decision.runId, api))) {
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: SETTLE_FAILED });
       continue;
@@ -209,7 +235,7 @@ function pendingList(value) {
 
 // Only a confirmed missing variable is an empty store. Any other read failure
 // means the stored recoveries are unknown, and a save would overwrite them.
-async function readPending(repo, api = json) {
+async function readPending(repo, api = storeJson) {
   try {
     const payload = await api(`/repos/${repo}/actions/variables/${PENDING_VARIABLE}`);
     return { ok: true, pending: pendingList(payload.value) };
@@ -219,8 +245,12 @@ async function readPending(repo, api = json) {
   }
 }
 
-async function writePending(repo, pending, api = json) {
-  const value = JSON.stringify(pending.slice(0, PENDING_LIMIT));
+// An entry the store cannot hold is an entry a cancelled run cannot be finished
+// from, so nothing is ever dropped to make room: a full store refuses to write
+// and the caller cancels nothing.
+async function writePending(repo, pending, api = storeJson) {
+  if (pending.length > PENDING_LIMIT) return false;
+  const value = JSON.stringify(pending);
   try {
     await api(`/repos/${repo}/actions/variables/${PENDING_VARIABLE}`, 'PATCH', { name: PENDING_VARIABLE, value });
     return true;
@@ -273,7 +303,7 @@ async function recover(repo, decisions, { api = json, settle = settleCancel, now
   let stored = JSON.stringify(pending);
   const write = async (value) => {
     if (!save) return true;
-    const list = value.slice(0, PENDING_LIMIT).map(entry => ({ ...entry }));
+    const list = value.map(entry => ({ ...entry }));
     if (JSON.stringify(list) === stored) return true;
     if (!(await save(list))) return false;
     stored = JSON.stringify(list);
@@ -298,25 +328,46 @@ async function recover(repo, decisions, { api = json, settle = settleCancel, now
     const refused = candidates.filter(decision => decision.action === 'cancel')
       .map(decision => ({ runId: decision.runId, action: 'skip', rerun: false, reason: STORE_UNAVAILABLE }));
     done.push(...refused);
-    return { done, pending: carried.slice(0, PENDING_LIMIT), saved: true, refused: refused.length };
+    return { done, pending: carried, saved: true, refused: refused.length };
   }
-  const outcomes = await apply(repo, candidates, {
+  // The recovery is written before the cancel, not after it: a sweep that dies
+  // between the two would otherwise leave a cancelled run with no record, and a
+  // run that cannot be reserved in the store is not cancelled at all.
+  const wanted = candidates.filter(decision => decision.action === 'cancel');
+  let room = PENDING_LIMIT - carried.length;
+  let writable = true;
+  const reserved = [];
+  for (const decision of wanted) {
+    if (!writable || room <= 0) {
+      done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: writable ? STORE_FULL : STORE_UNWRITABLE });
+      continue;
+    }
+    carried.push({ runId: decision.runId, attempt: decision.attempt ?? 1, cancelledAt: new Date(now).toISOString(), tries: 0 });
+    room -= 1;
+    if (!(await write(carried))) {
+      carried.pop();
+      room += 1;
+      writable = false;
+      saved = false;
+      done.push({ runId: decision.runId, action: 'skip', rerun: false, reason: STORE_UNWRITABLE });
+      continue;
+    }
+    reserved.push(decision);
+  }
+  const outcomes = await apply(repo, reserved, {
     api,
     settle,
     beforeCancel: async (decision) => {
       const run = await api(`/repos/${repo}/actions/runs/${decision.runId}`);
       return run.status === 'in_progress' && (run.run_attempt ?? 1) === (decision.attempt ?? 1);
     },
-    // Stored the moment the cancel lands, before this sweep reads anything else
-    // about the run: a sweep that dies after the cancel must not lose it.
-    onCancelled: async (decision) => {
-      carried.push({ runId: decision.runId, attempt: decision.attempt ?? 1, cancelledAt: new Date(now).toISOString(), tries: 0 });
-      if (!(await write(carried))) saved = false;
-    },
   });
   done.push(...outcomes);
-  const settled = new Set(outcomes.filter(outcome => outcome.rerun || SETTLED.has(outcome.reason)).map(outcome => outcome.runId));
-  const next = carried.filter(entry => !settled.has(entry.runId)).slice(0, PENDING_LIMIT);
+  // A reservation is dropped when its cancel never landed (the run is as it was
+  // and the next sweep may pick it again) and when it settled; it is kept only
+  // while it still needs the next sweep to finish it.
+  const settled = new Set(outcomes.filter(outcome => !UNFINISHED.has(outcome.reason)).map(outcome => outcome.runId));
+  const next = carried.filter(entry => !settled.has(entry.runId));
   if (!(await write(next))) saved = false;
   return { done, pending: next, saved };
 }
@@ -335,6 +386,27 @@ function fixturePlan(entry, options) {
   return plan(entry.repo, { ...options, runs: entry.runs, jobsFor: id => jobsByRun.get(id) ?? [] });
 }
 
+// One sweep. Discovery is the half that can fail, so the store is read and the
+// recoveries a previous sweep started are finished whatever the run list or any
+// single job list does: a cancelled check is the one thing here that a person
+// would have to finish by hand.
+async function sweep(repo, { now = Date.now(), read = null, discover = null, save = null, api = json, settle = settleCancel } = {}) {
+  const stored = await (read ?? (() => readPending(repo)))();
+  let decisions = [];
+  let unread = [];
+  let discovery = null;
+  try {
+    ({ decisions, unread } = await (discover ?? (() => plan(repo, { now })))());
+  } catch (error) {
+    discovery = String(error.message).slice(0, 120);
+  }
+  const recovery = await recover(repo, decisions, {
+    api, settle, now, pending: stored.pending,
+    save: stored.ok ? save ?? (list => writePending(repo, list)) : null,
+  });
+  return { decisions, unread, discovery, stored, recovery };
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   const repo = argValue(argv, '--repo') ?? process.env.REPO ?? process.env.GITHUB_REPOSITORY;
@@ -344,22 +416,40 @@ async function main() {
     stuckMinutes: Number(argValue(argv, '--stuck-minutes') ?? STUCK_MINUTES),
     now: Date.parse(argValue(argv, '--now')) || Date.now(),
   };
-  const decisions = fixture
-    ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
-    : await plan(repo, options);
   const live = applyChanges && !fixture;
-  const stored = live ? await readPending(repo) : { ok: true, pending: [] };
-  const recovery = live
-    ? await recover(repo, decisions, { pending: stored.pending, now: options.now, save: stored.ok ? list => writePending(repo, list) : null })
-    : { done: [], pending: stored.pending, saved: true };
-  const report = { repo, decisions, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
+  let decisions = [];
+  let unread = [];
+  let discovery = null;
+  let stored = { ok: true, pending: [] };
+  let recovery = { done: [], pending: [], saved: true };
+  if (live) {
+    ({ decisions, unread, discovery, stored, recovery } = await sweep(repo, { now: options.now }));
+  } else {
+    try {
+      ({ decisions, unread } = fixture
+        ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
+        : await plan(repo, options));
+    } catch (error) {
+      discovery = String(error.message).slice(0, 120);
+    }
+  }
+  const report = { repo, decisions, unread, discovery, pending: recovery.pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
   console.log(JSON.stringify(report, null, 2));
+  if (discovery) {
+    console.log(`::warning::the run list could not be read this sweep (${discovery}); stored recoveries were still finished.`);
+  }
+  for (const entry of unread) {
+    console.log(`::warning::run ${entry.runId} was not judged: ${entry.reason}.`);
+  }
   if (!stored.ok) {
     console.log(`::warning::${PENDING_VARIABLE} cannot be read, so no recovery is stored this sweep and the stored ones are left untouched.`);
   } else if (recovery.refused) {
     console.log(`::warning::${recovery.refused} stuck run(s) left to their own lease: ${STORE_UNAVAILABLE}.`);
   } else if (!recovery.saved) {
     console.log('::warning::A recovery could not be stored, so the next sweep will not finish it.');
+  }
+  for (const outcome of recovery.done.filter(entry => entry.action === 'drop' || entry.reason === STORE_FULL || entry.reason === STORE_UNWRITABLE)) {
+    console.log(`::warning::run ${outcome.runId} was not cancelled: ${outcome.reason}.`);
   }
   for (const outcome of recovery.done.filter(entry => entry.action === 'drop')) {
     console.log(`::warning::run ${outcome.runId} was cancelled by this sweep and abandoned: ${outcome.reason}.`);
@@ -381,7 +471,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, PENDING_VARIABLE };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, sweep, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, PENDING_VARIABLE, PENDING_LIMIT };
 
 if (require.main === module) {
   main().catch(error => {

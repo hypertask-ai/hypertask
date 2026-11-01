@@ -180,13 +180,20 @@ stuck_job_recovery:
   attempts_touched: 1
   actions: [cancel_run, wait_for_cancel, rerun_failed_jobs]
   rerun_provenance: run cancelled by this sweep, stored in STUCK_RECOVERY_PENDING until the re-run lands
+  tokens:
+    run_control: github.token
+    recovery_store: secrets.AUTOMERGE_TOKEN
+    reason: repository variables are their own permission and github.token holds none of it, so the store uses the token prod-health.yml already uses for the same endpoints
   pending_recovery:
     variable: STUCK_RECOVERY_PENDING
     attempts: 3
     max_age_hours: 6
-    checkpoint: on_cancel_lands
+    checkpoint: before_the_cancel
+    capacity: reserved_before_cancel, never_dropped, full_store_cancels_nothing
     bound_to: run_attempt
     unreadable_store: leaves_stored_entries_untouched
+    unwritable_store: cancels_nothing
+  discovery_isolation: [run_list_failure_keeps_stored_recoveries, job_list_failure_skips_only_that_run]
   never_act_on: [runs_holding_a_failed_job, runs_not_cancelled_by_this_sweep]
   job_list_after: eligibility_filter
   acts_on: [pull_request_runs]

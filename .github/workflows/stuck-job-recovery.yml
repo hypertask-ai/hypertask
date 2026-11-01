@@ -39,8 +39,15 @@ jobs:
           node-version: '^24.22.1'
           check-latest: true
 
+      # STORE_TOKEN carries the recovery store: repository variables are their own
+      # permission and `github.token` holds none of it, so the store uses the same
+      # token the production alarms already use for those two endpoints
+      # (prod-health.yml). Without it the store cannot be read, and a sweep with no
+      # store cancels nothing: a cancelled run nobody can finish is worse than a
+      # slow one.
       - name: Cancel or re-run stuck runs
         env:
           GH_TOKEN: ${{ github.token }}
+          STORE_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
           REPO: ${{ github.repository }}
         run: node .github/scripts/ci-stuck-jobs.cjs --apply

@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { decide, apply, plan, resume, recover, readPending } = require('../.github/scripts/ci-stuck-jobs.cjs');
+const { decide, apply, plan, resume, recover, sweep, readPending, PENDING_LIMIT } = require('../.github/scripts/ci-stuck-jobs.cjs');
 
 const now = Date.parse('2026-11-01T09:00:00Z');
 const step = (name, finished) => ({ name, conclusion: 'success', completed_at: finished });
@@ -143,7 +143,7 @@ test('an old run is history and costs no job request', async () => {
       return [];
     },
   });
-  assert.deepEqual(decisions, []);
+  assert.deepEqual(decisions, { decisions: [], unread: [] });
   assert.equal(fetched, 0);
 });
 
@@ -155,7 +155,7 @@ test('an empty job list is ignored instead of cancelling blind', () => {
 const found = { runId: 7, attempt: 1, cancelledAt: '2026-11-01T08:50:00Z', tries: 1 };
 const record = async () => true;
 
-test('the recovery is stored the moment the cancel lands, before the run is read again', async () => {
+test('the recovery is stored before the cancel is issued, not after it', async () => {
   const calls = [];
   const api = async (path, method = 'GET') => {
     calls.push(`${method} ${path}`);
@@ -165,7 +165,7 @@ test('the recovery is stored the moment the cancel lands, before the run is read
   const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
     api, settle: async () => false, now, save: async (list) => { calls.push('save'); written.push(list); return true; },
   });
-  assert.deepEqual(calls, ['GET /repos/o/r/actions/runs/7', 'POST /repos/o/r/actions/runs/7/cancel', 'save']);
+  assert.deepEqual(calls, ['save', 'GET /repos/o/r/actions/runs/7', 'POST /repos/o/r/actions/runs/7/cancel']);
   assert.deepEqual(written, [[{ runId: 7, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0 }]]);
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'cancel', rerun: false, reason: 'cancel did not settle' }]);
   assert.equal(outcome.saved, true);
@@ -186,7 +186,7 @@ test('a cancel that does not settle is carried into the next sweep that finishes
   });
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'cancel', rerun: false, reason: 'cancel did not settle' }]);
   assert.deepEqual(outcome.pending, [{ runId: 7, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0 }]);
-  assert.deepEqual(written, [outcome.pending]);
+  assert.deepEqual(written.at(-1), outcome.pending);
   state.settled = true;
   const next = await resume('o/r', outcome.pending[0], { api, now: now + 60000 });
   assert.deepEqual(next, { runId: 7, action: 'recover', rerun: true, jobs: ['test-shard (1)'] });
@@ -314,4 +314,102 @@ test('a stored entry whose request fails is kept for the next sweep', async () =
   assert.deepEqual(outcome.done, [{ runId: 7, action: 'wait', reason: 'gh api failed: HTTP 502', keep: true }]);
   assert.deepEqual(outcome.pending, [{ ...found, tries: 2 }]);
   assert.deepEqual(written.at(-1), [{ ...found, tries: 2 }]);
+});
+
+test('a full store refuses a new cancel instead of dropping a stored recovery', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    return { status: 'in_progress' };
+  };
+  const full = Array.from({ length: PENDING_LIMIT }, (_, index) => ({ runId: 100 + index, attempt: 1, cancelledAt: new Date(now).toISOString(), tries: 0 }));
+  const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
+    api, now, pending: full, save: record,
+  });
+  assert.deepEqual(outcome.pending.map(entry => entry.runId), full.map(entry => entry.runId));
+  assert.deepEqual(outcome.done.filter(entry => entry.action === 'skip'), [
+    { runId: 7, action: 'skip', rerun: false, reason: 'recovery store is full' },
+  ]);
+  assert.equal(calls.filter(call => call.endsWith('/cancel')).length, 0);
+});
+
+test('a reservation the store refuses is a cancel that never happens', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    return { status: 'in_progress' };
+  };
+  const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
+    api, now, save: async () => false,
+  });
+  assert.deepEqual(outcome.done, [{ runId: 7, action: 'skip', rerun: false, reason: 'recovery storage refused the reservation' }]);
+  assert.deepEqual(calls, []);
+  assert.equal(outcome.saved, false);
+  assert.deepEqual(outcome.pending, []);
+});
+
+test('a cancel that never lands drops its reservation', async () => {
+  const api = async (path, method = 'GET') => {
+    if (method === 'POST') throw new Error('gh api failed: HTTP 500');
+    return { status: 'in_progress' };
+  };
+  const written = [];
+  const outcome = await recover('o/r', [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], {
+    api, now, save: async (list) => { written.push(list); return true; },
+  });
+  assert.deepEqual(outcome.pending, []);
+  assert.equal(outcome.done.at(-1).reason.startsWith('cancel request failed'), true);
+  assert.deepEqual(written.at(-1), []);
+});
+
+test('a candidate whose job list fails does not stop the other candidates', async () => {
+  const runs = [
+    { ...stuckRun, id: 11, updated_at: new Date(now).toISOString() },
+    { ...stuckRun, id: 12, updated_at: new Date(now).toISOString() },
+  ];
+  const result = await plan('o/r', {
+    now, runs,
+    jobsFor: (id) => {
+      if (id === 11) throw new Error('gh api failed: HTTP 502');
+      return [job('test-shard (1)', 'in_progress', [step('Test shard', finishedAt)])];
+    },
+  });
+  assert.deepEqual(result.decisions.map(decision => decision.runId), [12]);
+  assert.deepEqual(result.unread, [{ runId: 11, reason: 'gh api failed: HTTP 502' }]);
+});
+
+test('a run list that cannot be read still finishes the stored recoveries', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    if (path === '/repos/o/r/actions/runs/7') return { status: 'completed' };
+    if (path.endsWith('/jobs?per_page=100')) return { jobs: [{ name: 'test-shard (1)', conclusion: 'cancelled' }] };
+    return {};
+  };
+  const result = await sweep('o/r', {
+    now,
+    read: async () => ({ ok: true, pending: [found] }),
+    discover: async () => { throw new Error('gh api failed: HTTP 502'); },
+    save: record,
+    api,
+  });
+  assert.equal(result.discovery, 'gh api failed: HTTP 502');
+  assert.deepEqual(result.recovery.done, [{ runId: 7, action: 'recover', rerun: true, jobs: ['test-shard (1)'] }]);
+  assert.deepEqual(calls, [
+    'GET /repos/o/r/actions/runs/7',
+    'GET /repos/o/r/actions/runs/7/jobs?per_page=100',
+    'POST /repos/o/r/actions/runs/7/rerun-failed-jobs',
+  ]);
+});
+
+test('a store the sweep cannot read cancels nothing but still reports the store', async () => {
+  const result = await sweep('o/r', {
+    now,
+    read: async () => ({ ok: false, pending: [] }),
+    discover: async () => ({ decisions: [{ runId: 7, action: 'cancel', attempt: 1, stuck: [{ name: 'test-shard (1)' }] }], unread: [] }),
+    save: record,
+    api: async () => { throw new Error('gh api failed: must not be called'); },
+  });
+  assert.equal(result.stored.ok, false);
+  assert.deepEqual(result.recovery.done, [{ runId: 7, action: 'skip', rerun: false, reason: 'recovery storage is unreadable' }]);
 });

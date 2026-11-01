@@ -27,13 +27,23 @@ after it, so a run whose cancel did not settle, whose job list was unavailable
 after the cancel, or whose re-run request errored is written to the repository
 variable `STUCK_RECOVERY_PENDING` and finished by the next sweep: without that
 record the run was cancelled for good, because every later sweep reads
-in-progress runs only. The entry is written the moment the cancel lands, before
-the sweep reads anything else about that run, and each candidate is handled in
-its own guard so one rejection cannot strand the rest. Only ids this sweep
+in-progress runs only. The entry is written **before** the cancel is issued, so a
+sweep that dies between the two leaves a recorded recovery and never a cancelled
+run with no record; a reservation the store refuses is a cancel that does not
+happen, and a cancellation that never lands drops its own reservation so the next
+sweep may pick the run again. Room in the store is reserved the same way: a
+stored recovery is never truncated or dropped to make space, so a full store
+refuses the new cancel and keeps the twenty it already holds. Only ids this sweep
 cancelled are ever stored, a stored entry is tried at most three times and
 expires after six hours, and a stored run that holds a real failure, has no
 cancelled job left, or has moved to a newer attempt is dropped instead of
-re-run. A run that already waits for its stored recovery is never cancelled
+re-run. The store is a repository variable, which is its own permission, so it is
+read and written with the token `prod-health.yml` already uses for those two
+endpoints rather than `github.token`; run control keeps `github.token`, which is
+the only one with `actions: write`. Discovery cannot delay what discovery started
+elsewhere either: the stored recoveries are read and finished before the run list
+is read, a run list that fails is reported and cancels nothing new, and a single
+unreadable job list skips that one run for the sweep instead of ending it. A run that already waits for its stored recovery is never cancelled
 again in the same sweep, and a decision is re-checked against the run's current
 attempt immediately before the cancel. Only a confirmed missing variable is read
 as an empty store: any other read failure leaves the stored recoveries untouched
@@ -64,4 +74,9 @@ stale run is ignored, and an empty job list never cancels blind. `recover()`
 carries an unsettled cancel into the next sweep, never carries a run this sweep
 did not cancel, finishes a stored recovery, and drops one that expired, ran out
 of tries, holds a real failure, has no cancelled job left or belongs to a
-replaced attempt.
+replaced attempt. The cases for the store are the ones the review asked for: a
+reservation is stored before the cancel is issued, a reservation the store
+refuses cancels nothing, a full store refuses a new cancel instead of dropping a
+stored recovery, a cancel that never lands drops its reservation, a candidate
+whose job list fails does not stop the other candidates, and a run list that
+cannot be read still finishes the stored recoveries.
