@@ -53,6 +53,7 @@ for (const smoke of [false, true]) {
       assert.equal(typeof config.webpack, "function");
       assert.equal(config.turbopack.resolveAlias["vfile-message"], path.resolve(__dirname, "..", "src/lib/vendor/vfile-message.mjs"));
       assert.equal(config.experimental.cpus, 1);
+      assert.equal(config.experimental.turbopackMemoryEviction, "full");
       assert.equal(config.experimental.parallelServerBuildTraces, smoke);
       assert.equal(config.experimental.parallelServerCompiles, undefined);
       assert.equal(config.productionBrowserSourceMaps, true);
