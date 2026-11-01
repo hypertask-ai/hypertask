@@ -32,9 +32,7 @@ const tooltipFlag = 'htpr-6950-tooltip-top-layer';
 const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
 const boardChipFlag = 'htpr-7053-compose-board-chip';
 
-// One window for the whole file (HYCI-55): every call still gets a fresh root,
-// fresh stubs and fresh module instances, but a rebuilt window was pure setup.
-const sharedDom = () => {
+const oneWindowPerFile = () => {
   const state = { dom: null };
   return (url) => {
     if (!state.dom) {
@@ -55,7 +53,7 @@ const sharedDom = () => {
     return state;
   };
 };
-const windowState = sharedDom();
+const windowState = oneWindowPerFile();
 
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
@@ -230,8 +228,7 @@ async function withPalette(t, config, check) {
       for (const key of Object.keys(require.cache)) if (!cached.has(key) && (stubbed.has(key) || !key.includes(`${path.sep}node_modules${path.sep}`))) delete require.cache[key];
       for (const [key, value] of cached) require.cache[key] = value;
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
-      // Reset the shared window instead of destroying it (HYCI-55).
-      dom.window.document.body.innerHTML = '<div id="root"></div>';
+      dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
     }
   }
 }
