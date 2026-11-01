@@ -220,7 +220,7 @@ async function main() {
         console.log("Visual head reuses the one app build from app-build; no second next build");
       } else {
         recordPhase(`${phase} build`);
-        command(root, env, ["npx", "next", "build", "--webpack"]);
+        command(root, env, ["npx", "next", "build"]);
         recordPhase(`${phase} seed+capture`);
       }
       const stop = await startServer(root, env, path.join(temp, `visual-${phase}-server.log`));

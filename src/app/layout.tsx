@@ -20,7 +20,7 @@ import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
 import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
-import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
+import { ibmPlexSans, PLEX_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
@@ -132,7 +132,7 @@ export default async function RootLayout(
     ? "system"
     : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
   const plexPreloadHref = shellSeed && ["amoled", "graphite", "porcelain"].includes(initialResolvedTheme)
-    ? (ibmPlexSans as typeof ibmPlexSans & { preloadHref?: string }).preloadHref
+    ? PLEX_LATIN_FONT_HREF
     : undefined;
 
   return (
