@@ -287,7 +287,7 @@ test("browser smoke retries its build once, only after a Google font download fa
   const path = require("node:path");
   const { spawnSync } = require("node:child_process");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
-  const step = workflow.jobs["browser-smoke-desktop"].steps.find((s) => s.name === "Build the local app (no migrations)");
+  const step = workflow.jobs["browser-build"].steps.find((s) => s.name === "Build the local app (no migrations)");
   const run = (outcomes) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
     fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
@@ -434,18 +434,19 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   const desktop = workflow.jobs["browser-smoke-desktop"];
   const mobile = workflow.jobs["browser-smoke-mobile"];
 
-  assert.deepEqual(aggregate.needs, SHARDS);
+  const build = workflow.jobs["browser-build"];
+  assert.deepEqual(aggregate.needs, ["browser-build", ...SHARDS]);
   const shards = SHARDS.map((key) => workflow.jobs[key]);
-  assert.deepEqual(shards.map((shard) => shard.needs), SHARDS.map(() => undefined));
+  assert.deepEqual(shards.map((shard) => shard.needs), SHARDS.map(() => "browser-build"));
   for (const shard of shards) {
     assert.equal(shard.if, desktop.if);
     assert.match(shard.if, /pull_request\.draft == false/);
     assert.ok(shard["timeout-minutes"] <= 20);
-  }
-  const desktopSteps = desktop.steps.map((step) => step.name);
-  assert.ok(desktopSteps.includes("Upload the one build"));
-  for (const shard of shards.slice(1)) {
+    assert.ok(shard.steps.some((step) => step.name === "Download the one build"));
     assert.ok(!shard.steps.some((step) => step.name === "Upload the one build"));
+  }
+  assert.equal(build.steps.filter((step) => step.name === "Upload the one build").length, 1);
+  for (const shard of shards.slice(1)) {
     assert.ok(!shard.steps.some((step) => step.name === "Download checksum-verified pinned native CLI"));
   }
   assert.equal(aggregate.outputs.contract, "${{ needs.browser-smoke-desktop.outputs.contract }}");
@@ -454,17 +455,18 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-smoke"]);
 
   const step = aggregate.steps[0];
-  const env = ["DESKTOP", "MOBILE", "MATRIX", "FLAGS"];
-  for (const [name, key] of env.map((name, index) => [name, SHARDS[index]])) {
+  const env = ["BUILD", "DESKTOP", "MOBILE", "MATRIX", "FLAGS"];
+  for (const [name, key] of env.map((name, index) => [name, ["browser-build", ...SHARDS][index]])) {
     assert.equal(step.env[name], "${{ needs." + key + ".result }}", name);
   }
   for (const results of [
-    ["success", "success", "success", "success"],
-    ["success", "failure", "success", "success"],
-    ["success", "success", "failure", "success"],
-    ["success", "success", "success", "cancelled"],
-    ["success", "success", "skipped", "success"],
-    ["skipped", "skipped", "skipped", "skipped"],
+    ["success", "success", "success", "success", "success"],
+    ["failure", "success", "success", "success", "success"],
+    ["success", "success", "failure", "success", "success"],
+    ["success", "success", "success", "failure", "success"],
+    ["success", "success", "success", "success", "cancelled"],
+    ["success", "success", "success", "skipped", "success"],
+    ["skipped", "skipped", "skipped", "skipped", "skipped"],
   ]) {
     const child = spawnSync("bash", ["-c", step.run], {
       env: { PATH: process.env.PATH, ...Object.fromEntries(env.map((name, index) => [name, results[index]])) },
@@ -523,7 +525,7 @@ test("HYCI-32: the two halves never publish an artifact under one name", async (
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
   const names = [];
-  for (const key of SHARDS) {
+  for (const key of ["browser-build", ...SHARDS]) {
     for (const step of workflow.jobs[key].steps) {
       if (!step.uses?.startsWith("actions/upload-artifact@")) continue;
       assert.ok(step.with?.name, `${key} uploads an artifact with no name`);

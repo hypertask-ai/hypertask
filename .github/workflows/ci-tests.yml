@@ -819,6 +819,202 @@ jobs:
             test "${{ needs.ci-test.result }}" = "skipped"
           fi
 
+  browser-build:
+    name: browser-build
+    # HYCI-59: one build for the whole check. HYCI-57 gave each shard its own
+    # warm build so no shard waited behind another, which meant four machines
+    # repeated the same build; the check then waited for the slowest shard's
+    # build to end before its pages could start. The build is one job now and
+    # publishes `app-build`; the four page shards start from that artifact, so
+    # the check pays the build once. The Next.js incremental cache is still
+    # saved on a production push and restored here, so the one build keeps the
+    # warm-cache cost (HYCI-59 measured the check before and after).
+    #
+    # The builder is the one production uses (`next build`, Turbopack since
+    # HTPR-8245), so the artifact every shard serves is the artifact production
+    # serves.
+    #
+    # The services and the disposable credentials stay identical to a shard's,
+    # so the build sees the environment it always saw.
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
+    services:
+      postgres:
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          POSTGRES_DB: hypertask_smoke
+          POSTGRES_USER: browser_smoke
+          POSTGRES_PASSWORD: browser_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U browser_smoke -d hypertask_smoke"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      soketi:
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+        env:
+          SOKETI_DEFAULT_APP_ID: app-id
+          SOKETI_DEFAULT_APP_KEY: app-key
+          SOKETI_DEFAULT_APP_SECRET: app-secret
+        ports:
+          - 6001:6001
+        options: >-
+          --health-cmd "wget --no-verbose --tries=1 --spider http://127.0.0.1:6001"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Keep the required jobs running: only their heavy steps may be skipped.
+      - name: Determine change scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # A missing/broken detector must never suppress correctness checks.
+          if ! node .github/scripts/ci-change-scope.cjs; then
+            echo "heavy_needed=true" >> "$GITHUB_OUTPUT"
+            : > "$RUNNER_TEMP/changed-files.txt"
+          fi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+          cache: npm
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+      - name: Install dependencies
+        if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Generate the client
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          npx prisma generate
+          # A restored node_modules skipped the npm postinstall that writes this file.
+          npm run flags:generate
+      - name: Create the database schema
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: npx prisma migrate deploy
+      - name: Prepare disposable local credentials
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          # Derived from the commit so one build serves every consumer.
+          seed="${{ github.event.pull_request.head.sha || github.sha }}-smoke"
+          session_secret=$(printf '%s' "$seed:session" | sha256sum | cut -d' ' -f1)
+          jwt_secret=$(printf '%s' "$seed:jwt" | sha256sum | cut -d' ' -f1)
+          better_auth_secret=$(printf '%s' "$seed:better-auth" | sha256sum | cut -d' ' -f1)
+          printf '::add-mask::%s\n' "$session_secret"
+          printf '::add-mask::%s\n' "$jwt_secret"
+          printf '::add-mask::%s\n' "$better_auth_secret"
+          {
+            printf '%s\n' 'DATABASE_URL=postgresql://browser_smoke:browser_smoke@127.0.0.1:5432/hypertask_smoke'
+            printf '%s\n' 'REDIS_URL=redis://127.0.0.1:6379'
+            printf 'SESSION_SECRET=%s\n' "$session_secret"
+            printf 'JWT_SECRET=%s\n' "$jwt_secret"
+            printf 'BETTER_AUTH_SECRET=%s\n' "$better_auth_secret"
+            printf '%s\n' 'BETTER_AUTH_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100'
+            printf '%s\n' 'TURBOPUFFER_BASE_URL=http://127.0.0.1:53101'
+            printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
+            printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
+            printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
+            printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_PORT=6001'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_USE_TLS=false'
+            printf '%s\n' 'NEXT_PUBLIC_PUSHER_CLUSTER=mt1'
+            printf '%s\n' 'PUSHER_APP_ID=app-id'
+            printf '%s\n' 'PUSHER_KEY=app-key'
+            printf '%s\n' 'PUSHER_SECRET=app-secret'
+            printf '%s\n' 'PUSHER_HOST=127.0.0.1'
+            printf '%s\n' 'PUSHER_PORT=6001'
+            printf '%s\n' 'PUSHER_USE_TLS=false'
+            printf '%s\n' 'PUSHER_CLUSTER=mt1'
+          } >> "$GITHUB_ENV"
+      - name: Restore Next.js build cache
+        id: restore-nextjs-cache
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
+      - name: Build the local app (no migrations)
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        # YPER4-363: next/font downloads Google fonts at build time and about
+        # 6% of builds lost that download. Retry once, only for that failure.
+        run: |
+          set -o pipefail
+          for attempt in 1 2; do
+            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
+            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
+            echo "::warning::Google font download failed during next build (attempt $attempt)"
+          done
+          exit 1
+      - name: Save Next.js build cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/production' && steps.restore-nextjs-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .next/cache
+          key: ${{ steps.restore-nextjs-cache.outputs.cache-primary-key }}
+      - name: Package the one build
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: tar --exclude='.next/cache' -czf "$RUNNER_TEMP/app-build.tgz" .next
+      - name: Upload the one build
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: app-build
+          path: ${{ runner.temp }}/app-build.tgz
+          retention-days: 1
+
   browser-smoke-desktop:
     name: browser-smoke-desktop
     # HYCI-32 split the browser check in two; HYCI-57 splits the page tests in
@@ -826,15 +1022,16 @@ jobs:
     # `browser-smoke-desktop` (default desktop pages, the instant-open control,
     # the contract), `browser-smoke-mobile` (default phone pages),
     # `browser-smoke-matrix` (the width matrix) and `browser-smoke-flags` (every
-    # flag on, then the inbox cycle). Each shard builds the candidate itself:
-    # a shared build job would put the whole build in front of every shard,
-    # which measured slower than four warm parallel builds (HYCI-57 has the
-    # numbers). The required context stays `browser-smoke`, a summary job over
-    # the four shards, so a red shard still blocks a merge and every existing
-    # ruleset, merge guard and policy entry keeps working unchanged.
+    # flag on, then the inbox cycle). HYCI-59: all four run their pages on the one
+    # `app-build` that `browser-build` publishes, so the check pays the app build
+    # once instead of once per shard. The required context stays `browser-smoke`,
+    # a summary job over the four shards, so a red shard still blocks a merge and
+    # every existing ruleset, merge guard and policy entry keeps working
+    # unchanged.
+    needs: browser-build
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: read
@@ -845,10 +1042,9 @@ jobs:
     # passing and let a fix ship without the customer test. Docs-only PRs instead
     # run the heavy steps of both halves as skips and succeed.
     #
-    # HYCI-10: this half builds once and publishes that build, so the visual
-    # comparison reuses it instead of building the candidate a second time. It is
-    # the only producer of `app-build` and the only saver of the shared Next.js
-    # cache; the phone half only restores them.
+    # HYCI-10: the one build was published so the visual comparison reuses it
+    # instead of building the candidate a second time. HYCI-59 moved that
+    # producer and the shared Next.js cache to `browser-build`.
     outputs:
       contract: ${{ steps.smoke.outputs.contract }}
       docs_only: ${{ steps.scope.outputs.heavy_needed == 'false' }}
@@ -1045,43 +1241,19 @@ jobs:
           echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check
           chmod 755 "$CLI_BINARY"
           printf 'MCP_CONTRACT_CLI=%s\n' "$CLI_BINARY" >> "$GITHUB_ENV"
-      - name: Restore Next.js build cache
-        id: restore-nextjs-cache
+      - name: Download the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
-      - name: Build the local app (no migrations)
-        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        # YPER4-363: next/font downloads Google fonts at build time and about
-        # 6% of builds lost that download. Retry once, only for that failure.
-        run: |
-          set -o pipefail
-          for attempt in 1 2; do
-            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
-            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
-            echo "::warning::Google font download failed during next build (attempt $attempt)"
-          done
-          exit 1
-      - name: Save Next.js build cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/production' && steps.restore-nextjs-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: .next/cache
-          key: ${{ steps.restore-nextjs-cache.outputs.cache-primary-key }}
-      - name: Package the one build
-        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        run: tar --exclude='.next/cache' -czf "$RUNNER_TEMP/app-build.tgz" .next
-      - name: Upload the one build
-        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: app-build
-          path: ${{ runner.temp }}/app-build.tgz
-          retention-days: 1
+          path: ${{ runner.temp }}/app-build
+      - name: Unpack the one build
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        run: |
+          set -euo pipefail
+          tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build"
+          rm -rf .next
+          mv "$RUNNER_TEMP/app-build/.next" .next
       - name: Serve and check desktop pages
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
@@ -1130,8 +1302,9 @@ jobs:
           retention-days: 7
   browser-smoke-mobile:
     name: browser-smoke-mobile
-    # HYCI-57: one quarter of the page tests. It builds the candidate itself,
-    # like every shard, so no shard waits behind another.
+    # HYCI-57: one quarter of the page tests. HYCI-59: it runs the pages on the
+    # one build browser-build published.
+    needs: browser-build
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1303,27 +1476,19 @@ jobs:
         run: |
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs --qa-journeys
-      - name: Restore Next.js build cache
-        id: restore-nextjs-cache
+      - name: Download the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
-          path: .next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
-      - name: Build the local app (no migrations)
+          name: app-build
+          path: ${{ runner.temp }}/app-build
+      - name: Unpack the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        # YPER4-363: next/font downloads Google fonts at build time and about
-        # 6% of builds lost that download. Retry once, only for that failure.
         run: |
-          set -o pipefail
-          for attempt in 1 2; do
-            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
-            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
-            echo "::warning::Google font download failed during next build (attempt $attempt)"
-          done
-          exit 1
+          set -euo pipefail
+          tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build"
+          rm -rf .next
+          mv "$RUNNER_TEMP/app-build/.next" .next
       - name: Serve and check the layout matrix
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
@@ -1369,8 +1534,9 @@ jobs:
 
   browser-smoke-matrix:
     name: browser-smoke-matrix
-    # HYCI-57: one quarter of the page tests. It builds the candidate itself,
-    # like every shard, so no shard waits behind another.
+    # HYCI-57: one quarter of the page tests. HYCI-59: it runs the pages on the
+    # one build browser-build published.
+    needs: browser-build
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -1542,27 +1708,19 @@ jobs:
         run: |
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs --qa-journeys
-      - name: Restore Next.js build cache
-        id: restore-nextjs-cache
+      - name: Download the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
-          path: .next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
-      - name: Build the local app (no migrations)
+          name: app-build
+          path: ${{ runner.temp }}/app-build
+      - name: Unpack the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        # YPER4-363: next/font downloads Google fonts at build time and about
-        # 6% of builds lost that download. Retry once, only for that failure.
         run: |
-          set -o pipefail
-          for attempt in 1 2; do
-            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
-            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
-            echo "::warning::Google font download failed during next build (attempt $attempt)"
-          done
-          exit 1
+          set -euo pipefail
+          tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build"
+          rm -rf .next
+          mv "$RUNNER_TEMP/app-build/.next" .next
       - name: Serve and check phone pages and the layout matrix
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
@@ -1616,8 +1774,9 @@ jobs:
 
   browser-smoke-flags:
     name: browser-smoke-flags
-    # HYCI-57: one quarter of the page tests. It builds the candidate itself,
-    # like every shard, so no shard waits behind another.
+    # HYCI-57: one quarter of the page tests. HYCI-59: it runs the pages on the
+    # one build browser-build published.
+    needs: browser-build
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -1789,27 +1948,19 @@ jobs:
         run: |
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs --qa-journeys
-      - name: Restore Next.js build cache
-        id: restore-nextjs-cache
+      - name: Download the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
-          path: .next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-${{ github.sha }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('package-lock.json', 'next.config.*') }}-
-      - name: Build the local app (no migrations)
+          name: app-build
+          path: ${{ runner.temp }}/app-build
+      - name: Unpack the one build
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
-        # YPER4-363: next/font downloads Google fonts at build time and about
-        # 6% of builds lost that download. Retry once, only for that failure.
         run: |
-          set -o pipefail
-          for attempt in 1 2; do
-            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
-            grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
-            echo "::warning::Google font download failed during next build (attempt $attempt)"
-          done
-          exit 1
+          set -euo pipefail
+          tar -xzf "$RUNNER_TEMP/app-build/app-build.tgz" -C "$RUNNER_TEMP/app-build"
+          rm -rf .next
+          mv "$RUNNER_TEMP/app-build/.next" .next
       - name: Serve and check phone pages and the layout matrix
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         id: smoke
@@ -1909,7 +2060,9 @@ jobs:
     # reads as passing, so the skip path is gated here as well).
     # HYCI-57: four shards, so the check is the slowest quarter of the page tests
     # plus one build instead of the slower of two halves.
-    needs: [browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
+    # HYCI-59: the one build is a need of its own, so a build that fails or is
+    # cancelled before any shard starts is a red check, never a skipped one.
+    needs: [browser-build, browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix, browser-smoke-flags]
     if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -1923,12 +2076,14 @@ jobs:
     steps:
       - name: Require every browser shard
         env:
+          BUILD: ${{ needs.browser-build.result }}
           DESKTOP: ${{ needs.browser-smoke-desktop.result }}
           MOBILE: ${{ needs.browser-smoke-mobile.result }}
           MATRIX: ${{ needs.browser-smoke-matrix.result }}
           FLAGS: ${{ needs.browser-smoke-flags.result }}
         run: |
           set -euo pipefail
+          test "$BUILD" = success
           test "$DESKTOP" = success
           test "$MOBILE" = success
           test "$MATRIX" = success

@@ -9,7 +9,7 @@ const yaml = require("js-yaml");
 
 const load = file => yaml.load(readFileSync(file, "utf8"));
 const steps = load(".github/workflows/visual-regression.yml").jobs["visual-regression"].steps;
-const smoke = load(".github/workflows/ci-tests.yml").jobs["browser-smoke-desktop"].steps;
+const smoke = load(".github/workflows/ci-tests.yml").jobs["browser-build"].steps;
 const producer = smoke.find(step => step.name === "Save Next.js build cache");
 
 for (const phase of ["base", "head"]) {
