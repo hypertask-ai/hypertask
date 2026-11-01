@@ -239,6 +239,27 @@ jobs:
           done
           echo "Cold-board fixture stress: 50/50 passed"
 
+      - name: Fixture handoff in one process
+        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/changed-files.txt"
+          if ! grep -Eq '^tests/compose-task-palette\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
+            echo "Palette fixture unchanged; no one-process handoff run needed."
+            exit 0
+          fi
+          npm run flags:generate
+          lane=$(node scripts/palette-fixture-lane.mjs)
+          if [ -z "$lane" ]; then
+            echo "No palette reader shares a test lane; nothing to hand over."
+            exit 0
+          fi
+          echo "Shared lane: $lane"
+          node --test --test-timeout=1200000 --test-concurrency=1 --test-isolation=none $lane
+          echo "One-process fixture handoff passed: $lane"
+
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).
       # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"

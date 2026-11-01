@@ -1,7 +1,12 @@
+const processFixture = globalThis.__composeTaskPaletteFixture;
+if (processFixture) {
+  module.exports = processFixture;
+  return;
+}
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { test: nodeTest } = require('node:test');
+const { test: nodeTest, after } = require('node:test');
 const { Worker } = require('node:worker_threads');
 const STALL_MS = Number(process.env.COMPOSE_PALETTE_STALL_MS ?? 120_000);
 const watchdog = new Worker(`
@@ -86,15 +91,14 @@ const realExports = (filename) => {
   if (!realModules.has(filename)) {
     realModules.set(filename, {});
     const proxy = proxies.get(filename);
-    const installed = proxy !== undefined && require.cache[filename] === proxy;
-    if (installed) cacheSlot(filename, undefined);
+    cacheSlot(filename, undefined);
     try {
       const loaded = jiti(filename);
       realModules.set(filename, loaded === proxy?.exports ? {} : loaded);
     } catch {
       realModules.set(filename, {});
     } finally {
-      if (installed) cacheSlot(filename, proxy);
+      if (proxy) cacheSlot(filename, proxy);
     }
   }
   return realModules.get(filename);
@@ -160,7 +164,22 @@ const releaseStubProxy = (filename) => {
   if (proxy && require.cache[filename] === proxy) cacheSlot(filename, undefined);
 };
 const isAppSource = (filename) => filename.startsWith(`${path.join(root, 'src')}${path.sep}`);
-stubTargets.filter(isAppSource).forEach(installStubProxy);
+stubTargets.filter(isAppSource).forEach((filename) => {
+  cacheSlot(filename, undefined);
+  installStubProxy(filename);
+});
+const releaseFixture = () => {
+  replacingStubs = false;
+  setupStubs.clear();
+  testStubs.clear();
+  pinned.clear();
+  realModules.clear();
+  for (const filename of stubTargets) if (isAppSource(filename) || proxies.get(filename) === require.cache[filename]) cacheSlot(filename, undefined);
+  proxies.clear();
+  delete globalThis.__composeTaskPaletteFixture;
+};
+after(releaseFixture);
+globalThis.__composeTaskPaletteFixture = { withPalette };
 
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
