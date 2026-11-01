@@ -136,13 +136,3 @@ test('live adapter uses synthetic tools and bounded loops without storing model 
   assert.match(result.stdout, /mocked live eval passed/);
 });
 
-test('CI is path scoped, hosted and explicitly offline without credentials', () => {
-  const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/ai-evals.yml'), 'utf8');
-  for (const directory of ['src/app/api/ai/**', 'src/lib/mcp-server/config/**', 'src/lib/mcp-server/validations/**', 'src/lib/ai/**']) assert.ok(workflow.includes(directory));
-  assert.match(workflow, /runs-on: ubuntu-latest/);
-  assert.match(workflow, /node-version: \^24\.\d+\.\d+/);
-  assert.match(workflow, /npm ci --ignore-scripts[\s\S]*?run: npx prisma generate[\s\S]*?run: node --test/);
-  assert.match(workflow, /AI_EVAL_LIVE: "0"/);
-  assert.match(workflow, /AI_EVAL_WRONG_TOOL_THRESHOLD: "0"/);
-  assert.doesNotMatch(workflow, /secrets\.|pull_request_target/);
-});

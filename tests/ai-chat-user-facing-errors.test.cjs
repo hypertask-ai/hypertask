@@ -128,23 +128,6 @@ test("model-facing errorMessage still returns non-Prisma errors verbatim", () =>
   assert.equal(errorMessage(new Error(message)), message);
 });
 
-test("handled chat errors unwrap non-Error provider payloads", () => {
-  const { errorMessage } = loadErrorFormatters();
-
-  assert.equal(
-    errorMessage({
-      error: { message: "AI Gateway rejected google/gemini-3.5-flash-lite" },
-      statusCode: 404,
-    }),
-    "AI Gateway rejected google/gemini-3.5-flash-lite",
-  );
-  assert.match(
-    routeSource,
-    /await reportHandledChatError\(error, "model-stream", \{\s*model: selected\.resolvedModelId,\s*provider: selected\.usageProvider,\s*\}\)/,
-  );
-  console.log("chat error unwrap verification passed");
-});
-
 test("request validation names an empty message without leaking Zod detail", () => {
   const logs = [];
   const { requestErrorMessage } = loadErrorFormatters(logs);
@@ -160,25 +143,6 @@ test("request validation names an empty message without leaking Zod detail", () 
   assert.deepEqual(logs[0], ["[ai/chat/stream] request-validation refused: invalid request"]);
 });
 
-test("malformed JSON uses its own plain request-body message", () => {
-  const logs = [];
-  const { requestErrorMessage } = loadErrorFormatters(logs);
-  const error = new SyntaxError("Unexpected end of JSON input");
-
-  const message = requestErrorMessage(error, "body");
-
-  assert.equal(
-    message,
-    "Invalid request: the request body could not be read."
-  );
-  assert.equal(logs.length, 1);
-  assert.deepEqual(logs[0], ["[ai/chat/stream] request-body refused: invalid JSON"]);
-  assert.match(
-    routeSource,
-    /try \{\s*json = await request\.json\(\);\s*\} catch \(error\) \{\s*return createSseErrorResponse\(requestErrorMessage\(error, "body"\)\);\s*\}/
-  );
-});
-
 test("validation without a field path falls back to a plain request message", () => {
   const { requestErrorMessage } = loadErrorFormatters();
   const rootResult = loadChatRequestSchema().safeParse([]);
@@ -191,56 +155,6 @@ test("validation without a field path falls back to a plain request message", ()
   assert.equal(
     requestErrorMessage(new z.ZodError([]), "validation"),
     "Invalid request."
-  );
-});
-
-test("model-selection errors remain user-actionable and pass through unchanged", () => {
-  assert.match(
-    routeSource,
-    /catch \(error\) \{\s*await reportHandledChatError\(error, "select-model"\);\s*return createSseErrorResponse\(errorMessage\(error\)\);\s*\}/
-  );
-});
-
-test("expected plan-access guidance is not reported as a product bug", async () => {
-  const reports = [];
-  const { reportHandledChatError } = loadModule("src/lib/ai/chatStream/errors.ts", {
-    "@/lib/api/errorMessage": { toErrorMessage: loadToErrorMessage() },
-    "@/lib/ai/tools/constants": { SSE_HEADERS: {} },
-    "@/lib/errors/reportError": { reportError: async report => reports.push(report) },
-  });
-
-  for (const name of ["AiPlanAccessError", "AiGatewayKeyRequiredError", "AiProviderAuthenticationError"]) {
-    await reportHandledChatError(Object.assign(new Error(name), { name }), "select-model");
-    assert.equal(reports.length, 0, `${name} must not be reported`);
-  }
-  await reportHandledChatError(Object.assign(new Error("unexpected"), { statusCode: 500 }), "model-stream");
-  assert.equal(reports.length, 1);
-  assert.equal(reports[0].extra.statusCode, 500);
-
-  const planGateSource = fs.readFileSync(
-    path.join(__dirname, "../src/app/api/ai/_lib/planGate.ts"),
-    "utf8"
-  );
-  assert.match(planGateSource, /export class AiPlanAccessError extends Error/);
-  assert.equal(
-    (planGateSource.match(/throw new AiPlanAccessError/g) || []).length,
-    3
-  );
-});
-
-test('no send("error") call site uses model-facing errorMessage', () => {
-  assert.equal((routeSource.match(/send\("error"/g) || []).length, 3);
-  assert.doesNotMatch(
-    routeSource,
-    /send\("error",\s*\{\s*content:\s*errorMessage\(/
-  );
-  assert.equal(
-    (
-      routeSource.match(
-        /send\("error",\s*\{\s*content:\s*userFacingErrorMessage\(/g
-      ) || []
-    ).length,
-    2
   );
 });
 
@@ -259,4 +173,48 @@ test("board agent instructions never let the model answer as the agent after a f
   assert.match(section, /never present your own knowledge as if it came from the agent/i);
 
   assert.match(section, /do not quote the tool's raw error text/i);
+});
+
+test("handled chat errors unwrap non-Error provider payloads", () => {
+  const { errorMessage } = loadErrorFormatters();
+
+  assert.equal(
+    errorMessage({
+      error: { message: "AI Gateway rejected google/gemini-3.5-flash-lite" },
+      statusCode: 404,
+    }),
+    "AI Gateway rejected google/gemini-3.5-flash-lite",
+  );
+});
+
+test("malformed JSON uses its own plain request-body message", () => {
+  const logs = [];
+  const { requestErrorMessage } = loadErrorFormatters(logs);
+  const error = new SyntaxError("Unexpected end of JSON input");
+
+  const message = requestErrorMessage(error, "body");
+
+  assert.equal(
+    message,
+    "Invalid request: the request body could not be read."
+  );
+  assert.equal(logs.length, 1);
+  assert.deepEqual(logs[0], ["[ai/chat/stream] request-body refused: invalid JSON"]);
+});
+
+test("expected plan-access guidance is not reported as a product bug", async () => {
+  const reports = [];
+  const { reportHandledChatError } = loadModule("src/lib/ai/chatStream/errors.ts", {
+    "@/lib/api/errorMessage": { toErrorMessage: loadToErrorMessage() },
+    "@/lib/ai/tools/constants": { SSE_HEADERS: {} },
+    "@/lib/errors/reportError": { reportError: async report => reports.push(report) },
+  });
+
+  for (const name of ["AiPlanAccessError", "AiGatewayKeyRequiredError", "AiProviderAuthenticationError"]) {
+    await reportHandledChatError(Object.assign(new Error(name), { name }), "select-model");
+    assert.equal(reports.length, 0, `${name} must not be reported`);
+  }
+  await reportHandledChatError(Object.assign(new Error("unexpected"), { statusCode: 500 }), "model-stream");
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].extra.statusCode, 500);
 });

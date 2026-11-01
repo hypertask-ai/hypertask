@@ -27,10 +27,6 @@ const {
   getAddCommentCrudInputSchema,
 } = jiti(path.join(root, "src/lib/mcp-server/validations/comment.validation.ts"));
 
-const routeSource = fs.readFileSync(
-  path.join(root, "src/lib/mcp/operations/comments/operation.ts"),
-  "utf8"
-);
 const followerJavascript = ts.transpileModule(fs.readFileSync(
   path.join(root, "src/utils/controllers/followers/createFollowerService.ts"),
   "utf8",
@@ -91,7 +87,6 @@ function loadCreateFollowerService() {
     agentMentionCalls,
   };
 }
-
 
 test("a description mention correlates by its notification id", () => {
   assert.deepEqual(buildAgentInvocationSelector({ invocationId: 8821 }), {
@@ -285,7 +280,6 @@ test("a routine agent comment never queries or consumes an invocation", async ()
   assert.equal(calls.updateMany.length, 0);
 });
 
-
 const addCommentBase = {
   task_id: 27744,
   text: "<p>Answered.</p>",
@@ -352,22 +346,6 @@ test("add_comment CRUD rejects both reply pointers at once", () => {
       reply_to_comment_id: 183450,
       reply_to_invocation_id: 8821,
     })
-  );
-});
-
-
-test("the API route gates reply_to_invocation_id to authenticated agents", () => {
-  assert.match(
-    routeSource,
-    /reply_to_invocation_id !== undefined && !ctx\.agentId/
-  );
-  assert.match(
-    routeSource,
-    /!Number\.isSafeInteger\(reply_to_invocation_id\) \|\| reply_to_invocation_id <= 0/
-  );
-  assert.match(
-    routeSource,
-    /directReplyInvocationId: ctx\.agentId \? reply_to_invocation_id : undefined/
   );
 });
 

@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("./refactored-module-source.cjs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -410,79 +409,6 @@ test("the stream guard rejects concurrent and excessive starts", async () => {
     "limited",
   );
   assert.deepEqual(excessive.calls.map(([name]) => name), ["eval"]);
-});
-
-test("the stream and client use rollout-safe background persistence", () => {
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8",
-  );
-  const client = fs.readFileSync(
-    path.join(root, "src/hooks/MultiPages/AIChat/useAiChat.ts"),
-    "utf8",
-  );
-  const cancelRoute = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/cancel/route.ts"),
-    "utf8",
-  );
-  const heartbeat = fs.readFileSync(
-    path.join(root, "src/app/api/cron/native-agent-heartbeat/route.ts"),
-    "utf8",
-  );
-  const history = fs.readFileSync(
-    path.join(
-      root,
-      "src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts",
-    ),
-    "utf8",
-  );
-
-  assert.match(route, /session_id: z\.string\(\)\.uuid\(\)\.optional\(\)/);
-  assert.match(route, /assistant_message_id: z\.string\(\)\.uuid\(\)\.optional\(\)/);
-  assert.match(route, /stream_id: z\.string\(\)\.uuid\(\)\.optional\(\)/);
-  assert.match(route, /const streamId = body\.stream_id \?\? randomUUID\(\)/);
-  assert.match(route, /acquireAiChatStreamLease\([\s\S]*sessionId: body\.session_id, streamId/);
-  assert.match(
-    route,
-    /if \(cancelled\) \{[\s\S]*failHeartbeatExecution\([\s\S]*"AI reply cancelled"[\s\S]*heartbeatExecutionTerminal = true/,
-  );
-  assert.match(cancelRoute, /stream_id: z\.string\(\)\.uuid\(\),/);
-  assert.doesNotMatch(cancelRoute, /stream_id:[^\n]+optional/);
-  assert.match(heartbeat, /stream_id: execution\.executionId/);
-  assert.match(route, /user_message_id: z\.string\(\)\.uuid\(\)\.optional\(\)/);
-  assert.match(route, /ensureNativeChatTurn\(\{/);
-  assert.match(route, /nativeTurnPersistence === "conflict"/);
-  assert.match(route, /Start a new chat and try again/);
-  assert.match(route, /findNativeAssistantReplay\(\{/);
-  assert.match(route, /replay\.status === "completed"/);
-  assert.match(route, /replayed: true/);
-  assert.match(route, /native-replay-check/);
-  assert.match(route, /cancel\(\) \{[\s\S]*clientConnected = false;/);
-  assert.match(route, /releaseAiChatStreamLease\(streamLease\)/);
-  assert.match(route, /assistant_persisted: assistantPersisted/);
-  assert.match(route, /user_message_persisted: userMessagePersisted/);
-  const completionBlock = route.slice(route.lastIndexOf("let assistantPersisted"));
-  assert.ok(
-    completionBlock.indexOf("persistAssistantMessage") <
-      completionBlock.indexOf("generateConversationTitle"),
-    "the completed reply must persist before title enrichment begins",
-  );
-  assert.match(client, /assistant_message_id: assistantMessageId/);
-  assert.match(client, /stream_id: streamId/);
-  assert.match(client, /parsed\.assistant_persisted === true/);
-  assert.match(
-    client,
-    /assistantPlaceholderAdded[\s\S]*updateLastMessageInSessionCache\(session\.id, errorMessage\)[\s\S]*appendMessageToSessionCache\(session\.id, errorMessage\)/,
-  );
-  assert.match(
-    history,
-    /const updateLastMessageInSessionCache[\s\S]*addMessageToSessionQuery\(sessionId, message, true, true\)/,
-  );
-  assert.match(
-    history,
-    /const appendMessageToSessionCache[\s\S]*addMessageToSessionQuery\(sessionId, message, true, false\)/,
-  );
-  assert.doesNotMatch(client, /addEventListener\("beforeunload", handleBeforeUnload\)/);
 });
 
 test("a native agent's reply is stored as that agent's message", async () => {

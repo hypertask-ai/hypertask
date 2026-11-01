@@ -424,7 +424,6 @@ test("stored parked notices are hidden and excluded from unread for everyone", a
   );
 });
 
-
 test("notice matching does not hide quoted human text, delivered replies, or other system notices", async () => {
   const { body } = await readHistory({
     extraRows: [
@@ -451,16 +450,3 @@ test("the flag and its constant are removed from the registry and runtime code",
   assert.equal(model.AGENT_CHAT_PARKED_REPLY_FLAG, undefined);
 });
 
-test("the flag stays retired, not deleted, so older deployments keep reading it as Off", () => {
-  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
-  const retiredSet = flags.match(/RETIRED_FEATURE_FLAG_KEYS = new Set\(\[([\s\S]*?)\]\)/);
-  assert.ok(retiredSet, "RETIRED_FEATURE_FLAG_KEYS exists");
-  assert.match(retiredSet[1], /"htpr-6322-agent-chat-parked-reply"/);
-  const outside = flags.replace(retiredSet[0], "");
-  assert.doesNotMatch(outside, /htpr-6322-agent-chat-parked-reply|AGENT_CHAT_PARKED_REPLY_FLAG/);
-  const migrations = path.join(root, "src/prisma/migrations");
-  for (const dir of fs.readdirSync(migrations)) {
-    const file = path.join(migrations, dir, "migration.sql");
-    if (fs.existsSync(file)) assert.doesNotMatch(fs.readFileSync(file, "utf8"), /htpr-6322-agent-chat-parked-reply/, dir);
-  }
-});

@@ -1,4 +1,3 @@
-const { readAgentDetailSource } = require("./helpers/agent-detail-source.cjs");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
@@ -225,32 +224,6 @@ test("task-writer selection passes the acting agent through to key lookup", asyn
     ),
     "expected the acting agent's openrouter key to be looked up",
   );
-});
-
-test("the agent page reads and writes the key through the owner-only route", () => {
-  const fs = require("./refactored-module-source.cjs");
-  const route = fs.readFileSync(
-    path.join(root, "src/app/api/agents/[agentId]/provider-key/route.ts"),
-    "utf8",
-  );
-  const detail = readAgentDetailSource();
-
-  assert.equal(route.match(/requireOwnedAgent\(/g).length, 4);
-  assert.match(route, /resolveOwnedAgent\(userId, ref\)/);
-  assert.match(route, /where: \{ id: resolved\.id, userId \}/);
-  assert.match(route, /verifyCookieIdentity\(/);
-  assert.match(route, /identity\.status === "verified"/);
-  assert.match(route, /identity\.status === "forged"/);
-  assert.doesNotMatch(route, /JSON\.parse\(userCookie\.value\)/);
-  assert.match(route, /ciphertext: encryptByokSecret\(apiKey\)/);
-  assert.doesNotMatch(route, /apiKey: decryptByokSecret/);
-  assert.match(route, /maskByokSecret\(decryptByokSecret\(ciphertext\)\)/);
-
-  assert.match(detail, /provider-key\?provider=openrouter/);
-  assert.match(detail, /res\.json\(\)\.catch\(\(\) => null\)/);
-  assert.match(detail, /data\?\.error \?\? "Could not remove provider key"/);
-  assert.match(detail, /data-agent-provider-key/);
-  assert.match(detail, /"Team key"/);
 });
 
 test("the agents list exposes only a masked key, and only to the owner", async () => {

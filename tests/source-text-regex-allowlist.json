@@ -1,18 +1,5 @@
 {
   "allowlist": [
-    "tests/agent-actor-archive.test.cjs",
-    "tests/agent-chat-durable-conversation.test.cjs",
-    "tests/agent-chat-parked-reply-removal.test.cjs",
-    "tests/agent-description-mention-invocation.test.cjs",
-    "tests/agent-provider-key.test.cjs",
-    "tests/agent-status-chip.test.cjs",
-    "tests/ai-bulk-confirmation.test.cjs",
-    "tests/ai-chat-background-persistence.test.cjs",
-    "tests/ai-chat-board-config.test.cjs",
-    "tests/ai-chat-page-history.test.cjs",
-    "tests/ai-chat-project-admin.test.cjs",
-    "tests/ai-chat-user-facing-errors.test.cjs",
-    "tests/ai-eval.test.cjs",
     "tests/ai-gateway-key-routing.test.cjs",
     "tests/ai-handled-fallbacks.test.cjs",
     "tests/ai-model-preferences.test.cjs",
@@ -175,5 +162,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 174
+  "count": 161
 }

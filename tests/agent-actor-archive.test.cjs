@@ -588,23 +588,6 @@ test("a Done descendant blocks agent soft-delete before any tree mutation", asyn
   assert.equal(calls.notifications, 0);
 });
 
-test("soft-delete tree path checks every locked task before updateMany", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/pages/api/queues/tasks/taskDeleteReminder.ts"),
-    "utf8",
-  );
-  assert.match(source, /assertAgentMayLeaveDoneForTasks/);
-  assert.match(source, /SELECT id, status, "sectionId", "hardDeleteProcessingAt"/);
-  assert.doesNotMatch(
-    source,
-    /assertAgentMayLeaveDone\(\s*tx,\s*root/,
-  );
-  assert.before = undefined;
-  const guardAt = source.indexOf("assertAgentMayLeaveDoneForTasks");
-  const mutateAt = source.indexOf("await tx.task.updateMany");
-  assert.ok(guardAt > 0 && mutateAt > guardAt);
-});
-
 test("humans may Archive Done tasks and agents may archive non-Done work", async () => {
   const tx = {
     section: {
@@ -629,17 +612,6 @@ test("humans may Archive Done tasks and agents may archive non-Done work", async
     { sectionId: ACTIVE_SECTION_ID, status: "Normal" },
     "Archive",
     AGENT_ID,
-  );
-});
-
-test("MCP updateTask signs the internal session with ctx.agentId", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/lib/mcp/tasks/updateTask.ts"),
-    "utf8",
-  );
-  assert.match(
-    source,
-    /signSession\(\{\s*id: userObj\.id,\s*email: userObj\.email,\s*\.\.\.\(ctx\.agentId \? \{ agentId: ctx\.agentId \} : \{\}\),\s*teamScope: ctx\.teamScope,\s*agentTokenGeneration: ctx\.agentTokenGeneration,?\s*\}\)/,
   );
 });
 

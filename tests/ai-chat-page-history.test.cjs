@@ -15,39 +15,6 @@ function toolBody(source, toolName) {
   return source.slice(start, nextToolStart === -1 ? undefined : nextToolStart);
 }
 
-test("hypertask_page_history is registered with the MCP actions and warnings", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
-  const body = toolBody(source, "hypertask_page_history");
-
-  assert.match(
-    source,
-    /hypertask_page_history: "Managing page history\.\.\."/,
-    "tool must have a user-visible status label",
-  );
-  assert.match(body, /sendStatus\("hypertask_page_history"\)/);
-  assert.match(body, /action: z\.enum\(\["versions", "restore", "archive"\]\)/);
-  assert.match(body, /Restore REPLACES the current page content/);
-  assert.match(body, /Archive hides the page/);
-  assert.match(body, /Always list versions first to get the required version_id/);
-  assert.match(
-    body,
-    /id: z\.union\(\[[\s\S]*?z\.coerce\.number\(\)\.int\(\)\.positive\(\)[\s\S]*?z\.string\(\)\.trim\(\)\.min\(1\)\.max\(100\)/,
-    "page history must accept numeric IDs and public IDs",
-  );
-  assert.match(
-    body,
-    /const identifier = parsePageIdentifier\(input\.id\)/,
-    "page identifiers must use the same resolver as the MCP routes and CLI",
-  );
-  assert.doesNotMatch(source, /\bcreateApiClient\b|\bcreateMcpToken\b/);
-  assert.doesNotMatch(
-    source,
-    /(?:@\/|src\/)lib\/mcp-server\/lib\/services\//,
-  );
-  assert.doesNotMatch(body, /\bfetch\s*\(|\/mcp\/pages\//);
-  assert.doesNotMatch(body, /confirmed/);
-});
-
 test("hypertask_page_history is registered as a write tool", () => {
   const source = fs.readFileSync(ROUTE, "utf8");
   const writeToolNamesStart = source.indexOf("const writeToolNames = new Set([");

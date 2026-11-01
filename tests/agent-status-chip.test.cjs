@@ -143,19 +143,6 @@ test("board refresh always broadcasts regardless of flag services", async () => 
   assert.deepEqual(sent, [[9, 42]]);
 });
 
-test("run start and stop bypass the throttle, activity inside the window does not", async () => {
-  const { refreshBoardForAgentRun } = loadRefresh();
-  const { sent, deps } = makeDeps(() => false);
-  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: false }, deps), false);
-  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: true }, deps), true);
-  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: true }, deps), true);
-  assert.equal(sent.length, 2);
-  const source = fs.readFileSync(path.join(root, "src/lib/agentRuns/service.ts"), "utf8");
-  assert.equal((source.match(/lifecycle: true/g) ?? []).length, 2);
-  assert.match(source, /refreshBoardForAgentRun\(run\.task\.projectId, originUserId, \{ lifecycle: false, taskId: run\.taskId \}\)/);
-  assert.doesNotMatch(source, /setTimeout/);
-});
-
 test("the minute clock uses one interval for many subscribers and clears it at zero", () => {
   const realSet = global.setInterval;
   const realClear = global.clearInterval;
@@ -221,4 +208,13 @@ test("the rendered chip keeps fresh status, hides stale or absent status, and su
   assert.equal(render({ agentName: "STALE", at: minutesAgo(360).toISOString() }), "");
   assert.equal(render(null), "");
   assert.deepEqual(subscriptions, [true, true, false]);
+});
+
+test("run start and stop bypass the throttle, activity inside the window does not", async () => {
+  const { refreshBoardForAgentRun } = loadRefresh();
+  const { sent, deps } = makeDeps(() => false);
+  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: false }, deps), false);
+  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: true }, deps), true);
+  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: true }, deps), true);
+  assert.equal(sent.length, 2);
 });
