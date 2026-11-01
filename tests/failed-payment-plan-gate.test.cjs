@@ -7,6 +7,8 @@ const prismaStub = require("./fixtures/prisma-team-stub.cjs");
 
 const jiti = require("jiti")(path.join(root, "tests/team-comp-entry.cjs"), {
   interopDefault: true,
+  moduleCache: false,
+  fsCache: false,
   alias: {
     "@/lib/prisma": path.join(root, "tests/fixtures/prisma-team-stub.cjs"),
     "@": path.join(root, "src"),
