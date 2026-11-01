@@ -118,10 +118,17 @@ const legacyTicketGates = () => {
     .map((entry) => entry.name).sort();
   const scan = (file, extra) => {
     let legacy = '';
-    try { legacy = readStableRegularFile(file, { label: extra ? 'project extra gates' : 'project ledger' }); } catch { return; }
-    let doc;
-    try { doc = parseGates(legacy); } catch { return; }
-    if (doc.errors.length) return;
+    try {
+      legacy = readStableRegularFile(file, { label: extra ? 'project extra gates' : 'project ledger' });
+    } catch (error) {
+      if (error.code === 'ENOENT') return;
+      throw new Error(`ship-gates: cannot read ${file}; repair or remove it before the home ledger is written`);
+    }
+    const doc = parseGates(legacy);
+    if (doc.errors.length) {
+      if (!legacy.includes(`${ticket}.`)) return;
+      throw new Error(`ship-gates: ${file} cannot be parsed (${doc.errors.join('; ')}); repair or remove it before the home ledger is written`);
+    }
     for (const block of gateBlocks(legacy)) {
       if (!block.id.startsWith(`${ticket}.`)) continue;
       const gate = doc.gates.find((candidate) => candidate.id === block.id);
@@ -172,6 +179,18 @@ await withFileLock(state, ledger, () => {
     process.stderr.write(handover
       ? `ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}; ${stale.size} generated gates written again at ${root}\n`
       : `ship-gates: ${ticket} ledger checkout moved to ${root}; ${stale.size} generated gates written again\n`);
+    // A move re-points only the generated gates. Every other gate in the ticket's gates folder
+    // keeps its own checkout, so one still on the old path is named instead of left unrunnable.
+    let gateFiles = [];
+    try { gateFiles = readdirSync(join(folder, 'gates'), { withFileTypes: true }); } catch { /* no gates folder */ }
+    for (const entry of gateFiles) {
+      if (!entry.isFile() || !entry.name.endsWith('.md') || entry.name === 'adopted.md') continue;
+      const file = join(folder, 'gates', entry.name);
+      for (const gate of carriedGates(file)) {
+        if (isGenerated(gate) || !gate.cwd || gate.cwd === root) continue;
+        throw new Error(`ship-gates: ${gate.id} in ${file} still runs in ${gate.cwd}; remove it, or write the replacement in ${root} and have it reviewed there`);
+      }
+    }
   }
   // ship-gates owns the standard gates. One that lost its CHECK would pass as a manual note and
   // block its own regeneration, so it is dropped and written again below. An edited CHECK stays a
@@ -231,6 +250,10 @@ await withFileLock(state, ledger, () => {
     mkdirSync(dirname(extrasFile), { recursive: true });
     let extraText = read(extrasFile);
     const have = new Set(gateBlocks(extraText).map((block) => block.id));
+    const reCarried = carried.filter((gate) => have.has(gate.id) && adopted.get(gate.id) !== gate.digest);
+    if (reCarried.length) {
+      throw new Error(`ship-gates: ${reCarried.map((gate) => gate.id).join(', ')} in ${extrasFile} no longer match their adopted definitions; remove them from ${extrasFile} and their lines in ${adoptedFile}, then re-run with SHIP_LEDGER_ADOPT=1 to carry the new definitions in for review`);
+    }
     const add = carried.filter((gate) => !have.has(gate.id));
     if (add.length) {
       if (!extraText.trim()) extraText = '# Extra gates carried out of the project\n';
