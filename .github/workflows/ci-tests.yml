@@ -238,6 +238,29 @@ jobs:
           done
           echo "Cold-board fixture stress: 50/50 passed"
 
+      - name: Fixture handoff in one process
+        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/changed-files.txt"
+          if ! grep -Eq '^tests/compose-task-palette\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
+            echo "Palette fixture unchanged; no one-process handoff run needed."
+            exit 0
+          fi
+          npm run flags:generate
+          node --test --test-isolation=none --test-concurrency=1 \
+            tests/compose-task-palette.test.cjs \
+            tests/htpr-7307-ctrlj-footer-clickable.test.cjs \
+            tests/htpr-7306-ctrlj-footer-one-line.test.cjs \
+            tests/htpr-7305-board-from-text.test.cjs \
+            tests/htpr-7652-ctrlj-enter-queue.test.cjs \
+            tests/htpr-7656-ctrlj-skill-menu.test.cjs \
+            tests/htpr-7675-ctrlj-enter-before-text-renders.test.cjs \
+            tests/htpr-6891-phone-task-writer-sheet.test.cjs
+          echo "One-process fixture handoff passed: palette file then every file that compiles it"
+
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).
       # HT_REQUIRE_PG_TESTS turns the real-PostgreSQL suites' "docker missing"
