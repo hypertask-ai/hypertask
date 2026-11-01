@@ -149,6 +149,27 @@ test('the deeper proof gate is read from the home ticket folder, and an older pr
   }
 });
 
+test('the deeper proof gate still counts with no session id, and reads no project folder then', needsUnlazy, () => {
+  const f = fixture();
+  const gate = (note) => `- [ ] HTPR-6819.deeper-path: ${note}\n  CHECK: true\n  EXPECT: true\n`;
+  try {
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates');
+    fs.mkdirSync(path.join(f.project, '.unlazy/s-abcdef12/gates'), { recursive: true });
+    fs.writeFileSync(path.join(f.project, '.unlazy/s-abcdef12/gates/extra.md'), gate('a project copy'));
+    const noId = deeper(f, 'HTPR-6819');
+    assert.notEqual(noId.status, 0, 'a project gate counted without a session id');
+    assert.match(noId.stdout, /a manual note does not count/);
+
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'extra.md'), gate('the ledger lives at home'));
+    const found = deeper(f, 'HTPR-6819');
+    assert.equal(found.status, 0, `${found.stdout}${found.stderr}`);
+    assert.match(found.stdout, /deeper ok/);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 test('the owning session moves its ledger to another checkout and earns its gates again', needsUnlazy, () => {
   const f = fixture();
   const main = path.join(f.root, 'main');

@@ -59,8 +59,10 @@ legacy_gates_dir() {
 }
 
 deeper_gate_runnable() {
-  local f dir
-  for dir in "$(ledger_gates_dir "$1")" "$(legacy_gates_dir)"; do
+  local f dir legacy dirs=()
+  dirs=("$(ledger_gates_dir "$1")")
+  if legacy=$(legacy_gates_dir); then dirs+=("$legacy"); fi
+  for dir in "${dirs[@]}"; do
     for f in "$dir"/*.md; do
       [ -f "$f" ] || continue
       awk -v id="$2" '
