@@ -1281,7 +1281,7 @@ git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-901-fix 2>/dev/null; e
 N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote branch" || ok "nochange refuses an origin branch ahead of base"
 
 # deeper gate (YPER4-435): a Deeper: activity with the four parts and a runnable proof gate in the ticket folder.
-DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/state/.unlazy/ledgers/YPER4-902/gates"
+DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo" "$DP/state/.unlazy/ledgers/YPER4-902/gates"
 printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
 chmod +x "$DP/bin/ht"; export DP
 DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" SHIP_STATE_ROOT="$DP/state" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }

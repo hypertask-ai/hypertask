@@ -8,6 +8,7 @@ const { spawnSync } = require('node:child_process');
 const repo = path.resolve(__dirname, '..');
 const shipGates = path.join(repo, '.claude/skills/ship/scripts/ship-gates');
 const shipCheck = path.join(repo, '.claude/skills/ship/scripts/ship-check');
+const pinnedUnlazy = path.join(process.env.HOME || os.homedir(), '.agents/skills/unlazy/scripts');
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-ledger-home-'));
@@ -17,7 +18,9 @@ function fixture() {
   fs.mkdirSync(path.join(home, '.agents/skills/unlazy/scripts'), { recursive: true });
   fs.mkdirSync(path.join(home, '.agents/skills/ship/scripts'), { recursive: true });
   fs.mkdirSync(project);
-  // The generated checks call the fake ship-check, so no gate reaches the network.
+  assert.ok(fs.existsSync(path.join(pinnedUnlazy, 'lib/gates.mjs')),
+    `ship-gates imports ${pinnedUnlazy}/lib/gates.mjs; run this in ship-scripts-tests-siblings, which installs the pinned unlazy checkout`);
+  fs.symlinkSync(path.join(pinnedUnlazy, 'lib'), path.join(home, '.agents/skills/unlazy/scripts/lib'), 'dir');
   fs.writeFileSync(path.join(home, '.agents/skills/ship/scripts/ship-check'),
     '#!/usr/bin/env bash\necho "marker ok"\n', { mode: 0o755 });
   fs.writeFileSync(path.join(home, '.agents/skills/unlazy/scripts/gate-check.mjs'),
@@ -27,9 +30,9 @@ function fixture() {
   return { root, home, project, calls };
 }
 
-function gates(f, ticket, session, extraEnv = {}) {
+function gates(f, ticket, session, { cwd = f.project, ...extraEnv } = {}) {
   const result = spawnSync('bash', [shipGates, ticket], {
-    cwd: f.project,
+    cwd,
     encoding: 'utf8',
     env: {
       PATH: process.env.PATH,
@@ -72,9 +75,7 @@ test('ship writes the ledger to the home ticket folder and leaves the project cl
     const text = fs.readFileSync(ledger, 'utf8');
     assert.equal(text.match(/^- \[ \] HTPR-6819\./gm).length, 9);
     assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionA-full\n');
-    // The whole point: the project holds no session state at all, not even locks.
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
-    // Gate checks run against the ticket folder, so a later re-run cannot leave locks behind either.
     const call = JSON.parse(fs.readFileSync(f.calls, 'utf8').trim().split('\n')[0]);
     assert.equal(call[0], '--approve');
     assert.equal(call[1], ledger);
@@ -94,11 +95,39 @@ test('a later session continues the same ticket ledger instead of needing a new 
     assert.match(result.stderr, /HTPR-6819 ledger moved from session sessionA-full to sessionB-full/);
     assert.equal(fs.readFileSync(ledger, 'utf8'), before);
     assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/session'), 'utf8'), 'sessionB-full\n');
-    // A second ticket gets its own folder rather than joining another ticket's ledger.
     gates(f, 'YPER4-123', 'sessionB-full');
     const other = path.join(f.home, '.unlazy/ledgers/YPER4-123/GATES.md');
     assert.equal(fs.readFileSync(other, 'utf8').match(/^- \[ \] YPER4-123\./gm).length, 8);
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a session in another worktree moves the ticket gates only when it asks to', () => {
+  const f = fixture();
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+    const worktree = path.join(f.root, 'project-worktree');
+    fs.mkdirSync(worktree);
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full' },
+    });
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /re-run with SHIP_LEDGER_MOVE=1/);
+    assert.equal(fs.readFileSync(ledger, 'utf8').includes(`  CWD: ${f.project}`), true);
+
+    const result = gates(f, 'HTPR-6819', 'sessionB-full', { cwd: worktree, SHIP_LEDGER_MOVE: '1' });
+    assert.match(result.stderr, /HTPR-6819 ledger gates moved from /);
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.equal(text.match(/^ {2}CWD: /gm).length, 9);
+    assert.equal(text.split('\n').filter((line) => line === `  CWD: ${worktree}`).length, 9);
+    assert.equal(fs.existsSync(path.join(worktree, '.unlazy')), false);
+    const call = JSON.parse(fs.readFileSync(f.calls, 'utf8').trim().split('\n').pop());
+    assert.equal(call[call.indexOf('--root') + 1], path.dirname(ledger));
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
@@ -115,7 +144,6 @@ test('the deeper proof gate is read from the home ticket folder, never from the 
     assert.equal(found.status, 0, `${found.stdout}${found.stderr}`);
     assert.match(found.stdout, /deeper ok/);
 
-    // A gate left behind in the project is not read any more: the reader moved, it was not copied.
     fs.rmSync(folder, { recursive: true, force: true });
     const stale = path.join(f.project, '.unlazy/s-abcdef12/gates');
     fs.mkdirSync(stale, { recursive: true });

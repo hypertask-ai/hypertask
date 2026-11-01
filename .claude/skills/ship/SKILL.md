@@ -19,7 +19,7 @@ Runners use headless QA browsers, never Valentin's browser or login. Only HT Pro
 
 ## Write the proof gates
 
-Run `ship-gates` after claiming. It creates the ticket's ledger under `~/.unlazy/ledgers/<TICKET>/`, one folder per ticket outside the project, and keeps no session state in the worktree. Use `unlazy`; inspect and separately approve extra checks in that folder's `gates/extra.md`. Keep one observable outcome per gate. Re-run the ledger after each step and before reporting, with `--root` on the ticket folder so its locks stay out of the project. Never edit generated checks to bypass repository settings or approvals.
+Run `ship-gates` after claiming. It creates the ticket's ledger under `~/.unlazy/ledgers/<TICKET>/`, one folder per ticket outside the project, and keeps no session state in the worktree. Use `unlazy`; inspect and separately approve extra checks in that folder's `gates/extra.md`. Keep one observable outcome per gate. Re-run the ledger after each step and before reporting, with `--root` on the ticket folder so its locks stay out of the project. A ledger written from another worktree is refused until you re-run with `SHIP_LEDGER_MOVE=1`, which moves its generated gates to this checkout. Never edit generated checks to bypass repository settings or approvals.
 
 Before building, record one `Deeper:` activity with **field**, **raw source**, **method**, **outside proof**, **breaks if**, and **proof gate**. Name the extra runnable gate `<TICKET>.deeper-<name>`. Use real source, the real entry point, shipped flag mode, realistic data, and affected shared systems. Capture a before baseline for the most likely regression. A proof that still passes that regression is not enough. Improve the method, not the scope.
 
