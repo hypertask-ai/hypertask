@@ -483,10 +483,6 @@ test('a cancel with no answer is reported until it leaves the recovery window', 
   assert.deepEqual(written.at(-1), [{ ...uncertain, tries: 2 }]);
 });
 
-// HYCI-71. The rule drops from eight minutes to three and the sweep stops
-// depending on a cron that GitHub delivers every few hours. Both sides of the new
-// boundary are pinned: a job quiet for two minutes is still working, one quiet
-// for four is not.
 test('the rule is three minutes and both sides of it are pinned', () => {
   const at = (iso) => job('test-shard (1)', 'in_progress', [step('Test shard', iso)]);
   assert.equal(STUCK_MINUTES, 3);
