@@ -55,6 +55,7 @@ function run(command, args, label, { concurrency = 1, lane = 0, serial = false, 
   const runIndex = timingFiles++;
   const timingFile = path.join(timingDirectory, `${runIndex}.jsonl`);
   const todoFile = path.join(timingDirectory, `${runIndex}.tap`);
+  const files = nodeTests ? args.filter((arg) => arg.endsWith(".test.cjs")) : [];
   if (nodeTests) {
     args = [
       "--test-reporter=spec", "--test-reporter-destination=stdout",
@@ -90,23 +91,30 @@ function run(command, args, label, { concurrency = 1, lane = 0, serial = false, 
     child.on("close", (status, signal) => {
       const durationMs = performance.now() - runStartedAt;
       if (lane > 0) for (const chunk of buffered) process.stdout.write(chunk);
+      const reported = new Set();
       if (nodeTests) {
         if (existsSync(todoFile)) {
           passingTodos.push(...findPassingTodos(readFileSync(todoFile, "utf8")));
           rmSync(todoFile, { force: true });
         }
-        for (const line of readFileSync(timingFile, "utf8").trim().split("\n").filter(Boolean)) {
+        for (const line of (existsSync(timingFile) ? readFileSync(timingFile, "utf8") : "").trim().split("\n").filter(Boolean)) {
           const entry = JSON.parse(line);
+          reported.add(entry.file);
           if (entry.shared) sharedFileDurations.push({ file: entry.file, testMs: entry.durationMs });
           else fileDurations.push({ ...entry, concurrency, serial });
         }
         if (lane > 0) {
-          fileDurations.push({ file: label, durationMs, concurrency, lane, fileCount: args.filter((arg) => arg.endsWith(".test.cjs")).length });
+          fileDurations.push({ file: label, durationMs, concurrency, lane, fileCount: files.length });
         }
       } else {
         fileDurations.push({ file: args.at(-1), durationMs, concurrency, serial });
       }
       const outcome = checkOutcome(status ?? 1, parser.finish(), quarantine);
+      if (signal && deferred && files.length > 0) {
+        const lost = files.filter((file) => !reported.has(file));
+        console.error(`${label} terminated by ${signal}; ${lost.length} file(s) of this run lost their result.`);
+        return resolve({ failed: status || 1, lost, reportedFailure: outcome.blocking.length > 0 });
+      }
       if (signal) {
         console.error(`${label} terminated by ${signal}`);
         process.exit(1);
@@ -261,6 +269,7 @@ if (cjsTests.length > 0) {
   for (const [index, files] of laneGroups.entries()) {
     const batches = batchLaneFiles(files, { maxFiles: TEST_LANE_FILE_CAP, maxBytes: TEST_LANE_BYTE_CAP, weightOf });
     jobs.push((async () => {
+      let failed = 0;
       for (const [batchIndex, batch] of batches.entries()) {
         const label = batches.length === 1
           ? `Shared Node lane ${index + 1}/${laneGroups.length} (${batch.length} files)`
@@ -271,9 +280,26 @@ if (cjsTests.length > 0) {
           label,
           { concurrency: laneGroups.length, lane: index + 1, deferred: true },
         );
+        if (result.lost?.length) {
+          if (result.reportedFailure) failed ||= result.failed;
+          console.error(`Re-running ${result.lost.length} file(s) alone so their results survive: ${result.lost.join(", ")}`);
+          for (const file of result.lost) {
+            const recovered = await run(
+              process.execPath,
+              ["--test", FILE_TIMEOUT, "--test-concurrency=1", TEST_ISOLATION, file],
+              `Recovered Node test: ${file}`,
+              { deferred: true },
+            );
+            if (recovered.failed) {
+              failed ||= recovered.failed;
+              console.error(`Failed alone: ${file}`);
+            }
+          }
+          continue;
+        }
         if (result.failed) return result;
       }
-      return { failed: 0 };
+      return { failed };
     })());
   }
   const results = await Promise.all(jobs);

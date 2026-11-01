@@ -130,6 +130,7 @@ test("process-wide state, loader edits and their helpers keep their own process"
     "stdout-listener.test.cjs": `process.stdout.on('data', () => {});`,
     "prototype-patch.test.cjs": `Date.prototype.toISOString = () => '';`,
     "loader-edit.test.cjs": `require('node:module')._resolveFilename = () => '';`,
+    "self-kill.test.cjs": `process.kill(process.pid, 'SIGKILL');`,
     "helper-user.test.cjs": `require('./helpers/env-poison.cjs');`,
     "clean.test.cjs": `require('node:test')('clean', () => {});`,
   };
@@ -157,6 +158,27 @@ test("a lane over the file cap runs in bounded batches without dropping a file",
   assert.equal(lanes.reduce((total, row) => total + row.fileCount, 0), names.length);
   const laneWalls = lanes.reduce((walls, row) => walls.set(row.lane, (walls.get(row.lane) ?? 0) + row.durationMs), new Map());
   assert.equal(report.longestLaneMs, Math.max(...laneWalls.values()), "a lane's wall time sums its sequential batches");
+});
+
+test("a batch killed mid-flight keeps the other results and names that one file", (t) => {
+  const names = Array.from({ length: 12 }, (_, index) => `neighbour-${index}.test.cjs`);
+  const sources = {
+    "killer.test.cjs": [
+      "const { test } = require('node:test');",
+      "const self = process;",
+      "setTimeout(() => { self.kill(self.pid, 'SIGKILL'); }, 2500);",
+      "test('killer waits for its own deadline', () => {});",
+      "setInterval(() => {}, 1000);",
+    ].join("\n"),
+    ...Object.fromEntries(names.map((name, index) => [name, `require('node:test')('neighbour ${index} result', () => {});`])),
+  };
+  const directory = fixture(t, sources);
+  const { status, stderr, stdout } = run(directory, [], { TEST_LANE_FILE_CAP: "3" });
+  assert.equal(status, 1);
+  for (let index = 0; index < names.length; index++) assert.match(stdout, new RegExp(`neighbour ${index} result`));
+  assert.match(stderr, /terminated by SIGKILL; \d+ file\(s\) of this run lost their result/);
+  assert.match(stderr, /Re-running \d+ file\(s\) alone so their results survive: .*tests\/killer\.test\.cjs/);
+  assert.match(stderr, /Failed alone: tests\/killer\.test\.cjs/);
 });
 
 test("one worker runs every file in the pool instead of two classes at once", (t) => {

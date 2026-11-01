@@ -12,6 +12,7 @@ const STATIC_HAZARDS = [
   /process\.(?:on|once|off|addListener|prependListener|removeListener|removeAllListeners)\s*\(/,
   /process\.(?:setUncaughtExceptionCaptureCallback|setUnhandledRejectionCaptureCallback)\s*\(/,
   /process\.(?:exit|chdir|umask)\s*\(/,
+  /process\.(?:kill|abort)\s*\(/,
   /process\.(?:exitCode|title)\s*=[^=]/,
   /process\.(?:stdout|stderr)\s*(?:\[[^\]]+\]|\.[A-Za-z0-9_$]+)\s*=[^=]/,
   /process\.(?:stdout|stderr)\.(?:on|once|addListener|prependListener)\s*\(/,
