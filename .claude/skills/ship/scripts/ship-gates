@@ -54,40 +54,53 @@ const read = (file) => {
   try { return readStableRegularFile(file, { root: state }); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
 };
+// The gate ship-gates writes for <ticket>.<name>, or null for any other gate.
+const standardGate = (id) => {
+  const match = (id || '').match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/);
+  if (!match || match[1] !== ticket || (match[2] === 'proof' && !ticket.startsWith('HTPR-'))) return null;
+  return gates[match[2]] ? match[2] : null;
+};
+// Never let --approve authorize a CHECK added by another ledger author.
+// Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for other repos.
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
 await withFileLock(state, ledger, () => {
   const binding = `${dirname(ledger)}/session`;
   const bound = read(binding).trim();
   let text = read(ledger);
   // The ticket owns its ledger, so a later session continues it instead of needing a new folder.
-  // That session also owns the cleanup, so the previous session's result cannot stand for it.
+  // That session works in its own checkout, so the gates ship-gates wrote itself are dropped and
+  // written again here: they cannot keep the previous worktree, repository or an earlier result.
   if (bound && bound !== session.trim() && text) {
-    const lines = text.split('\n');
-    let inside = false;
-    for (let i = 0; i < lines.length; i += 1) {
-      const head = lines[i].match(/^- \[[ xX]\] (\S+?):/);
-      if (head) inside = head[1] === `${ticket}.cleaned`;
-      else if (/^[^ ]/.test(lines[i])) inside = false;
-      if (!inside) continue;
-      if (/^- \[[ xX]\] /.test(lines[i])) lines[i] = lines[i].replace(/^- \[[ xX]\] /, '- [ ] ');
-      else if (/^ {2}EVIDENCE: /.test(lines[i])) lines[i] = '  EVIDENCE: pending';
+    const stale = new Set(parseGates(text).gates
+      .filter((gate) => {
+        const name = standardGate(gate.id);
+        return name && generatedCheck.test(gate.check || '') && gate.expect === gates[name][1];
+      })
+      .map((gate) => gate.id));
+    const kept = [];
+    let dropping = false;
+    for (const line of text.split('\n')) {
+      const head = line.match(/^- \[[ xX]\] (\S+?):/);
+      if (head) dropping = stale.has(head[1]);
+      else if (/^[^ ]/.test(line)) dropping = false;
+      if (!dropping) kept.push(line);
     }
-    text = lines.join('\n');
-    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}\n`);
+    text = kept.join('\n');
+    process.stderr.write(`ship-gates: ${ticket} ledger moved from session ${bound} to ${session.trim()}; ${stale.size} generated gates written again at ${root}\n`);
   }
   const doc = parseGates(text, { requireGates: !!text });
   if (doc.errors.length) throw new Error(doc.errors.join('; '));
-  // Never let --approve authorize a CHECK added by another ledger author.
-  // Allowed: the bare ship-check call, optionally behind the exact env prefix ship-gates writes for other repos.
-  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
   for (const gate of doc.gates) {
-    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/);
-    if (!match && !gate.check) continue;
-    if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
-        !generatedCheck.test(gate.check) || !gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) ||
-        gate.expect !== gates[match[2]][1] || gate.cwd !== root) {
-      throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
+    const name = standardGate(gate.id);
+    const generated = name && generatedCheck.test(gate.check || '') &&
+      gate.check.endsWith(`${quote(check)} ${name} ${ticket}`) && gate.expect === gates[name][1];
+    if (generated) {
+      if (gate.cwd !== root) throw new Error(`ship-gates: ${ticket} ledger holds gates written in ${gate.cwd}; finish them there, or let a session that started here continue it`);
+      continue;
     }
+    if (!gate.check) continue;
+    throw new Error(`ship-gates: refusing to approve non-generated gate ${gate.id}; put extra gates in gates/extra.md and review them separately`);
   }
   if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
   for (const [name, [title, expect]] of Object.entries(gates)) {
