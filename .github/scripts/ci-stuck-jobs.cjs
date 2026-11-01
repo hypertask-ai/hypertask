@@ -30,6 +30,20 @@ const SETTLE_DELAY_MS = 5000;
 const PR_EVENT = 'pull_request';
 const REPORT_ONLY = 'report';
 const FAILED = new Set(['failure', 'timed_out', 'startup_failure']);
+// A cancel that does not settle, or a re-run that fails after it, used to leave
+// the run cancelled for good: every later sweep reads in-progress runs only, so
+// nothing re-ran it and the pull request kept a cancelled check for ever. The
+// cancelled run id is written to a repository variable, and every later sweep
+// finishes the recoveries its predecessor started. Only a run this sweep
+// cancelled itself is ever recorded, so a run a person cancelled never enters it.
+const PENDING_VARIABLE = 'STUCK_RECOVERY_PENDING';
+const PENDING_LIMIT = 20;
+const RECOVERY_ATTEMPTS = 3;
+const PENDING_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+const SETTLE_FAILED = 'cancel did not settle';
+const RERUN_FAILED = 're-run request failed';
+const JOBS_UNAVAILABLE = 'job list unavailable after the cancel';
+const CARRY_ON = new Set([SETTLE_FAILED, RERUN_FAILED, JOBS_UNAVAILABLE]);
 
 function stepEnd(step) {
   return step && step.completed_at ? Date.parse(step.completed_at) : null;
@@ -84,16 +98,17 @@ function decide(run, jobs, { now = Date.now(), stuckMinutes = STUCK_MINUTES, rec
   };
 }
 
-function ghApi(args) {
+function ghApi(args, fields) {
+  const body = fields ? Object.entries(fields).flatMap(([key, value]) => ['-f', `${key}=${value}`]) : [];
   return new Promise((resolve, reject) => {
-    execFile('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 60000 }, (error, stdout) =>
+    execFile('gh', ['api', ...args, ...body], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 60000 }, (error, stdout) =>
       error ? reject(new Error(`gh api ${args[0]} failed: ${String(error.message).slice(0, 200)}`)) : resolve(stdout));
   });
 }
 
-async function json(path, method = 'GET') {
-  const args = method === 'GET' ? [path] : ['-X', 'POST', path];
-  const stdout = await ghApi(args);
+async function json(path, method = 'GET', fields = undefined) {
+  const args = method === 'GET' ? [path] : ['-X', method, path];
+  const stdout = await ghApi(args, fields);
   try {
     return JSON.parse(stdout || '{}');
   } catch {
@@ -134,10 +149,16 @@ async function apply(repo, decisions, { api = json, settle = settleCancel } = {}
   for (const decision of decisions.filter(entry => entry.action === 'cancel')) {
     await api(`/repos/${repo}/actions/runs/${decision.runId}/cancel`, 'POST');
     if (!(await settle(repo, decision.runId, api))) {
-      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'cancel did not settle' });
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: SETTLE_FAILED });
       continue;
     }
-    const jobs = await jobsOf(repo, decision.runId, api);
+    let jobs;
+    try {
+      jobs = await jobsOf(repo, decision.runId, api);
+    } catch {
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: JOBS_UNAVAILABLE });
+      continue;
+    }
     if (jobs.some(holdsFailure)) {
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'a genuine failure appeared' });
       continue;
@@ -147,10 +168,97 @@ async function apply(repo, decisions, { api = json, settle = settleCancel } = {}
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'no job left cancelled' });
       continue;
     }
-    await api(`/repos/${repo}/actions/runs/${decision.runId}/rerun-failed-jobs`, 'POST');
-    done.push({ runId: decision.runId, action: 'recover', rerun: true, jobs: cutOff });
+    try {
+      await api(`/repos/${repo}/actions/runs/${decision.runId}/rerun-failed-jobs`, 'POST');
+      done.push({ runId: decision.runId, action: 'recover', rerun: true, jobs: cutOff });
+    } catch {
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: RERUN_FAILED });
+    }
   }
   return done;
+}
+
+function pendingList(value) {
+  try {
+    const parsed = JSON.parse(value ?? '[]');
+    return Array.isArray(parsed)
+      ? parsed.filter(entry => Number.isInteger(entry?.runId) && typeof entry.cancelledAt === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+async function readPending(repo, api = json) {
+  try {
+    const payload = await api(`/repos/${repo}/actions/variables/${PENDING_VARIABLE}`);
+    return pendingList(payload.value);
+  } catch {
+    return [];
+  }
+}
+
+async function writePending(repo, pending, api = json) {
+  const value = JSON.stringify(pending.slice(0, PENDING_LIMIT));
+  try {
+    await api(`/repos/${repo}/actions/variables/${PENDING_VARIABLE}`, 'PATCH', { name: PENDING_VARIABLE, value });
+    return true;
+  } catch {
+    try {
+      await api(`/repos/${repo}/actions/variables`, 'POST', { name: PENDING_VARIABLE, value });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
+// One stored cancel, carried by whichever sweep comes next: the cancel already
+// landed, so the only question is whether the run now holds the cancelled jobs
+// this sweep would have re-run, and whether it still may be re-run at all.
+async function resume(repo, entry, { api = json, now = Date.now(), attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS } = {}) {
+  if (!(now - Date.parse(entry.cancelledAt) <= maxAgeMs)) {
+    return { runId: entry.runId, action: 'drop', reason: 'older than the recovery window' };
+  }
+  if ((entry.tries ?? 0) >= attempts) {
+    return { runId: entry.runId, action: 'drop', reason: `still not re-run after ${attempts} sweeps` };
+  }
+  const run = await api(`/repos/${repo}/actions/runs/${entry.runId}`);
+  if (run.status !== 'completed') {
+    return { runId: entry.runId, action: 'wait', reason: 'the cancel has not settled yet', keep: true };
+  }
+  const jobs = await jobsOf(repo, entry.runId, api);
+  if (jobs.some(holdsFailure)) {
+    return { runId: entry.runId, action: 'drop', reason: 'a genuine failure appeared' };
+  }
+  const cutOff = jobs.filter(job => job.conclusion === 'cancelled').map(job => job.name);
+  if (!cutOff.length) {
+    return { runId: entry.runId, action: 'drop', reason: 'no job left cancelled' };
+  }
+  try {
+    await api(`/repos/${repo}/actions/runs/${entry.runId}/rerun-failed-jobs`, 'POST');
+    return { runId: entry.runId, action: 'recover', rerun: true, jobs: cutOff };
+  } catch {
+    return { runId: entry.runId, action: 'wait', reason: RERUN_FAILED, keep: true };
+  }
+}
+
+async function recover(repo, decisions, { api = json, settle = settleCancel, now = Date.now(), pending = [], save = null, attempts = RECOVERY_ATTEMPTS, maxAgeMs = PENDING_MAX_AGE_MS } = {}) {
+  const done = [];
+  const carried = [];
+  for (const entry of pending) {
+    const outcome = await resume(repo, entry, { api, now, attempts, maxAgeMs });
+    done.push(outcome);
+    if (outcome.keep) carried.push({ ...entry, tries: (entry.tries ?? 0) + 1 });
+  }
+  for (const entry of await apply(repo, decisions, { api, settle })) {
+    done.push(entry);
+    if (CARRY_ON.has(entry.reason)) carried.push({ runId: entry.runId, cancelledAt: new Date(now).toISOString(), tries: 1 });
+  }
+  const next = carried.slice(0, PENDING_LIMIT);
+  const changed = JSON.stringify(next) !== JSON.stringify(pending);
+  const saved = !changed || !save ? true : await save(next);
+  return { done, pending: next, saved };
 }
 
 async function settleCancel(repo, runId, api) {
@@ -179,9 +287,22 @@ async function main() {
   const decisions = fixture
     ? await fixturePlan(JSON.parse(readFileSync(fixture, 'utf8')), options)
     : await plan(repo, options);
-  const applied = applyChanges && !fixture ? await apply(repo, decisions) : [];
-  const report = { repo, decisions, applied, readOnly: !applyChanges || Boolean(fixture) };
+  const live = applyChanges && !fixture;
+  const pending = live ? await readPending(repo) : [];
+  const recovery = live
+    ? await recover(repo, decisions, { pending, now: options.now, save: list => writePending(repo, list) })
+    : { done: [], pending, saved: true };
+  const report = { repo, decisions, pending, applied: recovery.done, pendingSaved: recovery.saved, readOnly: !live };
   console.log(JSON.stringify(report, null, 2));
+  if (!recovery.saved) {
+    console.log('::warning::A recovery could not be stored, so the next sweep will not finish it.');
+  }
+  for (const outcome of recovery.done.filter(entry => entry.action === 'drop')) {
+    console.log(`::warning::run ${outcome.runId} was cancelled by this sweep and abandoned: ${outcome.reason}.`);
+  }
+  for (const outcome of recovery.done.filter(entry => entry.action === 'recover' && entry.rerun)) {
+    console.log(`::notice::run ${outcome.runId} re-runs after its cancel: ${outcome.jobs.join(', ')}`);
+  }
   if (decisions.some(decision => decision.action === REPORT_ONLY)) {
     console.log('::warning::A run outside the recovery lane is stuck; leaving it to its own lease.');
   }
@@ -196,7 +317,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, resume, recover, pendingList, readPending, writePending, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES, PENDING_VARIABLE };
 
 if (require.main === module) {
   main().catch(error => {

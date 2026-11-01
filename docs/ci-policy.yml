@@ -174,12 +174,16 @@ stuck_job_recovery:
   runs_on: ubuntu-latest
   timeout_minutes: 5
   contributes_jobs_to_pr: false
-  reads: [actions_runs, actions_jobs]
+  reads: [actions_runs, actions_jobs, repository_variable]
   stuck_after_minutes: 8
   recent_minutes: 30
   attempts_touched: 1
   actions: [cancel_run, wait_for_cancel, rerun_failed_jobs]
-  rerun_provenance: run cancelled by this sweep, same invocation
+  rerun_provenance: run cancelled by this sweep, stored in STUCK_RECOVERY_PENDING until the re-run lands
+  pending_recovery:
+    variable: STUCK_RECOVERY_PENDING
+    attempts: 3
+    max_age_hours: 6
   never_act_on: [runs_holding_a_failed_job, runs_not_cancelled_by_this_sweep]
   job_list_after: eligibility_filter
   acts_on: [pull_request_runs]

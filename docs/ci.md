@@ -1394,9 +1394,16 @@ about 28 minutes after it starts instead of 68.0: 11 minutes to finish the work,
 8-18 minutes of capped idle (the 8-minute rule on a 10-minute tick), then a rerun
 of the same 306-478 s jobs.
 
-The sweep re-runs only a run it cancelled itself in the same sweep: the cancel
-call is the provenance, so a run cancelled by a person or by a superseded push is
-history and is never restarted. A run that holds a real `failure`, `timed_out` or
+The sweep re-runs only a run it cancelled itself: the cancel call is the
+provenance, so a run cancelled by a person or by a superseded push is history and
+is never restarted. A cancel only counts once it lands, and the re-run can fail
+after it, so a run whose cancel did not settle, whose job list was unavailable
+after the cancel, or whose re-run request errored is written to the repository
+variable `STUCK_RECOVERY_PENDING` and finished by the next sweep: without that
+record the run was cancelled for good, because every later sweep reads
+in-progress runs only. Only ids this sweep cancelled are ever stored, a stored
+entry is tried at most three times and expires after six hours, and a stored run
+that holds a real failure or no cancelled job is dropped instead of re-run. A run that holds a real `failure`, `timed_out` or
 `startup_failure` job is left alone entirely, and so is a job whose steps include
 a completed `failure`: a job in progress reports no conclusion of its own, so a
 red test step is only visible on the step until the completion report arrives.
@@ -1416,4 +1423,7 @@ never touched, `apply()` refuses the rerun when a failure appears during the
 cancel,
 `apply()` re-runs only the run it cancelled and never a run whose cancel did not
 settle or that finished clean before the cancel landed, a second attempt or a
-stale run is ignored, and an empty job list never cancels blind.
+stale run is ignored, and an empty job list never cancels blind. `recover()`
+carries an unsettled cancel into the next sweep, never carries a run this sweep
+did not cancel, finishes a stored recovery, and drops one that expired, ran out
+of tries, holds a real failure or has no cancelled job left.
