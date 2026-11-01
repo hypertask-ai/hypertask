@@ -208,3 +208,38 @@ test('a commit whose runs are unfinished, cut off or unreadable is never called 
   const unreadableSha = summarize({ name: 'app', repo: 'owner/app' }, rows, new Map());
   assert.equal(unreadableSha.greenPushes, 2);
 });
+
+test('skipped jobs and steps never rank as slow spots', async () => {
+  const { summarize } = await subject;
+  const row = {
+    id: 1, sha: 'abc', workflow: 'ci', waiting: 5, wall: 300, setup: 20, tests: 250, other: 5, gap: 0,
+    clipped: false, createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:05:00Z', conclusion: 'success',
+  };
+  const jobs = [
+    {
+      name: 'ci', conclusion: 'success', started_at: '2026-10-31T10:00:10Z', completed_at: '2026-10-31T10:04:00Z',
+      steps: [
+        { name: 'Run npm ci', conclusion: 'success', started_at: '2026-10-31T10:00:10Z', completed_at: '2026-10-31T10:01:10Z' },
+        { name: 'Run npm ci again', conclusion: 'skipped', started_at: '2026-10-31T10:01:10Z', completed_at: '2026-10-31T10:02:10Z' },
+      ],
+    },
+    { name: 'docs', conclusion: 'skipped', started_at: '2026-10-31T10:00:10Z', completed_at: '2026-10-31T10:00:20Z', steps: [] },
+    { name: 'other', conclusion: 'success', started_at: '2026-10-31T10:01:00Z', completed_at: '2026-10-31T10:03:00Z', steps: [] },
+  ];
+  const summary = summarize({ name: 'app', repo: 'owner/app' }, [row, { ...row, id: 2 }], new Map([[1, jobs], [2, jobs]]));
+  assert.deepEqual(summary.slowSpots.map(spot => spot.work), ['ci / ci', 'ci / other']);
+  assert.deepEqual(summary.setupSteps.map(spot => spot.work), ['ci / Run npm ci']);
+});
+
+test('the fixture replay honours repo and run limits', () => {
+  const one = spawnSync(process.execPath, ['scripts/ci-check-time.mjs', '--fixture', fixturePath, '--json', '--limit', '2'], {
+    cwd: path.join(__dirname, '..'), encoding: 'utf8',
+  });
+  assert.equal(one.status, 0, one.stderr);
+  assert.deepEqual(JSON.parse(one.stdout).apps.map(app => app.runs), [2, 2]);
+  const narrowed = spawnSync(process.execPath, ['scripts/ci-check-time.mjs', '--fixture', fixturePath, '--json', '--repos', 'valentinyeo/postbox'], {
+    cwd: path.join(__dirname, '..'), encoding: 'utf8',
+  });
+  assert.equal(narrowed.status, 0, narrowed.stderr);
+  assert.deepEqual(JSON.parse(narrowed.stdout).apps.map(app => app.repo), ['valentinyeo/postbox']);
+});

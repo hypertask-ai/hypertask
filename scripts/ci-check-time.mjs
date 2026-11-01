@@ -150,8 +150,10 @@ export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new 
   const stepEntries = [];
   for (const row of measured) {
     for (const job of jobsByRun.get(row.id) ?? []) {
+      if (IDLE.has(job.conclusion ?? '')) continue;
       jobEntries.push({ work: `${row.workflow} / ${job.name}`, seconds: seconds(job.started_at, job.completed_at) });
       for (const step of job.steps ?? []) {
+        if (IDLE.has(step.conclusion ?? '')) continue;
         stepEntries.push({ work: `${job.name} / ${step.name}`, seconds: seconds(step.started_at, step.completed_at), bucket: classifyStep(step.name) });
       }
     }
@@ -390,7 +392,10 @@ export async function main(args = process.argv.slice(2)) {
   const summaries = [];
   if (options.fixture) {
     const payload = JSON.parse(readFileSync(options.fixture, 'utf8'));
-    summaries.push(...(payload.apps ?? []).map(appFromFixture));
+    const wanted = new Set(apps.map(app => app.repo));
+    summaries.push(...(payload.apps ?? [])
+      .filter(entry => wanted.has(entry.repo))
+      .map(entry => appFromFixture({ ...entry, runs: entry.runs.slice(0, options.limit) })));
   } else {
     for (const app of apps) {
       const { rows, jobsByRun, excluded, commits } = await collectApp(app, { limit: options.limit });
