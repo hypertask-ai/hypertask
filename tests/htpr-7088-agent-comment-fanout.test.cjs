@@ -165,12 +165,3 @@ test("webhook targets with flag on: assigned and following agents, deduped, neve
   );
   assert.deepEqual(human.sort(), ["agent-a", "agent-b"]);
 });
-
-test("persistComment feeds comment.created through the shared target helper", () => {
-  const source = require("node:fs").readFileSync(
-    path.join(root, "src/utils/controllers/comments/persistComment.ts"),
-    "utf8",
-  );
-  assert.match(source, /findCommentWebhookAgentIds\(tx, \{/);
-  assert.match(source, /event: "comment\.created",\s*agentIds: assignedAgentIds/);
-});

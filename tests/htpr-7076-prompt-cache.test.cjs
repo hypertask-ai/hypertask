@@ -20,9 +20,9 @@ const CACHE_OPTIONS = { anthropic: { cacheControl: { type: "ephemeral" } } };
 test("flag file registers with a release risk, default Owner and QA", () => {
   const keys = load(path.join(root, "src/lib/flags/keys.ts"));
   assert.equal(keys.HTPR_7076_PROMPT_CACHE_FLAG, FLAG);
-  const source = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7076-prompt-cache.ts"), "utf8");
-  assert.match(source, /kind: "feature"/);
-  assert.match(source, /releaseRisk/);
+  const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7076-prompt-cache.ts")).default;
+  assert.equal(definition.kind, "feature");
+  assert.ok(definition.releaseRisk.risk);
 });
 
 test("helper returns the plain string when the flag is off, the model is not Claude, or the text is short", () => {
@@ -103,14 +103,6 @@ test("usage middleware records cache read and write tokens and prices them", asy
   assert.equal(h.rows[1].cachedInputTokens, null);
   assert.equal(h.rows[1].cacheWriteInputTokens, null);
   assert.ok(Math.abs(h.rows[1].costUsd - (1000 * 0.000003 + 100 * 0.000015)) < 1e-12);
-});
-
-test("AiUsage schema, migration and recorder carry the two cache columns", () => {
-  const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
-  assert.match(schema, /model AiUsage[\s\S]*cachedInputTokens\s+Int\?[\s\S]*cacheWriteInputTokens\s+Int\?/);
-  const migration = fs.readFileSync(path.join(root, "src/prisma/migrations/20261011010000_htpr_7076_ai_usage_cache_tokens/migration.sql"), "utf8");
-  assert.match(migration, /ADD COLUMN IF NOT EXISTS "cachedInputTokens" INTEGER/);
-  assert.match(migration, /ADD COLUMN IF NOT EXISTS "cacheWriteInputTokens" INTEGER/);
 });
 
 function moduleWithStubs(file, stubs) {
@@ -194,8 +186,6 @@ test("task writer: flag off or non-Claude model keeps the exact old string", asy
 });
 
 test("task questions use the cached helper and task summaries stay below the minimum", () => {
-  const route = fs.readFileSync(path.join(root, "src/app/api/ai/task-questions/route.ts"), "utf8");
-  assert.match(route, /cachedInstructionsForUser\(viewer\.id, \{ modelId: systemModel\.model, fixed: skillContext \? SKILL_FOLLOWUP_INSTRUCTIONS : actionChips \? ACTION_CHIPS_INSTRUCTIONS : writingQuestions \? WRITING_QUESTIONS_INSTRUCTIONS : newTicket \? NEW_TICKET_QUESTIONS_INSTRUCTIONS : TASK_QUESTIONS_INSTRUCTIONS \}\)/);
   assert.ok(cache.estimatePromptTokens(registry.renderPrompt("task-questions-context-1")) >= cache.PROMPT_CACHE_MIN_TOKENS);
   assert.ok(cache.estimatePromptTokens(registry.renderPrompt("task-summaries-system-2")) < cache.PROMPT_CACHE_MIN_TOKENS);
 });

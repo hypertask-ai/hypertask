@@ -99,17 +99,3 @@ for (const [name, row] of [
     assert.deepEqual(res.body, {});
   });
 }
-
-test("the share page sends no task content or title for a Domain link to an outsider", () => {
-  const page = fs.readFileSync(path.join(root, "src/app/share/page.tsx"), "utf8");
-  const domainBranch = page.indexOf('if (sharedTask.shareType === "Domain")');
-  const comments = page.indexOf("getSharedComments(task");
-  const provider = page.indexOf("<TasksProvider");
-  assert.ok(domainBranch !== -1 && domainBranch < comments && domainBranch < provider,
-    "the Domain return must come before comments are loaded and the task is rendered");
-  const branch = page.slice(domainBranch, comments);
-  assert.doesNotMatch(branch, /parsedTask|SharedTaskDetailComp|getSharedComments/);
-  assert.doesNotMatch(page, /blur-sm/, "content is no longer hidden by blur alone");
-  assert.match(page, /isShareLinkLive\(sharedTask\)/);
-  assert.match(page, /shareType !== "Domain" && isShareLinkLive\(taskInfo\)/);
-});

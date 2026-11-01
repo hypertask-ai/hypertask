@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const ts = require("typescript");
 const Module = require("node:module");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const FLAG = "htpr-7097-deleted-view-leaves-tabs";
@@ -92,8 +93,8 @@ test("flag off: delete behaves as before and leaves boardTasks alone", async () 
 });
 
 test("the flag is registered as an Everyone-by-default bugfix with release risk", () => {
-  const src = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7097-deleted-view-leaves-tabs.ts"), "utf8");
-  assert.match(src, /kind: "bugfix"/);
-  assert.match(src, /releaseRisk/);
-  assert.match(src, /htpr-7097-deleted-view-leaves-tabs/);
+  const def = loadModule("src/lib/flags/definitions/htpr-7097-deleted-view-leaves-tabs.ts").default;
+  assert.equal(def.key, FLAG);
+  assert.equal(def.kind, "bugfix");
+  assert.ok(def.releaseRisk);
 });
