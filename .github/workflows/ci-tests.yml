@@ -434,6 +434,7 @@ jobs:
           RUN_TESTS: ${{ needs.ci-prepare.outputs.run_tests == 'true' }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.event.pull_request.base.sha }}
           PIP_CACHE_DIR: ${{ runner.temp }}/agent-scope-pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
           SEMGREP_SEND_METRICS: "off"
@@ -695,6 +696,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           HT_REQUIRE_PG_TESTS: ${{ github.event_name == 'push' && '1' || steps.pg.outputs.need }}
+          SOURCE_TEXT_ALLOWLIST_BASE: ${{ github.event.pull_request.base.sha }}
           GITHUB_TOKEN: ""
           GH_TOKEN: ""
         run: |

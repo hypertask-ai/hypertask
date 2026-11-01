@@ -11,26 +11,36 @@ const {
   sampleEvenly,
   allowlistDiff,
 } = require("../scripts/lib/source-text-regex-detector.cjs");
+const { resolveAllowlistBase } = require("../scripts/lib/source-text-allowlist-base.cjs");
 
 const root = resolve(__dirname, "..");
 const allowlistPath = join(root, "tests/source-text-regex-allowlist.json");
 const { allowlist } = JSON.parse(fs.readFileSync(allowlistPath, "utf8"));
-const baseRef = process.env.SOURCE_TEXT_ALLOWLIST_BASE || "origin/production";
 
-function git(args) {
+function git(args, cwd = root) {
   return execFileSync("git", args, {
-    cwd: root,
+    cwd,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
+function branchBaseRef() {
+  try {
+    return resolveAllowlistBase(git);
+  } catch {
+    return "origin/production";
+  }
+}
+
+const baseRef = branchBaseRef();
+
 function readBaseAllowlist() {
   try {
     git(["rev-parse", "--verify", "--quiet", `${baseRef}^{commit}`]);
   } catch {
-    const branch = baseRef.startsWith("origin/") ? baseRef.slice("origin/".length) : baseRef;
-    git(["fetch", "--depth=1", "origin", `${branch}:refs/remotes/origin/${branch}`]);
+    const branch = baseRef.startsWith("origin/") ? baseRef.slice("origin/".length) : "";
+    git(["fetch", "--depth=1", "--no-tags", "origin", branch ? `${branch}:refs/remotes/origin/${branch}` : baseRef]);
   }
   try {
     const parsed = JSON.parse(git(["show", `${baseRef}:tests/source-text-regex-allowlist.json`]));
@@ -50,7 +60,7 @@ function readBaseAllowlist() {
 function growthMessage(added) {
   return [
     "The allowlist at tests/source-text-regex-allowlist.json may only shrink.",
-    `These paths are not on ${baseRef}:`,
+    `These paths are not on the branch's starting allowlist (${baseRef}):`,
     ...added.map((path) => `  - ${path}`),
     "Assert observable behavior instead (call the function, render the component, hit the route).",
     "Removing a path when a test is fixed is allowed. Adding one is not.",
@@ -90,7 +100,7 @@ const baseAllowlist = readBaseAllowlist();
 const ceiling = baseAllowlist ?? allowlist;
 const currentOffenders = findOffenders(root);
 
-test("no offender falls outside the production ceiling", () => {
+test("no offender falls outside the branch's starting ceiling", () => {
   const { removed: newOffenders } = allowlistDiff(ceiling, currentOffenders);
   assert.deepEqual(newOffenders, [], [
     "New tests that read source files as text and regex-match them were detected:",
@@ -98,7 +108,7 @@ test("no offender falls outside the production ceiling", () => {
     "These tests assert implementation, not behavior. They break on harmless refactors.",
     "Assert observable behavior instead.",
     "Call the function, render the component, or hit the route and check the result.",
-    `The ceiling is ${baseAllowlist ? baseRef : "this branch's allowlist, because production does not have the file yet"}.`,
+    `The ceiling is ${baseAllowlist ? baseRef : "this branch's allowlist, because its starting commit does not have the file yet"}.`,
     "The allowlist may only shrink. Existing offenders will be cleaned up in HTPR-7809.",
   ].join("\n"));
 });
@@ -116,7 +126,7 @@ test("the allowlist declares the number of paths it lists", () => {
   );
 });
 
-test("the allowlist may only shrink against the production allowlist", () => {
+test("the allowlist may only shrink against the branch's starting allowlist", () => {
   if (baseAllowlist === null) return;
   const { added } = allowlistDiff(allowlist, baseAllowlist);
   assert.deepEqual(added, [], growthMessage(added));
@@ -152,6 +162,105 @@ test("allowlist differences are sorted in both directions", () => {
     added: ["a", "z"],
     removed: ["b", "y"],
   });
+});
+
+function branchFixture(t) {
+  const dir = fs.mkdtempSync(join(os.tmpdir(), "source-text-base-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const run = (...args) => execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  run("init", "-q", "-b", "production", ".");
+  run("config", "user.email", "ci@example.com");
+  run("config", "user.name", "CI");
+  return {
+    dir,
+    run,
+    revParse: (ref) => run("rev-parse", ref).trim(),
+    commit: (message) => {
+      run("add", "-A");
+      run("commit", "-q", "--allow-empty", "-m", message);
+    },
+    resolver: (env = {}) => resolveAllowlistBase((args) => run(...args), env),
+  };
+}
+
+test("a branch keeps its starting ceiling while production deletes an allowlisted test", (t) => {
+  const repo = branchFixture(t);
+  const offender = join(repo.dir, "tests/offender.test.cjs");
+  const allowlistFile = join(repo.dir, "tests/source-text-regex-allowlist.json");
+  fs.mkdirSync(join(repo.dir, "tests"));
+  fs.writeFileSync(offender, "const s = readFileSync('src/x.ts', 'utf8'); assert.match(s, /x/);\n");
+  fs.writeFileSync(allowlistFile, JSON.stringify({ allowlist: ["tests/offender.test.cjs"] }));
+  repo.commit("production holds one allowlisted offender");
+  const fork = repo.revParse("HEAD");
+  repo.run("checkout", "-q", "-b", "ci-runner-3/hyci-47");
+  fs.writeFileSync(join(repo.dir, "branch.txt"), "branch work\n");
+  repo.commit("branch work");
+  repo.run("checkout", "-q", "-B", "production", fork);
+  fs.rmSync(offender);
+  fs.writeFileSync(allowlistFile, JSON.stringify({ allowlist: [] }));
+  repo.commit("cleanup batch deletes the offender");
+  const productionTip = repo.revParse("HEAD");
+  repo.run("update-ref", "refs/remotes/origin/production", productionTip);
+  repo.run("checkout", "-q", "ci-runner-3/hyci-47");
+  assert.notEqual(productionTip, fork, "the cleanup batch must move production for this case to mean anything");
+  assert.equal(repo.resolver(), fork);
+});
+
+test("a production push is judged against the commit before it, not itself", (t) => {
+  const repo = branchFixture(t);
+  fs.writeFileSync(join(repo.dir, "first.txt"), "one\n");
+  repo.commit("production starts");
+  const start = repo.revParse("HEAD");
+  fs.writeFileSync(join(repo.dir, "second.txt"), "two\n");
+  repo.commit("a push lands on production");
+  const pushed = repo.revParse("HEAD");
+  repo.run("update-ref", "refs/remotes/origin/production", pushed);
+  assert.equal(repo.resolver(), start);
+});
+
+test("a single-commit tree resolves to its own ceiling instead of throwing", (t) => {
+  const repo = branchFixture(t);
+  fs.writeFileSync(join(repo.dir, "only.txt"), "one\n");
+  repo.commit("the only commit");
+  const only = repo.revParse("HEAD");
+  repo.run("update-ref", "refs/remotes/origin/production", only);
+  assert.equal(repo.resolver(), only);
+});
+
+test("a tree with no ancestry settles on the base commit its event pinned", (t) => {
+  const repo = branchFixture(t);
+  fs.writeFileSync(join(repo.dir, "one-commit.txt"), "one\n");
+  repo.commit("a one-commit-deep checkout");
+  const pinned = "9f2c1d8e4b7a6c5d4e3f2a1b0c9d8e7f6a5b4c3d";
+  const shallow = (args) => {
+    if (args[0] === "merge-base") throw new Error("fatal: no merge base in a one-commit checkout");
+    return repo.run(...args);
+  };
+  assert.equal(resolveAllowlistBase(shallow, { SOURCE_TEXT_ALLOWLIST_BASE: pinned }), pinned);
+  assert.throws(() => resolveAllowlistBase(shallow, {}), /no merge base/);
+});
+
+test("a pin newer than the branch start loses to the branch's real start", (t) => {
+  const repo = branchFixture(t);
+  const offender = join(repo.dir, "tests/offender.test.cjs");
+  fs.mkdirSync(join(repo.dir, "tests"));
+  fs.writeFileSync(offender, "const s = readFileSync('src/x.ts', 'utf8'); assert.match(s, /x/);\n");
+  fs.writeFileSync(join(repo.dir, "tests/source-text-regex-allowlist.json"), JSON.stringify({ allowlist: ["tests/offender.test.cjs"] }));
+  repo.commit("production holds one allowlisted offender");
+  const fork = repo.revParse("HEAD");
+  repo.run("checkout", "-q", "-b", "ci-runner-3/hyci-47");
+  fs.writeFileSync(join(repo.dir, "branch.txt"), "branch work\n");
+  repo.commit("branch work");
+  repo.run("checkout", "-q", "-B", "production", fork);
+  fs.rmSync(offender);
+  fs.writeFileSync(join(repo.dir, "tests/source-text-regex-allowlist.json"), JSON.stringify({ allowlist: [] }));
+  repo.commit("cleanup batch deletes the offender");
+  const baseTipAtEvent = repo.revParse("HEAD");
+  repo.run("checkout", "-q", "ci-runner-3/hyci-47");
+  fs.writeFileSync(join(repo.dir, "later.txt"), "a push after the cleanup batch\n");
+  repo.commit("the branch is pushed after the cleanup batch");
+  repo.run("update-ref", "refs/remotes/origin/production", baseTipAtEvent);
+  assert.equal(repo.resolver({ SOURCE_TEXT_ALLOWLIST_BASE: baseTipAtEvent }), fork);
 });
 
 test("a source path stored in an earlier string binding is detected", (t) => {
