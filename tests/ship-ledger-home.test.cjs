@@ -457,3 +457,34 @@ test('a re-adoption refuses when the project copy changed, not recording a diges
     fs.rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('a legacy gate defined twice in two project folders is refused, not silently replaced', needsUnlazy, () => {
+  const f = fixture();
+  const first = path.join(f.project, '.unlazy/s-aaaa1111/GATES.md');
+  const second = path.join(f.project, '.unlazy/s-bbbb2222/GATES.md');
+  const gate = (check) => '# Gates: /ship\n\n' +
+    `- [ ] HTPR-6819.qa-note: the outcome this session still owes\n  CHECK: ${check}\n  EXPECT: carried\n`;
+  const carried = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates/adopted.md');
+  const run = () => spawnSync('bash', [shipGates, 'HTPR-6819'], { cwd: f.project, encoding: 'utf8',
+    env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full', SHIP_LEDGER_ADOPT: '1' } });
+  fs.mkdirSync(path.dirname(first), { recursive: true });
+  fs.mkdirSync(path.dirname(second), { recursive: true });
+  try {
+    fs.writeFileSync(first, gate('echo carried'));
+    fs.writeFileSync(second, gate('echo carried'));
+    const identical = run();
+    assert.equal(identical.status, 0, identical.stderr);
+    assert.equal(fs.readFileSync(carried, 'utf8').match(/^- \[ \] HTPR-6819\.qa-note:/gm).length, 1,
+      'an identical repeat of one gate was carried twice or refused');
+
+    fs.writeFileSync(second, gate('echo other'));
+    fs.rmSync(carried);
+    fs.rmSync(path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md'));
+    const refused = run();
+    assert.notEqual(refused.status, 0, 'the alphabetically first definition replaced the other one');
+    assert.match(refused.stderr, new RegExp(`${first} and ${second} both define HTPR-6819\\.qa-note with different checks`));
+    assert.equal(fs.existsSync(carried), false, 'a conflicting definition was carried anyway');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
