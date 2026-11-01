@@ -952,6 +952,16 @@ jobs:
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      # HYCI-62: the browser revision only moves when package-lock.json does, so a
+      # push restores Chromium from the cache instead of downloading it again.
+      # The key is the one prod-health already fills, so the first run is warm.
+      - name: Restore Playwright browser cache
+        id: restore-playwright-browsers
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -962,6 +972,14 @@ jobs:
           npx playwright install --with-deps chromium
           sudo apt-get update
           sudo apt-get install -y strace
+      # HYCI-62: one saver only. Four shards racing the same key would each pay
+      # the download when the cache misses, and three of the saves would fail.
+      - name: Save Playwright browser cache
+        if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-playwright-browsers.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Prepare disposable local credentials
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         shell: bash
@@ -1215,6 +1233,16 @@ jobs:
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      # HYCI-62: the browser revision only moves when package-lock.json does, so a
+      # push restores Chromium from the cache instead of downloading it again.
+      # The key is the one prod-health already fills, so the first run is warm.
+      - name: Restore Playwright browser cache
+        id: restore-playwright-browsers
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -1444,6 +1472,16 @@ jobs:
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      # HYCI-62: the browser revision only moves when package-lock.json does, so a
+      # push restores Chromium from the cache instead of downloading it again.
+      # The key is the one prod-health already fills, so the first run is warm.
+      - name: Restore Playwright browser cache
+        id: restore-playwright-browsers
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |
@@ -1681,6 +1719,16 @@ jobs:
         if: (github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true') && steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      # HYCI-62: the browser revision only moves when package-lock.json does, so a
+      # push restores Chromium from the cache instead of downloading it again.
+      # The key is the one prod-health already fills, so the first run is warm.
+      - name: Restore Playwright browser cache
+        id: restore-playwright-browsers
+        if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - name: Generate client and install Chromium
         if: github.event_name == 'push' || steps.scope.outputs.heavy_needed == 'true'
         run: |

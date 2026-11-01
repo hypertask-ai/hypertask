@@ -563,3 +563,36 @@ test("HYCI-32: a half that starts the fixture search server asks the seed for se
   delete stripped["browser-smoke-mobile"].steps.find((step) => step.id === "fixtures").env.BROWSER_SMOKE_SEARCH_FIXTURES;
   assert.deepEqual(unaskedHalves(stripped), ["browser-smoke-mobile"]);
 });
+
+test("HYCI-62: every page shard restores the pinned Chromium before installing it", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const CACHE_SHA = "0057852bfaa89a56745cba8c7296529d2fc39830";
+  const BROWSERS = "~/.cache/ms-playwright";
+  const CACHE_KEY = "playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}";
+  const byName = (job, name) => job.steps.find((step) => step.name === name);
+
+  for (const key of SHARDS) {
+    const job = workflow.jobs[key];
+    const restore = byName(job, "Restore Playwright browser cache");
+    assert.ok(restore, key);
+    assert.equal(restore.uses, `actions/cache/restore@${CACHE_SHA}`, key);
+    assert.equal(restore.with.path, BROWSERS, key);
+    assert.equal(restore.with.key, CACHE_KEY, key);
+    // The install has to read the restored directory, so it must come next.
+    assert.equal(job.steps.indexOf(byName(job, "Generate client and install Chromium")), job.steps.indexOf(restore) + 1, key);
+  }
+
+  const savers = SHARDS.filter((key) => byName(workflow.jobs[key], "Save Playwright browser cache"));
+  assert.deepEqual(savers, ["browser-smoke-desktop"], "one saver only, so four shards never race one key");
+  const save = byName(workflow.jobs["browser-smoke-desktop"], "Save Playwright browser cache");
+  assert.equal(save.uses, `actions/cache/save@${CACHE_SHA}`);
+  assert.equal(save.with.path, BROWSERS);
+  assert.equal(save.with.key, CACHE_KEY);
+  assert.match(save.if, /steps\.restore-playwright-browsers\.outputs\.cache-hit != 'true'/);
+  // A save before the install would cache an empty directory.
+  assert.ok(
+    workflow.jobs["browser-smoke-desktop"].steps.indexOf(save) >
+      workflow.jobs["browser-smoke-desktop"].steps.indexOf(byName(workflow.jobs["browser-smoke-desktop"], "Generate client and install Chromium")),
+  );
+});
