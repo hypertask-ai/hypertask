@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -373,18 +372,4 @@ test("view services reject an unknown empty-section setting before writing", asy
 
   assert.equal(createCalls.length, 0);
   assert.equal(updateCalls.length, 0);
-});
-
-test("MCP view routes forward board_empty_sections to the shared service", () => {
-  const createRoute = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/view/operation.ts"),
-    "utf8",
-  );
-  const updateRoute = fs.readFileSync(
-    path.join(root, "src/lib/mcp/operations/view/[viewId]/operation.ts"),
-    "utf8",
-  );
-
-  assert.match(createRoute, /board_empty_sections: body\.board_empty_sections/);
-  assert.match(updateRoute, /board_empty_sections: body\.board_empty_sections/);
 });

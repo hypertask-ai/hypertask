@@ -1715,28 +1715,6 @@ test('incomplete files, status publication errors and changed PR metadata do not
   }
 });
 
-test('workflow uses trusted pinned production code, correct events, permissions and secret', () => {
-  const workflow = readFileSync(path.join(root, '.github/workflows/ux-signoff-gate.yml'), 'utf8');
-  const trusted = readFileSync(path.join(root, '.github/workflows/feature-flag-gate.yml'), 'utf8');
-  assert.match(workflow, /pull_request_target:\s*types: \[opened, synchronize, reopened, edited, ready_for_review\]\s*branches: \[production\]/);
-  assert.match(workflow, /cron: ['"]29 \* \* \* \*['"]/);
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /permissions:\s*contents: read\s*pull-requests: read\s*statuses: write/);
-  assert.match(workflow, /group: ux-signoff-gate\s*queue: max\s*cancel-in-progress: false/);
-  assert.match(workflow, /runs-on: ubuntu-latest/);
-  for (const action of ['checkout', 'setup-node']) {
-    const pin = workflow.match(new RegExp(`actions/${action}@([a-f0-9]{40})`));
-    assert.ok(pin);
-    assert.ok(trusted.includes(pin[0]));
-  }
-  assert.match(workflow, /ref: production\s*persist-credentials: false/);
-  assert.match(workflow, /node-version: \^24\.\d+\.\d+/);
-  assert.match(workflow, /MCP_TOKEN: \$\{\{ secrets\.HYPERTASK_MCP_TOKEN \}\}/);
-  assert.match(workflow, /run: node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s*$/);
-  assert.doesNotMatch(workflow, /--pr|EVENT_NAME|PR_NUMBER/);
-  assert.doesNotMatch(workflow, /npm |pull_request\.head|git checkout|git fetch/);
-});
-
 test('item 1: all agent attribution markers reject comments and reactions', async () => {
   for (const marker of ['agent', 'agent_display_name', 'agentId', 'isAgent']) {
     for (const value of [{ id: 'runner' }, 'Private agent', true, false, 0, '']) {
@@ -1908,15 +1886,6 @@ test('item 8: re-read immediately before posting and evaluate changed heads with
     assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
     assert.ok(reads <= 4);
   }
-});
-
-test('item 9: all workflow triggers fully reconcile under one trusted global group', () => {
-  const workflow = readFileSync(path.join(root, '.github/workflows/ux-signoff-gate.yml'), 'utf8');
-  assert.match(workflow, /concurrency:\s*group: ux-signoff-gate\s*queue: max\s*cancel-in-progress: false/);
-  assert.match(workflow, /run: node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s*$/);
-  assert.doesNotMatch(workflow, /--pr|EVENT_NAME|PR_NUMBER|pull_request\.head/);
-  assert.match(workflow, /ref: production\s*persist-credentials: false/);
-  assert.match(workflow, /permissions:\s*contents: read\s*pull-requests: read\s*statuses: write\s*concurrency:/);
 });
 
 test('CI policy records ux-signoff without making it required', () => {

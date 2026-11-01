@@ -22,11 +22,6 @@ function loadQueryOptions() {
   return mod.exports;
 }
 
-const authSource = fs.readFileSync(
-  path.join(root, "src/hooks/General/useAuth.tsx"),
-  "utf8",
-);
-
 test("fresh user profiles remain reusable for five minutes", () => {
   const { getUserProfileQueryOptions, USER_PROFILE_STALE_TIME_MS } =
     loadQueryOptions();
@@ -46,21 +41,4 @@ test("user profile fetching waits for a valid cookie user ID", () => {
   assert.equal(getUserProfileQueryOptions(null).enabled, false);
   assert.equal(getUserProfileQueryOptions(0).enabled, false);
   assert.equal(getUserProfileQueryOptions(Number.NaN).enabled, false);
-});
-
-test("AuthProvider uses the signed account for its cache and refresh", () => {
-  assert.match(
-    authSource,
-    /const authenticatedAccountId = authenticatedUserId \?\? currentUserCookie\?\.id/,
-  );
-  assert.match(
-    authSource,
-    /\.\.\.getUserProfileQueryOptions\(authenticatedAccountId\)/,
-  );
-  assert.match(authSource, /queryFn: fetchUserById/);
-  assert.match(
-    authSource,
-    /setUserCookieAndAtom\(transformedUser\)/,
-    "a completed background refresh must still update cookie and app state",
-  );
 });

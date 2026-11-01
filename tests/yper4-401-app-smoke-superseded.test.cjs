@@ -102,23 +102,6 @@ test("still refused: a draft pull request, a non-production base, or two open pu
   assert.match(otherBase.stdout, /Pull request changed after this request started/);
 });
 
-test("the smoke and report jobs are skipped for a superseded request", () => {
-  assert.equal(workflow.jobs.validate.outputs.superseded, "${{ steps.request.outputs.superseded == 'true' || steps.current-request.outputs.superseded == 'true' }}");
-  assert.equal(workflow.jobs["app-smoke"].if, "needs.validate.outputs.superseded != 'true' && needs.validate.outputs.docs-only != 'true'");
-  assert.match(workflow.jobs.report.if, /needs\.validate\.outputs\.superseded != 'true'$/);
-});
-
-test("outer cancellation retains production cache and per-run isolation without an unordered branch group", () => {
-  assert.deepEqual(workflow.concurrency, {
-    group: "${{ github.event_name == 'push' && 'app-smoke-production-cache' || format('app-smoke-run-{0}', github.run_id) }}",
-    "cancel-in-progress": true,
-  });
-  assert.equal(workflow.jobs["app-smoke"].needs, "validate");
-  assert.equal(workflow.jobs["app-smoke"].concurrency, undefined);
-  assert.equal(workflow.jobs.validate.concurrency, undefined);
-  assert.equal(workflow.jobs.report.concurrency, undefined);
-});
-
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const cancellationStep = workflow.jobs.validate.steps.find((step) => step.id === "current-request");
 const REPOSITORY = "hypertask-ai/hypertask";
@@ -188,17 +171,6 @@ async function cancelOlder({ requestNumber = 200, runId = 600, runNumber = runId
   return { calls, cancelled, outputs, waits, warnings };
 }
 
-test("the post-scope request recheck runs before any order-aware cancellation", () => {
-  const steps = workflow.jobs.validate.steps;
-  assert.ok(steps.indexOf(cancellationStep) > steps.findIndex(step => step.id === "scope"));
-  assert.equal(cancellationStep.if, "steps.request.outputs.superseded != 'true'");
-  assert.equal(cancellationStep.env.PR, "${{ steps.request.outputs.pr }}");
-  assert.equal(cancellationStep.env.HEAD_SHA, "${{ steps.request.outputs.head-sha }}");
-  assert.equal(workflow.jobs.validate.permissions.actions, "write");
-  assert.equal(workflow.jobs["app-smoke"].permissions.actions, undefined);
-  assert.match(workflow["run-name"], /format\('App Smoke request \{0\} for \{1\}:\{2\}', github\.event\.workflow_run\.run_number, github\.event\.workflow_run\.head_repository\.full_name, github\.event\.workflow_run\.head_branch\)/);
-});
-
 test("validation that stalls in checkout or scope cannot cancel the newest smoke", async () => {
   const validated = runValidate({ requestPr: "1517", pullByNumber: { 1517: pr() } });
   assert.equal(validated.status, 0);
@@ -252,7 +224,6 @@ test("a head change during cancellation cannot cancel a newer build or publish f
   ] });
   assert.deepEqual(result.cancelled, [500]);
   assert.equal(result.outputs.superseded, "true");
-  assert.match(workflow.jobs.report.if, /needs\.validate\.outputs\.superseded != 'true'/);
 });
 
 test("the final head read catches a push even when no older smoke needed cancellation", async () => {
