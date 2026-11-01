@@ -239,6 +239,12 @@ const releaseStubProxy = (filename) => {
 const isAppSource = (filename) => filename.startsWith(`${path.join(root, 'src')}${path.sep}`);
 stubTargets.filter(isAppSource).forEach(installStubProxy);
 
+const wipeSrcCache = () => {
+  for (const key of Object.keys(require.cache)) if (key.startsWith(`${root}/src/`)) cacheSlot(key, undefined);
+  stubTargets.forEach((filename) => isAppSource(filename) ? installStubProxy(filename) : releaseStubProxy(filename));
+};
+const wipedTests = new WeakSet();
+
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
   const dom = shared.dom;
@@ -413,7 +419,11 @@ async function withPalette(t, config, check) {
       const replaced = testStubs.size > 0;
       setupStubs.clear();
       testStubs.clear();
-      if (replaced) for (const key of Object.keys(require.cache)) if (key.startsWith(`${root}/src/`)) cacheSlot(key, undefined);
+      if (replaced && !wipedTests.has(t)) {
+        wipedTests.add(t);
+        if (t?.after) t.after(wipeSrcCache);
+        else wipeSrcCache();
+      }
       stubTargets.forEach((filename) => isAppSource(filename) ? installStubProxy(filename) : releaseStubProxy(filename));
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
       dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
