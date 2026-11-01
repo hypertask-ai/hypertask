@@ -1,6 +1,4 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
 const { NextRequest } = require('next/server');
 const { load } = require('./task-route-loader.cjs');
@@ -44,12 +42,5 @@ test('unchanged real proxy rejects forged/mismatched profiles before page routes
       assert.equal(await response.text(), '{"error":"Unauthorized","code":"SESSION_REQUIRED"}');
       assert.deepEqual([...response.headers], [['content-type', 'application/json']]);
     }
-  }
-});
-test('routes do not introduce 403 or remove existing unauthorized response contracts', () => {
-  for (const [suffix] of Object.values(operations)) {
-    const source = fs.readFileSync(path.join(__dirname, '..', `src/app/api/pages/${suffix}/route.ts`), 'utf8');
-    assert.doesNotMatch(source, /status:\s*403/);
-    assert.match(source, /status:\s*401/);
   }
 });

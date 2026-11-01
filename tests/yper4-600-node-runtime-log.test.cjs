@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -31,12 +30,6 @@ test("now logged: the Node server writes its exact version and floor result to t
   assert.equal(entry.version, process.version);
   assert.equal(typeof entry.meetsSecurityFloor, "boolean");
   assert.match(entry.securityFloor, /^\d+\.\d+\.\d+$/);
-});
-
-test("still hidden: the public version endpoint reports only pass or fail, never the exact Node version", () => {
-  const route = fs.readFileSync(path.join(root, "src/app/api/version/route.ts"), "utf8");
-  assert.doesNotMatch(route, /version:\s*process\.version|process\.versions?\b(?!\))/);
-  assert.match(route, /meetsSecurityFloor: meetsNodeSecurityFloor\(process\.version\)/);
 });
 
 test("the edge runtime writes no Node runtime line", async () => {

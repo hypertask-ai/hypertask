@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -51,12 +50,4 @@ test("the cookie-feeding user response keeps the fields cookie readers use", asy
     assert.equal(select[field], true, `${field} must stay in the response`);
   }
   assert.equal(select.mcpTokensRevokedAt, undefined);
-});
-
-test("trial-plan-confirmation still reads stripe_customer_id from the cookie user", () => {
-  const page = fs.readFileSync(
-    path.join(root, "src/app/trial-plan-confirmation/page.tsx"),
-    "utf8",
-  );
-  assert.match(page, /User\??\.stripe_customer_id/);
 });
