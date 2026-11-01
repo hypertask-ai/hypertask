@@ -918,6 +918,15 @@ network, `CORE_APP_SMOKE`) and no network, so this artifact cannot serve it.
 
 Docs-only PRs skip the build and every heavy step, as before.
 
+The build traces the server build beside the client compile (HYCI-46). `next build`
+used to collect the server build traces only after the client compile had finished,
+which cost 60-84s of a 156-206s build on the page check (runs 41249646447 and
+41252735437). `.github/workflows/ci-tests.yml` now sets `CORE_APP_SMOKE` for every job
+it runs; `next.config.js` already read that value to switch
+`parallelServerBuildTraces` on for the App Smoke container build. The traces now run
+beside the client compile instead of after it. The build output, the `app-build`
+artifact and the required check name are unchanged.
+
 ## Bugfix regression report (HYCI-14)
 
 Unit 1 of [HYCI-14](https://app.hypertask.ai/detail/project-11514/14) adds a

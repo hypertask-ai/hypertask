@@ -66,6 +66,12 @@ env:
   # 6 pool lanes plus 2 serial lanes, so CI Test is 8 lanes.
   CI_TEST_SHARDS: "6"
   CI_SERIAL_SHARDS: "2"
+  # HYCI-46: without this the page check's `next build` collects its server build
+  # traces only after the client compile, which was 60-84s of a 156-206s build.
+  # With it Next.js traces the server build beside the client compile. The App
+  # Smoke container build has always run this way. Workflow-level, so the page
+  # check keeps it whether it is one job or two halves.
+  CORE_APP_SMOKE: "true"
 
 jobs:
   ci-prepare:

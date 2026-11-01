@@ -550,3 +550,19 @@ test("HYCI-32: a half that starts the fixture search server asks the seed for se
   delete stripped["browser-smoke-mobile"].steps.find((step) => step.id === "fixtures").env.BROWSER_SMOKE_SEARCH_FIXTURES;
   assert.deepEqual(unaskedHalves(stripped), ["browser-smoke-mobile"]);
 });
+
+test("the page build traces the server build beside the client compile", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  assert.equal(
+    String(workflow.env.CORE_APP_SMOKE),
+    "true",
+    "the page build collects its server build traces only after the client compile",
+  );
+
+  assert.match(
+    await source("next.config.js"),
+    /parallelServerBuildTraces: process\.env\.CORE_APP_SMOKE === "true"/,
+    "next.config.js no longer overlaps the server build traces for CORE_APP_SMOKE",
+  );
+});
