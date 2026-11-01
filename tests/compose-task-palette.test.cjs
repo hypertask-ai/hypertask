@@ -55,86 +55,92 @@ const oneWindowPerFile = () => {
 };
 const windowState = oneWindowPerFile();
 
-// App code loads once per process (HYCI-56). Every per-setup replacement becomes a
-// stable proxy that reads the active setup, so a reload only happens for the
-// palette entry point and for the real modules a setup asks for explicitly.
 const Module = require('node:module');
-const paletteEntry = path.join(root, 'src/components/Modals/commands/HTC/commands.tsx');
-const freshPerSetup = [paletteEntry, path.join(root, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx')];
 const stubTargets = [...new Set([...fs.readFileSync(__filename, 'utf8').matchAll(/\b(?:source\('([^']+)'|stub\(require\.resolve\('([^']+)'\))/g)]
   .map(([, file, id]) => file ? path.join(root, file) : require.resolve(id)))];
-const activeStubs = new Map();
+const setupStubs = new Map();
+const testStubs = new Map();
+let replacingStubs = false;
 const proxies = new Map();
 const pinned = new Map();
 const realModules = new Map();
 const TaskContext = React.createContext(undefined);
 const MobileViewContext = React.createContext(false);
 
+const cacheSlot = (filename, value) => {
+  if (value === undefined) delete require.cache[filename];
+  else require.cache[filename] = value;
+};
 const realExports = (filename) => {
   if (!realModules.has(filename)) {
     realModules.set(filename, {});
     const proxy = proxies.get(filename);
-    if (proxy) delete require.cache[filename];
+    if (proxy) cacheSlot(filename, undefined);
     try {
       const loaded = jiti(filename);
       realModules.set(filename, loaded === proxy?.exports ? {} : loaded);
+    } catch {
+      realModules.set(filename, {});
     } finally {
-      if (proxy) require.cache[filename] = proxy;
+      if (proxy) cacheSlot(filename, proxy);
     }
   }
   return realModules.get(filename);
 };
-const readStub = (filename, prop) => activeStubs.has(filename) ? activeStubs.get(filename)[prop] : realExports(filename)?.[prop];
+const stubLayers = (filename) => [testStubs.get(filename), setupStubs.get(filename)];
+const readStub = (filename, prop) => {
+  for (const layer of stubLayers(filename)) if (layer && prop in layer) return layer[prop];
+  return realExports(filename)?.[prop];
+};
+const stubKeys = (filename) => [...new Set(stubLayers(filename).flatMap((layer) => layer ? Reflect.ownKeys(layer) : []))];
 const plainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value) && typeof value.$$typeof !== 'symbol';
 const resolving = new Set();
 const live = (key, read) => {
-  if (resolving.has(key)) return undefined;
-  if (!pinned.has(key)) {
-    resolving.add(key);
-    try {
-      const current = () => read();
-      const first = current();
-      if (typeof first === 'function') pinned.set(key, (...args) => {
-        const fn = current();
-        return fn === undefined || fn === pinned.get(key) ? undefined : fn(...args);
-      });
-      else if (!plainObject(first)) pinned.set(key, first);
-      else pinned.set(key, new Proxy({}, {
-        get: (_, prop) => live(`${key}\u0000${String(prop)}`, () => read()?.[prop]),
-        has: (_, prop) => prop in (read() ?? {}),
-        ownKeys: () => Reflect.ownKeys(read() ?? {}),
-        // A test that replaces a stub's export at runtime (htpr-7305, htpr-7652 override
-        // getAllProjectsMinimal) must reach the app, so writes land on the active setup's stub.
-        set: (_, prop, value) => { const target = read(); if (!target) return false; target[prop] = value; return true; },
-        deleteProperty: (_, prop) => { delete read()?.[prop]; return true; },
-        getOwnPropertyDescriptor: (_, prop) => {
-          const value = read()?.[prop];
-          return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
-        },
-      }));
-    } finally {
-      resolving.delete(key);
-    }
+  if (pinned.has(key)) return pinned.get(key);
+  if (resolving.has(key)) return read();
+  resolving.add(key);
+  let first;
+  try {
+    const current = () => read();
+    first = current();
+    if (typeof first === 'function') pinned.set(key, (...args) => {
+      const fn = current();
+      return fn === undefined || fn === pinned.get(key) ? undefined : fn(...args);
+    });
+    else if (!plainObject(first) && typeof first === 'object' && first !== null) pinned.set(key, first);
+    else if (plainObject(first)) pinned.set(key, new Proxy({}, {
+      get: (_, prop) => live(`${key}\u0000${String(prop)}`, () => read()?.[prop]),
+      has: (_, prop) => prop in (read() ?? {}),
+      ownKeys: () => Reflect.ownKeys(read() ?? {}),
+      set: (_, prop, value) => { const target = read(); if (!target) return false; target[prop] = value; return true; },
+      deleteProperty: (_, prop) => { const target = read(); if (!target) return true; delete target[prop]; return true; },
+      getOwnPropertyDescriptor: (_, prop) => {
+        const value = read()?.[prop];
+        return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
+      },
+    }));
+  } finally {
+    resolving.delete(key);
   }
-  return pinned.get(key);
+  return pinned.has(key) ? pinned.get(key) : first;
 };
 const proxyModule = (filename) => {
   if (!proxies.has(filename)) {
-    const module = new Module(filename, null);
-    module.filename = filename;
-    module.loaded = true;
-    module.exports = new Proxy({}, {
+    const cached = new Module(filename, null);
+    cached.filename = filename;
+    cached.loaded = true;
+    cached.exports = new Proxy({}, {
       get: (_, prop) => live(`${filename}\u0000${String(prop)}`, () => readStub(filename, prop)),
-      has: (_, prop) => prop in (activeStubs.get(filename) ?? realExports(filename) ?? {}),
-      ownKeys: () => Reflect.ownKeys(activeStubs.get(filename) ?? realExports(filename) ?? {}),
+      has: (_, prop) => stubKeys(filename).length ? stubKeys(filename).includes(prop) : prop in (realExports(filename) ?? {}),
+      ownKeys: () => stubKeys(filename).length ? stubKeys(filename) : Reflect.ownKeys(realExports(filename) ?? {}),
       getOwnPropertyDescriptor: (_, prop) => {
         const value = readStub(filename, prop);
         return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
       },
     });
-    proxies.set(filename, module);
+    proxies.set(filename, cached);
   }
-  require.cache[filename] = proxies.get(filename);
+  cacheSlot(filename, proxies.get(filename));
   return proxies.get(filename);
 };
 stubTargets.forEach(proxyModule);
@@ -157,9 +163,8 @@ async function withPalette(t, config, check) {
     focus.call(focusProxy.current);
     focusProxy.current.setSelectionRange(2, 5);
   }
-  const stub = (filename, exports) => { activeStubs.set(filename, exports); proxyModule(filename); };
+  const stub = (filename, exports) => { (replacingStubs ? testStubs : setupStubs).set(filename, exports); proxyModule(filename); };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  freshPerSetup.forEach((file) => delete require.cache[file]);
   const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskOriginalNoteAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -302,6 +307,7 @@ async function withPalette(t, config, check) {
       assert.ok(callbacks.length, 'a focus retry must be pending');
       callbacks.forEach((callback) => callback());
     });
+    replacingStubs = true;
     await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
@@ -309,7 +315,14 @@ async function withPalette(t, config, check) {
       if (reactRoot) await React.act(async () => reactRoot.unmount());
     } finally {
       queryClient.clear();
-      activeStubs.clear();
+      replacingStubs = false;
+      const replaced = testStubs.size > 0;
+      setupStubs.clear();
+      testStubs.clear();
+      if (replaced) {
+        for (const key of Object.keys(require.cache)) if (key.startsWith(`${root}/src/`)) cacheSlot(key, undefined);
+        stubTargets.forEach(proxyModule);
+      }
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
       dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
     }
