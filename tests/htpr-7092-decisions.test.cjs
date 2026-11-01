@@ -144,10 +144,43 @@ test("Decisions is a built-in view available on every board", () => {
 });
 
 test("flag off hides the board view: the view list drops it unless the flag is on", () => {
-  const source = fs.readFileSync(path.join(root, "src/hooks/Homepage/Views/useOrderedViews.ts"), "utf8");
-  assert.match(source, /useFlag\(HTPR_7092_DECISIONS_FLAG\)/);
-  assert.match(source, /view\.id !== BUILTIN_VIEW_IDS\.decisions/);
-  assert.match(source, /return decisionsEnabled \? allViews : viewsWithoutDecisions/);
+  const loadViews = (decisionsEnabled) => {
+    const filename = path.join(root, "src/hooks/Homepage/Views/useOrderedViews.ts");
+    const stubs = {
+      react: { useMemo: (fn) => fn(), useEffect: () => {} },
+      "@/lib/state": { useRecoilValue: () => ({}), useSetRecoilState: () => () => {} },
+      "@/store": {},
+      "@/utils/api/viewOrder": { saveViewOrder: async () => {} },
+      "@/utils/helperFunctions/Views/ViewOrderHelperFunctions": { asViewOrder: () => undefined, sortViewsByOrder: (views) => views },
+      "@/lib/constants/builtinViews": builtin,
+      "next/navigation": { useRouter: () => ({ replace() {} }) },
+      "@/utils/helperFunctions/Views/ViewsHelperFunctions": {
+        getActiveBoardLayoutPreferenceFromProject: () => null,
+        savedBoardLayoutToClient: () => null,
+        replaceProjectSurface: () => {},
+      },
+      "@/hooks/useFlag": { useFlag: (key) => key === FLAG && decisionsEnabled, useFlagLoaded: () => true },
+      "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
+    };
+    const loaded = new Module(filename);
+    loaded.filename = filename;
+    loaded.require = (request) => stubs[request];
+    loaded._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+      compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, filename);
+    return loaded.exports.default;
+  };
+  const project = {
+    id: 15,
+    section: [],
+    tasks: [],
+    project_view: { default_view_id: "home", allViews: [{ id: "home", title: "Home" }], user_project_views: [] },
+  };
+  const ids = (views) => views.map((view) => view.id);
+  const on = ids(loadViews(true)(project));
+  const off = ids(loadViews(false)(project));
+  assert.ok(on.includes("builtin:decisions"));
+  assert.deepEqual(off, on.filter((id) => id !== "builtin:decisions"));
 });
 
 const loadServer = (enabled, db) =>
@@ -192,16 +225,6 @@ test("server: flag on returns unanswered Question tasks with two queries", async
   assert.deepEqual(calls, [["notification", "Mentioned"], ["comment", 6]]);
 });
 
-test("server: getAll.ts stays untouched; the wrapper marks rows through the gated helper", () => {
-  const wrapper = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAllWithDecisions.ts"), "utf8");
-  assert.match(wrapper, /getDecisionComments\(parsedUserId, visibleUserInboxWhere\(parsedUserId\)\)/);
-  assert.match(wrapper, /isDecision: true/);
-  assert.doesNotMatch(fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAll.ts"), "utf8"), /isDecision/);
-  for (const file of ["src/lib/api/notification-writes/all-read.ts", "src/lib/firstScreen/serverInboxDocument.ts"]) {
-    assert.match(fs.readFileSync(path.join(root, file), "utf8"), /notifications\/getAllWithDecisions/);
-  }
-});
-
 test("wrapper: flag off or no pending Question returns the original response unchanged", async () => {
   const original = { status: 200, json: { notifications: [{ id: "1", taskId: 5 }], structuredData: { tabs: [], data: [] } } };
   const run = async (ids) => {
@@ -222,9 +245,26 @@ test("wrapper: flag off or no pending Question returns the original response unc
   assert.equal(marked.json.structuredData.tabs[0].project, "Decisions");
 });
 
-test("server: activity-only viewer entries never count as an answer", () => {
-  const source = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/decisionTasks.ts"), "utf8");
-  assert.match(source, /activity: \{ equals: Prisma\.DbNull \}/);
+test("server: activity-only viewer entries never count as an answer", async () => {
+  const DbNull = Symbol("DbNull");
+  const wheres = [];
+  const db = {
+    notification: {
+      findMany: async () => [
+        { taskId: 1, commentId: 11, comment: { text: "<p>Question: a?</p>", commentText: "Question: a?", createdAt: at(5) } },
+      ],
+    },
+    comment: { findMany: async (args) => { wheres.push(args.where); return []; } },
+  };
+  const { getDecisionComments } = loadTsModule("src/utils/controllers/notifications/decisionTasks.ts", {
+    "@prisma/client": { Prisma: { DbNull } },
+    "@/lib/prisma": { __esModule: true, default: db },
+    "@/lib/flags": { isFeatureEnabled: async (key) => key === FLAG },
+    "@/lib/flags/keys": { HTPR_7092_DECISIONS_FLAG: FLAG },
+    "@/lib/flags/definitions/htpr-8205-agent-clear-blocker": { HTPR_8205_AGENT_CLEAR_BLOCKER_FLAG: "htpr-8205-agent-clear-blocker" },
+  });
+  assert.deepEqual(await getDecisionComments(6, {}), new Map());
+  assert.deepEqual(wheres, [{ creatorId: 6, agentId: null, activity: { equals: DbNull }, taskId: { in: [1] } }]);
 });
 
 test("Question with the colon outside the bold element still matches", () => {

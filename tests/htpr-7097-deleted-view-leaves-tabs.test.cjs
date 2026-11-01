@@ -92,8 +92,15 @@ test("flag off: delete behaves as before and leaves boardTasks alone", async () 
 });
 
 test("the flag is registered as an Everyone-by-default bugfix with release risk", () => {
-  const src = fs.readFileSync(path.join(root, "src/lib/flags/definitions/htpr-7097-deleted-view-leaves-tabs.ts"), "utf8");
-  assert.match(src, /kind: "bugfix"/);
-  assert.match(src, /releaseRisk/);
-  assert.match(src, /htpr-7097-deleted-view-leaves-tabs/);
+  const filename = path.join(root, "src/lib/flags/definitions/htpr-7097-deleted-view-leaves-tabs.ts");
+  const loaded = new Module(filename);
+  loaded.filename = filename;
+  loaded.require = () => ({});
+  loaded._compile(ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+  }).outputText, filename);
+  const def = loaded.exports.default;
+  assert.equal(def.key, FLAG);
+  assert.equal(def.kind, "bugfix");
+  assert.ok(def.releaseRisk);
 });

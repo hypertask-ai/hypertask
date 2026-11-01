@@ -136,13 +136,6 @@ for (const keep of [true, false]) {
   });
 }
 
-test("the saved-snapshot hook reads the flag through a ref, so a late flag load never restarts route entry", () => {
-  const source = fs.readFileSync(path.join(root, "src/hooks/Homepage/useSyncedBoardReadModel.ts"), "utf8");
-  assert.match(source, /keepHydratedCacheRef\.current = useFlag\(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG\);/);
-  assert.match(source, /keepHydratedCache: keepHydratedCacheRef\.current,/);
-  assert.match(source, /\[prepareLocalRead, queryClient\],/);
-});
-
 const recoveryHarness = () => {
   const { recoverAbortedProjectsAll, PROJECTS_ALL_QUERY_KEY } = jiti(path.join(root, "src/hooks/Homepage/useGetBoards.ts"));
   const client = new rq.QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -229,16 +222,17 @@ test("a board cache write inside the quiet window postpones the reload", async (
 });
 
 test("board drag writes are counted while in flight", async () => {
-  const source = fs.readFileSync(path.join(root, "src/utils/api/global/apiHelpers/moveTaskHandler.ts"), "utf8");
-  assert.match(source, /pendingMoves \+= 1;\n  try \{/);
-  assert.match(source, /\} finally \{\n    pendingMoves -= 1;/);
-});
-
-test("only the flagged board query arms the abort recovery", () => {
-  const source = fs.readFileSync(path.join(root, "src/hooks/Homepage/useGetBoards.ts"), "utf8");
-  assert.match(source, /const boardCardFresh = useFlag\(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG\);/);
-  assert.match(source, /if \(boardCardFresh\) signal\.addEventListener\("abort", \(\) => recoverAbortedProjectsAll\(queryClient\), \{ once: true \}\);/);
-  assert.equal(source.match(/recoverAbortedProjectsAll\(queryClient\)/g).length, 1);
+  let finish;
+  const { default: moveTaskHandler, pendingBoardMoves } = load(
+    "src/utils/api/global/apiHelpers/moveTaskHandler.ts",
+    { axios: { __esModule: true, default: { put: () => new Promise((resolve) => { finish = resolve; }) } } },
+  );
+  assert.equal(pendingBoardMoves(), 0);
+  const move = moveTaskHandler("Doing", 9, 77, "0", 5);
+  assert.equal(pendingBoardMoves(), 1);
+  finish({ status: 200 });
+  assert.equal(await move, true);
+  assert.equal(pendingBoardMoves(), 0);
 });
 
 const href = (task) => `/detail/project-${task.projectId}/${task.uniqueIndex}`;

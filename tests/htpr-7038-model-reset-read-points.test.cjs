@@ -124,7 +124,7 @@ test("preferences API GET reaches the shared controller and POST resets before r
   assert.equal(result.status, 400);
 });
 
-test("server saved-choice readers are covered, and the UI fetches the shared preferences endpoint", () => {
+test("server saved-choice readers are covered, and the UI fetches the shared preferences endpoint", async () => {
   const readers = [];
   function visit(directory) {
     for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -141,8 +141,17 @@ test("server saved-choice readers are covered, and the UI fetches the shared pre
     "src/app/api/ai/_lib/editorAi.ts", "src/app/api/users/preferences/route.ts",
     "src/lib/ai/chatStream/turnModel.ts", preferenceFile,
   ].sort());
-  const ui = fs.readFileSync(path.join(root, "src/hooks/General/useGetUserPreferences.tsx"), "utf8");
-  assert.match(ui, /\/users\/preferences/);
+  const requested = [];
+  const hook = load("src/hooks/General/useGetUserPreferences.tsx", {
+    axios: { __esModule: true, default: { get: async (url) => {
+      requested.push(url);
+      return { status: 200, data: { settings: { aiChatOpenTickets: true } } };
+    } } },
+    "@/lib/appShellBootstrap/client": { consumeEarlyAppShellBootstrapSlice: async () => null },
+  });
+  const preferences = await hook.fetchUserPreference(false);
+  assert.deepEqual(requested, ["/api/users/preferences"]);
+  assert.equal(preferences.aiChatOpenTickets, true);
 });
 
 test.after(() => console.log("HTPR-7038 read point tests passed"));

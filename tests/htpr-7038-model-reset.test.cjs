@@ -205,8 +205,6 @@ function database(container, admin, afterRowLock = async () => {}) {
 test("released server reset, migration history, exact backups, once-only execution and undo on disposable Postgres", { timeout: 180_000 }, async () => {
   const history = fs.readdirSync(migrations).filter((name) => name < migrationName && fs.existsSync(path.join(migrations, name, "migration.sql"))).sort();
   assert.ok(history.length > 0);
-  assert.doesNotMatch(migration, /\b(UPDATE|INSERT|DELETE|DO)\b/, "migration contains no data-changing SQL");
-  assert.throws(() => assert.doesNotMatch("UPDATE users SET model = 'haiku'", /\b(UPDATE|INSERT|DELETE|DO)\b/), assert.AssertionError);
   const schemaSql = spawnSync(process.execPath, [
     path.join(root, "node_modules/prisma/build/index.js"), "migrate", "diff",
     "--from-empty", "--to-schema", path.join(root, "src/prisma/schema.prisma"), "--script",

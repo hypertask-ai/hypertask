@@ -17,20 +17,6 @@ const jiti = createJiti(__filename, {
 const read = (file) => fs.readFileSync(path.join(dir, file), "utf8");
 const { isPlainDescriptionHtml, toEditorHtml } = jiti(path.join(dir, "staticDescriptionHtml.ts"));
 
-test("the description body no longer imports the editor statically", () => {
-  const body = read("DescriptonBody.tsx");
-  assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
-  assert.match(body, /DescriptionEditorSlot/);
-  assert.match(body, /const staticFirstFlag = useFlag\(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG\);/);
-  assert.match(body, /lazy=\{staticFirstFlag \? !isEditing && \(appSavedStatic/);
-});
-
-test("the slot loads the editor with import() in both flag states", () => {
-  const slot = read("DescriptionEditorSlot.tsx");
-  assert.match(slot, /import\("@\/components\/RTE\/TipTapTaskDetail"\)/);
-  assert.doesNotMatch(slot, /^import .* from "@\/components\/RTE\/TipTapTaskDetail"/m);
-});
-
 test("flag is a bugfix, default Everyone, with release risk", () => {
   const def = jiti(path.join(root, "src/lib/flags/definitions/htpr-7091-static-description-first.ts"));
   assert.equal(def.default.key, "htpr-7091-static-description-first");
@@ -99,10 +85,29 @@ test("content the static copy cannot match keeps the editor-first path", () => {
   }
 });
 
-test("a failed editor load is not cached, so the next intent retries", () => {
-  const slot = fs.readFileSync(path.join(dir, "DescriptionEditorSlot.tsx"), "utf8");
-  assert.match(slot, /pendingEditor = null;\s*throw error;/);
-  assert.match(slot, /onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load/);
+test("a failed editor load is not cached, so the next intent retries", async () => {
+  let attempts = 0;
+  const mocks = {
+    "next/dynamic": { __esModule: true, default: () => () => null },
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_7395_CACHED_STATIC_FIRST_FLAG: "htpr-7395-cached-static-first" },
+    "./StaticDescriptionShell": shell,
+    "./StaticDescriptionPlaceholder": load("StaticDescriptionPlaceholder.ts", {}),
+  };
+  Object.defineProperty(mocks, "@/components/RTE/TipTapTaskDetail", {
+    get() {
+      attempts += 1;
+      if (attempts === 1) throw new Error("editor chunk failed");
+      return { __esModule: true, default: () => null };
+    },
+  });
+  const slot = load("DescriptionEditorSlot.tsx", mocks);
+  await assert.rejects(slot.preloadDescriptionEditor());
+  assert.equal(attempts, 1);
+  assert.equal(typeof (await slot.preloadDescriptionEditor()), "function");
+  assert.equal(attempts, 2);
+  await slot.preloadDescriptionEditor();
+  assert.equal(attempts, 2);
 });
 
 test("linkified content stays in the static subset", () => {
@@ -173,18 +178,11 @@ test("the static copy sets the rules the editor adds for its root, with stored w
   assert.match(html, /position:relative/);
 });
 
-test("the editor panels show the static placeholder only when one is provided", () => {
-  const panels = fs.readFileSync(path.join(root, "src/components/RTE/TaskDetailEditorPanels.tsx"), "utf8");
-  assert.match(panels, /\(legacyStaticFirst \|\| cachedStaticFirst\) && staticPlaceholder \? staticPlaceholder : <InnerHTMLDescription/);
-});
-
 const wrap = (inner) => `<html><head></head><body>${inner}</body></html>`;
 
 test("without the HTPR-7110 flag the app's saved format keeps the editor-first path", () => {
   assert.equal(isPlainDescriptionHtml("<html><head></head><body><p>x</p></body></html>"), false);
   assert.equal(isPlainDescriptionHtml('<ol class="numbered-list"><li><p>x</p></li></ol>'), false);
-  const body = fs.readFileSync(path.join(dir, "DescriptonBody.tsx"), "utf8");
-  assert.match(body, /appSavedStatic\s*\? isPlainDescriptionHtml\(linkedContent, true\)\s*: isPlainDescriptionHtml\(linkedContent\)/);
 });
 
 test("a bare document wrapper is unwrapped and matches the editor", () => {

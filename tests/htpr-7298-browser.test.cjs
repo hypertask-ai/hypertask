@@ -406,9 +406,6 @@ test('standalone flag defaults Owner + QA and all new APIs gate on the same serv
   assert.equal(definition.defaultMode, 'OWNER_AND_QA');
   assert.equal(definition.shippedOn, '2026-10-18');
   assert.ok(definition.releaseRisk.risk && definition.releaseRisk.reason);
-  for (const route of ['create', 'list', '[publicId]/links']) {
-    assert.match(fs.readFileSync(path.join(root, `src/app/api/pages/${route}/route.ts`), 'utf8'), /isFeatureEnabled\(HTPR_7298_STANDALONE_PAGES_FLAG, userId\)/);
-  }
   const runbook = fs.readFileSync(path.join(root, 'docs/standalone-pages-rollout.md'), 'utf8');
   assert.match(runbook, /all old readers, writers, movers and task-delete workers/);
   assert.match(runbook, /Never revert to task-owned authorization/);

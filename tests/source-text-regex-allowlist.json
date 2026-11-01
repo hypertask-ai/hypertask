@@ -1,17 +1,5 @@
 {
   "allowlist": [
-    "tests/htpr-7038-model-reset-read-points.test.cjs",
-    "tests/htpr-7038-model-reset.test.cjs",
-    "tests/htpr-7076-prompt-cache.test.cjs",
-    "tests/htpr-7088-agent-comment-fanout.test.cjs",
-    "tests/htpr-7091-static-description-first.test.cjs",
-    "tests/htpr-7092-decisions.test.cjs",
-    "tests/htpr-7095-reaction-webhook.test.cjs",
-    "tests/htpr-7097-deleted-view-leaves-tabs.test.cjs",
-    "tests/htpr-7122-agent-reactions.test.cjs",
-    "tests/htpr-7129-board-card-fresh-after-escape.test.cjs",
-    "tests/htpr-7174-domain-share-access.test.cjs",
-    "tests/htpr-7298-browser.test.cjs",
     "tests/htpr-7312-ctrlj-skills.test.cjs",
     "tests/htpr-7313-ctrlj-always-board-chip.test.cjs",
     "tests/htpr-7324-plan-ai-caps.test.cjs",
@@ -112,5 +100,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 111
+  "count": 99
 }

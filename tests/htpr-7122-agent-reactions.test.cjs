@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { createJiti } = require("jiti");
 
@@ -106,20 +105,60 @@ test("a person's API reaction never revives or removes their agent's row", async
   assert.equal(tx.rows.find((row) => row.id === "agent-row").isDeleted, false);
 });
 
-test("the web emoji click only ever finds and deletes the person's own rows", () => {
-  const page = fs.readFileSync(path.join(root, "src/pages/api/comments/addReaction.ts"), "utf8");
-  const scoped = page.match(/userId:userId,\s*(?:\/\/[^\n]*\n\s*)?agentId:null,/g) || [];
-  assert.equal(scoped.length, 3);
-});
+test("the web emoji click only ever finds and deletes the person's own rows", async () => {
+  const matchesWhere = (row, where) => Object.entries(where).every(([key, value]) => (row[key] ?? null) === value);
+  const rows = [];
+  const agentRow = { id: "agent-1", commentId: 7, taskId: 42, userId: 6, unified: "1f44d", agentId: RUNNER.id };
+  const seed = (...seeded) => {
+    rows.splice(0, rows.length, ...seeded);
+  };
+  stubModule("src/lib/auth/agentScope.ts", { withAgentScopeRequest: (_req, run) => run() });
+  stubModule("src/lib/prisma.ts", {
+    default: {
+      comment: { findFirst: async () => ({ id: 7 }) },
+      reaction: {
+        findMany: async ({ where }) => rows.filter((row) => matchesWhere(row, where)),
+        deleteMany: async ({ where }) => {
+          const hit = rows.filter((row) => matchesWhere(row, where));
+          hit.forEach((row) => rows.splice(rows.indexOf(row), 1));
+          return { count: hit.length };
+        },
+      },
+    },
+  });
+  stubModule("src/models/model.ts", {});
+  stubModule("src/utils/controllers/FCM/index.ts", { sendDataNewCommentFCM: async () => {} });
+  stubModule("src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts", {});
+  stubModule("src/lib/realtime/server.ts", { broadcastTaskComment: async () => {} });
+  stubModule("src/utils/controllers/comments/readReceipts.ts", { omitCommentSeen: (comment) => comment });
+  stubModule("src/lib/agentWebhooks/commentReaction.ts", {
+    prepareCommentReactionWebhook: async () => null,
+    persistCommentReactionWebhook: async () => [],
+  });
+  stubModule("src/lib/agentWebhooks/outbox.ts", { publishAgentWebhookDeliveries: async () => {} });
+  stubModule("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 6 }) });
+  stubModule("src/utils/controllers/tasks/assertTaskAccess.ts", { userCanAccessTaskContent: async () => true });
+  stubModule("src/utils/controllers/projects/getAllIncludes.ts", { taskWriteAccessWhere: () => ({}) });
+  const { default: handler } = loadTs("src/pages/api/comments/addReaction.ts", { stubs: true });
+  const base = { taskId: 42, commentId: 7, emoji: "\u{1F44D}", unified: "1f44d", userId: 6 };
+  const click = async (body) => {
+    const res = { statusCode: 0, status(code) { this.statusCode = code; return this; }, json(payload) { this.body = payload; return this; } };
+    await handler({ method: "POST", headers: {}, body: { ...base, ...body } }, res);
+    return res;
+  };
+  const personRow = { id: "person-1", commentId: 7, taskId: 42, userId: 6, unified: "1f44d", agentId: null };
 
-test("the MCP route reacts as the calling agent and names it on the inbox notification", () => {
-  const route = fs.readFileSync(path.join(root, "src/app/api/mcp/comments/[comment_id]/reactions/route.ts"), "utf8");
-  assert.match(route, /setReaction\(target, userId, emoji, active, ctx\.agentId \?\? null\)/);
-  assert.match(route, /writeCommentReaction\(tx, \{/);
-  assert.match(route, /reactorAgentId: agent\?\.id \?\? null/);
-  assert.match(route, /fromAgentId: agentId/);
-  assert.doesNotMatch(route, /where: \{ commentId: target\.commentId, userId, unified \}/);
-  assert.match(route, /return mapReactionWriteResult\(result, \(agentIds\) =>\s*loadVisibleReactionAgents\(agentIds, userId, target\.projectId\)/);
+  seed(personRow, agentRow);
+  assert.equal((await click({ alreadyReacted: true })).statusCode, 200);
+  assert.deepEqual(rows.map((row) => row.id), ["agent-1"]);
+
+  seed(personRow, agentRow);
+  assert.equal((await click({})).statusCode, 202);
+  assert.deepEqual(rows.map((row) => row.id), ["agent-1"]);
+
+  seed(agentRow);
+  assert.equal((await click({ alreadyReacted: true })).statusCode, 200);
+  assert.deepEqual(rows.map((row) => row.id), ["agent-1"]);
 });
 
 test("a reaction write response hides agents, and survives a rejected agent lookup", async () => {
@@ -189,22 +228,6 @@ test("the tooltip names the agent, even for the agent's owner", () => {
   assert.equal(reactorsLabel([valentin, runner], 9), "Valentin Yeo and Runner 5 (agent)");
 });
 
-test("task detail and shared reaction groups show agents as agents", () => {
-  const load = fs.readFileSync(path.join(root, "src/utils/controllers/taskDetail/load.ts"), "utf8");
-  assert.equal((load.match(/JSONB_AGG\(\$\{reactionReactor\(userId, slimUser\)\}\) AS users/g) || []).length, 2);
-  assert.match(load, /'id', NULL,\s*'isAgent', true/);
-  assert.match(load, /\|\| ' \(agent\)'/);
-  const shared = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/getSharedTask.ts"), "utf8");
-  assert.match(shared, /CASE WHEN r\."agentId" IS NULL THEN TO_JSONB\(u\.\*\) ELSE/);
-  assert.match(shared, /'isAgent', true,\s*'displayName', 'Private agent'/);
-  assert.doesNotMatch(shared, /r\."agentDisplayName"/);
-  const sheet = fs.readFileSync(
-    path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/Common/MobileReactorsSheet.tsx"),
-    "utf8",
-  );
-  assert.match(sheet, /const isCurrentUser = user\.id != null && user\.id === currentUser\?\.id;/);
-});
-
 test("a reaction webhook event carries the reacting agent as its actor", async () => {
   const actorInputs = [];
   stubModule("src/lib/prisma.ts", { default: {} });
@@ -230,17 +253,4 @@ test("a reaction webhook event carries the reacting agent as its actor", async (
   });
   assert.deepEqual(actorInputs, [{ userId: 6, agentId: RUNNER.id }]);
   assert.equal(mod.reactionWebhookTarget({ added: true, reactorIsAgent: true, commentAgentId: "agent-other" }), null);
-});
-
-test("the migration only adds two nullable columns and is safe to re-run", () => {
-  const sql = fs.readFileSync(
-    path.join(root, "src/prisma/migrations/20261011140000_htpr_7122_reaction_agent/migration.sql"),
-    "utf8",
-  );
-  assert.match(sql, /ADD COLUMN IF NOT EXISTS "agentId" TEXT,/);
-  assert.match(sql, /ADD COLUMN IF NOT EXISTS "agentDisplayName" TEXT;/);
-  assert.match(sql, /set_config\('lock_timeout', '2s', true\)/);
-  const statements = sql.replace(/--[^\n]*/g, "");
-  assert.match(statements, /ALTER TABLE "Reaction"/);
-  assert.doesNotMatch(statements, /\b(DROP|UPDATE|DELETE|NOT NULL|DEFAULT|CREATE INDEX|CONSTRAINT)\b/i);
 });

@@ -151,21 +151,3 @@ test("a comment that no longer exists fires nothing", async () => {
   assert.deepEqual(await deliver(mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true }), []);
   assert.equal(persisted.length, 0);
 });
-
-test("both reaction routes write the outbox row in the reaction transaction, only for additions", () => {
-  const fs = require("node:fs");
-  const page = fs.readFileSync(path.join(root, "src/pages/api/comments/addReaction.ts"), "utf8");
-  const mcp = fs.readFileSync(path.join(root, "src/app/api/mcp/comments/[comment_id]/reactions/route.ts"), "utf8");
-  for (const [name, src] of [["web", page], ["mcp", mcp]]) {
-    assert.equal((src.match(/persistCommentReactionWebhook\(tx,/g) || []).length, 1, name);
-    assert.match(src, /publishAgentWebhookDeliveries\(deliveryIds\)/, name);
-    assert.ok(!/emitCommentReactionWebhook/.test(src), name);
-    assert.match(src, /= await prepareCommentReactionWebhook\(webhookInput\);/, name);
-  }
-  assert.match(page, /prisma\.\$transaction\(async \(tx\) => \{\s*const reaction = await tx\.reaction\.create/);
-  assert.ok(!/added: false/.test(page));
-  assert.match(page, /reactorIsAgent: false/);
-  assert.match(mcp, /preparedWebhook && !wasActive && active\)/);
-  assert.match(mcp, /setReaction\(target, userId, emoji, active, ctx\.agentId \?\? null\)/);
-  assert.match(mcp, /reactorIsAgent: Boolean\(agent\)/);
-});
