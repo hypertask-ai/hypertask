@@ -140,6 +140,11 @@ jobs:
       - name: Guard CI image sources
         run: node --test tests/ci-image-sources.test.cjs
 
+      # Runs before the change scope, so a workflow-only pull request (which
+      # installs no node_modules) is still guarded (HYCI-15).
+      - name: Guard workflow job timeouts
+        run: node --test tests/workflow-timeouts.test.cjs
+
       # Keep both required jobs running: only their heavy steps may be skipped.
       - name: Determine change scope
         id: scope
