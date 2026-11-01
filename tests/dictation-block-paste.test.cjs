@@ -1,5 +1,4 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -48,29 +47,5 @@ test("normalized transcript survives SSE framing end-to-end", () => {
   assert.equal(
     collectDictationTranscriptFromSse([`data: ${transcript}\n\n`]),
     "Hello World",
-  );
-});
-
-test("audio-transcript route normalizes transcript before SSE send", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/app/api/ai/audio-transcript/route.ts"),
-    "utf8",
-  );
-  assert.match(source, /normalizeDictationTranscriptForSse\(transcript\)/);
-  assert.doesNotMatch(source, /for \(const word of words\)/);
-  assert.doesNotMatch(source, /await sleep\(/);
-});
-
-test("AudioButton inserts dictated text once after the stream completes", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/components/RTE/Components/AudioButton.tsx"),
-    "utf8",
-  );
-  assert.match(source, /collectDictationTranscriptFromSse/);
-  assert.match(source, /from "@\/lib\/dictationSse"/);
-  assert.match(source, /callbackHandler\(prefix \+ transcript\)/);
-  assert.doesNotMatch(
-    source,
-    /if \(line\.startsWith\("data: "\)\) \{\s*\n\s*callbackHandler\(line\.substring\(6\)\)/,
   );
 });

@@ -25,19 +25,6 @@ const attachment = (id, source) => ({
   taskId: 99,
 });
 
-test("a source-backed preview preserves its gallery id", () => {
-  const fs = require("node:fs");
-  const source = fs.readFileSync(
-    path.join(
-      root,
-      "src/components/Common/AttachmentsUpload/SingleFileInputPreview.tsx",
-    ),
-    "utf8",
-  );
-
-  assert.match(source, /if \(file\.source\)[\s\S]*callback\?\.\(\{ id, file \}\)/);
-});
-
 test("one file object starts one upload promise across remounts", async () => {
   const selected = file("promise-reuse.txt");
   let calls = 0;
@@ -426,7 +413,6 @@ test("a null link response becomes a retryable failure", async () => {
 });
 
 test("task detail renders upload progress, failure, and a working Retry", async () => {
-  const fs = require("node:fs");
   const React = require("react");
   const { JSDOM } = require("jsdom");
   const previousWindow = global.window;
@@ -528,15 +514,6 @@ test("task detail renders upload progress, failure, and a working Retry", async 
     assert.equal(uploadCalls, 2);
     assert.equal(linked.length, 1);
     assert.equal(container.querySelector("button"), null);
-
-    const detail = fs.readFileSync(
-      path.join(
-        root,
-        "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
-      ),
-      "utf8",
-    );
-    assert.match(detail, /<BackgroundTaskAttachments[\s\S]*?taskId=\{task\.id\}/);
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     if (started && uploads.createTaskUploadById(started.id)) {

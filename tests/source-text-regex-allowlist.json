@@ -1,19 +1,7 @@
 {
   "allowlist": [
-    "tests/calendar-session-draft.test.cjs",
-    "tests/calendar-timeframe-bars.test.cjs",
-    "tests/chat-history-on-demand.test.cjs",
-    "tests/chunk-load-recovery.test.cjs",
-    "tests/command-center-shortcut.test.cjs",
     "tests/compose-task-palette.test.cjs",
     "tests/core-actions-inbox-smoke.test.cjs",
-    "tests/create-task-background-uploads.test.cjs",
-    "tests/create-task-description-save.test.cjs",
-    "tests/create-task-form-date.test.cjs",
-    "tests/create-task-page-reset.test.cjs",
-    "tests/create-task-pending-uploads.test.cjs",
-    "tests/dictation-block-paste.test.cjs",
-    "tests/dictation-provider.test.cjs",
     "tests/direct-agent-reply-notification.test.cjs",
     "tests/draft-sync.test.cjs",
     "tests/editor-writing-assistance.test.ts",
@@ -148,5 +136,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 147
+  "count": 135
 }
