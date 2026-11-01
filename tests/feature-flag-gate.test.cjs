@@ -101,6 +101,22 @@ test("YPER4 UI changes are exempt regardless of tag or line count", async (t) =>
   }
 });
 
+test("HYCI CI tickets reach the tag rules instead of being rejected as an unknown prefix", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/app/board/Board.tsx", "export const Board = () => <div />;\n");
+  const head = commit(git, "board guard");
+  const infra = await evaluate("HYCI-1 [INFRA] stop the board URL write racing a switch", base, head, dir);
+  assert.equal(infra.pass, true);
+  assert.equal(infra.ownerReview, "exempt-ui");
+  const feature = await evaluate("HYCI-1 [FEATURE] stop the board URL write racing a switch", base, head, dir);
+  assert.equal(feature.pass, false);
+  assert.match(feature.reason, /without a feature flag/);
+  for (const title of ["HYCI-x [INFRA] board", "HYCI-1 [] board", "HYCII-1 [INFRA] board"]) {
+    assert.equal((await evaluate(title, base, head, dir)).pass, false, title);
+  }
+});
+
 test("malformed YPER4 titles do not bypass the feature flag requirement", async (t) => {
   const { dir, git } = makeRepo(t);
   const base = commit(git, "base");
