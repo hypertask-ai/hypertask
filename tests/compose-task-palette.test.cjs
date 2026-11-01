@@ -55,6 +55,86 @@ const oneWindowPerFile = () => {
 };
 const windowState = oneWindowPerFile();
 
+// App code loads once per process (HYCI-56). Every per-setup replacement becomes a
+// stable proxy that reads the active setup, so a reload only happens for the
+// palette entry point and for the real modules a setup asks for explicitly.
+const Module = require('node:module');
+const paletteEntry = path.join(root, 'src/components/Modals/commands/HTC/commands.tsx');
+const freshPerSetup = [paletteEntry, path.join(root, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx')];
+const stubTargets = [...new Set([...fs.readFileSync(__filename, 'utf8').matchAll(/\b(?:source\('([^']+)'|stub\(require\.resolve\('([^']+)'\))/g)]
+  .map(([, file, id]) => file ? path.join(root, file) : require.resolve(id)))];
+const activeStubs = new Map();
+const proxies = new Map();
+const pinned = new Map();
+const realModules = new Map();
+const TaskContext = React.createContext(undefined);
+const MobileViewContext = React.createContext(false);
+
+const realExports = (filename) => {
+  if (!realModules.has(filename)) {
+    realModules.set(filename, {});
+    const proxy = proxies.get(filename);
+    if (proxy) delete require.cache[filename];
+    try {
+      const loaded = jiti(filename);
+      realModules.set(filename, loaded === proxy?.exports ? {} : loaded);
+    } finally {
+      if (proxy) require.cache[filename] = proxy;
+    }
+  }
+  return realModules.get(filename);
+};
+const readStub = (filename, prop) => activeStubs.has(filename) ? activeStubs.get(filename)[prop] : realExports(filename)?.[prop];
+const plainObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value) && typeof value.$$typeof !== 'symbol';
+const resolving = new Set();
+const live = (key, read) => {
+  if (resolving.has(key)) return undefined;
+  if (!pinned.has(key)) {
+    resolving.add(key);
+    try {
+      const current = () => read();
+      const first = current();
+      if (typeof first === 'function') pinned.set(key, (...args) => {
+        const fn = current();
+        return fn === undefined || fn === pinned.get(key) ? undefined : fn(...args);
+      });
+      else if (!plainObject(first)) pinned.set(key, first);
+      else pinned.set(key, new Proxy({}, {
+        get: (_, prop) => live(`${key}\u0000${String(prop)}`, () => read()?.[prop]),
+        has: (_, prop) => prop in (read() ?? {}),
+        ownKeys: () => Reflect.ownKeys(read() ?? {}),
+        getOwnPropertyDescriptor: (_, prop) => {
+          const value = read()?.[prop];
+          return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
+        },
+      }));
+    } finally {
+      resolving.delete(key);
+    }
+  }
+  return pinned.get(key);
+};
+const proxyModule = (filename) => {
+  if (!proxies.has(filename)) {
+    const module = new Module(filename, null);
+    module.filename = filename;
+    module.loaded = true;
+    module.exports = new Proxy({}, {
+      get: (_, prop) => live(`${filename}\u0000${String(prop)}`, () => readStub(filename, prop)),
+      has: (_, prop) => prop in (activeStubs.get(filename) ?? realExports(filename) ?? {}),
+      ownKeys: () => Reflect.ownKeys(activeStubs.get(filename) ?? realExports(filename) ?? {}),
+      getOwnPropertyDescriptor: (_, prop) => {
+        const value = readStub(filename, prop);
+        return value === undefined ? undefined : { value, enumerable: true, configurable: true, writable: true };
+      },
+    });
+    proxies.set(filename, module);
+  }
+  require.cache[filename] = proxies.get(filename);
+  return proxies.get(filename);
+};
+stubTargets.forEach(proxyModule);
+
 async function withPalette(t, config, check) {
   const shared = windowState(config.url ?? '/project?id=7');
   const dom = shared.dom;
@@ -73,12 +153,10 @@ async function withPalette(t, config, check) {
     focus.call(focusProxy.current);
     focusProxy.current.setSelectionRange(2, 5);
   }
-  const cached = new Map(Object.entries(require.cache));
-  const stubbed = new Set();
-  const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
+  const stub = (filename, exports) => { activeStubs.set(filename, exports); proxyModule(filename); };
   const source = (file, exports) => stub(path.join(root, file), exports);
+  freshPerSetup.forEach((file) => delete require.cache[file]);
   const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
-  const TaskContext = React.createContext(undefined);
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskOriginalNoteAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
@@ -111,7 +189,7 @@ async function withPalette(t, config, check) {
     source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => flags[key] ?? false });
     source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { TaskContext, useTaskContext: () => React.useContext(TaskContext) });
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => config.apple ?? false });
-    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(config.mobile ?? false) });
+    source('src/lib/contexts/mobileContext.tsx', { MobileViewContext });
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ resetShowCommands, toggleShowCommands }) });
     source('src/lib/contexts/TourContext.tsx', { useTourContext: () => ({ endTour() {} }) });
     source('src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx', { default: () => null });
@@ -138,7 +216,8 @@ async function withPalette(t, config, check) {
     const compose = jiti(path.join(root, 'src/lib/ai/composeTask.ts'));
     source('src/lib/ai/composeTask.ts', { ...compose, createComposedTask: (body) => new Promise((resolve, reject) => requests.push({ body, resolve, reject })) });
     const Thumbnails = ({ files, handleRemove }) => React.createElement('div', { 'data-thumbnails': true }, files.map(({ file }) => React.createElement('button', { key: file.name, onClick: () => handleRemove(file.name), 'aria-label': `Remove ${file.name}` }, React.createElement('img', { alt: file.name }), file.name)));
-    source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails });
+    const gallery = config.previewLoad ? React.lazy(() => config.previewLoad.then(() => ({ default: Thumbnails }))) : Thumbnails;
+    source('src/components/Common/AttachmentsUpload/ImageGalleryView.tsx', { default: (props) => React.createElement(gallery, props) });
     const commands = [{ group: 'Board', commandLists: [{ key: 'createTaskWithAiWriter', name: 'AI Task Writer', commandMode: 135 }] }];
     const enums = jiti(path.join(root, 'src/models/enums.ts'));
     commands[0].commandLists[0].commandMode = enums.CommandMode.CreateTaskWithAiWriter;
@@ -175,8 +254,9 @@ async function withPalette(t, config, check) {
       useCommandCenterShortcut(Object.hasOwn(config, 'userId') ? config.userId : 985, config.apple ?? false, dom.window.location.pathname, config.trial ?? false, false, toggleShowCommands);
       return React.createElement(query.QueryClientProvider, { client: queryClient },
         React.createElement(TaskContext.Provider, { value: config.headerTask ? headerState : undefined },
+          React.createElement(MobileViewContext.Provider, { value: config.mobile ?? false },
           shown.show ? React.createElement(React.Suspense, { fallback: React.createElement('div', { 'data-palette-suspended': true }) }, React.createElement(Palette, { isOpen: true, focusProxy: config.bufferedText !== undefined ? focusProxy : undefined })) : null,
-          React.createElement(Probe)));
+          React.createElement(Probe))));
     }
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
     await React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
@@ -201,7 +281,7 @@ async function withPalette(t, config, check) {
       const current = document.getElementById('root').innerHTML;
       await React.act(async () => reactRoot.unmount());
       for (const [filename, module] of Object.entries(require.cache)) {
-        if (filename.startsWith(`${root}/src/`) && !cached.has(filename)) {
+        if (filename.startsWith(`${root}/src/`)) {
           stub(path.join(directory, path.relative(root, filename)), module.exports);
         }
       }
@@ -225,8 +305,7 @@ async function withPalette(t, config, check) {
       if (reactRoot) await React.act(async () => reactRoot.unmount());
     } finally {
       queryClient.clear();
-      for (const key of Object.keys(require.cache)) if (!cached.has(key) && (stubbed.has(key) || !key.includes(`${path.sep}node_modules${path.sep}`))) delete require.cache[key];
-      for (const [key, value] of cached) require.cache[key] = value;
+      activeStubs.clear();
       for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
       dom.window.document.body.replaceChildren(Object.assign(dom.window.document.createElement('div'), { id: 'root' }));
     }
