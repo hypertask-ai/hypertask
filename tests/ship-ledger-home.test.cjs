@@ -9,6 +9,9 @@ const repo = path.resolve(__dirname, '..');
 const shipGates = path.join(repo, '.claude/skills/ship/scripts/ship-gates');
 const shipCheck = path.join(repo, '.claude/skills/ship/scripts/ship-check');
 const pinnedUnlazy = path.join(process.env.HOME || os.homedir(), '.agents/skills/unlazy/scripts');
+const needsUnlazy = fs.existsSync(path.join(pinnedUnlazy, 'lib/gates.mjs'))
+  ? {}
+  : { skip: `ship-gates imports ${pinnedUnlazy}/lib/gates.mjs; the ship-scripts-tests-siblings job installs that checkout` };
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-ledger-home-'));
@@ -18,8 +21,6 @@ function fixture() {
   fs.mkdirSync(path.join(home, '.agents/skills/unlazy/scripts'), { recursive: true });
   fs.mkdirSync(path.join(home, '.agents/skills/ship/scripts'), { recursive: true });
   fs.mkdirSync(project);
-  assert.ok(fs.existsSync(path.join(pinnedUnlazy, 'lib/gates.mjs')),
-    `ship-gates imports ${pinnedUnlazy}/lib/gates.mjs; run this in ship-scripts-tests-siblings, which installs the pinned unlazy checkout`);
   fs.symlinkSync(path.join(pinnedUnlazy, 'lib'), path.join(home, '.agents/skills/unlazy/scripts/lib'), 'dir');
   fs.writeFileSync(path.join(home, '.agents/skills/ship/scripts/ship-check'),
     '#!/usr/bin/env bash\necho "marker ok"\n', { mode: 0o755 });
@@ -66,7 +67,7 @@ function deeper(f, ticket, stateRoot) {
   });
 }
 
-test('ship writes the ledger to the home ticket folder and leaves the project clean', () => {
+test('ship writes the ledger to the home ticket folder and leaves the project clean', needsUnlazy, () => {
   const f = fixture();
   try {
     const result = gates(f, 'HTPR-6819', 'sessionA-full');
@@ -85,7 +86,7 @@ test('ship writes the ledger to the home ticket folder and leaves the project cl
   }
 });
 
-test('a later session continues the same ticket ledger instead of needing a new one', () => {
+test('a later session continues the same ticket ledger instead of needing a new one', needsUnlazy, () => {
   const f = fixture();
   try {
     gates(f, 'HTPR-6819', 'sessionA-full');
@@ -104,7 +105,7 @@ test('a later session continues the same ticket ledger instead of needing a new 
   }
 });
 
-test('a session in another worktree moves the ticket gates only when it asks to', () => {
+test('a session in another worktree moves the ticket gates only when it asks to', needsUnlazy, () => {
   const f = fixture();
   try {
     gates(f, 'HTPR-6819', 'sessionA-full');
@@ -133,7 +134,28 @@ test('a session in another worktree moves the ticket gates only when it asks to'
   }
 });
 
-test('the deeper proof gate is read from the home ticket folder, never from the project', () => {
+test('moving a pinned ledger re-points it at this session checkout', needsUnlazy, () => {
+  const f = fixture();
+  const cli = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/old checkout' };
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', cli);
+    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+    assert.equal(fs.readFileSync(ledger, 'utf8').includes("SHIP_CHECKOUT='/home/u/old checkout' "), true);
+    const worktree = path.join(f.root, 'cli-worktree');
+    fs.mkdirSync(worktree);
+    const result = gates(f, 'HTPR-6819', 'sessionB-full',
+      { cwd: worktree, SHIP_LEDGER_MOVE: '1', ...cli, SHIP_CHECKOUT: '/home/u/new checkout' });
+    assert.match(result.stderr, /ledger gates moved from /);
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.equal(text.includes("SHIP_CHECKOUT='/home/u/old checkout'"), false);
+    assert.equal(text.split('\n').filter((line) => line.startsWith("  CHECK: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/new checkout' '")).length, 9);
+    assert.equal(text.split('\n').filter((line) => line === `  CWD: ${worktree}`).length, 9);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('the deeper proof gate is read from the home ticket folder, never from the project', needsUnlazy, () => {
   const f = fixture();
   try {
     const folder = path.join(f.home, '.unlazy/ledgers/HTPR-6819/gates');
