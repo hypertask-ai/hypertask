@@ -167,6 +167,11 @@ test('a ledger left inside the project is adopted into the home ticket folder', 
       '- [x] HTPR-6819.deeper-path: the old session scope\n  CHECK: true\n  EXPECT: true\n' +
       '  CWD: /old/checkout\n  EVIDENCE: automatic-evidence=v1; exit=0\n\n' +
       '- [x] HTPR-9999.deeper-other: another ticket\n  CHECK: true\n  EXPECT: true\n');
+    fs.writeFileSync(path.join(legacy, 'session'), 'sessionA-full\n');
+    const stale = path.join(f.project, '.unlazy/s-sessionZ');
+    fs.mkdirSync(stale);
+    fs.writeFileSync(path.join(stale, 'GATES.md'), fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
+    fs.writeFileSync(path.join(stale, 'session'), 'sessionZ-full\n');
     fs.rmSync(home, { recursive: true, force: true });
 
     const result = gates(f, 'HTPR-6819', 'sessionB-full', { SHIP_LEDGER_MOVE: '1' });
@@ -181,6 +186,8 @@ test('a ledger left inside the project is adopted into the home ticket folder', 
     const left = fs.readFileSync(path.join(legacy, 'gates/extra.md'), 'utf8');
     assert.equal(left.includes('HTPR-6819'), false);
     assert.match(left, /^- \[x\] HTPR-9999\.deeper-other: /m);
+    assert.equal(fs.existsSync(stale), false);
+    assert.equal(fs.existsSync(path.join(legacy, 'session')), true);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
@@ -205,7 +212,7 @@ test('a ledger that changes hands clears the previous session cleanup result', n
     const at = text.findIndex((line) => line.startsWith('- [ ] HTPR-6819.cleaned:'));
     assert.ok(at > 0, 'the cleaned gate kept its previous session result');
     assert.equal(text[at + 4], '  EVIDENCE: pending');
-    assert.equal(text.includes('- [x] HTPR-6819.merged:'), true);
+    assert.equal(text.some((line) => line.startsWith('- [x] HTPR-6819.merged:')), true);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
@@ -233,6 +240,23 @@ test('an unprefixed ledger counts as the app repo, so a CLI session refuses it',
     });
     assert.notEqual(refused.status, 0);
     assert.match(refused.stderr, /ledger belongs to hypertask-ai\/hypertask, not hypertask-ai\/cli/);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a handover in the same directory still refuses another repository', needsUnlazy, () => {
+  const f = fixture();
+  const cli = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/cli' };
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', cli);
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: f.project,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full' },
+    });
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /ledger belongs to hypertask-ai\/cli, not hypertask-ai\/hypertask/);
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }
