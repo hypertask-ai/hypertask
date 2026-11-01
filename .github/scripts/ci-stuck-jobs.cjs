@@ -35,6 +35,14 @@ function stepEnd(step) {
   return step && step.completed_at ? Date.parse(step.completed_at) : null;
 }
 
+// A job in progress reports no conclusion yet, so a red test step shows only on
+// the step itself until the completion report arrives. Both are a genuine
+// failure and neither is ever recovered.
+function holdsFailure(job) {
+  if (FAILED.has(job.conclusion)) return true;
+  return (job.steps ?? []).some(step => step.completed_at && FAILED.has(step.conclusion));
+}
+
 function finishedJob(job, now, stuckMinutes) {
   const steps = job.steps ?? [];
   if (!steps.length) return null;
@@ -61,7 +69,7 @@ function liveRun(run, now, recentMinutes) {
 function decide(run, jobs, { now = Date.now(), stuckMinutes = STUCK_MINUTES, recentMinutes = RECENT_MINUTES } = {}) {
   if (!fresh(run, now, recentMinutes)) return null;
   if ((run.run_attempt ?? 1) !== 1) return null;
-  if (jobs.some(job => FAILED.has(job.conclusion))) return null;
+  if (jobs.some(holdsFailure)) return null;
   if (run.status !== 'in_progress') return null;
   const stuck = jobs.map(job => finishedJob(job, now, stuckMinutes)).filter(Boolean);
   if (!stuck.length) return null;
@@ -130,6 +138,10 @@ async function apply(repo, decisions, { api = json, settle = settleCancel } = {}
       continue;
     }
     const jobs = await jobsOf(repo, decision.runId, api);
+    if (jobs.some(holdsFailure)) {
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'a genuine failure appeared' });
+      continue;
+    }
     const cutOff = jobs.filter(job => job.conclusion === 'cancelled').map(job => job.name);
     if (!cutOff.length) {
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'no job left cancelled' });
@@ -184,7 +196,7 @@ function argValue(argv, flag) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
-module.exports = { decide, finishedJob, fresh, liveRun, plan, apply, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES };
+module.exports = { decide, finishedJob, holdsFailure, fresh, liveRun, plan, apply, settleCancel, fixturePlan, STUCK_MINUTES, RECENT_MINUTES };
 
 if (require.main === module) {
   main().catch(error => {
