@@ -105,8 +105,8 @@ async function plan(repo, { now = Date.now(), stuckMinutes = STUCK_MINUTES, rece
   return decisions;
 }
 
-async function jobsOf(repo, runId) {
-  const payload = await json(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`);
+async function jobsOf(repo, runId, api = json) {
+  const payload = await api(`/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`);
   return payload.jobs ?? [];
 }
 
@@ -129,8 +129,14 @@ async function apply(repo, decisions, { api = json, settle = settleCancel } = {}
       done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'cancel did not settle' });
       continue;
     }
+    const jobs = await jobsOf(repo, decision.runId, api);
+    const cutOff = jobs.filter(job => job.conclusion === 'cancelled').map(job => job.name);
+    if (!cutOff.length) {
+      done.push({ runId: decision.runId, action: 'cancel', rerun: false, reason: 'no job left cancelled' });
+      continue;
+    }
     await api(`/repos/${repo}/actions/runs/${decision.runId}/rerun-failed-jobs`, 'POST');
-    done.push({ runId: decision.runId, action: 'recover', rerun: true, jobs: decision.stuck.map(entry => entry.name) });
+    done.push({ runId: decision.runId, action: 'recover', rerun: true, jobs: cutOff });
   }
   return done;
 }

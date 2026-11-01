@@ -56,6 +56,7 @@ test('apply cancels and re-runs only the run it cancelled itself', async () => {
   const calls = [];
   const api = async (path, method = 'GET') => {
     calls.push(`${method} ${path}`);
+    if (path.endsWith('/jobs?per_page=100')) return { jobs: [{ name: 'test-shard (1)', conclusion: 'cancelled' }] };
     return { status: 'completed' };
   };
   const done = await apply('o/r', [
@@ -63,8 +64,24 @@ test('apply cancels and re-runs only the run it cancelled itself', async () => {
     { runId: 8, action: 'rerun', stuck: [] },
     { runId: 9, action: 'report', stuck: [{ name: 'browser-smoke' }] },
   ], { api });
-  assert.deepEqual(calls, ['POST /repos/o/r/actions/runs/7/cancel', 'POST /repos/o/r/actions/runs/7/rerun-failed-jobs']);
+  assert.deepEqual(calls, [
+    'POST /repos/o/r/actions/runs/7/cancel',
+    'GET /repos/o/r/actions/runs/7/jobs?per_page=100',
+    'POST /repos/o/r/actions/runs/7/rerun-failed-jobs',
+  ]);
   assert.deepEqual(done, [{ runId: 7, action: 'recover', rerun: true, jobs: ['test-shard (1)'] }]);
+});
+
+test('a run that finished clean before the cancel lands is not re-run', async () => {
+  const calls = [];
+  const api = async (path, method = 'GET') => {
+    calls.push(`${method} ${path}`);
+    if (path.endsWith('/jobs?per_page=100')) return { jobs: [{ name: 'test-shard (1)', conclusion: 'success' }] };
+    return { status: 'completed' };
+  };
+  const done = await apply('o/r', [{ runId: 7, action: 'cancel', stuck: [{ name: 'test-shard (1)' }] }], { api });
+  assert.deepEqual(calls, ['POST /repos/o/r/actions/runs/7/cancel', 'GET /repos/o/r/actions/runs/7/jobs?per_page=100']);
+  assert.deepEqual(done, [{ runId: 7, action: 'cancel', rerun: false, reason: 'no job left cancelled' }]);
 });
 
 test('a cancel that never settles is reported and never retried', async () => {

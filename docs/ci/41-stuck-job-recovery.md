@@ -35,5 +35,5 @@ cancelled, a job still running a step is left alone, a job quiet for under eight
 minutes is not yet stuck, a push run is reported only, a cancelled run recovery
 did not cancel is never re-run, a run holding a genuine failure is never touched,
 `apply()` re-runs only the run it cancelled and never a run whose cancel did not
-settle, a second attempt or a stale run is ignored, and an empty job list never
-cancels blind.
+settle or that finished clean before the cancel landed, a second attempt or a
+stale run is ignored, and an empty job list never cancels blind.
