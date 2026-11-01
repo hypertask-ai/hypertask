@@ -9,7 +9,7 @@
   },
   "dayOne": {
     "ticket": "HYCI-51",
-    "triggerLabel": "size-recheck"
+    "guardWorkflow": "pr-guards-trusted.yml"
   },
   "excludedFiles": ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "Cargo.lock"],
   "excludedDirectories": ["src/generated/", "tests/fixtures/", ".claude/skills/ship/scripts/fixtures/", "e2e/smoke/__snapshots__/"],

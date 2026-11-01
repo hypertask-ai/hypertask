@@ -3,7 +3,7 @@ const policy = require('./pr-size-policy.json');
 
 const APP = 'https://app.hypertask.ai';
 const WORKFLOW_FILE = 'pr-size-day-one.yml';
-const DEFAULT_TRIGGER_LABEL = 'size-recheck';
+const GUARD_WORKFLOW = policy.dayOne.guardWorkflow;
 const blockFrom = Date.parse(policy.blockFrom);
 
 const repoUrl = context => `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
@@ -35,52 +35,26 @@ const quietCore = core => ({
   summary: core.summary,
 });
 
-async function call({ context, token, method, path, body }) {
-  const base = context.apiUrl ?? 'https://api.github.com';
-  const response = await fetch(`${base}/repos/${context.repo.owner}/${context.repo.repo}${path}`, {
-    method,
-    signal: AbortSignal.timeout(30_000),
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      ...(body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    const error = new Error(`GitHub ${method} ${path} returned HTTP ${response.status}${detail ? `: ${detail.slice(0, 200)}` : ''}`);
-    error.status = response.status;
-    throw error;
-  }
-}
-
-async function ensureLabel({ context, token, label, log }) {
-  try {
-    await call({
-      context, token, method: 'POST', path: '/labels',
-      body: { name: label, color: 'ededed', description: 'Temporary marker: the trusted guards are re-deciding this change.' },
-    });
-  } catch (error) {
-    if (error.status !== 422) throw error;
-    log(`The ${label} label already exists.`);
-  }
-}
-
 // The trusted guard publishes every pr-title verdict. The sweep only asks it to
-// look at an unchanged change again: the label events are the guard's triggers,
-// so its own per-change ordering and its own size-ok recheck decide the result.
-async function requestGuard({ context, pull, token, label, log }) {
-  if (!token) throw new Error('DAY_ONE_TOKEN is missing; the guards cannot be asked to re-decide.');
-  await ensureLabel({ context, token, label, log });
-  await call({ context, token, method: 'POST', path: `/issues/${pull.number}/labels`, body: { labels: [label] } });
-  await call({ context, token, method: 'DELETE', path: `/issues/${pull.number}/labels/${encodeURIComponent(label)}` });
+// look at an unchanged change again: re-running the guard's own completed run
+// whose payload already carries this head, so the guard re-reads the change,
+// rechecks size-ok and the human reason, and keeps its own per-change ordering.
+async function requestGuard({ github, context, pull, log }) {
+  const { data } = await github.rest.actions.listWorkflowRuns({
+    ...context.repo, workflow_id: GUARD_WORKFLOW, head_sha: pull.head.sha, status: 'completed', per_page: 30,
+  });
+  const run = (data?.workflow_runs ?? [])
+    .filter(candidate => candidate.head_sha === pull.head.sha
+      && (candidate.pull_requests ?? []).some(linked => linked.number === pull.number)
+      && candidate.conclusion !== 'skipped')
+    .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at))[0];
+  if (!run) throw new Error(`no completed ${GUARD_WORKFLOW} run at ${pull.head.sha}; the change cannot be re-decided`);
+  await github.rest.actions.rerunWorkflowRun({ ...context.repo, run_id: run.id });
+  log(`Change #${pull.number} goes back to the guards as run ${run.id}.`);
 }
 
-async function sweep({ github, context, core, now = Date.now(), log = message => core.info(message), token = process.env.DAY_ONE_TOKEN }) {
+async function sweep({ github, context, core, now = Date.now(), log = message => core.info(message) }) {
   if (!policy.dayOne?.ticket) throw new Error('pr-size-policy.json is missing dayOne.ticket.');
-  const label = policy.dayOne.triggerLabel ?? DEFAULT_TRIGGER_LABEL;
   const enforcing = now >= blockFrom;
   const dispatch = context.eventName === 'workflow_dispatch';
   if (!enforcing && !dispatch) {
@@ -106,7 +80,7 @@ async function sweep({ github, context, core, now = Date.now(), log = message =>
     const state = report.overCap && report.exception?.by ? 'allowed' : report.verdict;
     if (state === 'blocked') {
       try {
-        await requestGuard({ context, pull, token, label, log });
+        await requestGuard({ github, context, pull, log });
         counts.sent.push(pull.number);
       } catch (error) {
         unrequested += 1;
