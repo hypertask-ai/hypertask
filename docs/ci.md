@@ -1096,16 +1096,16 @@ an already-open rail, and a flyout row re-renders under the pointer because its
 [run 41244897378](https://github.com/hypertask-ai/hypertask/actions/runs/41244897378)
 the click landed, the rail closed through the row's own `setShowBoardManager(false)`,
 and the URL still named the board being viewed. The switch now presses the shortcut
-only when the rail is closed, and it retries inside a bounded `toPass` until the
-document really renders the board it asked for.
+only when the rail is closed, then clicks the row once and asserts the board really
+renders.
 
-That last part matters on its own. A rail click is a client-side `pushState`
+It clicks once on purpose. A rail click is a client-side `pushState`
 (`src/hooks/General/useProjectQuery.ts`), so the board changes when the app applies
-the new URL one render later. On
+the new URL one render later, and on
 [run 41252735437](https://github.com/hypertask-ai/hypertask/actions/runs/41252735437)
-the URL named the requested board and the desktop half still rendered the previous
-one for the whole 15 s title wait: the app dropped that render and never retried it.
-Clicking the same row again is free and asks the app a second time, so the switch
-asserts the rendered title inside its retry instead of the URL alone. The dropped
-render is a product bug, not a test one, and it is worth its own ticket: the same
-class of late update is what HYCI-1's readiness gate covers for page loads.
+the URL named the requested board while the desktop half rendered the previous one
+for the whole 15 s title wait. Repeating the click made that run pass and hid a
+dropped render: a required check that retries a product bug reports green on it.
+The switch therefore asserts the rendered board from the one click, so a dropped
+render is red here and stays a product bug for the app to fix, the same class of
+late update that HYCI-1's readiness gate covers for page loads.
