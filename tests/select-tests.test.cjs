@@ -19,9 +19,37 @@ test("a dependency or schema change runs the whole suite", async () => {
   assert.equal(await select(["tsconfig.json"]), "ALL");
 });
 
-test("a wide fan-out across shared lib code runs the whole suite", async () => {
-  const wide = Array.from({ length: 6 }, (_, i) => `src/lib/thing-${i}.ts`);
-  assert.equal(await select(wide), "ALL");
+const SIX_SHARED = [
+  "src/lib/mcp-server/validations/comment.validation.ts",
+  "src/lib/mcp-server/validations/common/task-identification.ts",
+  "src/lib/mcp-server/validations/draft.validation.ts",
+  "src/lib/mcp-server/validations/inbox.validation.ts",
+  "src/lib/mcp-server/validations/task.validation.ts",
+  "src/lib/mcp-server/validations/view.validation.ts",
+];
+
+test("six shared lib files pick their union, under half the suite, dropping nothing", async () => {
+  const { discoverTestFiles } = await import(
+    pathToFileURL(path.join(root, "scripts/test-inventory.mjs")).href
+  );
+  const { supported } = await discoverTestFiles({
+    root,
+    testsRoot: path.join(root, "tests"),
+  });
+  const selected = await select(SIX_SHARED);
+  assert.notEqual(selected, "ALL");
+  assert.ok(
+    selected.length < supported.length / 2,
+    `${selected.length} of ${supported.length} test files is not under half`,
+  );
+  const picked = new Set(selected);
+  for (const file of SIX_SHARED) {
+    const alone = await select([file]);
+    if (alone === "ALL") continue;
+    for (const testPath of alone) {
+      assert.ok(picked.has(testPath), `${file} reaches ${testPath}, the six-file pick drops it`);
+    }
+  }
 });
 
 test("a workflow change selects the test that names it", async () => {
@@ -266,6 +294,34 @@ test("importing a barrel does not select every file under that directory", () =>
     assert.ok(index.includes("tests/require-barrel.test.cjs"), "require of the barrel still selects its test");
     assert.ok(index.includes("tests/copy-utils.test.cjs"), "copying the directory still runs for the barrel file");
     assert.notEqual(leaf.join("\n"), "ALL");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a pick that covers most of the suite runs the whole suite", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { execFileSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "select-wide-pick-"));
+  const put = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  };
+  put("scripts/test-inventory.mjs", fs.readFileSync(path.join(root, "scripts/test-inventory.mjs"), "utf8"));
+  put(".github/scripts/select-tests.mjs", fs.readFileSync(path.join(root, ".github/scripts/select-tests.mjs"), "utf8"));
+  put("src/lib/core.ts", "export const core = 1;\n");
+  put("src/lib/leaf.ts", "export const leaf = 1;\n");
+  for (let i = 0; i < 10; i++) put(`tests/reaches-core-${i}.test.cjs`, 'require("../src/lib/core.ts");\n');
+  put("tests/reaches-leaf.test.cjs", 'require("../src/lib/leaf.ts");\n');
+  const pick = (file) =>
+    execFileSync(process.execPath, [".github/scripts/select-tests.mjs", file], { cwd: dir, encoding: "utf8" })
+      .trim();
+  try {
+    assert.equal(pick("src/lib/core.ts"), "ALL");
+    const leaf = pick("src/lib/leaf.ts").split("\n");
+    assert.ok(leaf.includes("tests/reaches-leaf.test.cjs"), "a narrow pick still runs the test that reaches it");
+    assert.ok(!leaf.includes("tests/reaches-core-0.test.cjs"), "a narrow pick is not widened");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

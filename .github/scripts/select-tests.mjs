@@ -32,9 +32,12 @@ const WIDE_PATTERNS = [
   /^\.github\/scripts\/ci-change-scope\.cjs$/,
 ];
 
-// A shared-dir change with a broad blast radius is not worth guessing about.
-const WIDE_FANOUT_DIRS = [/^src\/lib\//, /^src\/utils\//, /^src\/models\//];
-const WIDE_FANOUT_THRESHOLD = 5;
+// The pick is worth sharding as a list only while it saves real work. Once it
+// covers nearly the whole suite the list buys nothing back, so run everything:
+// the same fallback as a dependency change, decided from the measured pick
+// rather than from how many shared files the PR happened to touch (HYCI-28: a
+// count of five shared files used to mean all 1846 test files).
+const WIDE_PICK_SHARE = 0.9;
 const TOTAL_CHANGE_THRESHOLD = 40;
 
 // Cheap suites that guard the runner and the demo path regardless of scope.
@@ -555,11 +558,6 @@ export async function selectTests(changed) {
   if (files.length === 0) return "ALL";
   if (files.length > TOTAL_CHANGE_THRESHOLD) return "ALL";
   if (files.some((f) => WIDE_PATTERNS.some((p) => p.test(f)))) return "ALL";
-  for (const dir of WIDE_FANOUT_DIRS) {
-    if (files.filter((f) => dir.test(f)).length > WIDE_FANOUT_THRESHOLD) {
-      return "ALL";
-    }
-  }
 
   // The inventory is the runner's own list, so a deleted or renamed test never
   // reaches it and nested suites (tests/security/) are included.
@@ -605,6 +603,8 @@ export async function selectTests(changed) {
   for (const t of weak) selected.add(t);
   for (const [t] of tests) if (reachable.get(t) === null) selected.add(t);
   for (const file of ALWAYS) if (inventory.has(file)) selected.add(file);
+  // A pick this wide is the whole suite with extra steps: run everything.
+  if (selected.size >= inventory.size * WIDE_PICK_SHARE) return "ALL";
   const result = [...selected].sort();
   // Dropping an unsafe path would quietly shrink the run; widen instead.
   return result.every(isShellSafe) ? result : "ALL";
