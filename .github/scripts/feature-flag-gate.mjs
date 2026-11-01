@@ -1930,7 +1930,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: "exempt-ui", reason: "Infra ticket: no flag required" };
   }
 
-  const titleMatch = title.match(/^(?:HTPR|HYFA)-(\d+) \[([^\]]+)\] \S/);
+  const titleMatch = title.match(/^(?:HTPR|HYFA|HYCI)-(\d+) \[([^\]]+)\] \S/);
   const autoRevert = isVerifiedAutoRevert(title, baseSha, headSha);
   const tag = titleMatch?.[2] ?? null;
   if (tag === "REFACTOR") {
