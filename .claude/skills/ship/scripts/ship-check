@@ -77,7 +77,7 @@ check_deeper() {
   id=$(grep -oE "proof gate: *$t\.deeper-[a-z0-9-]+" <<<"$text" | head -1 | sed -E 's/^proof gate: *//')
   [ -n "$id" ] || fail "the Deeper: activity on $t must name its proof gate as \"proof gate: $t.deeper-<name>\""
   deeper_gate_runnable "$t" "$id" \
-    || fail "$id has no gate with CHECK: and EXPECT: in $(ledger_gates_dir "$t")/*.md; a manual note does not count"
+    || fail "$id has no gate with CHECK: and EXPECT: in $(ledger_gates_dir "$t")/*.md; a manual note does not count. Run ship-gates $t to adopt one left inside the project"
   echo "deeper ok"
 }
 

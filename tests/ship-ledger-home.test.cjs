@@ -155,6 +155,89 @@ test('moving a pinned ledger re-points it at this session checkout', needsUnlazy
   }
 });
 
+test('a ledger left inside the project is adopted into the home ticket folder', needsUnlazy, () => {
+  const f = fixture();
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
+    const legacy = path.join(f.project, '.unlazy/s-sessionA');
+    fs.mkdirSync(path.join(legacy, 'gates'), { recursive: true });
+    fs.writeFileSync(path.join(legacy, 'GATES.md'), fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
+    fs.writeFileSync(path.join(legacy, 'gates/extra.md'),
+      '- [x] HTPR-6819.deeper-path: the old session scope\n  CHECK: true\n  EXPECT: true\n' +
+      '  CWD: /old/checkout\n  EVIDENCE: automatic-evidence=v1; exit=0\n\n' +
+      '- [x] HTPR-9999.deeper-other: another ticket\n  CHECK: true\n  EXPECT: true\n');
+    fs.rmSync(home, { recursive: true, force: true });
+
+    const result = gates(f, 'HTPR-6819', 'sessionB-full', { SHIP_LEDGER_MOVE: '1' });
+    assert.match(result.stderr, /HTPR-6819 ledger adopted from /);
+    assert.equal(fs.readFileSync(path.join(home, 'GATES.md'), 'utf8').match(/^- \[ \] HTPR-6819\./gm).length, 9);
+    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
+    assert.match(extra, /^- \[ \] HTPR-6819\.deeper-path: /m);
+    assert.equal(extra.includes(`  CWD: ${f.project}`), true);
+    assert.equal(extra.includes('EVIDENCE: pending'), true);
+    assert.equal(extra.includes('/old/checkout'), false);
+    assert.equal(fs.existsSync(path.join(legacy, 'GATES.md')), false);
+    const left = fs.readFileSync(path.join(legacy, 'gates/extra.md'), 'utf8');
+    assert.equal(left.includes('HTPR-6819'), false);
+    assert.match(left, /^- \[x\] HTPR-9999\.deeper-other: /m);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('a ledger that changes hands clears the previous session cleanup result', needsUnlazy, () => {
+  const f = fixture();
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+    const lines = fs.readFileSync(ledger, 'utf8').split('\n');
+    for (const name of ['merged', 'cleaned']) {
+      const at = lines.findIndex((line) => line.startsWith(`- [ ] HTPR-6819.${name}:`));
+      assert.ok(at > 0, `no ${name} gate in the ledger`);
+      lines[at] = lines[at].replace('- [ ]', '- [x]');
+      lines[at + 4] = '  EVIDENCE: automatic-evidence=v1; exit=0; EXPECT=matched';
+    }
+    fs.writeFileSync(ledger, lines.join('\n'));
+
+    gates(f, 'HTPR-6819', 'sessionB-full');
+    const text = fs.readFileSync(ledger, 'utf8').split('\n');
+    const at = text.findIndex((line) => line.startsWith('- [ ] HTPR-6819.cleaned:'));
+    assert.ok(at > 0, 'the cleaned gate kept its previous session result');
+    assert.equal(text[at + 4], '  EVIDENCE: pending');
+    assert.equal(text.includes('- [x] HTPR-6819.merged:'), true);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('an unprefixed ledger counts as the app repo, so a CLI session refuses it', needsUnlazy, () => {
+  const f = fixture();
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    const worktree = path.join(f.root, 'cli-worktree');
+    fs.mkdirSync(worktree);
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: worktree,
+      encoding: 'utf8',
+      env: {
+        PATH: process.env.PATH,
+        HOME: f.home,
+        GATE_CALLS: f.calls,
+        CODEX_SESSION_ID: 'sessionB-full',
+        SHIP_LEDGER_MOVE: '1',
+        SHIP_REPO: 'hypertask-ai/cli',
+        SHIP_BASE: 'main',
+        SHIP_CHECKOUT: '/home/u/cli',
+      },
+    });
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /ledger belongs to hypertask-ai\/hypertask, not hypertask-ai\/cli/);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 test('the deeper proof gate is read from the home ticket folder, never from the project', needsUnlazy, () => {
   const f = fixture();
   try {
