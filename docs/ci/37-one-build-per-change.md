@@ -33,11 +33,16 @@ network, `CORE_APP_SMOKE`) and no network, so this artifact cannot serve it.
 
 Docs-only PRs skip the build and every heavy step, as before.
 
-The build traces the server build beside the client compile (HYCI-46). `next build`
-used to collect the server build traces only after the client compile had finished,
-which cost 60-84s of a 156-206s build on the page check (runs 41249646447 and
-41252735437). `.github/workflows/ci-tests.yml` now sets `CORE_APP_SMOKE` for every job
-it runs; `next.config.js` already read that value to switch
-`parallelServerBuildTraces` on for the App Smoke container build. The traces now run
-beside the client compile instead of after it. The build output, the `app-build`
-artifact and the required check name are unchanged.
+The build starts its server build traces beside the client compile (HYCI-46).
+`next build` used to collect them only after the client compile and page generation
+had finished, which was 71-122s of dead time at the end of a 129-208s page-check build
+(runs 41257231186, 41259739597, 41259981110, 41260576809, 41260664320).
+`.github/workflows/ci-tests.yml` now sets `CORE_APP_SMOKE` for every job it runs;
+`next.config.js` already read that value to switch `parallelServerBuildTraces` on for
+the App Smoke container build. That trailing dead time is 55-78s on the two runs of
+the change (runs 41259147670, 41261876740), below the fastest run without it. The
+build stays on one page-generation worker (`experimental.cpus: 1`), so the trace
+worker competes with the client compile and the traces still cost 46-66s, down from
+49-85s. The build output, the `app-build` artifact and the required check name are
+unchanged, and the page check is still the slowest job in the run: the rest of it is
+387s of tests and about 120s of fixed setup.
