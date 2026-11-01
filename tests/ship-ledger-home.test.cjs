@@ -193,6 +193,96 @@ test('a ledger left inside the project is adopted into the home ticket folder', 
   }
 });
 
+test('a refused worktree move leaves the legacy gate file alone, and the retry copies it once', needsUnlazy, () => {
+  const f = fixture();
+  try {
+    const worktree = path.join(f.root, 'project-worktree');
+    fs.mkdirSync(worktree);
+    gates(f, 'HTPR-6819', 'sessionA-full', { cwd: worktree });
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
+    const legacy = path.join(f.project, '.unlazy/s-sessionB');
+    fs.mkdirSync(path.join(legacy, 'gates'), { recursive: true });
+    const source = path.join(legacy, 'gates/extra.md');
+    const gateText = '- [ ] HTPR-6819.deeper-path: the ledger lives in the home folder\n  CHECK: true\n  EXPECT: true\n';
+    fs.writeFileSync(source, gateText);
+
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: f.project,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionC-full' },
+    });
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /re-run with SHIP_LEDGER_MOVE=1/);
+    assert.equal(fs.existsSync(path.join(home, 'gates')), false);
+    assert.equal(fs.readFileSync(source, 'utf8'), gateText);
+
+    const result = gates(f, 'HTPR-6819', 'sessionC-full', { SHIP_LEDGER_MOVE: '1' });
+    assert.match(result.stderr, /HTPR-6819 ledger adopted from /);
+    const extra = path.join(home, 'gates/extra.md');
+    assert.equal(fs.readFileSync(extra, 'utf8').match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
+    assert.equal(fs.existsSync(source), false);
+    gates(f, 'HTPR-6819', 'sessionC-full', { SHIP_LEDGER_MOVE: '1' });
+    assert.equal(fs.readFileSync(extra, 'utf8').match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('adopting a gate that is already home replaces it instead of adding a second copy', needsUnlazy, () => {
+  const f = fixture();
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
+    fs.mkdirSync(path.join(home, 'gates'), { recursive: true });
+    fs.writeFileSync(path.join(home, 'gates/extra.md'),
+      '- [x] HTPR-6819.deeper-path: the stale copy\n  CHECK: true\n  EXPECT: true\n  EVIDENCE: automatic-evidence=v1; exit=0\n\n' +
+      '- [ ] HTPR-6819.deeper-other: a gate only the home folder has\n  CHECK: true\n  EXPECT: true\n');
+    const legacy = path.join(f.project, '.unlazy/s-sessionB/gates');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, 'extra.md'),
+      '- [x] HTPR-6819.deeper-path: the project copy\n  CHECK: true\n  EXPECT: true\n  EVIDENCE: automatic-evidence=v1; exit=0\n');
+
+    gates(f, 'HTPR-6819', 'sessionB-full');
+    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
+    assert.equal(extra.match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
+    assert.equal(extra.includes('the project copy'), true);
+    assert.equal(extra.includes('the stale copy'), false);
+    assert.equal(extra.includes('HTPR-6819.deeper-other'), true);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('two runs adopting the same legacy gate file copy it home once', needsUnlazy, async () => {
+  const f = fixture();
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full');
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
+    const legacy = path.join(f.project, '.unlazy/s-sessionB/gates');
+    fs.mkdirSync(legacy, { recursive: true });
+    fs.writeFileSync(path.join(legacy, 'extra.md'),
+      '- [ ] HTPR-6819.deeper-path: the shared gate\n  CHECK: true\n  EXPECT: true\n');
+    const { spawn } = require('node:child_process');
+    const run = (session) => new Promise((resolve) => {
+      const child = spawn('bash', [shipGates, 'HTPR-6819'], {
+        cwd: f.project,
+        env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: session },
+      });
+      let stderr = '';
+      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.on('close', (status) => resolve({ status, stderr }));
+    });
+    const results = await Promise.all([run('sessionC-full'), run('sessionD-full')]);
+    for (const result of results) assert.equal(result.status, 0, result.stderr);
+    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
+    assert.equal(extra.match(/^- \[ \] HTPR-6819\.deeper-path: /gm).length, 1);
+    assert.equal(fs.existsSync(path.join(legacy, 'extra.md')), false);
+    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
 test('a ledger that changes hands clears the previous session cleanup result', needsUnlazy, () => {
   const f = fixture();
   try {
