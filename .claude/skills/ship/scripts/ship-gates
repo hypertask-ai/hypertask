@@ -188,19 +188,21 @@ const apply = async () => {
       // prove it belongs to this repository before it goes.
       const ledgerFile = `${project}/GATES.md`;
       const ledgerText = source(ledgerFile);
-      const main = splitTicketGates(ledgerText, ticket, root, (gate) => {
-        if (!generated(gate)) return false;
+      // A generated gate keeps the repository that wrote it, whichever file it sits in.
+      const mine = (gate) => {
+        if (!generated(gate)) return true;
         if (repoOf(gate) !== currentRepo) {
           throw new Error(`ship-gates: ${ticket} ledger belongs to ${repoOf(gate)}, not ${currentRepo}; run those gates from that repository`);
         }
         return true;
-      });
+      };
+      const main = splitTicketGates(ledgerText, ticket, root, (gate) => generated(gate) && mine(gate));
       let adopted = main.moved ? 1 : 0;
       if (main.moved) pendingRemovals.push({ file: ledgerFile, kept: main.kept, snapshot: ledgerText });
       for (const extra of extras) {
         const file = `${extraDir}/${extra}`;
         const extraText = source(file);
-        const split = splitTicketGates(extraText, ticket, root, () => true);
+        const split = splitTicketGates(extraText, ticket, root, mine);
         if (!split.moved) continue;
         adoptedExtras.push({ dest: `${dirname(ledger)}/gates/${extra}`, moved: split.moved });
         pendingRemovals.push({ file, kept: split.kept, snapshot: extraText });
