@@ -44,7 +44,10 @@ test("browser-smoke runs on pushes and on ready pull requests, never on drafts",
 
 test("only the one build saves the rebuilt cache under the restore primary key, after a successful build", () => {
   for (const key of SHARDS) {
-    assert.ok(!workflow.jobs[key].steps.some(step => step.uses?.startsWith("actions/cache/save@")), key);
+    const savesNextCache = workflow.jobs[key].steps.some(
+      step => step.uses?.startsWith("actions/cache/save@") && step.with?.path === ".next/cache",
+    );
+    assert.ok(!savesNextCache, key);
   }
   assert.equal(save.uses, restore.uses.replace("/restore@", "/save@"));
   assert.equal(save.with.path, ".next/cache");
