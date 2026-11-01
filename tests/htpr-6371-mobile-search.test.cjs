@@ -1,5 +1,4 @@
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
 const path = require('node:path')
 const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
@@ -9,7 +8,6 @@ const { mobileSearchPickerBounds, isMobileSearchSubmit } = jiti(path.join(root, 
 const { searchCompletion, localValueSuggestions } = jiti(path.join(root, 'src/lib/search/autocomplete.ts'))
 const { candidateQuery, splitSearchChips, chipQuery } = jiti(path.join(root, 'src/lib/search/chips.ts'))
 const { SEARCH_OPERATORS, parseSearchQuery } = jiti(path.join(root, 'src/lib/search/operators.ts'))
-const input = fs.readFileSync(path.join(root, 'src/app/search/SearchChipsInput.tsx'), 'utf8')
 
 test('phone search is a new Owner + QA feature with a release risk', () => {
   assert.equal(flag.key, 'htpr-6371-mobile-search')
@@ -19,21 +17,7 @@ test('phone search is a new Owner + QA feature with a release risk', () => {
   assert.ok(flag.releaseRisk.reason.length > 20)
 })
 
-test('flag off and desktop retain the existing rows, summary and chip styles', () => {
-  assert.match(input, /const mobileEnabled = mobileFlagEnabled && isMobile/)
-  assert.match(input, /const mobileOverlay = mobileEnabled && focused/)
-  assert.match(input, /mobileOverlay && mobileBounds \? \{/)
-  assert.match(input, /mobileEnabled \? "min-w-0 max-w-\[200px\] truncate" : layoutEnabled \? "min-w-0 break-all"/)
-  assert.match(input, /summary && \(!layoutEnabled \|\| mobileOverlay\)/)
-  assert.match(input, /if \(!mobileEnabled\) return;[\s\S]*?addEventListener\('beforeinput', beforeInput\)/)
-  assert.match(input, /else row\?\.scrollIntoView/)
-})
-
 test('input events and composition completion handle soft-keyboard @ and # without keydown', () => {
-  assert.match(input, /onChange=\{change\}/)
-  assert.match(input, /onCompositionEnd=\{mobileEnabled \? \(event\) => \{[\s\S]*?change\(event\)/)
-  assert.match(input, /onCompositionStart=\{mobileEnabled \? \(\) => \{ composingRef.current = true; setComposing\(true\)/)
-  assert.match(input, /const open = !\(mobileEnabled && composing\)/)
   for (const [text, operator, value] of [['@', 'from', ''], ['@Browser', 'from', 'Browser'], ['fix @Browser', 'from', 'Browser'], ['#', 'in', ''], ['#Board', 'in', 'Board'], ['fix #Board', 'in', 'Board']]) {
     const completion = searchCompletion(text, {}, true)
     assert.equal(completion.kind, 'value')
@@ -46,8 +30,6 @@ test('input events and composition completion handle soft-keyboard @ and # witho
 })
 
 test('the phone Search key runs a search rather than the preselected autocomplete', () => {
-  assert.match(input, /enterKeyHint="search"/)
-  assert.ok(input.indexOf("mobileEnabled && event.key === 'Enter'") < input.indexOf('choose(selectedRow)'))
   for (const type of ['insertLineBreak', 'insertParagraph']) {
     assert.equal(isMobileSearchSubmit(type, false), true)
     assert.equal(isMobileSearchSubmit(type, true), false)
@@ -155,23 +137,4 @@ test('real input, composition and native beforeinput events complete phone chips
     for (const [key, descriptor] of previous) { if (descriptor) Object.defineProperty(global, key, descriptor); else delete global[key] }
     dom.window.close()
   }
-})
-
-test('phone picker fills the keyboard-safe list independently of the requested input layout', () => {
-  assert.match(input, /mobileEnabled \? "w-full h-full max-h-full max-w-full \[&_button\]:min-h-\[44px\]"/)
-  assert.match(input, /!mobileEnabled && <div/)
-  assert.match(input, /mobileEnabled && pickerRef\.current\?\.querySelector<HTMLElement>\(`/)
-  assert.match(input, /onPointerDown=\{\(event\) => \{ if \(mobileEnabled\) event\.preventDefault\(\); \}\}/)
-})
-
-test('phone overlay omits Bootstrap important margins instead of trying to override them inline', () => {
-  assert.match(input, /mobileOverlay \? "bg-containerBackground" : "mt-4"/)
-  assert.match(input, /mobileOverlay \? "min-h-\[44px\] h-11 truncate bg-containerBackground" : "mt-2"/)
-  assert.doesNotMatch(input, /className=\{`mt-[24] [^`]*mobileOverlay/)
-})
-
-test('scrolling the suggestion list does not re-measure or snap back to the selected row', () => {
-  assert.match(input, /pickerRef\.current\?\.contains\(event\.target\)\) return/)
-  assert.match(input, /window\.addEventListener\('scroll', onScroll, true\)/)
-  assert.match(input, /every\(\(key\) => previous\[key\] === next\[key\]\) \? previous : next/)
 })

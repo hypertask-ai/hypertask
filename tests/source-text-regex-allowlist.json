@@ -1,17 +1,5 @@
 {
   "allowlist": [
-    "tests/first-screen-inbox-adoption.test.cjs",
-    "tests/first-screen-inbox-document.test.cjs",
-    "tests/firstScreen-board-document.test.cjs",
-    "tests/flags-page-dropdown-filters.test.cjs",
-    "tests/get-session-user-fast-path.test.cjs",
-    "tests/guest-adoption.test.cjs",
-    "tests/haiku-5-5-default.test.cjs",
-    "tests/haiku-5-5-model.test.cjs",
-    "tests/heavy-job.test.cjs",
-    "tests/htpr-6371-mobile-search.test.cjs",
-    "tests/htpr-6971-chat-history-paging.test.cjs",
-    "tests/htpr-6992-route-contract.test.cjs",
     "tests/htpr-7038-model-reset-read-points.test.cjs",
     "tests/htpr-7038-model-reset.test.cjs",
     "tests/htpr-7076-prompt-cache.test.cjs",
@@ -124,5 +112,5 @@
     "tests/yper4-600-content-decoding.test.cjs",
     "tests/yper4-631-flag-review.test.cjs"
   ],
-  "count": 123
+  "count": 111
 }

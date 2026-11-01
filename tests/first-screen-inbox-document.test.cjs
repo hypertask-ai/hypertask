@@ -1,6 +1,5 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const fs = require('node:fs');
 const path = require('node:path');
 require('tsx/cjs');
 process.env.SESSION_SECRET = 'disposable-inbox-document-test-secret';
@@ -132,33 +131,6 @@ test('RSC navigation and requests without the proxy document hint cannot initial
   reset(); requestHeaders.set('rsc', '1'); assert.equal(await getServerInboxDocument(), null); assert.deepEqual(calls, []);
   reset(); requestHeaders.delete('x-ht-inbox-document-route'); assert.equal(await getServerInboxDocument(), null); assert.deepEqual(calls, []);
 });
-
-test('blocked dismissal storage cannot escape the mirror effect or leave a misleading display cookie', () => {
-  const source = fs.readFileSync(path.join(root, 'src/lib/firstScreen/BoardDisplayMirror.tsx'), 'utf8');
-  const start = source.indexOf('    const mirror =');
-  const body = source.slice(start, source.indexOf('    mirror();', start));
-  const js = require('typescript').transpileModule(body, { compilerOptions: { target: 7 } }).outputText;
-  const document = { documentElement: { dataset: { theme: 'porcelain' } }, cookie: 'old mirror' };
-  const bindings = { document, BOARD_DISPLAY_COOKIE, parseBoardDisplay, location: { protocol: 'https:' }, window: { innerWidth: 390 }, navigator: { language: 'en-US' },
-    accountId: 985, boardLayout: 'board', railCollapsed: true, quickTips: false, fcm: { permissionStatus: 'default', statusToggleFromDB: 'false' }, ...display.board, keepChatClosed: false, desktopChat: false, chatWidth: 517, chatSidebarMode: true,
-    localStorage: { getItem: () => { throw Error('storage blocked'); } } };
-  const mirror = storage => new Function(...Object.keys(bindings), js + '\nmirror();')(...Object.values({ ...bindings, localStorage: storage }));
-  assert.doesNotThrow(() => mirror(bindings.localStorage));
-  assert.equal(document.cookie, `${BOARD_DISPLAY_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax; Secure`);
-  mirror({ getItem: () => 'true' });
-  const encoded = document.cookie.split(';')[0].slice(BOARD_DISPLAY_COOKIE.length + 1);
-  assert.equal(JSON.parse(decodeURIComponent(encoded)).inbox.nudgeDismissed, true);
-});
-
-test('inbox HTML and Flight use dynamic private no-store with replaced caller route hints', () => {
-  const page = fs.readFileSync(path.join(root, 'src/app/inbox/page.tsx'), 'utf8');
-  assert.match(page, /export const dynamic = "force-dynamic"/); assert.match(page, /export const revalidate = 0/);
-  const proxy = fs.readFileSync(path.join(root, 'src/proxy.ts'), 'utf8');
-  assert.match(proxy, /forwardedHeaders.delete\('x-ht-inbox-document-route'\)/);
-  assert.match(proxy, /request.nextUrl.pathname === '\/inbox'/);
-  for (const header of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) assert.ok(proxy.includes(`response.headers.set('${header}'`));
-});
-
 
 test('desktop chat opt-in is board-only and never authorizes the inbox document', async () => {
   reset();

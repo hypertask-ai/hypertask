@@ -9,50 +9,6 @@ const root = path.resolve(__dirname, "..");
 const pinned = JSON.parse(fs.readFileSync(path.join(root, "tests/fixtures/htpr-6992-no-session-responses.json"), "utf8"));
 const routeFiles = Object.keys(pinned).sort();
 
-function walk(directory, files = []) {
-  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
-    const full = path.join(directory, entry.name);
-    if (entry.isDirectory()) walk(full, files);
-    else if (entry.name.endsWith(".ts")) files.push(path.relative(root, full).split(path.sep).join("/"));
-  }
-  return files;
-}
-
-function routeTargets(source) {
-  return [...source.matchAll(/(GET|POST|PUT|PATCH|DELETE|"\*"): async \(\) => \(await import\("@\/([^"]+)"\)\)\.(\w+)/g)]
-    .map((match) => ({ method: match[1].replace(/"/g, ""), file: `src/${match[2]}.ts`, name: match[3] }));
-}
-
-test("every adapter route is pinned, and no Pages route keeps the flag wrapper", () => {
-  const pages = walk(path.join(root, "src/pages/api"));
-  const adapted = pages.filter((file) => fs.readFileSync(path.join(root, file), "utf8").includes("taskWriteHandler("));
-  assert.deepEqual(adapted.sort(), routeFiles);
-  assert.equal(routeFiles.length, 81);
-  for (const file of pages) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.doesNotMatch(source, /withTaskWrite|HTPR_6923_APP_ROUTER|htpr-6923-app-router/, file);
-  }
-});
-
-test("each listed method loads an exported shared handler, and the adapter reads no flag", () => {
-  const adapter = fs.readFileSync(path.join(root, "src/lib/api/task-writes/route.ts"), "utf8");
-  assert.doesNotMatch(adapter, /@\/lib\/flags|isFeatureEnabled/);
-  for (const file of routeFiles) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    const targets = routeTargets(source);
-    assert.ok(targets.length > 0, `${file} lists no shared route`);
-    assert.doesNotMatch(source, /isFeatureEnabled|@\/lib\/flags/, `${file} must not look up a flag`);
-    for (const target of targets) {
-      const shared = fs.readFileSync(path.join(root, target.file), "utf8");
-      assert.match(shared, new RegExp(`export (?:const|async function|function) ${target.name}\\b|export \\{[^}]*\\b${target.name}\\b`), `${file} ${target.method} -> ${target.file}.${target.name}`);
-    }
-    const pinnedMethods = Object.keys(pinned[file]).filter((key) => !key.startsWith("wrong:"));
-    const listed = targets.map((target) => target.method);
-    if (listed.includes("*")) assert.deepEqual(pinnedMethods, ["GET", "POST", "PATCH"], file);
-    else assert.deepEqual([...pinnedMethods].sort(), [...listed].sort(), file);
-  }
-});
-
 test("a request with no session gets the pinned status and body on every kept route", async () => {
   const harness = createHarness(root);
   for (const file of routeFiles) {
