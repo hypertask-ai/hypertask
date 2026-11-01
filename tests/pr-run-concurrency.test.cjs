@@ -14,12 +14,12 @@ test('every pull request push cancels its superseded run', () => {
   assert.deepEqual(check(WORKFLOWS), []);
 });
 
-test('the shared-line gates are the only exceptions, and each says why', () => {
-  assert.deepEqual([...EXCEPTIONS.keys()], ['feature-flag-gate', 'ux-signoff-gate']);
+test('the required-status gates are the only exceptions, and each cites its ticket', () => {
+  assert.deepEqual([...EXCEPTIONS.keys()], ['feature-flag-gate', 'ux-signoff-gate', 'pr-guards-trusted']);
   for (const [name, reason] of EXCEPTIONS) {
     assert.equal(workflow(name).concurrency.queue, 'max', `${name} keeps a slot for every pending event`);
     assert.equal(workflow(name).concurrency['cancel-in-progress'], false);
-    assert.match(reason, /YPER4-707/);
+    assert.match(reason, /[A-Z][A-Z0-9]*-\d+/);
   }
 });
 

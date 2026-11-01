@@ -17,7 +17,7 @@ const pr = {
 const limited = (headers = { 'retry-after': '1' }) => Object.assign(
   new Error('API rate limit exceeded for installation'), { status: 403, response: { headers } });
 
-async function run({ limitedRead = false, limitedPost = false, limitedMetadataRead = false, event = {}, current = {}, outcomes = {}, evaluated = {}, baseline = false, runId = 1, initialStatus = 'success', afterPending = async () => {} } = {}) {
+async function run({ limitedRead = false, limitedPost = false, limitedMetadataRead = false, event = {}, current = {}, outcomes = {}, evaluated = {}, baseline = false, runId = 1 } = {}) {
   const { retryGithubRequest } = await gate;
   const calls = [];
   const waits = [];
@@ -26,7 +26,7 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
   const results = {};
   const eventPr = { ...pr, ...event };
   const visibleWhileWaiting = [];
-  let visibleStatus = initialStatus;
+  let visibleStatus = 'success';
   let clock = 1000000;
   const retry = request => retryGithubRequest(request, {
     now: () => clock, sleep: async ms => { waits.push(ms); visibleWhileWaiting.push(visibleStatus); clock += ms; }, log() {},
@@ -50,7 +50,6 @@ async function run({ limitedRead = false, limitedPost = false, limitedMetadataRe
         if (limitedPost && (baseline || post.state !== 'pending')) { limitedPost = false; throw limited(); }
         posts.push(post);
         visibleStatus = post.state;
-        if (post.state === 'pending') await afterPending();
       } },
       issues: { listComments() {} },
     },
@@ -231,22 +230,11 @@ test('stale title rechecks cannot invalidate a newer result', async () => {
 });
 
 
-test('old-event rerun after current pending cannot cancel the current title verdict', async () => {
-  const oldGroup = workflow.concurrency.group.replace('${{ github.run_id }}', '1');
-  const currentGroup = workflow.concurrency.group.replace('${{ github.run_id }}', '2');
-  assert.notEqual(oldGroup.toLowerCase(), currentGroup.toLowerCase());
-  assert.equal(workflow.concurrency['cancel-in-progress'], true);
-  let stale;
-  const latest = await run({
-    runId: 2, event: { title: 'Invalid current title' },
-    afterPending: async () => {
-      stale = await run({
-        runId: 1, current: { title: 'Invalid current title' }, initialStatus: 'pending',
-      });
-    },
-  });
-  assert.deepEqual(stale.posts, []);
-  assert.equal(stale.visibleStatus, 'pending');
-  assert.deepEqual(latest.posts.map(post => post.state), ['pending', 'failure']);
-  assert.equal(latest.visibleStatus, 'failure');
+test('one group per pull request serializes the evaluation instead of racing it', async () => {
+  assert.equal(workflow.concurrency.group,
+    'pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}');
+  assert.equal(workflow.concurrency.queue, 'max');
+  assert.equal(workflow.concurrency['cancel-in-progress'], false);
+  const superseded = await run({ event: { title: 'Older event title' }, current: { title: 'Newer title' } });
+  assert.deepEqual(superseded.posts, []);
 });

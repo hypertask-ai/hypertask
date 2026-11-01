@@ -2,14 +2,21 @@ const { writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 const policy = require('./pr-size-policy.json');
 
-function countFiles(pr, files) {
-  if (policy.mode !== 'report-only') throw new Error('Only report-only size policy is supported.');
-  if (!Number.isSafeInteger(pr.changed_files) || pr.changed_files < 0 || files.length !== pr.changed_files) {
-    throw new Error('Incomplete PR file list; no trustworthy size count.');
-  }
-  const excluded = filename => policy.excludedFiles.includes(filename) ||
-    policy.excludedDirectories.some(directory => filename.startsWith(directory)) ||
-    policy.excludedSuffixes.some(suffix => filename.endsWith(suffix));
+const SPLIT = 'Split it into smaller changes that each build green.';
+const REASON = /^[ \t]*size-ok:[ \t]*(\S.*)$/im;
+const bot = user => user?.type === 'Bot' || /\[bot\]$/i.test(String(user?.login ?? ''));
+const dependabot = pr => /^dependabot/i.test(String(pr.user?.login ?? ''));
+const agent = pr => bot(pr.user) && !dependabot(pr);
+const human = user => Boolean(user?.login) && !bot(user);
+
+const excluded = filename => policy.excludedFiles.includes(filename) ||
+  policy.excludedDirectories.some(directory => filename.startsWith(directory)) ||
+  policy.excludedSuffixes.some(suffix => filename.endsWith(suffix));
+
+const ignoredFile = file => excluded(file.filename) &&
+  (!file.previous_filename || excluded(file.previous_filename));
+
+function countChangedFiles(files) {
   let counted = 0;
   let ignored = 0;
   for (const file of files) {
@@ -20,18 +27,41 @@ function countFiles(pr, files) {
       throw new Error('Missing original rename path; no trustworthy size count.');
     }
     const lines = file.additions + file.deletions;
-    if (excluded(file.filename) && (!file.previous_filename || excluded(file.previous_filename))) ignored += lines;
+    if (ignoredFile(file)) ignored += lines;
     else counted += lines;
   }
+  return { counted, ignored, overCap: counted > policy.cap };
+}
+
+function countFiles(pr, files) {
+  if (!Number.isSafeInteger(pr.changed_files) || pr.changed_files < 0 || files.length !== pr.changed_files) {
+    throw new Error('Incomplete PR file list; no trustworthy size count.');
+  }
+  const { counted, ignored, overCap } = countChangedFiles(files);
   if (counted + ignored !== pr.additions + pr.deletions) {
     throw new Error('PR totals disagree with file counts; retry on a stable head.');
   }
-  return { counted, ignored, total: counted + ignored, cap: policy.cap, wouldBlock: counted > policy.cap };
+  return { counted, ignored, total: counted + ignored, cap: policy.cap, overCap };
 }
 
-async function reportSize({ github, context, core, pr, prMetadata, reportDirectory = process.env.RUNNER_TEMP }) {
+function exceptionFor(pr, comments) {
+  if (!(pr.labels ?? []).some(label => label.name === policy.exceptionLabel)) {
+    return { allowed: false, missing: 'label' };
+  }
+  const approved = [...comments].reverse().find(comment => human(comment.user) && REASON.test(comment.body ?? ''));
+  if (!approved) return { allowed: false, missing: 'reason' };
+  return { allowed: true, by: approved.user.login, reason: REASON.exec(approved.body)[1].trim() };
+}
+
+async function reportSize({ github, context, core, pr, prMetadata, reportDirectory = process.env.RUNNER_TEMP, now = Date.now() }) {
   const marker = '<!-- pr-size-warning -->';
-  const report = { mode: 'report-only', runId: context.runId, runAttempt: context.runAttempt || 1, pr: pr?.number || context.payload?.pull_request?.number };
+  const enforcing = now >= Date.parse(policy.blockFrom);
+  const report = {
+    runId: context.runId,
+    runAttempt: context.runAttempt || Number(process.env.GITHUB_RUN_ATTEMPT) || 1,
+    phase: enforcing ? 'blocking' : 'observation',
+    pr: pr?.number || context.payload?.pull_request?.number,
+  };
   let summary = '';
   try {
     if (!pr && prMetadata) pr = JSON.parse(prMetadata);
@@ -48,6 +78,7 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
       ...context.repo, pull_number: pr.number, per_page: 100,
     });
     Object.assign(report, countFiles(pr, files));
+    report.agent = agent(pr);
     const { data: current } = await github.rest.pulls.get({ ...context.repo, pull_number: pr.number });
     if (current.state !== 'open' || current.head.sha !== pr.head.sha) {
       report.verdict = 'stale';
@@ -55,36 +86,54 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
       core.info(report.reason);
       return report;
     }
-    report.verdict = report.wouldBlock ? 'would-block' : 'within-cap';
-    const body = [
-      marker, '', '**PR size: report only.**',
-      `- Hand-written changed lines: **${report.counted}**.`,
-      `- Excluded generated and fixture lines: ${report.ignored}.`,
-      `- Proposed cap: ${report.cap}.`,
-      report.wouldBlock ? '- Above proposed cap; merging remains unchanged.' : '- Within the proposed cap.',
-      '- Split into stacked PRs; each must build green.',
-      '- size-ok approval not implemented; observation comes first.',
-      '- Human exceptions need later safety review.',
-    ].join('\n');
-    summary = body;
-    const comments = await github.paginate(github.rest.issues.listComments, {
+    const sizeComments = await github.paginate(github.rest.issues.listComments, {
       ...context.repo, issue_number: pr.number, per_page: 100,
     });
-    const existing = comments.find(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker));
+    const exception = report.overCap && report.agent ? exceptionFor(pr, sizeComments) : { allowed: false };
+    report.exception = exception.allowed ? { by: exception.by, reason: exception.reason } : { missing: exception.missing };
+    const blocked = Boolean(report.overCap && report.agent && enforcing && !exception.allowed);
+    report.verdict = blocked ? 'blocked' : report.overCap ? 'would-block' : 'within-cap';
+    report.enforcing = enforcing;
+    const heading = blocked ? '**PR size: blocked.**'
+      : !report.overCap ? '**PR size: within the cap.**'
+        : report.agent ? `**PR size: over the cap. Blocking starts ${policy.blockFrom}.**`
+          : '**PR size: over the cap. Human-authored changes are never blocked.**';
+    const lines = `**${report.counted}** hand-written lines (cap ${policy.cap}); ${report.ignored} generated or fixture lines skipped.`;
+    const next = blocked ? SPLIT
+      : !report.overCap ? 'Nothing to split.'
+        : report.agent ? 'Would be blocked once blocking starts.'
+          : 'Not blocked: a human opened this change.';
+    const body = [
+      marker, '',
+      heading,
+      `- Hand-written changed lines: ${lines}`,
+      `- ${next}`,
+      report.overCap ? `- A human allows it: comment "${policy.exceptionLabel}: <reason>", then add the ${policy.exceptionLabel} label.` : '- No exception needed.',
+      exception.allowed ? `- Allowed by ${exception.by}: ${exception.reason}` : '',
+    ].filter(Boolean).join('\n');
+    summary = body;
+    const existing = sizeComments.find(c => c.user?.login === 'github-actions[bot]' && c.body?.includes(marker));
     if (existing && existing.body !== body) {
       await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
-    } else if (!existing && report.wouldBlock) {
+    } else if (!existing && (blocked || report.overCap)) {
       await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number, body });
     }
-    core.info(`PR #${pr.number}: ${report.verdict}; counted=${report.counted}, ignored=${report.ignored}, total=${report.total}`);
+    core.setOutput('blocked', blocked ? 'true' : 'false');
+    if (blocked) {
+      core.setFailed(
+        `PR size: ${report.counted} hand-written lines is over the ${policy.cap}-line cap. ${SPLIT} ` +
+        `A human allows it: comment "${policy.exceptionLabel}: <reason>", then add the ${policy.exceptionLabel} label.`,
+      );
+    }
+    core.info(`PR #${pr.number}: ${report.verdict} in ${report.phase}; counted=${report.counted}, ignored=${report.ignored}`);
   } catch (error) {
     report.verdict = 'error';
     report.reason = error.message;
-    core.warning(`PR size measurement unavailable (report only): ${error.message}`);
+    core.warning(`PR size measurement unavailable; merging stays unchanged: ${error.message}`);
   } finally {
     if (reportDirectory) writeFileSync(join(reportDirectory, `pr-size-${context.runId}-${report.runAttempt}-${report.pr || 'unknown'}.json`), JSON.stringify(report, null, 2) + '\n');
     try {
-      await core.summary.addRaw(`**Measurement result: ${report.verdict}.**\n\nHead: ${report.sha || 'unavailable'}\n\nTotal lines: ${report.total ?? 'unavailable'}\n\n${summary || report.reason}`).write();
+      await core.summary.addRaw(`**Measurement result: ${report.verdict}** (${report.phase}).\n\nHead: ${report.sha || 'unavailable'}\n\nTotal lines: ${report.total ?? 'unavailable'}\n\n${summary || report.reason}`).write();
     } catch (error) {
       core.warning(`Size summary unavailable: ${error.message}`);
     }
@@ -94,3 +143,7 @@ async function reportSize({ github, context, core, pr, prMetadata, reportDirecto
 
 module.exports = reportSize;
 module.exports.countFiles = countFiles;
+module.exports.countChangedFiles = countChangedFiles;
+module.exports.exceptionFor = exceptionFor;
+module.exports.isAgent = agent;
+module.exports.SPLIT = SPLIT;

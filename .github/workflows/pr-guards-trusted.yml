@@ -2,7 +2,7 @@ name: PR Guards Trusted
 
 on:
   pull_request_target:
-    types: [opened, synchronize, reopened, edited, ready_for_review]
+    types: [opened, synchronize, reopened, edited, ready_for_review, labeled, unlabeled]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -16,8 +16,13 @@ permissions:
   statuses: write
 
 concurrency:
-  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}-${{ github.run_id }}
-  cancel-in-progress: true
+  # One run at a time per pull request, and no cancellation. A cancelled
+  # evaluation leaves the required pr-title status unresolved, and a rerun of an
+  # older event cancels the current one (HYCI-29). `queue: max` keeps a slot for
+  # every pending event, so the newest event always publishes its own result.
+  group: pr-guards-trusted-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.pr_number }}
+  queue: max
+  cancel-in-progress: false
 
 jobs:
   pr-guards-trusted:
@@ -65,7 +70,8 @@ jobs:
             }), { log: core.warning });
             core.setOutput('pr', JSON.stringify({
               number: pr.number, state: pr.state, title: pr.title, user: pr.user,
-              head: pr.head, base: pr.base, additions: pr.additions, deletions: pr.deletions, changed_files: pr.changed_files,
+              labels: pr.labels, head: pr.head, base: pr.base,
+              additions: pr.additions, deletions: pr.deletions, changed_files: pr.changed_files,
             }));
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
         id: outside
@@ -106,7 +112,7 @@ jobs:
             const pr = JSON.parse(process.env.PR_METADATA);
             core.setOutput('sha', pr.head.sha);
             await require('./.github/scripts/ci-runner-policy.cjs').checkPullRequest({ pr, core });
-      - name: Save report-only size measurement
+      - name: Save size measurement
         if: ${{ !cancelled() && github.event.pull_request.base.ref == 'production' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -124,7 +130,10 @@ jobs:
             const { retryGithubRequest } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/github-rate-limit.mjs`);
             const results = JSON.parse(process.env.RESULTS);
             const eventPr = context.payload.pull_request;
-            const passed = ['outside', 'title', 'runner-policy'].every(id =>
+            const evaluated = JSON.parse(results.metadata?.outputs?.pr || '{}');
+            const labelNames = labels => (labels ?? []).map(label => label.name).sort().join(',');
+            const sizeBlocked = results.size?.outputs?.blocked === 'true';
+            const passed = !sizeBlocked && ['outside', 'title', 'runner-policy'].every(id =>
               results[id]?.outcome === 'success' && results[id]?.outputs?.sha === eventPr.head.sha);
             await retryGithubRequest(async () => {
               const { data: current } = await github.rest.pulls.get({
@@ -132,17 +141,18 @@ jobs:
               });
               if (current.state !== 'open' || current.base.ref !== 'production' ||
                   current.head.sha !== eventPr.head.sha || current.title !== eventPr.title ||
-                  current.title !== (results.title?.outputs?.title ?? eventPr.title)) {
+                  current.title !== (results.title?.outputs?.title ?? eventPr.title) ||
+                  (evaluated.labels && labelNames(current.labels) !== labelNames(evaluated.labels))) {
                 core.info('Skipping stale guard result; a newer event owns it.');
                 return;
               }
               await github.rest.repos.createCommitStatus({
                 ...context.repo, sha: current.head.sha, context: 'pr-title',
                 state: passed ? 'success' : 'failure',
-                description: passed ? 'Trusted guards passed' : 'A trusted guard failed or did not run',
+                description: passed ? 'Trusted guards passed' : sizeBlocked ? 'This change is over the hand-written size cap' : 'A trusted guard failed or did not run',
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               });
-              if (!passed) core.setFailed('A trusted guard failed or did not run.');
+              if (!passed) core.setFailed(sizeBlocked ? 'PR size over the cap; split it into smaller changes that each build green.' : 'A trusted guard failed or did not run.');
             }, { log: core.warning });
 
   bind-ticket:

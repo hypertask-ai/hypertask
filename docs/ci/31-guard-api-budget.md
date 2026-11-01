@@ -8,19 +8,24 @@ summary job replaces the old status publisher and trusted completion workflow.
 
 The trusted workflow reads PR metadata once for outside, size and title
 checks. It publishes only the existing required `pr-title` status, combining
-outside and title outcomes. Size remains advisory. A fresh pending status
+outside, size and title outcomes. A size block reddens that context and sends no
+extra status write. A fresh pending status
 invalidates an earlier same-head success before metadata reevaluation, so an
 invalid title cannot keep its prior approval during later quota retries.
-Publication rereads the open PR, production base, exact head, event title
-and evaluated title. A rate-limit refusal
+Publication rereads the open PR, production base, exact head, event title,
+evaluated title and evaluated labels. A rate-limit refusal
 waits until the supplied reset and retries that whole fresh-read/publication
 operation. Ordinary authorization errors remain failures. The retry wait is
 bounded to one hour; an unavailable required result never becomes green.
 No required ruleset context changes.
 
-Trusted guard concurrency includes the workflow run ID.
-Older event reruns cannot cancel newer evaluations.
-Reruns still share their original event's group.
+Trusted guard concurrency is one run at a time per pull request, and it no longer
+cancels. A cancelled evaluation leaves the required `pr-title` status
+unresolved, and a rerun of an older event cancels the current evaluation, so the
+group keeps `queue: max` and lets every pending event run in order. A label read
+by an older run still cannot reach a status after a newer event changed it: the
+publisher rereads the head, title and labels before every write, and the newest
+event always publishes last.
 
 `node tests/guard-quota.test.cjs` executes the saved production scripts and
 candidate workflow entry points with isolated GitHub responses. For a small,
