@@ -1043,7 +1043,7 @@ jobs:
         run: |
           set -o pipefail
           for attempt in 1 2; do
-            npx next build --webpack 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
+            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
             grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
             echo "::warning::Google font download failed during next build (attempt $attempt)"
           done
@@ -1757,7 +1757,7 @@ jobs:
         run: |
           set -o pipefail
           for attempt in 1 2; do
-            npx next build --webpack 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
+            npx next build 2>&1 | tee "$RUNNER_TEMP/next-build.log" && exit 0
             grep -q 'next/font/google' "$RUNNER_TEMP/next-build.log" || exit 1
             echo "::warning::Google font download failed during next build (attempt $attempt)"
           done

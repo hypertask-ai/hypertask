@@ -87,12 +87,20 @@ for (const options of [
   { dev: false, isServer: true, nextRuntime: "nodejs" },
   { dev: false, isServer: true, nextRuntime: "edge" },
 ]) {
-  test(`Next webpack aliases vfile-message for ${JSON.stringify(options)}`, () => {
+  test(`webpack aliases vfile-message for ${JSON.stringify(options)}`, () => {
     const config = nextConfig.webpack({ resolve: { alias: { existing: "kept" } } }, options);
     assert.equal(config.resolve.alias["vfile-message$"], patchedPath);
     assert.equal(config.resolve.alias.existing, "kept");
   });
 }
+
+test("Turbopack carries the same aliases and keeps the edge redis shim conditional", () => {
+  assert.deepEqual(nextConfig.turbopack.resolveAlias, {
+    "react-joyride": require.resolve("react-joyride"),
+    "vfile-message": patchedPath,
+    ioredis: { "edge-light": path.resolve(__dirname, "../src/lib/ioredis-edge-shim.ts") },
+  });
+});
 
 test("the real webpack markdown bundle renders under normal and locked Error intrinsics", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "htpr-6876-"));

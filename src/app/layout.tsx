@@ -16,8 +16,8 @@ import FilesImageFallback from "@/components/FilesImageFallback";
 import { isMobileDevice } from "@/utils/serverActions";
 import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
-import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
-import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
+import { inter } from "@/lib/fonts/inter";
+import { newsreader } from "@/lib/fonts/newsreader";
 import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
@@ -95,9 +95,6 @@ export default async function RootLayout(
       }
     } catch {}
   }
-  const deferUnusedBoardFonts = boardDocument &&
-    (boardDocument.display as BoardDisplay).isMobile &&
-    ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const chipEventsFlag = await isFeatureEnabled(HTPR_7978_AI_CHIP_EVENTS_FLAG, analyticsSession?.id ?? -1);
@@ -131,9 +128,6 @@ export default async function RootLayout(
   const themeClassName = themeValue === "system"
     ? "system"
     : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
-  const plexPreloadHref = shellSeed && ["amoled", "graphite", "porcelain"].includes(initialResolvedTheme)
-    ? (ibmPlexSans as typeof ibmPlexSans & { preloadHref?: string }).preloadHref
-    : undefined;
 
   return (
     <html
@@ -144,12 +138,6 @@ export default async function RootLayout(
       data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}
     >
       <head>
-        {plexPreloadHref && (
-          <link rel="preload" href={plexPreloadHref} as="font" type="font/woff2" crossOrigin="anonymous" />
-        )}
-        {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
-          <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
-        ))}
         <script
           id="ht-cached-task-history"
           dangerouslySetInnerHTML={{

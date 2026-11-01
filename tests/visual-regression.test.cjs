@@ -166,7 +166,7 @@ test("paired lifecycle resets each schema, seeds both from the same harness, bui
   assert.throws(() => assertLocalCi({ ...env, REDIS_URL: "redis://external.invalid" }));
   const code = source("scripts/visual-regression-ci.mjs");
   const loop = code.slice(code.indexOf('for (const phase of ["base", "head"])', code.indexOf("async function main")));
-  const steps = ['["npm", "ci"', '["npx", "prisma", "generate"]', '"DROP SCHEMA public CASCADE; CREATE SCHEMA public;"', 'redis.flushdb()', '["npx", "prisma", "migrate", "deploy"]', '["node", "scripts/seed-browser-smoke.mjs", "--visual"]', '["npx", "next", "build", "--webpack"]', 'await startServer(', '...captureArguments(phase)', 'await stop()'];
+  const steps = ['["npm", "ci"', '["npx", "prisma", "generate"]', '"DROP SCHEMA public CASCADE; CREATE SCHEMA public;"', 'redis.flushdb()', '["npx", "prisma", "migrate", "deploy"]', '["node", "scripts/seed-browser-smoke.mjs", "--visual"]', 'await buildArguments(root)', 'await startServer(', '...captureArguments(phase)', 'await stop()'];
   let previous = -1;
   for (const step of steps) { const index = loop.indexOf(step); assert.ok(index > previous, step); previous = index; }
   assert.match(code, /cp\(path\.join\(head, "e2e\/visual"\), path\.join\(base, "e2e\/visual"\)/);

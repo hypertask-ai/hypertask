@@ -23,7 +23,7 @@ test("Plex already has Next's size-adjust fallback enabled; swap is not a zero-s
   assert.equal(options.weight, "variable");
   assert.deepEqual(options.subsets, ["latin"]);
   assert.equal(options.display, "swap");
-  assert.equal(options.preload, false);
+  assert.equal(options.preload, true);
   const validated = validateGoogleFontFunctionCall("IBM_Plex_Sans", options);
   assert.equal(validated.adjustFontFallback, true);
   const metrics = getFallbackFontOverrideMetrics(validated.fontFamily);

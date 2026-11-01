@@ -8,6 +8,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
 const { getNextConfigEnv } = require("next/dist/lib/static-env");
 const { spawnSync } = require("node:child_process");
+const { createRequire } = require("node:module");
 
 const root = path.resolve(__dirname, "..");
 const paletteFile = "src/components/Modals/commands/HTC/commands.tsx";
@@ -104,7 +105,7 @@ function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
 
 function buildConfig(env = {}, gitSha = "a91d448", gitAvailable = true) {
   const configModule = { exports: {} };
-  new Function("require", "module", "process", "__dirname", read("next.config.js"))((specifier) => {
+  const configRequire = (specifier) => {
     if (["@next/bundle-analyzer", "next-pwa"].includes(specifier)) return () => (config) => config;
     if (specifier === "@posthog/nextjs-config") return { withPostHogConfig: (config) => config };
     if (specifier === "node:child_process") return { execFileSync: (_node, args, options) => {
@@ -116,7 +117,11 @@ function buildConfig(env = {}, gitSha = "a91d448", gitAvailable = true) {
       return Buffer.from(gitSha);
     } };
     throw new Error(`Unexpected config import: ${specifier}`);
-  }, configModule, { env, execPath: process.execPath }, root);
+  };
+  configRequire.resolve = createRequire(path.join(root, "next.config.js")).resolve;
+  new Function("require", "module", "process", "__dirname", read("next.config.js"))(
+    configRequire, configModule, { env, execPath: process.execPath }, root,
+  );
   return configModule.exports;
 }
 

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
+const { createRequire } = require("node:module");
 const path = require("node:path");
 const test = require("node:test");
 
@@ -38,6 +39,7 @@ for (const smoke of [false, true]) {
           },
         };
       };
+      configRequire.resolve = createRequire(path.join(__dirname, "..", "next.config.js")).resolve;
       new Function("require", "module", "process", "__dirname", source)(
         configRequire, configModule, { env, execPath: process.execPath }, path.resolve(__dirname, ".."),
       );
@@ -48,6 +50,8 @@ for (const smoke of [false, true]) {
       if (posthog) assert.equal(config.env.POSTHOG_RELEASE_ID, "build-memory-test-release");
       assert.equal(config.experimental.webpackBuildWorker, true);
       assert.equal(config.experimental.webpackMemoryOptimizations, true);
+      assert.equal(typeof config.webpack, "function");
+      assert.equal(config.turbopack.resolveAlias["vfile-message"], path.resolve(__dirname, "..", "src/lib/vendor/vfile-message.mjs"));
       assert.equal(config.experimental.cpus, 1);
       assert.equal(config.experimental.parallelServerBuildTraces, smoke);
       assert.equal(config.experimental.parallelServerCompiles, undefined);

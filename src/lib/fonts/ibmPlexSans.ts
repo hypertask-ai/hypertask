@@ -5,5 +5,5 @@ export const ibmPlexSans = IBM_Plex_Sans({
   subsets: ["latin"],
   variable: "--font-plex",
   display: "swap",
-  preload: false,
+  preload: true,
 });

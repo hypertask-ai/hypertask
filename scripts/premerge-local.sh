@@ -216,7 +216,7 @@ for ((attempt=0; attempt<30; attempt++)); do
   sleep 1
 done
 curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"
-PREMERGE_NEXT_BUILD=1 HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" --exclusive npx --no-install next build --webpack
+PREMERGE_NEXT_BUILD=1 HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" --exclusive npx --no-install next build
 setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
 printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/server.pid"
