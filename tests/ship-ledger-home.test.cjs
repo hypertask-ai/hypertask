@@ -375,3 +375,56 @@ test('the deeper proof gate is read from the home ticket folder, never from the 
     fs.rmSync(f.root, { recursive: true, force: true });
   }
 });
+
+test('a handover in the same directory re-points gates written for an older checkout', needsUnlazy, () => {
+  const f = fixture();
+  const old = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/old checkout' };
+  const now = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'release', SHIP_CHECKOUT: '/home/u/new checkout' };
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', old);
+    const ledger = path.join(f.home, '.unlazy/ledgers/HTPR-6819/GATES.md');
+    const refused = spawnSync('bash', [shipGates, 'HTPR-6819'], {
+      cwd: f.project,
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionB-full', ...now },
+    });
+    assert.notEqual(refused.status, 0);
+    assert.match(refused.stderr, /re-run with SHIP_LEDGER_MOVE=1/);
+    assert.match(refused.stderr, /was written for SHIP_REPO=hypertask-ai\/cli/);
+    assert.equal(fs.readFileSync(ledger, 'utf8').includes("SHIP_CHECKOUT='/home/u/old checkout'"), true);
+
+    const result = gates(f, 'HTPR-6819', 'sessionB-full', { SHIP_LEDGER_MOVE: '1', ...now });
+    assert.match(result.stderr, /ledger gates re-pointed at this session's repository settings/);
+    const text = fs.readFileSync(ledger, 'utf8');
+    assert.equal(text.includes('/home/u/old checkout'), false);
+    assert.equal(text.split('\n').filter((line) => line.startsWith("  CHECK: SHIP_REPO=hypertask-ai/cli SHIP_BASE=release SHIP_CHECKOUT='/home/u/new checkout' '")).length, 9);
+    assert.equal(text.split('\n').filter((line) => line === `  CWD: ${f.project}`).length, 9);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('adopting a legacy ledger re-points its gates at this session repository settings', needsUnlazy, () => {
+  const f = fixture();
+  const old = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/old checkout' };
+  const now = { SHIP_REPO: 'hypertask-ai/cli', SHIP_BASE: 'main', SHIP_CHECKOUT: '/home/u/new checkout' };
+  try {
+    gates(f, 'HTPR-6819', 'sessionA-full', old);
+    const home = path.join(f.home, '.unlazy/ledgers/HTPR-6819');
+    const legacy = path.join(f.project, '.unlazy/s-sessionA/gates');
+    fs.mkdirSync(legacy, { recursive: true });
+    const source = path.join(legacy, 'extra.md');
+    fs.writeFileSync(source, fs.readFileSync(path.join(home, 'GATES.md'), 'utf8'));
+    fs.rmSync(home, { recursive: true, force: true });
+
+    gates(f, 'HTPR-6819', 'sessionB-full', now);
+    const extra = fs.readFileSync(path.join(home, 'gates/extra.md'), 'utf8');
+    assert.equal(extra.includes('/home/u/old checkout'), false);
+    assert.equal(extra.split('\n').filter((line) => line.startsWith("  CHECK: SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/new checkout' '")).length, 9);
+    assert.equal(extra.split('\n').filter((line) => line === `  CWD: ${f.project}`).length, 9);
+    assert.equal(fs.existsSync(source), false);
+    assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});

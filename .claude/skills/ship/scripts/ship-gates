@@ -61,8 +61,10 @@ const read = (file) => {
 // A moved block drops the old result: its check now runs from this ledger and checkout.
 const splitTicketGates = (source, ticket, cwd, accept) => {
   const lines = source.split(/\r?\n/);
+  const all = parseGates(source, { requireGates: false }).gates;
   const held = new Set();
-  for (const gate of parseGates(source, { requireGates: false }).gates) {
+  const byLine = new Map(all.map((gate) => [gate.line, gate]));
+  for (const gate of all) {
     if (!gate.id.startsWith(`${ticket}.`) || !accept(gate)) continue;
     for (let i = gate.line; i < lines.length && (i === gate.line || /^[ \t]+\S/.test(lines[i])); i += 1) held.add(i);
   }
@@ -71,9 +73,14 @@ const splitTicketGates = (source, ticket, cwd, accept) => {
   for (let i = 0; i < lines.length; i += 1) {
     if (!held.has(i)) { kept.push(lines[i]); continue; }
     const line = lines[i];
+    const gate = byLine.get(i);
     if (/^- \[[ xX]\] /.test(line)) moved.push(line.replace(/^- \[[ xX]\] /, '- [ ] '));
     else if (/^ {2}CWD: /.test(line)) moved.push(`  CWD: ${cwd}`);
-    else if (/^ {2}EVIDENCE: /.test(line)) moved.push('  EVIDENCE: pending');
+    // A moved gate runs here, so it keeps this session's repository settings: the old checkout or
+    // base branch it was written for may not exist any more.
+    else if (/^ {2}CHECK: /.test(line) && gate && generated(gate)) {
+      moved.push(`  CHECK: ${envPrefix}${line.slice('  CHECK: '.length + prefixOf(gate).length)}`);
+    } else if (/^ {2}EVIDENCE: /.test(line)) moved.push('  EVIDENCE: pending');
     else moved.push(line);
   }
   return { moved: moved.join('\n').trim(), kept: kept.join('\n') };
@@ -145,6 +152,10 @@ const apply = async () => {
       gate.expect === gates[match[2]][1];
   };
   const repoOf = (gate) => (gate.check.startsWith('SHIP_REPO=') ? gate.check.split(' ')[0].replace('SHIP_REPO=', '') : APP_REPO);
+  // The repository settings a generated gate carries. A handover in the same directory changes them
+  // without changing the CWD, and a gate that keeps the old ones checks a checkout nobody uses.
+  const prefixPattern = /^(SHIP_REPO=[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='\/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?/;
+  const prefixOf = (gate) => prefixPattern.exec(gate.check ?? '')[0];
   // A ledger written before this change sits inside the project, where a session that is already
   // mid-ticket would lose its gates. Adopt this ticket's gates from every old session folder, then
   // delete what is left: the project must stay clean, and a copied file can still leak.
@@ -245,12 +256,14 @@ const apply = async () => {
     }
   };
   planProjectLedger();
-  // The ticket owns the ledger, so a later session may resume it from its own worktree. Those
-  // gates run where that session works, but only when the session asks for the move: an edited
-  // CWD is never re-approved by accident.
-  const strays = doc.gates.filter((gate) => generated(gate) && gate.cwd !== root);
+  // The ticket owns the ledger, so a later session may resume it from its own worktree, and a
+  // handover in the same directory may bring another checkout or base branch. Those gates run where
+  // this session works, but only when it asks for the move: a changed CWD or setting is never
+  // re-approved by accident.
+  const strays = doc.gates.filter((gate) => generated(gate) && (gate.cwd !== root || prefixOf(gate) !== envPrefix));
+  const strayWhere = (gate) => (gate.cwd !== root ? `from ${gate.cwd}` : `for ${prefixOf(gate).trim() || 'the app repository'}`);
   if (strays.length && process.env.SHIP_LEDGER_MOVE !== '1') {
-    throw new Error(`ship-gates: ${ticket} ledger was written from ${strays[0].cwd}; re-run with SHIP_LEDGER_MOVE=1 to run its gates in ${root}`);
+    throw new Error(`ship-gates: ${ticket} ledger was written ${strayWhere(strays[0])}; re-run with SHIP_LEDGER_MOVE=1 to run its gates ${strays[0].cwd !== root ? `in ${root}` : "with this session's repository settings"}`);
   }
   if (strays.length) {
     const rewritten = new Map();
@@ -273,7 +286,9 @@ const apply = async () => {
     text = lines.join('\n');
     doc = parseGates(text, { requireGates: true });
     if (doc.errors.length) throw new Error(doc.errors.join('; '));
-    process.stderr.write(`ship-gates: ${ticket} ledger gates moved from ${strays[0].cwd} to ${root}\n`);
+    process.stderr.write(strays[0].cwd !== root
+      ? `ship-gates: ${ticket} ledger gates moved from ${strays[0].cwd} to ${root}\n`
+      : `ship-gates: ${ticket} ledger gates re-pointed at this session's repository settings\n`);
   }
   for (const gate of doc.gates) {
     if (!gateId.test(gate.id) && !gate.check) continue;
