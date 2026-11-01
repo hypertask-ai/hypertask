@@ -339,7 +339,7 @@ docker run --rm --name "$builder" --network "$network" "${runtime[@]}" "${common
   -e NEXT_FONT_GOOGLE_MOCKED_RESPONSES=/trusted/next-font-smoke-mock.cjs \
   -v "$next_env:/app/next-env.d.ts:rw" \
   -v "$trusted_root/scripts:/trusted:ro" \
-  "$runtime_image" timeout --signal=KILL 10m node node_modules/next/dist/bin/next build
+  "$runtime_image" timeout --signal=KILL 10m node node_modules/next/dist/bin/next build --webpack
 
 docker run -d --name "$app" --network "$network" \
   --cap-drop ALL \

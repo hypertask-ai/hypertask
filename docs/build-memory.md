@@ -115,3 +115,9 @@ jobs that build with `npx next build` keep exercising Turbopack on GitHub's
 `tests/build-memory-config.test.cjs` fails if the production build command drops
 `--webpack` again, so returning to Turbopack needs a measured green Production
 deploy instead of a one-word edit.
+
+The same revert covers the smoke harness, which is read from `production`.
+`app-smoke` builds the candidate with the builder production ships (HYCI-49), so
+`scripts/run-app-smoke-isolated.sh` passes `--webpack` as well until the shipped
+build is Turbopack again. `tests/app-smoke-workflow.test.cjs` fails if that flag
+goes missing.

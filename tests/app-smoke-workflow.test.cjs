@@ -235,7 +235,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(isolated, /chmod 0666 "\$next_env"/);
   assert.match(
     isolated,
-    /--name "\$builder"[\s\S]*-v "\$next_env:\/app\/next-env\.d\.ts:rw"[\s\S]*next build/,
+    /--name "\$builder"[\s\S]*-v "\$next_env:\/app\/next-env\.d\.ts:rw"[\s\S]*next build --webpack/,
   );
   assert.match(isolated, /invocation_key=\$\{scratch##\*\.\}/);
   assert.match(isolated, /app-smoke\.Dockerfile/);
@@ -328,8 +328,7 @@ test("app smoke validates the head before isolated build and route checks", asyn
   assert.match(seed, /sections: \["Baseline", "Alternate"\]/);
   assert.match(seed, /section_title: "Baseline"/);
   assert.match(seed, /section_title: "Alternate"/);
-  assert.match(isolated, /next build/);
-  assert.doesNotMatch(isolated, /next build --webpack/);
+  assert.match(isolated, /next build --webpack/);
   assert.match(isolated, /NODE_OPTIONS=--max-old-space-size=8192/);
   assert.match(isolated, /CORE_APP_SMOKE=true/);
   assert.match(
