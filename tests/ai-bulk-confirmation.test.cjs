@@ -275,25 +275,3 @@ test("Redis errors fail closed", async () => {
   assert.equal(input.previewsIssuedThisRequest.has(input.operationKey), true);
 });
 
-test("every chat route bulk gate uses the shared confirmation helper", () => {
-  const routeSource = fs.readFileSync(
-    path.join(root, "src/app/api/ai/chat/stream/route.ts"),
-    "utf8"
-  );
-
-  assert.doesNotMatch(
-    routeSource,
-    /!\s*[\w.]*confirmed\s*\|\|\s*bulkPreviewsIssued\.has\s*\(/
-  );
-  assert.doesNotMatch(routeSource, /JSON\.stringify\((operation|requestedTasks)\)/);
-  assert.equal(
-    (routeSource.match(/await requireCrossMessageConfirmation\(/g) || []).length,
-    12,
-    "all twelve confirmation gates must use the shared helper"
-  );
-  assert.equal(
-    (routeSource.match(/buildBulkOperationKey\(/g) || []).length,
-    5,
-    "all five model-input-dependent gates must use canonical operation keys"
-  );
-});

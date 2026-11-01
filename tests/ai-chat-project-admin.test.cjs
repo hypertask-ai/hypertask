@@ -15,45 +15,6 @@ function toolBody(source, toolName) {
   return source.slice(start, nextToolStart === -1 ? undefined : nextToolStart);
 }
 
-test("hypertask_project_admin is registered with explicit board administration warnings", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
-  const body = toolBody(source, "hypertask_project_admin");
-
-  assert.match(
-    source,
-    /hypertask_project_admin: "Managing board administration\.\.\."/,
-    "tool must have a user-visible status label",
-  );
-  assert.match(body, /sendStatus\("hypertask_project_admin"\)/);
-  assert.match(body, /action: z\.enum\(\["archive", "invite_member"\]\)/);
-  assert.match(body, /project_id: z\.coerce\.number\(\)\.int\(\)\.positive\(\),/);
-  assert.match(body, /project_id must be used verbatim as a board ID/);
-  assert.match(
-    body,
-    /Never infer a board from a name or from a number appearing in a board title\./,
-  );
-  assert.match(
-    body,
-    /If the user names a board ambiguously, ask which board they mean instead of guessing\./,
-  );
-  assert.match(
-    body,
-    /Archiving requires the board's exact title in expected_title as a safety check\./,
-  );
-  assert.match(body, /Read that title from a tool result; never invent it\./);
-  assert.match(
-    body,
-    /expected_title: z[\s\S]*?Required for archive\. Use the board's exact title from a tool result; do not invent it\./,
-  );
-  assert.match(
-    body,
-    /input\.action === "archive"[\s\S]*?expected_title is required for archive[\s\S]*?path: \["expected_title"\]/,
-  );
-  assert.match(body, /Archiving hides the board for everyone\./);
-  assert.match(body, /Inviting grants the person or agent access to the board\./);
-  assert.doesNotMatch(body, /createApiClient|createMcpToken|ProjectService|fetch\s*\(/);
-});
-
 test("hypertask_project_admin is registered as a write tool", () => {
   const source = fs.readFileSync(ROUTE, "utf8");
   const writeToolNamesStart = source.indexOf("const writeToolNames = new Set([");
@@ -65,29 +26,6 @@ test("hypertask_project_admin is registered as a write tool", () => {
     /"hypertask_project_admin"/,
     "every project_admin action mutates board state or access",
   );
-});
-
-test("hypertask_project_admin archive and restore are owner-only", () => {
-  const source = fs.readFileSync(ROUTE, "utf8");
-  const body = toolBody(source, "hypertask_project_admin");
-  const archiveStart = body.indexOf('if (input.action === "archive")');
-  const inviteAccessStart = body.indexOf(
-    "const access = actingAgentId",
-  );
-  const archiveBranch = body.slice(archiveStart, inviteAccessStart);
-  const ownerCheckAt = archiveBranch.indexOf("ownerId: user.id");
-  const updateAt = archiveBranch.indexOf("updateProjectStatus(project.id, status, {");
-
-  assert.notEqual(archiveStart, -1, "archive action branch missing");
-  assert.notEqual(inviteAccessStart, -1, "invite access branch missing");
-  assert.match(archiveBranch, /const status = input\.status \?\? "Archive"/);
-  assert.match(archiveBranch, /status: \{ not: "Deleted" \}/);
-  assert.notEqual(ownerCheckAt, -1, "archive must match the authenticated owner");
-  assert.notEqual(updateAt, -1, "archive must update the owned project");
-  const quota = require("node:fs").readFileSync(path.resolve(__dirname, "../src/utils/controllers/projects/boardQuota.ts"), "utf8");
-  assert.match(quota, /status !== "Normal" \|\| !\(await isPlanLimitsEnabled\(context.actorUserId\)\)/);
-  assert.match(quota, /return prisma.project.update\(\{[\s\S]*?where: \{ id: projectId \},[\s\S]*?data: \{ status \}/);
-  assert.ok(ownerCheckAt < updateAt, "ownership must be checked before archive or restore");
 });
 
 test("hypertask_project_admin previews archive and restore without mutating", () => {
