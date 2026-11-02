@@ -31,15 +31,14 @@ case "$*" in
 esac
 `;
 
+const DRIFT_SCRIPT = ".github/scripts/production-drift.sh";
+
 function workflowRun() {
   const workflow = require("node:fs").readFileSync(".github/workflows/prod-health.yml", "utf8");
   const start = workflow.indexOf("      - name: Compare the live production deployment against the production tip");
-  const runStart = workflow.indexOf("        run: |\n", start) + "        run: |\n".length;
-  const runEnd = workflow.indexOf("\n  # ── Pusher status", runStart);
-  assert.ok(start !== -1 && runStart > start && runEnd > runStart, "drift step not found");
-  return workflow.slice(runStart, runEnd).split("\n")
-    .map((line) => (line.startsWith("          ") ? line.slice(10) : line))
-    .join("\n");
+  const runStart = workflow.indexOf(`        run: bash ${DRIFT_SCRIPT}`, start);
+  assert.ok(start !== -1 && runStart > start, "drift step not found");
+  return require("node:fs").readFileSync(DRIFT_SCRIPT, "utf8");
 }
 
 function repository() {

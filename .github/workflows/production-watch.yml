@@ -1,0 +1,113 @@
+name: Production Watch
+
+# YPER4-984. The scheduled production watch asked GitHub for 336 runs a day (a
+# 30-minute drift and Pusher check, a 5-minute reachability and core-actions pass)
+# and got 67 in the seven days to 2026-11-02T04:17Z: 2.8%, median gap 130 minutes,
+# worst gap 6.5 hours, so a bad deploy could sit unseen for hours. A cron is not a
+# tick on a repository this busy, and a dispatch is not throttled, so a link runs
+# six five-minute passes and then starts the next link itself
+# (.github/scripts/production-watch.cjs, .github/scripts/schedule-chain.cjs).
+#
+# The cron below is a backstop only: it restarts a chain that died. While another
+# link is queued or running it stands down, so a backstop landing on a live chain
+# never starts a second one.
+#
+# This is monitoring, never a mutation: the deploy verification and the guarded
+# rollback stay in prod-health.yml, on push. Because a live deploy still serving
+# the previous commit would read as drift, the drift half is skipped while a
+# prod-health run is in flight, which is why prod-health keeps health and drift in
+# one concurrency group.
+#
+# Cost: one of the twenty parallel jobs, free hosted minutes only, because this
+# repository is public.
+on:
+  schedule:
+    - cron: '7-59/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: production-watch
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: prj_oEok2iMNFPzj6AWe1KQBaIAcPaAf
+  TEAM_ID: team_yureFlJZ6ibwebaOOkKc5whs
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    # Six ticks five minutes apart, the checks inside them, and room for a slow
+    # pass without losing the link. The six gaps alone are 25 minutes and the
+    # passes sit on top (up to six more minutes at thirty seconds each), so the
+    # loop needs a deadline past that or it drops the sixth pass. It stops itself
+    # at --deadline-minutes so a slow check can never carry the job into this
+    # timeout; the hand-off is a separate job so it runs either way.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 50
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+
+      - name: Run six passes, five minutes apart
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          # The core-actions probe runs as the dedicated Health Check user,
+          # exactly as the prod-health push job runs it (HTPR-6258).
+          HYPERTASK_HEALTH_USER_TOKEN: ${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          CORE_SMOKE_TEAM_ID: ${{ vars.CORE_SMOKE_TEAM_ID }}
+          CORE_SMOKE_RESULT_FILE: ${{ runner.temp }}/core-smoke-result.json
+        run: node .github/scripts/production-watch.cjs --deadline-minutes 34
+
+  # The chain step runs even after a red tick: a broken check is what the watch
+  # is for, and a chain that stops on one red pass is the failure this ticket is
+  # about. It is its own job because a step cannot outlive the job that hit its
+  # timeout, so a slow pass would otherwise lose the link it was about to start.
+  chain:
+    needs: [watch]
+    if: ${{ always() }}
+    permissions:
+      contents: read
+      actions: write
+    concurrency:
+      group: production-watch-chain
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # Long enough to sit out a whole link: if the passes above end early (a red
+    # tick that fails fast), this job holds until the thirty-minute boundary, and
+    # losing that wait costs the next link.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+
+      # The gap is measured from this run's own start, so the next link starts on
+      # the thirty-minute boundary whether the passes above ran long or short.
+      - name: Start the next link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/schedule-chain.cjs hand-off --workflow production-watch.yml --gap-minutes 30

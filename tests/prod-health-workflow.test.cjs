@@ -480,21 +480,11 @@ async function driftScript() {
     "Compare the live production deployment against the production tip",
   );
   assert.notEqual(heading, -1, "drift job heading not found");
-  const marker = "        run: |\n";
-  const start = workflow.indexOf(marker, heading);
-  assert.notEqual(start, -1, "drift job run block not found");
-  const lines = workflow.slice(start + marker.length).split("\n");
-  const block = [];
-  for (const line of lines) {
-    if (line === "") {
-      block.push("");
-      continue;
-    }
-    const indent = (line.match(/^ */) || [""])[0].length;
-    if (indent <= 8) break;
-    block.push(line.slice(10));
-  }
-  return block.join("\n");
+  assert.match(
+    workflow.slice(heading, heading + 900),
+    /run: bash \.github\/scripts\/production-drift\.sh/,
+  );
+  return readFile(".github/scripts/production-drift.sh", "utf8");
 }
 
 const DRIFT_CURL_STUB = `#!/usr/bin/env bash
@@ -974,7 +964,10 @@ for (const [name, statusBody, componentsBody, exitStatus, message] of [
   test(`Pusher handles ${name} under errexit`, async () => {
     const yaml = require("js-yaml");
     const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
-    const script = workflow.jobs["pusher-status"].steps[0].run;
+    const [checkout, run] = workflow.jobs["pusher-status"].steps;
+    assert.equal(checkout.uses, workflow.jobs.health.steps[0].uses);
+    assert.equal(run.run, "bash .github/scripts/pusher-status.sh");
+    const script = await readFile(".github/scripts/pusher-status.sh", "utf8");
     const directory = await mkdtemp(join(tmpdir(), "prod-health-pusher-"));
     const bin = join(directory, "bin");
     try {
