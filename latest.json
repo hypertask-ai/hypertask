@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-27T10:31:42.852Z",
+  "generatedAt": "2026-11-02T14:43:42.994Z",
   "label": "weekly",
   "baseline": "weekly",
   "mode": "fixture",
@@ -11,7 +11,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 24,
+      "wallMs": 33,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -21,13 +21,33 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 10,
+      "wallMs": 18,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
     },
     {
       "taskId": "comment-ticket",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 76,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "comment-ticket",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 16,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "move-to-qa",
       "transport": "mcp",
       "pass": true,
       "reason": null,
@@ -37,31 +57,11 @@
       "executor": "mcp"
     },
     {
-      "taskId": "comment-ticket",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 7,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "move-to-qa",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
       "taskId": "move-to-qa",
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 9,
+      "wallMs": 10,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -81,7 +81,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -91,7 +91,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 4,
+      "wallMs": 5,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -101,37 +101,37 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
+      "wallMs": 8,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "list-board-tasks",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 3,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "list-board-tasks",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
       "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
     },
     {
-      "taskId": "list-board-tasks",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 2,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "list-board-tasks",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
       "taskId": "list-comments",
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 4,
+      "wallMs": 3,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -141,7 +141,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -181,7 +181,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -201,7 +201,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -221,7 +221,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -231,7 +231,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 4,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -241,7 +241,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -261,7 +261,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -281,7 +281,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -291,7 +291,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 3,
+      "wallMs": 2,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -301,7 +301,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -321,7 +321,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 6,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -331,37 +331,37 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 3,
+      "wallMs": 2,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
     },
     {
       "taskId": "next-tasks",
-      "transport": "cli",
-      "pass": true,
-      "reason": null,
-      "wallMs": 6,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "cli"
-    },
-    {
-      "taskId": "task-context",
-      "transport": "mcp",
-      "pass": true,
-      "reason": null,
-      "wallMs": 3,
-      "wallSource": "measured",
-      "toolCalls": 1,
-      "executor": "mcp"
-    },
-    {
-      "taskId": "task-context",
       "transport": "cli",
       "pass": true,
       "reason": null,
       "wallMs": 7,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "cli"
+    },
+    {
+      "taskId": "task-context",
+      "transport": "mcp",
+      "pass": true,
+      "reason": null,
+      "wallMs": 2,
+      "wallSource": "measured",
+      "toolCalls": 1,
+      "executor": "mcp"
+    },
+    {
+      "taskId": "task-context",
+      "transport": "cli",
+      "pass": true,
+      "reason": null,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -381,7 +381,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 7,
+      "wallMs": 8,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -391,7 +391,7 @@
       "transport": "mcp",
       "pass": true,
       "reason": null,
-      "wallMs": 2,
+      "wallMs": 1,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "mcp"
@@ -401,7 +401,7 @@
       "transport": "cli",
       "pass": true,
       "reason": null,
-      "wallMs": 5,
+      "wallMs": 7,
       "wallSource": "measured",
       "toolCalls": 1,
       "executor": "cli"
@@ -504,7 +504,7 @@
         "passed": 20,
         "failed": 0,
         "successRate": 1,
-        "wallMs": 91,
+        "wallMs": 171,
         "toolCalls": 20
       },
       "cli": {
@@ -512,7 +512,7 @@
         "passed": 20,
         "failed": 0,
         "successRate": 1,
-        "wallMs": 134,
+        "wallMs": 171,
         "toolCalls": 20
       }
     },
