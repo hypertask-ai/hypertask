@@ -276,3 +276,26 @@ test("a transient read failure is retried before any verdict is claimed", () => 
   assert.equal(result.status, 0, result.stderr);
   assert.equal(outputValue(written, "ok"), "true");
 });
+
+test("a healthy verdict that cannot be published is red, not a silent skip", () => {
+  const health = workflow.jobs.health.steps.find((step) => step.id === "check");
+  assert.match(health.run, /for attempt in 1 2 3; do/);
+  assert.ok(health.run.includes("'%{http_code}'"), "the publish does not read the HTTP code");
+  assert.ok(health.run.includes(`jq -r '.state // empty' "$body"`), "the publish does not read the status back");
+  assert.ok(health.run.includes("return 1"), "the publish never reports a failure");
+  assert.match(health.run, /if ! publish_health_gate "\$SHA" success/);
+  assert.match(health.run, /could not be published; the browser checks cannot run/);
+  assert.match(health.run, /publish_health_gate "\$SHA" failure[^|]*\\\n\s*\|\| notify/);
+});
+
+test("a rollback the health job requests does not wait for the speculative setup", () => {
+  const urgent = workflow.jobs["rollback-health"];
+  assert.ok(urgent, "no rollback-health job");
+  assert.deepEqual(urgent.needs, ["health"]);
+  assert.match(urgent.if, /needs\.health\.outputs\.rollback == 'true'/);
+  assert.equal(workflow.jobs.rollback.needs.length, 3);
+  assert.match(workflow.jobs.rollback.if, /needs\.health\.outputs\.rollback != 'true'/);
+  const urgentRun = urgent.steps.find((step) => step.name === "Freeze merging and revert the confirmed failed release");
+  const laterRun = workflow.jobs.rollback.steps.find((step) => step.name === "Freeze merging and revert the confirmed failed release");
+  assert.equal(urgentRun.run, laterRun.run, "the two rollback jobs run different commands");
+});
