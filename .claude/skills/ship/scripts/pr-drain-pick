@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Prints the one PR this runner should adopt, or NONE/WAIT. Valentin's app freeze (2026-10-31) is the
+# state file the launcher writes (~/.local/state/ht-or-runners/app-freeze; SHIP_FREEZE_FILE and
+# SHIP_APP_FREEZE override it). While it holds, only CI fix PRs with an idle owner wait (YPER4-1005).
 import datetime as dt
 import fcntl
 import json
@@ -16,10 +19,26 @@ CLAIMS = Path.home() / ".local/state/pr-drain/claims"
 CLAIM_TTL = dt.timedelta(hours=3)
 ACTIVE_WINDOW = dt.timedelta(hours=2)
 RED_IDLE = dt.timedelta(hours=6)
+FREEZE_FILE = Path(os.environ.get("SHIP_FREEZE_FILE") or
+                   Path.home() / ".local/state/ht-or-runners/app-freeze")
+FREEZE_IDLE = dt.timedelta(minutes=30)
+CI_TITLE = re.compile(r"\bHYCI-\d+\b")
 
 
 def parse(timestamp):
     return dt.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+
+
+def frozen():
+    override = os.environ.get("SHIP_APP_FREEZE", "")
+    if override == "1":
+        return True
+    if override == "0":
+        return False
+    try:
+        return FREEZE_FILE.exists()
+    except OSError:
+        return True
 
 
 def rank(pr, now):
@@ -32,6 +51,18 @@ def rank(pr, now):
     if red and idle > RED_IDLE:
         return (2, pr["updatedAt"], pr["number"])
     return None
+
+
+def freeze_rank(pr, now, owner, mine):
+    if pr["headRefName"].startswith(CI_RUNNER_PREFIX) or not CI_TITLE.search(pr["title"]):
+        return None
+    if mine:
+        return (-1, pr["updatedAt"], pr["number"])
+    if now - parse(pr["updatedAt"]) < FREEZE_IDLE:
+        return None
+    if owner is not None and now - parse(owner[1]) < FREEZE_IDLE:
+        return None
+    return (0, pr["updatedAt"], pr["number"])
 
 
 def main():
@@ -52,14 +83,12 @@ def main():
     if not isinstance(prs, list) or len(prs) >= 1000:
         sys.exit("pr-drain-pick: incomplete PR list")
     now = dt.datetime.now(dt.timezone.utc)
+    freeze = frozen()
     CLAIMS.mkdir(parents=True, exist_ok=True)
     with (CLAIMS / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         candidates = []
         for pr in prs:
-            if pr["headRefName"].startswith(CI_RUNNER_PREFIX):
-                continue
-            key = rank(pr, now)
             path = CLAIMS / str(pr["number"])
             owner_file = path / "owner"
             owner = None
@@ -68,21 +97,29 @@ def main():
                 if len(owner) != 2:
                     sys.exit("pr-drain-pick: invalid claim record")
                 parse(owner[1])
-            mine = owner is not None and owner[0] == runner
-            if mine:
-                key = (-1, pr["updatedAt"], pr["number"])
+            if freeze:
+                key = freeze_rank(pr, now, owner, owner is not None and owner[0] == runner)
+            else:
+                if pr["headRefName"].startswith(CI_RUNNER_PREFIX):
+                    continue
+                key = rank(pr, now)
+                if owner is not None and owner[0] == runner:
+                    key = (-1, pr["updatedAt"], pr["number"])
             if key is not None:
                 candidates.append((key, pr, owner))
         if not candidates:
-            print("NONE")
+            print("NONE app freeze: no CI fix PR waits; take CI work or end with RUNNER IDLE app freeze"
+                  if freeze else "NONE")
             return
+        claim_ttl = FREEZE_IDLE if freeze else CLAIM_TTL
+        active_window = FREEZE_IDLE if freeze else ACTIVE_WINDOW
         for _, pr, owner in sorted(candidates):
             path = CLAIMS / str(pr["number"])
             owner_file = path / "owner"
             mine = owner is not None and owner[0] == runner
-            if owner is not None and not mine and now - parse(owner[1]) < CLAIM_TTL:
+            if owner is not None and not mine and now - parse(owner[1]) < claim_ttl:
                 continue
-            if not mine and now - parse(pr["updatedAt"]) < ACTIVE_WINDOW:
+            if not mine and now - parse(pr["updatedAt"]) < active_window:
                 continue
             if not dry_run:
                 staged = Path(tempfile.mkdtemp(prefix=".claim-", dir=CLAIMS))
@@ -94,7 +131,7 @@ def main():
                         os.replace(staged, path)
                 finally:
                     shutil.rmtree(staged, ignore_errors=True)
-            ticket = re.search(r"\b(?:HTPR|YPER4|HYFA)-\d+\b", pr["title"])
+            ticket = re.search(r"\b(?:HTPR|YPER4|HYFA|HYCI)-\d+\b", pr["title"])
             title = " ".join(pr["title"].split())
             print(f"PR {pr['number']} {pr['headRefName']} {ticket.group(0) if ticket else '-'} {title}")
             return

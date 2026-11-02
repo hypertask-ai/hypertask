@@ -19,6 +19,8 @@ class PickerTests(unittest.TestCase):
         self.claims = self.home / '.local/state/pr-drain/claims'
         self.env = dict(os.environ, HOME=str(self.home), SHIP_SESSION_NAME='RUNNER 16',
                         PATH=f'{self.bin}:/usr/bin:/bin')
+        self.env.pop('SHIP_APP_FREEZE', None)
+        self.env.pop('SHIP_FREEZE_FILE', None)
         self.command('gh-app-token', 'printf fixture-token')
         self.command('gh', '''
 [ "$GH_TOKEN" = fixture-token ] || exit 99
@@ -32,11 +34,21 @@ cat "$HOME/prs.json"
         path.write_text('#!/bin/sh\n' + body + '\n')
         path.chmod(0o755)
 
-    def pr(self, number, *, hours=8, draft=True, branch=None, checks=None):
-        return dict(number=number, title=f'HTPR-{number} [BUGFIX] Example', isDraft=draft,
+    def pr(self, number, *, hours=8, draft=True, branch=None, checks=None, title=None):
+        return dict(number=number, title=title or f'HTPR-{number} [BUGFIX] Example', isDraft=draft,
                     headRefName=branch or f'runner-1/htpr-{number}',
                     updatedAt=(dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours)).isoformat(),
                     statusCheckRollup=checks or [])
+
+    def freeze(self):
+        path = self.home / '.local/state/ht-or-runners/app-freeze'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('')
+        return path
+
+    def ci_pr(self, number, *, hours=2):
+        return self.pr(number, hours=hours, title=f'HYCI-{number} [INFRA] Build once per change',
+                       branch=f'runner2/hyci-{number}')
 
     def owner(self, number, runner='RUNNER 7', hours=1):
         path = self.claims / str(number)
@@ -201,6 +213,68 @@ runpy.run_path(script, run_name='__main__')
         self.env.pop('SHIP_SESSION_NAME')
         self.assertNotEqual(self.pick().returncode, 0)
         self.assertFalse((self.home / 'gh-args').exists())
+
+    def test_freeze_offers_only_idle_ci_fix_prs(self):
+        self.freeze()
+        self.prs = [self.pr(1, hours=9), self.pr(2, hours=20, draft=False, checks=[{'state': 'FAILURE'}]),
+                    self.ci_pr(3, hours=3)]
+        result = self.pick()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, 'PR 3 runner2/hyci-3 HYCI-3 HYCI-3 [INFRA] Build once per change\n')
+        self.assertTrue((self.claims / '3' / 'owner').read_text().startswith('RUNNER 16\t'))
+        for number in [1, 2]:
+            self.assertFalse((self.claims / str(number)).exists())
+
+    def test_freeze_names_the_freeze_when_nothing_ci_is_free(self):
+        self.freeze()
+        self.prs = [self.pr(1, hours=1), self.pr(2, hours=20, draft=False),
+                    self.ci_pr(3, hours=0.1), self.pr(4, hours=9, branch='ci-runner-4/hyci-4')]
+        result = self.pick()
+        self.assertEqual((result.returncode, result.stdout),
+                         (0, 'NONE app freeze: no CI fix PR waits; take CI work or end with '
+                             'RUNNER IDLE app freeze\n'))
+        self.assertEqual(list(self.claims.glob('*/owner')), [])
+
+    def test_freeze_leaves_a_working_ci_owner_alone(self):
+        self.freeze()
+        self.prs = [self.ci_pr(3, hours=2)]
+        owner = self.owner(3, runner='RUNNER 7', hours=0.1)
+        before = owner.read_text()
+        result = self.pick()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith('NONE app freeze: '), result.stdout)
+        self.assertEqual(owner.read_text(), before)
+
+    def test_freeze_replaces_a_ci_owner_idle_thirty_minutes(self):
+        self.freeze()
+        self.prs = [self.ci_pr(3, hours=2)]
+        owner = self.owner(3, runner='RUNNER 7', hours=0.6)
+        self.assertTrue(self.pick().stdout.startswith('PR 3 '))
+        self.assertTrue(owner.read_text().startswith('RUNNER 16\t'))
+
+    def test_freeze_marker_and_override_decide_the_queue(self):
+        self.prs = [self.pr(1), self.ci_pr(3)]
+        marker = self.freeze()
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 3 '))
+        marker.unlink()
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 1 '))
+        self.env['SHIP_APP_FREEZE'] = '1'
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 3 '))
+        self.env['SHIP_APP_FREEZE'] = '0'
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 1 '))
+
+    def test_freeze_file_elsewhere_is_read(self):
+        marker = self.home / 'freeze-flag'
+        marker.write_text('')
+        self.env['SHIP_FREEZE_FILE'] = str(marker)
+        self.prs = [self.pr(1), self.ci_pr(3)]
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 3 '))
+
+    def test_freeze_resumes_this_runners_own_ci_pr(self):
+        self.freeze()
+        self.prs = [self.ci_pr(3, hours=0.05)]
+        self.owner(3, runner='RUNNER 16', hours=0.05)
+        self.assertTrue(self.pick('--dry-run').stdout.startswith('PR 3 '))
 
 
 if __name__ == '__main__':
