@@ -20,10 +20,11 @@ test("AI chat cleanup flag is a Everyone improvement", () => {
 test("the desktop chat action row puts the microphone left of Send", () => {
   const source = read("src/components/AI_CHAT/AiChatComposerActionRow.tsx");
   const desktop = source.slice(source.lastIndexOf("{attachmentControl}"));
-  const order = ["{contextControl}", "{recorder}", "{streamControl}", "{sendControl}"].map((control) => desktop.indexOf(control));
+  const order = ["{!micBeforeSend && recorder}", "{contextControl}", "{micBeforeSend && recorder}", "{streamControl}", "{sendControl}"].map((control) => desktop.indexOf(control));
   assert.ok(order.every((index) => index >= 0), "every desktop control is rendered");
   assert.deepEqual([...order].sort((a, b) => a - b), order, "desktop order is attach, context, mic, stream, Send");
   assert.ok(desktop.indexOf("{attachmentControl}") < order[0]);
+  assert.match(read("src/components/AI_CHAT/AI_Tiptap_Container.tsx"), /micBeforeSend=\{chatCleanupEnabled\}/);
 });
 
 test("the chat Send renders a word instead of the paper plane", () => {

@@ -410,6 +410,7 @@ export function AI_Tiptap_Container({
           mobile={Boolean(isMbl)}
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
+          micBeforeSend={chatCleanupEnabled}
           leadingControls={
             controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
