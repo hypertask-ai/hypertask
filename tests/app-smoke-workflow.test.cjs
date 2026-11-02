@@ -384,7 +384,8 @@ test("required-check drift monitoring is hourly, production-only and outside PR 
   assert.deepEqual(Object.keys(settingsWorkflow.on).sort(), ["schedule", "workflow_dispatch"]);
   assert.deepEqual(settingsWorkflow.on.schedule, [{ cron: "17 * * * *" }]);
   assert.deepEqual(settingsWorkflow.permissions, { contents: "read" });
-  assert.equal(settingsWorkflow.concurrency["cancel-in-progress"], false);
+  assert.equal(settingsWorkflow.concurrency, undefined);
+  assert.equal(settingsWorkflow.jobs.verify.concurrency["cancel-in-progress"], false);
   const settingsJob = settingsWorkflow.jobs.verify;
   assert.equal(settingsJob.if, "github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production')");
   assert.equal(settingsJob["runs-on"], "ubuntu-latest");
