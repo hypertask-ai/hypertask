@@ -10,7 +10,8 @@ def names(text):
     return out
 lost = []
 for f in ('.github/workflows/ci-tests.yml', '.github/workflows/visual-regression.yml'):
-    old = names(subprocess.run(['git','show','origin/production:'+f],capture_output=True,text=True).stdout)
+    mb = subprocess.run(['git','merge-base','HEAD','origin/production'],capture_output=True,text=True).stdout.strip()
+    old = names(subprocess.run(['git','show',mb+':'+f],capture_output=True,text=True).stdout)
     new = names(open(f).read())
     lost += sorted(old - new)
 if lost:
