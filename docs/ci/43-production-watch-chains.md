@@ -58,3 +58,27 @@ Cost is one of the twenty parallel jobs for each monitor and free hosted minutes
 only, because the repository is public. The number this ticket tracks is the share
 of asked-for passes that actually run, which the run list of each workflow reports
 by event from then on.
+
+## Counting the delivery (HYCI-79)
+
+`scripts/watch-delivery.mjs` reads the run history and answers the one question the
+fix leaves open: does each watch still deliver the passes it asks for.
+
+```bash
+node scripts/watch-delivery.mjs --days 7            # measured window
+node scripts/watch-delivery.mjs --days 7 --baseline # plus the window before it
+node scripts/watch-delivery.mjs --only pushes       # the push trigger alone
+```
+
+It reads three sources: `production-watch.yml` (asked: 48 links a day, six five-minute
+passes inside each link), `required-check-settings.yml` (24 runs a day)
+and the legacy `prod-health.yml` cron schedules (336 runs a day) so the before and the
+after of the fix sit in one table. The push half counts `prod-health.yml` push runs
+against the commits that landed on `origin/production`.
+
+A watch passes when it delivered at least nine runs in ten of what it asked for over
+seven days of its own record: a watch that started four hours ago shows its coverage
+instead of a rate it has not earned yet. It reads only, dispatches nothing, and never
+edits a ticket. GitHub charges a minute or more for a second page of a busy endpoint,
+so the window is sliced into days and read one page per slice: a day that delivers
+more than 100 runs of one workflow is counted as 100, which reads low, never high.
