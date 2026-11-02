@@ -1,0 +1,74 @@
+name: UX Signoff Chain
+
+# YPER4-985. The hourly UX signoff reconciliation is not a tick on this
+# repository either: in the seven days to 2026-11-02T04:17Z `ux-signoff-gate.yml`'s
+# cron delivered 12 of the 168 runs it asked for (7%, median gap 266 minutes), so a
+# wireframe question could wait most of a day for its verdict. A
+# `workflow_dispatch` is not throttled, so a link dispatches this hour's
+# reconciliation and then starts the next link an hour after it began
+# (`.github/scripts/schedule-chain.cjs`). The cron below only restarts a chain that
+# died: while another link is queued or running it stands down, so a backstop
+# landing on a live chain never starts a second one.
+#
+# The wait lives here rather than in `ux-signoff-gate.yml` because that workflow
+# serialises its whole run in the `ux-signoff-gate` concurrency group: a job that
+# waited out the hour inside it would put every pull-request reconciliation behind
+# an idle timer. The gate keeps its group, its pull-request triggers and its
+# `queue: max`, and this link dispatches it through that same group.
+#
+# `--chain-events` keeps a pull-request run of the gate from counting as a link.
+# That run neither waits out the hour nor starts a successor, so reading it as one
+# would skip the hour instead of starting it.
+#
+# Cost: one of the twenty parallel jobs for the hour, free hosted minutes only,
+# because this repository is public.
+on:
+  schedule:
+    - cron: '29 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ux-signoff-chain
+  cancel-in-progress: false
+
+jobs:
+  chain:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production') }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    # The wait is an hour and a slow reconciliation is dispatched, never awaited
+    # here, so this is the hour plus room to start the next link.
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+
+      # This period's work goes out when the link starts, not after the wait: a
+      # backstop that takes the chain over mid-wait then costs one duplicate
+      # reconciliation instead of skipping the hour. A reconciliation already
+      # dispatched by a live link stands this step down, and its failure never
+      # costs the chain that follows it.
+      - name: Dispatch this hour's reconciliation
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/schedule-chain.cjs hand-off --workflow ux-signoff-gate.yml --gap-minutes 0 --chain-events schedule,workflow_dispatch
+
+      - name: Start the next link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/schedule-chain.cjs hand-off --workflow ux-signoff-chain.yml --gap-minutes 60

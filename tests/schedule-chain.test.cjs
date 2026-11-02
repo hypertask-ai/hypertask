@@ -235,3 +235,76 @@ printf '{}'
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+const PR_WORKFLOW = "ux-signoff-gate.yml";
+const prRun = (id, event = "pull_request_target", status = "in_progress") => ({ workflow_runs: [{ id, event, status }] });
+
+test("a pull-request run of a driven workflow never costs the period", async () => {
+  const fake = api({
+    [`/repos/${REPO}/actions/workflows/${PR_WORKFLOW}/runs?per_page=30`]: prRun(4),
+  });
+
+  const result = await handOff(REPO, {
+    workflowFile: PR_WORKFLOW,
+    ownRunId: 9,
+    chainEvents: ["schedule", "workflow_dispatch"],
+    api: fake,
+  });
+
+  assert.deepEqual(result, { dispatched: true, ref: "production" });
+});
+
+test("a link of the driven workflow still holds the period back", async () => {
+  const fake = api({
+    [`/repos/${REPO}/actions/workflows/${PR_WORKFLOW}/runs?per_page=30`]: { workflow_runs: [{ id: 4, event: "schedule", status: "in_progress" }] },
+  });
+
+  const result = await handOff(REPO, {
+    workflowFile: PR_WORKFLOW,
+    ownRunId: 9,
+    chainEvents: ["schedule", "workflow_dispatch"],
+    tries: 1,
+    api: fake,
+  });
+
+  assert.equal(result.dispatched, false);
+});
+
+test("a deploy push still counts as in flight, because the drift check reads it unfiltered", async () => {
+  const fake = api({
+    [`/repos/${REPO}/actions/workflows/prod-health.yml/runs?per_page=30`]: prRun(6, "push"),
+  });
+
+  assert.equal((await runInFlight(REPO, "prod-health.yml", null, fake)).id, 6);
+  assert.equal(await runInFlight(REPO, "prod-health.yml", null, fake, ["schedule", "workflow_dispatch"]), null);
+});
+
+test("the command line passes --chain-events through to the hand-off", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "schedule-chain-events-"));
+  try {
+    await writeFile(join(directory, "gh"), `#!/usr/bin/env bash
+case "$*" in
+  *"workflows/ux-signoff-gate.yml/runs"*) printf '%s' '{"workflow_runs":[{"id":4,"event":"pull_request_target","status":"in_progress"}]}'; exit 0 ;;
+  *dispatches*) exit 0 ;;
+esac
+printf '{}'
+`, { mode: 0o755 });
+    const result = spawnSync(process.execPath, [
+      ".github/scripts/schedule-chain.cjs",
+      "hand-off",
+      "--workflow",
+      PR_WORKFLOW,
+      "--gap-minutes",
+      "0",
+      "--chain-events",
+      "schedule,workflow_dispatch",
+    ], {
+      encoding: "utf8",
+      env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, REPO, GITHUB_RUN_ID: "11", GITHUB_EVENT_NAME: "workflow_dispatch" },
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /ux-signoff-gate\.yml link is dispatched on production/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
