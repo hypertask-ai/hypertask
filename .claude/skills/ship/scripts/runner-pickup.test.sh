@@ -120,6 +120,16 @@ eq "a settled gate's leftover project copy does not hold the runner" "$(jq -r .d
 jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 printf -- '- [ ] HTPR-1.done: still open at home\n  CHECK: true\n' >> "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
 eq "an open gate in the home ledger still holds the runner" "$(hook 'RUNNER 3' "$pl")" ""
+# A carried gate file settles its id too: a custom gate adopted beside the ledger, and the copy the
+# project still holds, must not disagree about whether this session is idle (HYCI-44).
+mkdir -p "$T/home/.unlazy/ledgers/HTPR-1/gates"
+printf -- '- [x] HTPR-1.merged: settled in the home ledger\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+printf -- '- [ ] HTPR-1.custom: open in the old project copy\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [x] HTPR-1.custom: settled in the carried gate file\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/gates/adopted.md"
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+eq "a carried gate settled at home does not hold the runner" "$(jq -r .decision <<<"$(hook 'RUNNER 3' "$pl")")" "block"
+printf -- '- [ ] HTPR-1.custom2: still open at home\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/gates/adopted.md"
+eq "an open carried gate at home still holds the runner" "$(hook 'RUNNER 3' "$pl")" ""
 rm -rf "$T/work/.unlazy" "$T/home/.unlazy/ledgers"
 # Ship keeps one ledger folder per ticket under the home folder, tagged with its session.
 mkdir -p "$T/home/.unlazy/ledgers/HTPR-1"

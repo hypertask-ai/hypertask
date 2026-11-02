@@ -180,15 +180,17 @@ ticket_ok() {
   sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null)
   [ -n "$sid" ] || return 0
   cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
-  local home_ledgers=() old_ledgers=("${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md")
+  local home_ledgers=() home_extras=() old_ledgers=("${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md")
   for dir in "${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers"/*; do
     [ -f "$dir/session" ] && grep -qxF -- "$sid" "$dir/session" 2>/dev/null || continue
     home_ledgers+=("$dir/GATES.md")
+    home_extras+=("$dir"/gates/*.md)
   done
-  # A gate the ticket's home ledger settles is decided there: its leftover copy in the project,
-  # from before the move, cannot hold the runner away from new work for ever.
+  # A gate the ticket's home ledger settles is decided there, in GATES.md or in a carried gate file:
+  # its leftover copy in the project, from before the move, cannot hold the runner away from new
+  # work for ever.
   local decided=''
-  for ledger in "${home_ledgers[@]}"; do
+  for ledger in "${home_ledgers[@]}" "${home_extras[@]}"; do
     [ -f "$ledger" ] || continue
     decided+=$(grep -E '^- \[[ xX]\] ' "$ledger" | sed -E 's/^- \[[ xX]\] ([^:]+):.*/\1/')$'\n'
   done
@@ -201,7 +203,7 @@ ticket_ok() {
     done < <(grep -E '^- \[ \] ' "$file" | sed -E 's/^- \[ \] ([^:]+):.*/\1/')
     return 1
   }
-  for ledger in "${home_ledgers[@]}"; do
+  for ledger in "${home_ledgers[@]}" "${home_extras[@]}"; do
     unsettled "$ledger" && return 1
   done
   for ledger in "${old_ledgers[@]}"; do
