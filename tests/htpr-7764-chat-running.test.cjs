@@ -36,10 +36,15 @@ function fixture({ enabled = true, mobile = false, parallel = true, sidebar = tr
     "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
     "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
     "@/lib/ai/chipEvents": { signalAiChip: noop },
+    "./MessageList": { MessageList: () => null },
+    "./WelcomeScreen": { WelcomeScreen: () => null },
+    "./AI_Tiptap_Container": { AI_Tiptap_Container: () => null },
+    "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ modal: null, surfaceRef: React.createRef(), onKeyDownCapture: undefined }) },
   };
   const load = loader(mocks);
   const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts");
   const { ChatHeader } = load("src/components/AI_CHAT/ChatHeader.tsx");
+  const { ChatWindow } = load("src/components/AI_CHAT/ChatWindow.tsx");
   function App() {
     const [, update] = React.useState(0);
     refresh = () => update(version => version + 1);
@@ -48,7 +53,7 @@ function fixture({ enabled = true, mobile = false, parallel = true, sidebar = tr
     select = id => { current = id; refresh(); };
     minimize = () => { minimized = !minimized; refresh(); };
     return React.createElement(Chat.Provider, { value: { ...chat, sessions, historySessions: sessions, currentSession: sessions.find(s => s.id === current), minimizeChat: minimize, selectSession: select, togglePopover: noop, currentAiOption: {}, minimized } },
-      React.createElement("div", { "data-minimized": minimized }, React.createElement(ChatHeader, sidebar ? { sidebarChats: { target: targetKind === "ai" ? { kind: "ai" } : { kind: targetKind, agent: { id: "agent", displayName: "Test agent" } }, agents: [], onSelect: noop, onSelectSession: select } } : {})));
+      React.createElement("div", { "data-minimized": minimized }, React.createElement(ChatHeader, sidebar ? { sidebarChats: { target: targetKind === "ai" ? { kind: "ai" } : { kind: targetKind, agent: { id: "agent", displayName: "Test agent" } }, agents: [], onSelect: noop, onSelectSession: select } } : {}), minimized ? React.createElement(ChatWindow) : null));
   }
   view.render(React.createElement(App));
   return {
@@ -131,6 +136,24 @@ for (const targetKind of ["native-agent", "external-agent"]) {
       assert.equal(view.container.querySelectorAll('[aria-label="Chat running"]').length, targetKind === "native-agent" ? 1 : 0);
       view.update(() => view.streams.get("A").setIsTyping(false));
       assert.equal(view.container.querySelector('[role="status"]'), null);
+    } finally { view.close(); }
+  });
+}
+
+for (const enabled of [true, false]) {
+  test(`minimized floating chat ${enabled ? "shows the running indicator on its own pill and clears it" : "shows no running indicator while the flag is Off"}`, () => {
+    const view = fixture({ enabled, sidebar: false });
+    try {
+      view.minimize();
+      const pill = () => view.container.querySelector('[aria-label="Close AI chat"]').closest("button");
+      assert.match(pill().textContent, /Chat A/);
+      assert.equal(pill().querySelector('[role="status"]'), null);
+      view.update(() => view.streams.get("A").setIsTyping(true));
+      assert.equal(pill().querySelector('[aria-label="Chat running"]') !== null, enabled);
+      view.update(() => view.streams.get("B").setIsTyping(true));
+      assert.equal(pill().querySelectorAll('[role="status"]').length, enabled ? 1 : 0);
+      view.update(() => { view.streams.get("A").setIsTyping(false); view.streams.get("B").setIsTyping(false); });
+      assert.equal(pill().querySelector('[role="status"]'), null);
     } finally { view.close(); }
   });
 }
