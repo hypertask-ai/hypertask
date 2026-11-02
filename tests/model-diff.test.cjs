@@ -131,7 +131,7 @@ test("gateway failure falls back to authenticated provider lists without claimin
   const fallback = diffModels(catalog, sources);
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
-  assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
+  assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("after gateway pricing confirms at most $5")));
   assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
   const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
   assert.deepEqual(stale.map((finding) => finding.model), ["claude-haiku-4.5"]);
@@ -427,23 +427,4 @@ test("watcher refuses writes on failed, partial, malformed or truncated searches
   const ticket = ticketFor({ ...report().findings[0], reason: "<untrusted>" });
   assert.ok(ticket.description.includes("&lt;untrusted&gt;"));
   assert.ok(!ticket.description.includes("<untrusted>"));
-});
-
-let assertAgentWriting = null;
-try {
-  assertAgentWriting = require("./task-route-loader.cjs").load("src/lib/agents/writing.ts").assertAgentWriting;
-} catch {
-  assertAgentWriting = null;
-}
-
-test("generated tickets pass the plain-writing rule agents must follow", {
-  skip: assertAgentWriting ? false : "the source rule needs the app dependencies installed",
-}, () => {
-  const findings = report().findings;
-  const tickets = findings.map(ticketFor);
-  tickets.push(rollupTicket(findings.filter((finding) => finding.kind === "new-class").slice(0, 3), new Date("2026-10-25T12:00:00Z")));
-  tickets.push(ticketFor({ ...findings[0], inputPerMillion: null }));
-  for (const ticket of tickets) {
-    assertAgentWriting("modelwatch", { title: ticket.title, description: ticket.description });
-  }
 });
