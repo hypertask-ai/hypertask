@@ -100,6 +100,72 @@ for command in --help help --version; do
 done
 printf 'ok helper reads and help reach stub\n'
 
+for option in --help -h --h --help=true -h=true --version -V --V --version=true -V=true; do
+  allowed bash "$vcc" task waiting-on X-1 --user none "$option"
+  [[ $(< "$T/out") == "stub: <task> <waiting-on> <X-1> <--user> <none> <$option>" ]] || fail 'help changed waiting-on arguments'
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask tasks get'* ]] || fail 'help read the blocked ticket'
+  allowed bash "$vcc" comment add X-1 --text hi "$option"
+  [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--text> <hi> <$option>" ]] || fail 'help routed a comment to activity'
+  allowed bash "$vcc" "$option" task waiting-on X-1 --user none
+  allowed bash "$vcc" activity add X-1 hi "$option"
+  allowed bash "$vcc" task move X-1 --section Done "$option"
+done
+for option in -h -V; do
+  allowed bash "$vcc" comment add X-1 --kind qa --text 'Outputs: private' "$option"
+  [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <qa> <--text> <Outputs: private> <$option>" ]] || fail 'help changed refused content arguments'
+  refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --kind qa --text 'Outputs: private' "$option"
+  allowed bash "$vcc" task update X-1 --description 'Outputs: private' "$option"
+  [[ $(< "$T/out") == "stub: <task> <update> <X-1> <--description> <Outputs: private> <$option>" ]] || fail 'help changed refused description arguments'
+  refused env VCC_HELPER=1 bash "$vcc" task update X-1 --description 'Outputs: private' "$option"
+done
+for value in --help -h --version -V; do
+  allowed bash "$vcc" comment add X-1 --kind qa --text "$value"
+  [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <qa> <--text> <$value>" ]] || fail 'option values changed'
+done
+for option in --help=false --h= --version=no --V=0 -h=false -V=no; do
+  refused env VCC_HELPER=1 bash "$vcc" comment add X-1 --text hi "$option"
+  run bash "$vcc" comment add X-1 --kind qa --text 'Outputs: private' "$option"
+  [ "$status" = 5 ] || fail "invalid help bypassed content guard: $option"
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'invalid help reached CLI'
+done
+printf 'ok help and version bypass mutation dispatch\n'
+
+cp "$T/bin/curl" "$T/curl-original"
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+method='' output='' data=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --request) method=$2; shift ;;
+    --output) output=$2; shift ;;
+    --data) data=$2; shift ;;
+  esac
+  shift
+done
+if [ "$method" = GET ]; then
+  printf '%s' '{"success":true,"run":{"status":"active"}}' > "$output"
+else
+  printf '%s' "$data" > "$VCC_TEST_ACTIVITY"
+  printf '%s' '{"success":true,"activity":{"id":"fixture-activity"}}' > "$output"
+fi
+printf 200
+STUB
+export VCC_TEST_ACTIVITY="$T/activity"
+mkdir -p "$HOME/.local/state/vcc-runs/fixture"
+printf 'fixture-run\n' > "$HOME/.local/state/vcc-runs/fixture/X-1"
+for value in --help -h --version -V; do
+  refused env VCC_HELPER=1 bash "$vcc" activity add X-1 "$value"
+  run bash "$vcc" activity add X-1 "$value"
+  [ "$status" = 0 ] || fail "activity text failed: $value"
+  [ "$(< "$T/out")" = fixture-activity ] || fail "activity did not dispatch: $value"
+  [ "$(jq -r '.text' "$VCC_TEST_ACTIVITY")" = "$value" ] || fail "activity text changed: $value"
+  allowed bash "$vcc" activity add X-1 "$value" --help
+  [[ $(< "$T/out") == "stub: <activity> <add> <X-1> <$value> <--help>" ]] || fail 'trailing help changed activity arguments'
+  refused env VCC_HELPER=1 bash "$vcc" activity add X-1 "$value" --help
+done
+mv "$T/curl-original" "$T/bin/curl"
+printf 'ok help-like activity text stays literal\n'
+
 allowed env HAX_PROVIDER=codex HAX_MODEL=gpt-6.1-sol HAX_EFFORT=high bash "$vcc" comment add X-1 --text hi
 [[ $(< "$T/out") == 'stub: <comment> <add> <X-1> <--text> <hi>' ]] || fail 'write arguments changed'
 printf 'ok runner write reaches stub without helper markers or ancestors\n'
@@ -151,7 +217,7 @@ allowed launch_hax interactive comment add X-1 --text hi
 printf 'ok hax without an exact prompt argument remains a runner\n'
 
 # Unknown activity subcommands stop in vcc with its usage, never reach the CLI.
-for args in "activity" "activity --help" "activity list X-1"; do
+for args in "activity" "activity list X-1"; do
   run bash "$vcc" $args
   [ "$status" = 1 ] || fail "expected exit 1, got $status: vcc $args"
   [[ $(< "$T/err") == "vcc activity: "* ]] || fail "missing vcc activity error: vcc $args"
@@ -237,9 +303,15 @@ question_refused() {
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
 }
-plain='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
-inline_why='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
-for text in "$plain" "$inline_why" "$question"; do
+plain='<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+inline_why='<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes. Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+multiline_question=$'<p>Question: <strong>\nKeep it?\n</strong></p>\n<p>My recommendation: yes.</p>\n<p>Why: less work.</p>\n<p>Yes: keep it.</p>\n<p>No: remove it.</p>'
+multiline_mention=${question/Question:/Question:$'\n'}
+hardbreak_question=${plain/Keep it?/Keep<br>it?}
+listed_question="<ul><li>$question</li></ul>"
+quoted_question="<blockquote>$question</blockquote>"
+quoted_context="<blockquote>Context.</blockquote>$plain"
+for text in "$plain" "$inline_why" "$question" "$multiline_question" "$multiline_mention" "$hardbreak_question" "$listed_question" "$quoted_question" "$quoted_context"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
   fixture "$text"
@@ -254,6 +326,83 @@ done
 question_refused 'Question:' comment add X-1 --kind question --text "${plain/Keep it?/Keep it.}"
 printf 'ok required Question parts and shared review validation\n'
 
+for text in \
+  "<p>One.</p><p>Two.</p><p>Three.</p><p>Four.</p>$plain" \
+  "<ul><li>One.</li><li>Two.</li><li>Three.</li><li>Four.</li></ul>$plain" \
+  "<p>One.<br>Two.<br/>Three.<br />Four.</p>$plain"; do
+  question_refused '3 lines' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused '3 lines' task move X-1 --section 'Valentin Review'
+done
+for text in \
+  "<p>One.</p><p>Two.</p><p>Three.</p>$plain" \
+  "<ul><li>One.</li><li>Two.</li><li>Three.</li></ul>$plain"; do
+  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+done
+for count in 1 2 3 4; do
+  bullets='<ul>'
+  for ((i=0; i<count; i++)); do bullets+='<li><p>Context.</p></li>'; done
+  bullets+='</ul>'
+  text="$bullets$question"
+  if [ "$count" -le 3 ]; then
+    allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+    fixture "$text"
+    allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+  else
+    question_refused '3 lines' comment add X-1 --kind question --text "$text"
+    fixture "$text"
+    review_refused '3 lines' task move X-1 --section 'Valentin Review'
+  fi
+done
+printf 'ok bullet-prefaced mentioned Questions through dispatch and review\n'
+late='<p>Question: <strong>Keep it?</strong></p><p>Why: less work.</p><p>My recommendation: yes.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+question_refused 'right under' comment add X-1 --kind question --text "$late"
+fixture "$late"
+review_refused 'right under' task move X-1 --section 'Valentin Review'
+for text in \
+  "<p>Question: Earlier?</p><p>My recommendation: yes.</p><p>One.</p><p>Two.</p>$plain" \
+  "<p>Question: Earlier?</p><p>My recommendation: yes.</p>$late"; do
+  question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+done
+question_refused '3 lines' comment add X-1 --kind question --text "<p>Question: Earlier?</p><p>My recommendation: yes.</p><p>One.</p><p>Two.</p>$plain"
+question_refused 'right under' comment add X-1 --kind question --text "<p>Question: Earlier?</p><p>My recommendation: yes.</p>$late"
+for link in \
+  '<a href="https://linear.app/docs">Linear</a>' \
+  'https://notion.so/help' \
+  'www.google.com' \
+  '<a href="//example.test/help">Help</a>'; do
+  question_refused 'links' comment add X-1 --kind question --text "$plain<p>$link</p>"
+  fixture "$plain<p>$link</p>"
+  review_refused 'links' task move X-1 --section 'Valentin Review'
+done
+question_refused '3 lines' comment add X-1 --kind question --markdown --text "One.
+Two.
+Three.
+Four.
+Question: **Keep it?**
+My recommendation: yes.
+Why: less work.
+Yes: keep it.
+No: remove it."
+mention='<span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
+for text in \
+  "${late/Question:/$mention Question:}" \
+  "<p>One.</p><p>Two.</p><p>Three.</p><p>Four.</p>$question"; do
+  question_refused '' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused '' task move X-1 --section 'Valentin Review'
+done
+old_question_7980_325102=$(cat <<'FIXTURE'
+<p><strong>Billing release still needs separate approval.</strong></p><p>Terms approved; release approval remains excluded.</p><p>Linear: explains billing adjustments. <a href="https://linear.app/docs/billing-and-plans">https://linear.app/docs/billing-and-plans</a></p><p>Notion: explains plan-change charges. <a href="https://www.notion.com/help/upgrade-or-downgrade-your-plan">https://www.notion.com/help/upgrade-or-downgrade-your-plan</a></p><p>Jira: publishes purchase rules. <a href="https://www.atlassian.com/licensing/purchase-licensing">https://www.atlassian.com/licensing/purchase-licensing</a></p><p>Google: explains billing commitments. <a href="https://support.google.com/a/answer/1247360">https://support.google.com/a/answer/1247360</a></p><p>Our approved terms remain unchanged.</p><p>Release audience: owner and designated tester only.</p><p>Everyone else keeps existing billing.</p><p>Required browser checks previously failed.</p><p>Checks must pass before merging and deployment.</p><p>Live verification follows deployment.</p><p>My recommendation: Approve this limited release.</p><p>Why: Validate billing without exposing everyone.</p><p>Yes: Authorize release after required checks pass.</p><p>No: Keep billing release held.</p><p><a href="https://github.com/hypertask-ai/hypertask/pull/2275">https://github.com/hypertask-ai/hypertask/pull/2275</a></p><p>Question: <strong>Authorize billing release after required checks pass?</strong></p><p>For <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span></p>
+FIXTURE
+)
+question_refused 'links' comment add X-1 --kind question --text "$old_question_7980_325102"
+fixture "$old_question_7980_325102"
+review_refused 'links' task move X-1 --section 'Valentin Review'
+printf 'ok short question format enforced through comment dispatch and review moves\n'
+
 for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
   text="$plain<p>$word</p>"
   question_refused "$word" comment add X-1 --kind question --text "$text"
@@ -262,9 +411,7 @@ for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.
 done
 question_refused CI comment add X-1 --kind question --text "$plain<p>CI and OAuth</p>"
 [[ $(< "$T/err") == *OAuth* ]] || fail 'did not name every developer word'
-for text in   "$plain<p>We can decide in Circle, with ci and circles.</p>"   "$plain<p><a href="https://example.test/src/app/page.tsx/api/OAuth/CI#123">Details</a></p>"   "$plain<p><a href="https://example.test/123">PR #123</a></p>"   "$plain<p><a href="https://example.test/123"><strong>#123</strong></a></p>"; do
-  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
-done
+allowed bash "$vcc" comment add X-1 --kind question --text "$plain<p>We can decide in Circle, with ci and circles.</p>"
 question_refused '#456' comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">PR #123</a> #456</p>"
 question_refused OAuth comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">OAuth</a></p>"
 printf 'ok visible developer words and unlinked references refuse without CI substring or href false positives\n'
@@ -293,19 +440,28 @@ run bash "$vcc" comment add X-1 --kind question --file "$T/missing.html"
 [ "$status" = 5 ] || fail 'missing Question file must fail closed'
 markdown='Question: **Keep it?**
 
+My recommendation: yes. Why: less work.
+
 Yes: keep it.
-No: remove it.
-My recommendation: yes. Why: less work.'
+
+No: remove it.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
 printf '%s\n' "$markdown" > "$T/question.md"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
 question_refused 'My recommendation:' comment add X-1 --kind question --markdown --body "${markdown/My recommendation:/Suggestion:}"
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
+markdown_context=$'Question: Earlier?\nMy recommendation: yes.\nOne.\nTwo.\n'"$markdown"
+markdown_detached=$'Question: Earlier?\nMy recommendation: yes.\nQuestion: **Keep it?**\nWhy: less work.\nMy recommendation: yes.\nYes: keep it.\nNo: remove it.'
+for text in "$markdown_context" "$markdown_detached"; do
+  question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "$text"
+done
+question_refused '3 lines' comment add X-1 --kind question --markdown --text "$markdown_context"
+question_refused 'right under' comment add X-1 --kind question --markdown --text "$markdown_detached"
 question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
 OAuth"
-allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown
-[PR #123](https://example.test/api/OAuth/CI)"
+question_refused 'links' comment add X-1 --kind question --markdown --text "$markdown
+[Details](https://example.test/help)"
 printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
 
 for kind in qa done ''; do
@@ -348,6 +504,10 @@ allowed bash "$vcc" task create --title 'Clearer settings' --description '<p>Not
 agent_detail_refused comment add X-1 --kind qa --text '<p><strong>Helpers</strong>: none</p>'
 agent_detail_refused --json comment add X-1 --kind qa --text 'tmux attach -t runner-8'
 agent_detail_refused --project 15 task update X-1 --description 'Outputs: private'
+for option in --help --h --help=true --h=true --version --V --version=true --V=true -h -V; do
+  agent_detail_refused comment add X-1 --kind qa --text 'Outputs: private' -- "$option"
+  agent_detail_refused task update X-1 --description 'Outputs: private' -- "$option"
+done
 run bash "$vcc" comment add X-1 --kind=qa --file "$T/missing.html"
 [ "$status" = 5 ] || fail 'unreadable people content must fail closed'
 printf '<p>Settings now works.</p>\n' > "$T/plain.html"
