@@ -164,7 +164,7 @@ test("the watch workflow runs the tick script and starts the next link even afte
   const [pass] = workflow.jobs.watch.steps.filter(step => step.run);
   assert.equal(pass.run, "node .github/scripts/production-watch.cjs --deadline-minutes 34");
   assert.equal(pass.env.GH_TOKEN, "${{ github.token }}");
-  assert.equal(pass.env.HYPERTASK_HEALTH_USER_TOKEN, "${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}");
+  assert.equal(pass.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
 });
 
 test("the hand-off is its own job, so a watch job killed by its timeout still starts the next link", async () => {
