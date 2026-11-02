@@ -110,6 +110,17 @@ mkdir -p "$T/work/.unlazy/s-abcdef12"
 printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
 eq "legacy project ledger still makes the runner busy" "$(hook 'RUNNER 3' "$pl")|$(jq '[.items[]|select(.delivered|not)]|length' "$inbox")" "|1"
 rm -rf "$T/work/.unlazy"
+# A gate the ticket's home ledger settles is decided there; its leftover project copy cannot hold
+# the runner away from new work for ever (HYCI-44).
+mkdir -p "$T/work/.unlazy/s-abcdef12" "$T/home/.unlazy/ledgers/HTPR-1"
+printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
+printf -- '- [ ] HTPR-1.merged: open in the old project copy\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [x] HTPR-1.merged: settled in the home ledger\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+eq "a settled gate's leftover project copy does not hold the runner" "$(jq -r .decision <<<"$(hook 'RUNNER 3' "$pl")")" "block"
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+printf -- '- [ ] HTPR-1.done: still open at home\n  CHECK: true\n' >> "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+eq "an open gate in the home ledger still holds the runner" "$(hook 'RUNNER 3' "$pl")" ""
+rm -rf "$T/work/.unlazy" "$T/home/.unlazy/ledgers"
 # Ship keeps one ledger folder per ticket under the home folder, tagged with its session.
 mkdir -p "$T/home/.unlazy/ledgers/HTPR-1"
 printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
