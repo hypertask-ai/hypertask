@@ -1,6 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -246,7 +247,16 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
   showCursor,
   isContentEmpty,
 }) => {
+  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+
   if (agentStatus) {
+    if (chatCleanupEnabled) {
+      return (
+        <div className="status-indicator">
+          <span className="font-bold text-white-black">{agentStatus}</span>
+        </div>
+      );
+    }
     return (
       <div className="status-indicator">
         <div className="relative transition-all duration-300 ease-linear">

@@ -49,6 +49,7 @@ interface IProp {
   hoverTooltip?: { text: string; keyCombination: string[] };
   stopButtonId?: string;
   cancelButtonId?: string;
+  compactListeningPill?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -84,6 +85,7 @@ export const AudioButton = ({
   hoverTooltip,
   stopButtonId,
   cancelButtonId,
+  compactListeningPill = false,
 }: IProp) => {
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -630,7 +632,7 @@ export const AudioButton = ({
   }
 
   return (
-    <div className={cn("audio-recorder", recording && "w-full", wrapperClassName)}>
+    <div className={cn("audio-recorder", recording && !compactListeningPill && "w-full", wrapperClassName)}>
       {!recording ? (
         <div
           ref={menuWrapRef}
@@ -707,7 +709,7 @@ export const AudioButton = ({
                       className={cn(
                         "animate-spin",
                         "keep-stroke",
-                        isDesktopAiMic || mobilePrimaryTone === "ai"
+                        (isDesktopAiMic || mobilePrimaryTone === "ai") && !compactListeningPill
                           ? "text-hypertasks-ai-purple"
                           : "text-icon-dark-gray",
                       )}
@@ -825,7 +827,10 @@ export const AudioButton = ({
                     {selected && (
                       <Check
                         size={19}
-                        className="ml-auto shrink-0 text-hypertasks-ai-purple keep-stroke"
+                        className={cn(
+                          "ml-auto shrink-0 keep-stroke",
+                          compactListeningPill ? "text-white-black" : "text-hypertasks-ai-purple",
+                        )}
                         strokeWidth={2.5}
                       />
                     )}
@@ -834,6 +839,45 @@ export const AudioButton = ({
               })}
             </div>
           )}
+        </div>
+      ) : compactListeningPill ? (
+        <div
+          data-ai-chat-dictation-pill
+          className={cn(
+            "flex h-[26px] items-center gap-1.5 rounded-[4px] bg-hover-active pl-2 pr-1 z-[9999]",
+            visualizerClassName,
+          )}
+        >
+          <canvas
+            ref={waveCanvasRef}
+            className="block h-[12px] w-[26px] text-icon-dark-gray"
+            aria-hidden="true"
+          />
+          <span className="text-dense text-white-black">Dictation</span>
+          <button
+            type="button"
+            data-ai-chat-recording-cancel={isAiChat || undefined}
+            onClick={closeHandler}
+            aria-label="Cancel dictation"
+            className="flex h-[18px] w-[18px] items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
+          >
+            <X size={12} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            data-ai-chat-recording-submit={isAiChat || undefined}
+            onClick={() => stopRecording(true)}
+            aria-label="Stop dictation"
+            className="group relative flex h-[18px] w-[18px] items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted"
+          >
+            <Check size={12} strokeWidth={2.2} className="keep-stroke" />
+            <Tooltip
+              left={0}
+              bottom={-45}
+              keyCombination={["ENTER"]}
+              text={"Stop dictation"}
+            />
+          </button>
         </div>
       ) : (
         <div

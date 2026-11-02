@@ -157,8 +157,8 @@ export function AiChatComposerActionRow({
         ) : (
           <>
             {attachmentControl}
-            {recorder}
             {contextControl}
+            {recorder}
             {streamControl}
             {sendControl}
           </>

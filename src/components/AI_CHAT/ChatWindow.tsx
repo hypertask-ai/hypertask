@@ -12,6 +12,7 @@ import { Loader2, Sparkles, X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
+import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 
 export const ChatWindow = () => {
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
@@ -19,6 +20,7 @@ export const ChatWindow = () => {
   const isMbl = useContext(MobileViewContext);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
+  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover, runningSessionIds } =
     useAiChatContext();
 
@@ -33,7 +35,9 @@ export const ChatWindow = () => {
         onClick={restoreChat}
         className="group flex items-center gap-2 rounded-t-lg border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)]"
       >
-        <Sparkles size={14} className="text-hypertasks-ai-purple" strokeWidth={1.75} />
+        {!chatCleanupEnabled && (
+          <Sparkles size={14} className="text-hypertasks-ai-purple" strokeWidth={1.75} />
+        )}
         <span className="max-w-[160px] truncate text-meta font-medium">
           {currentSession?.title ?? "AI Chat"}
         </span>
