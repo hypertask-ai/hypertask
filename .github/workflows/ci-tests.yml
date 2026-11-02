@@ -2278,6 +2278,7 @@ jobs:
         shell: bash
         env:
           BASELINE_NAME: visual-baseline-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
+          BASELINE_SHA: ${{ steps.baseline.outputs.sha }}
           GH_TOKEN: ${{ github.token }}
           DEST: ${{ runner.temp }}/visual-expected
         run: |
@@ -2285,10 +2286,16 @@ jobs:
           echo "hit=false" >> "$GITHUB_OUTPUT"
           query="repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100&name=$BASELINE_NAME"
           headers=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
-          id=$(curl -sS "${headers[@]}" "https://api.github.com/$query" \
-            | jq -r '[.artifacts[]? | select(.expired == false)] | sort_by(.created_at) | last | .id // empty')
-          if [ -z "$id" ]; then
-            echo "::notice::no published baseline for $BASELINE_NAME; the base app will be built"
+          pick="node head/.github/scripts/published-baseline.mjs"
+          match=$(curl -sS "${headers[@]}" "https://api.github.com/$query" | $pick select "$BASELINE_SHA" || true)
+          if [ -z "$match" ]; then
+            echo "::notice::no published baseline from a production push for $BASELINE_NAME; the base app will be built"
+            exit 0
+          fi
+          id=${match%% *}
+          run_id=${match##* }
+          if ! curl -sS "${headers[@]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id" | $pick trust "$BASELINE_SHA"; then
+            echo "::notice::the published baseline $BASELINE_NAME came from an untrusted run; the base app will be built"
             exit 0
           fi
           mkdir -p "$DEST"
