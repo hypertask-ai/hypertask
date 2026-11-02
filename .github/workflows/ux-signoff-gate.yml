@@ -3,16 +3,16 @@ name: UX Signoff Gate
 # https://app.hypertask.ai/detail/project-15/7072 shipped new decision inbox UI
 # in PR 1271 without Valentin's design yes. Visible UI needs ticket signoff
 # on a clickable wireframe; new component names need his explicit approval too.
-# Run trusted production code only. The hourly schedule is a backstop: GitHub
-# runs it every four to six hours, so reactions are also reread on every pull
-# request event.
+# Run trusted production code only. Reactions are reread on every pull request
+# event, and the hourly pass is dispatched by ux-signoff-chain.yml (YPER4-985):
+# GitHub ran the cron it used to own every four to six hours (12 of 168 runs in
+# the seven days to 2026-11-02T04:17Z), so the schedule now lives in the chain and
+# this workflow keeps only what it does itself.
 
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, edited, ready_for_review]
     branches: [production]
-  schedule:
-    - cron: '29 * * * *'
   workflow_dispatch:
 
 permissions:

@@ -1635,6 +1635,23 @@ lock sits on the `verify` job, not on the workflow, so the chain can hold the re
 of the hour without ever blocking a manual dispatch (and a queued manual run can
 never be read as a live link and break the chain).
 
+`ux-signoff-chain.yml` does the same for the hourly UX signoff reconciliation
+(YPER4-985): the gate's cron delivered 12 of the 168 runs it asked for in the same
+seven days (7%, median gap 266 minutes), so a wireframe question could wait most of
+a day for its verdict. The chain cannot be a job inside `ux-signoff-gate.yml`,
+because that workflow serialises its whole run in the `ux-signoff-gate` group and a
+job waiting out the hour there would put every pull-request reconciliation behind
+an idle timer. So the chain is its own workflow with its own group: a link
+dispatches the hour's reconciliation when it starts, then starts the next link
+sixty minutes after it began. The gate keeps its group, its `queue: max` and its
+pull-request triggers, and the hour still goes through that group.
+
+The chain counts only `schedule` and `workflow_dispatch` runs of the gate as
+another link (`--chain-events`), because a pull-request run of the gate neither
+waits out the hour nor dispatches a successor: reading it as a link would skip the
+hour rather than start it. `prod-health.yml` keeps the unfiltered read, where a
+deploy push is exactly the run its drift check must not overlap.
+
 Cost is one of the twenty parallel jobs for each monitor and free hosted minutes
 only, because the repository is public. The number this ticket tracks is the share
 of asked-for passes that actually run, which the run list of each workflow reports

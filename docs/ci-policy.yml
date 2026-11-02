@@ -291,6 +291,27 @@ required_check_settings_monitor:
     user_login_fallback: false
     interval_seconds: 120
 
+ux_signoff_chain:
+  ticket: https://app.hypertask.ai/detail/project-4060/985
+  workflow: .github/workflows/ux-signoff-chain.yml
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  cron_utc: "29 * * * *"
+  cron_role: restart a chain that died
+  chain:
+    script: .github/scripts/schedule-chain.cjs
+    work: dispatches ux-signoff-gate.yml when the link starts, so a takeover mid-wait costs a duplicate, never a skipped hour
+    hand_off: sixty minutes after the run that just dispatched the hour began
+    dispatch: workflow_dispatch on production
+    guard: a run counts as a live link only when its event is schedule or workflow_dispatch, so a pull-request run of the gate never skips the hour
+    concurrency_group: ux-signoff-chain
+    gate_lock: ux-signoff-gate stays on the gate workflow, so the waiting link never queues a pull-request reconciliation behind it
+    reason: the gate's own cron delivered 12 of 168 runs in the seven days to 2026-11-02T04:17Z (7%, median gap 266 minutes)
+  moved_out_of: .github/workflows/ux-signoff-gate.yml
+  gate_keeps: [pull_request_target, workflow_dispatch, concurrency_group ux-signoff-gate, queue max]
+  mutates_production: false
+  never: [self_hosted_runners, paid_services]
+
 premerge_evidence:
   context: premerge-evidence
   publisher: .claude/skills/ship/scripts/ship-check

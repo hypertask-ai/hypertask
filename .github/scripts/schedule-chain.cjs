@@ -7,6 +7,10 @@
 // starts the next one itself: one link is always either checking or waiting, and
 // the cron only restarts a chain that died.
 //
+// `--chain-events` narrows what suppresses a hand-off. Only a run that waits out
+// the period and dispatches a successor is another link; ux-signoff-gate.yml also
+// runs on every pull request, and those runs must never cost the hour.
+//
 // The gap is measured from GitHub's own run record for this link, not from when
 // this step started, so a link whose checks ran long waits less and the cadence
 // holds. The dispatch is skipped while another link of the same workflow is
@@ -50,18 +54,31 @@ async function linkStart(repo, ownRunId, api = request) {
   return Number.isNaN(started) ? null : started;
 }
 
-async function runInFlight(repo, workflowFile, ownRunId = null, api = request) {
+// chainEvents narrows what counts as "another link". A workflow the chain only
+// drives (ux-signoff-gate.yml also runs on every pull request) must not read a
+// pull-request run as a link, because that run neither waits out the period nor
+// dispatches a successor; counting it would skip the period instead of starting
+// it. Left null, every live run counts, which is what prod-health.yml needs: a
+// deploy push is exactly the run its drift check must not overlap.
+function liveRun(runs, ownRunId, chainEvents) {
+  const events = chainEvents && chainEvents.length ? new Set(chainEvents) : null;
+  return (runs ?? [])
+    .filter(run => LIVE.has(run.status))
+    .filter(run => String(run.id) !== String(ownRunId))
+    .find(run => !events || events.has(run.event)) ?? null;
+}
+
+async function runInFlight(repo, workflowFile, ownRunId = null, api = request, chainEvents = null) {
   const payload = await api(`/repos/${repo}/actions/workflows/${workflowFile}/runs?per_page=30`);
-  const live = (payload.workflow_runs ?? []).filter(run => LIVE.has(run.status));
-  return live.find(run => String(run.id) !== String(ownRunId)) ?? null;
+  return liveRun(payload.workflow_runs, ownRunId, chainEvents);
 }
 
 // A cron or a push only restarts a chain that died. While another link is queued
 // or running the backstop stands down, so it never starts a second chain; it has
 // still run its own pass, which is the one useful thing it can add.
-async function standDown(repo, { workflowFile, ownRunId = null, api = request } = {}) {
+async function standDown(repo, { workflowFile, ownRunId = null, api = request, chainEvents = null } = {}) {
   try {
-    return await runInFlight(repo, workflowFile, ownRunId, api);
+    return await runInFlight(repo, workflowFile, ownRunId, api, chainEvents);
   } catch {
     return null;
   }
@@ -78,13 +95,14 @@ async function handOff(repo, {
   api = request,
   sleep = wait,
   now = Date.now,
+  chainEvents = null,
 } = {}) {
   const rest = startMs === null ? 0 : startMs + gapMs - now();
   if (rest > 0) await sleep(rest);
   for (let attempt = 1; attempt <= Math.max(1, tries); attempt++) {
     let busy;
     try {
-      busy = await runInFlight(repo, workflowFile, ownRunId, api);
+      busy = await runInFlight(repo, workflowFile, ownRunId, api, chainEvents);
     } catch (error) {
       return { dispatched: false, reason: `the run list could not be read: ${String(error.message).slice(0, 80)}` };
     }
@@ -128,16 +146,17 @@ async function main() {
   const gapMs = Math.max(0, Number(argValue(argv, '--gap-minutes') ?? 0)) * 60 * 1000;
   const ownRunId = process.env.GITHUB_RUN_ID ?? null;
   const backstop = BACKSTOP_EVENTS.has(process.env.GITHUB_EVENT_NAME ?? '');
+  const chainEvents = (argValue(argv, '--chain-events') ?? '').split(',').map(event => event.trim()).filter(Boolean);
 
   if (backstop) {
-    const busy = await standDown(repo, { workflowFile, ownRunId });
+    const busy = await standDown(repo, { workflowFile, ownRunId, chainEvents });
     if (busy) {
       console.log(`::notice::this backstop stood down: link ${busy.id} is already ${busy.status}.`);
       return;
     }
   }
   const startMs = gapMs > 0 && ownRunId ? await linkStart(repo, ownRunId).catch(() => null) : null;
-  const next = await handOff(repo, { workflowFile, ref, ownRunId, gapMs, startMs });
+  const next = await handOff(repo, { workflowFile, ref, ownRunId, gapMs, startMs, chainEvents });
   if (next.dispatched) {
     console.log(`::notice::the next ${workflowFile} link is dispatched on ${next.ref}.`);
     return;
@@ -148,6 +167,7 @@ async function main() {
 
 module.exports = {
   handOff,
+  liveRun,
   standDown,
   linkStart,
   runInFlight,
