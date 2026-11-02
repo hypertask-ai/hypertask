@@ -120,7 +120,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
     .split("\n").filter(line => !/^        if: /.test(line)).join("\n");
   assert.equal(credentials(workflow), credentials(smoke));
   const compareJob = yaml.load(smoke).jobs["visual-compare"];
-  assert.deepEqual(compareJob.permissions, { contents: "read", packages: "read" });
+  assert.deepEqual(compareJob.permissions, { contents: "read", packages: "read", actions: "read" });
   for (const service of ["postgres", "redis"]) assert.deepEqual(compareJob.services[service], job.services[service]);
   const smokeBlocks = smoke.split("      - name: Prepare disposable local credentials").slice(1)
     .map(block => block.slice(0, block.indexOf('          } >> "$GITHUB_ENV"')).split("\n").filter(line => !/^        if: /.test(line)).join("\n"));
