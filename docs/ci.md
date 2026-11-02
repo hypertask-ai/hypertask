@@ -1703,3 +1703,15 @@ GitHub charges a minute or more for a second page of a busy endpoint, so the win
 is sliced into days and read one page per slice, one slice at a time: a day that
 delivers more than 100 runs of one workflow is counted as 100, which reads low, never
 high.
+
+`.github/workflows/watch-delivery-report.yml` runs that same command once a day at
+06:41 UTC, or by hand, and writes the report into its own run summary. Counting the
+fix was a hand job before that: the ticket closes on seven days of real numbers, and
+a week nobody measures is a week nobody can claim. The job checks out `production`
+with full history because the push half counts commits, then reads with
+`actions: read` and `contents: read` only. It is a report, not a gate: a short watch
+is a `::warning::` line, because the chained watches only reach seven days of record
+a week after they started, and a red run every morning for that week would teach
+people to ignore it. A daily cron is one run a day against a schedule GitHub
+throttles, so a late link costs hours rather than a day, and the manual dispatch
+covers a missed morning.
