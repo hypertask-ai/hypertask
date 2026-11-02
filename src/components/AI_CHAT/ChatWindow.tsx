@@ -8,16 +8,18 @@ import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Ch
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { AI_Tiptap_Container } from "./AI_Tiptap_Container";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { Sparkles, X } from "lucide-react";
+import { Loader2, Sparkles, X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
+import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 
 export const ChatWindow = () => {
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const shortcuts = useChatShortcuts({ enabled: sharedShortcutsEnabled });
   const isMbl = useContext(MobileViewContext);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
-  const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover } =
+  const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
+  const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover, runningSessionIds } =
     useAiChatContext();
 
   if (minimized)
@@ -35,6 +37,9 @@ export const ChatWindow = () => {
         <span className="max-w-[160px] truncate text-meta font-medium">
           {currentSession?.title ?? "AI Chat"}
         </span>
+        {chatRunningEnabled && currentSession && runningSessionIds.includes(currentSession.id) && (
+          <Loader2 size={14} className="shrink-0 animate-spin" role="status" aria-label="Chat running" />
+        )}
         <span
           role="button"
           aria-label="Close AI chat"
