@@ -62,14 +62,15 @@ function render({ flagEnabled, laneCollapsed }) {
   return renderToStaticMarkup(React.createElement(Row, { activity: thought, taskId: 15 }));
 }
 
-const isCollapsedRow = (html) => html.includes('role="button"') && html.includes("text-ellipsis");
+const isCollapsedRow = (html) => html.includes("text-ellipsis");
 
-test("the lane row stays expanded with the flag off, even after Shift+O", () => {
+test("the lane row keeps today's inset and card with the flag off, even after Shift+O", () => {
   const html = render({ flagEnabled: false, laneCollapsed: true });
   assert.equal(isCollapsedRow(html), false);
   assert.match(html, /role="group"/);
-  assert.match(html, /px-4 py-5/);
-  assert.doesNotMatch(html, /px-3 py-1/);
+  assert.match(html, /px-3 py-1/);
+  assert.match(html, /px-3 py-2/);
+  assert.doesNotMatch(html, /px-4 py-5/);
 });
 
 test("Shift+O collapses lane rows onto the one-line comment row", () => {
@@ -77,22 +78,34 @@ test("Shift+O collapses lane rows onto the one-line comment row", () => {
   assert.equal(isCollapsedRow(html), true);
   assert.match(html, /my-\[4px\]/);
   assert.match(html, /whitespace-nowrap/);
+  assert.match(html, /aria-expanded="false"/);
   assert.match(html, /Read the ticket and the two comments/);
 });
 
 test("Shift+O again expands the lane back to the card", () => {
   const html = render({ flagEnabled: true, laneCollapsed: false });
   assert.equal(isCollapsedRow(html), false);
-  assert.match(html, /role="group"/);
+  assert.match(html, /aria-expanded="true"/);
   assert.match(html, /my-\[8px\]/);
+  assert.match(html, /px-4 py-5/);
 });
 
-test("lane rows keep the live comment card spacing and drop the lane inset", () => {
-  for (const laneCollapsed of [false, true]) {
-    const html = render({ flagEnabled: true, laneCollapsed });
-    assert.doesNotMatch(html, /px-3 py-1/);
-    assert.match(html, /px-4/);
-  }
+test("the folded row is keyboard operable and avoids the bright secondary focus ring", () => {
+  const html = render({ flagEnabled: true, laneCollapsed: true });
+  assert.match(html, /tabindex="0"/);
+  assert.match(html, /focus-visible:bg-hover-active/);
+  assert.doesNotMatch(html, /focus-visible:ring-white-black/);
+});
+
+test("Shift+O gives the lane the same fold direction as the comments", () => {
+  const hook = fs.readFileSync(
+    path.join(root, "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts"),
+    "utf8",
+  );
+  const body = hook.slice(hook.indexOf("const toggleAllComments = () => {"));
+  const toggle = body.slice(0, body.indexOf("\n  };"));
+  assert.match(toggle, /initialMap\[index\] = !allStacked/);
+  assert.match(toggle, /if \(agentLaneCollapse\) setAgentLaneCollapsed\(!allStacked\)/);
 });
 
 test("the flag is a reversible low-risk improvement for everyone", () => {
