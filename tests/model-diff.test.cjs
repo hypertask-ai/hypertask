@@ -131,7 +131,7 @@ test("gateway failure falls back to authenticated provider lists without claimin
   const fallback = diffModels(catalog, sources);
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
-  assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
+  assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("gateway price is at most $5 per million")));
   assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
   const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
   assert.deepEqual(stale.map((finding) => finding.model), ["claude-haiku-4.5"]);
@@ -156,10 +156,10 @@ test("provider pagination is complete, and absent keys or malformed gateway data
 
 test("premium is strictly over $5/M; unknown prices never permit an unconditional automatic shipment", () => {
   for (const [input, expected] of [["0.000005", "ship automatically"], ["0.00000501", "waits for HTPR-7746"],
-    [undefined, "ship automatically only after gateway pricing confirms at most $5 per million input tokens"],
-    ["not-a-price", "ship automatically only after gateway pricing confirms at most $5 per million input tokens"],
-    [" ", "ship automatically only after gateway pricing confirms at most $5 per million input tokens"],
-    [false, "ship automatically only after gateway pricing confirms at most $5 per million input tokens"]]) {
+    [undefined, "ship automatically when the gateway price is at most $5 per million"],
+    ["not-a-price", "ship automatically when the gateway price is at most $5 per million"],
+    [" ", "ship automatically when the gateway price is at most $5 per million"],
+    [false, "ship automatically when the gateway price is at most $5 per million"]]) {
     const sources = structuredClone(fixture);
     sources.gateway.data.find((row) => row.id === "anthropic/claude-sonnet-5.6").pricing.input = input;
     assert.equal(diffModels(catalog, sources).findings.find((finding) => finding.model.endsWith("/claude-sonnet-5.6")).action, expected);
