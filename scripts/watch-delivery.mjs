@@ -49,31 +49,36 @@ const day = time => new Date(time).toISOString().slice(0, 10);
 const percent = rate => `${Math.round(rate * 1000) / 10}%`;
 const round = value => Math.round(value * 10) / 10;
 
+const STARTED = run => run.status !== 'queued' && run.status !== 'requested' && run.status !== 'waiting';
+
 export function countDelivered(runs, sinceMs, untilMs) {
   const inWindow = runs.filter(run => {
     const created = Date.parse(run.created_at ?? '');
     return Number.isFinite(created) && created >= sinceMs && created < untilMs;
   });
-  const byDay = new Map();
-  for (const run of inWindow) {
+  const started = inWindow.filter(STARTED);
+  const perDay = new Map();
+  for (const run of started) {
     const key = day(Date.parse(run.created_at));
-    byDay.set(key, (byDay.get(key) ?? 0) + 1);
+    perDay.set(key, (perDay.get(key) ?? 0) + 1);
   }
   return {
-    runs: inWindow.length,
-    finished: inWindow.filter(run => run.status === 'completed').length,
-    red: inWindow.filter(run => ['failure', 'timed_out', 'startup_failure', 'action_required'].includes(run.conclusion)).length,
-    perDay: [...byDay].map(([name, runs]) => ({ day: name, runs })).sort((a, b) => a.day.localeCompare(b.day)),
+    runs: started.length,
+    queued: inWindow.length - started.length,
+    finished: started.filter(run => run.status === 'completed').length,
+    red: started.filter(run => ['failure', 'timed_out', 'startup_failure', 'action_required'].includes(run.conclusion)).length,
+    perDay: [...perDay].map(([name, runs]) => ({ day: name, runs })).sort((a, b) => a.day.localeCompare(b.day)),
   };
 }
 
-export function watchRow(watch, { sinceMs, untilMs, runs }) {
+export function watchRow(watch, { sinceMs, untilMs, runs, firstRecordedMs }) {
   const inWindow = runs.filter(run => {
     const created = Date.parse(run.created_at ?? '');
     return Number.isFinite(created) && created >= sinceMs && created < untilMs;
   });
   const firstRunMs = inWindow.reduce((first, run) => Math.min(first, Date.parse(run.created_at)), untilMs);
-  const coveredMs = Math.max(untilMs - Math.max(sinceMs, firstRunMs), 0);
+  const activeMs = Number.isFinite(firstRecordedMs) ? firstRecordedMs : firstRunMs;
+  const coveredMs = Math.max(untilMs - Math.max(sinceMs, activeMs), 0);
   const delivered = countDelivered(runs, sinceMs, untilMs);
   const asked = Math.round((watch.askedPerDay * coveredMs) / DAY);
   return {
@@ -82,6 +87,7 @@ export function watchRow(watch, { sinceMs, untilMs, runs }) {
     unit: watch.unit,
     asked,
     delivered: delivered.runs,
+    queued: delivered.queued,
     finished: delivered.finished,
     red: delivered.red,
     rate: asked ? delivered.runs / asked : 0,
@@ -119,7 +125,7 @@ export function formatWindow(label, window) {
     ])),
   ];
   for (const row of window.watches) {
-    lines.push(`${row.label}: asked ${row.asked} (${row.unit}), ran ${row.delivered}, ${percent(row.rate)}, ${row.coveredDays} days of record.`);
+    lines.push(`${row.label}: asked ${row.asked} (${row.unit}), ran ${row.delivered}, ${percent(row.rate)}, ${row.coveredDays} days of record${row.queued ? `, ${row.queued} queued and not counted` : ''}.`);
     if (row.perDay.length) lines.push(`Per day: ${row.perDay.map(entry => `${entry.day} ${entry.runs}`).join(', ')}.`);
   }
   if (window.pushes) {
@@ -173,25 +179,14 @@ export function verdictLines(comparison) {
   return lines.join('\n');
 }
 
-// A second page of a busy endpoint costs a minute or more at GitHub, and this host is
-// throttled when it asks in parallel, so the window is sliced into days and one page
-// is read per slice, one slice at a time. A day that delivers more than 100 runs of
-// one workflow is counted as 100, which reads low, never high.
 const SLICE_MS = DAY;
-const SLICE_CONCURRENCY = 1;
-
 export async function slicedWindow(sinceMs, untilMs, fetchPage) {
-  const slices = [];
-  for (let from = sinceMs; from < untilMs; from += SLICE_MS) slices.push([from, Math.min(from + SLICE_MS, untilMs)]);
   const rows = [];
-  for (let index = 0; index < slices.length; index += SLICE_CONCURRENCY) {
-    const wave = slices.slice(index, index + SLICE_CONCURRENCY);
-    const batches = await Promise.all(wave.map(async ([from, to]) => {
-      const batch = await fetchPage(new Date(from).toISOString(), new Date(to).toISOString(), 1);
-      if (!Array.isArray(batch)) throw new Error('GitHub returned no list of runs');
-      return batch;
-    }));
-    rows.push(...batches.flat());
+  for (let from = sinceMs; from < untilMs; from += SLICE_MS) {
+    const to = Math.min(from + SLICE_MS, untilMs);
+    const batch = await fetchPage(new Date(from).toISOString(), new Date(to).toISOString(), 1);
+    if (!Array.isArray(batch)) throw new Error('GitHub returned no list of runs');
+    rows.push(...batch);
   }
   return rows;
 }
@@ -209,13 +204,30 @@ function ghJson(path) {
   });
 }
 
+export function originMatches(origin, repo) {
+  const normalise = value => String(value ?? '')
+    .trim()
+    .replace(/^git@github\.com:/, '')
+    .replace(/^https?:\/\/github\.com\//, '')
+    .replace(/^ssh:\/\/git@github\.com\//, '')
+    .replace(/\.git$/, '')
+    .replace(/\/+$/, '')
+    .toLowerCase();
+  return normalise(origin) === normalise(repo);
+}
+
 export function gitCommits(repo, sinceMs, untilMs, dir = process.cwd()) {
   return new Promise((resolve, reject) => {
-    execFile('git', ['log', `--since=${new Date(sinceMs).toISOString()}`, `--until=${new Date(untilMs).toISOString()}`, '--format=%H', `origin/${PUSH_WATCH.branch}`],
-      { cwd: dir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 60000 },
-      (error, stdout, stderr) => (error
-        ? reject(new Error(`cannot count production commits (${String(stderr ?? '').trim() || error.message.split('\n')[0]})`))
-        : resolve(stdout.split('\n').filter(Boolean).length)));
+    execFile('git', ['config', '--get', 'remote.origin.url'], { cwd: dir, encoding: 'utf8', timeout: 60000 }, (error, stdout, stderr) => {
+      if (error) return reject(new Error(`cannot read this checkout's origin (${String(stderr ?? '').trim() || error.message.split('\n')[0]})`));
+      const origin = String(stdout ?? '').trim();
+      if (!originMatches(origin, repo)) return reject(new Error(`this checkout tracks ${origin}, not ${repo}: push counts read origin/${PUSH_WATCH.branch} of the checkout, so run it from a clone of ${repo}`));
+      return execFile('git', ['log', `--since=${new Date(sinceMs).toISOString()}`, `--until=${new Date(untilMs).toISOString()}`, '--format=%H', `origin/${PUSH_WATCH.branch}`],
+        { cwd: dir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 60000 },
+        (logError, logOut, logErr) => (logError
+          ? reject(new Error(`cannot count production commits (${String(logErr ?? '').trim() || logError.message.split('\n')[0]})`))
+          : resolve(logOut.split('\n').filter(Boolean).length)));
+    });
   });
 }
 
@@ -223,28 +235,33 @@ export async function measureWindow({ repo, sinceMs, untilMs, only, commits = gi
   const runsFor = workflow => slicedWindow(sinceMs, untilMs, (from, to, page) => api(
     `/repos/${repo}/actions/workflows/${workflow}/runs?created=${from}..${to}&per_page=100&page=${page}`,
   ).then(payload => payload.workflow_runs ?? payload));
+  const firstRunOf = workflow => api(
+    `/repos/${repo}/actions/workflows/${workflow}/runs?per_page=1&sort=created&direction=asc`,
+  ).then(payload => Date.parse((payload.workflow_runs ?? payload)[0]?.created_at ?? ''));
   const watches = [];
   const legs = [];
   if (only !== 'pushes') {
     for (const watch of WATCHES) {
       if (legs.some(leg => leg.workflow === watch.workflow)) continue;
-      legs.push({ workflow: watch.workflow, rows: runsFor(watch.workflow) });
+      legs.push({ workflow: watch.workflow, rows: runsFor(watch.workflow), first: firstRunOf(watch.workflow) });
     }
   }
   if (only !== 'watches' && !legs.some(leg => leg.workflow === PUSH_WATCH.workflow)) {
-    legs.push({ workflow: PUSH_WATCH.workflow, rows: runsFor(PUSH_WATCH.workflow) });
+    legs.push({ workflow: PUSH_WATCH.workflow, rows: runsFor(PUSH_WATCH.workflow), first: firstRunOf(PUSH_WATCH.workflow) });
   }
   const [legRows, landed] = await Promise.all([
-    Promise.all(legs.map(async leg => ({ workflow: leg.workflow, runs: await leg.rows }))),
+    Promise.all(legs.map(async leg => ({ workflow: leg.workflow, runs: await leg.rows, first: await leg.first }))),
     only !== 'watches' ? commits(repo, sinceMs, untilMs) : null,
   ]);
   const runsOf = workflow => legRows.find(leg => leg.workflow === workflow)?.runs ?? [];
+  const firstOf = workflow => legRows.find(leg => leg.workflow === workflow)?.first;
   if (only !== 'pushes') {
     for (const watch of WATCHES) {
       watches.push(watchRow(watch, {
         sinceMs,
         untilMs,
         runs: runsOf(watch.workflow).filter(run => watch.events.includes(run.event)),
+        firstRecordedMs: firstOf(watch.workflow),
       }));
     }
   }

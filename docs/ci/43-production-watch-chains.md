@@ -77,8 +77,15 @@ after of the fix sit in one table. The push half counts `prod-health.yml` push r
 against the commits that landed on `origin/production`.
 
 A watch passes when it delivered at least nine runs in ten of what it asked for over
-seven days of its own record: a watch that started four hours ago shows its coverage
-instead of a rate it has not earned yet. It reads only, dispatches nothing, and never
-edits a ticket. GitHub charges a minute or more for a second page of a busy endpoint,
-so the window is sliced into days and read one page per slice: a day that delivers
-more than 100 runs of one workflow is counted as 100, which reads low, never high.
+seven days of its own record, and its record starts at its first run ever, which one
+extra read per workflow returns. A watch older than the window is therefore judged
+over all seven days, and a watch younger than the window shows its coverage instead
+of a rate it has not earned yet. A run still queued, requested or waiting never
+counts as delivered: it is reported on its own and left out of the rate, so a week of
+queued records cannot pass. The push half reads `origin/production` of the checkout,
+so a `--repo` that does not match this checkout's origin is refused rather than
+mixing two histories. It reads only, dispatches nothing, and never edits a ticket.
+GitHub charges a minute or more for a second page of a busy endpoint, so the window
+is sliced into days and read one page per slice, one slice at a time: a day that
+delivers more than 100 runs of one workflow is counted as 100, which reads low, never
+high.

@@ -25,10 +25,31 @@ test('countDelivered keeps only runs inside the window and separates red from fi
     run('a.yml', 'schedule', until - 8 * DAY),
   ];
   const counted = countDelivered(runs, until - DAY, until);
-  assert.equal(counted.runs, 3);
+  assert.equal(counted.runs, 2);
+  assert.equal(counted.queued, 1);
   assert.equal(counted.finished, 2);
   assert.equal(counted.red, 1);
-  assert.deepEqual(counted.perDay, [{ day: '2026-11-08', runs: 3 }]);
+  assert.deepEqual(counted.perDay, [{ day: '2026-11-08', runs: 2 }]);
+});
+
+test('queued records do not count as delivered monitoring, however many pile up', async () => {
+  const { watchRow, WATCHES } = await subject;
+  const settings = WATCHES.find(watch => watch.workflow === 'required-check-settings.yml');
+  const queued = Array.from({ length: 24 * 7 }, (_, index) => run('required-check-settings.yml', 'schedule', until - 7 * DAY + index * HOUR, { status: 'queued', conclusion: null }));
+  const row = watchRow(settings, { sinceMs: until - 7 * DAY, untilMs: until, runs: queued, firstRecordedMs: until - 30 * DAY });
+  assert.equal(row.queued, 168);
+  assert.equal(row.delivered, 0);
+  assert.equal(row.enough, false);
+});
+
+test('a watch already running when the window opened is measured over the whole window', async () => {
+  const { watchRow, WATCHES } = await subject;
+  const settings = WATCHES.find(watch => watch.workflow === 'required-check-settings.yml');
+  const hourly = Array.from({ length: 24 * 7 }, (_, index) => run('required-check-settings.yml', 'schedule', until - 7 * DAY + index * HOUR + 6 * 60 * 1000));
+  const row = watchRow(settings, { sinceMs: until - 7 * DAY, untilMs: until, runs: hourly, firstRecordedMs: until - 30 * DAY });
+  assert.equal(row.coveredDays, 7);
+  assert.equal(row.asked, 168);
+  assert.equal(row.enough, true, 'a watch older than the window is judged over all seven days, not from its first run inside them');
 });
 
 test('a watch that delivered nine in ten for seven days passes, a starved one does not', async () => {
@@ -101,6 +122,14 @@ test('push delivery above the count of commits is clamped, and a drop against th
   const comparison = compareWindows(after, before);
   assert.equal(comparison.pushes.regression, true);
   assert.match(verdictLines(comparison), /pushes lost their check/);
+});
+
+test('a repository override that is not this checkout is refused instead of mixing two histories', async () => {
+  const { originMatches, gitCommits } = await subject;
+  assert.equal(originMatches('git@github.com:hypertask-ai/hypertask.git', 'hypertask-ai/hypertask'), true);
+  assert.equal(originMatches('https://github.com/hypertask-ai/hypertask.git', 'hypertask-ai/hypertask'), true);
+  assert.equal(originMatches('https://github.com/other/repo.git', 'hypertask-ai/hypertask'), false);
+  await assert.rejects(gitCommits('other/repo', until - DAY, until), /run it from a clone of other\/repo/);
 });
 
 test('the verdict names the short watch and its reason', async () => {
