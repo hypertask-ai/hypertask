@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
-const { ticks, plan, TICKS_PER_LINK, MIN_CHECK_MS, PROBE_CHECKS, WATCH_CHECKS } = require("../.github/scripts/production-watch.cjs");
+const { ticks, plan, envFor, TICKS_PER_LINK, MIN_CHECK_MS, PROBE_CHECKS, WATCH_CHECKS } = require("../.github/scripts/production-watch.cjs");
 
 const names = checks => checks.map(check => check.name);
 
@@ -15,11 +15,11 @@ function recorder({ fail = [], log = () => {} } = {}) {
 }
 
 test("the first tick of a link runs the thirty-minute half, later ticks only the five-minute pass", () => {
-  assert.deepEqual(names(plan(0)), ["drift", "pusher", "api-reachability"]);
-  for (const index of [1, 2, 3, 4, 5]) assert.deepEqual(names(plan(index)), ["api-reachability"]);
+  assert.deepEqual(names(plan(0)), ["drift", "pusher", "api-reachability", "core-actions"]);
+  for (const index of [1, 2, 3, 4, 5]) assert.deepEqual(names(plan(index)), ["api-reachability", "core-actions"]);
 });
 
-test("the drift check stands down while a prod-health run is in flight, the rest still runs", () => {
+test("the drift check and the fixture probe stand down while a prod-health run is in flight, the rest still runs", () => {
   assert.deepEqual(names(plan(0, { fixtureBusy: true })), ["pusher", "api-reachability"]);
   assert.deepEqual(names(plan(3, { fixtureBusy: true })), ["api-reachability"]);
 });
@@ -34,8 +34,8 @@ test("one link runs six ticks on five-minute boundaries, in order", async () => 
   assert.deepEqual(failures, []);
   assert.deepEqual(gaps, [300000, 300000, 300000, 300000, 300000]);
   assert.equal(TICKS_PER_LINK, 6);
-  assert.deepEqual(ran.slice(0, 3), names(WATCH_CHECKS).concat(names(PROBE_CHECKS)));
-  assert.equal(ran.length, 3 + 5);
+  assert.deepEqual(ran.slice(0, 4), names(WATCH_CHECKS).concat(names(PROBE_CHECKS)));
+  assert.equal(ran.length, 4 + 5 * 2);
 });
 
 test("a red check is reported and the rest of the link keeps checking", async () => {
@@ -46,7 +46,32 @@ test("a red check is reported and the rest of the link keeps checking", async ()
   assert.deepEqual(failures.map(failure => failure.check), ["drift", "api-reachability", "api-reachability"]);
   assert.deepEqual(failures.map(failure => failure.tick), [0, 0, 1]);
   assert.equal(ran.includes("pusher"), true);
-  assert.equal(ran.filter(name => name === "api-reachability").length, 2);
+  assert.equal(ran.includes("core-actions"), true);
+});
+
+test("a failed core-actions probe sends its report before the link moves on", async () => {
+  const ran = [];
+  const execute = async check => {
+    ran.push(check.name);
+    if (check.name === "core-actions") throw new Error("core-actions exited 1");
+  };
+
+  await ticks({ sweeps: 1, execute, sleep: async () => {} });
+
+  assert.deepEqual(ran, ["drift", "pusher", "api-reachability", "core-actions", "core-actions-report"]);
+});
+
+test("a report that cannot go out is a warning, not a lost tick", async () => {
+  const messages = [];
+  const execute = async check => {
+    if (check.name === "core-actions-report") throw new Error("report exited 1");
+    if (check.name === "core-actions") throw new Error("core-actions exited 1");
+  };
+
+  const failures = await ticks({ sweeps: 1, execute, sleep: async () => {}, log: message => messages.push(message) });
+
+  assert.deepEqual(failures.map(failure => failure.check), ["core-actions"]);
+  assert.match(messages.join("\n"), /the core-actions report did not go out: report exited 1/);
 });
 
 test("an unreadable prod-health run list never costs the drift check", async () => {
@@ -55,30 +80,29 @@ test("an unreadable prod-health run list never costs the drift check", async () 
   await ticks({ sweeps: 1, execute, sleep: async () => {}, fixtureBusy: async () => { throw new Error("HTTP 502"); } });
 
   assert.equal(ran.includes("drift"), true);
+  assert.equal(ran.includes("core-actions"), true);
 });
 
-test("the drift check is skipped with a notice while a prod-health run is in flight", async () => {
+test("the drift check and the fixture probe are skipped with a notice while a prod-health run is in flight", async () => {
   const { ran, execute } = recorder();
   const messages = [];
 
   await ticks({ sweeps: 1, execute, sleep: async () => {}, fixtureBusy: async () => true, log: message => messages.push(message) });
 
   assert.equal(ran.includes("drift"), false);
+  assert.equal(ran.includes("core-actions"), false);
   assert.equal(ran.includes("pusher"), true);
   assert.equal(ran.includes("api-reachability"), true);
-  assert.match(messages.join("\n"), /this tick skips the drift check/);
+  assert.match(messages.join("\n"), /this tick skips the drift check and the core-actions probe/);
 });
 
-test("the fixture probe is a job that joins the prod-health fixture group instead of a pass", async () => {
-  const yaml = require("js-yaml");
-  const workflow = yaml.load(await readFile(".github/workflows/production-watch.yml", "utf8"));
-  const push = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
-
-  const probe = workflow.jobs["core-actions"];
-  assert.equal(probe.concurrency.group, push.jobs["core-actions"].concurrency.group);
-  assert.equal(probe.concurrency["cancel-in-progress"], false);
-  assert.equal(probe.steps.find(step => step.id === "probe").env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}");
-  assert.equal(names(PROBE_CHECKS).includes("core-actions"), false);
+test("the core-actions probe and its report carry the health user token, the other checks carry the general one", () => {
+  const base = { HYPERTASK_MCP_TOKEN: "general", HYPERTASK_HEALTH_USER_TOKEN: "health" };
+  const core = PROBE_CHECKS.find(check => check.name === "core-actions");
+  assert.equal(envFor(core, base).HYPERTASK_MCP_TOKEN, "health");
+  const reachability = PROBE_CHECKS.find(check => check.name === "api-reachability");
+  assert.equal(envFor(reachability, base).HYPERTASK_MCP_TOKEN, "general");
+  assert.equal(envFor(core, { HYPERTASK_MCP_TOKEN: "general" }), null);
 });
 
 test("a link that runs out of time stops its ticks instead of running past the deadline", async () => {
@@ -97,7 +121,7 @@ test("a link that runs out of time stops its ticks instead of running past the d
 
   assert.deepEqual(failures, []);
   assert.equal(gaps.length, 5);
-  assert.equal(ran.length, 3 + 5);
+  assert.equal(ran.length, 4 + 5 * 2);
   assert.deepEqual(messages, []);
 
   const tightClock = { value: 0 };
@@ -126,7 +150,7 @@ test("a check that no longer fits moves to the next link instead of losing its t
   assert.match(messages.join("\n"), /drift moved to the next link: fewer than 2 minutes of this link are left/);
 
   await ticks({ sweeps: 1, execute, sleep: async () => {}, deadlineMs: null, now: () => 0 });
-  assert.equal(seen.length, 3);
+  assert.equal(seen.length, 4);
   for (const { timeout } of seen) assert.equal(timeout, 9 * 60 * 1000);
   assert.equal(MIN_CHECK_MS, 2 * 60 * 1000);
 });
@@ -139,17 +163,24 @@ test("a slow check shortens the next sleep instead of pushing the tick later", a
   await ticks({ sweeps: 2, execute, now: () => clock, sleep: async ms => { gaps.push(ms); clock += ms; } });
 
   assert.deepEqual(gaps, []);
-  assert.equal(clock, 8 * 60 * 1000);
+  assert.equal(clock, 12 * 60 * 1000);
 });
 
-test("every tick asks whether a prod-health run is in flight, not just the first", async () => {
+test("every tick asks whether a prod-health run holds the fixture, not just the first", async () => {
   let asked = 0;
   const { ran, execute } = recorder();
 
   await ticks({ sweeps: 3, execute, sleep: async () => {}, now: () => 0, fixtureBusy: async () => { asked += 1; return false; } });
 
   assert.equal(asked, 3);
-  assert.equal(ran.filter(name => name === "api-reachability").length, 3);
+  assert.equal(ran.filter(name => name === "core-actions").length, 3);
+});
+
+test("two fixture probes cannot interleave: the route takes the fixture lock on the server", async () => {
+  const route = await readFile("src/app/api/ops/core-actions-smoke/route.ts", "utf8");
+
+  assert.match(route, /withCoreSmokeLock\(`\$\{projectId\}:\$\{taskId\}`/);
+  assert.equal(names(PROBE_CHECKS).includes("core-actions"), true);
 });
 
 test("the watch workflow runs the tick script and starts the next link even after a red tick", async () => {
@@ -164,7 +195,7 @@ test("the watch workflow runs the tick script and starts the next link even afte
   const [pass] = workflow.jobs.watch.steps.filter(step => step.run);
   assert.equal(pass.run, "node .github/scripts/production-watch.cjs --deadline-minutes 34");
   assert.equal(pass.env.GH_TOKEN, "${{ github.token }}");
-  assert.equal(pass.env.HYPERTASK_MCP_TOKEN, "${{ secrets.HYPERTASK_MCP_TOKEN }}");
+  assert.equal(pass.env.HYPERTASK_HEALTH_USER_TOKEN, "${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}");
 });
 
 test("the hand-off is its own job, so a watch job killed by its timeout still starts the next link", async () => {

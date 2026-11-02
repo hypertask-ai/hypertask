@@ -235,16 +235,11 @@ production_watch:
   cron_utc: "7-59/30 * * * *"
   cron_role: restart a chain that died, never the tick itself
   tick_deadline: each tick is due at a fixed offset from the link start; a check that no longer fits moves to the next link instead of receiving a shorter timeout
-  drift_guard_asked: every tick, because a prod-health run can start between two passes
+  fixture_guard_asked: every tick, because a prod-health run can start between two passes
+  fixture_lock: the API route runs every probe inside withCoreSmokeLock (src/lib/productionSmoke/lock.ts), a Redis SET NX lock keyed by the fixture's projectId:taskId, so two probes never mutate the fixture at once
   passes:
-    five_minute: [api_reachability]
+    five_minute: [api_reachability, core_actions_probe]
     thirty_minute: [deploy_drift, pusher_status]
-  fixture_probe:
-    job: core-actions
-    cadence: once per link
-    concurrency_group: production-core-actions-smoke-fixture
-    lock: the same repository-wide group the prod-health push job takes, so the two never walk the fixture at once
-    token: the dedicated Health Check user, as the push job uses
   ticks_per_link: 6
   tick_gap_seconds: 300
   pass_timeout_minutes: 40
