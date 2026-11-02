@@ -5,7 +5,7 @@ import { taskWriterSkillsSchema, MAX_SKILL_INPUT_LENGTH } from "@/lib/ai/taskWri
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
@@ -262,7 +262,13 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
     if (!systemModel) {
       return NextResponse.json({ questions: [] });
     }
-    const gatewayApiKey = await getTeamGatewayApiKey({
+    const funded = typeof keyOnlySideCallModel === "function"
+      ? await keyOnlySideCallModel(
+        { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id },
+        systemModel.provider,
+      )
+      : null;
+    const gatewayApiKey = funded ? undefined : await getTeamGatewayApiKey({
       trustedTeamId: task.project.teamId,
     });
     const gatewayTags: AiGatewayTags = {
@@ -270,13 +276,13 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
       projectId: task.projectId,
     };
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id }, feature: "task-questions" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
+    const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id }, feature: "task-questions" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey));
     configureAiModelUsage(model, {
       userId: viewer.id,
       teamId: task.project.teamId,
       projectId: task.projectId,
       taskId: task.id,
-      provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
+      provider: funded?.usageProvider ?? (haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider),
       feature: "task-questions",
       reasoningFeature: "suggested-questions",
     });
@@ -314,6 +320,9 @@ async function taskQuestions(request: NextRequest, actionChipsFlag: boolean) {
       ? result.output.followup.trim() : undefined;
     return NextResponse.json({ questions, ...(followup ? { followup } : {}) });
   } catch (error) {
+    if (error instanceof Error && error.name === "TeamKeyOnlyRefusal") {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
     if (allowanceFallbacksEnabled && warnIfAllowanceRefused(error, "ai/task-questions")) {
       return NextResponse.json({ questions: [] });
     }

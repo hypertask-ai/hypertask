@@ -309,9 +309,14 @@ test("page index includes, rows, schema and namespace contain only page-owned me
     "@/lib/prisma": { default: { page: { findFirst: async (args) => {
       query = args;
       return { ...page, contentText: "Page text", project: { title: "Page board" }, task: null, taskId: null };
-    } } } },
+    } }, project: { findUnique: async () => ({ teamId: null }) } } },
     "@/lib/turbopuffer": { default: { namespace: (name) => ({ write: async (body) => { writes.push({ name, body }); } }) }, turbopufferNamespaces: namespaces },
     "@/utils/controllers/search/rankHits": {}, "@/app/api/ai/_lib/boardMemoryContract": {},
+    "@/lib/ai/teamAiFunding": require("./helpers/team-ai-funding-stub.cjs"),
+    "./embedRowsForWrite": load("src/utils/controllers/turbopuffer/embedRowsForWrite.ts", {
+      "@/lib/prisma": { default: { project: { findUnique: async () => ({ teamId: "fixture-team" }) } } },
+      "@/lib/ai/teamAiFunding": require("./helpers/team-ai-funding-stub.cjs"),
+    }),
   }, {
     env: { TURBOPUFFER_EMBEDDINGS_API_KEY: "synthetic-test-key" },
     fetch: async (_url, options) => {

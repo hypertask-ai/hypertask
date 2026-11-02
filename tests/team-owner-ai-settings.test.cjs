@@ -92,7 +92,7 @@ test("all JSON settings mutations serialize on the team row", () => {
   assert.doesNotMatch(featureModelsRouteSource, /prisma\.team\.update/);
 });
 
-test("team AI settings reads authorize in one normal-path query", () => {
+test("team AI settings reads authorize before fetching providers", () => {
   assert.match(settingsViewerSource, /prisma\.team\.findFirst/);
   assert.match(settingsViewerSource, /googleAccount: \{ is: \{ userId \} \}/);
   assert.match(
@@ -132,4 +132,33 @@ test("non-owners see read-only provider and API-key controls", () => {
     apiKeysSectionSource,
     /disabled=\{\s*!canManage \|\|\s*testState/,
   );
+});
+
+test("viewer receives enabled providers only after authorization", async () => {
+  const { loadModule } = require("./helpers/loadModule.cjs");
+  const calls = [];
+  let authorized = true;
+  let exists = true;
+  const prisma = {
+    team: {
+      findFirst: async (args) => {
+        calls.push(["team", args]);
+        return authorized ? { aiProviderSettings: { example: true }, aiKeyOnly: true, googleAccount: { userId: 42 } } : null;
+      },
+      findUnique: async () => exists ? { id: "team" } : null,
+    },
+    teamByokApiKey: { findMany: async (args) => { calls.push(["keys", args]); return [{ provider: "claude" }]; } },
+  };
+  const { getTeamAiSettingsForViewer } = loadModule("src/utils/controllers/teams/getTeamAiSettingsForViewer.ts", { "@/lib/prisma": { default: prisma } });
+  assert.deepEqual(await getTeamAiSettingsForViewer(7, undefined, "team"), {
+    ok: true, settings: { example: true }, aiKeyOnly: true, ownerUserId: 42, savedByokProviders: ["claude"],
+  });
+  assert.deepEqual(calls[0][1].select, { aiProviderSettings: true, aiKeyOnly: true, googleAccount: { select: { userId: true } } });
+  assert.deepEqual(calls[1], ["keys", { where: { teamId: "team", enabled: true }, select: { provider: true } }]);
+  authorized = false;
+  calls.length = 0;
+  assert.deepEqual(await getTeamAiSettingsForViewer(7, undefined, "team"), { ok: false, status: 403, message: "Forbidden" });
+  exists = false;
+  assert.deepEqual(await getTeamAiSettingsForViewer(7, undefined, "team"), { ok: false, status: 404, message: "Team not found" });
+  assert.deepEqual(calls.map(([kind]) => kind), ["team", "team"]);
 });

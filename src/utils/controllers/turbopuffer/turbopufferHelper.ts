@@ -4,6 +4,8 @@ import { TextNode } from "node-html-parser";
 
 import prisma from "@/lib/prisma";
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
+import { embeddingAuthorization, resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
+import { embedRowsForWrite } from "./embedRowsForWrite";
 import turbopuffer, { turbopufferNamespaces } from "@/lib/turbopuffer";
 import {
   parseTicketSearchQuery,
@@ -139,10 +141,6 @@ export type TurbopufferCustomInstructionFileRow = {
   chunkIndex: number;
   updatedAt: string;
   $dist?: number;
-};
-
-type TurbopufferVectorRow<T> = T & {
-  vector?: number[];
 };
 
 export const taskNamespaceSchema = {
@@ -385,35 +383,42 @@ export function buildCustomInstructionFileRows(args: {
   }));
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
+export async function embedTexts(texts: string[], teamId?: string | null): Promise<number[][]> {
   if (texts.length === 0) return [];
 
-  const apiKey = process.env.TURBOPUFFER_EMBEDDINGS_API_KEY;
-  if (!apiKey) {
-    throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
-  }
+  const decision = teamId && typeof resolveTeamAiFunding === "function"
+    ? await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" })
+    : { mode: "unrestricted" as const };
+  const auth = typeof embeddingAuthorization === "function"
+    ? embeddingAuthorization(decision, process.env.TURBOPUFFER_EMBEDDINGS_API_KEY)
+    : {
+        apiKey: process.env.TURBOPUFFER_EMBEDDINGS_API_KEY ?? "",
+        endpoint: "https://ai-gateway.vercel.sh/v1/embeddings",
+        model: "openai/text-embedding-3-small",
+      };
 
   const inputs = texts.map(toEmbeddingInput);
-  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], apiKey);
-  return embedInputs(inputs, apiKey);
+  if (inputs.length === 1) return shareInFlightEmbedding(inputs[0], auth, teamId);
+  return embedInputs(inputs, auth, teamId);
 }
 
 const inFlightSingleEmbeddings = new Map<string, Promise<number[][]>>();
 
-function shareInFlightEmbedding(input: string, apiKey: string) {
-  const running = inFlightSingleEmbeddings.get(input);
+function shareInFlightEmbedding(input: string, auth: ReturnType<typeof embeddingAuthorization>, teamId?: string | null) {
+  const key = JSON.stringify([input, auth.apiKey, auth.endpoint, auth.model, teamId ?? null]);
+  const running = inFlightSingleEmbeddings.get(key);
   if (running) return running;
-  const started = embedInputs([input], apiKey).finally(() => inFlightSingleEmbeddings.delete(input));
-  inFlightSingleEmbeddings.set(input, started);
+  const started = embedInputs([input], auth, teamId).finally(() => inFlightSingleEmbeddings.delete(key));
+  inFlightSingleEmbeddings.set(key, started);
   return started;
 }
 
-async function embedInputs(inputs: string[], apiKey: string) {
+async function embedInputs(inputs: string[], auth: ReturnType<typeof embeddingAuthorization>, teamId?: string | null) {
   const embeddings: number[][] = [];
 
   for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
     const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
-    embeddings.push(...(await embedBatchWithRetry(batch, apiKey)));
+    embeddings.push(...(await embedBatchWithRetry(batch, auth.apiKey, auth.endpoint, auth.model, teamId)));
   }
 
   return embeddings;
@@ -428,7 +433,10 @@ export function toEmbeddingInput(text: string): string {
 
 async function embedBatchWithRetry(
   batch: string[],
-  apiKey: string
+  apiKey: string,
+  endpoint = EMBEDDINGS_ENDPOINT,
+  model = EMBEDDING_MODEL,
+  teamId?: string | null,
 ): Promise<number[][]> {
   let lastError: unknown;
 
@@ -445,14 +453,14 @@ async function embedBatchWithRetry(
     try {
       let response: Response;
       try {
-        response = await fetch(EMBEDDINGS_ENDPOINT, {
+        response = await fetch(endpoint, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: EMBEDDING_MODEL,
+            model,
             input: batch,
           }),
         });
@@ -501,7 +509,7 @@ async function embedBatchWithRetry(
       return batchEmbeddings;
     } finally {
       await logAiUsage({
-        userId: null, provider: "gateway-embeddings", model: EMBEDDING_MODEL, feature: "embeddings",
+        userId: null, teamId: teamId ?? null, provider: "gateway-embeddings", model, feature: "embeddings",
         outcome: succeeded ? "ok" : "failed", inputTokens: usage?.prompt_tokens, totalTokens: usage?.total_tokens,
         costUsd: null, latencyMs: Date.now() - startedAt,
       });
@@ -513,8 +521,8 @@ async function embedBatchWithRetry(
     : new Error("OpenAI embeddings request failed after retries");
 }
 
-export async function embedText(text: string): Promise<number[]> {
-  const [embedding] = await embedTexts([text]);
+export async function embedText(text: string, teamId?: string | null): Promise<number[]> {
+  const [embedding] = await embedTexts([text], teamId);
   if (!embedding) {
     throw new Error("OpenAI embeddings returned no embedding");
   }
@@ -542,10 +550,10 @@ export async function upsertTaskRowsToTurbopuffer(
   options: { disableBackpressure?: boolean } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer task upsert"
+    "turbopuffer task upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -601,10 +609,10 @@ export async function upsertCommentRowsToTurbopuffer(
   options: { disableBackpressure?: boolean } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer comment upsert"
+    "turbopuffer comment upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -644,10 +652,10 @@ export async function upsertPageRowsToTurbopuffer(
   options: { disableBackpressure?: boolean } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer page upsert"
+    "turbopuffer page upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -754,10 +762,10 @@ export async function upsertCustomInstructionFileRowsToTurbopuffer(
   } = {}
 ) {
   if (rows.length === 0) return;
-
   const { rows: rowsWithVectors, hasVectors } = await embedRowsForWrite(
     rows,
-    "turbopuffer custom instruction file upsert"
+    "turbopuffer custom instruction file upsert",
+    embedTexts,
   );
 
   if (!hasVectors) {
@@ -821,7 +829,7 @@ export async function searchTasks({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks");
+    : await embedQueryForSearch(rankQuery, "turbopuffer searchTasks", projectId != null && projectIds.includes(projectId) ? [projectId] : projectIds);
 
   if (queryVector) {
     try {
@@ -892,7 +900,7 @@ export async function searchComments({
 
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchComments");
+    : await embedQueryForSearch(query, "turbopuffer searchComments", projectIds);
 
   if (queryVector) {
     try {
@@ -952,7 +960,7 @@ export async function searchCustomInstructionFiles({
   );
   const queryVector = keywordOnly
     ? null
-    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles");
+    : await embedQueryForSearch(query, "turbopuffer searchCustomInstructionFiles", [projectId]);
 
   if (queryVector) {
     try {
@@ -1132,34 +1140,27 @@ async function ensureNamespaceSchema(
   });
 }
 
-async function embedRowsForWrite<T extends { searchText: string }>(
-  rows: T[],
-  context: string
-): Promise<{ rows: Array<TurbopufferVectorRow<T>>; hasVectors: boolean }> {
-  try {
-    const embeddings = await embedTexts(rows.map((row) => row.searchText));
-    return {
-      rows: rows.map((row, index) => ({
-        ...row,
-        vector: embeddings[index],
-      })),
-      hasVectors: true,
-    };
-  } catch (error) {
-    console.error(
-      `${context} embedding error, upserting without vectors:`,
-      error
-    );
-    return { rows, hasVectors: false };
-  }
-}
-
 async function embedQueryForSearch(
   query: string,
-  context: string
+  context: string,
+  projectIds?: number[] | null,
 ): Promise<number[] | null> {
   try {
-    return await embedText(query);
+    if (!projectIds?.length) return null;
+    const teams = new Set<string>();
+    for (const projectId of projectIds) {
+      const project = await prisma.project.findUnique({ where: { id: projectId }, select: { teamId: true } });
+      if (!project?.teamId) return null;
+      teams.add(project.teamId);
+    }
+    if (teams.size > 1) {
+      for (const teamId of teams) {
+        const decision = await resolveTeamAiFunding(teamId, { provider: "openai", feature: "embeddings" });
+        if (decision.mode !== "unrestricted") return null;
+      }
+    }
+    const [teamId] = teams;
+    return await embedText(query, teamId);
   } catch (error) {
     console.error(`${context} embedding error, using BM25 only:`, error);
     return null;

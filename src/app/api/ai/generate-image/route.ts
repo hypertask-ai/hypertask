@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { htmlToText } from "@/app/api/ai/_lib/currentTaskContext";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
+import { resolveTeamAiFunding, TeamKeyOnlyRefusal } from "@/lib/ai/teamAiFunding";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   errorMessage,
@@ -119,9 +120,15 @@ export async function POST(request: NextRequest) {
         throw new Error("Image model provider is unavailable");
       }
 
-      const gatewayApiKey = await getTeamGatewayApiKey({
-        trustedTeamId: teamContext.teamId,
-      });
+      const imageFunding = teamContext.teamId
+        ? await resolveTeamAiFunding(teamContext.teamId, { provider: "gateway", feature: "images" })
+        : { mode: "unrestricted" as const };
+      if (imageFunding.mode === "refused") throw new TeamKeyOnlyRefusal(imageFunding.message);
+      const gatewayApiKey = imageFunding.mode === "byok"
+        ? imageFunding.apiKey
+        : await getTeamGatewayApiKey({
+            trustedTeamId: teamContext.teamId,
+          });
       await assertImageModelAllowedForPlan(
         body.projectId,
         definition,
@@ -157,6 +164,7 @@ export async function POST(request: NextRequest) {
       );
       generated = { mediaType: image.mediaType, fileName, imageUrl };
     } catch (error) {
+      if (error instanceof TeamKeyOnlyRefusal) throw error;
       const allowanceMessage = sharedAiAllowanceErrorMessage(error);
       if (allowanceMessage) {
         return NextResponse.json(
@@ -219,6 +227,9 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    if (error instanceof TeamKeyOnlyRefusal) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

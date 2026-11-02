@@ -1,7 +1,7 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
-import { resolveAiFallbackCredential, getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { aiUsageProviderForCredential, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -45,28 +45,32 @@ export async function generateConversationTitle(
   abortSignal?: AbortSignal,
 ) {
   const fallback = fallbackTitle(message);
-  if (!byokApiKey && !isAiGatewayEnabled()) {
-    return fallback;
-  }
   try {
+    const funded = tags?.teamId && typeof keyOnlySideCallModel === "function"
+      ? await keyOnlySideCallModel(
+          { trustedTeamId: tags.teamId, projectId: usageContext?.projectId ?? tags.projectId, userId: usageContext?.userId ?? tags.userId },
+          "openai",
+        )
+      : null;
+    if (!funded && !byokApiKey && !isAiGatewayEnabled()) return fallback;
     const defaultContext = { ...(typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }) : { haiku55Enabled: false, byok: undefined }), openaiOnlyDefaultEnabled: false };
-    if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return fallback;
+    if (!funded && "anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return fallback;
     const useHaiku = defaultModelKeyFor(defaultContext, "gpt-6-luna") === "claude-haiku-5-5";
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
-    const modelInput = await resolveAiFallbackCredential(async () => useHaiku
+    const modelInput = funded ? undefined : await resolveAiFallbackCredential(async () => useHaiku
       ? defaultContext.byok?.credential ?? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
           trustedTeamId: tags?.teamId,
           projectId: usageContext?.projectId ?? tags?.projectId,
           userId: usageContext?.userId ?? tags?.userId,
         })
       : byokApiKey, new Error("This team needs its own AI key for titles."));
-    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" }) : resolveLegacyAiModel("openai", "gpt-6-luna", byokApiKey);
+    const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" }) : resolveLegacyAiModel("openai", "gpt-6-luna", byokApiKey));
     const thinkingOptIn = await chatTitleTokenCap(usageContext?.userId ?? tags?.userId);
     configureAiModelUsage(model, {
       ...usageContext,
       userId: usageContext?.userId ?? tags?.userId,
       teamId: tags?.teamId ?? null,
-      provider: useHaiku ? aiUsageProviderForCredential(provider, modelInput) : provider,
+      provider: funded?.usageProvider ?? (useHaiku ? aiUsageProviderForCredential(provider, modelInput) : provider),
       feature: "chat",
       reasoningFeature: "chat-title",
     });
@@ -86,7 +90,7 @@ export async function generateConversationTitle(
     const cleaned = fallbackTitle(result.text);
     return cleaned || fallback;
   } catch (error) {
-    if (abortSignal?.aborted) throw error;
+    if (abortSignal?.aborted || (error instanceof Error && error.name === "TeamKeyOnlyRefusal")) throw error;
     console.error("[ai/chat/stream] title generation failed", error);
     return fallback;
   }

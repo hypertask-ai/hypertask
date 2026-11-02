@@ -8,7 +8,7 @@ import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText } from "ai";
 
-import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
+import { getTeamGatewayApiKey, keyOnlySideCallModel } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
   aiUsageProviderForCredential,
@@ -96,18 +96,33 @@ export async function generateAndStoreCommentSummary(commentId: number) {
       defaultContext,
     );
     if (!systemModel) return null;
-    const gatewayApiKey = await getTeamGatewayApiKey({
+    let funded: Awaited<ReturnType<typeof keyOnlySideCallModel>> = null;
+    try {
+      funded = typeof keyOnlySideCallModel === "function"
+        ? await keyOnlySideCallModel(
+          { trustedTeamId: comment.task.project.teamId, projectId: comment.task.projectId, userId: comment.creatorId ?? comment.task.userId },
+          systemModel.provider,
+        )
+        : null;
+    } catch (error) {
+      if (error instanceof Error && error.name === "TeamKeyOnlyRefusal") {
+        console.error(`[commentSummaries] ${error.message}`);
+        return null;
+      }
+      throw error;
+    }
+    const gatewayApiKey = funded ? undefined : await getTeamGatewayApiKey({
       trustedTeamId: comment.task.project.teamId,
     });
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: comment.task.project.teamId, projectId: comment.task.projectId, userId: comment.creatorId ?? comment.task.userId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
+    const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: comment.task.project.teamId, projectId: comment.task.projectId, userId: comment.creatorId ?? comment.task.userId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey));
     configureAiModelUsage(model, {
       userId: comment.creatorId ?? comment.task.userId,
       teamId: comment.task.project.teamId,
       projectId: comment.task.projectId,
       taskId: comment.task.id,
       agentId: comment.agentId,
-      provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
+      provider: funded?.usageProvider ?? (haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider),
       feature: "summary",
       reasoningFeature: "tldr",
     });

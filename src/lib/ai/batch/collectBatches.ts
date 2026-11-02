@@ -1,5 +1,6 @@
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
+import { TeamKeyOnlyRefusal } from "@/lib/ai/teamAiFunding";
 import { modelCostUsd, modelPricing } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   buildBatchUsageRow,
@@ -67,7 +68,14 @@ type Plan = { outcomes: BatchItemOutcome[]; finalStatus: "completed" | "cancelle
 
 async function planBatch(batch: BatchRow, itemIds: string[], stale: boolean): Promise<Plan> {
   const allFailed = outcomesForItems(itemIds, []);
-  const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: batch.teamId });
+  let gatewayKey: string | undefined;
+  try {
+    gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: batch.teamId });
+  } catch (error) {
+    if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+    console.error(`[ai-batch] ${error.message}`);
+    return { outcomes: allFailed, finalStatus: "cancelled" };
+  }
   if (!gatewayKey) {
     return stale ? { outcomes: allFailed, finalStatus: "cancelled" } : "waiting";
   }

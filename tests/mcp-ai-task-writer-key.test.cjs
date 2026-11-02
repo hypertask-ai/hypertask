@@ -34,6 +34,7 @@ stubModule("src/lib/prisma.ts", {
         assert.equal(where.id, teamId);
         return {
           id: teamId,
+          aiKeyOnly: false,
           compedPlan: plan === "BYOK" ? "BYOK" : null,
           compedUntil: plan === "BYOK" ? new Date("2099-01-01") : null,
           activeSubscriptionPlanId: plan === "Pro" ? "sub_fixture_pro" : null,

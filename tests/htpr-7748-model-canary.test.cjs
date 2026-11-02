@@ -16,6 +16,7 @@ let now, redis, alerts, calls, usage, keys, settings, behavior, authenticated, r
 let forcedUsageProvider, replacementModel, selectedCredentials;
 
 stub("src/lib/redis.ts", { getRedis: async () => redis });
+stub("src/lib/ai/teamAiFunding.ts", require("./helpers/team-ai-funding-stub.cjs"));
 stub("src/lib/prisma.ts", { default: { team: { findMany: async (query) => {
   assert.equal(query.where.googleAccount.userId, 985);
   return [{ id: TEAM, aiProviderSettings: settings }];

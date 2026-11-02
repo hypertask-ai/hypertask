@@ -13,6 +13,7 @@ const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7862-cha
 let enabled = true;
 let heartbeatStepCapEnabled = true;
 const dependencies = {
+  "@/lib/ai/teamAiFunding": require("./helpers/team-ai-funding-stub.cjs"),
   ai,
   "@/lib/net/downloadWithoutBrotli": {},
   "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => false, backgroundClaudeModelEnabled: async () => false },

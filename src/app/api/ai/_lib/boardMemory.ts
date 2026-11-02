@@ -7,7 +7,7 @@ import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText, Output } from "ai";
 import { z } from "zod";
 
-import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { getByokOrTeamGatewayApiKeyForProvider, keyOnlySideCallModel } from "@/app/api/ai/_lib/byokKeys";
 import {
   assertProjectAccess,
   ProjectAccessError,
@@ -180,13 +180,16 @@ export async function learnBoardMemoryFromSignal(args: {
     const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: project.id, userId: args.userId }) : { haiku55Enabled: false, byok: undefined };
     if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return { enabled: true, learned: [] as string[] };
     const useHaiku = defaultModelKeyFor(defaultContext, BOARD_MEMORY_MODEL) === "claude-haiku-5-5";
+    const funded = project.teamId && typeof keyOnlySideCallModel === "function"
+      ? await keyOnlySideCallModel({ trustedTeamId: project.teamId, projectId: project.id, userId: args.userId }, "openai")
+      : null;
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
-    const gatewayApiKey = (useHaiku ? defaultContext.byok?.credential : undefined) ?? await getByokOrTeamGatewayApiKeyForProvider(
+    const gatewayApiKey = funded ? undefined : (useHaiku ? defaultContext.byok?.credential : undefined) ?? await getByokOrTeamGatewayApiKeyForProvider(
       provider,
       undefined,
       { projectId: project.id, userId: args.userId },
     );
-    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId: project.id, userId: args.userId }, feature: "custom-instructions" }) : resolveLegacyAiModel("openai", BOARD_MEMORY_MODEL, gatewayApiKey);
+    const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId: project.id, userId: args.userId }, feature: "custom-instructions" }) : resolveLegacyAiModel("openai", BOARD_MEMORY_MODEL, gatewayApiKey));
     const gatewayTags: AiGatewayTags = {
       projectId: project.id,
       teamId: project.teamId ?? "",
@@ -196,7 +199,7 @@ export async function learnBoardMemoryFromSignal(args: {
       userId: args.userId,
       teamId: project.teamId,
       projectId: project.id,
-      provider: aiUsageProviderForCredential(provider, gatewayApiKey),
+      provider: funded?.usageProvider ?? aiUsageProviderForCredential(provider, gatewayApiKey),
       feature: "custom-instructions",
     });
     const result = await generateText({

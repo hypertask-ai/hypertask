@@ -1,6 +1,7 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
+import { resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
@@ -171,6 +172,10 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       `[ai-model-fallback] ${state.selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
     );
     if (previous.model === state.selected.resolvedModelId) continue;
+    if (previous.model === "gpt-6-luna" && gatewayTags.teamId && typeof resolveTeamAiFunding === "function") {
+      const keyOnlyChat = await resolveTeamAiFunding(gatewayTags.teamId, { provider: "openai", feature: "chat" });
+      if (keyOnlyChat.mode !== "unrestricted") throw fallbackError;
+    }
     const fallbackProvider = previous.model === "gpt-6-luna" ? "openai" : state.selected.provider;
     const fallbackLookup = { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id };
     const fallbackCredential = await resolveAiFallbackCredential(async () =>
