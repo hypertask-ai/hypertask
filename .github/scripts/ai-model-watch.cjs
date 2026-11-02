@@ -4,6 +4,7 @@ const { identity } = require("../../scripts/model-diff");
 
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+const GUIDANCE = `<p>Follow the update-ai-models skill. Replace the old version in every picker. Migrate saved picks. Check gateway input and output prices. Get a live chat answer after release. New classes and providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`;
 
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
@@ -11,7 +12,7 @@ function ticketFor(finding) {
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: `<p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p><p>Follow <code>.claude/skills/update-ai-models/SKILL.md</code>: replace the old version in every picker, migrate saved picks, verify gateway input/output prices and get a live chat answer after release. New classes/providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`,
+    description: `<p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p>${GUIDANCE}`,
   };
 }
 
@@ -21,7 +22,7 @@ function rollupTicket(findings, now = new Date()) {
   return {
     marker,
     title: `AI model watch new classes [${marker}]`,
-    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><ul>${items}</ul><p>Follow <code>.claude/skills/update-ai-models/SKILL.md</code>: replace the old version in every picker, migrate saved picks, verify gateway input/output prices and get a live chat answer after release. New classes/providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`,
+    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><ul>${items}</ul>${GUIDANCE}`,
   };
 }
 
