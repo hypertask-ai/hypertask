@@ -964,8 +964,6 @@ for (const [name, statusBody, componentsBody, exitStatus, message] of [
   test(`Pusher handles ${name} under errexit`, async () => {
     const yaml = require("js-yaml");
     const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
-    // YPER4-984: the body moved into the repository, so the job must check the
-    // repository out before it can run it.
     const [checkout, run] = workflow.jobs["pusher-status"].steps;
     assert.equal(checkout.uses, workflow.jobs.health.steps[0].uses);
     assert.equal(run.run, "bash .github/scripts/pusher-status.sh");

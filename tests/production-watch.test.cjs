@@ -101,7 +101,6 @@ test("the core-actions probe and its report carry the health user token, the oth
   assert.equal(envFor(core, base).HYPERTASK_MCP_TOKEN, "health");
   const reachability = PROBE_CHECKS.find(check => check.name === "api-reachability");
   assert.equal(envFor(reachability, base).HYPERTASK_MCP_TOKEN, "general");
-  // No health token in the environment: fall back, never pass an empty one.
   assert.equal(envFor(core, { HYPERTASK_MCP_TOKEN: "general" }).HYPERTASK_MCP_TOKEN, "general");
 });
 
@@ -111,8 +110,6 @@ test("a link that runs out of time stops its ticks instead of running past the d
   const messages = [];
   const { ran, execute } = recorder();
 
-  // Deadline 30 minutes out; each tick's sleep advances the clock by the gap it
-  // asked for, so the loop must stop once the next gap cannot fit.
   const failures = await ticks({
     execute,
     sleep: async ms => { gaps.push(ms); clock += ms; },
@@ -122,7 +119,6 @@ test("a link that runs out of time stops its ticks instead of running past the d
   });
 
   assert.deepEqual(failures, []);
-  // Five gaps fit inside 30 minutes; the sixth tick still needs MIN_CHECK_MS room.
   assert.equal(gaps.length, 5);
   assert.equal(ran.length, 4 + 5 * 2);
   assert.deepEqual(messages, []);
@@ -179,8 +175,6 @@ test("the hand-off is its own job, so a watch job killed by its timeout still st
   assert.deepEqual(chain.needs, ["watch"]);
   assert.equal(chain.if, "${{ always() }}");
   assert.equal(chain.permissions.actions, "write");
-  // The pass loop has to finish inside its own timeout, and the chain job has to
-  // be able to sit out a whole link when the passes end early.
   assert.ok(watch["timeout-minutes"] > 34);
   assert.ok(chain["timeout-minutes"] >= 30);
   assert.equal(chain.steps.at(-1).run, "node .github/scripts/schedule-chain.cjs hand-off --workflow production-watch.yml --gap-minutes 30");
@@ -191,8 +185,6 @@ test("the settings monitor starts its next link an hour after this run began", a
   const workflow = yaml.load(await readFile(".github/workflows/required-check-settings.yml", "utf8"));
 
   assert.deepEqual(workflow.on.schedule, [{ cron: "17 * * * *" }]);
-  // The lock belongs to the check, not the run: the chain waits out the rest of
-  // the hour and must not block a manual dispatch while it does.
   assert.equal(workflow.concurrency, undefined);
   assert.equal(workflow.jobs.verify.concurrency.group, "required-check-settings");
   assert.equal(workflow.jobs.verify.concurrency["cancel-in-progress"], false);
