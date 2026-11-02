@@ -2193,6 +2193,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      actions: read
     env:
       TZ: UTC
     services:
@@ -2266,9 +2267,38 @@ jobs:
         with:
           path: ${{ runner.temp }}/visual-expected
           key: visual-base-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
+      # HYCI-82: the cache is a 2 MB baseline in the same 10 GB pool as the build
+      # caches, so the production baseline for a recent base commit is usually
+      # evicted before a PR asks for it. The same screenshots are published as an
+      # artifact by visual-regression.yml, which the cache budget does not sweep.
+      # A hit here costs one download instead of the 333 s base build.
+      - name: Restore the published baseline
+        id: baseline-artifact
+        if: steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          BASELINE_NAME: visual-baseline-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
+          GH_TOKEN: ${{ github.token }}
+          DEST: ${{ runner.temp }}/visual-expected
+        run: |
+          set -euo pipefail
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+          query="repos/$GITHUB_REPOSITORY/actions/artifacts?per_page=100&name=$BASELINE_NAME"
+          headers=(-H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+          id=$(curl -sS "${headers[@]}" "https://api.github.com/$query" \
+            | jq -r '[.artifacts[]? | select(.expired == false)] | sort_by(.created_at) | last | .id // empty')
+          if [ -z "$id" ]; then
+            echo "::notice::no published baseline for $BASELINE_NAME; the base app will be built"
+            exit 0
+          fi
+          mkdir -p "$DEST"
+          curl -sSL "${headers[@]}" "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$id/zip" -o "$RUNNER_TEMP/baseline-artifact.zip"
+          unzip -q -o "$RUNNER_TEMP/baseline-artifact.zip" -d "$DEST"
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+          echo "Restored the published baseline $BASELINE_NAME (artifact $id); the base app is not rebuilt." | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Restore base Next.js build cache
         id: restore-base-nextjs-cache
-        if: steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true' && steps.baseline-artifact.outputs.hit != 'true'
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .next/cache
@@ -2276,7 +2306,7 @@ jobs:
           restore-keys: |
             nextjs-${{ runner.os }}-${{ hashFiles('base/package-lock.json', 'base/next.config.*') }}-
       - name: Stage base Next.js build cache
-        if: steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'
+        if: steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true' && steps.baseline-artifact.outputs.hit != 'true'
         shell: bash
         run: |
           if [ -d .next/cache ]; then
@@ -2344,14 +2374,14 @@ jobs:
       - name: Build and capture base, then compare head
         if: steps.scope.outputs.visual_needed != 'false'
         env:
-          VISUAL_BASE_CACHE_HIT: ${{ steps.baseline-cache.outputs.cache-hit }}
+          VISUAL_BASE_CACHE_HIT: ${{ steps.baseline-cache.outputs.cache-hit == 'true' || steps.baseline-artifact.outputs.hit == 'true' }}
           VISUAL_BASE_ONLY: 'false'
           VISUAL_HEAD_BUILD: artifact
         run: node head/scripts/visual-regression-ci.mjs
       - name: Summarize failed screens
         if: always() && steps.scope.outputs.visual_needed != 'false' && hashFiles('head/scripts/visual-regression-ci.mjs') != ''
         env:
-          VISUAL_BASE_CACHE_HIT: ${{ steps.baseline-cache.outputs.cache-hit }}
+          VISUAL_BASE_CACHE_HIT: ${{ steps.baseline-cache.outputs.cache-hit == 'true' || steps.baseline-artifact.outputs.hit == 'true' }}
           VISUAL_BASE_ONLY: 'false'
           VISUAL_HEAD_BUILD: artifact
         run: node head/scripts/visual-regression-ci.mjs --summary

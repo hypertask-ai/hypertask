@@ -188,6 +188,19 @@ jobs:
         with:
           path: ${{ runner.temp }}/visual-expected
           key: ${{ steps.baseline-cache.outputs.cache-primary-key }}
+      # HYCI-82: the cache holds a 2 MB baseline beside 9 GB of build caches, so the
+      # oldest entries are evicted first: eight of the twelve production baselines
+      # captured on 2026-11-01 to 2026-11-02 were already gone when a PR asked for
+      # them. visual-compare then rebuilt the base app, 333 s of a 513 s step, and
+      # the push finished at 13-17 minutes. The same ten validated screenshots are
+      # also published as an artifact, which is not part of the cache budget.
+      - name: Publish the validated baseline
+        if: github.event_name == 'push' && steps.baseline-cache.outputs.cache-hit != 'true'
+        uses: actions/upload-artifact@ea165f8d65e6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-baseline-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
+          path: ${{ runner.temp }}/visual-expected
+          if-no-files-found: error
       - name: Summarize failed screens
         if: always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''
         env:
