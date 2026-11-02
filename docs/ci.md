@@ -1675,8 +1675,11 @@ after of the fix sit in one table. The push half counts `prod-health.yml` push r
 against the commits that landed on `origin/production`.
 
 A watch passes when it delivered at least nine runs in ten of what it asked for over
-seven days of its own record, and its record starts at its first run ever, which one
-extra read per workflow returns. A watch older than the window is therefore judged
+seven days of its own record, and its record starts at its first run ever. That run is
+read from the last page of the workflow's run list, because the endpoint lists newest
+first and ignores `sort` and `direction`: read from page one it hands back the newest
+run, which collapses every ask to a handful and turns a broken watch into a healthy
+one. A watch older than the window is therefore judged
 over all seven days, and a watch younger than the window shows its coverage instead
 of a rate it has not earned yet. A run still queued, requested or waiting never
 counts as delivered: it is reported on its own and left out of the rate, so a week of

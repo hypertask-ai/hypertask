@@ -180,6 +180,7 @@ export function verdictLines(comparison) {
 }
 
 const SLICE_MS = DAY;
+const PAGE_SIZE = 100;
 export async function slicedWindow(sinceMs, untilMs, fetchPage) {
   const rows = [];
   for (let from = sinceMs; from < untilMs; from += SLICE_MS) {
@@ -233,35 +234,44 @@ export function gitCommits(repo, sinceMs, untilMs, dir = process.cwd()) {
 
 export async function measureWindow({ repo, sinceMs, untilMs, only, commits = gitCommits }, api = ghJson) {
   const runsFor = workflow => slicedWindow(sinceMs, untilMs, (from, to, page) => api(
-    `/repos/${repo}/actions/workflows/${workflow}/runs?created=${from}..${to}&per_page=100&page=${page}`,
+    `/repos/${repo}/actions/workflows/${workflow}/runs?created=${from}..${to}&per_page=${PAGE_SIZE}&page=${page}`,
   ).then(payload => payload.workflow_runs ?? payload));
-  const firstRunOf = workflow => api(
-    `/repos/${repo}/actions/workflows/${workflow}/runs?per_page=1&sort=created&direction=asc`,
-  ).then(payload => Date.parse((payload.workflow_runs ?? payload)[0]?.created_at ?? ''));
+  const oldestRunOf = async workflow => {
+    const listedNewestFirst = await api(`/repos/${repo}/actions/workflows/${workflow}/runs?per_page=${PAGE_SIZE}&page=1`);
+    const newestFirst = listedNewestFirst.workflow_runs ?? listedNewestFirst;
+    const total = Number(listedNewestFirst.total_count ?? newestFirst.length);
+    if (!Number.isFinite(total) || total < 1) return Number.NaN;
+    const lastPage = Math.ceil(total / PAGE_SIZE);
+    const oldestPage = lastPage === 1
+      ? newestFirst
+      : ((await api(`/repos/${repo}/actions/workflows/${workflow}/runs?per_page=${PAGE_SIZE}&page=${lastPage}`)).workflow_runs ?? []);
+    const stamps = oldestPage.map(run => Date.parse(run.created_at ?? '')).filter(Number.isFinite);
+    return stamps.length ? Math.min(...stamps) : Number.NaN;
+  };
   const watches = [];
   const legs = [];
   if (only !== 'pushes') {
     for (const watch of WATCHES) {
       if (legs.some(leg => leg.workflow === watch.workflow)) continue;
-      legs.push({ workflow: watch.workflow, rows: runsFor(watch.workflow), first: firstRunOf(watch.workflow) });
+      legs.push({ workflow: watch.workflow, rows: runsFor(watch.workflow), first: oldestRunOf(watch.workflow) });
     }
   }
   if (only !== 'watches' && !legs.some(leg => leg.workflow === PUSH_WATCH.workflow)) {
-    legs.push({ workflow: PUSH_WATCH.workflow, rows: runsFor(PUSH_WATCH.workflow), first: firstRunOf(PUSH_WATCH.workflow) });
+    legs.push({ workflow: PUSH_WATCH.workflow, rows: runsFor(PUSH_WATCH.workflow), first: oldestRunOf(PUSH_WATCH.workflow) });
   }
   const [legRows, landed] = await Promise.all([
     Promise.all(legs.map(async leg => ({ workflow: leg.workflow, runs: await leg.rows, first: await leg.first }))),
     only !== 'watches' ? commits(repo, sinceMs, untilMs) : null,
   ]);
   const runsOf = workflow => legRows.find(leg => leg.workflow === workflow)?.runs ?? [];
-  const firstOf = workflow => legRows.find(leg => leg.workflow === workflow)?.first;
+  const oldestOf = workflow => legRows.find(leg => leg.workflow === workflow)?.first;
   if (only !== 'pushes') {
     for (const watch of WATCHES) {
       watches.push(watchRow(watch, {
         sinceMs,
         untilMs,
         runs: runsOf(watch.workflow).filter(run => watch.events.includes(run.event)),
-        firstRecordedMs: firstOf(watch.workflow),
+        firstRecordedMs: oldestOf(watch.workflow),
       }));
     }
   }

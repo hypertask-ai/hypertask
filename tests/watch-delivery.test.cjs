@@ -82,6 +82,46 @@ test('asked time starts at the first run, so a brand new watch is not judged ove
   assert.equal(row.enough, false, 'four hours of record is not seven days');
 });
 
+test('the oldest run is read from the last page, because the runs list is newest first and ignores sort', async () => {
+  const { measureWindow } = await subject;
+  const newest = run('required-check-settings.yml', 'schedule', until - HOUR);
+  const oldest = run('required-check-settings.yml', 'schedule', until - 400 * DAY);
+  const seen = [];
+  const api = async path => {
+    seen.push(path);
+    if (path.includes('created=')) return { workflow_runs: [newest] };
+    if (path.endsWith('page=1')) return { total_count: 250, workflow_runs: [newest] };
+    if (path.endsWith('page=3')) return { total_count: 250, workflow_runs: [oldest] };
+    throw new Error(`unexpected path ${path}`);
+  };
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 7 * DAY, untilMs: until, only: 'watches', commits: async () => 0 }, api);
+  const settings = window.watches.find(row => row.workflow === 'required-check-settings.yml');
+  assert.equal(settings.asked, 168, 'a watch whose oldest run predates the window is asked for all seven days');
+  assert.equal(settings.coveredDays, 7);
+  assert.equal(settings.delivered, 7, 'one run counted in each of the seven day slices');
+  assert.equal(settings.rate, 7 / 168);
+  assert.ok(seen.some(path => path.endsWith('page=3')), 'the second read asks for the last page, not for page one again');
+});
+
+test('a workflow with one page needs no second read, and a workflow with no runs has no record', async () => {
+  const { measureWindow } = await subject;
+  const only = run('prod-health.yml', 'schedule', until - 2 * DAY);
+  const paths = [];
+  const api = async path => {
+    paths.push(path);
+    if (path.includes('created=')) return { workflow_runs: [] };
+    if (path.includes('prod-health.yml')) return { total_count: 1, workflow_runs: [only] };
+    return { total_count: 0, workflow_runs: [] };
+  };
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 2 * DAY, untilMs: until, only: 'watches', commits: async () => 0 }, api);
+  const legacy = window.watches.find(row => row.workflow === 'prod-health.yml');
+  const settings = window.watches.find(row => row.workflow === 'required-check-settings.yml');
+  assert.equal(legacy.asked, 672);
+  assert.equal(settings.asked, 0, 'a workflow with no record anywhere is asked for nothing, not judged over the window');
+  assert.equal(settings.enough, false);
+  assert.equal(paths.filter(path => path.includes('prod-health.yml') && path.includes('page=2')).length, 0);
+});
+
 test('legacy cron runs and chained runs are counted apart', async () => {
   const { measureWindow } = await subject;
   const pages = {
