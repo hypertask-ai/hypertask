@@ -92,7 +92,11 @@ passes inside each link), `required-check-settings.yml` (24 runs a day),
 `ux-signoff-chain.yml` (24 links a day, the hourly design check) and the legacy
 `prod-health.yml` cron schedules (336 runs a day) so the before and the after of the
 fix sit in one table. The push half counts `prod-health.yml` push runs against the
-commits that landed on `origin/production`.
+pushes that landed on `origin/production`. A push is one tip on the first-parent
+history, because a squash merge lands one commit and a merge push lands its merge
+commit, so the extra commits a push carries are never counted as pushes of their own:
+counting every commit read a healthy week as 81% of pushes, when each of its 448
+pushes had started its run.
 
 The design check is counted on `ux-signoff-chain.yml`, never on `ux-signoff-gate.yml`:
 the gate also runs on every pull request, and such a run neither waits out the hour nor
@@ -104,6 +108,13 @@ A rate alone hides what a person waits through, so each watch also reports the m
 and the worst gap between its links. The pre-fix design check delivered 12 links in a
 week with a 266-minute median and a 424-minute worst gap: seven runs in a hundred, and
 a wireframe question that could sit most of a day for its verdict.
+
+Each day of the window is read to its last page, because the run list returns a
+hundred records at a time and a busy day holds more: reading page one only dropped 14
+of one week's 448 push runs and turned a full count into 97%. A run is counted once by
+its id, because a page boundary that moves between two reads of the same day hands the
+same record back twice, and a duplicated link reads as a watch that outran what it asked
+for.
 
 A watch passes when it delivered at least nine runs in ten of what it asked for over
 seven days of its own record, and its record starts at its first run ever. That run is

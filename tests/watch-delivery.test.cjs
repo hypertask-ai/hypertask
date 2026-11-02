@@ -1,5 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const subject = import('../scripts/watch-delivery.mjs');
 
@@ -89,12 +93,15 @@ test('the oldest run is read from the last page, because the runs list is newest
   const seen = [];
   const api = async path => {
     seen.push(path);
-    if (path.includes('created=')) return { workflow_runs: [newest] };
+    if (path.includes('created=')) {
+      const from = Date.parse(/created=([^&]+)/.exec(path)[1].split('..')[0]);
+      return { workflow_runs: [run('required-check-settings.yml', 'schedule', from + HOUR)] };
+    }
     if (path.endsWith('page=1')) return { total_count: 250, workflow_runs: [newest] };
     if (path.endsWith('page=3')) return { total_count: 250, workflow_runs: [oldest] };
     throw new Error(`unexpected path ${path}`);
   };
-  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 7 * DAY, untilMs: until, only: 'watches', commits: async () => 0 }, api);
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 7 * DAY, untilMs: until, only: 'watches', pushes: async () => 0 }, api);
   const settings = window.watches.find(row => row.workflow === 'required-check-settings.yml');
   assert.equal(settings.asked, 168, 'a watch whose oldest run predates the window is asked for all seven days');
   assert.equal(settings.coveredDays, 7);
@@ -113,7 +120,7 @@ test('a workflow with one page needs no second read, and a workflow with no runs
     if (path.includes('prod-health.yml')) return { total_count: 1, workflow_runs: [only] };
     return { total_count: 0, workflow_runs: [] };
   };
-  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 2 * DAY, untilMs: until, only: 'watches', commits: async () => 0 }, api);
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 2 * DAY, untilMs: until, only: 'watches', pushes: async () => 0 }, api);
   const legacy = window.watches.find(row => row.workflow === 'prod-health.yml');
   const settings = window.watches.find(row => row.workflow === 'required-check-settings.yml');
   assert.equal(legacy.asked, 672);
@@ -138,14 +145,14 @@ test('legacy cron runs and chained runs are counted apart', async () => {
     if (!workflow) throw new Error(`unexpected path ${path}`);
     return { workflow_runs: path.includes('event=push') ? pages[workflow].filter(entry => entry.event === 'push') : pages[workflow] };
   };
-  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - DAY, untilMs: until, commits: async () => 2 }, api);
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - DAY, untilMs: until, pushes: async () => 2 }, api);
   assert.deepEqual(window.watches.map(row => [row.label, row.delivered]), [
     ['production watch, chained', 1],
     ['hourly settings check', 1],
     ['hourly design check, chained', 1],
     ['production watch, legacy cron', 1],
   ]);
-  assert.equal(window.pushes.commits, 2);
+  assert.equal(window.pushes.pushes, 2);
   assert.equal(window.pushes.runs, 1);
 });
 
@@ -180,7 +187,7 @@ test('the hourly design check is counted from its chain, so a pull-request gate 
     }
     return { workflow_runs: [] };
   };
-  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 7 * DAY, untilMs: until, only: 'watches', commits: async () => 0 }, api);
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 7 * DAY, untilMs: until, only: 'watches', pushes: async () => 0 }, api);
   const row = window.watches.find(entry => entry.label === 'hourly design check, chained');
   assert.equal(row.asked, 168);
   assert.equal(row.delivered, 168);
@@ -213,16 +220,16 @@ test('the gap meter reads the pre-fix design-check week as a wait of most of a d
   assert.match(text, /worst gap 424m \(7\.1h\)/);
 });
 
-test('push delivery above the count of commits is clamped, and a drop against the earlier window is a regression', async () => {
+test('push delivery above the count of pushes is clamped, and a drop against the earlier window is a regression', async () => {
   const { pushRow, compareWindows, verdictLines, measureWindow } = await subject;
-  const noisy = pushRow({ commits: 2, runs: [1, 2, 3].map(index => run('prod-health.yml', 'push', until - index * HOUR)), sinceMs: until - DAY, untilMs: until });
+  const noisy = pushRow({ pushes: 2, runs: [1, 2, 3].map(index => run('prod-health.yml', 'push', until - index * HOUR)), sinceMs: until - DAY, untilMs: until });
   assert.equal(noisy.rate, 1);
 
   const api = async () => ({ workflow_runs: [] });
-  const after = await measureWindow({ repo: 'example/repo', sinceMs: until - DAY, untilMs: until, only: 'pushes', commits: async () => 10 }, api);
+  const after = await measureWindow({ repo: 'example/repo', sinceMs: until - DAY, untilMs: until, only: 'pushes', pushes: async () => 10 }, api);
   after.pushes.runs = 5;
   after.pushes.rate = 0.5;
-  const before = await measureWindow({ repo: 'example/repo', sinceMs: until - 2 * DAY, untilMs: until - DAY, only: 'pushes', commits: async () => 10 }, api);
+  const before = await measureWindow({ repo: 'example/repo', sinceMs: until - 2 * DAY, untilMs: until - DAY, only: 'pushes', pushes: async () => 10 }, api);
   before.pushes.runs = 9;
   before.pushes.rate = 0.9;
   const comparison = compareWindows(after, before);
@@ -231,11 +238,11 @@ test('push delivery above the count of commits is clamped, and a drop against th
 });
 
 test('a repository override that is not this checkout is refused instead of mixing two histories', async () => {
-  const { originMatches, gitCommits } = await subject;
+  const { originMatches, gitPushes } = await subject;
   assert.equal(originMatches('git@github.com:hypertask-ai/hypertask.git', 'hypertask-ai/hypertask'), true);
   assert.equal(originMatches('https://github.com/hypertask-ai/hypertask.git', 'hypertask-ai/hypertask'), true);
   assert.equal(originMatches('https://github.com/other/repo.git', 'hypertask-ai/hypertask'), false);
-  await assert.rejects(gitCommits('other/repo', until - DAY, until), /run it from a clone of other\/repo/);
+  await assert.rejects(gitPushes('other/repo', until - DAY, until), /run it from a clone of other\/repo/);
 });
 
 test('the verdict names the short watch and its reason', async () => {
@@ -245,6 +252,72 @@ test('the verdict names the short watch and its reason', async () => {
     { watches: [{ label: 'production watch, chained', rate: 0.02, enough: false, coveredDays: 7 }], pushes: { rate: 1 } },
   );
   const text = verdictLines(comparison);
-  assert.match(text, /pushes keep their check: 100% of production commits started a prod-health push run, was 100%\./);
+  assert.match(text, /pushes keep their check: 100% of production pushes started a prod-health push run, was 100%\./);
   assert.match(text, /watch delivery is short: production watch, chained 99% \(was 2%\), short of nine in ten or of seven days: production watch, chained \(2\.5 days of record, needs 7\)\./);
+});
+
+test('a day that holds more than one page of runs is read to its last page', async () => {
+  const { slicedWindow } = await subject;
+  const full = Array.from({ length: 100 }, (_, index) => run('prod-health.yml', 'push', until - index * 60000));
+  const rest = [run('prod-health.yml', 'push', until - 100 * 60000)];
+  const asked = [];
+  const rows = await slicedWindow(until - DAY, until, async (from, to, page) => {
+    asked.push(page);
+    return page === 1 ? full : (page === 2 ? rest : []);
+  });
+  assert.equal(rows.length, 101, 'the hundred runs on page one are not the whole day');
+  assert.deepEqual(asked, [1, 2], 'a short page ends the day, so the last page never asks for another');
+});
+
+test('the same run listed on two pages of one day is counted once', async () => {
+  const { slicedWindow } = await subject;
+  const day = Array.from({ length: 100 }, (_, index) => ({ id: index + 1, event: 'push', created_at: new Date(until - index * 60000).toISOString() }));
+  const overlapping = [{ id: 100, event: 'push', created_at: new Date(until - 99 * 60000).toISOString() }, { id: 101, event: 'push', created_at: new Date(until).toISOString() }];
+  const rows = await slicedWindow(until - DAY, until, async (from, to, page) => (page === 1 ? day : overlapping));
+  assert.equal(rows.length, 101, 'a run that moves between page one and page two is one run, not two');
+});
+
+test('a push that carries several commits counts once, because only its tip starts the run', async () => {
+  const { gitPushes } = await subject;
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'watch-delivery-'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
+  const commit = (message, at) => {
+    execFileSync('git', ['commit', '--allow-empty', '-m', message], {
+      cwd: dir,
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com',
+        GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at,
+      },
+    });
+  };
+  try {
+    git('init', '--quiet', '--initial-branch=production');
+    git('remote', 'add', 'origin', 'git@github.com:example/repo.git');
+    const day = 24 * HOUR;
+    commit('first', '2026-11-02T09:00:00Z');
+    git('checkout', '--quiet', '-b', 'branch');
+    commit('branch work', '2026-11-02T08:00:00Z');
+    git('checkout', '--quiet', 'production');
+    execFileSync('git', ['merge', '--no-ff', '--quiet', '-m', 'Merge pull request #1', 'branch'], {
+      cwd: dir,
+      stdio: 'pipe',
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: 'Test', GIT_AUTHOR_EMAIL: 'test@example.com',
+        GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.com',
+        GIT_AUTHOR_DATE: '2026-11-02T10:00:00Z', GIT_COMMITTER_DATE: '2026-11-02T10:00:00Z',
+      },
+    });
+    const tip = git('rev-parse', 'production').toString().trim();
+    git('update-ref', 'refs/remotes/origin/production', tip);
+    assert.equal(git('rev-list', '--count', 'production').toString().trim(), '3', 'the merge push carried three commits');
+    const since = Date.parse('2026-11-01T00:00:00Z');
+    assert.equal(await gitPushes('example/repo', since, since + 2 * day, dir), 2, 'two pushes landed two tips, not three commits');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

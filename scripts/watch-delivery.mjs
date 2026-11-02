@@ -49,7 +49,9 @@ const usage = [
   '       [--repo owner/name] [--only watches|pushes] [--baseline] [--json]',
   'Counts how many runs of the production watch, the hourly settings check and the hourly',
   'design check really ran against how many the repository asks for, how long the worst wait',
-  'between them got, and how many production pushes still started the prod-health check.',
+  'between them got, and how many production pushes still started the prod-health check. A push',
+  'counts as one tip on the first-parent history of origin/production, because a squash or a',
+  'merge push lands one there and every commit of a multi-commit push is not a push of its own.',
   '--baseline also measures the window just before this one, so the report says whether a',
   'fix held. It reads run history only; it dispatches and edits nothing.',
 ].join('\n');
@@ -128,7 +130,7 @@ export function watchRow(watch, { sinceMs, untilMs, runs, firstRecordedMs }) {
   };
 }
 
-export function pushRow({ commits, runs, sinceMs, untilMs }) {
+export function pushRow({ pushes, runs, sinceMs, untilMs }) {
   const inWindow = runs.filter(run => {
     const created = Date.parse(run.created_at ?? '');
     return Number.isFinite(created) && created >= sinceMs && created < untilMs
@@ -136,8 +138,8 @@ export function pushRow({ commits, runs, sinceMs, untilMs }) {
   });
   return {
     runs: inWindow.length,
-    commits,
-    rate: commits ? Math.min(1, inWindow.length / commits) : 1,
+    pushes,
+    rate: pushes ? Math.min(1, inWindow.length / pushes) : 1,
   };
 }
 
@@ -160,7 +162,7 @@ export function formatWindow(label, window) {
   }
   if (window.pushes) {
     lines.push('');
-    lines.push(`Prod-health push runs: ${window.pushes.runs} against ${window.pushes.commits} commits landing on production, ${percent(window.pushes.rate)}.`);
+    lines.push(`Prod-health push runs: ${window.pushes.runs} against ${window.pushes.pushes} pushes landing on production, ${percent(window.pushes.rate)}.`);
   }
   return lines.join('\n');
 }
@@ -197,8 +199,8 @@ export function verdictLines(comparison) {
     const { before, after, regression } = comparison.pushes;
     const was = before === null ? 'no earlier window' : `was ${percent(before)}`;
     lines.push(regression
-      ? `pushes lost their check: ${percent(after)} of production commits started a prod-health push run, ${was}.`
-      : `pushes keep their check: ${percent(after)} of production commits started a prod-health push run, ${was}.`);
+      ? `pushes lost their check: ${percent(after)} of production pushes started a prod-health push run, ${was}.`
+      : `pushes keep their check: ${percent(after)} of production pushes started a prod-health push run, ${was}.`);
   }
   if (comparison.rows.some(row => row.current)) {
     const detail = comparison.rows.filter(row => row.current).map(row => `${row.label} ${percent(row.after)}${row.before === null ? '' : ` (was ${percent(row.before)})`}`).join(', ');
@@ -211,15 +213,21 @@ export function verdictLines(comparison) {
 
 const SLICE_MS = DAY;
 const PAGE_SIZE = 100;
+const MAX_PAGES_PER_SLICE = 10;
+const runKey = run => String(run.id ?? `${run.head_sha ?? ''}|${run.created_at ?? ''}|${run.event ?? ''}`);
+
 export async function slicedWindow(sinceMs, untilMs, fetchPage) {
-  const rows = [];
+  const seen = new Map();
   for (let from = sinceMs; from < untilMs; from += SLICE_MS) {
     const to = Math.min(from + SLICE_MS, untilMs);
-    const batch = await fetchPage(new Date(from).toISOString(), new Date(to).toISOString(), 1);
-    if (!Array.isArray(batch)) throw new Error('GitHub returned no list of runs');
-    rows.push(...batch);
+    for (let page = 1; page <= MAX_PAGES_PER_SLICE; page++) {
+      const batch = await fetchPage(new Date(from).toISOString(), new Date(to).toISOString(), page);
+      if (!Array.isArray(batch)) throw new Error('GitHub returned no list of runs');
+      for (const run of batch) seen.set(runKey(run), run);
+      if (batch.length < PAGE_SIZE) break;
+    }
   }
-  return rows;
+  return [...seen.values()];
 }
 
 function ghJson(path) {
@@ -247,22 +255,22 @@ export function originMatches(origin, repo) {
   return normalise(origin) === normalise(repo);
 }
 
-export function gitCommits(repo, sinceMs, untilMs, dir = process.cwd()) {
+export function gitPushes(repo, sinceMs, untilMs, dir = process.cwd()) {
   return new Promise((resolve, reject) => {
     execFile('git', ['config', '--get', 'remote.origin.url'], { cwd: dir, encoding: 'utf8', timeout: 60000 }, (error, stdout, stderr) => {
       if (error) return reject(new Error(`cannot read this checkout's origin (${String(stderr ?? '').trim() || error.message.split('\n')[0]})`));
       const origin = String(stdout ?? '').trim();
       if (!originMatches(origin, repo)) return reject(new Error(`this checkout tracks ${origin}, not ${repo}: push counts read origin/${PUSH_WATCH.branch} of the checkout, so run it from a clone of ${repo}`));
-      return execFile('git', ['log', `--since=${new Date(sinceMs).toISOString()}`, `--until=${new Date(untilMs).toISOString()}`, '--format=%H', `origin/${PUSH_WATCH.branch}`],
+      return execFile('git', ['log', '--first-parent', `--since=${new Date(sinceMs).toISOString()}`, `--until=${new Date(untilMs).toISOString()}`, '--format=%H', `origin/${PUSH_WATCH.branch}`],
         { cwd: dir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 60000 },
         (logError, logOut, logErr) => (logError
-          ? reject(new Error(`cannot count production commits (${String(logErr ?? '').trim() || logError.message.split('\n')[0]})`))
+          ? reject(new Error(`cannot count production pushes (${String(logErr ?? '').trim() || logError.message.split('\n')[0]})`))
           : resolve(logOut.split('\n').filter(Boolean).length)));
     });
   });
 }
 
-export async function measureWindow({ repo, sinceMs, untilMs, only, commits = gitCommits }, api = ghJson) {
+export async function measureWindow({ repo, sinceMs, untilMs, only, pushes: countPushes = gitPushes }, api = ghJson) {
   const runsFor = workflow => slicedWindow(sinceMs, untilMs, (from, to, page) => api(
     `/repos/${repo}/actions/workflows/${workflow}/runs?created=${from}..${to}&per_page=${PAGE_SIZE}&page=${page}`,
   ).then(payload => payload.workflow_runs ?? payload));
@@ -291,7 +299,7 @@ export async function measureWindow({ repo, sinceMs, untilMs, only, commits = gi
   }
   const [legRows, landed] = await Promise.all([
     Promise.all(legs.map(async leg => ({ workflow: leg.workflow, runs: await leg.rows, first: await leg.first }))),
-    only !== 'watches' ? commits(repo, sinceMs, untilMs) : null,
+    only !== 'watches' ? countPushes(repo, sinceMs, untilMs) : null,
   ]);
   const runsOf = workflow => legRows.find(leg => leg.workflow === workflow)?.runs ?? [];
   const oldestOf = workflow => legRows.find(leg => leg.workflow === workflow)?.first;
@@ -305,7 +313,7 @@ export async function measureWindow({ repo, sinceMs, untilMs, only, commits = gi
       }));
     }
   }
-  const pushes = only === 'watches' ? null : pushRow({ commits: landed, runs: runsOf(PUSH_WATCH.workflow), sinceMs, untilMs });
+  const pushes = only === 'watches' ? null : pushRow({ pushes: landed, runs: runsOf(PUSH_WATCH.workflow), sinceMs, untilMs });
   return { sinceMs, untilMs, watches, pushes };
 }
 
@@ -334,9 +342,9 @@ export async function report(options, api = ghJson) {
   const untilMs = options.until ?? Date.now();
   const sinceMs = options.since ?? untilMs - options.days * DAY;
   if (sinceMs >= untilMs) throw new Error('--since must be before --until');
-  const after = await measureWindow({ repo: options.repo, sinceMs, untilMs, only: options.only, commits: options.commits }, api);
+  const after = await measureWindow({ repo: options.repo, sinceMs, untilMs, only: options.only, pushes: options.pushes }, api);
   const before = options.baseline
-    ? await measureWindow({ repo: options.repo, sinceMs: sinceMs - (untilMs - sinceMs), untilMs: sinceMs, only: options.only, commits: options.commits }, api)
+    ? await measureWindow({ repo: options.repo, sinceMs: sinceMs - (untilMs - sinceMs), untilMs: sinceMs, only: options.only, pushes: options.pushes }, api)
     : null;
   const comparison = compareWindows(after, before);
   return { after, before, comparison };
