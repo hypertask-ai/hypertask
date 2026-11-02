@@ -511,22 +511,28 @@ test("a fixture that cannot be resolved is unrunnable and never rolls back", asy
   }
 });
 
-test("the workflow schedules and serializes the production fixture", async () => {
+test("the chained watch replaces the crons and keeps the production fixture serialized", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
+  const watch = await readFile(".github/workflows/production-watch.yml", "utf8");
 
-  assert.match(workflow, /cron: "\*\/30 \* \* \* \*"/);
-  assert.match(workflow, /cron: "3-58\/5 \* \* \* \*"/);
+  assert.doesNotMatch(workflow, /schedule:/);
+  assert.match(watch, /cron: '7-59\/30 \* \* \* \*'/);
+  assert.match(
+    watch,
+    /group: production-watch\n  cancel-in-progress: false/,
+  );
+  assert.match(watch, /hand-off --workflow production-watch\.yml/);
   assert.match(
     workflow,
     /group: prod-health\n  cancel-in-progress: false/,
   );
   assert.match(
     workflow,
-    /drift:[\s\S]*github\.event\.schedule == '\*\/30 \* \* \* \*'/,
+    /drift:[\s\S]*if: \$\{\{ github\.event_name == 'workflow_dispatch' \}\}/,
   );
   assert.match(
     workflow,
-    /core-actions:[\s\S]*github\.event\.schedule == '3-58\/5 \* \* \* \*'/,
+    /core-actions:[\s\S]*github\.event_name == 'push' \|\| github\.event_name == 'workflow_dispatch'/,
   );
   assert.equal(
     workflow.match(/group: production-core-actions-smoke-fixture/g)?.length,

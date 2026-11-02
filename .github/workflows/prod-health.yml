@@ -775,7 +775,7 @@ jobs:
 
   core-actions:
     needs: health
-    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch')) }}
+    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch') }}
     concurrency:
       group: production-core-actions-smoke-fixture
       cancel-in-progress: false

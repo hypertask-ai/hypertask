@@ -101,14 +101,17 @@ exec "$REAL_NODE" "$@"
   }
 }
 
-test("API reachability job uses the five-minute schedule, bounded runner and existing Vercel and Telegram secrets", async () => {
+test("API reachability job runs on every watch tick, bounded runner and existing Vercel and Telegram secrets", async () => {
   const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
+  const watch = yaml.load(await readFile(".github/workflows/production-watch.yml", "utf8"));
   const job = workflow.jobs["api-reachability"];
   const pusher = workflow.jobs["pusher-status"];
   assert.ok(job);
-  const schedule = workflow.on.schedule.find((item) => item.cron.includes("/5"));
-  assert.ok(schedule);
-  assert.equal(job.if, "${{ github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '" + schedule.cron + "') || github.event_name == 'workflow_dispatch' }}");
+  assert.equal(job.if, "${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}");
+  const watchScript = await readFile(".github/scripts/production-watch.cjs", "utf8");
+  assert.match(watchScript, /TICK_GAP_MS = 5 \* 60 \* 1000/);
+  assert.match(watchScript, /name: 'api-reachability', file: '\.github\/scripts\/api-reachability\.sh'/);
+  assert.deepEqual(watch.on.schedule, [{ cron: "7-59/30 * * * *" }]);
   assert.equal(job["runs-on"], pusher["runs-on"]);
   assert.equal(job["timeout-minutes"], 10);
   assert.deepEqual(job.permissions, { contents: "read" });
