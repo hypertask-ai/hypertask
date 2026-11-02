@@ -661,7 +661,7 @@ ci_tests:
     within_job: concurrent_lanes
     within_job_exceptions: none
     required_summary: ci-tests
-    summary_needs: [ci-prepare, ci-checks, ci-test]
+    summary_needs: [ci-prepare, ci-checks, ci-test, ci-fixtures]
     docs_only: explicit_skipped_producers
   board_registration_boundary:
     job: ci-checks
