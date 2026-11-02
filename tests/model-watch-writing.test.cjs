@@ -15,6 +15,17 @@ test("watcher ticket text passes the agent writing check the board applies to ag
     rollupTicket(findings.filter((finding) => finding.kind === "new-class"), new Date("2026-10-25T12:00:00Z")),
     ...findings.filter((finding) => finding.kind !== "new-class").map(ticketFor),
   ];
+  const shapes = [
+    { kind: "new-version", provider: "anthropic", action: "confirm the gateway price first; ship automatically under $5 per million input tokens" },
+    { kind: "new-version", provider: "openai", action: "ship automatically" },
+    { kind: "new-version", provider: "other", action: "ask Valentin before shipping" },
+    { kind: "stale", provider: "anthropic", action: "remove stale entry; migrate saved picks to the current model of its class" },
+    { kind: "new-class", provider: "other", action: "waits for HTPR-7746" },
+  ];
+  tickets.push(...shapes.map((shape) => ticketFor({
+    model: `${shape.provider}/gpt-6.2-sol`, modelClass: "sol", current: ["claude-sonnet-5-5"],
+    inputPerMillion: null, reason: "not in the current catalog", ...shape,
+  })));
   assert.ok(tickets.length > 1);
   for (const ticket of tickets) {
     assert.doesNotThrow(

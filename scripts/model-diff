@@ -115,7 +115,7 @@ function diffModels(catalog, sources) {
     const automatic = kind === "new-version" && ["openai", "anthropic"].includes(model.provider);
     const action = premium ? "waits for HTPR-7746"
       : kind === "stale" ? "remove stale entry; migrate saved picks to the current model of its class"
-      : automatic ? model.inputPerMillion === null ? "ship automatically only after gateway pricing confirms at most $5 per million input tokens" : "ship automatically"
+      : automatic ? model.inputPerMillion === null ? "confirm the gateway price first; ship automatically under $5 per million input tokens" : "ship automatically"
       : "ask Valentin before shipping";
     findings.push({ kind, model: model.id, provider: model.provider, modelClass, current,
       inputPerMillion: model.inputPerMillion, action, reason });
