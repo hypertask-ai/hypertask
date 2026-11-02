@@ -76,24 +76,34 @@ test("smoke classification routes unrunnable checks to infra and confirmed failu
   }
 });
 
-test("the rollback job runs only for confirmed production-push signals, even when monitoring failed", async () => {
+test("exactly one rollback job runs, and only for confirmed production-push signals", async () => {
   const workflow = yaml.load(await readFile(".github/workflows/prod-health.yml", "utf8"));
-  const job = workflow.jobs.rollback;
-  assert.deepEqual(job.needs, ["health", "smoke", "core-actions"]);
-  assert.deepEqual(job.permissions, { contents: "read" });
-  assert.equal(job.steps[0].with["persist-credentials"], false);
-  const expression = job.if.slice(3, -2).replaceAll("needs.core-actions", 'needs["core-actions"]');
+  const guards = { rollback: workflow.jobs.rollback, "rollback-health": workflow.jobs["rollback-health"] };
+  for (const [name, job] of Object.entries(guards)) {
+    assert.ok(job, `${name} is missing`);
+    assert.deepEqual(job.permissions, { contents: "read" }, name);
+    assert.equal(job.steps[0].with["persist-credentials"], false, name);
+  }
+  assert.deepEqual(guards.rollback.needs, ["health", "smoke", "core-actions"]);
+  assert.deepEqual(guards["rollback-health"].needs, ["health"]);
   for (const event of ["push", "schedule", "workflow_dispatch"]) {
     for (const signal of ["health", "smoke", "core-actions", "none"]) {
       for (const cancelled of [false, true]) {
-        const needs = Object.fromEntries(job.needs.map((name) => [name, {
-          result: name === signal ? "failure" : "skipped",
-          outputs: { rollback: name === signal ? "true" : "" },
-        }]));
-        const enabled = vm.runInNewContext(expression, {
-          github: { event_name: event }, needs, cancelled: () => cancelled,
-        });
-        assert.equal(enabled, event === "push" && signal !== "none" && !cancelled);
+        const enabled = Object.entries(guards).filter(([, job]) => {
+          const expression = job.if.slice(3, -2).replaceAll("needs.core-actions", 'needs["core-actions"]');
+          const needs = Object.fromEntries(job.needs.map((name) => [name, {
+            result: name === signal ? "failure" : "skipped",
+            outputs: { rollback: name === signal ? "true" : "" },
+          }]));
+          return vm.runInNewContext(expression, {
+            github: { event_name: event }, needs, cancelled: () => cancelled,
+          });
+        }).map(([name]) => name);
+        const wanted = event === "push" && signal !== "none" && !cancelled;
+        assert.equal(enabled.length, wanted ? 1 : 0, `${event}/${signal}/${cancelled}: ${JSON.stringify(enabled)}`);
+        if (wanted) {
+          assert.deepEqual(enabled, [signal === "health" ? "rollback-health" : "rollback"], `${event}/${signal}/${cancelled}`);
+        }
       }
     }
   }
