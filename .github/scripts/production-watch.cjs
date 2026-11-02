@@ -5,10 +5,11 @@
 // minutes apart and then starts the next link, so runner startup is paid once per
 // half hour instead of once per tick.
 //
-// The checks are the ones prod-health.yml already runs on a push: the live
-// endpoint reachability guard, the core-actions write probe, and - once per link,
-// on the same thirty-minute cadence the drift cron asked for - the deploy drift
-// check and the Pusher status page. Nothing here mutates production and nothing
+// The passes are the reachability guard prod-health.yml runs on a push, and once
+// per link - the cadence the drift cron asked for - the deploy drift check and the
+// Pusher status page. The core-actions write probe is a job of its own in this
+// workflow, because it walks a fixture the push job also owns and only the shared
+// fixture group can serialize the two. Nothing here mutates production and nothing
 // here rolls back; the rollback path stays push-only in prod-health.yml.
 //
 // The drift check is skipped while a prod-health run is in flight. prod-health
@@ -23,13 +24,8 @@ const TICKS_PER_LINK = 6;
 // The thirty-minute half runs on the first tick of each link.
 const WATCH_TICK = 0;
 const DRIFT_WORKFLOW = 'prod-health.yml';
-// The core-actions probe walks the same fixture as the prod-health push job, so
-// it must not run as a different user and must not run while that job owns the
-// fixture (HTPR-6258, production-core-actions-smoke-fixture).
-const FIXTURE_ENV = 'HYPERTASK_HEALTH_USER_TOKEN';
 const PROBE_CHECKS = [
   { name: 'api-reachability', file: '.github/scripts/api-reachability.sh', args: [] },
-  { name: 'core-actions', file: '.github/scripts/core-actions-smoke.mjs', args: ['run'], tokenEnv: FIXTURE_ENV },
 ];
 const WATCH_CHECKS = [
   { name: 'drift', file: '.github/scripts/production-drift.sh', args: [] },
@@ -49,22 +45,10 @@ function commandFor(check) {
   return { file: 'bash', args: [check.file] };
 }
 
-// A check that touches the fixture carries its own token instead of the general
-// one, the way prod-health.yml hands HYPERTASK_HEALTH_USER_TOKEN to core-actions.
-function envFor(check, base) {
-  if (!check.tokenEnv) return base;
-  if (!base[check.tokenEnv]) return null;
-  return { ...base, HYPERTASK_MCP_TOKEN: base[check.tokenEnv] };
-}
-
 function runCheck(check, { env = process.env, timeout = EXECUTE_TIMEOUT_MS } = {}) {
   const { file, args } = commandFor(check);
-  const resolved = envFor(check, env);
-  if (!resolved) {
-    return Promise.reject(new Error(`${check.name} needs ${check.tokenEnv} and refuses to run as another identity`));
-  }
   return new Promise((resolve, reject) => {
-    execFile(file, args, { env: resolved, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(file, args, { env, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (stdout) process.stdout.write(stdout);
       if (stderr) process.stderr.write(stderr);
       if (error) reject(new Error(`${check.name} exited ${error.code ?? error.signal ?? 'unknown'}`));
@@ -73,24 +57,13 @@ function runCheck(check, { env = process.env, timeout = EXECUTE_TIMEOUT_MS } = {
   });
 }
 
-// A core-actions failure has already written its result file, and the report is
-// what turns it into a ticket comment and an alert. The prod-health push job runs
-// the same pair, so a red watch tick says as much as a red push run does.
-async function reportCoreActions({ execute = runCheck, log = console.log } = {}) {
-  try {
-    await execute({ name: 'core-actions-report', file: '.github/scripts/core-actions-smoke.mjs', args: ['report'], tokenEnv: FIXTURE_ENV });
-  } catch (error) {
-    log(`::warning::the core-actions report did not go out: ${String(error.message).slice(0, 120)}.`);
-  }
-}
-
 function plan(index, { fixtureBusy = false } = {}) {
-  // The drift check and the core-actions probe both lose their answer while a
-  // prod-health run is live: drift would read a deploy still rolling out, and the
-  // probe would walk the fixture that run is using.
-  const blocked = new Set(fixtureBusy ? ['drift', 'core-actions'] : []);
-  if (index !== WATCH_TICK) return PROBE_CHECKS.filter(check => !blocked.has(check.name));
-  return [...WATCH_CHECKS, ...PROBE_CHECKS].filter(check => !blocked.has(check.name));
+  // Drift loses its answer while a prod-health run is live: it would read a deploy
+  // still rolling out as drift. The core-actions probe is a job of its own, under
+  // that run's fixture group, so it needs no guard here.
+  const watch = fixtureBusy ? WATCH_CHECKS.filter(check => check.name !== 'drift') : WATCH_CHECKS;
+  if (index !== WATCH_TICK) return PROBE_CHECKS;
+  return [...watch, ...PROBE_CHECKS];
 }
 
 async function ticks({
@@ -127,7 +100,7 @@ async function ticks({
       } catch {
         blocked = false;
       }
-      if (blocked) log('::notice::a prod-health run is in flight, so this tick skips the drift check and the core-actions probe.');
+      if (blocked) log('::notice::a prod-health run is in flight, so this tick skips the drift check.');
     }
     for (const check of plan(index, { fixtureBusy: blocked })) {
       const remaining = budget();
@@ -140,7 +113,6 @@ async function ticks({
         await execute(check, { timeout: Math.min(EXECUTE_TIMEOUT_MS, remaining) });
       } catch (error) {
         failures.push({ tick: index, check: check.name, error: String(error.message).slice(0, 120) });
-        if (check.name === 'core-actions') await reportCoreActions({ execute, log });
       }
     }
     if (outOfTime) break;
@@ -179,8 +151,6 @@ module.exports = {
   ticks,
   plan,
   runCheck,
-  envFor,
-  reportCoreActions,
   TICK_GAP_MS,
   TICKS_PER_LINK,
   WATCH_TICK,
