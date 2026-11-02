@@ -5,7 +5,7 @@ description: Keep the AI catalog current from deterministic model discovery; shi
 
 # Update AI models
 
-Use for model-watch tickets or a request to refresh the catalog. Follow `/ship` and AGENTS.md **AI models**: one model per class. This skill does not grant permission to bypass required review, CI, owner merge, deployment or live QA.
+Use for model-watch tickets or a request to refresh the catalog. Follow `/ship` and [AI models](../../reference/architecture.md#ai-models): one model per class. This skill does not grant permission to bypass required review, CI, owner merge, deployment or live QA.
 
 Valentin approved this automation in https://app.hypertask.ai/detail/project-15/7747: “for the providers we have we generally want the newest models as soon as they come out. openai/anthropic we always update.”
 
