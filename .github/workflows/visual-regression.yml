@@ -196,7 +196,7 @@ jobs:
       # also published as an artifact, which is not part of the cache budget.
       - name: Publish the validated baseline
         if: github.event_name == 'push' && steps.baseline-cache.outputs.cache-hit != 'true'
-        uses: actions/upload-artifact@ea165f8d65e6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: visual-baseline-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
           path: ${{ runner.temp }}/visual-expected
