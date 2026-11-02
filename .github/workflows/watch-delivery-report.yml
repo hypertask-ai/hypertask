@@ -1,0 +1,61 @@
+name: Watch Delivery Report
+
+# HYCI-79. The watch fix is only true if someone counts it, and the count was
+# made by hand: `scripts/watch-delivery.mjs`, run when a person remembered. The
+# ticket closes on seven days of real numbers, so this workflow writes the same
+# report once a day, into its own run summary. It reads run history and the
+# production log only: it dispatches nothing, deploys nothing and edits nothing.
+# A report, not a gate: a watch that is short is a warning here, because the
+# chained watches only reach seven days of record a week after they started.
+
+on:
+  schedule:
+    - cron: '41 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: watch-delivery-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    if: >-
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          # The push half counts the commits that landed on origin/production, so
+          # the clone needs the week of history a shallow checkout drops.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+
+      - name: Count the last seven days
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          report=$(node scripts/watch-delivery.mjs --days 7 --baseline --repo "${{ github.repository }}")
+          printf '%s\n' "$report"
+          {
+            echo '## Watch delivery, seven days to now'
+            echo
+            echo '```'
+            printf '%s\n' "$report"
+            echo '```'
+            echo
+            echo 'Nine in ten needs seven days of a watch'"'"'s own record.'
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$report" | grep 'short of nine in ten' | sed 's/^/::warning::/' || true

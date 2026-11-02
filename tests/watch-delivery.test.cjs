@@ -1,5 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const yaml = require('js-yaml');
 
 const subject = import('../scripts/watch-delivery.mjs');
 
@@ -181,4 +183,21 @@ test('the verdict names the short watch and its reason', async () => {
   const text = verdictLines(comparison);
   assert.match(text, /pushes keep their check: 100% of production commits started a prod-health push run, was 100%\./);
   assert.match(text, /watch delivery is short: production watch, chained 99% \(was 2%\), short of nine in ten or of seven days: production watch, chained \(2\.5 days of record, needs 7\)\./);
+});
+
+test('the daily report runs the same seven-day count with read-only permissions and full history', () => {
+  const workflow = yaml.load(readFileSync('.github/workflows/watch-delivery-report.yml', 'utf8'));
+  assert.deepEqual(Object.keys(workflow.on).sort(), ['schedule', 'workflow_dispatch']);
+  assert.equal(workflow.on.schedule.length, 1);
+  assert.match(workflow.on.schedule[0].cron, /^\d+ \d+ \* \* \*$/);
+  assert.deepEqual(workflow.permissions, { contents: 'read', actions: 'read' });
+  const report = workflow.jobs.report;
+  assert.equal(Object.keys(workflow.jobs).length, 1);
+  assert.equal(report['runs-on'], 'ubuntu-latest');
+  assert.ok(report['timeout-minutes'] > 0);
+  const checkout = report.steps.find(step => String(step.uses ?? '').startsWith('actions/checkout@'));
+  assert.equal(checkout.with['fetch-depth'], 0);
+  const script = report.steps.map(step => step.run ?? '').join('\n');
+  assert.match(script, /scripts\/watch-delivery\.mjs --days 7 --baseline/);
+  assert.match(script, /\$GITHUB_STEP_SUMMARY/);
 });
