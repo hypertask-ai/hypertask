@@ -24,11 +24,12 @@ test("the drift check and the fixture probe stand down while a prod-health run i
   assert.deepEqual(names(plan(3, { fixtureBusy: true })), ["api-reachability"]);
 });
 
-test("one link runs six ticks five minutes apart, in order", async () => {
+test("one link runs six ticks on five-minute boundaries, in order", async () => {
   const gaps = [];
+  let clock = 0;
   const { ran, execute } = recorder();
 
-  const failures = await ticks({ execute, sleep: async ms => gaps.push(ms) });
+  const failures = await ticks({ execute, now: () => clock, sleep: async ms => { gaps.push(ms); clock += ms; } });
 
   assert.deepEqual(failures, []);
   assert.deepEqual(gaps, [300000, 300000, 300000, 300000, 300000]);
@@ -92,7 +93,7 @@ test("the drift check and the fixture probe are skipped with a notice while a pr
   assert.equal(ran.includes("core-actions"), false);
   assert.equal(ran.includes("pusher"), true);
   assert.equal(ran.includes("api-reachability"), true);
-  assert.match(messages.join("\n"), /this link skips the drift check and the core-actions probe/);
+  assert.match(messages.join("\n"), /this tick skips the drift check and the core-actions probe/);
 });
 
 test("the core-actions probe and its report carry the health user token, the other checks carry the general one", () => {
@@ -101,7 +102,7 @@ test("the core-actions probe and its report carry the health user token, the oth
   assert.equal(envFor(core, base).HYPERTASK_MCP_TOKEN, "health");
   const reachability = PROBE_CHECKS.find(check => check.name === "api-reachability");
   assert.equal(envFor(reachability, base).HYPERTASK_MCP_TOKEN, "general");
-  assert.equal(envFor(core, { HYPERTASK_MCP_TOKEN: "general" }).HYPERTASK_MCP_TOKEN, "general");
+  assert.equal(envFor(core, { HYPERTASK_MCP_TOKEN: "general" }), null);
 });
 
 test("a link that runs out of time stops its ticks instead of running past the deadline", async () => {
@@ -136,19 +137,43 @@ test("a link that runs out of time stops its ticks instead of running past the d
   assert.match(messages.join("\n"), /the link is out of time after 3 ticks/);
 });
 
-test("a check near the deadline is given the remaining time, never less than the floor", async () => {
+test("a check that no longer fits moves to the next link instead of losing its timeout floor", async () => {
   const seen = [];
+  const messages = [];
   const execute = async (check, options) => {
     seen.push({ check: check.name, timeout: options.timeout });
   };
 
-  await ticks({ sweeps: 1, execute, sleep: async () => {}, deadlineMs: 60 * 1000, now: () => 0 });
+  await ticks({ sweeps: 1, execute, sleep: async () => {}, deadlineMs: 60 * 1000, now: () => 0, log: message => messages.push(message) });
 
-  for (const { timeout } of seen) assert.equal(timeout, MIN_CHECK_MS);
+  assert.deepEqual(seen, []);
+  assert.match(messages.join("\n"), /drift moved to the next link: fewer than 2 minutes of this link are left/);
 
-  seen.length = 0;
   await ticks({ sweeps: 1, execute, sleep: async () => {}, deadlineMs: null, now: () => 0 });
+  assert.equal(seen.length, 4);
   for (const { timeout } of seen) assert.equal(timeout, 9 * 60 * 1000);
+  assert.equal(MIN_CHECK_MS, 2 * 60 * 1000);
+});
+
+test("a slow check shortens the next sleep instead of pushing the tick later", async () => {
+  const gaps = [];
+  let clock = 0;
+  const execute = async () => { clock += 2 * 60 * 1000; };
+
+  await ticks({ sweeps: 2, execute, now: () => clock, sleep: async ms => { gaps.push(ms); clock += ms; } });
+
+  assert.deepEqual(gaps, []);
+  assert.equal(clock, 12 * 60 * 1000);
+});
+
+test("every tick asks whether a prod-health run holds the fixture, not just the first", async () => {
+  let asked = 0;
+  const { ran, execute } = recorder();
+
+  await ticks({ sweeps: 3, execute, sleep: async () => {}, now: () => 0, fixtureBusy: async () => { asked += 1; return false; } });
+
+  assert.equal(asked, 3);
+  assert.equal(ran.filter(name => name === "core-actions").length, 3);
 });
 
 test("the watch workflow runs the tick script and starts the next link even after a red tick", async () => {

@@ -52,14 +52,19 @@ function commandFor(check) {
 // A check that touches the fixture carries its own token instead of the general
 // one, the way prod-health.yml hands HYPERTASK_HEALTH_USER_TOKEN to core-actions.
 function envFor(check, base) {
-  if (!check.tokenEnv || !base[check.tokenEnv]) return base;
+  if (!check.tokenEnv) return base;
+  if (!base[check.tokenEnv]) return null;
   return { ...base, HYPERTASK_MCP_TOKEN: base[check.tokenEnv] };
 }
 
 function runCheck(check, { env = process.env, timeout = EXECUTE_TIMEOUT_MS } = {}) {
   const { file, args } = commandFor(check);
+  const resolved = envFor(check, env);
+  if (!resolved) {
+    return Promise.reject(new Error(`${check.name} needs ${check.tokenEnv} and refuses to run as another identity`));
+  }
   return new Promise((resolve, reject) => {
-    execFile(file, args, { env: envFor(check, env), encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(file, args, { env: resolved, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (stdout) process.stdout.write(stdout);
       if (stderr) process.stderr.write(stderr);
       if (error) reject(new Error(`${check.name} exited ${error.code ?? error.signal ?? 'unknown'}`));
@@ -99,35 +104,46 @@ async function ticks({
   now = Date.now,
 } = {}) {
   const failures = [];
+  const started = now();
   const budget = () => (deadlineMs === null ? Infinity : deadlineMs - now());
+  let outOfTime = false;
   for (let index = 0; index < Math.max(1, sweeps); index++) {
     if (index > 0) {
-      // Slept against a deadline, not a running total, so a fast tick does not
-      // shorten the next gap and a slow one does not push the link past its end.
+      // Each tick is due at a deadline from the link start, never from the end of
+      // the last check, so a slow check cannot stretch the five-minute cadence.
       if (budget() < gapMs + MIN_CHECK_MS) {
         log(`::notice::the link is out of time after ${index} ticks, so the rest of the passes moved to the next link.`);
         break;
       }
-      await sleep(gapMs);
+      const due = started + index * gapMs;
+      if (due > now()) await sleep(due - now());
     }
     let blocked = false;
-    if (index === WATCH_TICK && fixtureBusy) {
+    if (fixtureBusy) {
+      // Asked on every tick: a prod-health run can start between two passes, and it
+      // holds the same fixture the probe walks.
       try {
         blocked = Boolean(await fixtureBusy());
       } catch {
         blocked = false;
       }
-      if (blocked) log('::notice::a prod-health run is in flight, so this link skips the drift check and the core-actions probe, and the next link reads them.');
+      if (blocked) log('::notice::a prod-health run is in flight, so this tick skips the drift check and the core-actions probe.');
     }
     for (const check of plan(index, { fixtureBusy: blocked })) {
-      const timeout = Math.max(MIN_CHECK_MS, Math.min(EXECUTE_TIMEOUT_MS, budget()));
+      const remaining = budget();
+      if (remaining < MIN_CHECK_MS) {
+        log(`::notice::${check.name} moved to the next link: fewer than ${Math.round(MIN_CHECK_MS / 60000)} minutes of this link are left.`);
+        outOfTime = true;
+        break;
+      }
       try {
-        await execute(check, { timeout });
+        await execute(check, { timeout: Math.min(EXECUTE_TIMEOUT_MS, remaining) });
       } catch (error) {
         failures.push({ tick: index, check: check.name, error: String(error.message).slice(0, 120) });
         if (check.name === 'core-actions') await reportCoreActions({ execute, log });
       }
     }
+    if (outOfTime) break;
   }
   return failures;
 }

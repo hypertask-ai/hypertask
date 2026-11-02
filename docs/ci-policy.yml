@@ -234,6 +234,8 @@ production_watch:
   triggers: [schedule, workflow_dispatch]
   cron_utc: "7-59/30 * * * *"
   cron_role: restart a chain that died, never the tick itself
+  tick_deadline: each tick is due at a fixed offset from the link start; a check that no longer fits moves to the next link instead of receiving a shorter timeout
+  fixture_guard_asked: every tick, because a prod-health run can start between two passes
   passes:
     five_minute: [api_reachability, core_actions_probe]
     thirty_minute: [deploy_drift, pusher_status]

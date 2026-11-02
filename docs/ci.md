@@ -1594,9 +1594,13 @@ runs six five-minute passes (reachability, then the core-actions write probe) an
 the thirty-minute half (deploy drift, Pusher status) on its first tick, then starts
 the next link. `.github/scripts/production-watch.cjs` runs the ticks;
 `.github/scripts/schedule-chain.cjs` dispatches the next link, and both monitors
-use it. The pass loop is bounded by `--deadline-minutes` and the hand-off is its
-own job that always runs, because a step cannot outlive the job that hit its
-timeout and a lost hand-off is the failure this ticket fixes. The next link is
+use it. Ticks are due at five-minute deadlines from the link start, never from the
+end of the previous check, so a slow check shortens the next wait instead of
+stretching the cadence. The pass loop is bounded by `--deadline-minutes`: a check
+that no longer fits moves to the next link rather than being handed a shorter
+timeout than it needs. The hand-off is its own job that always runs, because a step
+cannot outlive the job that hit its timeout and a lost hand-off is the failure this
+ticket fixes. The next link is
 dispatched on the thirty-minute boundary measured from this run's start, so a fast
 link waits and a slow one hands off immediately instead of drifting. The cron in each file is a backstop that only restarts a chain that died:
 it stands down while another link is queued or running, so a backstop landing on a
@@ -1607,10 +1611,13 @@ Nothing here is a mutation. The deploy verification and the guarded rollback sta
 in `prod-health.yml` on push, and a manual dispatch of it still runs the same
 monitoring jobs with a pass each. Because a live deploy still serving the previous
 commit would read as drift, one job cannot both wait for a deploy and report drift.
-The core-actions probe walks a fixture the same `prod-health` run also owns. So while
-a `prod-health` run is in flight the watch skips both, which is why `prod-health.yml`
+The core-actions probe walks a fixture the same `prod-health` run also owns, so every
+tick asks whether a `prod-health` run is in flight and skips both the drift check and
+the probe when one is: a run can start between two passes, which is why the question
+is asked on each of them and not once per link. That is also why `prod-health.yml`
 keeps health and drift in one concurrency group for its own runs, and why the watch
-runs the probe as the dedicated health user rather than the general MCP token.
+runs the probe as the dedicated health user: with that secret absent the probe
+refuses to run rather than walk the fixture as another identity.
 Drift and Pusher bodies moved out of the workflow into
 `.github/scripts/production-drift.sh` and `.github/scripts/pusher-status.sh` so the
 scheduled watch and the push path run the same code.
