@@ -131,7 +131,7 @@ test("gateway failure falls back to authenticated provider lists without claimin
   const fallback = diffModels(catalog, sources);
   assert.deepEqual(fallback.sourcesUsed, ["openai", "anthropic"]);
   assert.ok(fallback.warnings.includes("gateway: HTTP 403"));
-  assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("only after gateway pricing")));
+  assert.ok(fallback.findings.some((finding) => finding.model.includes("sonnet") && finding.action.includes("gateway price is at most $5 per million")));
   assert.equal(fallback.findings.filter((finding) => finding.kind === "stale").length, 0);
   const stale = diffModels(twoVersionCatalog, sources).findings.filter((finding) => finding.kind === "stale");
   assert.deepEqual(stale.map((finding) => finding.model), ["claude-haiku-4.5"]);
