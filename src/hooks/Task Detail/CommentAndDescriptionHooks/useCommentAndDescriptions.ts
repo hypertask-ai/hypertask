@@ -21,8 +21,9 @@ import { useGetAllComments } from "../useGetComments";
 import globalConstants from "@/lib/constants";
 import { useTaskCommentsRealtime } from "@/hooks/realtime/useTaskCommentsRealtime";
 import { shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
+  agentLaneCollapsedAtom,
   currentUserAtom,
   idToDeleteCommentAtom,
   taskDetailNonEssentialReadyAtom,
@@ -181,6 +182,7 @@ const useDescriptionAndCommentsStates = () => {
   const [allStacked, setAllStacked] = useState<boolean>(true);
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
+  const setAgentLaneCollapsed = useSetRecoilState(agentLaneCollapsedAtom);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
   const nonEssentialReady = useRecoilValue(taskDetailNonEssentialReadyAtom);
   const [emojiFinder, setEmojiFinder] = useState<(unified: any) => string>(
@@ -626,6 +628,7 @@ const useDescriptionAndCommentsStates = () => {
         initialMap[index] = !allStacked;
       });
     setStacked(ensureAtLeastOneCommentIsOpen(comments, initialMap));
+    setAgentLaneCollapsed(allStacked);
     setAllStacked((prev) => !prev);
   };
 

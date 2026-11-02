@@ -7,14 +7,18 @@ import {
   ExternalLink,
   Lightbulb,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 import RelativeTime from "@/components/Common/RelativeTime";
+import { useFlag } from "@/hooks/useFlag";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { safeAgentRunActivityLink } from "@/lib/agentRuns/taskActivityFeed";
+import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
+import { useRecoilValue } from "@/lib/state";
+import { agentLaneCollapsedAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 const ACTIVITY_ICONS = {
@@ -34,6 +38,13 @@ const AgentRunActivityRow = ({
   const queryClient = useQueryClient();
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const selectionLocked = activity.selectedOption !== null || pendingValue !== null;
+  const collapseLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
+  const laneCollapsed = useRecoilValue(agentLaneCollapsedAtom);
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    setExpandedOverride(null);
+  }, [laneCollapsed]);
 
   const selectOption = async (value: string) => {
     if (selectionLocked) return;
@@ -68,82 +79,129 @@ const AgentRunActivityRow = ({
   if (type === "response") return null;
   const Icon = ACTIVITY_ICONS[type];
   const link = safeAgentRunActivityLink(activity.link);
+  const collapsible = collapseLane && type !== "elicitation";
+  const collapsed = collapsible && (expandedOverride ?? laneCollapsed);
+  const toggleRow = () => {
+    if (!collapsible) return;
+    setExpandedOverride(!collapsed);
+  };
+
+  const time = (
+    <time
+      dateTime={activity.createdAt}
+      className="ml-auto shrink-0 text-micro"
+      title={new Date(activity.createdAt).toLocaleString()}
+    >
+      <RelativeTime date={activity.createdAt} />
+    </time>
+  );
+
+  if (collapsed) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={false}
+        aria-label={`Agent ${activity.type}, collapsed`}
+        onClick={toggleRow}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            toggleRow();
+          }
+        }}
+        className="my-[4px] flex min-w-0 cursor-pointer items-center gap-2 rounded-[5px] px-4 py-1 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:ring-1 focus-visible:ring-white-black"
+      >
+        <Icon
+          className={cn(
+            "h-3 w-3 shrink-0",
+            activity.type === "error" && "text-red-500",
+          )}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+          {activity.text}
+        </span>
+        {time}
+      </div>
+    );
+  }
 
   return (
-    <div className="px-3 py-1">
-      <div
-        className="rounded-[5px] bg-cardBackground px-3 py-2 text-meta text-text-light-gray"
-        role="group"
-        aria-label={`Agent ${activity.type}`}
-      >
-        <div className="flex min-w-0 items-start gap-1.5">
-          <Icon
-            className={cn(
-              "mt-0.5 h-3 w-3 shrink-0",
-              activity.type === "error" && "text-red-500",
-            )}
-            strokeWidth={1.75}
-            aria-hidden
-          />
-          {link ? (
-            <a
-              href={link}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-w-0 items-start gap-1 text-white-black hover:text-hypertasks-purple"
-            >
-              <span className="break-words">{activity.text}</span>
-              <ExternalLink
-                className="mt-0.5 h-3 w-3 shrink-0"
-                strokeWidth={1.75}
-                aria-hidden
-              />
-            </a>
-          ) : (
-            <span className="min-w-0 break-words">{activity.text}</span>
+    <div
+      className={cn(
+        "my-[8px] rounded-[5px] bg-cardBackground px-4 py-5 text-meta text-text-light-gray",
+        collapsible && "cursor-pointer",
+      )}
+      role="group"
+      aria-label={`Agent ${activity.type}`}
+      onClick={collapsible ? toggleRow : undefined}
+    >
+      <div className="flex min-w-0 items-start gap-1.5">
+        <Icon
+          className={cn(
+            "mt-0.5 h-3 w-3 shrink-0",
+            activity.type === "error" && "text-red-500",
           )}
-          <time
-            dateTime={activity.createdAt}
-            className="ml-auto shrink-0 text-micro"
-            title={new Date(activity.createdAt).toLocaleString()}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        {link ? (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-w-0 items-start gap-1 text-white-black hover:text-hypertasks-purple"
           >
-            <RelativeTime date={activity.createdAt} />
-          </time>
-        </div>
-
-        {activity.type === "elicitation" && activity.options ? (
-          <div
-            className="mt-2 flex flex-wrap gap-2"
-            role="group"
-            aria-label="Choose a response"
-          >
-            {activity.options.map((option) => {
-              const selected = activity.selectedOption?.value === option.value;
-              const blocked = selectionLocked;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={selected}
-                  aria-disabled={blocked}
-                  aria-busy={pendingValue === option.value || undefined}
-                  onClick={() => void selectOption(option.value)}
-                  className={cn(
-                    "min-h-11 min-w-11 rounded-[4px] px-3 py-2 text-dense font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white-black",
-                    selected
-                      ? "bg-hypertasks-purple text-white"
-                      : "bg-hoverCardBackground text-white-black hover:bg-hover-active",
-                    blocked && !selected && "opacity-50",
-                    pendingValue === option.value && "cursor-wait",
-                  )}
-                >
-                  {option.label}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
+            <span className="break-words">{activity.text}</span>
+            <ExternalLink
+              className="mt-0.5 h-3 w-3 shrink-0"
+              strokeWidth={1.75}
+              aria-hidden
+            />
+          </a>
+        ) : (
+          <span className="min-w-0 break-words">{activity.text}</span>
+        )}
+        {time}
       </div>
+
+      {activity.type === "elicitation" && activity.options ? (
+        <div
+          className="mt-2 flex flex-wrap gap-2"
+          role="group"
+          aria-label="Choose a response"
+        >
+          {activity.options.map((option) => {
+            const selected = activity.selectedOption?.value === option.value;
+            const blocked = selectionLocked;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={selected}
+                aria-disabled={blocked}
+                aria-busy={pendingValue === option.value || undefined}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void selectOption(option.value);
+                }}
+                className={cn(
+                  "min-h-11 min-w-11 rounded-[4px] px-3 py-2 text-dense font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white-black",
+                  selected
+                    ? "bg-hypertasks-purple text-white"
+                    : "bg-hoverCardBackground text-white-black hover:bg-hover-active",
+                  blocked && !selected && "opacity-50",
+                  pendingValue === option.value && "cursor-wait",
+                )}
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 };

@@ -292,6 +292,10 @@ export const toggleAllCommentsSignalAtom = atom<number>({
     key: "toggleAllCommentsSignal",
     default: 0,
 });
+export const agentLaneCollapsedAtom = atom<boolean>({
+    key: "agentLaneCollapsed",
+    default: false,
+});
 export const kanbanFiltersAtom = atom<IFilterSettings>({
     key: "kanbanFilterAtom",
     default: { addedFilters: [], matchFilters: "ALL" },
