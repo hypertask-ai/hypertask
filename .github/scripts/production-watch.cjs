@@ -23,15 +23,22 @@ const TICKS_PER_LINK = 6;
 // The thirty-minute half runs on the first tick of each link.
 const WATCH_TICK = 0;
 const DRIFT_WORKFLOW = 'prod-health.yml';
+// The core-actions probe walks the same fixture as the prod-health push job, so
+// it must not run as a different user and must not run while that job owns the
+// fixture (HTPR-6258, production-core-actions-smoke-fixture).
+const FIXTURE_ENV = 'HYPERTASK_HEALTH_USER_TOKEN';
 const PROBE_CHECKS = [
   { name: 'api-reachability', file: '.github/scripts/api-reachability.sh', args: [] },
-  { name: 'core-actions', file: '.github/scripts/core-actions-smoke.mjs', args: ['run'] },
+  { name: 'core-actions', file: '.github/scripts/core-actions-smoke.mjs', args: ['run'], tokenEnv: FIXTURE_ENV },
 ];
 const WATCH_CHECKS = [
   { name: 'drift', file: '.github/scripts/production-drift.sh', args: [] },
   { name: 'pusher', file: '.github/scripts/pusher-status.sh', args: [] },
 ];
 const EXECUTE_TIMEOUT_MS = 9 * 60 * 1000;
+// No check is given less than this when the link is running out of time, so a
+// starved check reports a real answer instead of a false timeout.
+const MIN_CHECK_MS = 2 * 60 * 1000;
 
 function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -42,10 +49,17 @@ function commandFor(check) {
   return { file: 'bash', args: [check.file] };
 }
 
+// A check that touches the fixture carries its own token instead of the general
+// one, the way prod-health.yml hands HYPERTASK_HEALTH_USER_TOKEN to core-actions.
+function envFor(check, base) {
+  if (!check.tokenEnv || !base[check.tokenEnv]) return base;
+  return { ...base, HYPERTASK_MCP_TOKEN: base[check.tokenEnv] };
+}
+
 function runCheck(check, { env = process.env, timeout = EXECUTE_TIMEOUT_MS } = {}) {
   const { file, args } = commandFor(check);
   return new Promise((resolve, reject) => {
-    execFile(file, args, { env, encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(file, args, { env: envFor(check, env), encoding: 'utf8', timeout, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (stdout) process.stdout.write(stdout);
       if (stderr) process.stderr.write(stderr);
       if (error) reject(new Error(`${check.name} exited ${error.code ?? error.signal ?? 'unknown'}`));
@@ -59,40 +73,56 @@ function runCheck(check, { env = process.env, timeout = EXECUTE_TIMEOUT_MS } = {
 // the same pair, so a red watch tick says as much as a red push run does.
 async function reportCoreActions({ execute = runCheck, log = console.log } = {}) {
   try {
-    await execute({ name: 'core-actions-report', file: '.github/scripts/core-actions-smoke.mjs', args: ['report'] });
+    await execute({ name: 'core-actions-report', file: '.github/scripts/core-actions-smoke.mjs', args: ['report'], tokenEnv: FIXTURE_ENV });
   } catch (error) {
     log(`::warning::the core-actions report did not go out: ${String(error.message).slice(0, 120)}.`);
   }
 }
 
-function plan(index, { driftBlocked = false } = {}) {
-  if (index !== WATCH_TICK) return PROBE_CHECKS;
-  return [...(driftBlocked ? WATCH_CHECKS.filter(check => check.name !== 'drift') : WATCH_CHECKS), ...PROBE_CHECKS];
+function plan(index, { fixtureBusy = false } = {}) {
+  // The drift check and the core-actions probe both lose their answer while a
+  // prod-health run is live: drift would read a deploy still rolling out, and the
+  // probe would walk the fixture that run is using.
+  const blocked = new Set(fixtureBusy ? ['drift', 'core-actions'] : []);
+  if (index !== WATCH_TICK) return PROBE_CHECKS.filter(check => !blocked.has(check.name));
+  return [...WATCH_CHECKS, ...PROBE_CHECKS].filter(check => !blocked.has(check.name));
 }
 
 async function ticks({
   sweeps = TICKS_PER_LINK,
   gapMs = TICK_GAP_MS,
   execute = runCheck,
-  driftBusy = null,
+  fixtureBusy = null,
   sleep = wait,
   log = console.log,
+  deadlineMs = null,
+  now = Date.now,
 } = {}) {
   const failures = [];
+  const budget = () => (deadlineMs === null ? Infinity : deadlineMs - now());
   for (let index = 0; index < Math.max(1, sweeps); index++) {
-    if (index > 0) await sleep(gapMs);
-    let driftBlocked = false;
-    if (index === WATCH_TICK && driftBusy) {
-      try {
-        driftBlocked = Boolean(await driftBusy());
-      } catch {
-        driftBlocked = false;
+    if (index > 0) {
+      // Slept against a deadline, not a running total, so a fast tick does not
+      // shorten the next gap and a slow one does not push the link past its end.
+      if (budget() < gapMs + MIN_CHECK_MS) {
+        log(`::notice::the link is out of time after ${index} ticks, so the rest of the passes moved to the next link.`);
+        break;
       }
-      if (driftBlocked) log('::notice::a prod-health run is in flight, so this link skips the drift check and the next link reads it.');
+      await sleep(gapMs);
     }
-    for (const check of plan(index, { driftBlocked })) {
+    let blocked = false;
+    if (index === WATCH_TICK && fixtureBusy) {
       try {
-        await execute(check);
+        blocked = Boolean(await fixtureBusy());
+      } catch {
+        blocked = false;
+      }
+      if (blocked) log('::notice::a prod-health run is in flight, so this link skips the drift check and the core-actions probe, and the next link reads them.');
+    }
+    for (const check of plan(index, { fixtureBusy: blocked })) {
+      const timeout = Math.max(MIN_CHECK_MS, Math.min(EXECUTE_TIMEOUT_MS, budget()));
+      try {
+        await execute(check, { timeout });
       } catch (error) {
         failures.push({ tick: index, check: check.name, error: String(error.message).slice(0, 120) });
         if (check.name === 'core-actions') await reportCoreActions({ execute, log });
@@ -112,10 +142,12 @@ async function main() {
   const repo = argValue(argv, '--repo') ?? process.env.REPO ?? process.env.GITHUB_REPOSITORY;
   const sweeps = Math.max(1, Number(argValue(argv, '--ticks') ?? TICKS_PER_LINK));
   const gapMs = Number(argValue(argv, '--gap-ms') ?? TICK_GAP_MS);
+  const deadlineMinutes = Number(argValue(argv, '--deadline-minutes') ?? 0);
   const failures = await ticks({
     sweeps,
     gapMs,
-    driftBusy: () => runInFlight(repo, DRIFT_WORKFLOW),
+    deadlineMs: deadlineMinutes > 0 ? Date.now() + deadlineMinutes * 60 * 1000 : null,
+    fixtureBusy: () => runInFlight(repo, DRIFT_WORKFLOW),
   });
   for (const failure of failures) {
     console.log(`::error::tick ${failure.tick} ${failure.check} failed: ${failure.error}.`);
@@ -131,10 +163,13 @@ module.exports = {
   ticks,
   plan,
   runCheck,
+  envFor,
   reportCoreActions,
   TICK_GAP_MS,
   TICKS_PER_LINK,
   WATCH_TICK,
+  EXECUTE_TIMEOUT_MS,
+  MIN_CHECK_MS,
   PROBE_CHECKS,
   WATCH_CHECKS,
 };

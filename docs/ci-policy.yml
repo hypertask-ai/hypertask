@@ -239,9 +239,12 @@ production_watch:
     thirty_minute: [deploy_drift, pusher_status]
   ticks_per_link: 6
   tick_gap_seconds: 300
-  timeout_minutes: 45
+  pass_timeout_minutes: 40
+  pass_deadline_minutes: 34
   chain:
-    hand_off: a link that used its ticks dispatches the next one at once
+    job: chain
+    hand_off: the next link is dispatched on the thirty-minute boundary measured from the run that just passed
+    survives_pass_timeout: the hand-off is its own always() job, so a pass job killed by its timeout still starts the next link
     dispatch: workflow_dispatch on production
     guard: the dispatch is skipped while another link of this workflow is queued or running
     backstop: a scheduled or pushed run stands down when a link is already in flight
@@ -253,7 +256,8 @@ production_watch:
   moved_out_of: .github/workflows/prod-health.yml
   moved_out_scripts: [.github/scripts/production-drift.sh, .github/scripts/pusher-status.sh]
   prod_health_keeps: every push job unchanged, and the same monitoring jobs on manual dispatch
-  drift_stands_down_while: a prod-health run is in flight
+  stands_down_while: a prod-health run is in flight, for the drift check and the core-actions probe
+  core_actions_identity: the dedicated Health Check user, as on the prod-health push job
   mutates_production: false
   never: [self_hosted_runners, paid_services, rollback_authority]
 
@@ -271,6 +275,7 @@ required_check_settings_monitor:
     dispatch: workflow_dispatch on production
     guard: the dispatch is skipped while another link is queued or running
     concurrency_group: required-check-settings-chain
+    verify_lock: the required-check-settings lock sits on the verify job, so the waiting chain never blocks a manual dispatch
     reason: the cron delivered 30 of 168 runs in the seven days to 2026-11-02T04:17Z
   trusted_code_ref: production
   runs_on: ubuntu-latest

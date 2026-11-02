@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
-const { ticks, plan, TICKS_PER_LINK, PROBE_CHECKS, WATCH_CHECKS } = require("../.github/scripts/production-watch.cjs");
+const { ticks, plan, envFor, TICKS_PER_LINK, MIN_CHECK_MS, PROBE_CHECKS, WATCH_CHECKS } = require("../.github/scripts/production-watch.cjs");
 
 const names = checks => checks.map(check => check.name);
 
@@ -19,8 +19,9 @@ test("the first tick of a link runs the thirty-minute half, later ticks only the
   for (const index of [1, 2, 3, 4, 5]) assert.deepEqual(names(plan(index)), ["api-reachability", "core-actions"]);
 });
 
-test("the drift check stands down while a prod-health run is in flight, the rest still runs", () => {
-  assert.deepEqual(names(plan(0, { driftBlocked: true })), ["pusher", "api-reachability", "core-actions"]);
+test("the drift check and the fixture probe stand down while a prod-health run is in flight, the rest still runs", () => {
+  assert.deepEqual(names(plan(0, { fixtureBusy: true })), ["pusher", "api-reachability"]);
+  assert.deepEqual(names(plan(3, { fixtureBusy: true })), ["api-reachability"]);
 });
 
 test("one link runs six ticks five minutes apart, in order", async () => {
@@ -75,20 +76,83 @@ test("a report that cannot go out is a warning, not a lost tick", async () => {
 test("an unreadable prod-health run list never costs the drift check", async () => {
   const { ran, execute } = recorder();
 
-  await ticks({ sweeps: 1, execute, sleep: async () => {}, driftBusy: async () => { throw new Error("HTTP 502"); } });
+  await ticks({ sweeps: 1, execute, sleep: async () => {}, fixtureBusy: async () => { throw new Error("HTTP 502"); } });
 
   assert.equal(ran.includes("drift"), true);
+  assert.equal(ran.includes("core-actions"), true);
 });
 
-test("the drift check is skipped with a notice while a prod-health run is in flight", async () => {
+test("the drift check and the fixture probe are skipped with a notice while a prod-health run is in flight", async () => {
   const { ran, execute } = recorder();
   const messages = [];
 
-  await ticks({ sweeps: 1, execute, sleep: async () => {}, driftBusy: async () => true, log: message => messages.push(message) });
+  await ticks({ sweeps: 1, execute, sleep: async () => {}, fixtureBusy: async () => true, log: message => messages.push(message) });
 
   assert.equal(ran.includes("drift"), false);
+  assert.equal(ran.includes("core-actions"), false);
   assert.equal(ran.includes("pusher"), true);
-  assert.match(messages.join("\n"), /this link skips the drift check/);
+  assert.equal(ran.includes("api-reachability"), true);
+  assert.match(messages.join("\n"), /this link skips the drift check and the core-actions probe/);
+});
+
+test("the core-actions probe and its report carry the health user token, the other checks carry the general one", () => {
+  const base = { HYPERTASK_MCP_TOKEN: "general", HYPERTASK_HEALTH_USER_TOKEN: "health" };
+  const core = PROBE_CHECKS.find(check => check.name === "core-actions");
+  assert.equal(envFor(core, base).HYPERTASK_MCP_TOKEN, "health");
+  const reachability = PROBE_CHECKS.find(check => check.name === "api-reachability");
+  assert.equal(envFor(reachability, base).HYPERTASK_MCP_TOKEN, "general");
+  // No health token in the environment: fall back, never pass an empty one.
+  assert.equal(envFor(core, { HYPERTASK_MCP_TOKEN: "general" }).HYPERTASK_MCP_TOKEN, "general");
+});
+
+test("a link that runs out of time stops its ticks instead of running past the deadline", async () => {
+  let clock = 0;
+  const gaps = [];
+  const messages = [];
+  const { ran, execute } = recorder();
+
+  // Deadline 30 minutes out; each tick's sleep advances the clock by the gap it
+  // asked for, so the loop must stop once the next gap cannot fit.
+  const failures = await ticks({
+    execute,
+    sleep: async ms => { gaps.push(ms); clock += ms; },
+    log: message => messages.push(message),
+    deadlineMs: 30 * 60 * 1000,
+    now: () => clock,
+  });
+
+  assert.deepEqual(failures, []);
+  // Five gaps fit inside 30 minutes; the sixth tick still needs MIN_CHECK_MS room.
+  assert.equal(gaps.length, 5);
+  assert.equal(ran.length, 4 + 5 * 2);
+  assert.deepEqual(messages, []);
+
+  const tightClock = { value: 0 };
+  const tightGaps = [];
+  await ticks({
+    execute,
+    sleep: async ms => { tightGaps.push(ms); tightClock.value += ms; },
+    log: message => messages.push(message),
+    deadlineMs: 12 * 60 * 1000,
+    now: () => tightClock.value,
+  });
+  assert.equal(tightGaps.length, 2);
+  assert.match(messages.join("\n"), /the link is out of time after 3 ticks/);
+});
+
+test("a check near the deadline is given the remaining time, never less than the floor", async () => {
+  const seen = [];
+  const execute = async (check, options) => {
+    seen.push({ check: check.name, timeout: options.timeout });
+  };
+
+  await ticks({ sweeps: 1, execute, sleep: async () => {}, deadlineMs: 60 * 1000, now: () => 0 });
+
+  for (const { timeout } of seen) assert.equal(timeout, MIN_CHECK_MS);
+
+  seen.length = 0;
+  await ticks({ sweeps: 1, execute, sleep: async () => {}, deadlineMs: null, now: () => 0 });
+  for (const { timeout } of seen) assert.equal(timeout, 9 * 60 * 1000);
 });
 
 test("the watch workflow runs the tick script and starts the next link even after a red tick", async () => {
@@ -100,11 +164,26 @@ test("the watch workflow runs the tick script and starts the next link even afte
   assert.equal(workflow.concurrency.group, "production-watch");
   assert.equal(workflow.concurrency["cancel-in-progress"], false);
 
-  const [pass, chain] = workflow.jobs.watch.steps.filter(step => step.run);
-  assert.equal(pass.run, "node .github/scripts/production-watch.cjs");
+  const [pass] = workflow.jobs.watch.steps.filter(step => step.run);
+  assert.equal(pass.run, "node .github/scripts/production-watch.cjs --deadline-minutes 34");
   assert.equal(pass.env.GH_TOKEN, "${{ github.token }}");
+  assert.equal(pass.env.HYPERTASK_HEALTH_USER_TOKEN, "${{ secrets.HYPERTASK_HEALTH_USER_TOKEN }}");
+});
+
+test("the hand-off is its own job, so a watch job killed by its timeout still starts the next link", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await readFile(".github/workflows/production-watch.yml", "utf8"));
+
+  const watch = workflow.jobs.watch;
+  const chain = workflow.jobs.chain;
+  assert.deepEqual(chain.needs, ["watch"]);
   assert.equal(chain.if, "${{ always() }}");
-  assert.equal(chain.run, "node .github/scripts/schedule-chain.cjs hand-off --workflow production-watch.yml");
+  assert.equal(chain.permissions.actions, "write");
+  // The pass loop has to finish inside its own timeout, and the chain job has to
+  // be able to sit out a whole link when the passes end early.
+  assert.ok(watch["timeout-minutes"] > 34);
+  assert.ok(chain["timeout-minutes"] >= 30);
+  assert.equal(chain.steps.at(-1).run, "node .github/scripts/schedule-chain.cjs hand-off --workflow production-watch.yml --gap-minutes 30");
 });
 
 test("the settings monitor starts its next link an hour after this run began", async () => {
@@ -112,6 +191,11 @@ test("the settings monitor starts its next link an hour after this run began", a
   const workflow = yaml.load(await readFile(".github/workflows/required-check-settings.yml", "utf8"));
 
   assert.deepEqual(workflow.on.schedule, [{ cron: "17 * * * *" }]);
+  // The lock belongs to the check, not the run: the chain waits out the rest of
+  // the hour and must not block a manual dispatch while it does.
+  assert.equal(workflow.concurrency, undefined);
+  assert.equal(workflow.jobs.verify.concurrency.group, "required-check-settings");
+  assert.equal(workflow.jobs.verify.concurrency["cancel-in-progress"], false);
   const chain = workflow.jobs.chain;
   assert.deepEqual(chain.needs, ["verify"]);
   assert.equal(chain.if, "${{ !cancelled() }}");
