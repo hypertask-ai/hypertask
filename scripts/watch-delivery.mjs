@@ -25,6 +25,14 @@ export const WATCHES = [
     current: true,
   },
   {
+    workflow: 'ux-signoff-chain.yml',
+    label: 'hourly design check, chained',
+    askedPerDay: 24,
+    unit: 'links, one an hour; the gate a link dispatches also runs on every pull request, and those runs are never a link',
+    events: ['schedule', 'workflow_dispatch'],
+    current: true,
+  },
+  {
     workflow: 'prod-health.yml',
     label: 'production watch, legacy cron',
     askedPerDay: 336,
@@ -39,15 +47,19 @@ export const PUSH_WATCH = { workflow: 'prod-health.yml', branch: 'production' };
 const usage = [
   'Usage: node scripts/watch-delivery.mjs [--days 7] [--since YYYY-MM-DD] [--until YYYY-MM-DD]',
   '       [--repo owner/name] [--only watches|pushes] [--baseline] [--json]',
-  'Counts how many runs of the production watch and the hourly settings check really ran',
-  'against how many the repository asks for, and how many production pushes still started',
-  'the prod-health check. --baseline also measures the window just before this one, so the',
-  'report says whether a fix held. It reads run history only; it dispatches and edits nothing.',
+  'Counts how many runs of the production watch, the hourly settings check and the hourly',
+  'design check really ran against how many the repository asks for, how long the worst wait',
+  'between them got, and how many production pushes still started the prod-health check.',
+  '--baseline also measures the window just before this one, so the report says whether a',
+  'fix held. It reads run history only; it dispatches and edits nothing.',
 ].join('\n');
 
 const day = time => new Date(time).toISOString().slice(0, 10);
 const percent = rate => `${Math.round(rate * 1000) / 10}%`;
 const round = value => Math.round(value * 10) / 10;
+const gap = minutes => (minutes === null || minutes === undefined
+  ? '-'
+  : `${minutes}m (${round(minutes / 60)}h)`);
 
 const STARTED = run => run.status !== 'queued' && run.status !== 'requested' && run.status !== 'waiting';
 
@@ -71,6 +83,21 @@ export function countDelivered(runs, sinceMs, untilMs) {
   };
 }
 
+export function gapBetweenLinks(runs) {
+  const times = runs.filter(STARTED)
+    .map(run => Date.parse(run.created_at ?? ''))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const gaps = times.slice(1).map((time, index) => Math.round((time - times[index]) / 60000));
+  if (!gaps.length) return { median: null, worst: null };
+  const sorted = [...gaps].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return {
+    median: sorted.length % 2 ? sorted[middle] : Math.round((sorted[middle - 1] + sorted[middle]) / 2),
+    worst: sorted[sorted.length - 1],
+  };
+}
+
 export function watchRow(watch, { sinceMs, untilMs, runs, firstRecordedMs }) {
   const inWindow = runs.filter(run => {
     const created = Date.parse(run.created_at ?? '');
@@ -81,11 +108,14 @@ export function watchRow(watch, { sinceMs, untilMs, runs, firstRecordedMs }) {
   const coveredMs = Math.max(untilMs - Math.max(sinceMs, activeMs), 0);
   const delivered = countDelivered(runs, sinceMs, untilMs);
   const asked = Math.round((watch.askedPerDay * coveredMs) / DAY);
+  const gaps = gapBetweenLinks(inWindow);
   return {
     label: watch.label,
     workflow: watch.workflow,
     unit: watch.unit,
     asked,
+    medianGap: gaps.median,
+    worstGap: gaps.worst,
     delivered: delivered.runs,
     queued: delivered.queued,
     finished: delivered.finished,
@@ -120,12 +150,12 @@ export function formatWindow(label, window) {
   const lines = [
     `${label}: ${new Date(window.sinceMs).toISOString()} to ${new Date(window.untilMs).toISOString()}`,
     '',
-    table(['Watch', 'Asked', 'Ran', 'Finished', 'Red', 'Rate', 'Nine in ten'], window.watches.map(row => [
-      row.label, row.asked, row.delivered, row.finished, row.red, percent(row.rate), row.enough ? 'yes' : 'no',
+    table(['Watch', 'Asked', 'Ran', 'Finished', 'Red', 'Rate', 'Median gap', 'Worst gap', 'Nine in ten'], window.watches.map(row => [
+      row.label, row.asked, row.delivered, row.finished, row.red, percent(row.rate), gap(row.medianGap), gap(row.worstGap), row.enough ? 'yes' : 'no',
     ])),
   ];
   for (const row of window.watches) {
-    lines.push(`${row.label}: asked ${row.asked} (${row.unit}), ran ${row.delivered}, ${percent(row.rate)}, ${row.coveredDays} days of record${row.queued ? `, ${row.queued} queued and not counted` : ''}.`);
+    lines.push(`${row.label}: asked ${row.asked} (${row.unit}), ran ${row.delivered}, ${percent(row.rate)}, ${row.coveredDays} days of record, median gap ${gap(row.medianGap)}, worst gap ${gap(row.worstGap)}${row.queued ? `, ${row.queued} queued and not counted` : ''}.`);
     if (row.perDay.length) lines.push(`Per day: ${row.perDay.map(entry => `${entry.day} ${entry.runs}`).join(', ')}.`);
   }
   if (window.pushes) {
