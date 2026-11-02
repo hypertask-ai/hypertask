@@ -1,5 +1,5 @@
-version: 13
-last_updated: 2026-11-01
+version: 14
+last_updated: 2026-11-02
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
 topology:
@@ -611,6 +611,18 @@ ci_tests:
     additional_jobs: false
     browser_services: job_level_services_start_before_scope
     contract_summary_exception: successful_browser_job_with_explicit_docs_only_output
+  # HYCI-78. The fixture stress and the palette handoff gate ci-tests from their
+  # own lane instead of running in front of every shard inside ci-prepare.
+  fixture_lane:
+    job: ci-fixtures
+    needs: ci-prepare
+    starts_when: [stress_fixtures, handoff_fixture]
+    parallel_with: [ci-checks, ci-test]
+    required_by: ci-tests
+    skipped_allowed: true
+    failed_cancelled_or_missing_fails_ci_tests: true
+    pool_jobs_when_not_started: 0
+    measured_2026_11_01: {pushes: 35, ci_prepare_median_seconds: 55, stress_runs: 8, stress_seconds_total: 2659}
   pull_request_types: [opened, synchronize, reopened, ready_for_review]
   # HYCI-10: one candidate build per change. The required browser-smoke job
   # publishes its .next (without .next/cache) and the visual comparison
@@ -649,7 +661,7 @@ ci_tests:
     within_job: concurrent_lanes
     within_job_exceptions: none
     required_summary: ci-tests
-    summary_needs: [ci-prepare, ci-checks, ci-test]
+    summary_needs: [ci-prepare, ci-checks, ci-test, ci-fixtures]
     docs_only: explicit_skipped_producers
   board_registration_boundary:
     job: ci-checks

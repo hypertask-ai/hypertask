@@ -66,6 +66,26 @@ test('push to green counts only commits where every run passed', async () => {
   assert.equal(hypertask.median.gap, 0);
 });
 
+test('the share inside the target counts a push once, from its first run to its last', async () => {
+  const { summarize } = await subject;
+  const row = () => ({
+    id: 1, sha: 'abc', workflow: 'ci-tests', waiting: 10, wall: 100, setup: 40, tests: 50, other: 10,
+    overhead: 0, clipped: false, createdAt: '2026-10-31T10:00:00Z', updatedAt: '2026-10-31T10:01:40Z', conclusion: 'success',
+  });
+  const commit = (from, to) => [
+    { conclusion: 'success', createdAt: from, updatedAt: to, unreadable: false },
+  ];
+  const commits = new Map([
+    ['fast', commit('2026-10-31T10:00:00Z', '2026-10-31T10:07:00Z')],
+    ['target', commit('2026-10-31T11:00:00Z', '2026-10-31T11:10:00Z')],
+    ['slow', commit('2026-10-31T12:00:00Z', '2026-10-31T12:14:00Z')],
+  ]);
+  const summary = summarize({ name: 'app', repo: 'owner/app' }, [row()], new Map(), { commits });
+  assert.equal(summary.greenPushes, 3);
+  assert.equal(summary.pushToGreen.withinTarget, 2);
+  assert.equal(summary.pushToGreen.share, 67);
+});
+
 test('the slowest spots are named from job durations with at least two samples', async () => {
   const { appFromFixture } = await subject;
   const hypertask = appFromFixture(fixture.apps[0]);
@@ -90,6 +110,8 @@ test('the page shows every app in both factories and keeps user text escaped', a
   assert.equal((html.match(/<h2>/g) ?? []).length, 2);
   assert.match(html, /Software Factory/);
   assert.match(html, /node scripts\/ci-check-time\.mjs/);
+  assert.match(html, /green pushes inside 10 minutes<\/td><td>2 of 2 \(100%\)/);
+  assert.match(formatText(summaries, { limit: 150 }), /green pushes inside 10 minutes: 2 of 2 \(100%\)/);
   assert.match(formatText(summaries, { limit: 150 }), /Postbox \(valentinyeo\/postbox, 2 runs measured, 0 skipped, 2 green commits\)/);
   const markdown = formatMarkdown(summaries, { limit: 150, generatedAt: '2026-10-31T12:00:00Z', command: 'node scripts/ci-check-time.mjs' });
   assert.match(markdown, /## Postbox \(Software Factory\)/);

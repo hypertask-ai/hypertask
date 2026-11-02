@@ -98,6 +98,7 @@ export function percentile(values, share) {
 }
 
 const RED = new Set(['failure', 'timed_out', 'startup_failure', 'action_required']);
+export const TARGET_SECONDS = 600;
 const IDLE = new Set(['skipped', 'cancelled']);
 
 export function commitRuns(rows) {
@@ -171,7 +172,12 @@ export function summarize(app, allRows, jobsByRun = new Map(), { excluded = new 
     greenPushes: greens.length,
     clipped: completed.filter(row => row.clipped).length,
     unreadable: rows.filter(row => row.unreadable).length,
-    pushToGreen: { median: median(greens), p90: percentile(greens, 0.9) },
+    pushToGreen: {
+      median: median(greens),
+      p90: percentile(greens, 0.9),
+      withinTarget: greens.filter(value => value <= TARGET_SECONDS).length,
+      share: greens.length ? Math.round((100 * greens.filter(value => value <= TARGET_SECONDS).length) / greens.length) : 0,
+    },
     median: {
       waiting: median(pick('waiting')),
       wall: median(pick('wall')),
@@ -287,6 +293,7 @@ export function formatHtml(summaries, { limit, generatedAt = new Date().toISOStr
     <table>
       <tr><th>Measure</th><th>Median</th><th>p90</th></tr>
       <tr class="lead"><td>push to all green</td><td>${escape(fmt(summary.pushToGreen.median))}</td><td>${escape(fmt(summary.pushToGreen.p90))}</td></tr>
+      <tr><td>green pushes inside ${TARGET_SECONDS / 60} minutes</td><td>${summary.pushToGreen.withinTarget} of ${summary.greenPushes} (${summary.pushToGreen.share}%)</td><td>-</td></tr>
       ${[['waiting (queue)', summary.median.waiting, summary.p90.waiting], ['run wall clock', summary.median.wall, summary.p90.wall]]
     .map(([name, middle, tail]) => `<tr><td>${escape(name)}</td>${cell('m', middle)}${cell('m', tail)}</tr>`).join('')}
       ${[['setup (worker time)', summary.median.setup], ['tests (worker time)', summary.median.tests], ['other work (worker time)', summary.median.other], ['run time outside jobs', summary.median.gap]]
@@ -322,6 +329,7 @@ export function formatMarkdown(summaries, { limit, generatedAt = new Date().toIS
     `| Tests (worker time) | ${fmt(summary.median.tests)} | - |`,
     `| Other work (worker time) | ${fmt(summary.median.other)} | - |`,
     `| Run time outside jobs | ${fmt(summary.median.gap)} | - |`,
+    `| Green pushes inside ${TARGET_SECONDS / 60} minutes | ${summary.pushToGreen.withinTarget} of ${summary.greenPushes} (${summary.pushToGreen.share}%) | - |`,
   ].join('\n');
   const spots = summary => [...summary.slowSpots, ...summary.setupSteps]
     .map(spot => `| ${escape(spot.work)} | ${fmt(spot.median)} | ${spot.samples} |`).join('\n');
@@ -358,6 +366,7 @@ export function formatText(summaries, { limit }) {
     lines.push('');
     lines.push(`${summary.label} (${summary.repo}, ${summary.runs} runs measured, ${summary.skipped} skipped, ${summary.greenPushes} green commits${summary.unreadable ? `, ${summary.unreadable} unreadable left out` : ''})`);
     lines.push(`  push to all green: median ${fmt(summary.pushToGreen.median)}, p90 ${fmt(summary.pushToGreen.p90)}`);
+    lines.push(`  green pushes inside ${TARGET_SECONDS / 60} minutes: ${summary.pushToGreen.withinTarget} of ${summary.greenPushes} (${summary.pushToGreen.share}%)`);
     lines.push(`  waiting ${fmt(summary.median.waiting)} | wall ${fmt(summary.median.wall)}`);
     lines.push(`  worker time: setup ${fmt(summary.median.setup)} | tests ${fmt(summary.median.tests)} | other ${fmt(summary.median.other)} | outside jobs ${fmt(summary.median.gap)}`);
     for (const spot of summary.slowSpots) lines.push(`  slow: ${spot.work} ${fmt(spot.median)} (${spot.samples})`);

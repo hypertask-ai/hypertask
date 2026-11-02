@@ -106,6 +106,8 @@ jobs:
       boundary_needed: ${{ steps.boundary-scope.outputs.needed }}
       run_tests: ${{ steps.shards.outputs.run_tests }}
       shard_indexes: ${{ steps.shards.outputs.indexes }}
+      stress_fixtures: ${{ steps.fixtures.outputs.stress }}
+      handoff_fixture: ${{ steps.fixtures.outputs.handoff }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -221,44 +223,30 @@ jobs:
           path: node_modules
           key: ${{ steps.restore-node-modules.outputs.cache-primary-key }}
 
-      - name: Stress cold-board query fixtures
+      # HYCI-78: the fixture stress and the palette handoff moved out of this job
+      # into ci-fixtures. They ran here, ahead of "Select tests for changed files",
+      # so a push that touched one of those four files paid their whole wall time
+      # before a single test shard could start: 114-446 s on the eight real pushes
+      # that ran it, against a 55 s median ci-prepare. Each step still decides for
+      # itself whether it has anything to do, and the job only starts when one of
+      # them does.
+      - name: Decide fixture lane scope
+        id: fixtures
         if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
-        timeout-minutes: 25
         shell: bash
         run: |
           set -euo pipefail
-          test -f "$RUNNER_TEMP/changed-files.txt"
-          if ! grep -Eq '^tests/(htpr-7305-board-from-text|htpr-7652-ctrlj-enter-queue|compose-task-palette|search-board-loading)\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
-            echo "Cold-board fixtures unchanged; no stress run needed."
-            exit 0
+          changed="$RUNNER_TEMP/changed-files.txt"
+          stress=false
+          handoff=false
+          if [ -f "$changed" ] && grep -Eq '^tests/(htpr-7305-board-from-text|htpr-7652-ctrlj-enter-queue|compose-task-palette|search-board-loading)\.test\.cjs$' "$changed"; then
+            stress=true
           fi
-          npm run flags:generate
-          for iteration in {1..50}; do
-            echo "Cold-board fixture stress $iteration/50"
-            node --test --test-concurrency=1 tests/htpr-7305-board-from-text.test.cjs tests/htpr-7652-ctrlj-enter-queue.test.cjs tests/search-board-loading.test.cjs
-          done
-          echo "Cold-board fixture stress: 50/50 passed"
-
-      - name: Fixture handoff in one process
-        if: github.event_name == 'pull_request' && steps.scope.outputs.build_needed == 'true'
-        timeout-minutes: 15
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f "$RUNNER_TEMP/changed-files.txt"
-          if ! grep -Eq '^tests/compose-task-palette\.test\.cjs$' "$RUNNER_TEMP/changed-files.txt"; then
-            echo "Palette fixture unchanged; no one-process handoff run needed."
-            exit 0
+          if [ -f "$changed" ] && grep -Eq '^tests/compose-task-palette\.test\.cjs$' "$changed"; then
+            handoff=true
           fi
-          npm run flags:generate
-          lane=$(node scripts/palette-fixture-lane.mjs)
-          if [ -z "$lane" ]; then
-            echo "No palette reader shares a test lane; nothing to hand over."
-            exit 0
-          fi
-          echo "Shared lane: $lane"
-          node --test --test-timeout=1200000 --test-concurrency=1 --test-isolation=none $lane
-          echo "One-process fixture handoff passed: $lane"
+          echo "stress=$stress" >> "$GITHUB_OUTPUT"
+          echo "handoff=$handoff" >> "$GITHUB_OUTPUT"
 
       # Every PR body claims "npm test N passed" and nothing checked it, so a
       # broken suite sat green on production for days (HTPR-5161).
@@ -751,9 +739,78 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # The cold-board stress and the palette handoff are fixture regressions, not
+  # inputs to test selection, so they run beside the shards instead of in front of
+  # them. ci-tests still fails whenever this lane fails: the check is unchanged,
+  # only its wall time stops adding to every other lane's start.
+  ci-fixtures:
+    name: ci-fixtures
+    needs: ci-prepare
+    if: needs.ci-prepare.outputs.stress_fixtures == 'true' || needs.ci-prepare.outputs.handoff_fixture == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ^24.22.1
+          check-latest: true
+
+      - name: Resolve dependency cache version
+        id: dependency-cache-version
+        run: |
+          echo "node-abi=$(node -p 'process.versions.modules')" >> "$GITHUB_OUTPUT"
+          echo "npm-major=$(npm --version | cut -d. -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore node_modules cache
+        id: restore-node-modules
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-abi${{ steps.dependency-cache-version.outputs.node-abi }}-npm${{ steps.dependency-cache-version.outputs.npm-major }}-${{ hashFiles('package-lock.json', 'package.json', '.npmrc') }}
+
+      - name: Install dependencies
+        if: steps.restore-node-modules.outputs.cache-hit != 'true'
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Stress cold-board query fixtures
+        if: needs.ci-prepare.outputs.stress_fixtures == 'true'
+        timeout-minutes: 25
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run flags:generate
+          for iteration in {1..50}; do
+            echo "Cold-board fixture stress $iteration/50"
+            node --test --test-concurrency=1 tests/htpr-7305-board-from-text.test.cjs tests/htpr-7652-ctrlj-enter-queue.test.cjs tests/search-board-loading.test.cjs
+          done
+          echo "Cold-board fixture stress: 50/50 passed"
+
+      - name: Fixture handoff in one process
+        if: needs.ci-prepare.outputs.handoff_fixture == 'true'
+        timeout-minutes: 15
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run flags:generate
+          lane=$(node scripts/palette-fixture-lane.mjs)
+          if [ -z "$lane" ]; then
+            echo "No palette reader shares a test lane; nothing to hand over."
+            exit 0
+          fi
+          echo "Shared lane: $lane"
+          node --test --test-timeout=1200000 --test-concurrency=1 --test-isolation=none $lane
+          echo "One-process fixture handoff passed: $lane"
+
   ci-tests:
     name: ci-tests
-    needs: [ci-prepare, ci-checks, ci-test]
+    needs: [ci-prepare, ci-checks, ci-test, ci-fixtures]
     if: always() && (github.event_name == 'push' || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -840,6 +897,13 @@ jobs:
             fi
             test "${{ needs.ci-test.result }}" = "skipped"
           fi
+          # A fixture run that started and went red, was cancelled, or never
+          # reported back is a red check; only a lane that had nothing to do may
+          # be skipped.
+          case "${{ needs.ci-fixtures.result }}" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac
 
   browser-build:
     name: browser-build

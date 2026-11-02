@@ -1277,7 +1277,8 @@ checks themselves; both are summed across every job, so parallel jobs add up to
 more than the wall clock. Run time outside jobs is wall clock no job was
 executing, measured from the union of job intervals. Push to all green counts commits with no failed,
 timed-out or action-required run, from the first run created for that commit to
-the last one finishing. Skipped runs from path filters never block it, and the
+the last one finishing. The report also gives the share of those green pushes
+that finished inside ten minutes, which is the target HYCI-78 tracks. Skipped runs from path filters never block it, and the
 newest commit, any commit with unfinished or cut-off runs, and any commit whose
 full run list cannot be read waits until its checks settle. Runs that never executed stay out of the medians, and a run whose jobs cannot be
 read is counted and keeps its commit unranked. Slow spots rank workflow and job medians
@@ -1555,3 +1556,25 @@ refuses cancels nothing, a full store refuses a new cancel instead of dropping a
 stored recovery, a cancel that never lands drops its reservation, a candidate
 whose job list fails does not stop the other candidates, and a run list that
 cannot be read still finishes the stored recoveries.
+
+## Fixture runs beside the shards (HYCI-78)
+
+The cold-board fixture stress and the palette handoff prove that four fixture
+files are not flaky. They do not decide which tests run, but they used to sit in
+`ci-prepare` ahead of "Select tests for changed files", so every other lane
+waited for them to finish before it could start.
+
+Both now run in `ci-fixtures`, a lane that starts beside `ci-checks` and
+`ci-test` and is still one of `ci-tests`' own dependencies: a fixture run that
+fails, is cancelled, or never reports back makes the required check red. Only a
+push that touched one of the four files starts the job at all, and it keeps the
+twenty-job pool unchanged on every other push.
+
+Measured on 35 pull-request pushes on 2026-11-01: `ci-prepare` is a 55-second
+median, the stress step ran on 8 of them, and on those it took 114 to 446
+seconds, 2,659 seconds in total, all of it serialised in front of the shards.
+The worst push (14.2 minutes) spent 446 seconds in the stress step and 408
+seconds in its slowest shard, which now overlap instead of adding up.
+
+`node scripts/ci-check-time.mjs` reports the share of green pushes that finish
+inside ten minutes, which is the number this ticket tracks.
