@@ -5,23 +5,27 @@ const { identity } = require("../../scripts/model-diff");
 const APP = "https://app.hypertask.ai";
 const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
 
+function priceText(inputPerMillion) {
+  return inputPerMillion === null || inputPerMillion === undefined ? "not published yet" : `$${escapeHtml(inputPerMillion)}`;
+}
+
 function ticketFor(finding) {
   const model = `${finding.provider}/${identity(finding.model).name}`;
   const marker = `modelwatch${createHash("sha256").update(`${finding.kind}/${model}`).digest("hex").slice(0, 20)}`;
   return {
     marker,
     title: `AI model ${finding.kind}: ${model} [${marker}]`,
-    description: `<p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}. Class: <code>${escapeHtml(finding.modelClass)}</code>. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Gateway input price per million tokens: ${finding.inputPerMillion === null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}.</p><p>Follow <code>.claude/skills/update-ai-models/SKILL.md</code>: replace the old version in every picker, migrate saved picks, verify gateway input/output prices and get a live chat answer after release. New classes/providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`,
+    description: `<p><strong>${escapeHtml(finding.action)}.</strong></p><p>${escapeHtml(finding.reason)}.</p><p>Class: ${escapeHtml(finding.modelClass)}. Current: ${escapeHtml(finding.current.join(", ") || "none")}.</p><p>Input price per million tokens: ${priceText(finding.inputPerMillion)}.</p>${finding.inputPerMillion === null || finding.inputPerMillion === undefined ? "<p>Check the price before shipping.</p>" : ""}<p>The update skill has the steps.</p>`,
   };
 }
 
 function rollupTicket(findings, now = new Date()) {
   const marker = `modelwatchrollup-${now.toISOString().slice(0, 10)}`;
-  const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Gateway input price per million tokens: ${finding.inputPerMillion == null ? "unknown; verify pricing before shipping" : `$${escapeHtml(finding.inputPerMillion)}`}. ${escapeHtml(finding.action)}.</li>`).join("");
+  const items = findings.map((finding) => `<li><code>${escapeHtml(`${finding.provider}/${identity(finding.model).name}`)}</code>. Input price per million tokens: ${priceText(finding.inputPerMillion)}. ${escapeHtml(finding.action)}.</li>`).join("");
   return {
     marker,
     title: `AI model watch new classes [${marker}]`,
-    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><ul>${items}</ul><p>Follow <code>.claude/skills/update-ai-models/SKILL.md</code>: replace the old version in every picker, migrate saved picks, verify gateway input/output prices and get a live chat answer after release. New classes/providers need Valentin's yes. Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>; do not auto-ship them.</p>`,
+    description: `<p><strong>${findings.length} new model classes are not in our catalog.</strong></p><ul>${items}</ul><p>The update skill has the steps.</p><p>New classes need Valentin's yes.</p><p>Premium models <a href="${APP}/detail/project-15/7746">wait for HTPR-7746</a>.</p>`,
   };
 }
 

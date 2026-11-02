@@ -156,10 +156,10 @@ test("provider pagination is complete, and absent keys or malformed gateway data
 
 test("premium is strictly over $5/M; unknown prices never permit an unconditional automatic shipment", () => {
   for (const [input, expected] of [["0.000005", "ship automatically"], ["0.00000501", "waits for HTPR-7746"],
-    [undefined, "ship automatically only after gateway pricing confirms at most $5 per million input tokens"],
-    ["not-a-price", "ship automatically only after gateway pricing confirms at most $5 per million input tokens"],
-    [" ", "ship automatically only after gateway pricing confirms at most $5 per million input tokens"],
-    [false, "ship automatically only after gateway pricing confirms at most $5 per million input tokens"]]) {
+    [undefined, "ship after gateway pricing confirms at most $5 per million input tokens"],
+    ["not-a-price", "ship after gateway pricing confirms at most $5 per million input tokens"],
+    [" ", "ship after gateway pricing confirms at most $5 per million input tokens"],
+    [false, "ship after gateway pricing confirms at most $5 per million input tokens"]]) {
     const sources = structuredClone(fixture);
     sources.gateway.data.find((row) => row.id === "anthropic/claude-sonnet-5.6").pricing.input = input;
     assert.equal(diffModels(catalog, sources).findings.find((finding) => finding.model.endsWith("/claude-sonnet-5.6")).action, expected);
@@ -216,14 +216,14 @@ test("rollup uses the exact UTC-day marker, lists prices and actions, and escape
   assert.equal(ticket.title, "AI model watch new classes [modelwatchrollup-2026-10-25]");
   assert.ok(ticket.description.startsWith("<p><strong>3 new model classes are not in our catalog.</strong></p><ul>"));
   assert.equal((ticket.description.match(/<li>/g) || []).length, 3);
-  assert.match(ticket.description, /<code>new&lt;provider&gt;\/model-1<\/code>\. Gateway input price per million tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);
-  assert.equal((ticket.description.match(/unknown; verify pricing before shipping/g) || []).length, 2);
+  assert.match(ticket.description, /<code>new&lt;provider&gt;\/model-1<\/code>\. Input price per million tokens: \$0\. ask &lt;Valentin&gt; &amp; verify\.<\/li>/);
+  assert.equal((ticket.description.match(/not published yet/g) || []).length, 2);
   assert.match(ticket.description, /<code>other\/model-2<\/code>.*waits for HTPR-7746\.<\/li>/);
   assert.match(ticket.description, /<code>unknown\/model-3<\/code>.*ask Valentin before shipping\.<\/li>/);
   assert.ok(!ticket.description.includes("<provider>"));
   assert.ok(!ticket.description.includes("<Valentin>"));
-  const guidance = ticketFor(report().findings[0]).description.split("<p>Follow ")[1];
-  assert.ok(ticket.description.endsWith(`<p>Follow ${guidance}`));
+  assert.ok(ticket.description.endsWith('<p>Premium models <a href="https://app.hypertask.ai/detail/project-15/7746">wait for HTPR-7746</a>.</p>'));
+  assert.ok(!ticketFor(report().findings[0]).description.includes("SKILL.md"));
 });
 
 test("watcher creates one rollup for three new classes and one separate new-version ticket", async () => {
@@ -258,7 +258,7 @@ test("watcher creates one rollup for three new classes and one separate new-vers
   assert.equal((rollupDescription.match(/<li>/g) || []).length, 3);
   for (const finding of newClasses) {
     assert.ok(rollupDescription.includes(`${finding.provider}/${identity(finding.model).name}`));
-    assert.ok(rollupDescription.includes(`Gateway input price per million tokens: $${finding.inputPerMillion}`));
+    assert.ok(rollupDescription.includes(`Input price per million tokens: $${finding.inputPerMillion}`));
     assert.ok(rollupDescription.includes(finding.action));
   }
   assert.deepEqual(results, [
@@ -427,4 +427,23 @@ test("watcher refuses writes on failed, partial, malformed or truncated searches
   const ticket = ticketFor({ ...report().findings[0], reason: "<untrusted>" });
   assert.ok(ticket.description.includes("&lt;untrusted&gt;"));
   assert.ok(!ticket.description.includes("<untrusted>"));
+});
+
+let assertAgentWriting = null;
+try {
+  assertAgentWriting = require("./task-route-loader.cjs").load("src/lib/agents/writing.ts").assertAgentWriting;
+} catch {
+  assertAgentWriting = null;
+}
+
+test("generated tickets pass the plain-writing rule agents must follow", {
+  skip: assertAgentWriting ? false : "the source rule needs the app dependencies installed",
+}, () => {
+  const findings = report().findings;
+  const tickets = findings.map(ticketFor);
+  tickets.push(rollupTicket(findings.filter((finding) => finding.kind === "new-class").slice(0, 3), new Date("2026-10-25T12:00:00Z")));
+  tickets.push(ticketFor({ ...findings[0], inputPerMillion: null }));
+  for (const ticket of tickets) {
+    assertAgentWriting("modelwatch", { title: ticket.title, description: ticket.description });
+  }
 });
