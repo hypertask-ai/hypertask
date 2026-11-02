@@ -23,12 +23,6 @@ import { updateTaskSchema } from "./updateTaskSchema";
 
 type TaskWriteGuards = Pick<NonNullable<Parameters<typeof updateTaskSingle>[3]>, "expectedTitle" | "expectedDescription" | "expectedProjectId" | "expectedStatus">;
 
-function provisionalGuards(context: ToolContext, taskId: number): TaskWriteGuards | undefined {
-  const provisional = context.provisionalTickets?.get(taskId);
-  if (!provisional) return undefined;
-  return { expectedTitle: provisional.title, expectedDescription: provisional.description, expectedProjectId: provisional.projectId, expectedStatus: "Normal" };
-}
-
 export function createTaskUpdater(context: ToolContext, input: z.infer<typeof updateTaskSchema>, expected?: TaskWriteGuards) {
   const { user, actingAgentId, body } = context;
   return async (
@@ -61,8 +55,10 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
       return { success: false, error: "Task not found or access denied" };
     }
 
-    const provisional = expected ? undefined : provisionalGuards(context, task.id);
-    const guards = expected ?? provisional;
+    const provisional = expected ? undefined : context.provisionalTickets?.get(task.id);
+    const guards: TaskWriteGuards | undefined = expected ?? (provisional
+      ? { expectedTitle: provisional.title, expectedDescription: provisional.description, expectedProjectId: provisional.projectId, expectedStatus: "Normal" }
+      : undefined);
 
     let sectionTarget: { id: number; section_title: string } | null = null;
     let sectionWarning: string | undefined;

@@ -44,8 +44,8 @@ function harness(options = {}) {
     "@/lib/mcp/boards/links": { buildMcpTaskUrl: (projectId, uniqueIndex) => `http://localhost:3000/detail/project-${projectId}/${uniqueIndex}` },
     "@/lib/ai/tools/helpers": {
       buildActivityUser: (user) => user,
-      applyPriorityUpdate: async (...args) => { priority.push(args); },
-      applyEstimateUpdate: async (...args) => { estimate.push(args); },
+      applyPriorityUpdate: async (...args) => { priority.push(args); return {}; },
+      applyEstimateUpdate: async (...args) => { estimate.push(args); return {}; },
       sanitizeForJson: (value) => value,
       mapTaskToDetail: (task) => task,
     },
@@ -85,7 +85,7 @@ test("guarded property and label writes stay conditional for a ticket this reply
   await h.update({ priority: "High", estimate: 3, add_labels: ["AI CHAT 💬"] });
   assert.deepEqual(h.priority[0][4], { onlyIfUnchangedDefault: true });
   assert.deepEqual(h.estimate[0][4], { onlyIfUnchangedDefault: true });
-  assert.equal(h.mutated[0][3].onlyIfUnedited, true);
+  assert.equal(h.mutated[0][2].onlyIfUnedited, true);
 });
 
 test("the guard follows the chat's own writes so the reply keeps working", async () => {
@@ -126,8 +126,8 @@ test("ordinary updates to other tickets keep today's unguarded write path", asyn
     "@/lib/mcp/boards/links": { buildMcpTaskUrl: () => "/detail/project-1/1" },
     "@/lib/ai/tools/helpers": {
       buildActivityUser: (user) => user,
-      applyPriorityUpdate: async () => {},
-      applyEstimateUpdate: async () => {},
+      applyPriorityUpdate: async () => ({}),
+      applyEstimateUpdate: async () => ({}),
       sanitizeForJson: (value) => value,
       mapTaskToDetail: (task) => task,
     },
