@@ -139,6 +139,7 @@ test('legacy cron runs and chained runs are counted apart', async () => {
       run('prod-health.yml', 'schedule', until - 2 * HOUR),
       run('prod-health.yml', 'push', until - 3 * HOUR),
     ],
+    'watch-delivery-report.yml': [run('watch-delivery-report.yml', 'schedule', until - 4 * HOUR)],
   };
   const api = async path => {
     const workflow = Object.keys(pages).find(name => path.includes(name));
@@ -151,6 +152,7 @@ test('legacy cron runs and chained runs are counted apart', async () => {
     ['hourly settings check', 1],
     ['hourly design check, chained', 1],
     ['production watch, legacy cron', 1],
+    ['the daily count itself', 1],
   ]);
   assert.equal(window.pushes.pushes, 2);
   assert.equal(window.pushes.runs, 1);
@@ -320,4 +322,26 @@ test('a push that carries several commits counts once, because only its tip star
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the daily count counts its own mornings, so a morning it missed shows in the next report', async () => {
+  const { formatWindow, watchRow, compareWindows, verdictLines, REPORT_WATCH } = await subject;
+  const window = until - 7 * DAY;
+  const mornings = (days) => days.map(index => run('watch-delivery-report.yml', 'schedule', window + index * DAY + HOUR));
+
+  const missed = watchRow(REPORT_WATCH, { sinceMs: window, untilMs: until, runs: mornings([0, 1, 2, 4, 5, 6]), firstRecordedMs: window - 30 * DAY });
+  assert.equal(missed.asked, 7);
+  assert.equal(missed.delivered, 6);
+  assert.equal(missed.current, false, 'the count is measured, never judged as a watch that must hit nine in ten');
+
+  const text = formatWindow('Measured window', { sinceMs: window, untilMs: until, watches: [missed], pushes: null });
+  assert.match(text, /the daily count itself: asked 7 \(runs, one a morning\), ran 6, 85\.7%/);
+  assert.match(text, /short of nine in ten: the daily count itself ran 6 of 7 mornings\./, 'a missed morning is the warning the daily report itself would otherwise never raise');
+
+  const kept = watchRow(REPORT_WATCH, { sinceMs: window, untilMs: until, runs: mornings([0, 1, 2, 3, 4, 5, 6]), firstRecordedMs: window - 30 * DAY });
+  assert.doesNotMatch(formatWindow('Measured window', { sinceMs: window, untilMs: until, watches: [kept], pushes: null }), /the daily count itself ran/);
+
+  const comparison = compareWindows({ watches: [missed], pushes: null }, null);
+  assert.deepEqual(comparison.short, [], 'a missed morning never reads as a short watch in the verdict');
+  assert.doesNotMatch(verdictLines(comparison), /the daily count itself/);
 });
