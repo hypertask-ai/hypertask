@@ -11,6 +11,7 @@ const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const LOGIN_PATH = '/login'
 const BOARD_SWITCH_TIMEOUT = 15_000
+const BOARD_SWITCH_CLICK_TIMEOUT = 3_000
 
 const RUNNER_ERROR_MARKERS = [
   /net::ERR_/i,
@@ -211,22 +212,32 @@ test('docked AI chat follows the viewed board and keeps hand picks board-local',
     await expect(chip).toHaveAttribute('title', board.title)
     await expect(chip).toContainText(board.title)
   }
-  const switchBoard = async (board: typeof a) => {
+  const switchedTo = (board: typeof a) => (url: URL) =>
+    url.pathname === '/project' && url.searchParams.get('id') === String(board.id)
+  const clickBoardEntry = async (board: typeof a) => {
     if (mobile) {
-      await page.getByRole('button', { name: 'Close AI chat', exact: true }).click()
+      if (await sidebar.isVisible()) await page.getByRole('button', { name: 'Close AI chat', exact: true }).click()
       await expect(sidebar).toBeHidden()
       await page.getByRole('button', { name: 'Switch board', exact: true }).click()
       await page.locator(`#mobile-board-option-${board.id}`).click()
-    } else {
-      await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
-      const entry = page.locator(`#project-${board.id}:visible`)
-      if (!(await entry.count())) {
-        await page.keyboard.press('Control+b')
-        await expect(entry).toBeVisible({ timeout: 5_000 })
-      }
-      await entry.click({ timeout: 5_000 })
+      return
     }
-    await expect(page).toHaveURL((url) => url.pathname === '/project' && url.searchParams.get('id') === String(board.id), { timeout: BOARD_SWITCH_TIMEOUT })
+    await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
+    const entry = page.locator(`#project-${board.id}:visible`)
+    if (!(await entry.count())) {
+      await page.keyboard.press('Control+b')
+      await expect(entry).toBeVisible({ timeout: 5_000 })
+    }
+    await entry.click({ timeout: 5_000 })
+  }
+  const switchBoard = async (board: typeof a) => {
+    await expect(async () => {
+      await clickBoardEntry(board)
+      await expect(page).toHaveURL(switchedTo(board), { timeout: BOARD_SWITCH_CLICK_TIMEOUT })
+    }, 'the board entry click never landed on the board it asked for').toPass({
+      timeout: BOARD_SWITCH_TIMEOUT,
+      intervals: [500],
+    })
     await expect(renderedBoard(board), 'the switch did not render the board the rail asked for').toBeAttached({ timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page).toHaveTitle(`${board.title} • Hypertask`, { timeout: BOARD_SWITCH_TIMEOUT })
     await expect(page.locator('[id^="task-"]').filter({ hasText: `${board.title} fixture` }).first()).toBeVisible({ timeout: BOARD_SWITCH_TIMEOUT })
