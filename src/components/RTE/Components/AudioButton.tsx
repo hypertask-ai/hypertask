@@ -4,6 +4,8 @@ import { Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
+import { useFlag } from "@/hooks/useFlag";
 import type { Editor } from "@tiptap/react";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { audioTranscriptRoute } from "@/lib/constants/APIRouteConstants";
@@ -79,6 +81,7 @@ export const AudioButton = ({
   activeRef.current = active;
   const [recording, setRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const micTap = useRef(createTapGuard()).current;
   const onMicTouchStart = (event: React.TouchEvent) => {
     const touch = event.touches[0];
@@ -109,6 +112,8 @@ export const AudioButton = ({
   const isMobileNewTask =
     isMobileView && id === "create-task-modal-audio-button";
   const isAiChat = id === "ai-chat-audio-button" || id.startsWith("ai-chat-audio-button-");
+  const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const aiChatCleanup = isAiChat && chatCleanup;
   const isMobileAiChat = isMobileView && isAiChat;
   const isKeyboardAccessible =
     isMobileTaskWriter || Boolean(ariaLabel || idleLabel);
@@ -497,6 +502,18 @@ export const AudioButton = ({
   }, [editor, isMobileCreateComment, isProcessing]);
 
   useEffect(() => {
+    if (!recording) {
+      setElapsedSeconds(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const ticker = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, [recording]);
+
+  useEffect(() => {
     onProcessingChange?.(isProcessing);
 
   }, [isProcessing]);
@@ -720,6 +737,14 @@ export const AudioButton = ({
                 {!isProcessing && idleLabel && (
                   <span className="text-dense">{idleLabel}</span>
                 )}
+                {hover && !isProcessing && aiChatCleanup && (
+                  <Tooltip
+                    left={0}
+                    bottom={tooltipsOpenUpward ? 45 : -45}
+                    keyCombination={[isApple ? "CMD" : "CTRL", "SHIFT", "D"]}
+                    text={"Dictate"}
+                  />
+                )}
                 {hover &&
                   !isProcessing &&
                   !isAiChat &&
@@ -743,7 +768,7 @@ export const AudioButton = ({
             );
           })()}
 
-          {!isMobileView && (
+          {!isMobileView && !aiChatCleanup && (
             <button
               type="button"
               aria-label="Choose microphone"
@@ -810,6 +835,15 @@ export const AudioButton = ({
               aria-hidden="true"
             />
           </div>
+          {aiChatCleanup && (
+            <span
+              data-ai-chat-recording-elapsed
+              className="shrink-0 text-dense tabular-nums text-icon-dark-gray"
+            >
+              {String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:
+              {String(elapsedSeconds % 60).padStart(2, "0")}
+            </span>
+          )}
           <button
             type="button"
             data-ai-chat-recording-cancel={isAiChat || undefined}
