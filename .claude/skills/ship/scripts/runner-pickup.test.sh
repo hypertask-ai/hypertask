@@ -130,6 +130,7 @@ jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$i
 eq "a carried gate settled at home does not hold the runner" "$(jq -r .decision <<<"$(hook 'RUNNER 3' "$pl")")" "block"
 printf -- '- [ ] HTPR-1.custom2: still open at home\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/gates/adopted.md"
 eq "an open carried gate at home still holds the runner" "$(hook 'RUNNER 3' "$pl")" ""
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 rm -rf "$T/work/.unlazy" "$T/home/.unlazy/ledgers"
 # Ship keeps one ledger folder per ticket under the home folder, tagged with its session.
 mkdir -p "$T/home/.unlazy/ledgers/HTPR-1"
