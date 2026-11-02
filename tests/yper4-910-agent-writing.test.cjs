@@ -266,3 +266,36 @@ test('description persistence keeps pre-write legacy lines but rejects newly inv
     }
   }
 })
+
+const aiModelWatch = require('../.github/scripts/ai-model-watch.cjs')
+const { readCatalog, diffModels } = require('../scripts/model-diff')
+const fs = require('node:fs')
+const path = require('node:path')
+const root = path.resolve(__dirname, '..')
+const catalog = readCatalog(fs.readFileSync(path.join(root, 'src/lib/aiModelOptions.ts'), 'utf8'))
+const gatewayFixture = require('./fixtures/model-diff.json')
+const twoVersionCatalog = {
+  definitions: [
+    { key: 'claude-haiku-4.5', modelClass: 'claude-haiku', label: 'Haiku 4.5', provider: 'anthropic', priceTier: 1 },
+    { key: 'claude-haiku-5-5', modelClass: 'claude-haiku', label: 'Haiku 5.5', provider: 'anthropic', priceTier: 1 },
+  ],
+  options: [
+    { id: 'claude-haiku-4.5', modelKey: 'claude-haiku-4.5', model: 'claude-haiku-4.5', source: 'claude' },
+    { id: 'claude-haiku-5-5', modelKey: 'claude-haiku-5-5', model: 'claude-haiku-5.5', source: 'claude' },
+  ],
+}
+
+test('model watch tickets use words the board accepts', () => {
+  const now = new Date('2026-11-02T12:00:00Z')
+  const unknownPrice = structuredClone(gatewayFixture)
+  unknownPrice.gateway.data.find((row) => row.id === 'anthropic/claude-sonnet-5.6').pricing.input = undefined
+  const findings = [
+    ...diffModels(catalog, structuredClone(gatewayFixture)).findings,
+    ...diffModels(catalog, unknownPrice).findings.filter((finding) => finding.model.endsWith('/claude-sonnet-5.6')),
+    ...diffModels(twoVersionCatalog, structuredClone(gatewayFixture)).findings.filter((finding) => finding.kind === 'stale'),
+  ]
+  for (const finding of findings) {
+    const ticket = finding.kind === 'new-class' ? aiModelWatch.rollupTicket([finding], now) : aiModelWatch.ticketFor(finding)
+    assert.doesNotThrow(() => assertAgentWriting('agent', { title: ticket.title, description: ticket.description }), ticket.title)
+  }
+})
