@@ -269,19 +269,30 @@ export function originMatches(origin, repo) {
   return normalise(origin) === normalise(repo);
 }
 
-export function gitPushes(repo, sinceMs, untilMs, dir = process.cwd()) {
+function gitText(git, args, dir, maxBuffer = 1024 * 1024) {
   return new Promise((resolve, reject) => {
-    execFile('git', ['config', '--get', 'remote.origin.url'], { cwd: dir, encoding: 'utf8', timeout: 60000 }, (error, stdout, stderr) => {
-      if (error) return reject(new Error(`cannot read this checkout's origin (${String(stderr ?? '').trim() || error.message.split('\n')[0]})`));
-      const origin = String(stdout ?? '').trim();
-      if (!originMatches(origin, repo)) return reject(new Error(`this checkout tracks ${origin}, not ${repo}: push counts read origin/${PUSH_WATCH.branch} of the checkout, so run it from a clone of ${repo}`));
-      return execFile('git', ['log', '--first-parent', `--since=${new Date(sinceMs).toISOString()}`, `--until=${new Date(untilMs).toISOString()}`, '--format=%H', `origin/${PUSH_WATCH.branch}`],
-        { cwd: dir, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 60000 },
-        (logError, logOut, logErr) => (logError
-          ? reject(new Error(`cannot count production pushes (${String(logErr ?? '').trim() || logError.message.split('\n')[0]})`))
-          : resolve(logOut.split('\n').filter(Boolean).length)));
-    });
+    git('git', args, { cwd: dir, encoding: 'utf8', maxBuffer, timeout: 60000 }, (error, stdout, stderr) => (
+      error
+        ? reject(new Error(String(stderr ?? '').trim() || error.message.split('\n')[0]))
+        : resolve(String(stdout ?? ''))
+    ));
   });
+}
+
+export async function gitPushes(repo, sinceMs, untilMs, dir = process.cwd(), git = execFile) {
+  const read = async (args, what, maxBuffer) => {
+    try {
+      return (await gitText(git, args, dir, maxBuffer)).trim();
+    } catch (error) {
+      throw new Error(`${what} (${error.message})`);
+    }
+  };
+  const origin = await read(['config', '--get', 'remote.origin.url'], 'cannot read this checkout\'s origin');
+  if (!originMatches(origin, repo)) throw new Error(`this checkout tracks ${origin}, not ${repo}: push counts read origin/${PUSH_WATCH.branch} of the checkout, so run it from a clone of ${repo}`);
+  const shallow = await read(['rev-parse', '--is-shallow-repository'], 'cannot read this checkout\'s history depth');
+  if (shallow === 'true') throw new Error(`this checkout is shallow, so the week of production pushes is not in it and a short read would pass as a full one: run git fetch --deepen 2000, or clone the way the daily report does with fetch-depth: 0`);
+  const log = await read(['log', '--first-parent', `--since=${new Date(sinceMs).toISOString()}`, `--until=${new Date(untilMs).toISOString()}`, '--format=%H', `origin/${PUSH_WATCH.branch}`], 'cannot count production pushes', 8 * 1024 * 1024);
+  return log.split('\n').filter(Boolean).length;
 }
 
 export async function measureWindow({ repo, sinceMs, untilMs, only, pushes: countPushes = gitPushes }, api = ghJson) {
