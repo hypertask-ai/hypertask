@@ -13,6 +13,8 @@ import { ChatRequest, SendSse } from "@/lib/ai/chatStream/request";
 
 import { createTaskAssigneeMutation } from "./taskAssignees";
 
+export type ProvisionalTicketState = { title: string; description: string; projectId: number };
+
 export function createToolContext(
   user: AuthedUser,
   body: ChatRequest,
@@ -38,6 +40,7 @@ export function createToolContext(
   };
 
   const bulkPreviewsIssued = new Set<string>();
+  const provisionalTickets = new Map<number, ProvisionalTicketState>();
   const bulkScopePreviews = bulkScopeConfirmationEnabled
     ? new Map<string, { pending: number; changed: boolean }>()
     : undefined;
@@ -85,7 +88,7 @@ export function createToolContext(
       : null;
   };
   const mutateTaskAssignees = createTaskAssigneeMutation({ user, actingAgentId, requestingUserId, confirmationSessionId, bulkPreviewsIssued, bulkScopeConfirmationEnabled, bulkScopePreviews });
-  return { docsRoutingEnabled, ticketRows, skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
+  return { provisionalTickets, docsRoutingEnabled, ticketRows, skillDraftsEnabled, bulkScopeConfirmationEnabled, bulkScopePreviews, teamScope: teamScope ?? null, inlineAgentImagesEnabled, chatTaskWriterEnabled, abortSignal, user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, requestingUserId, sendStatus, bulkPreviewsIssued, confirmationSessionId, invokeAgentManagementHandler, requireAccountManagementConfirmation, mutateTaskAssignees };
 }
 
 export type TicketRowsSink = { executions: ToolExecution[]; setGroups: (groups: ChatTicketGroupReferences) => void };

@@ -232,6 +232,7 @@ export function createCreateTaskTool(context: ToolContext) {
                 if (!briefTitle) throw new Error("Provide a task brief with a usable title.");
                 initialTitle = briefTitle;
                 earlyTask = await save(initialTitle, undefined, true);
+                context.provisionalTickets?.set(earlyTask.id, { title: initialTitle, description: "", projectId: input.project_id });
                 send("task_created", { content: savedLink(earlyTask) });
                 earlyTaskPublished = true;
                 send("status", { content: "Ticket created. Writing its description…" });

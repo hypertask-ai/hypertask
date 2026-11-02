@@ -53,6 +53,7 @@ function harness(options = {}) {
     user: { id: 985 }, actingAgentId: options.agent ? "agent" : null,
     body: {}, chatTaskWriterEnabled: true, inlineAgentImagesEnabled: options.inlineImages, sendStatus() {},
     confirmationSessionId: "session", bulkPreviewsIssued: new Set(),
+    provisionalTickets: options.provisionalTickets,
     send: (event, data) => { events.push({ event, data }); return true; },
     abortSignal: options.signal,
   }).hypertask_create_task;
@@ -87,6 +88,16 @@ test("the tool saves one usable title and emits its link before the writer compl
   assert.equal(result.task.estimate, draft.estimate);
   assert.equal(h.writerCalls[0][0].PROMPT, "Fix export failures");
   assert.deepEqual(h.events.at(-1), { event: "task_updated", data: { taskId: 1 } });
+});
+
+test("the reply records the published ticket so later writes keep the human's edit", async () => {
+  const provisionalTickets = new Map();
+  const h = harness({ provisionalTickets });
+  const pending = h.execute();
+  await started(h);
+  assert.deepEqual(provisionalTickets.get(1), { title: "Fix export failures", description: "", projectId: 7049 });
+  h.release();
+  await pending;
 });
 
 test("completion guards retain the original write values when the creation read sees a concurrent edit or move", async () => {
