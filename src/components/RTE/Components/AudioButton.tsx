@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import Tooltip from "@/components/Common/Tooltip";
-import { Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Mic, Square, X } from "lucide-react";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -870,7 +870,7 @@ export const AudioButton = ({
             aria-label="Stop dictation"
             className="group relative flex h-[18px] w-[18px] items-center justify-center rounded-[4px] bg-white-black text-white-black-inverted"
           >
-            <Check size={12} strokeWidth={2.2} className="keep-stroke" />
+            <Square size={10} strokeWidth={2.2} />
             <Tooltip
               left={0}
               bottom={-45}

@@ -250,20 +250,15 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
 
   if (agentStatus) {
-    if (chatCleanupEnabled) {
-      return (
-        <div className="status-indicator">
-          <span className="font-bold text-white-black">{agentStatus}</span>
-        </div>
-      );
-    }
     return (
       <div className="status-indicator">
         <div className="relative transition-all duration-300 ease-linear">
-          <span className="invisible font-bold">{agentStatus}</span>
-          <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent bg-size-200 animate-gradient">
-            {agentStatus}
-          </span>
+          <span className={chatCleanupEnabled ? "font-bold text-white-black" : "invisible font-bold"}>{agentStatus}</span>
+          {!chatCleanupEnabled && (
+            <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent bg-size-200 animate-gradient">
+              {agentStatus}
+            </span>
+          )}
         </div>
       </div>
     );
