@@ -79,7 +79,8 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${sha}" \
               -d "$(jq -n --arg state "$state" --arg desc "$desc" \
-                '{state:$state,context:"prod-health-gate",description:$desc}')" || true
+                --arg url "https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+                '{state:$state,context:"prod-health-gate",description:$desc,target_url:$url}')" || true
           }
           ignored_only_between() {
             local from="$1" to="$2"
@@ -454,11 +455,15 @@ jobs:
   #
   # The gate did not move: "Wait for the production health verdict" reads the
   # same two facts the old `needs` used. The browser checks run only once the
-  # health job concluded `success` AND published the `prod-health-gate`
-  # `success` status for this exact SHA, which health does only after proving
-  # the live site serves this SHA and its probes pass. A failed or superseded
-  # deploy is still never smoke-tested, and an inconclusive write probe still
-  # skips it.
+  # health job concluded `success` for this run's health job AND published the
+  # `prod-health-gate` `success` status for this exact SHA during that same job,
+  # which health does only after proving the live site serves this SHA and its
+  # probes pass. A status from another run, or one older than this run's health
+  # job, never authorises the checks (HYCI-83 review): a re-run of a superseded
+  # SHA exits green without publishing, and must not inherit an older verdict.
+  # A failed or superseded deploy is still never smoke-tested, an inconclusive
+  # write probe still skips it, and an unreadable verdict is reported red rather
+  # than skipped green.
   # workflow_dispatch runs the checks without any of this (nothing to gate
   # on, `health` doesn't run) so this job is dispatchable for manual
   # verification. Only push failures can request guarded rollback.
@@ -469,7 +474,10 @@ jobs:
       statuses: write
       actions: read
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # Covers the whole health budget (30 min, see its own timeout) plus this
+    # job's setup and browser run, so a slow deploy is still smoke-tested
+    # instead of silently skipped (HYCI-83 review).
+    timeout-minutes: 40
     # The GLM QA job (HTPR-6239) reads these: `ran` says the browser checks
     # actually executed (not skipped for a missing session), `ok` its verdict.
     outputs:
@@ -514,6 +522,10 @@ jobs:
         id: setup-npm
         if: steps.provisioned.outputs.ok == 'true' && steps.setup-node.outcome == 'success'
         continue-on-error: true
+        # A speculative setup must never hold a rollback the health job already
+        # requested: the rollback job waits for this job, and core-actions
+        # already bounds its own wait to 8 minutes (HYCI-83 review).
+        timeout-minutes: 8
         # Layout lock imports the server flag registry, which loads Prisma.
         run: |
           npm ci
@@ -532,6 +544,7 @@ jobs:
         id: setup-pw
         if: steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success'
         continue-on-error: true
+        timeout-minutes: 8
         run: ./node_modules/.bin/playwright install --with-deps chromium
 
       # A failed npm ci / playwright install is an UNRUNNABLE check, not a
@@ -574,21 +587,44 @@ jobs:
             exit 0
           fi
           skip() {
+            echo "ok=false" >> "$GITHUB_OUTPUT"
             echo "reason=$1" >> "$GITHUB_OUTPUT"
             echo "::warning::Browser smoke skipped: $1"
             echo "Browser smoke skipped: $1" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           }
-          api() {
-            curl -sS --max-time 20 -H "Authorization: Bearer $GITHUB_TOKEN" \
-              -H "Accept: application/vnd.github+json" "$1"
+          unreadable() {
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$1" >> "$GITHUB_OUTPUT"
+            echo "::error::$1; the browser checks did not run"
+            echo "$1; the browser checks did not run" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           }
-          deadline=$((SECONDS + 1200))
+          read_json() {
+            local url="$1" out="$2" code
+            code=$(curl -sS -o "$out" -w '%{http_code}' --max-time 20 \
+              -H "Authorization: Bearer $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" "$url") || code=000
+            [ "$code" = "200" ] && jq -e . "$out" >/dev/null 2>&1
+          }
+          unread=""
+          # 33 minutes covers the health job's whole 30-minute budget plus
+          # scheduling slack, so a slow deploy is still smoke-tested. The
+          # rollback never waits on this: a health failure ends the wait in one
+          # poll. GATE_BUDGET_SECONDS exists so the gate's own test can reach
+          # the end-of-budget branches without waiting 33 minutes.
+          budget=${GATE_BUDGET_SECONDS:-1980}
+          deadline=$((SECONDS + budget))
           while [ "$SECONDS" -lt "$deadline" ]; do
             # Read the job first: health publishes the status before it exits,
             # so a `success` read here can never precede its own status.
-            health=$(api "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=50" \
-              | jq -r '[.jobs[] | select(.name == "health")][0].conclusion // "pending"' 2>/dev/null) || health="pending"
+            if ! read_json "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=50" "$RUNNER_TEMP/gate-jobs.json"; then
+              unread="could not read this run's jobs; the production health verdict is unknown"
+              sleep 20
+              continue
+            fi
+            health=$(jq -r '[.jobs[] | select(.name == "health")][0].conclusion // "pending"' "$RUNNER_TEMP/gate-jobs.json")
+            health_started=$(jq -r '[.jobs[] | select(.name == "health")][0].started_at // ""' "$RUNNER_TEMP/gate-jobs.json")
             case "$health" in
               success) ;;
               failure|cancelled|timed_out|skipped)
@@ -599,16 +635,45 @@ jobs:
                 continue
                 ;;
             esac
-            state=$(api "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$SHA/statuses?per_page=100" \
-              | jq -r '[.[] | select(.context == "prod-health-gate")][0].state // empty' 2>/dev/null) || state=""
+            if ! read_json "https://api.github.com/repos/$GITHUB_REPOSITORY/commits/$SHA/statuses?per_page=100" "$RUNNER_TEMP/gate-statuses.json"; then
+              unread="could not read the production health verdict for $SHA"
+              sleep 20
+              continue
+            fi
+            state=$(jq -r --arg run "$RUN_ID" --arg since "$health_started" '
+              [ .[]
+                | select(.context == "prod-health-gate")
+                | select((.target_url // "") | contains("/runs/" + $run))
+                | select(.created_at >= $since) ][0].state // empty' "$RUNNER_TEMP/gate-statuses.json")
+            unread=""
             if [ "$state" = "success" ]; then
               echo "ok=true" >> "$GITHUB_OUTPUT"
               echo "Health verdict for $SHA is live and healthy; running the browser checks."
               exit 0
             fi
-            skip "health finished without a live verdict for $SHA (nothing to check, or the deploy was superseded)"
+            skip "health finished without a live verdict for this run and $SHA (nothing to check, or the deploy was superseded)"
           done
-          skip "no production health verdict for $SHA within 20 minutes"
+          if [ -n "$unread" ]; then
+            unreadable "$unread"
+          fi
+          skip "the production health job has not concluded for $SHA within 33 minutes"
+
+      # Green monitoring must never mean "we could not tell": when the verdict
+      # cannot be read, this fails the job and alerts instead of skipping
+      # (HYCI-83 review). It never touches the smoke streak or the rollback.
+      - name: Report an unreadable production health verdict
+        id: gate-unreadable
+        if: ${{ !cancelled() && steps.gate.outcome == 'failure' }}
+        env:
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SHA: ${{ github.sha }}
+        run: |
+          node .github/scripts/production-alert.mjs setup smoke-gate-unreadable "⚠️ hypertasks: the production health verdict for $SHA could not be read, so the browser checks did not run. NOT rolling back. https://app.hypertask.ai" || true
+          echo "::error::Production smoke gate could not read the health verdict; the browser checks did not run"
+          exit 1
 
       - name: Run the smoke checks
         id: smoke
