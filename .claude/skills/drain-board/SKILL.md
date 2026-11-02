@@ -21,7 +21,7 @@ Valentin, 2026-10-03: "makes the agent go through all tickets in the board using
    - **Ask**: needs his decision (money, login and access, security, can't be undone, product direction, or something only he has). One `Question:` comment that @mentions him, yes or no, then move to Valentin Review.
    - **Fix**: everything else. Work it with `/ship <TICKET>`, one ticket at a time, or hand self-contained pieces to Codex helpers (hax, each with its own ledger). Reverify a helper's gates yourself.
 4. **Board writes** only through `vcc`, ending with the `Next:` line and this session's resume command. Read the ticket back after each move. Lists paginate: always `--limit 500`.
-5. **Finish.** `node ~/.agents/skills/unlazy/scripts/gate-check.mjs <drain file>` shows every gate met or abandoned with a reason. Tell Valentin in chat: how many closed, fixed, asked, left alone (with why), plus the board link opened in his pane.
+5. **Finish.** Run the `verify:` line the gates step printed. It shows every gate met or abandoned with a reason, and it hands the checker the ledger's own folder, so no lock or state lands in the project. Tell Valentin in chat: how many closed, fixed, asked, left alone (with why), plus the board link opened in his pane.
 
 ## Not this skill
 

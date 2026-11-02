@@ -286,6 +286,10 @@ test('a board drain keeps one ledger per session outside the project', needsUnla
     assert.equal(fs.readFileSync(b, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1);
     assert.equal(drain('sessionA-full').status, 0);
     assert.equal(fs.readFileSync(a, 'utf8').match(/^- \[ \] drain-11514\./gm).length, 1, 'a rerun duplicated the gates');
+    const printed = drain('sessionA-full').stdout.split('\n').find((line) => line.startsWith('verify: '));
+    assert.ok(printed, 'the gates step printed no verify line');
+    assert.ok(printed.includes(` --root ${path.dirname(a)} `),
+      `the verify line does not hand the checker the ledger folder: ${printed}`);
     const calls = fs.readFileSync(f.calls, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
     assert.deepEqual(calls.at(-1), ['--approve', a, '--root', path.dirname(a)],
       'the checker was not handed the home ledger root as its state root');

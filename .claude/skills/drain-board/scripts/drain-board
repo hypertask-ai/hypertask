@@ -44,6 +44,8 @@ case "${1:-}" in
     node "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" --approve "$F" --root "$(dirname "$F")" >/dev/null || status=$?
     # Exit 1 only means tickets are still open, which is expected while draining.
     [ "$status" -le 1 ] || exit "$status"
-    echo "$F: $n new ticket gates, $(grep -c '^- \[ \] drain-' "$F") open" ;;
+    echo "$F: $n new ticket gates, $(grep -c '^- \[ \] drain-' "$F") open"
+    printf 'verify: node %q --root %q %q\n' \
+      "$HOME/.agents/skills/unlazy/scripts/gate-check.mjs" "$(dirname "$F")" "$F" ;;
   *) echo "usage: drain-board gates <project-id> | check <TICKET>" >&2; exit 2 ;;
 esac
