@@ -1,4 +1,4 @@
-version: 14
+version: 15
 last_updated: 2026-11-02
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is docs/ci.md; this file is the machine-readable companion."
 
@@ -224,12 +224,54 @@ stuck_job_recovery:
   report_only: [production_push_runs, other_run_events]
   never: [self_hosted_runners, other_repositories, paid_services]
 
+production_watch:
+  ticket: https://app.hypertask.ai/detail/project-4060/984
+  workflow: .github/workflows/production-watch.yml
+  scripts:
+    ticks: .github/scripts/production-watch.cjs
+    chain: .github/scripts/schedule-chain.cjs
+  required: false
+  triggers: [schedule, workflow_dispatch]
+  cron_utc: "7-59/30 * * * *"
+  cron_role: restart a chain that died, never the tick itself
+  passes:
+    five_minute: [api_reachability, core_actions_probe]
+    thirty_minute: [deploy_drift, pusher_status]
+  ticks_per_link: 6
+  tick_gap_seconds: 300
+  timeout_minutes: 45
+  chain:
+    hand_off: a link that used its ticks dispatches the next one at once
+    dispatch: workflow_dispatch on production
+    guard: the dispatch is skipped while another link of this workflow is queued or running
+    backstop: a scheduled or pushed run stands down when a link is already in flight
+    dead_chain: a run list that cannot be read, or a refused dispatch, stops the chain loudly
+    cost: one of the twenty parallel jobs, free hosted minutes only, because the repository is public
+  measured_schedule_delivery:
+    before: 67 of 2352 asked runs (2.8%), median gap 130 minutes, worst gap 6.5 hours
+    window: the seven days to 2026-11-02T04:17Z
+  moved_out_of: .github/workflows/prod-health.yml
+  moved_out_scripts: [.github/scripts/production-drift.sh, .github/scripts/pusher-status.sh]
+  prod_health_keeps: every push job unchanged, and the same monitoring jobs on manual dispatch
+  drift_stands_down_while: a prod-health run is in flight
+  mutates_production: false
+  never: [self_hosted_runners, paid_services, rollback_authority]
+
 required_check_settings_monitor:
   ticket: https://app.hypertask.ai/detail/project-4060/780
   workflow: .github/workflows/required-check-settings.yml
   required: false
   triggers: [schedule, workflow_dispatch]
   cron_utc: "17 * * * *"
+  cron_role: restart a chain that died
+  chain:
+    job: chain
+    script: .github/scripts/schedule-chain.cjs
+    hand_off: sixty minutes after the run that just verified began
+    dispatch: workflow_dispatch on production
+    guard: the dispatch is skipped while another link is queued or running
+    concurrency_group: required-check-settings-chain
+    reason: the cron delivered 30 of 168 runs in the seven days to 2026-11-02T04:17Z
   trusted_code_ref: production
   runs_on: ubuntu-latest
   per_pr_settings_api_reads: 0
@@ -523,8 +565,8 @@ policies:
       rename_detection: disabled
       health_comparison: same_script_between_live_and_tip
       health_empty_tree_comparison: skip
-      scheduled_health_checks: unchanged
     production_health_check_after_deploy: true
+    scheduled_health_checks: chained_from_production_watch_yml
     failed_build_keeps_previous_deployment_live: true
     automatic_rollback:
       workflow: .github/workflows/prod-health.yml

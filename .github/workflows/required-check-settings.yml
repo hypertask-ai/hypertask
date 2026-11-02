@@ -1,5 +1,11 @@
 name: Required Check Settings
 
+# YPER4-984. The hourly cron delivered 30 of the 168 runs it asked for in the
+# seven days to 2026-11-02T04:17Z, so the settings gate was checked a few times a
+# day instead of hourly. A dispatch is not throttled, so the last job of a run
+# now starts the next one an hour after this run began
+# (.github/scripts/schedule-chain.cjs) and the cron only restarts a chain that
+# died: it stands down while another link is queued or running.
 on:
   schedule:
     - cron: '17 * * * *'
@@ -48,3 +54,33 @@ jobs:
         with:
           path: .settings-proof
           key: required-check-settings-proof-${{ github.run_id }}
+
+  chain:
+    needs: [verify]
+    # A red verify still restarts the chain: the monitor being down is not a
+    # reason for the next hour to be unmonitored.
+    if: ${{ !cancelled() }}
+    permissions:
+      contents: read
+      actions: write
+    concurrency:
+      # Own group: this job holds its slot for the rest of the hour, and the
+      # verify job must stay dispatchable by hand in the meantime.
+      group: required-check-settings-chain
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '^24.22.1'
+          check-latest: true
+      - name: Start the next hourly link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node .github/scripts/schedule-chain.cjs hand-off --workflow required-check-settings.yml --gap-minutes 60

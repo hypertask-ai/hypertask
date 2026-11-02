@@ -2,19 +2,17 @@ name: Prod Health Check + Auto-Rollback
 
 # After every push to production (= production deploy), wait for the Vercel
 # deployment to finish and check the live app. Confirmed application failures
-# freeze merging and revert production; manual/scheduled runs only report.
+# freeze merging and revert production; a manual run only reports.
+#
+# YPER4-984. The two scheduled passes this file used to own (a 30-minute drift and
+# Pusher check, a 5-minute reachability and core-actions pass) moved to
+# production-watch.yml, which chains itself instead of waiting for a cron: GitHub
+# delivered 67 of the 2352 runs these crons asked for in the seven days to
+# 2026-11-02T04:17Z. Everything a push runs is unchanged, and a manual dispatch
+# still runs the same monitoring jobs.
 on:
   push:
     branches: [production]
-  schedule:
-    # Every 30 min, catch production silently serving an older commit than the
-    # production tip (HTPR-4781). Concurrent sessions each deploy from their own
-    # worktree, so an older build can take the production alias minutes after a
-    # newer merge went READY and nothing warns you.
-    - cron: "*/30 * * * *"
-    # HTPR-6267: run the production core-actions probe every five minutes. The
-    # three-minute offset keeps it from colliding with the drift schedule.
-    - cron: "3-58/5 * * * *"
   workflow_dispatch:
     inputs:
       provision_core_actions:
@@ -740,9 +738,10 @@ jobs:
   # A newer merge can go READY and then an older build from another session's
   # worktree takes the production alias, silently reverting shipped work
   # (HTPR-4781: two features disappeared for ~20 minutes and only a manual API
-  # check caught it). Nothing else notices, so this asks every 30 minutes.
+  # check caught it). Nothing else notices, so it asks every 30 minutes from
+  # production-watch.yml; a manual dispatch of this workflow runs it too.
   drift:
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') }}
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -760,142 +759,23 @@ jobs:
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          set -uo pipefail
-
-          api() { curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
-
-          TIP=$(git rev-parse HEAD)
-          DRIFT_DIR="${RUNNER_TEMP:-/tmp}/drift-$$"
-          mkdir -p "$DRIFT_DIR"
-
-          # What users hit. The newest READY row is only a guess at live
-          # (HTPR-6511).
-          fetch_live_version() {
-            rm -f "$DRIFT_DIR/version.json" "$DRIFT_DIR/version.h"
-            version_code=$(curl -s -o "$DRIFT_DIR/version.json" -D "$DRIFT_DIR/version.h" -w '%{http_code}' --max-time 30 \
-              "https://app.hypertask.ai/api/version") || version_code=000
-            version_challenged=no
-            if grep -qi '^x-vercel-mitigated: *challenge' "$DRIFT_DIR/version.h" 2>/dev/null; then
-              version_challenged=yes
-            fi
-            LIVE=$(jq -r '.buildId // empty' "$DRIFT_DIR/version.json" 2>/dev/null) || LIVE=""
-          }
-
-          fetch_live_version
-
-          if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE" ]; then
-            echo "/api/version unverifiable (status $version_code, challenged=$version_challenged); falling back to Vercel production target"
-            LIVE=$(api "/v9/projects/$PROJECT_ID?teamId=$TEAM_ID" \
-              | jq -r '.targets.production.meta.githubCommitSha // empty') || LIVE=""
-          fi
-
-          if [ -z "$LIVE" ]; then
-            echo "No live production SHA from /api/version or Vercel target; nothing to compare."
-            exit 0
-          fi
-
-          echo "production tip: $TIP"
-          echo "live deploy: $LIVE"
-          [ "$TIP" = "$LIVE" ] && { echo "Production is on the production tip."; exit 0; }
-
-          # A deploy in flight is normal: the tip is only a problem once its own
-          # build has had time to finish, so ignore a tip pushed in the last 15
-          # minutes and only complain about a live commit that is genuinely older.
-          AGE=$(( $(date +%s) - $(git log -1 --format=%ct "$TIP") ))
-          [ "$AGE" -lt 900 ] && { echo "Staging tip is ${AGE}s old; a deploy is probably still in flight."; exit 0; }
-
-          if git merge-base --is-ancestor "$LIVE" "$TIP" 2>/dev/null; then
-            # Commits the deploy ignore-step skips (docs, .github) never
-            # build, so being "behind" by only those is the expected steady state.
-            if node scripts/vercel-ignore-build.cjs --between "$LIVE" "$TIP"; then
-              echo "Live deploy is behind only by non-building commits (docs/CI); nothing to promote."
-              exit 0
-            fi
-            # A build that failed, or is still running, is not drift: the health
-            # job already alarms it (cause deploy-build) and the live site
-            # correctly keeps the last good deploy. Reporting both filed two
-            # tickets for one broken build (YPER4-969). A canceled build has no
-            # other alarm, so it still counts as drift.
-            TIP_STATE=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=20" \
-              | jq -r --arg sha "$TIP" 'if (.deployments | type) == "array" then
-                    ([.deployments[] | select(.meta.githubCommitSha == $sha)]
-                      | (map(select(.state == "READY")) + .) | .[0].state // "NOTFOUND")
-                  else "UNKNOWN" end') || TIP_STATE="UNKNOWN"
-            echo "tip deploy state: $TIP_STATE"
-            case "$TIP_STATE" in
-              ERROR)
-                echo "The production build for ${TIP:0:9} failed; the build alarm covers it, so this is not drift."
-                exit 0 ;;
-              QUEUED|BUILDING|INITIALIZING)
-                echo "The production build for ${TIP:0:9} is still $TIP_STATE; a deploy is in flight."
-                exit 0 ;;
-            esac
-            BEHIND=$(git rev-list --count "$LIVE..$TIP" 2>/dev/null || echo "?")
-
-            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is $BEHIND commit(s) BEHIND the production tip ${TIP:0:9}. Alert only; no deployment was promoted."
-          else
-            MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the production tip ${TIP:0:9}. The live app is on a commit that is not on production at all."
-          fi
-
-          node .github/scripts/production-alert.mjs setup deploy-drift "$MSG" || true
-          echo "::error::$MSG"
-          exit 1
+        run: bash .github/scripts/production-drift.sh
 
   # ── Pusher status: are live updates (board moves, comments) actually live? ──
   # HTPR-6289: a column move didn't live-update and there was no signal telling
   # us whether Pusher (the realtime service the app uses to push board/task
   # changes to open tabs) was degraded. This just asks Pusher's own status page.
   pusher-status:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '*/30 * * * *') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Check Pusher status
-        run: |
-          set -uo pipefail
-
-          STATUS_JSON=$(curl -s --max-time 15 "https://status.pusher.com/api/v2/status.json") || STATUS_JSON=""
-          INDICATOR=$(echo "$STATUS_JSON" | jq -r '.status.indicator // empty') || INDICATOR=""
-          DESCRIPTION=$(echo "$STATUS_JSON" | jq -r '.status.description // "unknown"') || DESCRIPTION="unknown"
-
-          if [ -z "$INDICATOR" ]; then
-            echo "::warning::Could not read Pusher status page; skipping"
-            exit 0
-          fi
-
-          echo "Pusher status: $INDICATOR ($DESCRIPTION)"
-
-          if [ "$INDICATOR" = "none" ]; then
-            echo "Pusher is operational."
-            exit 0
-          fi
-
-          # Also surface which Channels component is affected, for a useful alert.
-          COMPONENTS_JSON=$(curl -s --max-time 15 "https://status.pusher.com/api/v2/components.json") || COMPONENTS_JSON=""
-          AFFECTED=$(echo "$COMPONENTS_JSON" | jq -r '[.components[]? | select(.name | test("Channels"; "i")) | select(.status != "operational") | "\(.name): \(.status)"] | join(", ")') || AFFECTED=""
-          [ -z "$AFFECTED" ] && AFFECTED="no Channels component reported as degraded"
-
-          case "$INDICATOR" in
-            critical|major)
-              echo "Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
-              echo "::error::Pusher status is $INDICATOR: $DESCRIPTION ($AFFECTED)"
-              exit 1
-              ;;
-            minor)
-              echo "Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
-              echo "::warning::Pusher status is $INDICATOR: $DESCRIPTION ($AFFECTED)"
-              exit 0
-              ;;
-            *)
-              echo "::warning::Pusher status is unrecognized indicator '$INDICATOR': $DESCRIPTION"
-              exit 0
-              ;;
-          esac
+        run: bash .github/scripts/pusher-status.sh
 
   core-actions:
     needs: health
-    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '3-58/5 * * * *')) }}
+    if: ${{ !cancelled() && inputs.provision_core_actions != true && ((github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success') || github.event_name == 'workflow_dispatch')) }}
     concurrency:
       group: production-core-actions-smoke-fixture
       cancel-in-progress: false
@@ -1052,7 +932,7 @@ jobs:
           [ "$(echo "$RESULT" | jq -r '.action')" != "failed" ]
 
   api-reachability:
-    if: ${{ github.event_name == 'push' || (github.event_name == 'schedule' && github.event.schedule == '3-58/5 * * * *') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
