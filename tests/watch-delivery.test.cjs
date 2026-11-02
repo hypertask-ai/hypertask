@@ -324,6 +324,28 @@ test('a push that carries several commits counts once, because only its tip star
   }
 });
 
+test('a shallow checkout is refused rather than counting a fraction of the week as every push', async () => {
+  const { gitPushes } = await subject;
+  const since = Date.parse('2026-11-01T00:00:00Z');
+  const until2 = since + 2 * DAY;
+  const when = `--since=${new Date(since).toISOString()} --until=${new Date(until2).toISOString()}`;
+  const answers = {
+    'config --get remote.origin.url': 'https://github.com/example/repo.git\n',
+    'rev-parse --is-shallow-repository': 'true\n',
+    [`log --first-parent ${when} --format=%H origin/production`]: 'a\na\na\n',
+  };
+  const git = table => (command, args, options, done) => {
+    const answer = table[args.join(' ')];
+    return answer === undefined ? done(new Error(`unexpected git ${args.join(' ')}`), '', '') : done(null, answer, '');
+  };
+  await assert.rejects(gitPushes('example/repo', since, until2, process.cwd(), git(answers)), /shallow.*fetch --deepen/);
+  assert.equal(
+    await gitPushes('example/repo', since, until2, process.cwd(), git({ ...answers, 'rev-parse --is-shallow-repository': 'false\n' })),
+    3,
+    'a full checkout still counts its tips',
+  );
+});
+
 test('the daily count counts its own mornings, so a morning it missed shows in the next report', async () => {
   const { formatWindow, watchRow, compareWindows, verdictLines, REPORT_WATCH } = await subject;
   const window = until - 7 * DAY;
