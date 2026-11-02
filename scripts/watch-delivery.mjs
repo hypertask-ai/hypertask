@@ -44,6 +44,15 @@ export const WATCHES = [
 
 export const PUSH_WATCH = { workflow: 'prod-health.yml', branch: 'production' };
 
+export const REPORT_WATCH = {
+  workflow: 'watch-delivery-report.yml',
+  label: 'the daily count itself',
+  askedPerDay: 1,
+  unit: 'runs, one a morning',
+  events: ['schedule', 'workflow_dispatch'],
+  current: false,
+};
+
 const usage = [
   'Usage: node scripts/watch-delivery.mjs [--days 7] [--since YYYY-MM-DD] [--until YYYY-MM-DD]',
   '       [--repo owner/name] [--only watches|pushes] [--baseline] [--json]',
@@ -53,7 +62,8 @@ const usage = [
   'counts as one tip on the first-parent history of origin/production, because a squash or a',
   'merge push lands one there and every commit of a multi-commit push is not a push of its own.',
   '--baseline also measures the window just before this one, so the report says whether a',
-  'fix held. It reads run history only; it dispatches and edits nothing.',
+  'fix held. It reads run history only; it dispatches and edits nothing. The daily count is',
+  'measured as a row of its own, so a morning it missed shows up in the next morning.',
 ].join('\n');
 
 const day = time => new Date(time).toISOString().slice(0, 10);
@@ -159,6 +169,10 @@ export function formatWindow(label, window) {
   for (const row of window.watches) {
     lines.push(`${row.label}: asked ${row.asked} (${row.unit}), ran ${row.delivered}, ${percent(row.rate)}, ${row.coveredDays} days of record, median gap ${gap(row.medianGap)}, worst gap ${gap(row.worstGap)}${row.queued ? `, ${row.queued} queued and not counted` : ''}.`);
     if (row.perDay.length) lines.push(`Per day: ${row.perDay.map(entry => `${entry.day} ${entry.runs}`).join(', ')}.`);
+  }
+  const report = window.watches.find(row => row.workflow === REPORT_WATCH.workflow);
+  if (report && report.delivered < report.asked) {
+    lines.push(`short of nine in ten: the daily count itself ran ${report.delivered} of ${report.asked} mornings.`);
   }
   if (window.pushes) {
     lines.push('');
@@ -289,7 +303,7 @@ export async function measureWindow({ repo, sinceMs, untilMs, only, pushes: coun
   const watches = [];
   const legs = [];
   if (only !== 'pushes') {
-    for (const watch of WATCHES) {
+    for (const watch of [...WATCHES, REPORT_WATCH]) {
       if (legs.some(leg => leg.workflow === watch.workflow)) continue;
       legs.push({ workflow: watch.workflow, rows: runsFor(watch.workflow), first: oldestRunOf(watch.workflow) });
     }
@@ -304,7 +318,7 @@ export async function measureWindow({ repo, sinceMs, untilMs, only, pushes: coun
   const runsOf = workflow => legRows.find(leg => leg.workflow === workflow)?.runs ?? [];
   const oldestOf = workflow => legRows.find(leg => leg.workflow === workflow)?.first;
   if (only !== 'pushes') {
-    for (const watch of WATCHES) {
+    for (const watch of [...WATCHES, REPORT_WATCH]) {
       watches.push(watchRow(watch, {
         sinceMs,
         untilMs,

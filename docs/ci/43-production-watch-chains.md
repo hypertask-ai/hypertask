@@ -144,3 +144,12 @@ a week after they started, and a red run every morning for that week would teach
 people to ignore it. A daily cron is one run a day against a schedule GitHub
 throttles, so a late link costs hours rather than a day, and the manual dispatch
 covers a missed morning.
+
+The report counts itself as well. `watch-delivery-report.yml` is a row with one run
+asked a morning, so the next morning's report says which mornings the count missed
+and raises its own `short of nine in ten: the daily count itself ran 6 of 7
+mornings` line as a `::warning::`, the same way a short watch is reported. That row
+is never judged as a watch: it carries `current: false`, because a count that is
+younger than a week has no week to be judged on and must not read as a broken watch.
+The one gap it cannot close is a report that never runs again, which by definition
+cannot count itself: that is what the ticket recheck is for.
