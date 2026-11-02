@@ -36,7 +36,9 @@ test("a link dispatches the hour when it starts and starts the next link an hour
 
   assert.match(steps[0], /hand-off --workflow ux-signoff-gate\.yml --gap-minutes 0 --chain-events schedule,workflow_dispatch$/);
   assert.match(steps[1], /hand-off --workflow ux-signoff-chain\.yml --gap-minutes 60$/);
-  assert.equal(job.steps[0]["continue-on-error"], true, "a refused reconciliation must not cost the chain");
-  assert.ok(job.timeout_minutes >= 60 || job["timeout-minutes"] >= 60, "the wait is an hour");
+
+  const dispatch = job.steps.find(step => /hand-off --workflow ux-signoff-gate\.yml/.test(step.run ?? ""));
+  assert.equal(dispatch?.["continue-on-error"], true, "a refused reconciliation must not cost the chain");
+  assert.ok(job["timeout-minutes"] >= 60, "the wait is an hour");
   assert.deepEqual(Object.keys(job.permissions).sort(), ["actions", "contents"]);
 });
