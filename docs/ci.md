@@ -1657,7 +1657,7 @@ only, because the repository is public. The number this ticket tracks is the sha
 of asked-for passes that actually run, which the run list of each workflow reports
 by event from then on.
 
-## Counting the delivery (HYCI-79)
+## Counting the delivery (HYCI-79, HYCI-81)
 
 `scripts/watch-delivery.mjs` reads the run history and answers the one question the
 fix leaves open: does each watch still deliver the passes it asks for.
@@ -1668,11 +1668,23 @@ node scripts/watch-delivery.mjs --days 7 --baseline # plus the window before it
 node scripts/watch-delivery.mjs --only pushes       # the push trigger alone
 ```
 
-It reads three sources: `production-watch.yml` (asked: 48 links a day, six five-minute
-passes inside each link), `required-check-settings.yml` (24 runs a day)
-and the legacy `prod-health.yml` cron schedules (336 runs a day) so the before and the
-after of the fix sit in one table. The push half counts `prod-health.yml` push runs
-against the commits that landed on `origin/production`.
+It reads four sources: `production-watch.yml` (asked: 48 links a day, six five-minute
+passes inside each link), `required-check-settings.yml` (24 runs a day),
+`ux-signoff-chain.yml` (24 links a day, the hourly design check) and the legacy
+`prod-health.yml` cron schedules (336 runs a day) so the before and the after of the
+fix sit in one table. The push half counts `prod-health.yml` push runs against the
+commits that landed on `origin/production`.
+
+The design check is counted on `ux-signoff-chain.yml`, never on `ux-signoff-gate.yml`:
+the gate also runs on every pull request, and such a run neither waits out the hour nor
+starts a successor, so reading it as a link would skip the hour instead of counting it.
+The chain's run list is the only record of the hourly ticks, which is why that is the
+one that is read.
+
+A rate alone hides what a person waits through, so each watch also reports the median
+and the worst gap between its links. The pre-fix design check delivered 12 links in a
+week with a 266-minute median and a 424-minute worst gap: seven runs in a hundred, and
+a wireframe question that could sit most of a day for its verdict.
 
 A watch passes when it delivered at least nine runs in ten of what it asked for over
 seven days of its own record, and its record starts at its first run ever. That run is

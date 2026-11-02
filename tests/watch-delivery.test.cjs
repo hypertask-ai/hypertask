@@ -127,6 +127,7 @@ test('legacy cron runs and chained runs are counted apart', async () => {
   const pages = {
     'production-watch.yml': [run('production-watch.yml', 'workflow_dispatch', until - HOUR)],
     'required-check-settings.yml': [run('required-check-settings.yml', 'schedule', until - HOUR)],
+    'ux-signoff-chain.yml': [run('ux-signoff-chain.yml', 'schedule', until - HOUR)],
     'prod-health.yml': [
       run('prod-health.yml', 'schedule', until - 2 * HOUR),
       run('prod-health.yml', 'push', until - 3 * HOUR),
@@ -141,10 +142,75 @@ test('legacy cron runs and chained runs are counted apart', async () => {
   assert.deepEqual(window.watches.map(row => [row.label, row.delivered]), [
     ['production watch, chained', 1],
     ['hourly settings check', 1],
+    ['hourly design check, chained', 1],
     ['production watch, legacy cron', 1],
   ]);
   assert.equal(window.pushes.commits, 2);
   assert.equal(window.pushes.runs, 1);
+});
+
+test('the hourly design check is counted from its chain, so a pull-request gate run is never a link', async () => {
+  const { measureWindow, WATCHES } = await subject;
+  const design = WATCHES.find(watch => watch.label.startsWith('hourly design check'));
+  assert.equal(design.workflow, 'ux-signoff-chain.yml');
+  assert.deepEqual(design.events, ['schedule', 'workflow_dispatch']);
+
+  const reads = [];
+  const within = (path, runs) => {
+    const bounds = /created=([^&]+)/.exec(path)?.[1];
+    if (!bounds) return runs;
+    const [from, to] = bounds.split('..').map(value => Date.parse(value));
+    return runs.filter(entry => Date.parse(entry.created_at) >= from && Date.parse(entry.created_at) < to);
+  };
+  const api = async path => {
+    reads.push(path);
+    if (path.includes('ux-signoff-chain.yml')) {
+      return {
+        workflow_runs: within(path, Array.from({ length: 24 * 7 }, (_, index) => run(
+          'ux-signoff-chain.yml',
+          index === 5 ? 'workflow_dispatch' : 'schedule',
+          until - 7 * DAY + index * HOUR,
+        ))),
+      };
+    }
+    if (path.includes('ux-signoff-gate.yml')) {
+      return {
+        workflow_runs: Array.from({ length: 43 }, (_, index) => run('ux-signoff-gate.yml', 'pull_request_target', until - 7 * DAY + index * 4 * HOUR)),
+      };
+    }
+    return { workflow_runs: [] };
+  };
+  const window = await measureWindow({ repo: 'example/repo', sinceMs: until - 7 * DAY, untilMs: until, only: 'watches', commits: async () => 0 }, api);
+  const row = window.watches.find(entry => entry.label === 'hourly design check, chained');
+  assert.equal(row.asked, 168);
+  assert.equal(row.delivered, 168);
+  assert.equal(row.enough, true);
+  assert.equal(reads.some(path => path.includes('ux-signoff-gate.yml')), false, 'a gate run neither waits out the hour nor starts a successor, so its run list is never read as links');
+});
+
+test('the gap meter reads the pre-fix design-check week as a wait of most of a day', async () => {
+  const { formatWindow, watchRow, WATCHES } = await subject;
+  const design = WATCHES.find(watch => watch.label.startsWith('hourly design check'));
+
+  let at = until - 7 * DAY;
+  const starved = [run('ux-signoff-chain.yml', 'schedule', at)];
+  for (const minutes of [266, 266, 266, 266, 266, 266, 266, 266, 266, 266, 266, 424]) {
+    at += minutes * 60000;
+    starved.push(run('ux-signoff-chain.yml', 'schedule', at));
+  }
+  const starvedRow = watchRow(design, { sinceMs: until - 7 * DAY, untilMs: until, runs: starved, firstRecordedMs: until - 30 * DAY });
+  assert.equal(starvedRow.delivered, 13);
+  assert.equal(starvedRow.medianGap, 266);
+  assert.equal(starvedRow.worstGap, 424, 'the 424-minute wait is the design question that sat most of a day');
+
+  const healthy = Array.from({ length: 24 * 7 }, (_, index) => run('ux-signoff-chain.yml', 'schedule', until - 7 * DAY + index * HOUR));
+  const healthyRow = watchRow(design, { sinceMs: until - 7 * DAY, untilMs: until, runs: healthy, firstRecordedMs: until - 30 * DAY });
+  assert.equal(healthyRow.medianGap, 60);
+  assert.equal(healthyRow.worstGap, 60);
+
+  const text = formatWindow('Measured window', { sinceMs: until - 7 * DAY, untilMs: until, watches: [starvedRow], pushes: null });
+  assert.match(text, /\| Median gap \| Worst gap \| Nine in ten \|/);
+  assert.match(text, /worst gap 424m \(7\.1h\)/);
 });
 
 test('push delivery above the count of commits is clamped, and a drop against the earlier window is a regression', async () => {
