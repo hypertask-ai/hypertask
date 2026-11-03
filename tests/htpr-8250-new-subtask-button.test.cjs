@@ -17,6 +17,7 @@ const addParentRoute = "/api/tasks/add-parent";
 let enabled = false;
 let listed = [];
 let posted = [];
+let inputProps = null;
 const created = [];
 const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
@@ -36,7 +37,10 @@ const stubs = {
   "@/components/Common/CommonModalComponents": {
     ModalContainerCustom: container,
     ModalHeaderComp: ({ header }) => React.createElement("div", null, header),
-    ModalInput: (props) => React.createElement("input", { value: props.value, placeholder: props.placeholder, onChange: props.onChange }),
+    ModalInput: (props) => {
+      inputProps = props;
+      return React.createElement("input", { value: props.value, placeholder: props.placeholder });
+    },
     ModalListContainer: box,
     ModalRowElementContainer: ({ children, onClick }) => React.createElement("li", { onClick: () => onClick?.(0) }, children),
   },
@@ -71,6 +75,7 @@ test.beforeEach(async () => {
   enabled = false;
   listed = [];
   posted = [];
+  inputProps = null;
   created.length = 0;
   closed = 0;
   dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/detail/project-15/8250" });
@@ -127,10 +132,9 @@ test("typing keeps the create row first and names the text", async () => {
   enabled = true;
   listed = tasks;
   await render(Modal, props());
-  const input = document.querySelector("input");
+  assert.equal(rows()[0].textContent.trim(), "+ Create new sub-task");
   await act(async () => {
-    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, "release");
-    input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    inputProps.onChange({ target: { value: "release" } });
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
   assert.equal(rows()[0].textContent.trim(), 'Create sub-task "release"');
