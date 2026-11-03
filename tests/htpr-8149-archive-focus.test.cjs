@@ -43,6 +43,7 @@ function load(names, file, env) {
 function fixture(enabled = true, visibleIds = [1, 3, 5]) {
   const dom = new JSDOM('<div class="section-container" tabindex="-1"><div id="droppable-section-container-11"></div></div>');
   const document = dom.window.document;
+  globalThis.document = document;
   const column = document.querySelector('.section-container');
   const list = document.getElementById('droppable-section-container-11');
   let sections = [{ sectionId: 11, section_title: 'Done', items: [1, 2, 3, 4, 5].map(id => ({ id })) }, { sectionId: 12, section_title: 'AI Review', items: [{ id: 99 }] }];

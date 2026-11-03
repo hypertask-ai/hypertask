@@ -407,8 +407,10 @@ const UpdateKanban = () => {
     );
     updateActiveItemAndItemInView(nextId, projectId, sectionId);
     if (keepColumnFocus && nextId === null) {
-      document.getElementById(`droppable-section-container-${sectionId}`)
-        ?.closest<HTMLElement>(".section-container")?.focus({ preventScroll: true });
+      globalThis.document
+        ?.getElementById(`droppable-section-container-${sectionId}`)
+        ?.closest<HTMLElement>(".section-container")
+        ?.focus({ preventScroll: true });
     }
   }
   async function removeFromListWithStatus(
@@ -478,7 +480,8 @@ const UpdateKanban = () => {
         itemIndex,
         projectId,
         scope: status === "Archive" ? "column" : "board",
-        keepColumnFocus: status === "Archive" && options.focusSections !== undefined,
+        keepColumnFocus:
+          status === "Archive" && (archiveColumnBoundary || options.focusSections !== undefined),
       });
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);
