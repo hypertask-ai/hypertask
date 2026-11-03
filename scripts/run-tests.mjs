@@ -235,7 +235,7 @@ process.on("exit", (exitCode) => {
 });
 
 if (cjsTests.length > 0) {
-  const { serial, pool, safe, weightOf } = await classifySuite({ root, files: cjsTests });
+  const { serial, pool, safe, weightOf, workOf } = await classifySuite({ root, files: cjsTests });
   for (const file of serial) {
     await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`, { serial: true });
   }
@@ -265,7 +265,7 @@ if (cjsTests.length > 0) {
       { concurrency: poolWidth, deferred: true },
     ));
   }
-  const laneGroups = partitionSafeFiles(sharedFiles, lanes, weightOf);
+  const laneGroups = partitionSafeFiles(sharedFiles, lanes, workOf);
   for (const [index, files] of laneGroups.entries()) {
     const batches = batchLaneFiles(files, { maxFiles: TEST_LANE_FILE_CAP, maxBytes: TEST_LANE_BYTE_CAP, weightOf });
     jobs.push((async () => {

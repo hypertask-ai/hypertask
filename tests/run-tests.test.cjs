@@ -394,3 +394,39 @@ test("the todo scan reads known-bug todos only, including indented and CRLF outp
   ].join("\r\n")), ["repaired bug", "nested bug"]);
   assert.deepEqual(findPassingTodos(""), []);
 });
+
+test("shared lanes pack on measured time, not on source length", async () => {
+  const { classifySuite, partitionSafeFiles } = await import(pathToFileURL(path.join(root, "scripts/test-lanes.mjs")).href);
+  const directory = mkdtempSync(path.join(tmpdir(), "run-tests-lane-work-"));
+  try {
+    mkdirSync(path.join(directory, "tests"), { recursive: true });
+    mkdirSync(path.join(directory, "config"), { recursive: true });
+    const bigFast = "x".repeat(100_000);
+    const sources = {
+      "wide.test.cjs": `require('node:test')('wide', () => {}); // ${bigFast}`,
+      ...Object.fromEntries(Array.from({ length: 6 }, (_, index) => [
+        `narrow-${index}.test.cjs`, `require('node:test')('narrow ${index}', () => {});`,
+      ])),
+    };
+    for (const [file, source] of Object.entries(sources)) writeFileSync(path.join(directory, "tests", file), source);
+    const files = Object.keys(sources).map((file) => `tests/${file}`);
+    const minutes = 20 * 60 * 1000;
+    const measured = { "tests/wide.test.cjs": 1000, ...Object.fromEntries(files.filter((file) => file !== "tests/wide.test.cjs").map((file) => [file, minutes])) };
+    writeFileSync(path.join(directory, "config/test-duration-weights.json"), JSON.stringify({ defaultWorkMs: 280, files: measured }));
+
+    const { safe, weightOf, workOf } = await classifySuite({ root: directory, files });
+    assert.equal(safe.length, files.length, "every clean file may share a lane");
+    assert.equal(workOf("tests/narrow-0.test.cjs"), minutes, "lane work comes from the measured file times");
+    assert.equal(workOf("tests/unmeasured.test.cjs"), 280, "an unmeasured file falls back to the default work");
+    assert.equal(weightOf("tests/wide.test.cjs"), sources["wide.test.cjs"].length, "byte weight still measures source length for the batch caps");
+
+    const laneWall = (lanes, work) => lanes.map((lane) => lane.reduce((total, file) => total + work(file), 0));
+    const onTime = laneWall(partitionSafeFiles(safe, 2, workOf), workOf);
+    const onBytes = laneWall(partitionSafeFiles(safe, 2, weightOf), workOf);
+    const average = (walls) => walls.reduce((total, wall) => total + wall, 0) / walls.length;
+    assert.ok(Math.max(...onTime) <= average(onTime) * 1.05, `time packed lanes ${onTime} balance`);
+    assert.ok(Math.max(...onBytes) > average(onBytes) * 10, `byte packed lanes ${onBytes} do not`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
