@@ -188,6 +188,7 @@ import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
+import { HTPR_8274_REMOVE_SHORTCUT_TIP_FLAG } from "@/lib/flags/definitions/htpr-8274-remove-shortcut-tip";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
@@ -316,6 +317,7 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
+  const shortcutTipRemoved = useFlag(HTPR_8274_REMOVE_SHORTCUT_TIP_FLAG);
   const myTasksSingleCommandCenter = useFlag(HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
@@ -1240,7 +1242,7 @@ export default function GlobalProvider({
         position={mbl ? "top-right" : "bottom-left"}
       />
       <SingleUndoToaster mobile={mbl} appShellRailOn={appShellRailOn} />
-      <ShortcutArchiveNudge />
+      {!shortcutTipRemoved && <ShortcutArchiveNudge />}
 
       {showGlobalCreateHTCTask.show && (
         <CreateTaskGlobally
