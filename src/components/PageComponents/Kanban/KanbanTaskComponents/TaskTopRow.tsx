@@ -84,11 +84,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
           ) : (
             <></>
           )}
-          <p
-            className={`task-ticket-id font-medium text-content sm:text-meta uppercase text-left ${
-              cleanup ? "text-[#8e9093]" : "text-text-light-gray"
-            }`}
-          >{`${ticketNumber}`}</p>
+          <p className="task-ticket-id font-medium text-content sm:text-meta text-text-light-gray uppercase text-left">{`${ticketNumber}`}</p>
         </span>
 
         {isMbl ? (

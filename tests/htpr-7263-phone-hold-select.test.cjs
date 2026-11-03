@@ -24,6 +24,7 @@ function fixture(t, { enabled = true, mobile = true, selectAll = true, overview 
   let currentEnabled = enabled;
   const load = loader({
     "@/hooks/useFlag": { useFlag: key => key === flag ? currentEnabled : key === selectAllFlag && selectAll },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": {
       HTPR_7260_KANBAN_SELECT_ALL_FLAG: selectAllFlag,
       HTPR_7263_PHONE_HOLD_SELECT_FLAG: flag,

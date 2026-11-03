@@ -43,6 +43,7 @@ function navigationMocks(client, pathname, react = React) {
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-7129-board-card-fresh-after-escape"].includes(key)) return false; assert.fail(`Unexpected flag: ${key}`); } },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: ({ initialTask }) => React.createElement("article", { id: "ticket" }, initialTask.title, initialTask.description_.content) },
     "@/lib/navigation/cachedTaskDetail": cache,
@@ -129,6 +130,7 @@ test("quiet: deferred activity/comments suspend without loading text", () => {
     "@/lib/constants/TaskDetail": {},
     "lucide-react": { Reply: noop },
     "@/hooks/useFlag": { useFlag: (key) => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
     "@/lib/taskDetailEditTarget": compile(read("src/lib/taskDetailEditTarget.ts"), {}),
@@ -160,7 +162,7 @@ test("quiet: contact hover waits for final content on detail routes, retaining e
     "@/lib/state": { useSetRecoilState: () => assert.fail },
     "@/store": {},
     "./TooltipPortal": { __esModule: true, default: pass },
-    "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-7737-agent-hover-chat", "htpr-7518-agent-sidebar-chats"].includes(key)) return false; assert.fail(`Unexpected flag: ${key}`); } },
+    "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-6950-tooltip-top-layer", "htpr-7737-agent-hover-chat", "htpr-7518-agent-sidebar-chats"].includes(key)) return false; assert.fail(`Unexpected flag: ${key}`); } },
     "@/lib/flags/definitions/htpr-7737-agent-hover-chat": { HTPR_7737_AGENT_HOVER_CHAT_FLAG: "htpr-7737-agent-hover-chat" },
     "@/lib/flags/keys": { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: "htpr-7518-agent-sidebar-chats" },
     "@floating-ui/react": { useFloating: () => ({ refs: { setFloating: noop, setReference: noop, domReference: { current: null } }, context: {}, floatingStyles: {} }), useInteractions: () => ({ getFloatingProps: (props) => props }), FloatingFocusManager: pass, FloatingPortal: pass },
@@ -395,6 +397,7 @@ test("warm: a cold desktop reaction chunk cannot delay the title/body or change 
     "@/components/Common/TimeTooltip": { __esModule: true, default: noop },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
 
   }).default;
   const render = () => renderToString(React.createElement(React.Suspense, { fallback: "Outer loading" },

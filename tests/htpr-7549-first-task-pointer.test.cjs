@@ -30,6 +30,7 @@ async function withPointer(fn) {
   const Pointer = load("src/components/PageComponents/Kanban/KanbanSectionComponents/FirstTaskPointer.tsx", {
     "@tanstack/react-query": { useQuery: (options) => { query = options; return { data: state.data, isPending: state.pending, isFetching: state.fetching }; }, useQueryClient: () => queryClient },
     "@/hooks/useFlag": { useFlag: (flag) => flag === key ? state.enabled : flag === composeKey ? state.compose : assert.fail(`Unexpected flag ${flag}`) },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeKey, HTPR_7549_FIRST_TASK_POINTER_FLAG: key },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => state.apple },
     "@/lib/state": { useSetRecoilState: (atom) => (value) => actions.push([atom, value]) },

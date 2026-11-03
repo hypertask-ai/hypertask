@@ -1,8 +1,6 @@
 import { ITask } from "@/models/model";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import { Reply } from "lucide-react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 
 const FlattenedParentTask = ({
   parentTask,
@@ -13,7 +11,6 @@ const FlattenedParentTask = ({
   currentSetting?: TBoardSubtaskSetting;
   onClick?: () => void;
 }) => {
-  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const handleOnClick = (e: any) => {
     e.preventDefault();
     e.stopPropagation();
@@ -30,11 +27,7 @@ const FlattenedParentTask = ({
         size={12}
         style={{ transform: "scale(-1,1) rotate(90deg)" }}
        strokeWidth={1.75}/>
-      <span
-        className={`items-center line-clamp-1 text-meta w-fit font-medium hover:underline ${
-          cleanup ? "text-[#cdd1d3]" : "text-label-component"
-        }`}
-      >
+      <span className="items-center line-clamp-1 text-meta w-fit text-label-component font-medium hover:underline">
       {parentTask.ticketNumber}: {parentTask.title}
       </span>
     </div>

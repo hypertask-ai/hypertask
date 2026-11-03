@@ -56,8 +56,13 @@ export const LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD = 40;
 const INITIAL_PROGRESSIVE_TASKS_PER_SECTION = 2;
 const PROGRESSIVE_REVEAL_SETTLE_MS = 160;
 
-const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
-  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+const TaskSkeleton = ({
+  provided,
+  cleanup = false,
+}: {
+  provided?: DraggableProvided;
+  cleanup?: boolean;
+}) => {
   return (
     <div
       ref={provided?.innerRef}
@@ -466,8 +471,8 @@ export const Section = ({
               hover:scrollbar-thumb-list-scroll-hover
               scrollbar-thumb-list-scroll
               scrollbar-track-kanban-column-scrollbar
-              ${cleanup ? "kanban-cleanup-scroll" : ""}
               `}
+            data-kanban-cleanup-scroll={cleanup ? "" : undefined}
           >
             <div
               {...dragHandleProps}
@@ -534,7 +539,7 @@ export const Section = ({
                   >
                     {(provided, snapshot) =>
                       renderMode === "skeleton" ? (
-                        <TaskSkeleton provided={provided} />
+                        <TaskSkeleton provided={provided} cleanup={cleanup} />
                       ) : renderMode === "placeholder" ? (
                         <ProgressiveTaskPlaceholder
                           task={task}
@@ -636,14 +641,14 @@ const TitleAndTasks = ({
   wipCount,
   title,
   id,
-  cleanup,
+  cleanup = false,
 }: {
   itemLen: number;
   wipLimit?: number | null;
   wipCount: number;
   title: string;
   id: number;
-  cleanup: boolean;
+  cleanup?: boolean;
 }) => {
   const setShowCommands = useSetRecoilState(showCommandsAtom);
 
@@ -660,7 +665,7 @@ const TitleAndTasks = ({
           {title}
         </p>
         <p
-          className={`kanban-column-count text-meta font-medium self-center ${wipLimit != null && wipCount > wipLimit ? "!text-destructive" : cleanup ? "text-[#8e9093]" : "text-text-light-gray"}`}
+          className={`kanban-column-count text-meta font-medium self-center ${wipLimit != null && wipCount > wipLimit ? "!text-destructive" : "text-text-light-gray"} ${cleanup ? "" : "mt-[2px]"}`}
           title={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
           aria-label={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
         >

@@ -83,6 +83,7 @@ function fixture(t, { mobile = false, cached = false, openDetail } = {}) {
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": linkModule.exports,
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": { HTPR_7614_SELECTED_CARD_BORDER_FLAG: "htpr-7614-selected-card-border" },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },

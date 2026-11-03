@@ -50,6 +50,7 @@ const HTCButton = loadComponent(
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/hooks/MultiPages/HTC/useDarkMode": () => ({ effectiveTheme: "light" }),
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/definitions/htpr-7749-header-icon-size": { HTPR_7749_HEADER_ICON_SIZE_FLAG: "htpr-7749-header-icon-size" },
     "@/models/enums": { CommandMode: { Command: "Command" } },
   },
@@ -76,6 +77,7 @@ const TaskDraggableContainer = loadComponent(
   {
     ...shared,
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": {},
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
   },

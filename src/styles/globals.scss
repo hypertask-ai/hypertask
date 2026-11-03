@@ -917,7 +917,7 @@ svg.lucide.fill-current {
   }
 }
 
-.kanban-cleanup-scroll {
+[data-kanban-cleanup-scroll] {
   scrollbar-width: thin;
   scrollbar-color: var(--color-horizontal-scrollbar-track) transparent;
 

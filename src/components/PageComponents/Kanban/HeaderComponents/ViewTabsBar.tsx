@@ -115,7 +115,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
               ref={scrollerRef}
               id="view-tabs-bar"
               className={appShellRail
-                ? `flex min-w-0 flex-1 flex-wrap items-center ${cleanup ? 'gap-6' : 'gap-[9px]'}`
+                ? cn('flex min-w-0 flex-1 flex-wrap items-center', cleanup ? 'gap-6' : 'gap-[9px]')
                 : 'flex items-center gap-1 overflow-x-auto scrollbar-none'}
             >
               {renderedViews.map((view, index) => {
@@ -163,7 +163,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                           dropTargetId === view.id && 'bg-hover-active rounded-sm',
                           appShellRail
                           ? cn(
-                              `!cursor-default relative group flex h-8 max-w-full min-w-0 items-center justify-start gap-1 whitespace-nowrap text-content transition-opacity ${cleanup ? 'pr-0' : 'pr-[15px]'}`,
+                              cn('!cursor-default relative group flex h-8 max-w-full min-w-0 items-center justify-start gap-1 whitespace-nowrap text-content transition-opacity', cleanup ? 'pr-0' : 'pr-[15px]'),
                               isActive
                                 ? 'text-white-black'
                                 : 'text-text-light-gray opacity-90 hover:opacity-100'
