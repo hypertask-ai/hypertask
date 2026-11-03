@@ -41,7 +41,7 @@ test('a named sentence is clipped so the message stays readable', () => {
 
 test('a nameable phrase still carries the plain-language advice', () => {
   const error = refusal('Please put exit code here.')
-  assert.match(error.message, /Use short plain sentences for people; put technical details and status in the agent log\.$/)
+  assert.match(error.message, /Keep people text plain and link the build or commit instead of pasting its id; put the raw value in the agent log\.$/)
 })
 
 test('short plain agent text is accepted', () => {

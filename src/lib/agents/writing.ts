@@ -9,13 +9,16 @@ function excerpt(text: string | undefined): string {
   return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat
 }
 
+const PLAIN_ADVICE = 'Use short plain sentences for people; put technical details and status in the agent log.'
+const TECHNICAL_ADVICE = 'Keep people text plain and link the build or commit instead of pasting its id; put the raw value in the agent log.'
+
 export class AgentWritingError extends Error {
   readonly status = 400
   readonly code = 'invalid_field'
 
-  constructor(readonly field: string, reason: string, offender?: string) {
+  constructor(readonly field: string, reason: string, offender?: string, advice = PLAIN_ADVICE) {
     const quoted = excerpt(offender)
-    super(`${field}: ${reason}${quoted ? ` ("${quoted}")` : ''}. Use short plain sentences for people; put technical details and status in the agent log.`)
+    super(`${field}: ${reason}${quoted ? ` ("${quoted}")` : ''}. ${advice}`)
   }
 }
 
@@ -38,7 +41,7 @@ export function assertAgentWriting(agentId: string | null | undefined, fields: {
         throw new AgentWritingError(field, 'Robot status belongs in the agent log', plain.match(ROBOT_STATUS)?.[0])
       }
       if (TECHNICAL_DETAIL.test(plain)) {
-        throw new AgentWritingError(field, 'Technical details belong in the agent log', plain.match(TECHNICAL_DETAIL)?.[0])
+        throw new AgentWritingError(field, 'Technical details belong in the agent log', plain.match(TECHNICAL_DETAIL)?.[0], TECHNICAL_ADVICE)
       }
       for (const sentence of plain.replace(/"[^"]+"|“[^”]+”/g, 'LINK').split(/(?<=[.!?:;])\s+/)) {
         const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu)?.filter((word) => word !== 'LINK') ?? []
