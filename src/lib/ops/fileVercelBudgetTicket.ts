@@ -17,6 +17,7 @@ const BOARD_LABEL_VALUE = "Infra";
 const OPS_USER_ID = 332;
 const OWNER_EMAIL = "valentin.yeo@gmail.com";
 const CLAIM_TTL_SECONDS = 20 * 60 * 60;
+const PENDING_EMAIL_TTL_SECONDS = 120;
 const RESERVATION_TTL_SECONDS = 60;
 
 async function findBudgetTicket(marker: string) {
@@ -80,6 +81,14 @@ export const prismaBudgetAlertStore: BudgetAlertStore = {
     const redis = await getRedis();
     return (await redis.set(`vercel:budget-alert:reserve:${marker}`, "1", "EX", RESERVATION_TTL_SECONDS, "NX")) === "OK";
   },
+  async release(marker) {
+    try {
+      const redis = await getRedis();
+      await redis.del(`vercel:budget-alert:reserve:${marker}`);
+    } catch (error) {
+      console.error("[vercel-budget-alert] reservation release failed", error);
+    }
+  },
   async reserveSpend(key) {
     const redis = await getRedis();
     return (await redis.set(`vercel:budget-alert:spend:${key}`, "1", "EX", CLAIM_TTL_SECONDS, "NX")) === "OK";
@@ -95,12 +104,18 @@ export const prismaBudgetAlertStore: BudgetAlertStore = {
   async claimEmail(marker) {
     try {
       const redis = await getRedis();
-      const claimed = await redis.set(`vercel:budget-alert:email:${marker}`, "1", "EX", CLAIM_TTL_SECONDS, "NX");
-      return claimed === "OK" ? "claimed" : "already-sent";
+      const key = `vercel:budget-alert:email:${marker}`;
+      const claimed = await redis.set(key, "pending", "EX", PENDING_EMAIL_TTL_SECONDS, "NX");
+      if (claimed === "OK") return "claimed";
+      return (await redis.get(key)) === "sent" ? "already-sent" : "pending";
     } catch (error) {
       console.error("[vercel-budget-alert] email claim failed", error);
       return "unavailable";
     }
+  },
+  async markEmailSent(marker) {
+    const redis = await getRedis();
+    await redis.set(`vercel:budget-alert:email:${marker}`, "sent", "EX", CLAIM_TTL_SECONDS);
   },
   async releaseEmail(marker) {
     try {

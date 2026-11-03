@@ -88,6 +88,9 @@ function memoryStore({ createDelayMs = 0 } = {}) {
     async addComment() {
       calls.comments += 1;
     },
+    async release(marker) {
+      reservations.delete(marker);
+    },
     async reserveSpend(key) {
       if (updates.has(key)) return false;
       updates.add(key);
@@ -106,6 +109,7 @@ function memoryStore({ createDelayMs = 0 } = {}) {
       emailClaims.add(marker);
       return "claimed";
     },
+    async markEmailSent() {},
     async releaseEmail(marker) {
       calls.releases += 1;
       emailClaims.delete(marker);
@@ -335,6 +339,42 @@ test("a failed comment write is retried by the next delivery", async () => {
     store.calls.comments += 1;
   };
   await fileBudgetAlert(alert({ currentSpend: 300 }), store);
+  assert.equal(store.calls.comments, 1);
+});
+
+test("a pending or unavailable email claim asks for a retry", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
+  const pending = memoryStore();
+  pending.claimEmail = async () => "pending";
+  assert.equal((await fileBudgetAlert(full, pending)).email, "failed");
+  const unavailable = memoryStore();
+  unavailable.claimEmail = async () => "unavailable";
+  assert.equal((await fileBudgetAlert(full, unavailable)).email, "failed");
+});
+
+test("a sent alert is not emailed twice", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const store = memoryStore();
+  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
+  assert.equal((await fileBudgetAlert(full, store)).email, "sent");
+  assert.equal((await fileBudgetAlert(full, store)).email, "already-sent");
+  assert.deepEqual(store.calls.emails, [100]);
+});
+
+test("a failed create releases the spend claim", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const store = memoryStore();
+  const create = store.createTicket;
+  store.createTicket = async () => {
+    throw new Error("board unavailable");
+  };
+  await assert.rejects(fileBudgetAlert(alert(), store));
+  store.createTicket = create;
+  await fileBudgetAlert(alert({ currentSpend: 300 }), store);
+  assert.equal(store.calls.create, 1);
+  const retried = await fileBudgetAlert(alert(), store);
+  assert.equal(retried.created, false);
   assert.equal(store.calls.comments, 1);
 });
 
