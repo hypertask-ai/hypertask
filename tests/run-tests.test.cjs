@@ -463,8 +463,7 @@ test("a lane's batch chains run every batch once and stay inside the lane worker
   const heaviest = Math.max(...batches.map((batch) => batch.reduce((total, file) => total + work(file), 0)));
   for (const workers of [1, 2, 3]) {
     const chains = chainBatches(batches, workers, work);
-    const flat = chains.flat();
-    assert.deepEqual([...flat].sort(), [...files].sort(), `every batch file of a lane runs exactly once at ${workers} workers`);
+    assert.deepEqual(chains.flat(2).sort(), [...files].sort(), `every batch file of a lane runs exactly once at ${workers} workers`);
     assert.equal(chains.length, Math.min(workers, batches.length), "one chain per worker while batches remain");
     const loads = chains.map((chain) => chain.flat().reduce((total, file) => total + work(file), 0));
     assert.ok(Math.max(...loads) - Math.min(...loads) <= heaviest, `chains ${loads} balance within one batch`);
@@ -473,5 +472,5 @@ test("a lane's batch chains run every batch once and stay inside the lane worker
     assert.ok(budgets.every((budget) => budget >= 1), `chain budgets ${budgets} all get a worker`);
     assert.equal(budgets[loads.indexOf(Math.max(...loads))], Math.max(...budgets), "a spare worker goes to the heaviest chain");
   }
-  assert.deepEqual(chainBudgets([["tests/only.test.cjs"]], 2, work), [2], "a single batch keeps the whole lane budget");
+  assert.deepEqual(chainBudgets([[["tests/only.test.cjs"]]], 2, work), [2], "a single batch keeps the whole lane budget");
 });
