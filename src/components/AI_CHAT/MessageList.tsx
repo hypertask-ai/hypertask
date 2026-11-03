@@ -10,6 +10,8 @@ import { composeTaskOriginalNoteAtom, composeTaskQuestionsTaskIdAtom, composeTas
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7601_ONLY_VIEWED_TICKET_QUESTIONS_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
 
+import { readChatNavigationState, writeChatNavigationState } from "@/lib/aiChat/chatNavigationState";
+
 interface MessageListProps { sidebarKey?: string; active?: boolean; hidden?: boolean }
 
 const isSavedOrLocalComposeIntro = (content: string) => / from your note\. Want me to refine it\?/.test(content);
@@ -19,6 +21,7 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
   const messagesContentRef = useRef<HTMLDivElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const {
+    navigationKey,
     handleMessageListScroll,
     registerMessageListRef,
     scrollMessagesToBottom,
@@ -30,7 +33,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     isTyping,
     handleSendMessage,
   } = useAiChatContext();
-  const scrollKey = sidebarKey ?? currentSession?.id ?? "";
+  const navigationScrollKey = navigationKey && currentSession?.id ? `${navigationKey}.${currentSession.id}` : null;
+  const scrollKey = navigationScrollKey ?? sidebarKey ?? currentSession?.id ?? "";
   const messages = currentSession?.messages ?? [];
   const lastMessage = messages[messages.length - 1];
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
@@ -102,7 +106,9 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
     if (!active || hidden || !element || !content) return;
 
     const followMessages = () => {
-      const saved = scrollPositions.current.get(scrollKey);
+      const persisted = readChatNavigationState(navigationScrollKey);
+      const saved = scrollPositions.current.get(scrollKey) ??
+        (persisted.scrollTop !== undefined ? { top: persisted.scrollTop, away: persisted.scrollAway } : undefined);
       if (saved?.away) element.scrollTop = saved.top;
       else scrollMessagesToBottom("auto");
       scrollPositions.current.set(scrollKey, { top: element.scrollTop, away: saved?.away ?? false });
@@ -130,6 +136,8 @@ export const MessageList: React.FC<MessageListProps> = ({ sidebarKey, active = t
         const movedUp = Boolean(saved && element.scrollTop < saved.top);
         scrollPositions.current.set(scrollKey, { top: element.scrollTop,
           away: !nearBottom && (movedUp || Boolean(saved?.away)) });
+        writeChatNavigationState(navigationScrollKey, { scrollTop: element.scrollTop,
+          scrollAway: !nearBottom && (movedUp || Boolean(saved?.away)) });
         handleMessageListScroll(element);
       }}
       className="flex-1 min-h-0 min-w-0 max-w-full overflow-x-hidden overflow-y-auto p-2 max-h-full scrollbar-thin hover:scrollbar-thumb-list-scroll-hover scrollbar-thumb-list-scroll scrollbar-track-kanban-column-scrollbar"

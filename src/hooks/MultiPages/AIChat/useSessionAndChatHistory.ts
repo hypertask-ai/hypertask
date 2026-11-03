@@ -1,6 +1,6 @@
 import { HTPR_7736_CHAT_FOLLOWS_TASK_FLAG } from "@/lib/flags/definitions/htpr-7736-chat-follows-task";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7783_REMEMBER_CHAT_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -15,6 +15,8 @@ import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
 import { usePagedChatHistory } from "./usePagedChatHistory";
 import { useDockedChatScope } from "./useDockedChatScope";
+import { chatNavigationKey, initialChatSessionId } from "@/lib/aiChat/chatNavigationState";
+import { useChatSessionSelection } from "./useChatSessionSelection";
 
 const createDemoSession = (user: IUser): IChatSession => {
   const now = new Date();
@@ -40,6 +42,7 @@ export const useSessionAndChatHistory = (
   pinnedSessionId: string | null = null,
   windowScoped = false
 ) => {
+  const rememberChat = useFlag(HTPR_7783_REMEMBER_CHAT_FLAG);
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
@@ -77,11 +80,13 @@ export const useSessionAndChatHistory = (
   }
   if (chatNames) nameBoardRef.current = scopedBoardId;
   else nameBoardRef.current = undefined;
-  const [activeSession, setActiveSession] = useState<string | null>(pinnedSessionId);
+  const navigationScope = chatNavigationKey(currentUser?.id, manualChat ? undefined : scopedBoardId, followsTaskNavigation ? undefined : taskId, pathname?.startsWith("/chat"));
+  const navigationKey = rememberChat && !isDemo && navigationScope ? `${navigationScope}${manualChat ? `.team.${teamKey ?? "none"}` : ""}` : null;
+  const [activeSession, setActiveSession] = useChatSessionSelection(`${navigationKey ?? "legacy"}:${followsTaskNavigation ? selectionScope : ""}`, pinnedSessionId ? null : navigationKey, !hasExplicitTask, pinnedSessionId);
   useEffect(() => {
     if (pinnedSessionId) return;
-    if (manualChat) setActiveSession(null);
-  }, [manualChat, teamKey, pinnedSessionId]);
+    if (manualChat && !navigationKey) setActiveSession(null);
+  }, [manualChat, teamKey, navigationKey, pinnedSessionId, setActiveSession]);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
   const queryClient = useQueryClient();
@@ -90,7 +95,7 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
-  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: selectionScope, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId });
+  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: selectionScope, restoreSelection: !hasExplicitTask, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId }, navigationKey, scopedBoardId);
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
   const pagedActiveSession = pagedHistory.activeSession;
   const setPagedActiveSession = pagedHistory.setActiveSession;
@@ -181,7 +186,7 @@ export const useSessionAndChatHistory = (
     } catch (error) {
       console.log("🚀 ~ useSessionAndChatHistory ~ error:", error);
     }
-  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId]);
+  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId, setActiveSession]);
 
   const selectSession = useCallback(
     (sessionId: string) => {
@@ -230,7 +235,7 @@ export const useSessionAndChatHistory = (
         console.error("Error selecting session:", error);
       }
     },
-    [hasRequiredData, currentUser?.uid, isDemo, queryClient]
+    [hasRequiredData, currentUser?.uid, isDemo, queryClient, setActiveSession]
   );
 
   const addMessageToSessionQuery = useCallback(
@@ -500,6 +505,7 @@ export const useSessionAndChatHistory = (
       hasRequiredData,
       isDemo,
       queryClient,
+      setActiveSession,
     ]
   );
 
@@ -534,12 +540,12 @@ export const useSessionAndChatHistory = (
 
         if (taskId === undefined) {
           if (taskScopedHistory) return;
-          if (preserveSessionSelection) {
-            setActiveSession((selected) => sessions.some((session) => session.id === selected) ? selected : sessions[0]?.id);
-          } else setActiveSession(sessions[0]?.id);
+          if (navigationKey && sessions.some((session) => session.id === activeSession)) return;
+          setActiveSession(initialChatSessionId(sessions, activeSession, preserveSessionSelection, navigationKey, scopedBoardId));
           return;
         }
 
+        if (navigationKey && sessions.some((session) => session.id === activeSession && (!hasExplicitTask || session.taskId === taskId))) return;
         const existingTaskSession = sessions.find(
           (session) => session.taskId === taskId
         );
@@ -573,13 +579,13 @@ export const useSessionAndChatHistory = (
     taskScopedHistory,
     sessionsData,
     taskId,
-    startNewSession, paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession,
+    startNewSession, paged, preserveSessionSelection, followsTaskNavigation, hasExplicitTask, activeSession, navigationKey, setActiveSession, scopedBoardId,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
   const selectedSession = paged ? pagedHistory.currentSession : activeSession
     ? sessions.find((session) => session.id === activeSession)
-    : sessions[0];
+    : navigationKey ? undefined : sessions[0];
   const currentSession = followsTaskNavigation && hasExplicitTask && selectedSession?.taskId !== taskId ? undefined : selectedSession;
   useEffect(() => {
     if (windowScoped) return;
@@ -611,17 +617,19 @@ export const useSessionAndChatHistory = (
   const getDisplayedSession = useCallback(() => currentSession, [currentSession]);
   const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope) => sessions.find((session) =>
     sessionId ? session.id === sessionId :
-      (!scope?.taskId || session.taskId === scope.taskId) &&
+      (scope?.taskId !== undefined || !session.agentId) && (!scope?.taskId || session.taskId === scope.taskId) &&
       (!scope?.projectId || (session.projectId === scope.projectId && session.taskId === null))), [sessions]);
-  if (paged) return { ...pagedHistory, showWelcomeScreen: pagedHistory.showWelcomeScreen && !waitingForSkillFollowup && !hasPendingSkillIntro, sessionPagingEnabled: true };
+  if (paged) return { ...pagedHistory, navigationKey, showWelcomeScreen: pagedHistory.showWelcomeScreen && !waitingForSkillFollowup && !hasPendingSkillIntro, sessionPagingEnabled: true };
 
   return {
+    navigationKey,
     sessionPagingEnabled: false,
     historySessions: sessions, hasMoreSessions: false, isLoadingMoreSessions: false, pagingError: false,
     loadMoreSessions: async () => {}, refreshHistorySessions: async () => {}, resolveHistorySession, getDisplayedSession,
     isLoading: isDemo ? false : isLoadingSessions,
     isError: isDemo ? false : isErrorSessions,
     isSuccess: isDemo ? demoSessions.length > 0 : isSuccessSessions,
+    isHistoryReady: isDemo ? demoSessions.length > 0 : isSuccessSessions,
     activeSession,
     currentSession,
     showWelcomeScreen,

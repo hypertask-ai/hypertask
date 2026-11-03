@@ -502,3 +502,15 @@ change together, and restoring the token must restore both. Check every theme.
 Resize to 390x844: the chat sheet must report no shadow. With
 `htpr-8055-floating-elevation` Off, the chat returns to its previous halo and
 the palette stays flat.
+
+## Returning from Settings
+
+With `htpr-7783-remember-chat`, select an older conversation, scroll upward,
+and leave an unsent draft. Visit Settings and return. Confirm the same
+conversation, draft, scroll position and panel visibility survive. Reload,
+then explicitly choose New chat: only that action starts another conversation.
+Check both full-screen chat and the docked panel. With manual chat enabled,
+board navigation must not replace the selected conversation; team and account
+switches must not restore another account or team selection. Flag off retains
+existing navigation defaults. Reuse existing draft storage; do not send a
+message merely to verify navigation.
