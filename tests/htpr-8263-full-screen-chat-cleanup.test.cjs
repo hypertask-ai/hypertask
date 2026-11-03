@@ -45,7 +45,7 @@ test('desktop composer puts the mic left of Send behind the flag', () => {
 test('the text Send button keeps the mobile arrow and an icon fallback', () => {
   const button = read('src/components/AI_CHAT/SendMessageButton.tsx');
   assert.match(button, new RegExp(`useFlag\\(${FLAG}\\)`));
-  assert.match(button, /const textLabel = cleanup \? label : undefined;/);
+  assert.match(button, /aria-label=\{queueMode \? "Queue message" : cleanup && label \? label : "Send message"\}/);
   assert.match(button, /\) : cleanup && label \? \(\s*<span>\{label\}<\/span>/, 'desktop renders the text label');
   assert.match(button, /\{mobile \? \(\s*<SendArrow size=\{22\} \/>/, 'mobile keeps the arrow button');
   assert.match(button, /<Send size=\{16\} strokeWidth=\{1\.75\} \/>/, 'callers without a label keep the paper plane');

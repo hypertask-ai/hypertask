@@ -22,7 +22,6 @@ export function SendMessageButton({
   onClick: () => void;
 }) {
   const cleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-  const textLabel = cleanup ? label : undefined;
   const sendTooltip =
     aiTaskWriterConfig.shortcutsAndTooltips.ai_chat.send_button;
   let tooltipProps: ComponentProps<typeof Tooltip> = {
@@ -50,9 +49,6 @@ export function SendMessageButton({
   if (mobile) {
     buttonClassName =
       "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-sm bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
-  } else if (textLabel) {
-    buttonClassName =
-      "relative group h-7 rounded px-2 text-dense text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black disabled:cursor-not-allowed disabled:text-gray-400 disabled:hover:bg-transparent";
   } else if (!disabled && queueMode) {
     buttonClassName += " text-text-light-gray hover:text-white-black";
   } else if (!disabled) {
@@ -65,7 +61,7 @@ export function SendMessageButton({
       className={buttonClassName}
       onClick={onClick}
       disabled={disabled}
-      aria-label={queueMode ? "Queue message" : textLabel ?? "Send message"}
+      aria-label={queueMode ? "Queue message" : cleanup && label ? label : "Send message"}
     >
       <Tooltip {...tooltipProps} />
       {mobile ? (
