@@ -108,7 +108,7 @@ const moduleMocks = {
   "@/lib/boardBootstrap/earlyBoardBootstrap": { discardEarlyBoardBootstrap: noop },
   "@/lib/lastBoardTeam": { setLastBoardTeam: noop },
   "@/lib/localReadModels/clear": { clearRevokedBoardMarker: noop },
-  "@/lib/analytics/boardSwitchLatency": { resolveBoardSwitchIntent: noop },
+  "@/lib/analytics/boardSwitchLatency": { resolveBoardSwitchIntent: noop, boardSwitchIntentHoldsAddressRepair: () => false },
   "@/lib/boardStartup/secondaryRequests": {
     shouldReleaseSecondaryStartupOnBoardRequest: () => false,
     shouldReleaseSecondaryStartupForTerminalBoard: () => false,
