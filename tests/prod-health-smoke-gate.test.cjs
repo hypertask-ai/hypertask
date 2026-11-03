@@ -110,7 +110,7 @@ function runGate(overrides = {}) {
       RUN_ID: "1",
       SHA,
       EVENT_NAME: "push",
-      GATE_BUDGET_SECONDS: "1",
+      GATE_MAX_POLLS: "3",
       ...overrides,
     },
   });
@@ -154,8 +154,18 @@ test("the wait covers the whole health budget without outliving the job", () => 
   const budget = /GATE_BUDGET_SECONDS:-(\d+)/.exec(gate);
   assert.ok(budget, "the gate budget is not readable");
   assert.ok(Number(budget[1]) >= workflow.jobs.health["timeout-minutes"] * 60);
+  const maxPolls = /GATE_MAX_POLLS:-(\d+)/.exec(gate);
+  assert.ok(maxPolls, "the poll budget is not readable");
+  assert.ok(Number(maxPolls[1]) * 20 >= Number(budget[1]), `a poll budget of ${maxPolls[1]} ends a real wait early`);
   const jobTimeout = workflow.jobs.smoke["timeout-minutes"];
   assert.ok(jobTimeout * 60 > Number(budget[1]) + 300, `job timeout ${jobTimeout} leaves no room after the wait`);
+});
+
+test("the wait ends on its poll budget, not on a racing clock", () => {
+  const { result, written } = runGate({ JOBS_JSON: healthJobs(null), GATE_MAX_POLLS: "2" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(outputValue(written, "ok"), "false");
+  assert.match(result.stdout, /has not concluded/);
 });
 
 test("a speculative setup cannot hold a rollback the health job requested", () => {
