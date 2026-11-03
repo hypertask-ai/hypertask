@@ -21,9 +21,10 @@ function load(file, dependencies) {
 
 const flagPath = "src/lib/flags/definitions/htpr-8035-sidebar-new-task.ts";
 const flag = load(flagPath, {}).default;
+const fillFlag = load("src/lib/flags/definitions/htpr-8035-new-task-fill.ts", {}).default;
 const { CommandMode } = load("src/models/enums.ts", {});
 
-function renderRail({ enabled = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
+function renderRail({ enabled = true, fill = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
   const updates = [];
   const navigation = [];
   const icon = (props) => React.createElement("svg", props);
@@ -54,12 +55,13 @@ function renderRail({ enabled = true, wide = false, apple = false, settingsNamed
     "@/components/Modals/Settings/settingsNavigation": { useSettingsNavigation: () => ({ openSettings: () => navigation.push("settings") }) },
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/store/currentPageActions": { currentPageActionsAtom: "page-actions" },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === fillFlag.key ? fill : false },
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
     "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
     "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: flag.key },
+    "@/lib/flags/definitions/htpr-8035-new-task-fill": { HTPR_8035_NEW_TASK_FILL_FLAG: fillFlag.key },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
   };
   const Rail = load("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", dependencies).default;
@@ -97,6 +99,29 @@ for (const wide of [false, true]) {
     assert.deepEqual(rail.navigation, ["boards", "board", "table"]);
   });
 }
+
+test("the fill flag off restores the primary pair on the same button", () => {
+  for (const wide of [false, true]) {
+    const on = renderRail({ wide });
+    const off = renderRail({ wide, fill: false });
+    const button = (rail) => rail.nodes.find((node) => node.type === "button" && node.props["aria-label"] === "New Task");
+    const classes = (rail) => button(rail).props.className.split(/\s+/);
+    assert.ok(classes(on).includes("bg-white-black"));
+    assert.ok(!classes(on).includes("bg-shadcn-primary"));
+    assert.ok(classes(off).includes("bg-shadcn-primary"));
+    assert.ok(classes(off).includes("text-primary-foreground"));
+    assert.ok(!classes(off).includes("bg-white-black"));
+    assert.equal(button(on).props.onClick, button(off).props.onClick);
+    assert.match(off.html, /CTRL\+J/);
+  }
+});
+
+test("the fill improvement ships to Everyone with a small reversible risk", () => {
+  assert.equal(fillFlag.key, "htpr-8035-new-task-fill");
+  assert.equal(fillFlag.kind, "improvement");
+  assert.equal(fillFlag.defaultMode, "EVERYONE");
+  assert.equal(fillFlag.releaseRisk.risk, "small");
+});
 
 test("rail keeps its existing glyphs until Graphite 2 replacements are enabled", () => {
   for (const wide of [false, true]) for (const graphite2 of [false, true]) {

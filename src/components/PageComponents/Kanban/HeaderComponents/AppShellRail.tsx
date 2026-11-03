@@ -1,5 +1,6 @@
 "use client";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { HTPR_8035_NEW_TASK_FILL_FLAG } from "@/lib/flags/definitions/htpr-8035-new-task-fill";
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -123,6 +124,7 @@ const AppShellRail = ({
   }
   const settingsAccessibleName = useFlag(HTPR_8146_SETTINGS_NAME_FLAG);
   const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
+  const newTaskFill = useFlag(HTPR_8035_NEW_TASK_FILL_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
@@ -353,7 +355,9 @@ const AppShellRail = ({
             type="button"
             aria-label="New Task"
             onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
-            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] bg-white-black text-white-black-inverted hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
+            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] ${
+              newTaskFill ? "bg-white-black text-white-black-inverted" : "bg-shadcn-primary text-primary-foreground"
+            } hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
               wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
             }`}
           >
