@@ -96,6 +96,7 @@ const PersonHovercardSurfaceContent = ({
   }, [anchor, refs]);
 
   const hover = useHover(context, {
+    enabled: !controlled,
     mouseOnly: true,
     handleClose: safePolygon({ blockPointerEvents: true }),
   });

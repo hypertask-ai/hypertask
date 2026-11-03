@@ -129,7 +129,9 @@ test("a tap keeps the person card open; a mouse hover still closes on leave", as
     useInteractions: () => ({ getReferenceProps: value => value, getFloatingProps: value => value }),
     FloatingFocusManager: pass, FloatingPortal: pass,
   };
-  for (const key of ["autoUpdate", "flip", "offset", "safePolygon", "shift", "useDismiss", "useFocus", "useHover", "useRole"]) floating[key] = noop;
+  const hoverOptions = [];
+  floating.useHover = (_context, options) => { hoverOptions.push(options); return {}; };
+  for (const key of ["autoUpdate", "flip", "offset", "safePolygon", "shift", "useDismiss", "useFocus", "useRole"]) floating[key] = noop;
   const source = loader({
     "@/components/Common/UserAvatar": { default: () => null },
     "./TooltipPortal": { default: pass },
@@ -168,5 +170,9 @@ test("a tap keeps the person card open; a mouse hover still closes on leave", as
     assert.equal(expanded(), "true", "the pointerleave after a tap must not close the card");
     await fire("focusin", "touch");
     assert.equal(expanded(), "true", "keyboard focus still opens the card");
+    assert.equal(hoverOptions.at(-1).enabled, false, "a card opened from outside must not add the library mouseleave close");
+    const { PersonHovercardSurface } = source("src/components/Common/PersonHovercard.tsx");
+    await React.act(async () => view.render(React.createElement(PersonHovercardSurface, { projectId: 7049, subject: { kind: "agent", id: "agent-one" } })));
+    assert.equal(hoverOptions.at(-1).enabled, true, "a card that owns its own open state keeps hover");
   } finally { view.close(); }
 });
