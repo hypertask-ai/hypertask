@@ -24,7 +24,8 @@ test('the full-screen header drops the sparkle only behind the flag', () => {
   assert.match(chat, /cleanupEnabled \? "h-\[29px\] px-1" : "px-3 py-2"/, 'chat rows use the 29px row height');
   assert.match(chat, /cleanupEnabled \? "space-y-2" : "space-y-0\.5"/, 'chat rows use an 8px gap');
   assert.match(chat, /cleanupEnabled \? "mb-4" : "mb-3"/, 'chat groups use a 16px gap');
-  assert.match(chat, /cleanupEnabled \? "px-4" : "px-2"/, 'the chat list uses 16px padding');
+  assert.match(chat, /<div className=\{cleanupEnabled \? "px-2" : undefined\}>/, 'the chat list gains 16px padding behind the flag');
+  assert.match(chat, /className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin/, 'the scroll container keeps its style-token line');
 });
 
 test('desktop composer puts the mic left of Send behind the flag', () => {
