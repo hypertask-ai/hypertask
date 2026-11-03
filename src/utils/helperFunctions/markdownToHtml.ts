@@ -100,7 +100,7 @@ function quotedLinesToBlockquote(value: string): string {
     if (!body.trim()) return
     out.push(BLOCK_TAG.test(body) ? body : normalizeBlockHtml(body))
   }
-  for (const line of value.split('\n')) {
+  for (const line of value.split(/\r\n?|\n/)) {
     if (codeDepth === 0) {
       const match = QUOTED_LINE.exec(line)
       if (match && match[1].trim()) {
