@@ -48,8 +48,21 @@ for (const kind of routing.COMMENT_KINDS) {
   })
 }
 
-test('human posts remain comments with flag on', async () => {
+test('human posts remain comments with a kind', async () => {
   const { post, calls } = setup({ human: true })
+  assertComment(await post({ kind: 'qa' }), calls, 'qa')
+})
+
+test('human posts with no kind are refused instead of publishing robot status', async () => {
+  const { post, calls } = setup({ human: true })
+  const response = await post()
+  assert.equal(response.status, 400)
+  assert.equal(response.body.code, 'missing_field')
+  assert.equal(calls.comments.length + calls.broadcasts.length, 0)
+})
+
+test('human posts with no kind publish again when the rule is off', async () => {
+  const { post, calls } = setup({ human: true, kindRequired: false })
   assertComment(await post(), calls)
 })
 

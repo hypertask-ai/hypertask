@@ -72,6 +72,7 @@ function setup(options = {}) {
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push({ key, userId })
         return (key === 'htpr-7341-agent-chatter-to-log' && options.flag !== false) ||
+          (key === 'htpr-8437-people-comment-needs-kind' && options.kindRequired !== false) ||
           (key === 'yper4-910-agent-writing' && options.writing !== false) ||
           (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
           (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true)

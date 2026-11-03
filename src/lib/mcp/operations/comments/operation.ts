@@ -7,6 +7,7 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
 import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG } from "@/lib/flags/keys";
+import { HTPR_8437_PEOPLE_COMMENT_NEEDS_KIND_FLAG } from "@/lib/flags/definitions/htpr-8437-people-comment-needs-kind";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -998,6 +999,12 @@ export async function POST(request: NextRequest) {
       : null
     if (writingPolicy && ctx.agentId && kind === undefined && (has_attachments || images?.length || /<img\b/i.test(sanitizedText) || (Array.isArray(body.attachments) && body.attachments.length))) {
       return NextResponse.json(buildFieldError('missing_field', 'kind', 'Choose kind (question|qa|done) before attaching files to a people comment.'), { status: 400 })
+    }
+    if (!ctx.agentId && kind === undefined && !dryRun && await isFeatureEnabled(HTPR_8437_PEOPLE_COMMENT_NEEDS_KIND_FLAG, user.id)) {
+      return NextResponse.json(
+        buildFieldError('missing_field', 'kind', 'Choose kind (question|qa|done) so the comment says who it is for. Text with no kind belongs in an agent log, and this token has none.', COMMENT_KINDS),
+        { status: 400 }
+      )
     }
     const legacyRouting = writingPolicy ? undefined : {
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
