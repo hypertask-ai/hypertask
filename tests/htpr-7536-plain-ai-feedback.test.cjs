@@ -256,7 +256,7 @@ test('a CLI board-membership refusal files no ticket and never reads as a wrong 
     const rendered = f.plainFeedback(reported, 'b'.repeat(64), { origin }).description
     assert.doesNotMatch(rendered, /wrong or expired key|refused when it signed in/)
   }
-  assert.match(f.plainFeedback(reported, 'b'.repeat(64), { origin: 'agent' }).description, /not allowed to use that board or action/)
+  assert.match(f.plainFeedback(reported, 'b'.repeat(64), { origin: 'agent' }).description, /may not use that board or action/)
 })
 
 for (const reason of ['invalid_token', 'insufficient_scope', new Error('Classifier unavailable')]) {
