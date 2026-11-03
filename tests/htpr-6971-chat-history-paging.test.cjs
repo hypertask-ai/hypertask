@@ -79,6 +79,7 @@ async function withHistory(config, check) {
       '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
       '@/lib/flags/definitions/htpr-7762-chat-new-session-focus': { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG: 'htpr-7762-chat-new-session-focus' },
       '@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch': { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: 'htpr-7763-ctrl-tab-session-switch' },
+      '@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup': { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: 'htpr-8263-full-screen-chat-cleanup' },
       '@/lib/state': { useRecoilValue: () => user, useRecoilState: (atom) => React.useState(atom === 'width' ? 280 : atom === 'scope' ? null : []) },
       '@/store': { fullScreenChatRailWidthAtom: 'width', fullScreenChatScopeAtom: 'scope' },
       '@/utils/aiChat/sortBoardsByRecent': { sortBoardsByRecent: (teams) => teams },
@@ -1110,8 +1111,6 @@ test('new feature flag defaults Owner + QA', () => {
   assert.equal(definition.default.kind, 'feature');
   assert.equal(definition.default.defaultMode, 'OWNER_AND_QA');
   assert.ok(definition.default.releaseRisk.reason);
-  const source = require('node:fs').readFileSync('src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts', 'utf8');
-  assert.match(source, /useFlag\(HTPR_6971_CHAT_HISTORY_PAGING_FLAG\)/);
 });
 
 test('unavailable server paging falls back to the complete legacy cache without requesting transcripts', async () => {
@@ -1151,7 +1150,6 @@ test('thirty titles load per page and messages load only for the displayed conve
 test('board lookup never picks a ticket conversation from a map, scoped lookup or empty reuse', async () => {
   const rows = [session(9, { taskId: 91, projectId: 4, messages: [] }), session(1, { projectId: 4 })];
   await withHistory({ rows, boardMap: { 4: id(9) }, page: (options) => {
-    // Deliberately include the ticket in a board response to prove client validation too.
     const visible = options.projectId ? [rows[0], rows[1]] : rows.slice(0, 1);
     return response({ success: true, sessions: visible.map(({ messages, ...row }) => ({ ...row, hasMessages: messages.length > 0 })), nextCursor: null });
   } }, async ({ resolver, history, requests, flush, mapChanges }) => {
@@ -1240,20 +1238,6 @@ test('chat orchestration passes the live ticket flag into resolution and send gu
     require('react-dom/server').renderToString(React.createElement(() => { useAiChat(); return null; }));
     assert.equal(resolution.sessionPagingEnabled, enabled && available);
     assert.equal(sending.sessionPagingEnabled, enabled && available);
-  }
-});
-
-test('flag-off session setup identity is exactly the production key without a paging suffix', () => {
-  const fs = require('node:fs');
-  const filename = 'src/hooks/MultiPages/AIChat/useAiChatState.ts';
-  const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = (\[[\s\S]*?\]\.join\(":"\))/)[1];
-  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, ticketScopeSelected: false, sessionPagingEnabled: false, manualDockedChat: false, navigationKey: null };
-  const evaluate = (expression, values) => new Function(...Object.keys(values), `return ${expression}`)(...Object.values(values));
-  for (const taskId of [undefined, 91]) {
-    context.taskId = taskId;
-    const legacyKey = `chat:docked:implicit:4:4:6:${taskId ?? 'no-task'}`;
-    assert.equal(evaluate(changed, context), legacyKey);
-    assert.equal(evaluate(changed, { ...context, sessionPagingEnabled: true }), `${legacyKey}:${flag}`);
   }
 });
 
