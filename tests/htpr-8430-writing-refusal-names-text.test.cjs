@@ -33,10 +33,10 @@ test('a long sentence refusal names the sentence', () => {
 
 test('a named sentence is clipped so the message stays readable', () => {
   const error = refusal(`${longSentence} and then it adds a great deal more text to make sure the quoted part is clipped by the excerpt helper`)
-  const quoted = error.message.match(/\(([^()]*)\)/)
+  const quoted = error.message.match(/\("([^"]*)"\)/)
   assert.ok(quoted, 'the refusal must quote the offending text')
   assert.ok(quoted[1].length <= 80, `the quoted text must be clipped, got ${quoted[1].length} characters`)
-  assert.match(quoted[1], /\.\.\."$/)
+  assert.match(quoted[1], /\.\.\.$/)
 })
 
 test('a nameable phrase still carries the plain-language advice', () => {
