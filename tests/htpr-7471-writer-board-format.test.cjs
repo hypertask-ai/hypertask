@@ -115,7 +115,7 @@ function harness(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.format !== false : key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG ? options.web !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
+      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
     } },
     "@/lib/flags/keys": keys,
     "@/app/api/ai/_lib/customInstructions": moduleWithStubs("src/app/api/ai/_lib/customInstructions.ts", new Proxy({ "@/lib/prisma": { __esModule: true, default: prisma }, "ai": ai }, { has: () => true, get: (target, id) => target[id] ?? {} })),
@@ -303,20 +303,18 @@ test("persisted instructions reach the actual SDK prompt for chat and empty-clie
   assert.match(promptText(whitespace), /OWN_INSTRUCTIONS_SENTINEL/);
 });
 
-for (const web of [true, false]) {
-  test(`recurring skeleton and title pattern outrank brevity only with the flag (web=${web})`, async () => {
-    const on = harness({ enabled: true, web });
-    await on.execute({ project_id: 15, brief: "Make this change" });
-    assert.match(promptText(on), skeletonRule);
-    assert.match(promptText(on), /title pattern/i);
-    assert.match(promptText(on), /same order/i);
-    assert.match(promptText(on), /custom fields.*(?:examples|instructions)/i);
-    assert.ok(on.checks.some(([key, userId]) => key === flag && userId === 985));
-    const off = harness({ enabled: true, format: false, web });
-    await off.execute({ project_id: 15, brief: "Make this change" });
-    assert.doesNotMatch(promptText(off), skeletonRule);
-  });
-}
+test("recurring skeleton and title pattern outrank brevity only with the flag", async () => {
+  const on = harness({ enabled: true });
+  await on.execute({ project_id: 15, brief: "Make this change" });
+  assert.match(promptText(on), skeletonRule);
+  assert.match(promptText(on), /title pattern/i);
+  assert.match(promptText(on), /same order/i);
+  assert.match(promptText(on), /custom fields.*(?:examples|instructions)/i);
+  assert.ok(on.checks.some(([key, userId]) => key === flag && userId === 985));
+  const off = harness({ enabled: true, format: false });
+  await off.execute({ project_id: 15, brief: "Make this change" });
+  assert.doesNotMatch(promptText(off), skeletonRule);
+});
 
 for (const surface of ["chat", "compose"]) {
   test(`${surface}: vocabulary includes the board Number definition and saves model customFields=19`, async () => {
@@ -361,22 +359,20 @@ test("CLI/MCP returns validated customFields without leaking its metadata into H
   assert.deepEqual(h.fieldSaves, []);
 });
 
-for (const web of [true, false]) {
-  test(`flag off: exact production SDK prompts, no instruction/field load or save (web=${web})`, async () => {
-    const h = harness({ enabled: true, format: false, web });
-    await h.execute({ project_id: 15, brief: "Make this change" });
-    assert.equal(digest(promptText(h)), web ? "d8492475696ad235a452af16a21a09469f4a04d9354134d753a66ad552746303" : "5e696ae7af81c707c8752ecda742a77a8f0ce3060dd6f4c619693cee8407a5e8");
-    assert.deepEqual(h.instructionLoads, []);
-    assert.deepEqual(h.fieldLoads, []);
-    assert.deepEqual(h.fieldSaves, []);
-    assert.doesNotMatch(promptText(h), /OWN_INSTRUCTIONS|score-field|FOREIGN|CUSTOM_FIELDS/);
-    const compose = harness({ format: false, web });
-    assert.equal((await compose.compose()).writerFailed, false);
-    assert.deepEqual(compose.instructionLoads, []);
-    assert.deepEqual(compose.fieldLoads, []);
-    assert.deepEqual(compose.fieldSaves, []);
-  });
-}
+test("flag off: exact production SDK prompts, no instruction/field load or save", async () => {
+  const h = harness({ enabled: true, format: false });
+  await h.execute({ project_id: 15, brief: "Make this change" });
+  assert.equal(digest(promptText(h)), "d8492475696ad235a452af16a21a09469f4a04d9354134d753a66ad552746303");
+  assert.deepEqual(h.instructionLoads, []);
+  assert.deepEqual(h.fieldLoads, []);
+  assert.deepEqual(h.fieldSaves, []);
+  assert.doesNotMatch(promptText(h), /OWN_INSTRUCTIONS|score-field|FOREIGN|CUSTOM_FIELDS/);
+  const compose = harness({ format: false });
+  assert.equal((await compose.compose()).writerFailed, false);
+  assert.deepEqual(compose.instructionLoads, []);
+  assert.deepEqual(compose.fieldLoads, []);
+  assert.deepEqual(compose.fieldSaves, []);
+});
 
 test("authorization precedes instruction and field loading, with an own-board positive control", async () => {
   const own = harness({ enabled: true });

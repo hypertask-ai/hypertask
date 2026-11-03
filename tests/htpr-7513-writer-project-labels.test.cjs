@@ -121,7 +121,7 @@ function harness(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG ? options.web !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, keys.HTPR_6937_NEW_TASK_WINDOW_FLAG].includes(key);
+      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, keys.HTPR_6937_NEW_TASK_WINDOW_FLAG].includes(key);
     } },
     "@/lib/flags/keys": keys,
     "@/app/api/ai/_lib/customInstructions": moduleWithStubs("src/app/api/ai/_lib/customInstructions.ts", new Proxy({ "@/lib/prisma": { __esModule: true, default: prisma }, "ai": ai }, { has: () => true, get: (target, id) => target[id] ?? {} })),

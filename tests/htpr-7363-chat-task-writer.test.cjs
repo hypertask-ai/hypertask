@@ -90,7 +90,7 @@ function harness(options = {}) {
       return { taskRows, commentRows };
     } },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG || key === keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG },
+    "@/lib/flags": { ...keys, isFeatureEnabled: async (key) => key === keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG },
     "@/lib/flags/keys": keys,
     "@/lib/ai/prompts/registry": load(path.join(root, "src/lib/ai/prompts/registry.ts")),
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => !options.featureDisabled },

@@ -292,7 +292,6 @@
   "tests/htpr-7324-plan-ai-caps.test.cjs": 2,
   "tests/htpr-7337-edit-with-ai.test.cjs": 1,
   "tests/htpr-7338-ai-writer-stays-visible.test.cjs": 3,
-  "tests/htpr-7342-web-writing-task-writer.test.cjs": 1,
   "tests/htpr-7343-ctrlj-writer-properties.test.cjs": 4,
   "tests/htpr-7349-title-clear-of-nav.test.cjs": 1,
   "tests/htpr-7360-new-task-keeps-creator-labels.test.cjs": 1,
