@@ -107,8 +107,9 @@ for (const operation of ['get', 'versions', 'update', 'archive', 'restore']) {
         '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
         '@/utils/controllers/pages/pageService': h.service,
         '@/lib/mcp/operations/pages/helpers': helpers(board),
-        '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (s) => s },
+        '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (s) => s, htmlToMarkdownWithTables: (s) => s },
         '@/utils/controllers/pages/htmlCanvas': { decodeHtmlCanvas: () => null },
+        '@/lib/flags': { isFeatureEnabled: async () => true },
       });
       const request = { headers: new Headers({ Authorization: `Bearer ${require('jsonwebtoken').sign({ userId: 7 }, 'fixture')}` }), nextUrl: new URL('https://example.invalid/?id=10'), json: async () => ({ id: 10, title: 'Updated title', version_id: 5 }) };
       const response = await (route.GET ?? route.POST)(request);

@@ -253,6 +253,7 @@ export async function POST(request: NextRequest) {
             id: page.id,
             title: page.title,
             version: page.version,
+            content_type: contentType,
             url: getPageUrl(page.publicId),
           },
         }

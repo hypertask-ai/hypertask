@@ -24,6 +24,7 @@ function fixture(enabled) {
   h.prisma.task.findUnique = async () => h.state.tasks.find((t) => t.id === 11);
   const mocks = {
     '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
+      if (key === 'htpr-8435-page-export-tables') return false;
       assert.equal(key, flag);
       assert.equal(userId, 3, 'evaluate the human credential owner, not agent id');
       flagCalls.push([key, userId]);
@@ -46,7 +47,7 @@ function fixture(enabled) {
       IdempotencyAccessError: class extends Error {},
       IdempotencyInProgressError: class extends Error {},
     },
-    '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (html) => html },
+    '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (html) => html, htmlToMarkdownWithTables: (html) => html },
     ai: { tool: (value) => value },
     '@/lib/ai/tools/execution': { withToolErrors: (fn) => fn },
     '@/lib/ai/tools/helpers': { sanitizeForJson: (value) => value, getAccessibleProjectIds: async () => [1, 2, 3] },
