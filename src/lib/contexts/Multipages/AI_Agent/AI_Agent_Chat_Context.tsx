@@ -1,9 +1,11 @@
 "use client";
 import type { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
+import toast from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
+import { isNewChatWindowShortcut } from "@/lib/aiChat/chatShortcuts";
 import { useRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom } from "@/store";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
@@ -200,6 +202,19 @@ export const ChatRuntime = memo(function ChatRuntime({
       document.removeEventListener("keydown", handleLayoutKeydown);
     };
   }, [windowScope]);
+
+  useEffect(() => {
+    if (windowScope || !chatWindows) return;
+    const handleNewChatWindow = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !isNewChatWindowShortcut(event)) return;
+      event.preventDefault();
+      void chatWindows.openNewChatWindow().then((opened) => {
+        if (!opened && chatWindows.atCapacity) toast("Close a chat window to open another chat.");
+      });
+    };
+    document.addEventListener("keydown", handleNewChatWindow);
+    return () => document.removeEventListener("keydown", handleNewChatWindow);
+  }, [chatWindows, windowScope]);
 
   const [pendingAiChatPrompt, setPendingAiChatPrompt] = useRecoilState(
     aiChatPendingPromptAtom

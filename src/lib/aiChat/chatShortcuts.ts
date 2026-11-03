@@ -60,6 +60,12 @@ export function dispatchChatShortcut(
   return true;
 }
 
+export const isNewChatWindowShortcut = (event: Event): boolean => {
+  const keyboardEvent = event as KeyboardEvent;
+  if (keyboardEvent.repeat) return false;
+  return matchChatShortcut(keyboardEvent, true) === "new";
+};
+
 export function adjacentChatSession(ids: string[], currentId: string | undefined, direction: "next" | "previous") {
   const index = ids.indexOf(currentId ?? "");
   if (index < 0) return;
