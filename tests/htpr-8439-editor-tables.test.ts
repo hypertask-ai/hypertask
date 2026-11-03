@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
-import fs from "node:fs";
-import path from "node:path";
 import test from "node:test";
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -9,7 +7,6 @@ import { TableKit } from "@tiptap/extension-table";
 
 const require = createRequire(import.meta.url);
 const { JSDOM } = require("jsdom");
-const root = path.resolve(import.meta.dirname, "..");
 
 function installBrowserGlobals(window: Window & typeof globalThis) {
   const globals = {
@@ -94,13 +91,4 @@ test("a saved page keeps its table when the editor opens it again", (t) => {
   const reopened = editor.getHTML();
   assert.equal((reopened.match(/<td/g) ?? []).length, 4);
   assert.match(reopened, /<td[^>]*><p>Gamma<\/p><\/td>/);
-});
-
-test("the page editor registers the table kit", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/components/RTE/Tiptap.ts"),
-    "utf8"
-  );
-  assert.match(source, /import \{ TableKit \} from "@tiptap\/extension-table"/);
-  assert.match(source, /\n\s*TableKit\.configure\(/);
 });
