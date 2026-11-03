@@ -4,6 +4,7 @@ import Highlight from "@tiptap/extension-highlight";
 import OrderedList from "@tiptap/extension-ordered-list";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
+import { TableKit } from "@tiptap/extension-table";
 import { Extension, nodePasteRule, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -148,6 +149,7 @@ const useTiptap = ({
       Figma,
       Youtube,
       HtmlBlock,
+      TableKit.configure({ table: { resizable: false } }),
       TaskList.configure({
         HTMLAttributes: {
           class: "taskList",
