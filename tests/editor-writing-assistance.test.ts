@@ -402,3 +402,33 @@ test("HTPR-5908: Select All and delete also preserves lowercase on retyping", (t
   editor.commands.insertContent("hello");
   assert.equal(editor.getText(), "hello");
 });
+
+test("HTPR-6906: deleting the only word with a plain selection also preserves lowercase on retyping", (t) => {
+  const editor = makeUndoEditor(t, { undo: true, retype: true });
+  editor.commands.setContent("<p></p>", { emitUpdate: false });
+  editor.commands.setTextSelection(1);
+  dispatchTextInput(editor, "h");
+  editor.commands.insertContent("ello");
+  assert.equal(editor.getText(), "Hello");
+  editor.commands.setTextSelection({ from: 1, to: 6 });
+  editor.commands.deleteSelection();
+  assert.equal(editor.getText(), "");
+  assert.equal(dispatchTextInput(editor, "h"), false);
+  editor.commands.insertContent("ello");
+  assert.equal(editor.getText(), "hello");
+});
+
+test("HTPR-6906: a document rewrite after the word is deleted still keeps the retype lowercase", (t) => {
+  const editor = makeUndoEditor(t, { undo: true, retype: true });
+  editor.commands.setContent("<p></p>", { emitUpdate: false });
+  editor.commands.setTextSelection(1);
+  dispatchTextInput(editor, "z");
+  assert.equal(editor.getText(), "Z");
+  editor.commands.setTextSelection({ from: 1, to: 2 });
+  editor.commands.deleteSelection();
+  assert.equal(editor.getText(), "");
+  editor.commands.setContent("<p></p>", { emitUpdate: false });
+  assert.equal(dispatchTextInput(editor, "z"), false);
+  editor.commands.insertContent("z");
+  assert.equal(editor.getText(), "z");
+});
