@@ -14,6 +14,7 @@ const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 const policy = load(path.join(root, "src/lib/aiAllowancePolicy.ts"));
 const fallback = load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts"));
 const flag = load(path.join(root, "src/lib/flags/definitions/htpr-7634-openai-only-default.ts"));
+const agentChatFlag = load(path.join(root, "src/lib/flags/definitions/htpr-7681-agent-team-openai-default.ts"));
 const userId = 1000;
 const projectId = 7634;
 const teamId = "fixture-team";
@@ -40,7 +41,7 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false, managed = false, openai = false, openaiGateway = false, gateway = false, openrouter = false, agentProvider = null, agentCiphertext = null, agentId = null, settings = {}, flagError = false, background = false } = {}) {
+function harness({ enabled = true, agentTeamOpenai = false, plan = "Pro", saved = null, teamByok = false, managed = false, openai = false, openaiGateway = false, gateway = false, openrouter = false, agentProvider = null, agentCiphertext = null, agentKeys = {}, agentId = null, settings = {}, flagError = false, background = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
@@ -49,6 +50,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
       if (flagError) throw new Error("Fixture flag read failed");
       return enabled;
     }
+    if (key === agentChatFlag.HTPR_7681_AGENT_TEAM_OPENAI_DEFAULT_FLAG) return agentTeamOpenai;
     if (key === keys.HTPR_7075_BACKGROUND_CLAUDE_FLAG) return background;
     return false;
   } };
@@ -70,7 +72,9 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     } },
     agentByokApiKey: { findUnique: async ({ where }) => {
       agentLookups.push(where.agentId_provider);
-      return agentProvider && where.agentId_provider.provider === agentProvider ? { enabled: true, ciphertext: agentCiphertext ?? (agentProvider === "gateway" ? "vck_fixture_agent" : agentKey) } : null;
+      const provider = where.agentId_provider.provider;
+      const ciphertext = agentKeys[provider] ?? (agentProvider && provider === agentProvider ? agentCiphertext ?? (agentProvider === "gateway" ? "vck_fixture_agent" : agentKey) : null);
+      return ciphertext ? { enabled: true, ciphertext } : null;
     } },
     userSetting: { findUnique: async () => {
       preferenceReads += 1;
@@ -227,7 +231,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     await Promise.all(observations);
     return { status: response.status, content };
   };
-  return { post, editor, gate, byok, modelApi, checks, calls, reservations, agentLookups, usage, preferenceReads: () => preferenceReads };
+  return { post, editor, gate, byok, modelApi, flags, checks, calls, reservations, agentLookups, usage, preferenceReads: () => preferenceReads };
 }
 
 const test = require("node:test");
@@ -452,6 +456,8 @@ function chatTurnModule(h, actingAgentId, agentPin = null) {
   });
   return moduleWithStubs("src/lib/ai/chatStream/turnModel.ts", {
     "next/server": { NextResponse: { json: Response.json } },
+    "@/lib/flags": h.flags,
+    "@/lib/flags/definitions/htpr-7681-agent-team-openai-default": agentChatFlag,
     "@/lib/prisma": { __esModule: true, default: { chatSession: { findFirst: async () => ({ agent: actingAgentId ? { runtimeType: "NATIVE" } : null }) }, userSetting: { findUnique: async () => null } } },
     "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder, "@/lib/aiProviders": providers,
@@ -510,6 +516,36 @@ test("agent chat without its own key on an OpenAI-only team runs Luna on the tea
 });
 
 const serverDefaultTurn = { aiFeature: "aiChat", session_id: "fixture-session", modelFromDefault: true };
+for (const [label, input] of [
+  ["a shared gateway key", { agentProvider: "openai", agentCiphertext: sharedKey }],
+  ["a registered managed key", { agentProvider: "openai", agentCiphertext: managedKey, registerManaged: true }],
+  ["its own direct OpenAI key", { agentProvider: "openai" }],
+]) {
+  for (const body of [serverDefaultTurn, browserLunaDefault]) {
+    for (const agentPin of [null, lunaOption.id]) {
+      test(`HTPR-7681 default agent chat with ${label}, ${body.model ? "browser Luna" : "server default"}, pin ${agentPin}: Luna uses only the team's stored OpenAI key`, async () => {
+        const outcome = await chatTurnOutcome({ ...input, agentPin, agentTeamOpenai: true }, body);
+        assert.deepEqual(outcome, { modelId: "gpt-6-luna", credential: "fixture-direct-openai" });
+      });
+    }
+  }
+}
+
+test("HTPR-7681 an agent with Claude and OpenAI keys keeps Haiku on its Claude key", async () => {
+  const outcome = await chatTurnOutcome({ agentTeamOpenai: true, agentKeys: { claude: agentKey, openai: "fixture-agent-openai" } }, serverDefaultTurn);
+  assert.deepEqual(outcome, { modelId: "claude-haiku-5.5", credential: agentKey });
+});
+
+test("HTPR-7681 a hand-picked Luna keeps the agent's own direct OpenAI key", async () => {
+  const outcome = await chatTurnOutcome({ agentTeamOpenai: true, agentProvider: "openai" }, { ...browserLunaDefault, modelFromDefault: false });
+  assert.deepEqual(outcome, { modelId: "gpt-6-luna", credential: agentKey });
+});
+
+test("HTPR-7681 without a stored team OpenAI key an agent's shared key never becomes the Luna default", async () => {
+  const outcome = await chatTurnOutcome({ agentTeamOpenai: true, openai: false, agentProvider: "openai", agentCiphertext: sharedKey }, serverDefaultTurn);
+  assert.notEqual(outcome.modelId, "gpt-6-luna", JSON.stringify(outcome));
+});
+
 for (const [label, input] of [
   ["a shared gateway key in its OpenAI slot", { agentProvider: "openai", agentCiphertext: sharedKey }],
   ["a registered managed key in its OpenAI slot", { agentProvider: "openai", agentCiphertext: managedKey, registerManaged: true }],
