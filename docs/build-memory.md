@@ -123,3 +123,36 @@ Webpack limits concurrent module builds with `parallelism`, default 100. Next on
 The build script now sets `NEXT_WEBPACK_PARALLELISM=4`, one concurrent module build per core of Vercel's standard 4 vCPU / 8 GB build machine, so the native side of the compile scales with the cores that actually run it instead of with a queue depth of 100. `tests/build-memory-config.test.cjs` fails if the cap is dropped or raised above the core count.
 
 If the next production build still reports `out_of_memory`, the parallelism is not the binding term: the fallback is 2, then 1, and after that the compiler genuinely needs more than an 8 GB machine, which makes the paid Enhanced Build Machine Valentin's decision.
+
+## Webpack parallelism 2 (2026-11-03, HYCI-98)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/98
+
+The parallelism 4 cap from HTPR-8342 did not fit the graph the app compiles today. It is a real reduction (the cap is read: `getParallelism` in Next 16.4.2, `next/dist/build/webpack-config.js:712`, and it is ignored only when `experimental.slowModuleDetection` is on in dev), but the 8 GB machine still fills.
+
+Measured from the production deployment record and the build logs, not from a local build:
+
+| Fact | Value |
+| --- | --- |
+| Production builds with the 4 cap in place (01:59 to 05:10 UTC) | 19 |
+| Of those OOM-killed | 2 (`6bcdd4d1` at 04:58, `4a60deed` at 05:10) |
+| Green builds in the same window | 17, durations 4m 48s to 8m 36s |
+| Kill point in `dpl_3fuD1HADKbaphgV2MXy2XBCh9vcS` | 87 s into "Creating an optimized production build", compiler output still empty |
+| Build machine | 4 vCPU, 8192 MiB, standard |
+
+The failing log names the phase and rules out the heap cap again:
+
+```
+✓ Running next.config.js took 973ms
+  Creating an optimized production build ...
+Next.js build worker exited with code: null and signal: SIGKILL
+• At least one "Out of Memory" ("OOM") event was detected during the build.
+```
+
+No "Reached heap limit" anywhere, so V8 stayed inside its 4096 MB cap while the container filled: the native term is still the binding one, and it scales with concurrency. Note that `6bcdd4d1` and `4a60deed` differ from the green builds only by which module graph they compile, so the build sits on the ceiling and trips when a merge adds enough code.
+
+The build script now sets `NEXT_WEBPACK_PARALLELISM=2`, half of the 4 vCPU / 8 GB machine's cores. `tests/build-memory-config.test.cjs` fails if the cap is raised above 2 or dropped.
+
+The expected cost is build wall-clock only, which the 45 minute build timeout leaves room for.
+
+If a production build still reports `out_of_memory` at 2, the next step is 1. Below that, the remaining lever without money is the heap cap: lowering `--max-old-space-size` from 4096 makes V8 collect earlier and hands the difference to native memory, and if the heap is then genuinely too small the log says "Reached heap limit" instead of dying silently. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
