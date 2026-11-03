@@ -657,6 +657,7 @@ export async function createTask(data: {
                 labelIds: labelIds?.map(String),
                 uniqueIndex: taskWithDescription.uniqueIndex,
                 title: taskWithDescription.title,
+                userId,
             });
         } catch (error) {
             console.error('[mcp-task-create] feedback Slack line failed', { taskId: taskWithDescription.id, error });

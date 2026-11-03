@@ -328,6 +328,7 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
                 labelIds,
                 uniqueIndex: newTask.uniqueIndex,
                 title: newTask.title,
+                userId,
             });
         } catch (error) {
             console.error('[task-create-core] feedback Slack line failed', { taskId: newTask.id, error });

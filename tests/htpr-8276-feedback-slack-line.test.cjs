@@ -4,8 +4,11 @@ const { loadModule } = require('./helpers/loadModule.cjs')
 
 const posts = []
 let installRow = null
+let flagOn = true
+const flagChecks = []
 const modules = () => loadModule('src/lib/aiFeedback/slackLine.ts', {
   '@/lib/crypto/byokCipher': { decryptSecret: (value) => `plain:${value}` },
+  '@/lib/flags': { isFeatureEnabled: async (key, userId) => (flagChecks.push([key, userId]), flagOn) },
   '@/lib/slack/api': {
     postSlackMessage: async (...args) => {
       posts.push(args)
@@ -33,9 +36,12 @@ const feedbackTicket = {
   labelIds: ['label-ai'],
   uniqueIndex: 8487,
   title: 'Agent feedback, bug: An agent list call returns nothing',
+  userId: 404,
 }
 const slackReady = () => {
   posts.length = 0
+  flagChecks.length = 0
+  flagOn = true
   process.env.SLACK_FEEDBACK_CHANNEL_ID = 'C-FEEDBACK'
   installRow = { encryptedBotToken: 'cipher' }
 }
@@ -61,6 +67,7 @@ test('a new feedback ticket on board 15 posts exactly one line with the workspac
   slackReady()
   await announceFeedbackTicket(feedbackTicket)
   assert.equal(posts.length, 1)
+  assert.deepEqual(flagChecks, [['htpr-8276-feedback-slack-line', 404]])
   const [botToken, channelId, blocks] = posts[0]
   assert.equal(botToken, 'plain:cipher')
   assert.equal(channelId, 'C-FEEDBACK')
@@ -90,6 +97,14 @@ test('tickets outside board 15, without the feedback label, or without a channel
   process.env.SLACK_FEEDBACK_CHANNEL_ID = '   '
   await announceFeedbackTicket(feedbackTicket)
   assert.equal(posts.length, 0)
+})
+
+test('Flag Off stops the line even when a channel is named', async () => {
+  slackReady()
+  flagOn = false
+  await announceFeedbackTicket(feedbackTicket)
+  assert.equal(posts.length, 0)
+  assert.deepEqual(flagChecks, [['htpr-8276-feedback-slack-line', 404]])
 })
 
 test('a workspace without a Slack install posts nothing', async () => {

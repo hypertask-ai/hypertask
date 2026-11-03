@@ -1,5 +1,7 @@
 import prisma from '@/lib/prisma'
 import { decryptSecret } from '@/lib/crypto/byokCipher'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8276_FEEDBACK_SLACK_LINE_FLAG } from '@/lib/flags/definitions/htpr-8276-feedback-slack-line'
 import { postSlackMessage } from '@/lib/slack/api'
 
 const FEEDBACK_PROJECT_ID = 15
@@ -26,10 +28,12 @@ export async function announceFeedbackTicket(input: {
   labelIds?: (string | number)[]
   uniqueIndex: number
   title: string
+  userId: number
 }): Promise<void> {
   if (input.projectId !== FEEDBACK_PROJECT_ID || !input.labelIds?.length) return
   const channelId = process.env.SLACK_FEEDBACK_CHANNEL_ID?.trim()
   if (!channelId) return
+  if (!await isFeatureEnabled(HTPR_8276_FEEDBACK_SLACK_LINE_FLAG, input.userId)) return
   const label = await prisma.label.findFirst({
     where: { projectId: FEEDBACK_PROJECT_ID, value: FEEDBACK_LABEL, id: { in: input.labelIds.map(String) } },
     select: { id: true },
