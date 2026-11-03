@@ -7,10 +7,14 @@ const FEEDBACK_LABEL = 'ai-feedback'
 const KINDS = 'bug|friction|missing|idea'
 const KIND_PREFIX = new RegExp(`^\\s*Agent feedback,\\s*(${KINDS})\\s*:\\s*`, 'i')
 
+function mrkdwn(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 export function feedbackLine(title: string, url: string): string {
   const kind = title.match(KIND_PREFIX)?.[1].toLowerCase() ?? 'feedback'
   const summary = title.replace(KIND_PREFIX, '').trim() || title.trim()
-  return `*${kind}* · ${summary} · ${url}`
+  return `*${kind}* · ${mrkdwn(summary)} · ${url}`
 }
 
 export function feedbackTicketUrl(uniqueIndex: number): string {
@@ -33,6 +37,7 @@ export async function announceFeedbackTicket(input: {
   if (!label) return
   const install = await prisma.slackInstall.findFirst({
     where: { team: { projects: { some: { id: FEEDBACK_PROJECT_ID } } } },
+    orderBy: { updatedAt: 'desc' },
     select: { encryptedBotToken: true },
   })
   if (!install) return

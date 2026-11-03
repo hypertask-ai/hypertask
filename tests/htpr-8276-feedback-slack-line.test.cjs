@@ -55,6 +55,7 @@ test('the line names the kind, the short summary and the ticket link and carries
   assert.equal(feedbackLine('Agent feedback, friction: Two lists disagree', 'https://app.hypertask.ai/detail/project-15/2'), '*friction* · Two lists disagree · https://app.hypertask.ai/detail/project-15/2')
   assert.equal(feedbackLine("An agent's CLI call to list had a problem (3 Nov)", 'https://app.hypertask.ai/detail/project-15/3'), "*feedback* · An agent's CLI call to list had a problem (3 Nov) · https://app.hypertask.ai/detail/project-15/3")
   assert.equal(feedbackLine('Agent feedback, idea: ', 'https://app.hypertask.ai/detail/project-15/4'), '*idea* · Agent feedback, idea:  · https://app.hypertask.ai/detail/project-15/4')
+  assert.equal(feedbackLine('Agent feedback, bug: <!channel> & <https://evil.test|click>', 'https://app.hypertask.ai/detail/project-15/5'), '*bug* · &lt;!channel&gt; &amp; &lt;https://evil.test|click&gt; · https://app.hypertask.ai/detail/project-15/5')
 })
 
 test('a new feedback ticket on board 15 posts exactly one line with the workspace bot', async () => {
