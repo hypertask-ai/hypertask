@@ -5,6 +5,7 @@ export const HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG = "htpr-8101-vercel-budget-aler
 export default {
   key: HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG,
   kind: "improvement",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-03",
   releaseRisk: {
     "risk": "small",

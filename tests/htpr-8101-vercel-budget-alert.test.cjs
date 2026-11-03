@@ -5,6 +5,7 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 
 const ROUTE = "src/app/api/integrations/vercel/budget-alert/route.ts";
 const TICKET_LIB = "@/lib/ops/fileVercelBudgetTicket";
+const FILING_LIB = "@/lib/ops/budgetAlertFiling";
 const FLAGS_LIB = "@/lib/flags";
 
 function sign(secret, body) {
@@ -15,11 +16,11 @@ function loadAlertLib() {
   return loadModule("src/lib/ops/vercelBudgetAlert.ts");
 }
 
-function loadFilerLib() {
-  return loadModule("src/lib/ops/fileVercelBudgetTicket.ts");
+function loadFilingLib() {
+  return loadModule("src/lib/ops/budgetAlertFiling.ts");
 }
 
-function loadRoute({ onFile = () => {}, flagOn = true } = {}) {
+function loadRoute({ onFile = () => {}, flagOn = true, emailed = false } = {}) {
   return loadModule(ROUTE, {
     [FLAGS_LIB]: {
       HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG: "htpr-8101-vercel-budget-alerts",
@@ -28,7 +29,13 @@ function loadRoute({ onFile = () => {}, flagOn = true } = {}) {
     [TICKET_LIB]: {
       fileVercelBudgetTicket: async (alert) => {
         onFile(alert);
-        return { taskId: 4242, created: true, emailed: false };
+        return { taskId: 4242, created: true, emailed };
+      },
+    },
+    [FILING_LIB]: {
+      fileBudgetAlert: async (alert) => {
+        onFile(alert);
+        return { taskId: 4242, created: true, emailed };
       },
       BudgetAlertRaceError: class BudgetAlertRaceError extends Error {},
     },
@@ -43,7 +50,7 @@ function postRequest(body, headers = {}) {
   });
 }
 
-function documentedAlert(overrides = {}) {
+function documentedPayload(overrides = {}) {
   return {
     budgetAmount: 500,
     currentSpend: 250,
@@ -51,6 +58,12 @@ function documentedAlert(overrides = {}) {
     thresholdPercent: 50,
     ...overrides,
   };
+}
+
+function alert(overrides = {}) {
+  const parsed = loadAlertLib().parseVercelBudgetAlert(documentedPayload(overrides));
+  assert.ok(parsed, `payload not accepted: ${JSON.stringify(overrides)}`);
+  return parsed;
 }
 
 function memoryStore({ createDelayMs = 0 } = {}) {
@@ -64,11 +77,11 @@ function memoryStore({ createDelayMs = 0 } = {}) {
     async findTicket(marker) {
       return tickets.get(marker) ?? null;
     },
-    async createTicket(alert) {
+    async createTicket(created) {
       calls.create += 1;
       if (createDelayMs) await new Promise((resolve) => setTimeout(resolve, createDelayMs));
       const id = nextId++;
-      tickets.set(loadAlertLib().budgetAlertMarkerHtml(alert), id);
+      tickets.set(loadAlertLib().budgetAlertMarkerHtml(created), id);
       return id;
     },
     async addComment() {
@@ -95,8 +108,7 @@ function memoryStore({ createDelayMs = 0 } = {}) {
 }
 
 test("documented Vercel spend payload is accepted", () => {
-  const alert = loadAlertLib().parseVercelBudgetAlert(documentedAlert());
-  assert.deepEqual(alert, {
+  assert.deepEqual(loadAlertLib().parseVercelBudgetAlert(documentedPayload()), {
     budgetAmount: 500,
     currentSpend: 250,
     thresholdPercent: 50,
@@ -106,24 +118,24 @@ test("documented Vercel spend payload is accepted", () => {
 });
 
 test("an explicit budget scope is kept", () => {
-  const alert = loadAlertLib().parseVercelBudgetAlert(documentedAlert({ budgetScope: "ai gateway budget" }));
-  assert.equal(alert.budgetScope, "ai gateway budget");
+  const parsed = loadAlertLib().parseVercelBudgetAlert(documentedPayload({ budgetScope: "ai gateway budget" }));
+  assert.equal(parsed.budgetScope, "ai gateway budget");
 });
 
 test("payloads missing a spend, budget, team or threshold are refused", () => {
   const { parseVercelBudgetAlert } = loadAlertLib();
-  assert.ok(parseVercelBudgetAlert(documentedAlert()));
+  assert.ok(parseVercelBudgetAlert(documentedPayload()));
   for (const broken of [
-    { ...documentedAlert(), budgetAmount: undefined },
-    { ...documentedAlert(), budgetAmount: 0 },
-    { ...documentedAlert(), currentSpend: -1 },
-    { ...documentedAlert(), currentSpend: "250" },
-    { ...documentedAlert(), teamId: "" },
-    { ...documentedAlert(), teamId: "team with spaces" },
-    { ...documentedAlert(), teamId: "team_<script>" },
-    { ...documentedAlert(), thresholdPercent: 50.5 },
-    { ...documentedAlert(), thresholdPercent: 0 },
-    { ...documentedAlert(), thresholdPercent: 5000 },
+    { ...documentedPayload(), budgetAmount: undefined },
+    { ...documentedPayload(), budgetAmount: 0 },
+    { ...documentedPayload(), currentSpend: -1 },
+    { ...documentedPayload(), currentSpend: "250" },
+    { ...documentedPayload(), teamId: "" },
+    { ...documentedPayload(), teamId: "team with spaces" },
+    { ...documentedPayload(), teamId: "team_<script>" },
+    { ...documentedPayload(), thresholdPercent: 50.5 },
+    { ...documentedPayload(), thresholdPercent: 0 },
+    { ...documentedPayload(), thresholdPercent: 5000 },
     null,
     "not-json-object",
     [],
@@ -135,7 +147,7 @@ test("payloads missing a spend, budget, team or threshold are refused", () => {
 test("only the raw-body sha1 of the shared secret verifies", () => {
   const { verifyVercelSignature } = loadAlertLib();
   const secret = "whsec_example";
-  const body = JSON.stringify(documentedAlert());
+  const body = JSON.stringify(documentedPayload());
   assert.equal(verifyVercelSignature(body, sign(secret, body), secret), true);
   assert.equal(verifyVercelSignature(body, sign(secret, body).toUpperCase(), secret), true);
   assert.equal(verifyVercelSignature(body, sign("another-secret", body), secret), false);
@@ -147,9 +159,9 @@ test("only the raw-body sha1 of the shared secret verifies", () => {
 
 test("the ticket names the limit, the spend and the budget left", () => {
   const { budgetAlertDescription, budgetAlertTitle } = loadAlertLib();
-  const alert = documentedAlert({ currentSpend: 375.5, thresholdPercent: 75 });
-  assert.equal(budgetAlertTitle(alert), "Vercel team budget at 75%: $375.50 of $500.00");
-  const description = budgetAlertDescription(alert);
+  const full = alert({ currentSpend: 375.5, thresholdPercent: 75 });
+  assert.equal(budgetAlertTitle(full), "Vercel team budget at 75%: $375.50 of $500.00");
+  const description = budgetAlertDescription(full);
   assert.match(description, /reached 75%/);
   assert.match(description, /Spent so far: \$375\.50 of \$500\.00/);
   assert.match(description, /Budget left: \$124\.50/);
@@ -158,59 +170,69 @@ test("the ticket names the limit, the spend and the budget left", () => {
 
 test("each threshold and budget gets its own marker", () => {
   const { budgetAlertMarker, budgetAlertMarkerHtml } = loadAlertLib();
-  const base = documentedAlert();
+  const base = alert();
   const marker = budgetAlertMarker(base);
   assert.equal(marker, "vercel-budget-alert:team:team_jkT8yZ3oE1u6xLo8h6dxfNc3:budget:500:threshold:50");
   assert.equal(budgetAlertMarkerHtml(base), `<p>${marker}</p>`);
-  assert.notEqual(marker, budgetAlertMarker({ ...base, thresholdPercent: 100 }));
-  assert.notEqual(marker, budgetAlertMarker({ ...base, budgetAmount: 900 }));
+  assert.notEqual(marker, budgetAlertMarker(alert({ thresholdPercent: 100 })));
+  assert.notEqual(marker, budgetAlertMarker(alert({ budgetAmount: 900 })));
 });
 
 test("a threshold of 10 never matches an existing 100 ticket", () => {
   const { budgetAlertMarkerHtml } = loadAlertLib();
-  const stored = `${budgetAlertMarkerHtml(documentedAlert({ thresholdPercent: 100 }))}`;
-  const wanted = budgetAlertMarkerHtml(documentedAlert({ thresholdPercent: 10 }));
-  assert.equal(stored.includes(wanted), false);
+  const stored = budgetAlertMarkerHtml(alert({ thresholdPercent: 100 }));
+  assert.equal(stored.includes(budgetAlertMarkerHtml(alert({ thresholdPercent: 10 }))), false);
 });
 
 test("two deliveries of one alert file one ticket", async () => {
-  const { fileBudgetAlert } = loadFilerLib();
+  const { fileBudgetAlert } = loadFilingLib();
   const store = memoryStore({ createDelayMs: 20 });
-  const alert = documentedAlert({ thresholdPercent: 100 });
+  const one = alert({ thresholdPercent: 100 });
   const results = await Promise.all([
-    fileBudgetAlert(alert, store),
-    fileBudgetAlert(alert, store),
-    fileBudgetAlert(alert, store),
+    fileBudgetAlert(one, store),
+    fileBudgetAlert(one, store),
+    fileBudgetAlert(one, store),
   ]);
   assert.equal(store.calls.create, 1);
-  assert.equal(results.length, 3);
   assert.equal(new Set(results.map((result) => result.taskId)).size, 1);
   assert.equal(results.filter((result) => result.created).length, 1);
 });
 
+test("a delivery that loses the race still records its spend", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const store = memoryStore({ createDelayMs: 20 });
+  const results = await Promise.all([
+    fileBudgetAlert(alert(), store),
+    fileBudgetAlert(alert({ currentSpend: 300 }), store),
+  ]);
+  assert.equal(store.calls.create, 1);
+  assert.equal(store.calls.comments, 1);
+  assert.equal(results[0].taskId, results[1].taskId);
+});
+
 test("a repeat alert comments on the same ticket", async () => {
-  const { fileBudgetAlert } = loadFilerLib();
+  const { fileBudgetAlert } = loadFilingLib();
   const store = memoryStore();
-  const first = await fileBudgetAlert(documentedAlert(), store);
-  const second = await fileBudgetAlert(documentedAlert({ currentSpend: 300 }), store);
+  const first = await fileBudgetAlert(alert(), store);
+  const second = await fileBudgetAlert(alert({ currentSpend: 300 }), store);
   assert.equal(store.calls.create, 1);
   assert.equal(store.calls.comments, 1);
   assert.equal(first.taskId, second.taskId);
 });
 
-test("a release of the email claim lets the next alert send it", async () => {
-  const { fileBudgetAlert } = loadFilerLib();
+test("a failed owner email releases the claim so the next alert sends it", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
   const store = memoryStore();
   store.email = async () => {
     throw new Error("resend refused");
   };
-  const alert = documentedAlert({ currentSpend: 500, thresholdPercent: 100 });
-  const failed = await fileBudgetAlert(alert, store);
+  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
+  const failed = await fileBudgetAlert(full, store);
   assert.equal(failed.emailed, false);
   assert.equal(store.calls.releases, 1);
   const sent = [];
   store.email = async (taskId) => sent.push(taskId);
-  const retried = await fileBudgetAlert(alert, store);
+  const retried = await fileBudgetAlert(full, store);
   assert.equal(retried.emailed, true);
   assert.deepEqual(sent, [retried.taskId]);
 });
@@ -218,8 +240,8 @@ test("a release of the email claim lets the next alert send it", async () => {
 test("an unconfigured webhook is refused and files nothing", async () => {
   delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
   const filed = [];
-  const route = loadRoute({ onFile: (alert) => filed.push(alert) });
-  const response = await route.POST(postRequest(JSON.stringify(documentedAlert())));
+  const route = loadRoute({ onFile: (payload) => filed.push(payload) });
+  const response = await route.POST(postRequest(JSON.stringify(documentedPayload())));
   assert.equal(response.status, 503);
   assert.equal(filed.length, 0);
 });
@@ -227,8 +249,8 @@ test("an unconfigured webhook is refused and files nothing", async () => {
 test("an unsigned or forged alert is refused and files nothing", async () => {
   process.env.VERCEL_BUDGET_WEBHOOK_SECRET = "whsec_example";
   const filed = [];
-  const route = loadRoute({ onFile: (alert) => filed.push(alert) });
-  const body = JSON.stringify(documentedAlert());
+  const route = loadRoute({ onFile: (payload) => filed.push(payload) });
+  const body = JSON.stringify(documentedPayload());
   assert.equal((await route.POST(postRequest(body))).status, 401);
   assert.equal((await route.POST(postRequest(body, { "x-vercel-signature": sign("guess", body) }))).status, 401);
   assert.equal(filed.length, 0);
@@ -239,13 +261,23 @@ test("a signed alert files one urgent ticket", async () => {
   const secret = "whsec_example";
   process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
   const filed = [];
-  const route = loadRoute({ onFile: (alert) => filed.push(alert) });
-  const body = JSON.stringify(documentedAlert({ currentSpend: 500, thresholdPercent: 100 }));
+  const route = loadRoute({ onFile: (payload) => filed.push(payload) });
+  const body = JSON.stringify(documentedPayload());
   const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { taskId: 4242, created: true, emailed: false });
   assert.equal(filed.length, 1);
-  assert.equal(filed[0].thresholdPercent, 100);
+  assert.equal(filed[0].thresholdPercent, 50);
+  delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
+});
+
+test("a full budget whose email failed answers retryable", async () => {
+  const secret = "whsec_example";
+  process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
+  const route = loadRoute({ emailed: false });
+  const body = JSON.stringify(documentedPayload({ currentSpend: 500, thresholdPercent: 100 }));
+  const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
+  assert.equal(response.status, 503);
   delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
 });
 
@@ -253,8 +285,8 @@ test("the flag switches the intake off", async () => {
   const secret = "whsec_example";
   process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
   const filed = [];
-  const route = loadRoute({ onFile: (alert) => filed.push(alert), flagOn: false });
-  const body = JSON.stringify(documentedAlert());
+  const route = loadRoute({ onFile: (payload) => filed.push(payload), flagOn: false });
+  const body = JSON.stringify(documentedPayload());
   const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
   assert.equal(response.status, 503);
   assert.equal(filed.length, 0);
@@ -265,7 +297,7 @@ test("a signed but malformed alert is refused", async () => {
   const secret = "whsec_example";
   process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
   const filed = [];
-  const route = loadRoute({ onFile: (alert) => filed.push(alert) });
+  const route = loadRoute({ onFile: (payload) => filed.push(payload) });
   const body = JSON.stringify({ budgetAmount: 500, currentSpend: 250, teamId: "team_1" });
   const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
   assert.equal(response.status, 400);
