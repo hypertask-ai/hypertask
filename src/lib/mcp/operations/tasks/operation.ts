@@ -425,12 +425,12 @@ export async function GET(request: NextRequest) {
     const sortOrderParam = parseSortOrderParam(searchParams.get('sort_order'), 'desc')
     if (!sortOrderParam) return validationError('sort_order must be asc or desc')
     let sortOrder = sortOrderParam
-    let sectionId = sectionIdParam.value ?? sectionFilter.sectionId
+    let sectionId = sectionIdParam.value ?? sectionFilter.sectionId ?? undefined
     if (listQuery) {
       if (listQuery.query) search = listQuery.query
       if (listQuery.filter.section) {
         const filterSection = parseSectionFilter(listQuery.filter.section)
-        sectionId = filterSection.sectionId ?? sectionIdParam.value
+        sectionId = filterSection.sectionId ?? sectionIdParam.value ?? undefined
         section = filterSection.section
       }
       if (listQuery.filter.assignee !== undefined) {
@@ -478,7 +478,7 @@ export async function GET(request: NextRequest) {
       return validationError(`${invalidDateParam} must be a valid date or datetime, e.g. 2026-10-14 or 2026-10-14T03:00:00Z`)
     }
 
-    const filterIdOutOfRange = findIdParamOutOfRange({ section_id: sectionIdParam.value, section: sectionFilter.sectionId, created_by: createdBy })
+    const filterIdOutOfRange = findIdParamOutOfRange({ section_id: sectionId, section: sectionFilter.sectionId, created_by: createdBy })
     if (filterIdOutOfRange) return validationError(idOutOfRangeMessage(filterIdOutOfRange))
 
     const TASK_SORT_FIELDS = ['createdAt', 'updatedAt', 'dueDate', 'priority', 'title', 'id'] as const

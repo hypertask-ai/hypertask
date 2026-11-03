@@ -208,7 +208,12 @@ export async function GET(request: NextRequest) {
     }
 
     const sectionIdOutOfRange = findIdParamOutOfRange({ section: sectionId })
-    if (sectionIdOutOfRange) return validationError(idOutOfRangeMessage(sectionIdOutOfRange))
+    if (sectionIdOutOfRange) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: idOutOfRangeMessage(sectionIdOutOfRange) },
+        { status: 400 },
+      )
+    }
 
     if (sectionId !== undefined) {
       where.sectionId = sectionId
