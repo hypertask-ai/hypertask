@@ -355,7 +355,7 @@ const SwipeUnread = ({ userId, onClose }: SwipeUnreadProps) => {
       aria-modal="true"
       aria-label="Swipe through unread notifications"
       tabIndex={-1}
-      className="fixed inset-0 z-[10000] flex h-[100svh] flex-col overflow-hidden bg-pageBackground px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] text-white-black outline-none md:px-6 md:pb-6"
+      className="fixed inset-0 z-toast flex h-[100svh] flex-col overflow-hidden bg-pageBackground px-3 pb-[max(12px,env(safe-area-inset-bottom))] pt-[env(safe-area-inset-top)] text-white-black outline-none md:px-6 md:pb-6"
     >
       <header className="mx-auto flex h-14 w-full max-w-[720px] shrink-0 items-center justify-between">
         <button

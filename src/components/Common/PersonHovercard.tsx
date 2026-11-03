@@ -155,7 +155,7 @@ const PersonHovercardSurfaceContent = ({
         style={floatingStyles}
         aria-labelledby={profile ? headingId : undefined}
         aria-label={profile ? undefined : "Person contact details"}
-        className={`relative ${topLayer ? "" : "z-[999999999]"} w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]`}
+        className={`relative ${topLayer ? "" : "z-tooltip"} w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]`}
         {...getFloatingProps({
           onPointerEnter: onFloatingPointerEnter,
           onPointerLeave: onFloatingPointerLeave,

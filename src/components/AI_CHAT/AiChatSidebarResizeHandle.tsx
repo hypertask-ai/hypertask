@@ -88,7 +88,7 @@ export function AiChatSidebarResizeHandle() {
         if (!isDragging) setIsHovered(false);
       }}
       className={cn(
-        "relative z-[52] hidden w-1 shrink-0 cursor-col-resize md:block",
+        "relative z-sticky hidden w-1 shrink-0 cursor-col-resize md:block",
         isDragging && "select-none"
       )}
       data-dragging={isDragging || undefined}

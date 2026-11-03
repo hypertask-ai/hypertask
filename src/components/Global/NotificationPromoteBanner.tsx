@@ -236,7 +236,7 @@ const NotificationPromoteBanner = () => {
       role="region"
       aria-label="Enable notifications"
       style={{ left: appShellRailOn ? "var(--app-shell-rail-w, 48px)" : 0 }}
-      className="fixed right-0 bottom-0 z-[299] border-t border-[#232a39] bg-[#10131a] pb-[env(safe-area-inset-bottom)] text-content text-[#e9edf1]"
+      className="fixed right-0 bottom-0 z-menu border-t border-[#232a39] bg-[#10131a] pb-[env(safe-area-inset-bottom)] text-content text-[#e9edf1]"
     >
       <div className="flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 px-3 py-2">
         <div className="flex min-w-0 basis-full flex-1 items-center justify-center gap-3 sm:basis-auto sm:justify-start">

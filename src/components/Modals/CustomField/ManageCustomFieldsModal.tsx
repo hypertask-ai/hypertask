@@ -266,7 +266,7 @@ const ManageCustomFieldsModal = ({ closeHandler, projectId }: Props) => {
           onConfirm={() => void confirmDelete()}
           onCancel={() => setDeletingField(null)}
           onTaskPage
-          customClassName="sm:min-w-[440px] xs:max-h-[600px] z-[90000000] relative sm:top-[10px]"
+          customClassName="sm:min-w-[440px] xs:max-h-[600px] z-popup relative sm:top-[10px]"
         />
       )}
     </ModalContainerCustom>

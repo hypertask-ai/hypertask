@@ -216,7 +216,7 @@ const AI_Options = ({
           isOpen={actionSheetOpen}
           onClose={() => setActionSheetOpen(false)}
           detent="content"
-          sheetClassName="!z-[13000]"
+          sheetClassName="!z-toast"
           disableScrollLocking
           customScroller
           ariaLabel="Other apply and refine actions"

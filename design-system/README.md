@@ -11,3 +11,15 @@ Token mapping:
 - Spacing, radius, and shadow examples mirror conventions observed in kanban cards, shared modal helpers, sidebar rows, labels, and comments.
 
 Maintenance rule: change tokens in `src/styles/tailwindThemes/`, then regenerate/edit the matching card, then re-sync to Claude Design.
+
+## Layers (z-index)
+
+Stacking uses one named scale, in `tailwind.config.ts` as `z-base`, `z-sticky`,
+`z-menu`, `z-floating`, `z-popup`, `z-toast` and `z-tooltip`, and in
+`src/styles/globals.scss` as `--z-base` through `--z-tooltip` for CSS and SCSS.
+Order is the contract: base < sticky < menu < floating < popup < toast < tooltip.
+
+Never type a z-index number. A hand-typed `z-[...]` or `z-index: 1234` fails
+`scripts/lint-changed-styles.mjs`, and `tests/htpr-8060-z-layers.test.cjs`
+keeps the repo at zero. Change a layer value in `globals.scss` when a whole
+layer must move; do not add a bigger number in one component.

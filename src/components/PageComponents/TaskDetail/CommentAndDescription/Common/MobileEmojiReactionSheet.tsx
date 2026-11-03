@@ -70,14 +70,14 @@ const MobileEmojiReactionSheet = ({
     <>
       <div
         aria-hidden="true"
-        className="fixed inset-0 z-[9998] bg-black/40"
+        className="fixed inset-0 z-toast bg-black/40"
         onPointerDown={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Add reaction"
-        className="reaction-emoji-sheet fixed inset-x-0 bottom-0 z-[9999] flex max-h-[85vh] w-full flex-col overflow-hidden overscroll-contain rounded-t-[12px] bg-modalBackground text-white-black shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom)]"
+        className="reaction-emoji-sheet fixed inset-x-0 bottom-0 z-toast flex max-h-[85vh] w-full flex-col overflow-hidden overscroll-contain rounded-t-[12px] bg-modalBackground text-white-black shadow-[0_-8px_24px_rgba(0,0,0,0.35)] pb-[env(safe-area-inset-bottom)]"
       >
         <div className="flex h-6 shrink-0 items-center justify-center">
           <span className="h-1 w-9 rounded-full bg-[#4F5766]" />

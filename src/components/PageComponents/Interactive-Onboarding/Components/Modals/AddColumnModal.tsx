@@ -11,7 +11,7 @@ const AddColumnModal = () => {
   return (
     <div
       id="htc-container"
-      className="flex items-center justify-center fixed top-[180px] bg-transparent right-0 left-0 z-[9999] text-white-black"
+      className="flex items-center justify-center fixed top-[180px] bg-transparent right-0 left-0 z-toast text-white-black"
     >
       <div
         className="rounded-[4px] customshadow-4"

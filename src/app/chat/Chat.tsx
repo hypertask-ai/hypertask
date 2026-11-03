@@ -151,7 +151,7 @@ function FullScreenChatRailResizeHandle() {
         if (!isDragging) setIsHovered(false);
       }}
       className={cn(
-        "absolute inset-y-0 right-[-2px] z-[52] hidden w-1 cursor-col-resize md:block",
+        "absolute inset-y-0 right-[-2px] z-sticky hidden w-1 cursor-col-resize md:block",
         isDragging && "select-none"
       )}
       data-dragging={isDragging || undefined}

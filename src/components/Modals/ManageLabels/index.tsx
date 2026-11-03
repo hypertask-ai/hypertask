@@ -335,7 +335,7 @@ const ManageLabels = ({onClose}: Props) => {
                     searchInputRef.current?.focus();
                   }}
                   onTaskPage
-                  customClassName="sm:min-w-[500px] xs:max-h-[600px] z-[90000000] relative sm:top-[10px]"
+                  customClassName="sm:min-w-[500px] xs:max-h-[600px] z-popup relative sm:top-[10px]"
                 />
               )}
             </ModalContainerCustom>

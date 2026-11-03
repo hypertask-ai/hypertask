@@ -166,7 +166,7 @@ const BottomSettings_QuickTips = ({
             bottom: `calc(40px + var(--notif-banner-h, 0px))`,
             right: sidebarRightOffsetPx,
           }}
-          className={`h-fit flex flex-col fixed z-[100] w-fit`}
+          className={`h-fit flex flex-col fixed z-menu w-fit`}
         >
           <div
             onClick={toggleShowAnnouncements}

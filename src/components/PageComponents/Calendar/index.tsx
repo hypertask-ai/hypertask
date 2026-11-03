@@ -429,7 +429,7 @@ const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
             </div>
           </MobileBottomSheet>
         ) : (
-          <BackDropContainer className="!z-[250]">
+          <BackDropContainer className="!z-menu">
             <div
               style={{ zIndex: "999998" }}
               id={calendarConfig.element_ids.sidebar}

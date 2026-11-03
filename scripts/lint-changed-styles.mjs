@@ -11,6 +11,8 @@ const number = /(?:^|[\s,(])[-+]?(?:\d*\.)?\d+/g;
 const palette = /(?:^|:)!?(?:text|bg|border(?:-[trblxyse])?|divide|outline|ring(?:-offset)?|fill|stroke|from|via|to|decoration|placeholder|accent|caret|shadow)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(?:50|[1-9]00|950)(?:\/[^\s]+)?!?$/;
 const typography = /(?:^|:)!?(?:text|leading)-\[(?:length:)?-?[\d.]+(?:px|rem|em|%)?\]/;
 const advice = "Use text-micro/text-content and text-text-light-gray/bg-modalBackground from tailwind.config.ts; CSS uses var(--...) tokens defined in src/styles/globals.scss.";
+const layerAdvice = "Use a z layer token: z-base, z-sticky, z-menu, z-floating, z-popup, z-toast or z-tooltip. CSS uses var(--z-*) defined in src/styles/globals.scss. Never type a z-index number.";
+const rawLayer = /(?:^|[\s,(])(?!var\()[-+]?(?:\d*\.)?\d/;
 
 function styleOffsets(value, sizing = false) {
   const offsets = [];
@@ -52,6 +54,9 @@ export function lintStyles(source, filename) {
       const raw = source.slice(decl.source.start.offset, decl.source.end.offset);
       const valueOffset = raw.indexOf(":") + 1;
       const value = raw.slice(valueOffset).replace(/;$/, "");
+      if (/^z-index$/.test(decl.prop) && rawLayer.test(value.replace(/!important$/, ""))) {
+        findings.push({ line: source.slice(0, decl.source.start.offset + valueOffset).split("\n").length, message: layerAdvice });
+      }
       for (const match of styleOffsets(value, /^(?:font-size|line-height)$/.test(decl.prop))) {
         const offset = decl.source.start.offset + valueOffset + match;
         findings.push({ line: source.slice(0, offset).split("\n").length, message: advice });
@@ -110,6 +115,10 @@ export function lintStyles(source, filename) {
             report(sourceCode.getLocFromIndex(node.range[0] + 1 + offset), usage);
           }
           return;
+        }
+        if (style && node.type === "Property" && (node.key.name ?? node.key.value) === "zIndex"
+          && !(node.value.type === "Literal" && typeof node.value.value === "string" && node.value.value.startsWith("var("))) {
+          report(node.value.loc, usage);
         }
         if (style && node.type === "Property" && ["fontSize", "lineHeight"].includes(node.key.name ?? node.key.value)) {
           if (node.value.type === "Literal" && (typeof node.value.value === "number" || new RegExp(number).test(node.value.value))) {

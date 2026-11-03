@@ -85,11 +85,11 @@ export function createTableRowRenderer(context: Context) {
       switch (column) {
         case "ticket":
           return (
-            <TableTicketCell key="ticket" ticket={getTicketText(task)} style={{ left: frozenColumnOffset("ticket") }} className={`md:sticky md:z-[1] ${stickyBackground}`} />
+            <TableTicketCell key="ticket" ticket={getTicketText(task)} style={{ left: frozenColumnOffset("ticket") }} className={`md:sticky md:z-sticky ${stickyBackground}`} />
           );
         case "title":
           return (
-            <TableTitleCell key="title" task={task} style={{ left: frozenColumnOffset("title") }} className={`md:sticky md:z-[1] ${stickyBackground}`} />
+            <TableTitleCell key="title" task={task} style={{ left: frozenColumnOffset("title") }} className={`md:sticky md:z-sticky ${stickyBackground}`} />
           );
         case "status":
           return (

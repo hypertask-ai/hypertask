@@ -756,7 +756,7 @@ const ManageAgentsModal: React.FC<ManageModalProps> = ({
             confirmDisabled={!agentToDelete}
             onConfirm={confirmDisable}
             onCancel={() => setShowConfirm(false)}
-            customClassName="sm:min-w-[500px] xs:max-h-[600px] z-[90000000] relative sm:top-[10px]"
+            customClassName="sm:min-w-[500px] xs:max-h-[600px] z-popup relative sm:top-[10px]"
             compact="my-[-15px]"
           />
         )}

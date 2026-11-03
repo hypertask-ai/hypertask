@@ -202,7 +202,7 @@ const MobilePullDownCommand = () => {
   return (
     <div
       aria-hidden
-      className="pointer-events-none fixed left-1/2 z-[290] text-[#8e9093]"
+      className="pointer-events-none fixed left-1/2 z-menu text-[#8e9093]"
       style={{
         top: "calc(48px + env(safe-area-inset-top) + 2px)",
         opacity: progress,

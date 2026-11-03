@@ -13,6 +13,17 @@ const config: Config = {
   theme: {
     
     extend: {
+      // HTPR-8060: the only allowed stacking values. Order matters and must stay:
+      // base < sticky < menu < floating < popup < toast < tooltip.
+      zIndex: {
+        base: "var(--z-base)",
+        sticky: "var(--z-sticky)",
+        menu: "var(--z-menu)",
+        floating: "var(--z-floating)",
+        popup: "var(--z-popup)",
+        toast: "var(--z-toast)",
+        tooltip: "var(--z-tooltip)",
+      },
       ringColor:{
         "container-outline":"var(--focus-ring)",
       },

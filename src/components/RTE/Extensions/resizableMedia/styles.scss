@@ -4,7 +4,7 @@
   position: absolute;
   top: 50%;
   right: 0.25rem;
-  z-index: 50;
+  z-index: var(--z-menu);
   height: 6rem;
   width: 0.625rem;
   --tw-translate-y: -50%;

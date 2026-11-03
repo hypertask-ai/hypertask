@@ -92,7 +92,7 @@ const MobileTopBar = ({
       <header
         ref={headerRef}
         data-testid="mobile-top-bar"
-        className="fixed inset-x-0 top-0 z-[300] flex items-stretch gap-[10px] bg-containerBackground px-[14px] will-change-transform md:hidden"
+        className="fixed inset-x-0 top-0 z-floating flex items-stretch gap-[10px] bg-containerBackground px-[14px] will-change-transform md:hidden"
         style={{
           height: "calc(48px + env(safe-area-inset-top))",
           paddingTop: "env(safe-area-inset-top)",

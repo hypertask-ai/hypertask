@@ -38,8 +38,8 @@ export function renderCommandModals2(context: Context) {
         id="htc-container"
         className={
           isMbl
-            ? "fixed inset-0 z-[9999] bg-transparent pointer-events-none"
-            : "fixed left-0 right-0 top-[180px] z-[9999] flex items-center justify-center bg-transparent"
+            ? "fixed inset-0 z-toast bg-transparent pointer-events-none"
+            : "fixed left-0 right-0 top-[180px] z-toast flex items-center justify-center bg-transparent"
         }
       >
         <div className={isMbl ? "bg-transparent pointer-events-auto" : "rounded-[5px] bg-modalBackground customshadow-4"}>

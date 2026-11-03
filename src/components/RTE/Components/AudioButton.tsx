@@ -758,7 +758,7 @@ export const AudioButton = ({
           )}
 
           {!isMobileView && menuOpen && (
-            <div className="absolute bottom-[38px] right-0 z-[9999] w-[260px] rounded-[4px] bg-modalBackground p-1.5 text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
+            <div className="absolute bottom-[38px] right-0 z-menu w-[260px] rounded-[4px] bg-modalBackground p-1.5 text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
               <div className="mx-1.5 mb-2 mt-1 h-[24px] overflow-hidden rounded-[3px]">
                 <canvas
                   ref={miniCanvasRef}
@@ -798,8 +798,8 @@ export const AudioButton = ({
         <div
           className={cn(
             isMobileView
-              ? "flex w-full items-center gap-2 rounded-[4px] z-[9999]"
-              : "flex items-center gap-2 rounded-[4px] bg-newComment-container px-2 py-[6px] z-[9999] mb-3 md:!mb-0",
+              ? "flex w-full items-center gap-2 rounded-[4px] z-menu"
+              : "flex items-center gap-2 rounded-[4px] bg-newComment-container px-2 py-[6px] z-menu mb-3 md:!mb-0",
             visualizerClassName,
           )}
         >

@@ -364,7 +364,7 @@
   border-radius: 8px;
   position: absolute;
   cursor: pointer;
-  z-index: 9999;
+  z-index: var(--z-toast);
   pointer-events: all;
   box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
 }
@@ -417,7 +417,7 @@
   position: absolute;
   top: 50%;
   right: 0.25rem;
-  z-index: 50;
+  z-index: var(--z-menu);
   height: 6rem;
   width: 0.625rem;
   --tw-translate-y: -50%;
@@ -476,7 +476,7 @@
       position: absolute;
       top: 50%;
       right: 0.25rem;
-      z-index: 50;
+      z-index: var(--z-menu);
       height: 6rem;
       width: 0.625rem;
       transform: translateY(-50%);
@@ -563,7 +563,7 @@
     }
 
     .selectedCell:after {
-      z-index: 2;
+      z-index: var(--z-base);
       position: absolute;
       content: "";
       left: 0;

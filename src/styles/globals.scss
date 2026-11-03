@@ -9,12 +9,26 @@
 @import "./tailwindThemes/porcelain.css";
 @import "./tailwind-entry.css";
 
-/* HTPR-6404: floated pickers/tooltips in #portal-root must clear the new
-   comment composer (relative z-10 / mobile fixed z-101). Keep this below tippy
-   (10001+) so @/slash menus still win when both are open. */
+/* HTPR-8060: the z-index scale. Tailwind exposes the same names as z-base,
+   z-sticky, z-menu, z-floating, z-popup, z-toast and z-tooltip. CSS and SCSS use
+   these variables. Never type a z-index number again: order is the contract,
+   base < sticky < menu < floating < popup < toast < tooltip. */
+:root {
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-menu: 20;
+  --z-floating: 30;
+  --z-popup: 40;
+  --z-toast: 50;
+  --z-tooltip: 60;
+}
+
+/* HTPR-6404: floated pickers/tooltips in #portal-root must clear the comment
+   composer. Keep this below the tooltip layer so @/slash menus still win when
+   both are open. */
 #portal-root {
   position: relative;
-  z-index: 5000;
+  z-index: var(--z-popup);
 }
 
 :root {
@@ -195,7 +209,7 @@
   // toast anchors to its own side within this wrapper — undo prompts pick the
   // left so mobile task actions on the right stay clear (HTPR-5564).
   top: 52% !important;
-  z-index: 10001 !important;
+  z-index: var(--z-tooltip) !important;
   font-size: 14px;
 }
 .toastP {
@@ -432,7 +446,7 @@ span[data-label^="project"] {
   }
 
   .inbox_title {
-    z-index: 100;
+    z-index: var(--z-menu);
     position: fixed;
   }
   .footer_tags {
@@ -577,7 +591,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  z-index: 2;
+  z-index: var(--z-base);
 }
 
 // ======================== RESPONSIVE STYLING

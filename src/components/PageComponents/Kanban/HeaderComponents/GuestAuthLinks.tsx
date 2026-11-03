@@ -16,7 +16,7 @@ const GuestAuthLinks = ({ floating = false }: { floating?: boolean }) => {
   return (
     <div
       className={`flex shrink-0 items-center gap-2 whitespace-nowrap ${
-        floating ? "fixed top-3 z-[70]" : ""
+        floating ? "fixed top-3 z-sticky" : ""
       }`}
       style={
         floating

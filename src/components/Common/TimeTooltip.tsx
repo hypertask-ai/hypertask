@@ -36,7 +36,7 @@ const LegacyTimeTooltip = ({time,bottom, left}:Props) => {
                 className={`sm:flex
                     hidden
                     items-center
-                    z-[9999]
+                    z-tooltip
                     font-bold
                     border-light-black-border-1 border-[1px]
                     bg-labelComponent gap-2

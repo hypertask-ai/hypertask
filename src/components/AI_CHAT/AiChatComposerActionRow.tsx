@@ -110,7 +110,7 @@ export function AiChatComposerActionRow({
                   onClick={() => {
                     if (overflowRef.current) overflowRef.current.open = false;
                   }}
-                  className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
+                  className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-popup flex items-center gap-3 rounded-[4px] bg-modalBackground p-2 shadow-[0_8px_30px_rgba(0,0,0,0.45)] [&>button]:flex [&>button]:h-11 [&>button]:w-11 [&>button]:items-center [&>button]:justify-center"
                 >
                   {attachmentControl}
                   {contextControl}

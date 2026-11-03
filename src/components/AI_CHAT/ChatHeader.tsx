@@ -292,7 +292,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     return (
       <div
         id="ai-chat-session-history"
-        className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-[1200] ${alignmentClass}`}
+        className={`absolute mt-2 max-h-[min(60svh,15rem)] w-64 max-w-[calc(100vw-1rem)] overflow-y-auto rounded-md bg-modalBackground shadow-lg scrollbar-none z-popup ${alignmentClass}`}
         onScroll={(event) => {
           const menu = event.currentTarget;
           if (sessionPagingEnabled && hasMoreSessions && !isLoadingMoreSessions && menu.scrollTop + menu.clientHeight >= menu.scrollHeight - 40) {

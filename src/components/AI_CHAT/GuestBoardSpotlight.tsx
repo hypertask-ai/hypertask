@@ -50,7 +50,7 @@ export const GuestBoardSpotlight = ({ onReveal }: { onReveal: () => void }) => {
         right: "calc(var(--ht-ai-sidebar-width, 0px) + 12px)",
         background: "hsl(var(--primary))",
       }}
-      className="pointer-events-none fixed top-1/2 z-[300] -translate-y-1/2 animate-pulse whitespace-nowrap rounded-[5px] px-3 py-2 text-meta text-white shadow-customshadow-2"
+      className="pointer-events-none fixed top-1/2 z-floating -translate-y-1/2 animate-pulse whitespace-nowrap rounded-[5px] px-3 py-2 text-meta text-white shadow-customshadow-2"
     >
       Tell the AI what this board is for
       <span

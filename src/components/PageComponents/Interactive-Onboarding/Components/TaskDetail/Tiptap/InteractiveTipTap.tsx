@@ -83,7 +83,7 @@ export const InteractiveTiptap = ({ type, editor }: IProps) => {
 
       <div
         id={"interactive-tiptap-container"}
-        className={`w-full absolute z-[1000] ${
+        className={`w-full absolute z-popup ${
           activeScene.index === 31 && type === "description"
             ? "block h-full"
             : "hidden h-0"
