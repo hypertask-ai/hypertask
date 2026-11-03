@@ -77,6 +77,22 @@ function memberByLabel(
   return members.find((member) => labelFor(member) === wanted);
 }
 
+const isPersonLabel = /^name-\d+$/;
+
+function memberFor(
+  name: string,
+  label: string,
+  members: ResolvableMember[],
+): ResolvableMember | undefined {
+  const byLabel = memberByLabel(label, members);
+  const byName = memberByName(name, members);
+  if (!byLabel || !byName) return byLabel ?? byName;
+  if (labelFor(byLabel) === labelFor(byName)) return byLabel;
+  const sameKind =
+    isPersonLabel.test(labelFor(byLabel)) === isPersonLabel.test(labelFor(byName));
+  return sameKind ? byLabel : byName;
+}
+
 function mapOutsideMentionSpans(
   html: string,
   transform: (segment: string) => string,
@@ -102,9 +118,11 @@ export function normalizeMentionSpans(
     const openEnd = whole.indexOf(">") + 1;
     const tag = whole.slice(0, openEnd);
     const inner = whole.slice(openEnd, -SPAN_CLOSE.length);
-    const name = readAttribute(tag, "data-id") ?? "";
-    const label = readAttribute(tag, "data-label") ?? "";
-    const member = memberByName(name, members) ?? memberByLabel(label, members);
+    const member = memberFor(
+      readAttribute(tag, "data-id") ?? "",
+      readAttribute(tag, "data-label") ?? "",
+      members,
+    );
     if (!member) return whole;
 
     const normalizedTag = writeAttribute(
@@ -113,11 +131,7 @@ export function normalizeMentionSpans(
       escapeHtml(labelFor(member)),
     );
     const visible = inner.replace(/<[^>]*>/g, "").replace(/^@/, "").trim();
-    const content =
-      visible.toLowerCase() === member.displayName.trim().toLowerCase()
-        ? escapeHtml(member.displayName)
-        : inner;
-    return `${normalizedTag}${content}${SPAN_CLOSE}`;
+    return `${normalizedTag}${escapeHtml(visible || member.displayName)}${SPAN_CLOSE}`;
   });
 }
 

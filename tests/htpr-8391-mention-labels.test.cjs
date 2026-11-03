@@ -70,6 +70,26 @@ test("an ambiguous display name falls back to the label", () => {
   assert.match(normalizeMentionSpans(html, twoSaras), /data-label="name-2"/);
 });
 
+test("a valid person label survives a rename that hands the name to someone else", () => {
+  const renamed = [
+    { id: 1, displayName: "Alexander" },
+    { id: 2, displayName: "Alex" },
+  ];
+  const html = `<p><span data-type="mention" class="mention" data-id="Alex" data-label="name-1">Alex</span></p>`;
+  const out = normalizeMentionSpans(html, renamed);
+  assert.match(out, /data-label="name-1"/);
+  assert.match(out, /data-id="Alexander"/);
+});
+
+test("markup inside a mention span is written as plain text", () => {
+  const html =
+    `<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6"><b>Valentin Yeo</b></span>` +
+    ` <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6"><script>alert(1)</script></span></p>`;
+  const out = normalizeMentionSpans(html, members);
+  assert.doesNotMatch(out, /<script/);
+  assert.match(out, /data-label="name-6">Valentin Yeo<\/span>/);
+});
+
 test("display names are escaped when the span is rewritten", () => {
   const risky = [{ id: 7, displayName: 'Bob" onmouseover="alert' }];
   const html = `<p><span data-type="mention" class="mention" data-id="bob" data-label="name-7">Bob</span></p>`;
