@@ -108,11 +108,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const dictating = newTaskWindow && (recording || transcribing);
-  useEffect(() => {
-    if (newTaskWindow) return;
-    setRecording(false);
-    setTranscribing(false);
-  }, [newTaskWindow]);
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = mobile && active;
   const [text, setText] = useState("");
