@@ -17,6 +17,7 @@ import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { HTPR_8088_MANUAL_CHAT_FLAG } from "@/lib/flags/definitions/htpr-8088-manual-chat";
+import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
@@ -56,7 +57,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
-  const manualDockedChat = manualChat && !isFullScreenChat && !(pathname?.startsWith("/demo") ?? false);
+  const fullScreenHandoff = useFlag(HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG);
+  const manualDockedChat = manualChat && !(pathname?.startsWith("/demo") ?? false) && (!isFullScreenChat || fullScreenHandoff);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const ticketScopeSelected =
     ticketScopeEnabled && !isFullScreenChat && isDetailPage &&

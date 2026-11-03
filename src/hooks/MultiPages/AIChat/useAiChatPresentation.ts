@@ -1,7 +1,7 @@
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef } from "react";
-import { useRecoilValue } from "@/lib/state";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom, keepAiChatClosedAtom } from "@/store";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { focusAiChatEditorForRequest, isEditableElement } from "@/utils/aiChat/focusRequestWindow";
@@ -27,6 +27,7 @@ export function useAiChatPresentation(context: Context) {
   let keepAiChatClosed = false;
   if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
+  const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const {
   setAiOption, contextList, setContextList, editor, handleCancelStream,
   streamingSessionRef, showAiChatInterface, aiChatExplicitOpenAt, setAiChatExplicitOpenAt, setChatMounted,
@@ -173,6 +174,13 @@ export function useAiChatPresentation(context: Context) {
 
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
+  const openDockedChat = () => {
+    setAiChatAutoOpenSuppressed(false);
+    setAiChatExplicitOpenAt(Date.now());
+    setChatMounted(true);
+    setShowAIChat(true);
+  };
+
   const renameChat = (newTitle: string) => {
     const sessionId = currentSession?.id;
     if (!sessionId) {
@@ -185,6 +193,6 @@ export function useAiChatPresentation(context: Context) {
   };
   return {
   dropDownButtonAICallback, handleRemoveContext, handleAddContext, handleMessageListScroll, registerMessageListRef,
-  scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat,
+  scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat, openDockedChat,
   };
 }

@@ -35,6 +35,17 @@ conversation. Switching accounts must never show the previous account's chat.
 Flag off keeps the existing separate conversations per ticket. Compare sidebar
 bounds and composer placement before and after; no controls or layout change.
 
+## Leaving the full-screen chat for a ticket
+
+Flag `htpr-7772-fullscreen-chat-handoff` (Everyone). Open `/chat`, pick a
+conversation with a ticket link in an answer, and click the link at 1440x900.
+The ticket must open with the chat side panel already open, showing the same
+conversation and its last message. No ticket-scoped conversation may start:
+the app must not call `/api/ai-chat/task-sessions`. Check the ticket rows
+under an answer the same way. On a phone the chat closes on tap as before, and
+**New chat** still starts a clean conversation. Flag off closes the chat on
+the link click and reopening it shows the ticket's own conversation.
+
 ## How to drive it
 
 Use `agent-browser` headless for the request/reply check. On production,

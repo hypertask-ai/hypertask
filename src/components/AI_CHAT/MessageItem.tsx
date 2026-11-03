@@ -1,6 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
+import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -17,7 +18,7 @@ import {
 } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import "@/styles/messageItem.scss";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Copy, Pencil, Plus, RotateCw, type LucideIcon } from "lucide-react";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -274,12 +275,19 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
   const hasAnimated = useRef(false);
   const [showCursor, setShowCursor] = useState(!message.isDelivered);
   const router = useRouter();
-  const { agentStatus, togglePopover, showAiChatInterface } =
+  const pathname = usePathname();
+  const { agentStatus, togglePopover, showAiChatInterface, openDockedChat } =
     useAiChatContext();
   const isMbl = useContext(MobileViewContext);
+  const handoffEnabled = useFlag(HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG);
 
   const revealNavigationTarget = () => {
     if (isMbl && showAiChatInterface) togglePopover();
+  };
+
+  const followInternalLink = () => {
+    if (handoffEnabled && !isMbl && (pathname?.startsWith("/chat") ?? false)) openDockedChat();
+    revealNavigationTarget();
   };
 
   const settingCards = useMemo(() => message.role === "assistant" ? extractSettingCards(message.content) : { html: message.content, ids: [] }, [message.content, message.role]);
@@ -295,7 +303,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
   );
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    interceptMessageLinkClick(event, router, revealNavigationTarget);
+    interceptMessageLinkClick(event, router, followInternalLink);
   };
 
   useEffect(() => {
@@ -319,7 +327,7 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
         {settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />)}
-        {message.role === "assistant" && message.isDelivered && ticketGroups?.length ? <AiChatTicketRows groups={ticketGroups} onNavigate={(url) => { router.push(url); revealNavigationTarget(); }} /> : null}
+        {message.role === "assistant" && message.isDelivered && ticketGroups?.length ? <AiChatTicketRows groups={ticketGroups} onNavigate={(url) => { followInternalLink(); router.push(url); }} /> : null}
         {message.role === "assistant" && !message.isDelivered && (
           <AssistantStreamingStatus
             agentStatus={agentStatus}
