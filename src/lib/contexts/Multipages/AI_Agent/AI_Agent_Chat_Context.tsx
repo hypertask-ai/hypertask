@@ -4,7 +4,6 @@ import { useAiChat } from "@/hooks/MultiPages/AIChat/useAiChat";
 import toast from "react-hot-toast";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 import { isControlQFocusShortcut } from "@/lib/aiChat/chatFocusShortcut";
 import { isNewChatWindowShortcut } from "@/lib/aiChat/chatShortcuts";
 import { useRecoilState } from "@/lib/state";
@@ -204,19 +203,18 @@ export const ChatRuntime = memo(function ChatRuntime({
     };
   }, [windowScope]);
 
-  const chatShortcutLayerEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   useEffect(() => {
-    if (windowScope || !chatWindows || chatShortcutLayerEnabled) return;
+    if (windowScope || !chatWindows) return;
     const handleNewChatWindow = (event: KeyboardEvent) => {
-      if (!isNewChatWindowShortcut(event)) return;
+      if (event.defaultPrevented || !isNewChatWindowShortcut(event)) return;
       event.preventDefault();
       void chatWindows.openNewChatWindow().then((opened) => {
         if (!opened && chatWindows.atCapacity) toast("Close a chat window to open another chat.");
       });
     };
-    document.addEventListener("keydown", handleNewChatWindow, true);
-    return () => document.removeEventListener("keydown", handleNewChatWindow, true);
-  }, [chatWindows, chatShortcutLayerEnabled, windowScope]);
+    document.addEventListener("keydown", handleNewChatWindow);
+    return () => document.removeEventListener("keydown", handleNewChatWindow);
+  }, [chatWindows, windowScope]);
 
   const [pendingAiChatPrompt, setPendingAiChatPrompt] = useRecoilState(
     aiChatPendingPromptAtom

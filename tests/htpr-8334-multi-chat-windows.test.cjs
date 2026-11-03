@@ -186,7 +186,7 @@ test("multi chat windows: choosing a chat at the cap leaves the current conversa
 
 test("multi chat windows: a new chat adds a window instead of replacing the open one", () => {
   const header = read("src/components/AI_CHAT/ChatHeader.tsx");
-  assert.match(header, /if \(chatWindowControls\) \{\n      const opened = await chatWindowControls\.openNewChatWindow\(\);/);
+  assert.match(header, /if \(multiChatWindowsEnabled && chatWindowControls\) \{\n      const opened = await chatWindowControls\.openNewChatWindow\(\);/);
   const shortcuts = read("src/hooks/MultiPages/AIChat/useChatShortcuts.tsx");
   assert.match(shortcuts, /const startNewChat = chat\.chatWindows\?\.enabled \? chat\.chatWindows\.openNewChatWindow : options\.onNewChat \?\? chat\.startNewSession;/);
 });
@@ -194,7 +194,7 @@ test("multi chat windows: a new chat adds a window instead of replacing the open
 test("multi chat windows: picking a chat adds a window, even from the list inside a window", () => {
   const header = read("src/components/AI_CHAT/ChatHeader.tsx");
   assert.doesNotMatch(header, /if \(!windowDrag\) \{/);
-  const guard = header.slice(header.indexOf("chatWindowControls.focusOpenSessionWindow(chat.id)"));
+  const guard = header.slice(header.indexOf("multiChatWindowsEnabled && chat.id !== resolvedSessionId"));
   assert.match(guard, /if \(chatWindowControls\.atCapacity\) \{/);
   assert.match(guard, /if \(chatWindowControls\.openSessionWindow\(chat\.id\)\) return;/);
 });
@@ -208,7 +208,8 @@ test("multi chat windows: Ctrl+Shift+O opens a window while the shared chat shor
   assert.equal(isNewChatWindowShortcut({ ...press, altKey: true }), false);
   assert.equal(isNewChatWindowShortcut({ ...press, key: "P", code: "KeyP" }), false);
   const runtime = read("src/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx");
-  assert.match(runtime, /if \(windowScope \|\| !chatWindows \|\| chatShortcutLayerEnabled\) return;/);
-  assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow, true\);/);
+  assert.match(runtime, /if \(windowScope \|\| !chatWindows\) return;/);
+  assert.match(runtime, /if \(event\.defaultPrevented \|\| !isNewChatWindowShortcut\(event\)\) return;/);
+  assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow\);/);
   assert.match(runtime, /chatWindows\.openNewChatWindow\(\)\.then/);
 });
