@@ -125,8 +125,8 @@ export function AI_Tiptap_Container({
   const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
-  const isMbl = useContext(MobileViewContext);
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  const isMbl = useContext(MobileViewContext);
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
     tiptapKeydown,
