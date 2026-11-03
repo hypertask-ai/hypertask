@@ -14,7 +14,7 @@ test("hover chat is reversible and preserves profile links, human contacts and l
   const writes = [], navigations = [], events = [], closed = [];
   const pass = ({ children }) => children;
   const floating = {
-    useFloating: () => ({ refs: { setFloating: noop }, context: {}, floatingStyles: {} }),
+    useFloating: () => ({ refs: { setFloating: noop, setReference: noop, domReference: { current: null } }, context: {}, floatingStyles: {} }),
     useInteractions: () => ({ getFloatingProps: value => value }),
     FloatingFocusManager: pass, FloatingPortal: pass,
   };

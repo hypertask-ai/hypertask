@@ -102,16 +102,19 @@ test("flag registration, Owner + QA, and added gates on every changed UI entry",
 test("all six controls reuse icon-only kanban triggers with tooltips and phone targets", () => {
   enabled = true;
   render(Controls, controlProps(structuredClone(DEFAULT_MY_TASKS_VIEW_CONFIG)));
+  const hint = () => document.body.querySelector("[data-hover-tooltip-portal]");
   for (const [index, label] of labels.entries()) {
     const button = trigger(label);
     assert.ok(button, label);
     assert.match(button.className, /group relative flex size-8/);
     assert.match(button.className, /min-h-11 min-w-11 @md:min-h-0 @md:min-w-0/);
     assert.ok(button.querySelector('svg[width="18"][stroke-width="1.75"]'));
-    const tooltip = button.querySelector("div.sm\\:scale-0");
-    assert.ok(tooltip, label);
-    assert.equal(tooltip.textContent.trim(), ["Involvement", "Columns", "Scope", "Filters", "Sort", "Group: Due date"][index]);
-    assert.equal([...button.children].filter((child) => child.tagName === "SPAN").length, 0, "no visible text label");
+    act(() => button.dispatchEvent(new dom.window.MouseEvent("mouseenter")));
+    assert.ok(hint(), `${label} hint opens on hover`);
+    assert.equal(hint().textContent.trim(), ["Involvement", "Columns", "Scope", "Filters", "Sort", "Group: Due date"][index]);
+    act(() => button.dispatchEvent(new dom.window.MouseEvent("mouseleave")));
+    assert.equal(hint(), null, `${label} hint closes on leave`);
+    assert.equal([...button.children].filter((child) => child.tagName === "SPAN" && !child.hasAttribute("aria-hidden")).length, 0, "no visible text label");
     assert.doesNotMatch(button.className, /text-view-control-active/);
   }
 });
@@ -132,7 +135,10 @@ test("all six non-default controls are active and retain compact count badges", 
     assert.equal(badge.textContent, count);
     assert.match(badge.className, /-right-0\.5 -top-0\.5 text-micro/);
   }
-  assert.match(trigger(labels[5]).textContent, /Group: Board/);
+  act(() => trigger(labels[5]).dispatchEvent(new dom.window.MouseEvent("mouseenter")));
+  assert.match(document.body.querySelector("[data-hover-tooltip-portal]").textContent, /Group: Board/);
+  act(() => trigger(labels[5]).dispatchEvent(new dom.window.MouseEvent("mouseleave")));
+  assert.equal(document.body.querySelector("[data-hover-tooltip-portal]"), null);
   config.boardIds = [2, 1];
   render(Controls, controlProps(config));
   assert.doesNotMatch(trigger(labels[2]).className, /text-view-control-active/);
@@ -170,22 +176,24 @@ test("saved-view and board-split overdue badges expose N overdue and portal hove
   assert.equal(document.querySelector('[data-htpr-6459-my-tasks-overdue-badges]').getAttribute("aria-label"), null);
   enabled = true;
   render(Tabs, props);
+  const hint = () => document.body.querySelector("[data-hover-tooltip-portal]");
   for (const count of [3, 2]) {
     const badge = document.querySelector(`span[aria-label="${count} overdue"]`);
     assert.ok(badge);
     act(() => badge.dispatchEvent(new dom.window.MouseEvent("mouseenter")));
-    assert.ok([...document.body.querySelectorAll("div.fixed")].some((tooltip) => tooltip.textContent.trim() === `${count} overdue`));
+    assert.equal(hint().textContent.trim(), `${count} overdue`);
     act(() => badge.dispatchEvent(new dom.window.MouseEvent("mouseleave")));
+    assert.equal(hint(), null);
   }
   render(SplitTitle, { tab: { idx: 1, project: "Product", length: 10, hasUnseen: false, overdueCount: 4 }, isSelected: true, onClick: noop });
   const badge = document.querySelector('span[aria-label="4 overdue"]');
   assert.ok(badge);
   act(() => badge.dispatchEvent(new dom.window.MouseEvent("mouseenter")));
-  assert.ok([...document.body.querySelectorAll("div.fixed")].some((tooltip) => tooltip.textContent.trim() === "4 overdue"));
+  assert.equal(hint().textContent.trim(), "4 overdue");
   enabled = false;
   render(SplitTitle, { tab: { idx: 0, project: "All", length: 1, hasUnseen: false, overdueCount: 4 }, isSelected: true, onClick: noop });
   assert.equal(document.querySelector('span[aria-label="4 overdue"]'), null);
-  assert.equal(document.querySelector("div.fixed"), null);
+  assert.equal(hint(), null);
 });
 
 test("production tab picks persist the selected view only behind 6938 and retain board scope checks", () => {
