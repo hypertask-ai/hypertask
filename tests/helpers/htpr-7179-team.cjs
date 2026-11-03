@@ -58,6 +58,7 @@ function teamFixture(mode, actor = 'bound') {
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
     '@/utils/controllers/activities/createLabelActivity': {},
     '@/lib/agentWebhooks/outbox': {},
+    '@/lib/pullRequests/taskPullRequests': { refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests },
     '@/utils/controllers/urls/extractUrlsFromContent': { persistUrlsForDescription: async () => {}, persistUrlsForComment: async () => {} },
     '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
     '@/utils/controllers/turbopuffer/turbopufferHelper': { convertToPlain: s => s, upsertPageToTurbopuffer: async () => {}, deletePageFromTurbopuffer: async () => {} },

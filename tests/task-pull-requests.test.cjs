@@ -183,6 +183,63 @@ test("fetchGithubPullRequest normalizes network failures", async () => {
   );
 });
 
+test("fetchGithubPullRequest reads the head check runs into the check state", async () => {
+  const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
+  const urls = [];
+  await withMockFetch(
+    async (url) => {
+      urls.push(String(url));
+      if (String(url).includes("/check-runs")) {
+        return Response.json({
+          check_runs: [
+            { status: "completed", conclusion: "success" },
+            { status: "completed", conclusion: "skipped" },
+          ],
+        });
+      }
+      return Response.json({
+        id: 110,
+        html_url: canonicalPullRequestUrl,
+        title: githubMetadata.title,
+        state: "open",
+        merged_at: null,
+        updated_at: "2026-09-01T12:00:00Z",
+        base: { repo: { id: 1 } },
+        head: { sha: "abc123" },
+      });
+    },
+    async () => {
+      const metadata = await fetchGithubPullRequest(parsed);
+      assert.equal(metadata.checkState, "passing");
+      assert.deepEqual(urls, [
+        "https://api.github.com/repos/hypertask-ai/hypertask/pulls/110",
+        "https://api.github.com/repos/hypertask-ai/hypertask/commits/abc123/check-runs?per_page=100",
+      ]);
+    },
+  );
+});
+
+test("fetchGithubPullRequest leaves the check state unknown when GitHub refuses the check runs", async () => {
+  const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
+  await withMockFetch(
+    async (url) => String(url).includes("/check-runs")
+      ? new Response("denied", { status: 403 })
+      : Response.json({
+        id: 110,
+        html_url: canonicalPullRequestUrl,
+        title: githubMetadata.title,
+        state: "open",
+        merged_at: null,
+        updated_at: "2026-09-01T12:00:00Z",
+        base: { repo: { id: 1 } },
+        head: { sha: "abc123" },
+      }),
+    async () => {
+      assert.equal((await fetchGithubPullRequest(parsed)).checkState, null);
+    },
+  );
+});
+
 test("fetchGithubPullRequest rejects malformed GitHub JSON", async () => {
   const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
   await withMockFetch(

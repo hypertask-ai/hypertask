@@ -149,6 +149,42 @@ test("a changed PR head invalidates checks for the old head", async () => {
   assert.equal(toPublicTaskPullRequest(refreshed).displayState, "open");
 });
 
+test("a GitHub check state for the stored head replaces the pending default", async () => {
+  const [refreshed] = await refreshTaskPullRequests(40660, [row], options(async () => ({
+    ...metadata,
+    lifecycle: "open",
+    headSha: row.headSha,
+    checkState: "passing",
+  })));
+  assert.equal(refreshed.checkState, "passing");
+  assert.equal(toPublicTaskPullRequest(refreshed).displayState, "green");
+});
+
+test("a failed or missing check-run read keeps the stored state", async () => {
+  const [kept] = await refreshTaskPullRequests(40660, [{ ...row, checkState: "failing" }],
+    options(async () => ({
+      ...metadata,
+      lifecycle: "open",
+      headSha: row.headSha,
+      checkState: null,
+    })));
+  assert.equal(kept.checkState, "failing");
+});
+
+test("a link on another board heals its head and check state", async () => {
+  const ciBoardRow = { ...row, taskId: 84758 };
+  const [refreshed] = await refreshTaskPullRequests(84758, [ciBoardRow],
+    options(async () => ({
+      ...metadata,
+      lifecycle: "open",
+      headSha: "fresh-head",
+      checkState: "failing",
+    })));
+  assert.equal(refreshed.headSha, "fresh-head");
+  assert.equal(refreshed.checkState, "failing");
+  assert.equal(calls.writes.at(-1).where.taskId, 84758);
+});
+
 test("closed and reopened GitHub lifecycles use the existing display rules", async () => {
   const [closed] = await refreshTaskPullRequests(40660, [row], options(async () => ({
     ...metadata, lifecycle: "closed",
@@ -228,7 +264,10 @@ test("task detail heals stale rows only after the authorized task lookup", async
     await scheduled[0];
     assert.equal(calls.writes.length, 1);
     assert.deepEqual(calls.broadcasts, [40660]);
-    assert.deepEqual(calls.fetches, ["https://api.github.com/repos/hypertask-ai/cli/pulls/81"]);
+    assert.deepEqual(calls.fetches, [
+      "https://api.github.com/repos/hypertask-ai/cli/pulls/81",
+      "https://api.github.com/repos/hypertask-ai/cli/commits/merged-head/check-runs?per_page=100",
+    ]);
   } finally {
     global.fetch = originalFetch;
   }

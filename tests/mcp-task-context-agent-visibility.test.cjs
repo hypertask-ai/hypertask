@@ -55,6 +55,9 @@ function loadRoute(comments) {
       derivePullRequestDisplayState: () => "open",
       parseGithubPullRequestUrl: () => null,
     },
+    "@/lib/pullRequests/taskPullRequests": {
+      refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests,
+    },
     "@/lib/mcp/tasks/mappers": {
       taskMcpGetInclude: () => ({}),
       mapTaskToMcpGetResponse: () => ({
