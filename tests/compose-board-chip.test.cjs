@@ -9,9 +9,6 @@ const { createJiti } = require('jiti');
 const icons = require('lucide-react');
 const { JSDOM } = require('jsdom');
 const root = path.resolve(__dirname, '..');
-let enabled = false;
-const flagPath = path.join(root, 'src/hooks/useFlag.tsx');
-require.cache[flagPath] = { id: flagPath, filename: flagPath, loaded: true, exports: { useFlag: () => enabled } };
 const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false, jsx: { runtime: 'automatic' } });
 const { ChatScopeChip } = jiti(path.join(root, 'src/components/AI_CHAT/ChatScopeChip.tsx'));
 const source = fs.readFileSync(path.join(root, 'src/components/AI_CHAT/AI_Tiptap_Container.tsx'), 'utf8');
@@ -40,15 +37,12 @@ test('shared chat chip renders exactly the retained production icon, name, chevr
   }
 });
 
-test('compose variant is runtime-gated and keeps the compact chat trigger with keyboard focus shade', () => {
+test('compose variant keeps the compact chat trigger with keyboard focus shade', () => {
   const props = { compose: true, kind: 'board', label: 'QA Sandbox', isOpen: false, 'aria-haspopup': 'dialog' };
-  assert.equal(renderToStaticMarkup(React.createElement(ChatScopeChip, props)), '');
-  enabled = true;
   const markup = renderToStaticMarkup(React.createElement(ChatScopeChip, props));
   assert.match(markup, /QA Sandbox/);
   assert.match(markup, /square-kanban/);
   assert.match(markup, /chevron-down/);
   assert.match(markup, /focus-visible:bg-hover-active/);
   assert.doesNotMatch(markup, /Context:/);
-  enabled = false;
 });

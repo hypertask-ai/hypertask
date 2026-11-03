@@ -10,7 +10,7 @@ const writer = () => document.querySelector("[data-compose-task-writer]");
 
 for (const apple of [false, true]) {
   test(`desktop ${apple ? "Mac" : "PC"}: flag on removes only Esc Close; flag off restores the exact footer`, async (t) => {
-    await withPalette(t, { apple, newWindow: true, boardChip: true, tab: "compose", url: "/inbox" }, async ({ flags, rerender }) => {
+    await withPalette(t, { apple, newWindow: true, tab: "compose", url: "/inbox" }, async ({ flags, rerender }) => {
       const original = writer().innerHTML;
       const expected = writer().cloneNode(true);
       const hint = [...expected.querySelectorAll("span")].find((span) => span.textContent === "Esc Close");
@@ -28,7 +28,7 @@ for (const apple of [false, true]) {
 }
 
 test("phone New Task sheet hides the footer and the one-line flag does not change it", async (t) => {
-  await withPalette(t, { mobile: true, newWindow: true, boardChip: true, tab: "compose" }, async ({ flags, rerender }) => {
+  await withPalette(t, { mobile: true, newWindow: true, tab: "compose" }, async ({ flags, rerender }) => {
     const original = document.getElementById("root").innerHTML;
     assert.equal(writer().textContent.includes("Esc Close"), false);
     flags[flag] = true;

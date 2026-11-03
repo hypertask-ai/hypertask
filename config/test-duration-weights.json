@@ -450,7 +450,6 @@
   "tests/feature-flag-status-batch.test.cjs": 24,
   "tests/feature-flags-admin-ui.test.cjs": 1268,
   "tests/feature-flags-cluster.test.ts": 449,
-  "tests/feature-flags-compose-board-chip.test.cjs": 547,
   "tests/feature-flags-files.test.cjs": 145,
   "tests/feature-flags-htpr-8141.test.cjs": 86,
   "tests/feature-flags-htpr-8199.test.cjs": 96,

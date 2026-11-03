@@ -180,7 +180,7 @@ Writer failure saves the raw note and explains the fallback. Create failure
 keeps the note and images for retry. With the flag off, both shortcuts and the
 palette keep their previous behavior, including the board's legacy AI writer.
 
-With `htpr-7053-compose-board-chip` (Owner + QA), inbox Compose uses the focused
+Inbox Compose uses the focused
 ticket's board, otherwise the open board split, otherwise the last used board
 (including All and Important splits). Inbox and mixed-board views show the chat
 board chip beside attach and microphone. Board and ticket pages hide it until a
@@ -190,4 +190,3 @@ and Enter/Space opens the existing Shift+M Select Board list. `Ctrl+Shift+B`
 the note even when the chip is hidden. Type to filter, arrows move, Enter picks
 and restores the text caret, and Esc closes only the board list. The task is
 created on the displayed board using the existing server-side write-access check.
-With this flag off, target selection, controls and keyboard behavior are unchanged.

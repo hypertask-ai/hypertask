@@ -17,7 +17,7 @@ const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 async function withColdBoards(t, queueEnabled, check) {
   notifyManager.setScheduler(queueMicrotask);
   t.after(() => notifyManager.setScheduler(defaultScheduler));
-  await withPalette(t, { newWindow: true, boardChip: false, tab: "compose", url: "/project?id=7" }, async (palette) => {
+  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7" }, async (palette) => {
     let resolveBoards;
     const api = require.cache[path.join(root, "src/utils/api/global/index.ts")].exports.default;
     api.getAllProjectsMinimal = () => new Promise((resolve) => { resolveBoards = resolve; });
