@@ -160,7 +160,7 @@ const Starred = (props: IProp) => {
       </div>
       <div
         onClick={() => router.back()}
-        className="fixed z-menu bottom-[110px] right-4 rounded-[20px] justify-center md:hidden cursor-pointer shadow-customshadow-2 flex w-fit px-3 py-[2px] h-fit gap-2 items-center bg-modalBackground text-[#8E9093]"
+        className="fixed z-menu bottom-[110px] right-4 rounded-[20px] justify-center md:hidden cursor-pointer shadow-customshadow-2 flex w-fit px-3 py-[2px] h-fit gap-2 items-center bg-modalBackground text-text-light-gray"
       >
         <Image src={Goback} alt="icon" width={28} height={28} />
         <span>Back</span>
