@@ -406,7 +406,17 @@ const UpdateKanban = () => {
         globalThis.document
           ?.getElementById(`droppable-section-container-${sectionId}`)
           ?.closest<HTMLElement>(".section-container") ?? null;
-      updateActiveItemAndItemInView(focusCardNextTo(column, removedId), projectId, sectionId);
+      const focusedId = focusCardNextTo(column, removedId);
+      updateActiveItemAndItemInView(focusedId, projectId, sectionId);
+      if (focusedId === null && column) {
+        requestAnimationFrame(() => {
+          if (globalThis.document?.activeElement === column) return;
+          const container = globalThis.document?.getElementById("sectionsContainer");
+          if (!container) return;
+          container.setAttribute("tabindex", "-1");
+          container.focus({ preventScroll: true });
+        });
+      }
       return;
     }
     if (keepColumnFocus) {
