@@ -67,7 +67,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, ticketScopeSelected, editor, editorEnabled,
   editorMountProps, taskId, manualChat, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
+  navigationKey, currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams: sessionStreams,
@@ -82,10 +82,10 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   }, [editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId, chatWindowScope]);
 
   const sessionContext = {
-    parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
+    navigationKey, parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, editor, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
     deleteSessionInHistory, messageQueueRef, persistentQueue, setQueuedMessages, sendInFlightRef, modelBilling,
-    currentAiOption, pathname, currentUser, taskId, manualChat, sessionsRef,
+    currentAiOption, pathname, currentUser, scopedProjectId, taskId, manualChat, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
     setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
   };
@@ -157,6 +157,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   }
 
   return {
+    navigationKey,
     runningSessionIds,
     minimized,
     minimizeChat,
