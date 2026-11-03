@@ -6,7 +6,6 @@ const flag = "htpr-7393-comment-inline-ai";
 const keys = {
   HTPR_7393_COMMENT_INLINE_AI_FLAG: flag,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
-  HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
 };
 const modes = ["create-comment", "read-edit-comments", "read-edit-description"];
 function harness(enabled) {

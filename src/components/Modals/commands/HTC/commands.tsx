@@ -78,7 +78,6 @@ import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
-  HTPR_6937_NEW_TASK_WINDOW_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -135,15 +134,13 @@ const Commands = (props: Props) => {
     selectedTasksFirst = true;
   }
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const ctrlJSkillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
   let skillMenuOwnsKeys = false;
   if (ctrlJSkillMenuFlag) skillMenuOwnsKeys = true;
-  let newTaskWindow = false;
-  if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
   const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
+  const newTaskWindow = composeEnabled;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
   const composeProjectRef = useRef<IProject | undefined>(undefined);

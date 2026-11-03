@@ -14,7 +14,7 @@ const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 async function withColdBoards(t, queueEnabled, check) {
   notifyManager.setScheduler(queueMicrotask);
   t.after(() => notifyManager.setScheduler(defaultScheduler));
-  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7", coldBoards: boards }, async (palette) => {
+  await withPalette(t, { tab: "compose", url: "/project?id=7", coldBoards: boards }, async (palette) => {
     palette.flags[boardFromTextFlag] = true;
     palette.flags[flag] = queueEnabled;
     await palette.rerender();

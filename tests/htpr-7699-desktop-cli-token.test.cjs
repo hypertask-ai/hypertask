@@ -70,14 +70,14 @@ function harness() {
   };
   const flags = {
     HTPR_7699_DESKTOP_CLI_TOKEN_FLAG: FLAG,
-    HTPR_6937_NEW_TASK_WINDOW_FLAG: "existing-target", HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: "split",
+    HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: "split",
     isFeatureEnabled: async (key, id) => {
       calls.flags.push({ key, id });
       if (key === FLAG) {
         if (state.flagError) throw new Error("flag store unavailable");
         return state.mode === "EVERYONE" || (state.mode === "OWNER_AND_QA" && [owner.id, member.id].includes(id));
       }
-      return key === "existing-target" || key === "compose" || (key === "split" && state.split);
+      return key === "compose" || (key === "split" && state.split);
     },
   };
   const mocks = {

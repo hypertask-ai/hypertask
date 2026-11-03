@@ -1,9 +1,9 @@
-const { assert, fs, path, React, root, jiti, test, withPalette, flag, newFlag, keepClosedFlag } = require('./helpers/compose-task-palette-fixture.cjs');
-test('lazy attachment previews cannot suspend the palette or lose the Compose draft under either window flag', async (t) => {
-  for (const newWindow of [false, true]) {
+const { assert, fs, path, React, root, jiti, test, withPalette, flag, keepClosedFlag } = require('./helpers/compose-task-palette-fixture.cjs');
+test('lazy attachment previews cannot suspend the palette or lose the Compose draft', async (t) => {
+  {
     let resolvePreview;
     const previewLoad = new Promise((resolve) => { resolvePreview = resolve; });
-    await withPalette(t, { tab: 'compose', newWindow, previewLoad }, async ({ dom, input, type, press, requests }) => {
+    await withPalette(t, { tab: 'compose', previewLoad }, async ({ dom, input, type, press, requests }) => {
       await type('Keep this note while the thumbnail loads');
       const field = input();
       const picker = document.querySelector('[data-compose-task-writer] input[type="file"]');
@@ -23,7 +23,7 @@ test('lazy attachment previews cannot suspend the palette or lose the Compose dr
 });
 
 test('real shared gallery paints image blobs, file icons and removable tiles without uploads', async (t) => {
-  await withPalette(t, { open: false, newWindow: true }, async ({ source, stub, jiti, mountProbe, dom, flags, rerender }) => {
+  await withPalette(t, { open: false }, async ({ source, stub, jiti, mountProbe, dom, flags, rerender }) => {
     const savedCreate = URL.createObjectURL, savedRevoke = URL.revokeObjectURL;
     const revoked = [];
     URL.createObjectURL = () => 'blob:compose-thumbnail';
@@ -47,14 +47,12 @@ test('real shared gallery paints image blobs, file icons and removable tiles wit
       assert.equal(document.querySelector('img[alt="image.png"]').getAttribute('src'), 'blob:compose-thumbnail');
       assert.ok(document.querySelector('.lucide-paperclip'));
       assert.ok(document.body.textContent.includes('brief.txt'));
-      for (const offFlag of [flag, newFlag]) {
-        flags[offFlag] = false;
-        await rerender();
-        assert.equal(document.querySelector('.lucide-x').getAttribute('role'), null, 'flag-off shared removal markup stays unchanged');
-        assert.equal(document.querySelector('.lucide-x').getAttribute('aria-label'), null);
-        flags[offFlag] = true;
-        await rerender();
-      }
+      flags[flag] = false;
+      await rerender();
+      assert.equal(document.querySelector('.lucide-x').getAttribute('role'), null, 'flag-off shared removal markup stays unchanged');
+      assert.equal(document.querySelector('.lucide-x').getAttribute('aria-label'), null);
+      flags[flag] = true;
+      await rerender();
       await React.act(async () => document.querySelector('[aria-label="Remove image.png"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
       assert.equal(document.querySelector('img[alt="image.png"]'), null);
       assert.deepEqual(revoked, ['blob:compose-thumbnail']);
@@ -101,7 +99,7 @@ test('modified Enter in New Task over a populated form never also saves the form
   const runHandler = new Function('isApple', 'showAssignModal', 'isRecording', 'newTaskWindow', 'showCommands', 'shouldShowAiTaskWriter', 'CtrlEnterHandler', 'editor', `${ts.transpileModule(`const handler = ${handler};`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText} return handler;`);
   const runListener = new Function('useEffect', 'handleKeyDown', ts.transpileModule(listener, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText);
   for (const apple of [false, true]) for (const modifiers of [{}, { altKey: true }, { altKey: true, shiftKey: true }, { shiftKey: true }]) {
-    await withPalette(t, { newWindow: true, apple, tab: 'compose' }, async ({ mountProbe, values, type, press, requests, finish, clickTab }) => {
+    await withPalette(t, { apple, tab: 'compose' }, async ({ mountProbe, values, type, press, requests, finish, clickTab }) => {
       const formSaves = [];
       function Probe() {
         const handleKeyDown = runHandler(apple, false, false, true, values.get('showCommandsAtom'), false, (action) => formSaves.push(action), { isFocused: false });
@@ -135,8 +133,8 @@ test('modified Enter in New Task over a populated form never also saves the form
 });
 
 test('New Task desktop leaves action tooltips unclipped and scrolls only attachments; phone keeps its keyboard sheet', async (t) => {
-  for (const mobile of [false, true]) for (const newWindow of [false, true]) {
-    await withPalette(t, { tab: 'compose', mobile, newWindow }, async ({ dom, input, flags, rerender }) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { tab: 'compose', mobile }, async ({ dom, input, flags, rerender }) => {
       const writer = document.querySelector('[data-compose-task-writer]');
       assert.equal(writer.className, mobile ? 'flex min-h-0 flex-1 flex-col' : '');
       const picker = writer.querySelector('input[type="file"]');
@@ -148,11 +146,11 @@ test('New Task desktop leaves action tooltips unclipped and scrolls only attachm
       if (mobile) {
         assert.equal(previews.parentElement.className, 'min-h-0 overflow-y-auto');
         assert.equal(previews.parentElement.nextElementSibling, input(), 'text and actions stay outside attachment scrolling');
-      } else if (newWindow) {
+      } else {
         assert.equal(previews.parentElement.className, 'max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto');
         assert.equal(previews.parentElement.contains(input()), false, 'text and actions stay outside attachment scrolling');
-      } else assert.equal(previews.parentElement.className, 'flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2');
-      assert.equal(input().className.includes('max-h-52 overflow-y-auto'), newWindow && !mobile);
+      }
+      assert.equal(input().className.includes('max-h-52 overflow-y-auto'), !mobile);
       flags[flag] = false;
       await rerender();
       assert.equal(document.querySelector('[data-compose-task-writer]'), null);
@@ -162,7 +160,7 @@ test('New Task desktop leaves action tooltips unclipped and scrolls only attachm
 
 test('the New Task window shows stage labels in the existing live status and retries reset progress', async (t) => {
   for (const mobile of [false, true]) {
-    await withPalette(t, { newWindow: true, mobile, tab: 'compose' }, async ({ type, press, requests, fail, input }) => {
+    await withPalette(t, { mobile, tab: 'compose' }, async ({ type, press, requests, fail, input }) => {
       await type('Write this ticket');
       await press('Enter', { code: 'Enter' });
       const progress = requests[0].body.onProgress;
@@ -185,15 +183,9 @@ test('the New Task window shows stage labels in the existing live status and ret
   }
 });
 
-test('new-window flag off preserves the legacy loading label and omits progress', async (t) => {
+test('compose writer off omits the writer and its progress', async (t) => {
   for (const mobile of [false, true]) {
-    await withPalette(t, { newWindow: false, mobile, tab: 'compose' }, async ({ type, press, requests }) => {
-      await type('Legacy note');
-      await press('Enter', { code: 'Enter' });
-      assert.equal(requests[0].body.onProgress, undefined);
-      assert.equal(document.querySelector('[role="status"]').textContent, 'Writing your ticket…');
-    });
-    await withPalette(t, { enabled: false, newWindow: true, mobile }, async ({ requests }) => {
+    await withPalette(t, { enabled: false, mobile }, async ({ requests }) => {
       assert.equal(document.querySelector('[data-compose-task-writer]'), null);
       assert.equal(document.querySelector('[role="status"]'), null);
       assert.equal(requests.length, 0);
@@ -202,7 +194,7 @@ test('new-window flag off preserves the legacy loading label and omits progress'
 });
 
 test('progress steps keep the New Task window height', async (t) => {
-  await withPalette(t, { newWindow: true, tab: 'compose' }, async ({ type, press }) => {
+  await withPalette(t, { tab: 'compose' }, async ({ type, press }) => {
     const proto = Object.getPrototypeOf(document.createElement('div'));
     const original = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(proto), 'offsetHeight') ?? Object.getOwnPropertyDescriptor(proto, 'offsetHeight');
     Object.defineProperty(proto, 'offsetHeight', { configurable: true, get: () => 184 });
@@ -230,7 +222,7 @@ test('inbox chip shows the rule target and submission uses exactly the displayed
     ['/inbox?split=All', { taskId: null }, 'project-7', 7],
     ['/inbox?split=Important', { taskId: null }, undefined, 8],
   ]) {
-    await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url, inView, previousBoard, recency: { 7: 1, 8: 2 } }, async ({ type, press, requests }) => {
+    await withPalette(t, { tab: 'compose', boards: composeBoards, url, inView, previousBoard, recency: { 7: 1, 8: 2 } }, async ({ type, press, requests }) => {
       assert.equal(chip().textContent, composeBoards.find((board) => board.id === expected).title);
       await type('Use this board');
       await press('Enter', { code: 'Enter' });
@@ -241,12 +233,12 @@ test('inbox chip shows the rule target and submission uses exactly the displayed
 
 test('mixed-board views show a chip; board and ticket views hide it until choosing a different board', async (t) => {
   for (const url of ['/my-tasks', '/search', '/all-tasks', '/calendar', '/starred', '/inbox']) {
-    await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, previousBoard: 'project-7', url }, async () => {
+    await withPalette(t, { tab: 'compose', boards: composeBoards, previousBoard: 'project-7', url }, async () => {
       assert.equal(chip().textContent, 'QA Sandbox');
     });
   }
   for (const url of ['/project?id=7', '/detail/project-7/42']) {
-    await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url, previousBoard: 'project-8', inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: '', description_: { content: '' } } }, async ({ input, type, press, requests }) => {
+    await withPalette(t, { tab: 'compose', boards: composeBoards, url, previousBoard: 'project-8', inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: '', description_: { content: '' } } }, async ({ input, type, press, requests }) => {
       assert.equal(chip(), null);
       await type('Keep my draft');
       input().setSelectionRange(3, 7, 'backward');
@@ -268,7 +260,7 @@ test('mixed-board views show a chip; board and ticket views hide it until choosi
 
 test('Tab and Shift+Tab connect textarea and chip, Enter/Space open shared picker, Esc closes only list', async (t) => {
   for (const mobile of [false, true]) {
-    await withPalette(t, { newWindow: true, mobile, tab: 'compose', boards: composeBoards, url: '/inbox', previousBoard: 'project-7' }, async ({ input, type, press, values, requests, capture }) => {
+    await withPalette(t, { mobile, tab: 'compose', boards: composeBoards, url: '/inbox', previousBoard: 'project-7' }, async ({ input, type, press, values, requests, capture }) => {
       await type('Caret stays here');
       capture(`board-chip-${mobile ? 'mobile' : 'desktop'}`);
       input().setSelectionRange(6, 6);
@@ -300,7 +292,7 @@ test('Tab and Shift+Tab connect textarea and chip, Enter/Space open shared picke
 
 test('board shortcut matches platform footer, filters list, and restores caret after Enter picks', async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/search', previousBoard: 'project-7' }, async ({ dom, input, type, press, requests }) => {
+    await withPalette(t, { apple, tab: 'compose', boards: composeBoards, url: '/search', previousBoard: 'project-7' }, async ({ dom, input, type, press, requests }) => {
       assert.match(document.querySelector('[data-compose-task-writer]').textContent, apple ? /CMD\+SHIFT\+B/ : /CTRL\+SHIFT\+B/);
       await type('Still writing');
       input().setSelectionRange(4, 4);
@@ -328,7 +320,7 @@ test('board shortcut matches platform footer, filters list, and restores caret a
 });
 
 test('board list bounds arrows to filtered rows, tolerates no matches, and reveals same-board choice', async (t) => {
-  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url: '/project?id=7' }, async ({ dom, input, type, press, requests }) => {
+  await withPalette(t, { tab: 'compose', boards: composeBoards, url: '/project?id=7' }, async ({ dom, input, type, press, requests }) => {
     await type('Do not send from the board list');
     input().setSelectionRange(4, 8, 'backward');
     await press('B', boardKey());
@@ -354,7 +346,7 @@ test('board list bounds arrows to filtered rows, tolerates no matches, and revea
 });
 
 test('board chip without a current or remembered board lets the user pick before creating', async (t) => {
-  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, project: null, url: '/inbox' }, async ({ type, press, requests }) => {
+  await withPalette(t, { tab: 'compose', boards: composeBoards, project: null, url: '/inbox' }, async ({ type, press, requests }) => {
     assert.equal(chip().textContent, 'Choose a board');
     await press('B', boardKey());
     await press('Enter', { code: 'Enter' });
@@ -368,7 +360,7 @@ test('board chip without a current or remembered board lets the user pick before
 for (const keepClosedFlag of [false, true]) {
   for (const keepClosed of [false, true]) {
     test(`Ctrl+J creation: keep closed flag=${keepClosedFlag}, preference=${keepClosed}`, async (t) => {
-      await withPalette(t, { open: false, newWindow: true, keepClosedFlag, keepClosed }, async ({ press, type, finish, values, set, navigations, cacheAdds }) => {
+      await withPalette(t, { open: false, keepClosedFlag, keepClosed }, async ({ press, type, finish, values, set, navigations, cacheAdds }) => {
         await React.act(async () => {
           set('showAIChatInterfaceAtom', false);
           set('aiChatAutoOpenSuppressedAtom', true);
@@ -391,7 +383,7 @@ for (const keepClosedFlag of [false, true]) {
 }
 
 test('Ctrl+J uses the latest saved veto if it changes while task creation is pending', async (t) => {
-  await withPalette(t, { open: false, newWindow: true, keepClosedFlag: true }, async ({ press, type, finish, values, set, navigations }) => {
+  await withPalette(t, { open: false, keepClosedFlag: true }, async ({ press, type, finish, values, set, navigations }) => {
     await press('j', { ctrlKey: true }, document.body);
     await type('Create while the preference changes');
     await press('Enter');
@@ -531,7 +523,7 @@ test('HTPR-7547 queued Compose Enter submits once when mobile focus lands in a l
 });
 
 test('three-switch creation marks the new ticket and leaves opening to its page policy', async (t) => {
-  await withPalette(t, { open: false, newWindow: true, autoOpenSwitches: true }, async ({ press, type, finish, values, set, navigations }) => {
+  await withPalette(t, { open: false, autoOpenSwitches: true }, async ({ press, type, finish, values, set, navigations }) => {
     await React.act(async () => {
       set('showAIChatInterfaceAtom', false);
       set('aiChatAutoOpenSuppressedAtom', true);
@@ -549,7 +541,7 @@ test('three-switch creation marks the new ticket and leaves opening to its page 
 
 for (const modeOutline of [false, true]) for (const mobile of [false, true]) {
   test(`AMOLED mode outline flag ${modeOutline} preserves tab switching on ${mobile ? 'phone' : 'desktop'}`, async (t) => {
-    await withPalette(t, { newWindow: true, modeOutline, mobile }, async ({ press, input, values }) => {
+    await withPalette(t, { modeOutline, mobile }, async ({ press, input, values }) => {
       const tabs = document.querySelector('[aria-label="Commands mode"]');
       assert.ok(tabs);
       for (const token of ['[outline:var(--outline-floating-panel)]']) {
@@ -570,7 +562,7 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
     const AudioButton = (props) => React.createElement('button', {
       id: props.id, 'aria-label': props.ariaLabel, onClick: () => { starts++; },
     }, 'Mic');
-    await withPalette(t, { newWindow: true, tab: 'compose', apple, AudioButton }, async ({ flags, rerender, type, press, input, requests }) => {
+    await withPalette(t, { tab: 'compose', apple, AudioButton }, async ({ flags, rerender, type, press, input, requests }) => {
       flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
       await rerender();
       await type('Keep this draft');
@@ -604,7 +596,7 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
 
 test('HTPR-8260 Ctrl+J footer spells every key in words and offers a Create text button', async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { newWindow: true, tab: 'compose', apple, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
+    await withPalette(t, { tab: 'compose', apple, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
       flags['htpr-8260-ctrlj-composer-keys'] = true;
       flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
       await rerender();
@@ -637,7 +629,7 @@ test('HTPR-8260 microphone sits after the board picker and left of Create, with 
       React.createElement('button', { id: props.id, 'aria-label': props.ariaLabel, 'data-dictate-tooltip': props.hoverTooltip?.text, onClick: () => setListening(true) }, 'Mic'),
       listening && React.createElement('button', { id: props.stopButtonId, 'aria-label': 'Send recording', onClick: () => { setListening(false); props.callbackHandler(' spoken words'); } }, 'Stop'));
   };
-  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: DictationAudioButton }, async ({ flags, rerender, press, requests }) => {
+  await withPalette(t, { tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: DictationAudioButton }, async ({ flags, rerender, press, requests }) => {
     flags['htpr-8260-ctrlj-composer-keys'] = true;
     flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
     await rerender();
@@ -679,7 +671,7 @@ test('HTPR-8260 Ctrl+Enter after a silent or failed dictation never creates a ta
       React.createElement('button', { id: props.id, 'aria-label': props.ariaLabel, onClick: () => setListening(true) }, 'Mic'),
       listening && React.createElement('button', { id: props.stopButtonId, 'aria-label': 'Send recording', onClick: () => setListening(false) }, 'Stop'));
   };
-  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: SilentAudioButton }, async ({ flags, rerender, press, type, requests }) => {
+  await withPalette(t, { tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: SilentAudioButton }, async ({ flags, rerender, press, type, requests }) => {
     flags['htpr-8260-ctrlj-composer-keys'] = true;
     await rerender();
     await type('Keep this draft');
@@ -693,7 +685,7 @@ test('HTPR-8260 Ctrl+Enter after a silent or failed dictation never creates a ta
 
 test('HTPR-8141 board tooltip matches platform footer and preserves picker and flag-off behavior', async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {
+    await withPalette(t, { apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {
       const before = chip().outerHTML;
       assert.equal(document.querySelector('[data-tooltip="Change board"]'), null);
       flags['htpr-8141-board-shortcut-tooltip'] = true;
@@ -728,8 +720,8 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
   visit(file);
   assert.ok(effect);
   const javascript = ts.transpileModule(`const closeComposedTaskForm = ${closeForm}; ${effect}`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-  for (const mobile of [false, true]) for (const newWindow of [false, true]) for (const outcome of ['created', 'escape', 'search-close', 'failure']) {
-    await withPalette(t, { mobile, newWindow, open: false, navigate: true, url: '/project?id=1', project: { id: 1, title: 'URL board' } }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti, finish, fail, values, input }) => {
+  for (const mobile of [false, true]) for (const outcome of ['created', 'escape', 'search-close', 'failure']) {
+    await withPalette(t, { mobile, open: false, navigate: true, url: '/project?id=1', project: { id: 1, title: 'URL board' } }, async ({ mountProbe, set, press, type, requests, legacyJ, jiti, finish, fail, values, input }) => {
       const selected = { id: 2, title: 'Form board' };
       const closes = [];
       let disarm = () => {};
@@ -738,7 +730,7 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
       const { isComposePaletteShortcut } = jiti(path.join(root, 'src/lib/constants/commandCenterShortcut.ts'));
       const { CommandMode } = jiti(path.join(root, 'src/models/enums.ts'));
       const runEffect = new Function('useEffect', 'newTaskWindow', 'isApple', 'pathname', 'projectForContext', 'setCommands', 'CommandMode', 'isComposePaletteShortcut', 'closeHandler', 'isMbl', 'closeBackDismissBeforeNavigation', 'composeShortcutCapture', javascript);
-      function Probe() { runEffect(React.useEffect, newWindow, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation, true); return null; }
+      function Probe() { runEffect(React.useEffect, true, false, '/project', selected, (value) => set('showCommandsAtom', value), CommandMode, isComposePaletteShortcut, closeHandler, mobile, closeBackDismissBeforeNavigation, true); return null; }
       await mountProbe(() => React.createElement(Probe));
       await press('j', { ctrlKey: true }, document.body);
       assert.equal(legacyJ(), 0, 'only one shortcut handles the opening');
@@ -759,7 +751,7 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
         return;
       }
       await press('Enter');
-      assert.equal(requests[0].body.project.id, newWindow ? 2 : 1, 'flag off retains the global Compose destination');
+      assert.equal(requests[0].body.project.id, 2, 'the New Task window keeps the selected board');
       assert.deepEqual(closes, [], 'an in-flight creation does not close the form');
       if (outcome === 'failure') {
         await fail();
@@ -768,7 +760,7 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
         await press('Enter');
       }
       let popped = Promise.resolve();
-      if (mobile && newWindow) {
+      if (mobile) {
         disarm = armBackDismiss(window, { key: 'createTaskModal', onBack: () => {} });
         popped = new Promise((resolve) => window.addEventListener('popstate', resolve, { once: true }));
       }
@@ -776,9 +768,9 @@ test('creation-form New Task handoff preserves board and dismissal, and closes o
         await finish(outcome === 'failure');
         await popped;
       });
-      assert.deepEqual(closes, newWindow ? [true] : [], 'only flagged handoff success closes without discard, including fallback/retry');
+      assert.deepEqual(closes, [true], 'handoff success closes without discard, including fallback/retry');
       assert.equal(values.get('showCommandsAtom').show, false);
-      assert.equal(window.location.pathname, `/detail/project-${newWindow ? 2 : 1}/44`, 'phone history cleanup must finish before pushing the new task');
+      assert.equal(window.location.pathname, '/detail/project-2/44', 'phone history cleanup must finish before pushing the new task');
       assert.equal(values.get('showAIChatInterfaceAtom'), true);
       assert.equal(values.get('composeTaskChatIntroAtom').taskId, 91);
     });

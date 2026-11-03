@@ -1,5 +1,5 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
-import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -42,9 +42,8 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
     if (!sidebarEditWithAi || !showAiChatInterface || !mobileExistingEditOpen) setChatHandoffOpen(false);
   }, [sidebarEditWithAi, showAiChatInterface, mobileExistingEditOpen, setChatHandoffOpen]);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
-  if (mode === "read-edit-description" && !descriptionInlineDrafts && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  if (mode === "read-edit-description" && !descriptionInlineDrafts && composeEnabled) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const legacyStaticFirst = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);

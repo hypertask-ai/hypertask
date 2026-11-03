@@ -12,8 +12,8 @@ const skills = [
 ];
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
-async function withSkillMenu(t, { menuFlag = true, invokeSkills = true, newWindow = false } = {}, check) {
-  await withPalette(t, { tab: "compose", newWindow }, async (palette) => {
+async function withSkillMenu(t, { menuFlag = true, invokeSkills = true } = {}, check) {
+  await withPalette(t, { tab: "compose" }, async (palette) => {
     const skillRequests = [];
     const previousGetComputedStyle = global.getComputedStyle;
     global.getComputedStyle = palette.dom.window.getComputedStyle.bind(palette.dom.window);
@@ -72,7 +72,7 @@ test("Escape closes only the picker and keeps Ctrl+J open with the draft", async
 });
 
 test("Tab picks the skill instead of switching to Search in the New Task window", async (t) => {
-  await withSkillMenu(t, { newWindow: true }, async ({ typeAndWait, press, input, values }) => {
+  await withSkillMenu(t, {}, async ({ typeAndWait, press, input, values }) => {
     await typeAndWait("/dee");
     await press("Tab", { code: "Tab" });
     assert.equal(input().value, "/deeper ");

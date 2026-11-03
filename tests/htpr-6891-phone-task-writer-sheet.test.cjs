@@ -4,7 +4,7 @@ const React = require('react');
 const { loader, mount } = require('./helpers/htpr-7260-ui.cjs');
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
-const config = { newWindow: true, tab: 'compose', url: '/inbox', previousBoard: 'project-7' };
+const config = { tab: 'compose', url: '/inbox', previousBoard: 'project-7' };
 
 for (const mobile of [false, true]) {
   test(`phone writer fills the compose sheet above the keyboard${mobile ? '' : ' and leaves desktop output unchanged'}`, async (t) => {

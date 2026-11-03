@@ -1,4 +1,4 @@
-import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG, HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG, HTPR_7564_PHONE_SHORTCUTS_HEADER_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
@@ -34,9 +34,7 @@ const KeyboardShortcuts = () => {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  let newTaskWindow = false;
-  if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
+  const newTaskWindow = composeTaskWriterEnabled;
   const historyToggleLabel = "Toggle agent log";
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");

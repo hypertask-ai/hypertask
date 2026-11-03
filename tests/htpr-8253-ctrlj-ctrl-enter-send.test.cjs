@@ -30,7 +30,7 @@ test("flag registers a default-Everyone low-risk improvement", () => {
 });
 
 test("Enter starts a new paragraph and Ctrl+Enter creates the ticket once in the shipped mode", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7" }, async ({ input, type, press, requests, flags, rerender }) => {
+  await withPalette(t, { tab: "compose", url: "/project?id=7" }, async ({ input, type, press, requests, flags, rerender }) => {
     flags[flag] = true;
     await rerender();
     assert.match(footer().textContent, /Ctrl Enter Send/);
@@ -49,7 +49,7 @@ test("Enter starts a new paragraph and Ctrl+Enter creates the ticket once in the
 });
 
 test("Cmd+Enter sends on a Mac and the footer hint names the platform shortcut", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7", apple: true }, async ({ input, type, press, requests, flags, rerender }) => {
+  await withPalette(t, { tab: "compose", url: "/project?id=7", apple: true }, async ({ input, type, press, requests, flags, rerender }) => {
     flags[flag] = true;
     await rerender();
     assert.match(footer().textContent, /Cmd Enter Send/);
@@ -64,7 +64,7 @@ test("Cmd+Enter sends on a Mac and the footer hint names the platform shortcut",
 });
 
 test("flag off keeps Enter as the send shortcut and the old hint", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7" }, async ({ input, type, press, requests, flags, rerender }) => {
+  await withPalette(t, { tab: "compose", url: "/project?id=7" }, async ({ input, type, press, requests, flags, rerender }) => {
     flags[flag] = false;
     await rerender();
     assert.doesNotMatch(footer().textContent, /Ctrl Enter/);
@@ -78,7 +78,7 @@ test("flag off keeps Enter as the send shortcut and the old hint", async (t) => 
 
 test("the Ctrl+J key footer names the new create and new-line keys", async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { newWindow: true, tab: "compose", apple, boards: [{ id: 7, title: "QA Sandbox", uniqueIdentifier: "QASA" }], url: "/my-tasks", previousBoard: "project-7" }, async ({ flags, rerender }) => {
+    await withPalette(t, { tab: "compose", apple, boards: [{ id: 7, title: "QA Sandbox", uniqueIdentifier: "QASA" }], url: "/my-tasks", previousBoard: "project-7" }, async ({ flags, rerender }) => {
       flags["htpr-8260-ctrlj-composer-keys"] = true;
       flags[flag] = true;
       await rerender();

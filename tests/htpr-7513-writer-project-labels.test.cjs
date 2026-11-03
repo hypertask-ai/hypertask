@@ -121,7 +121,7 @@ function harness(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, keys.HTPR_6937_NEW_TASK_WINDOW_FLAG].includes(key);
+      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
     } },
     "@/lib/flags/keys": keys,
     "@/app/api/ai/_lib/customInstructions": moduleWithStubs("src/app/api/ai/_lib/customInstructions.ts", new Proxy({ "@/lib/prisma": { __esModule: true, default: prisma }, "ai": ai }, { has: () => true, get: (target, id) => target[id] ?? {} })),
@@ -244,7 +244,7 @@ function harness(options = {}) {
     "better-auth/cookies": { parseCookies: () => new Map() },
     "@prisma/client": { Prisma: { PrismaClientKnownRequestError: class extends Error {} } },
     "@/lib/ai/composeTaskTarget": load(path.join(root, "src/lib/ai/composeTaskTarget.ts")),
-    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_6937_NEW_TASK_WINDOW_FLAG].includes(key); } },
+    "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG; } },
     "@/lib/prisma": { default: { ...prisma, user: { findUnique: async () => ({ id: 985 }) } }, __esModule: true },
     "@/utils/controllers/customFields": { getCustomFieldsForProject: async (projectId) => { fieldLoads.push({ projectId }); return options.noFields ? [] : fields; }, saveWriterCustomFieldValues: async (taskId, values) => { for (const { fieldId, value } of values) fieldSaves.push(plain([fieldId, taskId, value])); } },
     "@/utils/controllers/tasks/getNextUniqueTaskIndex": { getNextUniqueTaskIndex: async () => 1 },

@@ -1,6 +1,5 @@
 "use client";
 
-import { HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
@@ -21,9 +20,7 @@ const ShortcutsSection = () => {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   let includeComposeTaskShortcut = false;
   if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  let newTaskWindow = false;
-  if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
+  const newTaskWindow = composeTaskWriterEnabled;
   const historyToggleLabel = "Toggle agent log";
   const shortcutGroups = getKeyboardShortcuts(
     isApple,

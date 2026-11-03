@@ -38,7 +38,6 @@ const transform = (options) => {
 };
 const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' }, transform });
 const flag = 'htpr-6929-compose-task-writer';
-const newFlag = 'htpr-6937-new-task-window';
 const commentInlineFlag = 'htpr-7393-comment-inline-ai';
 const inlineDraftsFlag = 'htpr-8173-description-inline-drafts';
 const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
@@ -265,7 +264,7 @@ async function withPalette(t, config, check) {
   }
   const stub = (filename, exports) => { (replacingStubs ? testStubs : setupStubs).set(filename, exports); installStubProxy(filename); };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, [commentInlineFlag]: config.commentInline ?? false, [inlineDraftsFlag]: config.inlineDrafts ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
+  const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [commentInlineFlag]: config.commentInline ?? false, [inlineDraftsFlag]: config.inlineDrafts ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskOriginalNoteAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
@@ -382,7 +381,8 @@ async function withPalette(t, config, check) {
       Object.getOwnPropertyDescriptor(dom.window.HTMLTextAreaElement.prototype, 'value').set.call(input(), value);
       input().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
     });
-    const clickTab = async (label) => React.act(async () => [...document.querySelectorAll('[role="tab"]')].find((button) => button.textContent === label).click());
+    const tabNames = { Compose: 'New Task' };
+    const clickTab = async (label) => React.act(async () => [...document.querySelectorAll('[role="tab"]')].find((button) => button.textContent.startsWith(tabNames[label] ?? label)).click());
     const finish = async (writerFailed = false, task = { id: 91, projectId: requests.at(-1).body.project.id, sectionId: 12, uniqueIndex: 44, ticketNumber: 'QASA-44' }) => React.act(async () => requests.at(-1).resolve({ writerFailed, task }));
     const fail = async () => React.act(async () => requests.at(-1).reject(new Error('Couldn’t create the task. Your note is still here — try again.')));
     const rerender = async () => React.act(async () => reactRoot.render(React.createElement(config.strict ? React.StrictMode : React.Fragment, null, React.createElement(Harness))));
@@ -443,4 +443,4 @@ after(() => {
   proxies.clear();
 });
 
-module.exports = { assert, fs, path, React, query, root, jiti, test, withPalette, flag, newFlag, keepClosedFlag };
+module.exports = { assert, fs, path, React, query, root, jiti, test, withPalette, flag, keepClosedFlag };

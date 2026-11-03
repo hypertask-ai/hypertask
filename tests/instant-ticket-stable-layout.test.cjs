@@ -641,7 +641,7 @@ test("the real quote insertion effect fills the composer before centering it cle
       "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({}) },
       react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop },
       "@/hooks/useFlag": { useFlag: key => key === "stable" && stable },
-      "@/lib/flags/keys": { ...common["@/lib/flags/keys"], HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task-window" },
+      "@/lib/flags/keys": { ...common["@/lib/flags/keys"], HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose" },
       "@/lib/state": { useSetRecoilState: () => noop },
       "@/store": { showCommandsAtom: {} },
       "@/models/enums": { CommandMode: {} },
