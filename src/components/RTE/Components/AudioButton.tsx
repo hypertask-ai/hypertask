@@ -844,13 +844,13 @@ export const AudioButton = ({
         <div
           data-ai-chat-dictation-pill
           className={cn(
-            "flex h-[26px] items-center gap-1.5 rounded-[4px] bg-hover-active pl-2 pr-1 z-[9999]",
+            "flex h-7 items-center gap-1.5 rounded bg-hover-active pl-2 pr-1",
             visualizerClassName,
           )}
         >
           <canvas
             ref={waveCanvasRef}
-            className="block h-[12px] w-[26px] text-icon-dark-gray"
+            className="block h-3 w-7 text-icon-dark-gray"
             aria-hidden="true"
           />
           <span className="text-dense text-white-black">Dictation</span>
@@ -859,7 +859,7 @@ export const AudioButton = ({
             data-ai-chat-recording-cancel={isAiChat || undefined}
             onClick={closeHandler}
             aria-label="Cancel dictation"
-            className="flex h-5 w-5 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
+            className="flex h-5 w-5 items-center justify-center rounded text-icon-dark-gray hover:text-white-black"
           >
             <X size={14} strokeWidth={1.75} />
           </button>
@@ -868,7 +868,7 @@ export const AudioButton = ({
             data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Stop dictation"
-            className="group relative flex h-5 w-5 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
+            className="group relative flex h-5 w-5 items-center justify-center rounded text-icon-dark-gray hover:text-white-black"
           >
             <Square size={14} strokeWidth={2.2} />
             <Tooltip
