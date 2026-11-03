@@ -1,74 +1,46 @@
 // HTPR-8376: a comment list projection must name the valid fields instead of dropping a name it does not know.
-const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
+const assert = require("node:assert/strict");
 
-const root = path.resolve(__dirname, "..");
-const listQueryPath = path.join(root, "src/lib/mcp/listQuery.ts");
-const operationPath = path.join(root, "src/lib/mcp/operations/comments/operation.ts");
+const { loadRoute, commentFixture } = require("./helpers/comment-list-route.cjs");
 
-function loadListQuery() {
-  const javascript = ts.transpileModule(fs.readFileSync(listQueryPath, "utf8"), {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function("module", "exports", "require", javascript)(mod, mod.exports, require);
-  return mod.exports;
-}
-
-const COMMENT_FIELDS = [
-  "id",
-  "text",
-  "commentText",
-  "createdAt",
-  "editedAt",
-  "editedBy",
-  "creatorId",
-  "creator",
-  "agent",
-  "agent_display_name",
-  "attachments",
-  "reactions",
+const comments = [
+  commentFixture({ id: 7, text: "First", commentText: "First", createdAt: new Date("2026-09-07T00:00:00.000Z") }),
+  commentFixture({ id: 8, text: "Second", commentText: "Second", createdAt: new Date("2026-09-07T00:01:00.000Z") }),
 ];
 
-test("a field name the row does not know is reported, not dropped", () => {
-  const { assertKnownProjectionFields, ListQueryParseError } = loadListQuery();
-  assert.throws(
-    () => assertKnownProjectionFields(["createdAt", "kind"], COMMENT_FIELDS),
-    (error) => {
-      assert.ok(error instanceof ListQueryParseError);
-      assert.match(error.message, /fields must be a comma-separated subset of: id, text, commentText/);
-      assert.match(error.message, /not known: kind/);
-      return true;
-    },
-  );
+test("a field the comment row does not have is refused with the valid names", async () => {
+  const route = loadRoute(comments);
+  const response = await route.get({ task_id: "100", fields: "createdAt,kind" });
+  assert.equal(response.status, 400);
+  assert.equal(response.body.error, "Validation error");
+  assert.match(response.body.message, /not known: kind/);
+  assert.match(response.body.message, /commentText/);
+  assert.match(response.body.message, /agent_display_name/);
+  assert.equal(route.getQuery(), undefined, "a refused projection must not read the comments");
 });
 
-test("every known field and a nested path pass", () => {
-  const { assertKnownProjectionFields, unknownProjectionFields } = loadListQuery();
-  assert.doesNotThrow(() => assertKnownProjectionFields(COMMENT_FIELDS, COMMENT_FIELDS));
-  assert.deepEqual(unknownProjectionFields(["creator.email", "attachments"], COMMENT_FIELDS), []);
-  assert.deepEqual(unknownProjectionFields([], COMMENT_FIELDS), []);
+test("every valid field still projects the row", async () => {
+  const route = loadRoute(comments);
+  const response = await route.get({ task_id: "100", fields: "createdAt,commentText" });
+  assert.equal(response.status, 200);
+  assert.deepEqual(Object.keys(response.body.comments[0]), ["createdAt", "commentText"]);
+  assert.equal(response.body.comments[0].commentText, "First");
+  assert.equal(response.body.total, 2);
 });
 
-test("an empty projection stays valid", () => {
-  const { assertKnownProjectionFields } = loadListQuery();
-  assert.doesNotThrow(() => assertKnownProjectionFields([], COMMENT_FIELDS));
+test("an unknown sort value and an unknown field are both refused", async () => {
+  const route = loadRoute(comments);
+  assert.equal((await route.get({ task_id: "100", sort: "bogus" })).status, 400);
+  assert.equal((await route.get({ task_id: "100", fields: "author" })).status, 400);
 });
 
-test("the comment list validates its fields and lists the real row keys", () => {
-  const operation = fs.readFileSync(operationPath, "utf8");
-  assert.match(operation, /assertKnownProjectionFields\(/);
-  const allowlist = operation.match(/COMMENT_LIST_FIELDS = \[([\s\S]*?)\] as const/);
-  assert.ok(allowlist, "COMMENT_LIST_FIELDS must be declared");
-  for (const field of ["commentText", "creator", "agent_display_name", "reactions", "attachments"]) {
-    assert.match(allowlist[1], new RegExp(`'${field}'`));
-  }
-  assert.match(operation, /status: 400/);
+test("activity fields ask for include_activity instead of silently vanishing", async () => {
+  const route = loadRoute([commentFixture({ id: 9, type: "comment" })]);
+  const withoutActivity = await route.get({ task_id: "100", fields: "type" });
+  assert.equal(withoutActivity.status, 400);
+  assert.match(withoutActivity.body.message, /include_activity/);
+  const withActivity = await route.get({ task_id: "100", fields: "type", include_activity: "true" });
+  assert.equal(withActivity.status, 200);
+  assert.deepEqual(Object.keys(withActivity.body.comments[0]), ["type"]);
 });

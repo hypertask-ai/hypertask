@@ -251,7 +251,7 @@ for (const agentId of [null, agent.id]) {
       "@/lib/mcp/boards/links": {},
       "@/lib/mcp/comments/reactionResponse": { mapMcpCommentReaction: value => value, reactionAgentIds: () => [] },
       "@/lib/mcp/readListQuery": { readListQuery: () => ({}) },
-      "@/lib/mcp/listQuery": {},
+      "@/lib/mcp/listQuery": load("src/lib/mcp/listQuery.ts", {}),
     });
     h.mocks["@/lib/agents/publicAgent"].overlayDurableAgentDisplayName = value => value;
     h.mocks["@/lib/prisma"].default.comment = {
