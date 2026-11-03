@@ -43,9 +43,7 @@ export function useAiChatAutoOpen(mobile: boolean) {
   const autoOpenedPage = useRef<string | null>(null);
   const fullScreenReturnPage = useRef<string | null>(null);
   const manualOpen = !embeddedTicketPath && (search?.get("newTaskAi") === "1" || search?.get("welcome_ai") === "1" || search?.has("agentSidebar") === true);
-  const allowed = page !== null && (manualChat
-    ? page === "aiChatOpenNewTickets" && values[page]
-    : values[page] || (pinned && !mobile));
+  const allowed = !manualChat && page !== null && (values[page] || (pinned && !mobile));
 
   useEffect(() => {
     if (!enabled || !ready || !pathname || !user?.id) {

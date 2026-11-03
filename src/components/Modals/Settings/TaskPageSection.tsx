@@ -29,13 +29,15 @@ const TaskPageSection = () => {
         <UserPreferenceSidebar ToggleComponent={SettingsToggle} />
         {aiChatOpenSwitchesEnabled ? (
           <>
-            <SettingsToggle
-              label="Open AI chat on newly created tickets"
-              inputId="ai-chat-open-new-tickets"
-              value={values.aiChatOpenNewTickets}
-              checked={values.aiChatOpenNewTickets}
-              onChange={() => setPreference("aiChatOpenNewTickets", !values.aiChatOpenNewTickets)}
-            />
+            {!manualChat && (
+              <SettingsToggle
+                label="Open AI chat on newly created tickets"
+                inputId="ai-chat-open-new-tickets"
+                value={values.aiChatOpenNewTickets}
+                checked={values.aiChatOpenNewTickets}
+                onChange={() => setPreference("aiChatOpenNewTickets", !values.aiChatOpenNewTickets)}
+              />
+            )}
             {!manualChat && (
               <SettingsToggle
                 label="Open AI chat when I open a ticket"
