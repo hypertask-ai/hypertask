@@ -5,6 +5,8 @@ export interface McpTaskAssignee {
     id: number;
     email: string;
     displayName?: string;
+    type: 'person' | 'agent';
+    agentId?: string;
     agent?: McpAgentSummary;
     agentAssigner?: McpAgentSummary;
 }

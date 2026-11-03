@@ -33,11 +33,20 @@ export function mapTaskAssignee(a: {
     const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
     if (a.agent && !agent) return undefined;
 
-    const mapped: McpTaskAssignee = {
-        id: a.user.id,
-        email: a.user.email,
-        displayName: agent?.displayName || a.user.displayName || undefined,
-    };
+    const mapped: McpTaskAssignee = agent
+        ? {
+              id: a.user.id,
+              email: '',
+              displayName: agent.displayName,
+              type: 'agent',
+              agentId: agent.id,
+          }
+        : {
+              id: a.user.id,
+              email: a.user.email,
+              displayName: a.user.displayName || undefined,
+              type: 'person',
+          };
     const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
     if (agent) mapped.agent = agent;
     if (agentAssigner) mapped.agentAssigner = agentAssigner;
@@ -176,7 +185,6 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null, teamS
             fileName: true,
             fileType: true,
             fileSize: true,
-            fileSource: true,
         },
     },
     subTasks: {
@@ -287,12 +295,11 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
             displayName: f.user.displayName || undefined,
         })),
         labels: (task.taskLabels ?? []).map(mapMcpTaskLabel),
-        attachments: (task.attachments ?? []).map((a: { id: number; fileName: string | null; fileType: string; fileSize: string | number | null; fileSource?: string | null }) => ({
+        attachments: (task.attachments ?? []).map((a: { id: number; fileName: string | null; fileType: string; fileSize: string | number | null }) => ({
             id: a.id,
             fileName: a.fileName || '',
             fileType: a.fileType,
             fileSize: a.fileSize ? (typeof a.fileSize === 'string' ? parseInt(a.fileSize) || 0 : a.fileSize) : 0,
-            fileSource: a.fileSource || '',
         })),
         customFieldValues: (task.customFieldValues ?? []).map((customFieldValue: {
             value: string;
