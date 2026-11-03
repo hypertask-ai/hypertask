@@ -215,7 +215,8 @@ test('phone Commands entry has the same switch, composer and existing keyboard-a
     assert.equal(shells.at(-1).fullHeight, true);
     assert.equal(shells.at(-1).keyboardAware, true);
     await clickTab('Compose');
-    assert.equal(shells.at(-1).fullHeight, false);
+    assert.equal(shells.at(-1).fullHeight, true);
+    assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
     assert.equal(shells.at(-1).bottomSlot, undefined);
     assert.ok(shells.at(-1).aboveSlot);
     assert.match(document.querySelector('[aria-label="Send message"]').className, /h-11 w-11.*bg-shadcn-primary/);

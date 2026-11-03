@@ -363,6 +363,16 @@ test("edit-with-ai ticket actions are permanent and no longer registered", async
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("phone task writer sheet is permanent and no longer registered", async () => {
+  const key = ["htpr", "6891", "phone", "task", "writer", "sheet"].join("-");
+  const identifier = ["HTPR", "6891", "PHONE", "TASK", "WRITER", "SHEET", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 test("demo login own-board bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG;
   assert.equal(key, "htpr-7035-demo-login-own-board");

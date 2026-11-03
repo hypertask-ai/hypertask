@@ -187,8 +187,6 @@ test('Board label remains absent when its existing flag is off; the phone sheet 
     assert.equal(footer().querySelectorAll('button').length, 4);
   });
   await withPalette(t, { ...config, mobile: true }, async (ui) => {
-    ui.flags['htpr-6891-phone-task-writer-sheet'] = true;
-    await ui.rerender();
     const original = writer().outerHTML;
     await enable(ui);
     assert.equal(footer(), undefined);
