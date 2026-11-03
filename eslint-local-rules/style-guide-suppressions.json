@@ -674,11 +674,6 @@
       "count": 6
     }
   },
-  "src/components/Global/ShortcutArchiveNudge.tsx": {
-    "tailwindcss/no-custom-classname": {
-      "count": 1
-    }
-  },
   "src/components/Input/AutoResizableTextArea.tsx": {
     "hypertask-style/no-raw-tailwind-colors": {
       "count": 1

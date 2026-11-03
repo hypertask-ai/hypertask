@@ -26,7 +26,6 @@ const { taskDetailNavigationKeymap } = load("src/app/detail/[...slug]/taskDetail
   "@/lib/configs/taskDetail.config": { default: {} },
   "@/lib/keyboard/archiveShortcutGuard": { shouldRunArchiveShortcut: () => false },
   "@/lib/taskDetailArchiveNavigation": { shouldAdvanceAfterNotificationArchive: () => false },
-  "@/lib/notifications/archiveShortcutNudge": { clearArchiveShortcutNudge: () => {} },
   "@/models/enums": { CommandMode: {} },
   "@/lib/constants/keyboard-handler": { KeyCodes },
 });

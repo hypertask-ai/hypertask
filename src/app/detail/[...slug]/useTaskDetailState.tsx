@@ -1,9 +1,9 @@
 import { IUser } from "@/models/model";
-import { currentProjectAtom, taskDetailNonEssentialReadyAtom, archiveShortcutNudgeAtom } from "@/store";
+import { currentProjectAtom, taskDetailNonEssentialReadyAtom } from "@/store";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { useRecoilState, useSetRecoilState } from "@/lib/state";
+import { useRecoilState } from "@/lib/state";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -58,7 +58,6 @@ export function useTaskDetailState({
   const [nonEssentialReady, setNonEssentialReady] = useRecoilState(
     taskDetailNonEssentialReadyAtom
   );
-  const setArchiveNudge = useSetRecoilState(archiveShortcutNudgeAtom);
 
   const {
     parsedTask: _currentTask,
@@ -197,7 +196,7 @@ export function useTaskDetailState({
   );
 
   const taskTimer = useTaskTime(_parsedTask.id);
-  return { _slugs, _currentTask, _currentUser, embedded, _parsedTask, currentUser, suspenseCommitMarkedRef, queryClient, undoData, undoAction, currentProject, setCurrentProject, nonEssentialReady, setNonEssentialReady, setArchiveNudge, currentId, setCurrentTask, currentTask, editMode, setEditMode, requestDescriptionFocus, setEditState, focusOn, editModeCheck, onGoback, setIsSummaryExpand, isSummaryExpanded, refocusAndOpenTaskWriter, scrollSetting, showSubtaskLinkingModal, toggleSubtaskLinkingModal, showCommentDeleteModal, setShowCommentDeleteModal, showTaskDeleteModal, setShowTaskDeleteModal, setShowTaskOptionsModal, showRemoveSubtaskModal, setShowRemoveSubtaskModal, handlePinComment, handleStarTask, createContextOptionsForHTC, setShowRemindMeModal, editCommentHandler, replyToCommentHandler, toggleEmojiPicker, isRecording, scrollVirtualize, comments, setComments, carousalItems, setCarousalItems, defaultCommentFocus, showRemindMeModal, toggleHistory, newCommentIds, newCommentsSnapshotReady, virtualizer, visibleCommentIndices, virtualizeIndexes, scrollElementRef, markAsDone, navigateToNextTask, navigateToPreviousTask, callBackHandlerRemoveParent, dynamicTopValue, dynamicElementRef, setStickyElementHeight, followers, followerKeyPrefix, PostFollower, onWindowFocus, navigate, searchParams, lastGPress, hasScrolledToUnreadRef, readinessTaskRef, hasBottomScrolledRef, bottomScrollCancelRef, initialScrollGuard, initialScrollGenerationRef, lastM_APress, movingItem, setMovingItem, currentItemInTasksPlaylist, updateTaskInCache, moveItem, removeFromListWithStatus, getProjectIdxAndAllData, copyTaskURL, copyTaskFormattedURL, copySharedTaskFormattedURL, copySharedTaskURL, copyTitleAndTicketNumber, copyTicketNumber, removeRelation, router, sectionsForProjectTQ, priorityForTaskTQ, estimateForTaskTQ, sharedLink, labelsFromTQ, isRefetching, taskTimer };
+  return { _slugs, _currentTask, _currentUser, embedded, _parsedTask, currentUser, suspenseCommitMarkedRef, queryClient, undoData, undoAction, currentProject, setCurrentProject, nonEssentialReady, setNonEssentialReady, currentId, setCurrentTask, currentTask, editMode, setEditMode, requestDescriptionFocus, setEditState, focusOn, editModeCheck, onGoback, setIsSummaryExpand, isSummaryExpanded, refocusAndOpenTaskWriter, scrollSetting, showSubtaskLinkingModal, toggleSubtaskLinkingModal, showCommentDeleteModal, setShowCommentDeleteModal, showTaskDeleteModal, setShowTaskDeleteModal, setShowTaskOptionsModal, showRemoveSubtaskModal, setShowRemoveSubtaskModal, handlePinComment, handleStarTask, createContextOptionsForHTC, setShowRemindMeModal, editCommentHandler, replyToCommentHandler, toggleEmojiPicker, isRecording, scrollVirtualize, comments, setComments, carousalItems, setCarousalItems, defaultCommentFocus, showRemindMeModal, toggleHistory, newCommentIds, newCommentsSnapshotReady, virtualizer, visibleCommentIndices, virtualizeIndexes, scrollElementRef, markAsDone, navigateToNextTask, navigateToPreviousTask, callBackHandlerRemoveParent, dynamicTopValue, dynamicElementRef, setStickyElementHeight, followers, followerKeyPrefix, PostFollower, onWindowFocus, navigate, searchParams, lastGPress, hasScrolledToUnreadRef, readinessTaskRef, hasBottomScrolledRef, bottomScrollCancelRef, initialScrollGuard, initialScrollGenerationRef, lastM_APress, movingItem, setMovingItem, currentItemInTasksPlaylist, updateTaskInCache, moveItem, removeFromListWithStatus, getProjectIdxAndAllData, copyTaskURL, copyTaskFormattedURL, copySharedTaskFormattedURL, copySharedTaskURL, copyTitleAndTicketNumber, copyTicketNumber, removeRelation, router, sectionsForProjectTQ, priorityForTaskTQ, estimateForTaskTQ, sharedLink, labelsFromTQ, isRefetching, taskTimer };
 }
 
 export type useTaskDetailStateValue = ReturnType<typeof useTaskDetailState>;
