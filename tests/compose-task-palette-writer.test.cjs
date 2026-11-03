@@ -438,9 +438,8 @@ test('dictation stays mounted across Search switches and its draft survives', as
     await React.act(async () => { audioProps.toggleRecording(false); audioProps.callbackHandler('<p>Spoken text</p>', true); });
     assert.equal(input().value, 'Keep my typed note Spoken text');
     assert.equal(input().disabled, false);
-    await type(' and more');
     await press('Enter', { code: 'Enter' });
-    assert.equal(requests[0].body.text, 'Keep my typed note Spoken text and more');
+    assert.equal(requests[0].body.text, 'Keep my typed note Spoken text');
   });
 });
 

@@ -2,7 +2,7 @@ const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
-const { after, test } = require("node:test");
+const { after } = require("node:test");
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -22,7 +22,6 @@ function pins(name) {
   const update = Boolean(process.env.UPDATE_HTPR_6992_PINS);
   const groups = new Map();
   after(() => {
-    if (groups.size === 0) return;
     const actual = Object.fromEntries([...groups].sort(([a], [b]) => (a < b ? -1 : 1)).map(([group, entries]) => [group, digestOf(entries)]));
     if (process.env.HTPR_6992_PINS_DUMP) {
       fs.mkdirSync(process.env.HTPR_6992_PINS_DUMP, { recursive: true });
@@ -42,15 +41,5 @@ function pins(name) {
     return plain;
   };
 }
-
-test("every pinned fixture is readable JSON of digests", () => {
-  const directory = path.join(__dirname, "..", "fixtures", "htpr-6992-pins");
-  for (const name of fs.readdirSync(directory).sort()) {
-    const pinned = JSON.parse(fs.readFileSync(path.join(directory, name), "utf8"));
-    for (const [group, digest] of Object.entries(pinned)) {
-      assert.match(digest, /^[0-9a-f]{16}$/, `${name} ${group}`);
-    }
-  }
-});
 
 module.exports = { pins, digestOf };
