@@ -23,13 +23,16 @@ function sourceFiles(directory) {
 
 test("the shared hover-tooltip layer clears every numeric app layer", () => {
   const styles = read("src/styles/_tooltip-portal.scss");
-  const definitions = [...styles.matchAll(/--z-hover-tooltip:\s*(\d+)/g)];
-  assert.equal(definitions.length, 1);
-  const tooltipLayer = Number(definitions[0][1]);
+  const scale = Object.fromEntries([...read("src/styles/globals.scss")
+    .matchAll(/--z-([a-z]+):\s*(\d+);/g)].map((match) => [match[1], Number(match[2])]));
+  assert.deepEqual(Object.keys(scale), ["base", "sticky", "menu", "floating", "popup", "toast", "tooltip"]);
+  const tooltipLayer = scale.tooltip;
+  assert.equal(Math.max(...Object.values(scale)), tooltipLayer, "the tooltip layer is the top layer");
+  assert.match(styles, /--z-hover-tooltip:\s*var\(--z-tooltip\)/);
   const files = [...sourceFiles(path.join(root, "src")), path.join(root, "tailwind.config.ts")];
   for (const file of files) {
     for (const layer of layerValues(fs.readFileSync(file, "utf8"))) {
-      assert.ok(tooltipLayer > layer, `${path.relative(root, file)} uses ${layer}, above the tooltip layer ${tooltipLayer}`);
+      assert.ok(tooltipLayer >= layer, `${path.relative(root, file)} uses ${layer}, above the tooltip layer ${tooltipLayer}`);
     }
   }
   assert.match(styles, /z-index:\s*var\(--z-hover-tooltip\)/);
@@ -406,7 +409,7 @@ test("legacy reaction placement retains composer boundaries, clamping and shortc
       assert.equal(surface.style.left, `${scenario.left}px`);
       assert.equal(surface.style.top, `${scenario.top}px`);
       assert.equal(surface.textContent, "Add ReactionRFast LikeL");
-      assert.ok(surface.classList.contains("z-[9999]"));
+      assert.ok(surface.classList.contains("z-tooltip"));
       assert.equal(document.querySelector("[data-hover-tooltip-portal]"), null);
     }
     await render(React.createElement(Component));

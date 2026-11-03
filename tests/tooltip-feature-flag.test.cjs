@@ -53,18 +53,18 @@ test("flag off renders production tooltips and flag on renders the top-layer por
     const notificationProps = { notification, markAsDone() {}, openTask() {}, setSelectedInbox() {}, _selectedInbox: null };
     const personProps = { projectId: 15, subject: { kind: "user", userId: 985 } };
     const cases = [
-      ["Tooltip inline", Tooltip, { text: "Set tags", keyCombination: ["T"], bottom: -40, left: 0 }, "Set tagsT", "z-[9999]", "hover"],
-      ["Tooltip anchored", Tooltip, { text: "Set tags", keyCombination: ["T"], bottom: -40, left: 0, portal: true, anchorElement: external }, "Set tagsT", "z-[9999]"],
-      ["ReactTooltip", ReactTooltip, { children: "Ada reacted", className: "scale-100" }, "Ada reacted", "z-[9999]"],
-      ["TimeTooltip", TimeTooltip, { time: new Date(), bottom: -5, left: 55 }, "5 October 2026, 12:00 GMT", "z-[9999]"],
-      ["TutorialTooltip", TutorialTooltip, { text: "Type Done", top: 15, left: -95 }, "Type Done", "z-[9990]"],
-      ["CommentEmojiTooltip inline", CommentEmojiTooltip, {}, "Add ReactionRFast LikeL", "z-[9999]", "hover"],
-      ["CommentEmojiTooltip anchored", CommentEmojiTooltip, { anchorElement: external }, "Add ReactionRFast LikeL", "z-[9999]"],
+      ["Tooltip inline", Tooltip, { text: "Set tags", keyCombination: ["T"], bottom: -40, left: 0 }, "Set tagsT", "z-tooltip", "hover"],
+      ["Tooltip anchored", Tooltip, { text: "Set tags", keyCombination: ["T"], bottom: -40, left: 0, portal: true, anchorElement: external }, "Set tagsT", "z-tooltip"],
+      ["ReactTooltip", ReactTooltip, { children: "Ada reacted", className: "scale-100" }, "Ada reacted", "z-tooltip"],
+      ["TimeTooltip", TimeTooltip, { time: new Date(), bottom: -5, left: 55 }, "5 October 2026, 12:00 GMT", "z-tooltip"],
+      ["TutorialTooltip", TutorialTooltip, { text: "Type Done", top: 15, left: -95 }, "Type Done", "z-toast"],
+      ["CommentEmojiTooltip inline", CommentEmojiTooltip, {}, "Add ReactionRFast LikeL", "z-tooltip", "hover"],
+      ["CommentEmojiTooltip anchored", CommentEmojiTooltip, { anchorElement: external }, "Add ReactionRFast LikeL", "z-tooltip"],
       ["NotificationAssigned", NotificationAssigned, notificationProps, "Mark Done   E", "scale-0", "notification"],
       ["NotificationComment", NotificationComment, notificationProps, "Mark Done   E", "scale-0", "notification"],
-      ["PersonHovercardSurface", PersonHovercardSurface, { ...personProps, anchor: external, externallyOpen: true }, "AvatarAdaada@example.test", "z-[999999999]"],
-      ["PersonHovercard", PersonHovercard, { ...personProps, children: React.createElement("button", { id: "person" }, "Ada") }, "AvatarAdaada@example.test", "z-[999999999]", "person"],
-      ["ParentPersonHovercard", ParentPersonHovercard, personProps, "AvatarAdaada@example.test", "z-[999999999]", "parent"],
+      ["PersonHovercardSurface", PersonHovercardSurface, { ...personProps, anchor: external, externallyOpen: true }, "AvatarAdaada@example.test", "z-tooltip"],
+      ["PersonHovercard", PersonHovercard, { ...personProps, children: React.createElement("button", { id: "person" }, "Ada") }, "AvatarAdaada@example.test", "z-tooltip", "person"],
+      ["ParentPersonHovercard", ParentPersonHovercard, personProps, "AvatarAdaada@example.test", "z-tooltip", "parent"],
     ];
     const baselineDir = process.env.TOOLTIP_BASELINE_DIR;
     const baselineComponents = baselineDir ? new Map([
@@ -114,7 +114,7 @@ test("flag off renders production tooltips and flag on renders the top-layer por
         }, `null shortcuts ${state}`, "hover"));
         const tooltips = state
           ? [...document.querySelectorAll("[data-hover-tooltip-portal]")]
-          : legacyElements("z-[9999]");
+          : legacyElements("z-tooltip");
         assert.equal(tooltips.length, 1);
         assert.equal(tooltips[0].textContent, "Set cycle");
         assert.equal(tooltips[0].querySelectorAll("kbd").length, 0);

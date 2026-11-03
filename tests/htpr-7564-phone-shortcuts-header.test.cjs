@@ -16,7 +16,7 @@ const componentPath = "src/components/sidebars/keyboardShortcuts.tsx";
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const keys = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const shortcuts = jiti(path.join(root, "src/lib/constants/shortcuts.ts"));
-const phoneLayer = "max-sm:!z-[9990]";
+const phoneLayer = "max-sm:!z-toast";
 
 function load(file, dependencies, source = fs.readFileSync(path.join(root, file), "utf8")) {
   const js = ts.transpileModule(source, {
@@ -38,7 +38,7 @@ function render(enabled, phoneHelp, legacy = false) {
   });
   let source = fs.readFileSync(path.join(root, componentPath), "utf8");
   if (legacy) {
-    const branch = '<BackDropContainer className={phoneShortcutsHeader ? "max-sm:!z-[9990]" : undefined}>';
+    const branch = '<BackDropContainer className={phoneShortcutsHeader ? "max-sm:!z-toast" : undefined}>';
     assert.ok(source.includes(branch));
     source = source.replace(branch, "<BackDropContainer>");
   }
@@ -82,8 +82,8 @@ test("phone layer is important to override the inline backdrop z-index and never
   const compiler = await compile('@import "./src/styles/tailwind-entry.css";', { base: root, onDependency: () => {} });
   const css = compiler.build([phoneLayer]);
   assert.match(css, /@media\s*\(width\s*<\s*640px\)/);
-  assert.match(css, /z-index:\s*9990\s*!important/);
-  assert.doesNotMatch(css, /z-index:\s*9990\s*;/, "no unscoped non-important layer override");
+  assert.match(css, /z-index:\s*var\(--z-toast\)\s*!important/);
+  assert.doesNotMatch(css, /z-index:\s*var\(--z-toast\)\s*;/,  "no unscoped non-important layer override");
 });
 
 test("phone header flag ships as a small Everyone bugfix", () => {

@@ -1033,7 +1033,7 @@ test('shared highlight uses inbox theme tokens and extends behind both tip colum
   assert.equal(highlight['background-color'], 'var(--active-elementBg)')
   assert.equal(highlight['border-left'], '4px solid var(--border-active)')
   assert.equal(highlight['pointer-events'], 'none')
-  assert.equal(rule('[data-search-layout-row] > *')['z-index'], '1')
+  assert.equal(rule('[data-search-layout-row] > *')['z-index'], 'var(--z-base)')
   const gutters = []
   css.walkDecls('--search-row-gutter', (node) => gutters.push([node.value, node.parent.parent.params]))
   const bootstrap = fs.readFileSync(require.resolve('bootstrap/dist/css/bootstrap.css'), 'utf8')

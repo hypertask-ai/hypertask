@@ -442,7 +442,7 @@ test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated ta
     const tabs = [...document.querySelectorAll('[aria-label="Commands mode"] [role="tab"]')];
     for (const [tab, shortcut] of [[tabs[0], 'CTRL'], [tabs[1], 'CTRL']]) {
       await React.act(async () => tab.focus());
-      const portal = document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-[9999]"].fixed');
+      const portal = document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-tooltip"].fixed');
       assert.ok(portal, 'the actual Tooltip portal opens on the focusable tab');
       assert.ok(portal.textContent.includes(tab.textContent));
       assert.ok(portal.textContent.includes(shortcut));
@@ -451,7 +451,7 @@ test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated ta
     otherTab.setAttribute('role', 'tab');
     document.body.append(otherTab);
     await React.act(async () => otherTab.focus());
-    assert.equal(document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-[9999]"].fixed'), null, 'focusout closes the tooltip');
+    assert.equal(document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-tooltip"].fixed'), null, 'focusout closes the tooltip');
     assert.equal((await press('Tab', {}, otherTab)).defaultPrevented, false);
     assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
     otherTab.remove();

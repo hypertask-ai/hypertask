@@ -15,7 +15,7 @@ const flagKey = "htpr-7045-shortcuts-help-phone";
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const keys = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const shortcuts = jiti(path.join(root, "src/lib/constants/shortcuts.ts"));
-const legacyPanel = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
+const legacyPanel = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-menu pt-[env(safe-area-inset-top)]";
 const evidenceDir = process.env.SHORTCUTS_PHONE_EVIDENCE_DIR;
 
 function loadComponent(file, dependencies) {

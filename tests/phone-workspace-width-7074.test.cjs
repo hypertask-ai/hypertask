@@ -43,7 +43,7 @@ test("flags not loaded yet: narrow slots are already protected in the first serv
 
 test("phone flag loaded Off still protects narrow slots", () => {
   const slot = new JSDOM(render({ [phoneKey]: false })).window.document.querySelector("[data-ai-chat-slot]");
-  assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]");
+  assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-sticky");
 });
 
 test("flag On: the reserved slot is out of flow below md and still shrink-0 above", () => {
