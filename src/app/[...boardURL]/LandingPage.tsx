@@ -592,7 +592,6 @@ export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
-  const holdAddressForPendingSwitch = useFlag(HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG)
   const {
   setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
   setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
@@ -762,6 +761,7 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   queryClient, setHydrationRetryToken, hydrationRetryToken,
   } = context;
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
+  const holdAddressForPendingSwitch = useFlag(HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG)
 
 useEffect(() => {
   if (!pinnedProject) return
