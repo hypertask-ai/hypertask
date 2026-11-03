@@ -1,4 +1,5 @@
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
+import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
 import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
@@ -112,6 +113,7 @@ function ChatSessionRow({
 
 export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean } = {}) => {
   const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
   const closeAgents = useCallback(() => setAgentsOpen(false), []);
@@ -230,7 +232,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
 
   const handleStartNewSession = async () => {
     if (isStartingNewSessionRef.current) return;
-    if (!windowDrag && chatWindowControls) {
+    if (!windowDrag && multiChatWindowsEnabled && chatWindowControls) {
       const opened = await chatWindowControls.openNewChatWindow();
       if (!opened && chatWindowControls.atCapacity) toast("Close a chat window to open another chat.");
       return;
@@ -277,7 +279,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
               if (agent && sidebarChats?.onSelectAgentSession) sidebarChats.onSelectAgentSession(agent, chat.id);
               else {
                 sidebarChats?.onSelect({ kind: "ai" });
-                if (!isFullScreenChat && chat.id !== resolvedSessionId && chatWindowControls) {
+                if (!isFullScreenChat && chat.id !== resolvedSessionId && multiChatWindowsEnabled && chatWindowControls) {
                   if (chatWindowControls.focusOpenSessionWindow(chat.id)) return;
                   if (!windowDrag) {
                     if (chatWindowControls.atCapacity) {

@@ -2,6 +2,7 @@
 
 import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
+import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
 
 import { useChatShortcuts } from "@/hooks/MultiPages/AIChat/useChatShortcuts";
@@ -43,6 +44,7 @@ export const AI_Chat_Sidebar = ({
   const chat = useAiChatContext();
   const { showWelcomeScreen, minimized } = chat;
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
+  const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const agentHoverChat = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
   const enabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const pastChatsFirst = useFlag(HTPR_7688_PAST_CHATS_FIRST_FLAG);
@@ -244,7 +246,7 @@ export const AI_Chat_Sidebar = ({
     enabled: sharedShortcutsEnabled,
     active: target.kind !== "external-agent",
     onNewChat: async () => {
-      if (chat.chatWindows?.enabled) {
+      if (multiChatWindowsEnabled && chat.chatWindows?.enabled) {
         const opened = await chat.chatWindows.openNewChatWindow();
         if (!opened && chat.chatWindows.atCapacity) toast("Close a chat window to open another chat.");
         return;
