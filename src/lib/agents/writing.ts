@@ -1,11 +1,21 @@
 import { parse } from 'node-html-parser'
 
+const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const TECHNICAL_DETAIL = /(^|\s)(~|\.{0,2})\/[\w.-]+\/|\b[\w-]+\.(?:py|sh|zig|ts|tsx|js|mjs|go|kt|json|ya?ml|toml|md|jsonl|log|html)\b|\b[A-Za-z_][\w.]*\(\)|\b[a-z]+(?:_[a-z0-9]+)+\b|\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}\b|`[^`]+`|\b(?:Traceback|stderr|stdout|exit code|stack trace|tmux)\b|(?:^|\s)--[a-z][\w-]+/
+
+function excerpt(text: string | undefined): string {
+  if (!text) return ''
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat
+}
+
 export class AgentWritingError extends Error {
   readonly status = 400
   readonly code = 'invalid_field'
 
-  constructor(readonly field: string, reason: string) {
-    super(`${field}: ${reason}. Use short plain sentences for people; put technical details and status in the agent log.`)
+  constructor(readonly field: string, reason: string, offender?: string) {
+    const quoted = excerpt(offender)
+    super(`${field}: ${reason}${quoted ? ` ("${quoted}")` : ''}. Use short plain sentences for people; put technical details and status in the agent log.`)
   }
 }
 
@@ -24,15 +34,15 @@ export function assertAgentWriting(agentId: string | null | undefined, fields: {
     for (const line of lines(value)) {
       if (unchanged.has(line)) continue
       const plain = line.replace(/https?:\/\/\S+/g, 'LINK')
-      if (/(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i.test(plain)) {
-        throw new AgentWritingError(field, 'Robot status belongs in the agent log')
+      if (ROBOT_STATUS.test(plain)) {
+        throw new AgentWritingError(field, 'Robot status belongs in the agent log', plain.match(ROBOT_STATUS)?.[0])
       }
-      if (/(^|\s)(~|\.{0,2})\/[\w.-]+\/|\b[\w-]+\.(?:py|sh|zig|ts|tsx|js|mjs|go|kt|json|ya?ml|toml|md|jsonl|log|html)\b|\b[A-Za-z_][\w.]*\(\)|\b[a-z]+(?:_[a-z0-9]+)+\b|\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}\b|`[^`]+`|\b(?:Traceback|stderr|stdout|exit code|stack trace|tmux)\b|(?:^|\s)--[a-z][\w-]+/.test(plain)) {
-        throw new AgentWritingError(field, 'Technical details belong in the agent log')
+      if (TECHNICAL_DETAIL.test(plain)) {
+        throw new AgentWritingError(field, 'Technical details belong in the agent log', plain.match(TECHNICAL_DETAIL)?.[0])
       }
       for (const sentence of plain.replace(/"[^"]+"|“[^”]+”/g, 'LINK').split(/(?<=[.!?:;])\s+/)) {
         const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu)?.filter((word) => word !== 'LINK') ?? []
-        if (words.length > 12) throw new AgentWritingError(field, 'Keep each sentence within twelve words')
+        if (words.length > 12) throw new AgentWritingError(field, 'Keep each sentence within twelve words', sentence)
       }
     }
   }
