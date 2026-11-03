@@ -1,4 +1,4 @@
-import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from '@/lib/flags/keys'
+import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -250,7 +250,11 @@ export async function GET(request: NextRequest) {
       } else if (assignee.kind === 'ids') {
         where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
       } else if (assignee.kind === 'me') {
-        where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
+        const agentMe = ctx.agentId &&
+          await isFeatureEnabled(HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, user.id).catch(() => false)
+        where.assignees = agentMe
+          ? { some: { agentId: ctx.agentId } }
+          : { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
       } else {
         where.assignees = { none: {} }
       }
