@@ -11,8 +11,11 @@ type AIGeneratedAttachment = {
   preview: string;
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
+import { HTPR_8251_DESCRIPTION_AI_EDIT_FLAG } from "@/lib/flags/definitions/htpr-8251-description-ai-edit";
+import { useFlag } from "@/hooks/useFlag";
 export function useTaskDetailEditorWriter(getContext: () => TaskDetailEditorContext) {
   const { currentTask, router, updateDrafts, setShouldShowAITaskWriter, editor, setAiTriggerData, setShowSetLinkModal, newCommentAttachments, setNewCommentAttachments, setTrigger, mode } = getContext();
+  const descriptionAiEdit = useFlag(HTPR_8251_DESCRIPTION_AI_EDIT_FLAG);
 
 
   const calculatePopoverPosition = (targetDiv: HTMLElement, popover: HTMLElement) => {
@@ -128,7 +131,7 @@ export function useTaskDetailEditorWriter(getContext: () => TaskDetailEditorCont
   };
 
   const getDefaultMode = () => {
-    return mode === "read-edit-description" ? "AiTaskWriter" : "WriteWithAI";
+    return mode === "read-edit-description" && !descriptionAiEdit ? "AiTaskWriter" : "WriteWithAI";
   };
   return { calculatePopoverPosition, updateTaskTitleDescription, handleEscape, setLinkHandlerCallback, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode };
 }
