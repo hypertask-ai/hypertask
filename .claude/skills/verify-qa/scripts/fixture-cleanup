@@ -1,0 +1,129 @@
+#!/usr/bin/env node
+
+const { readFile } = require('node:fs/promises');
+
+const appHost = 'app.hypertask.ai';
+
+function finish(lines, code) {
+  for (const line of lines) console.log(line);
+  process.exitCode = code;
+}
+
+function parseArgs(args) {
+  const stateFile = args.shift();
+  const taskIds = [];
+  let baseUrl = `https://${appHost}`;
+  const seen = new Set();
+  if (!stateFile || stateFile.startsWith('--')) return { error: 'usage: fixture-cleanup <state-file> <taskId...> [--base-url <origin>]' };
+  while (args.length) {
+    const token = args.shift();
+    if (/^\d+$/.test(token)) {
+      const id = Number(token);
+      if (!Number.isSafeInteger(id) || id <= 0) return { error: `invalid task id: ${token}` };
+      taskIds.push(id);
+      continue;
+    }
+    if (token !== '--base-url' || seen.has(token)) return { error: `invalid argument: ${token}` };
+    seen.add(token);
+    const value = args.shift();
+    try {
+      const url = new URL(value ?? '');
+      if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' ||
+          url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
+        throw new Error();
+      }
+      baseUrl = url.origin;
+    } catch {
+      return { error: 'test base URL must be an HTTP origin on 127.0.0.1' };
+    }
+  }
+  if (!taskIds.length) return { error: 'usage: fixture-cleanup <state-file> <taskId...> [--base-url <origin>]' };
+  return { taskIds, baseUrl };
+}
+
+function appCookies(state, endpoint) {
+  if (!state || !Array.isArray(state.cookies)) return { error: 'storage state must contain a cookies array' };
+  const cookies = [];
+  const now = Date.now() / 1000;
+  for (const cookie of state.cookies) {
+    if (!cookie || typeof cookie.domain !== 'string' || typeof cookie.path !== 'string' ||
+        !cookie.path.startsWith('/') || typeof cookie.name !== 'string' ||
+        typeof cookie.value !== 'string' || !Number.isFinite(cookie.expires)) continue;
+    const domain = cookie.domain.toLowerCase();
+    const matchesDomain = domain.startsWith('.')
+      ? appHost === domain.slice(1) || appHost.endsWith(domain)
+      : appHost === domain;
+    const matchesPath = endpoint === cookie.path ||
+      endpoint.startsWith(cookie.path.endsWith('/') ? cookie.path : `${cookie.path}/`);
+    if (matchesDomain && matchesPath && (cookie.expires === -1 || cookie.expires > now)) cookies.push(cookie);
+  }
+  if (!cookies.length) return { error: 'no valid app cookies in this state' };
+  cookies.sort((a, b) => b.path.length - a.path.length);
+  return { cookie: cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ') };
+}
+
+async function call(baseUrl, endpoint, method, cookie, body) {
+  const response = await fetch(new URL(endpoint, baseUrl), {
+    method,
+    headers: { Cookie: cookie, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15_000),
+  });
+  const text = await response.text();
+  let json = null;
+  try { json = text ? JSON.parse(text) : null; } catch { json = null; }
+  return { status: response.status, ok: response.ok, json };
+}
+
+async function stillThere(taskId, baseUrl, cookie) {
+  const read = await call(baseUrl, '/api/tasks/getTaskMinimal', 'POST', cookie, { id: taskId });
+  if (read.status === 404 || (read.ok && read.json === null)) return { gone: true };
+  if (!read.ok) return { error: `read back HTTP ${read.status}` };
+  return { gone: false };
+}
+
+async function cleanOne(taskId, baseUrl, cookie) {
+  const trash = await call(baseUrl, '/api/queues/tasks/taskDeleteReminder', 'POST', cookie, { taskId });
+  if (trash.status === 404) {
+    const check = await stillThere(taskId, baseUrl, cookie);
+    if (check.gone) return `cleaned ${taskId}`;
+    return `failed ${taskId} trash HTTP 404`;
+  }
+  if (!trash.ok) return `failed ${taskId} trash HTTP ${trash.status}`;
+  const purge = await call(baseUrl, `/api/tasks/deleteTask?taskId=${taskId}`, 'DELETE', cookie);
+  if (!purge.ok) return `failed ${taskId} delete ${purge.json?.code ?? `HTTP ${purge.status}`}`;
+  const check = await stillThere(taskId, baseUrl, cookie);
+  if (check.gone) return `cleaned ${taskId}`;
+  return `failed ${taskId} ${check.error ?? 'still readable after delete'}`;
+}
+
+async function main() {
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.error) return finish([`fixture-cleanup ${parsed.error}`], 2);
+
+  let state;
+  try {
+    state = JSON.parse(await readFile(process.argv[2], 'utf8'));
+  } catch {
+    return finish(['fixture-cleanup cannot read a valid storage-state JSON file'], 2);
+  }
+  const cookies = appCookies(state, '/api/tasks/deleteTask');
+  if (cookies.error) return finish([`fixture-cleanup ${cookies.error}`], 2);
+
+  const lines = [];
+  let failed = false;
+  for (const taskId of parsed.taskIds) {
+    let line;
+    try {
+      line = await cleanOne(taskId, parsed.baseUrl, cookies.cookie);
+    } catch {
+      line = `failed ${taskId} network error`;
+    }
+    if (line.startsWith('failed')) failed = true;
+    lines.push(line);
+  }
+  finish(lines, failed ? 1 : 0);
+}
+
+main().catch(() => finish(['fixture-cleanup failed'], 2));
