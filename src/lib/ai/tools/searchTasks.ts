@@ -1,5 +1,6 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from "@/lib/flags/keys";
+import { ASSIGNED_TO_FILTER_MESSAGE, parseAssigneeFilter } from "@/lib/mcp/listQuery";
 import { tool } from "ai";
 import { z } from "zod";
 import { buildSearchTotalMetadata } from "@/app/api/ai/chat/stream/bulkTools";
@@ -53,15 +54,15 @@ export function createSearchTasksTool(context: ToolContext) {
         if (input.section) where.section = input.section;
         if (input.assigned_to) {
           const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id);
-          if (input.assigned_to === "me") {
+          const assignee = parseAssigneeFilter(input.assigned_to);
+          if (!assignee.ok) {
+            return { success: false, error: ASSIGNED_TO_FILTER_MESSAGE };
+          } else if (assignee.kind === "ids") {
+            where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
+          } else if (assignee.kind === "me") {
             where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
-          } else if (input.assigned_to === "unassigned") {
-            where.assignees = { none: {} };
           } else {
-            const assignedUserId = parseInt(input.assigned_to, 10);
-            if (Number.isInteger(assignedUserId)) {
-              where.assignees = { some: { userId: assignedUserId, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
-            }
+            where.assignees = { none: {} };
           }
         }
         const priorities = normalizePriorityInput(input.priority);

@@ -81,12 +81,15 @@ function loadRoute(tasks = []) {
     },
     "@/lib/flags/keys": {
       HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer",
+      HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG: "htpr-7733-person-assignment-filter",
+      HTPR_8340_ASSIGNEE_FILTER_VALIDATION_FLAG: "htpr-8340-assignee-filter-validation",
     },
     "@/lib/mcp/listQuery": {
       hasPrWhere: () => null,
       normalizeTaskStatus: (status) => status,
       parseTaskStatusParam: (status) => status || "Normal",
-      parseAssigneeFilter: () => ({ ok: true, value: null }),
+      parseAssigneeFilter: require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}).parseAssigneeFilter,
+      ASSIGNED_TO_FILTER_MESSAGE: "assigned_to must be me, unassigned, or a comma-separated list of user ids",
       parseNumericCursor: () => null,
       projectRows: (rows) => rows,
       resolveListLimit: (_, fallback) => fallback,

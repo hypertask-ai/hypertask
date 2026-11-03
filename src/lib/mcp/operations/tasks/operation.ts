@@ -25,6 +25,7 @@ import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from '@/lib/flags/keys'
 import {
+  ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
   normalizeTaskStatus,
   parseTaskStatusParam,
@@ -528,16 +529,16 @@ export async function GET(request: NextRequest) {
 
     if (assignedTo) {
       const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id)
-      if (assignedTo === 'me') {
+      const assignee = parseAssigneeFilter(assignedTo)
+      if (!assignee.ok) {
+        return validationError(ASSIGNED_TO_FILTER_MESSAGE)
+      } else if (assignee.kind === 'ids') {
+        if (findIdParamOutOfRange({ assigned_to: assignee.userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
+        where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
+      } else if (assignee.kind === 'me') {
         where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
-      } else if (assignedTo === 'unassigned') {
-        where.assignees = { none: {} }
       } else {
-        const userIds = assignedTo.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
-        if (findIdParamOutOfRange({ assigned_to: userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
-        if (userIds.length > 0) {
-          where.assignees = { some: { userId: { in: userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
-        }
+        where.assignees = { none: {} }
       }
     }
 

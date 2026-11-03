@@ -346,6 +346,7 @@ for (const foreignParent of [false, true]) {
       "@/lib/mcp/tasks/mappers": { mapTaskDescriptionContent: () => "" },
       "@/lib/ai/chatStream/request": { statusSchema: require("zod").z.string(), sortOrderSchema: require("zod").z.string() },
       "@/lib/ai/tools/helpers": { getAccessibleProjectIds: async () => [10], normalizePriorityInput: () => [], sanitizeForJson: (value) => value },
+      "@/lib/mcp/listQuery": require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}),
     });
     const output = await createListTasksTool({ user: { id: 7 }, sendStatus: () => {} }).hypertask_list_tasks.execute({ labels: [], status: "Normal", limit: 50, offset: 0, sort_by: "updatedAt", sort_order: "desc" });
     assert.equal(output.success, true);
