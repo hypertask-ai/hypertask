@@ -233,8 +233,6 @@ function notificationReasonText(context: NotificationReasonContext): string {
 
 type InboxRowFillDecor = { kind: InboxRowFillPartKind; node: React.ReactNode };
 
-const COMMENT_LED_TYPES = new Set<string>(["Comment", "Mentioned", "AddedToFollowerInTask"]);
-
 function inboxRowFillDecor({
     notification,
     projection,
@@ -250,7 +248,8 @@ function inboxRowFillDecor({
 }): InboxRowFillDecor[] {
     const toPlain = (html: string) => plain(html.slice(0, 1200)) ?? "";
     const commentText = notification.comment?.text ?? "";
-    const commentLeads = Boolean(notification.commentId) && commentText.length > 0 && COMMENT_LED_TYPES.has(notification.type);
+    const commentLeads = Boolean(notification.commentId) && commentText.length > 0 &&
+        (notification.type === "Comment" || notification.type === "Mentioned" || notification.type === "AddedToFollowerInTask");
     const latestHumanComment = notification.task?.comments?.[0];
     const latestCommentText = toPlain(latestHumanComment?.text ?? "");
     const parts = buildInboxRowFillParts({
