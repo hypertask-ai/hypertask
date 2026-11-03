@@ -100,7 +100,13 @@ const PersonHovercardSurfaceContent = ({
     handleClose: safePolygon({ blockPointerEvents: true }),
   });
   const focus = useFocus(context, { enabled: !controlled });
-  const dismiss = useDismiss(context, { escapeKey: true, outsidePress: true });
+  const dismiss = useDismiss(context, {
+    escapeKey: true,
+    outsidePress: (event: MouseEvent) => {
+      const reference = refs.domReference.current;
+      return !(event.target instanceof Node && reference ? reference.contains(event.target) : false);
+    },
+  });
   const role = useRole(context, { role: "dialog" });
   const { getReferenceProps, getFloatingProps } = useInteractions([
     hover,
