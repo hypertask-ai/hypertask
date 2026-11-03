@@ -7,7 +7,7 @@ const ts = require('typescript');
 const { JSDOM } = require('jsdom');
 const { loadModule } = require('./helpers/loadModule.cjs');
 const jiti = require('jiti')(__filename);
-const { nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
+const { focusCandidates, focusRenderedCandidate, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
 
 function source(file) {
   return ts.createSourceFile(file, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -51,7 +51,7 @@ function fixture({ droppable = true, boundary = true } = {}) {
   const focused = [];
   let activeId = 1;
   const reAdjustFocusFromCurrContext = load('reAdjustFocusFromCurrContext', 'src/hooks/MultiPages/useUpdateTaskInBoards.tsx', {
-    nextFocusAfterRemoval,
+    nextFocusAfterRemoval, focusCandidates, focusRenderedCandidate,
     archiveColumnBoundary: boundary,
     updateActiveItemAndItemInView: (id) => {
       activeId = id;
