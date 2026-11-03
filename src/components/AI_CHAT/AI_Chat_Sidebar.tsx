@@ -244,6 +244,11 @@ export const AI_Chat_Sidebar = ({
     enabled: sharedShortcutsEnabled,
     active: target.kind !== "external-agent",
     onNewChat: async () => {
+      if (chat.chatWindows?.enabled) {
+        const opened = await chat.chatWindows.openNewChatWindow();
+        if (!opened && chat.chatWindows.atCapacity) toast("Close a chat window to open another chat.");
+        return;
+      }
       resolvingGeneralChat.current = true;
       try {
         await selectTarget({ kind: "ai" }, undefined, { createFallbackSession: false });
