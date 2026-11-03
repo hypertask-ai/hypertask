@@ -5,9 +5,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
-import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
+import { htmlToMarkdown, htmlToMarkdownWithTables } from '@/utils/controllers/pages/htmlToMarkdown'
 import { decodeHtmlCanvas } from '@/utils/controllers/pages/htmlCanvas'
 import { getPage } from '@/utils/controllers/pages/pageService'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8435_PAGE_EXPORT_TABLES_FLAG } from '@/lib/flags/definitions/htpr-8435-page-export-tables'
 import {
   canAccessProject,
   resolvePageIdentifierAlias,
@@ -58,11 +60,16 @@ export async function GET(request: NextRequest) {
     }
 
     const canvas = decodeHtmlCanvas(page.contentHtml)
+    const keepTables = format === 'markdown' &&
+      canvas == null &&
+      await isFeatureEnabled(HTPR_8435_PAGE_EXPORT_TABLES_FLAG, ctx.user.id)
     const content = canvas != null
       ? canvas
       : format === 'html'
         ? page.contentHtml
-        : htmlToMarkdown(page.contentHtml)
+        : keepTables
+          ? htmlToMarkdownWithTables(page.contentHtml)
+          : htmlToMarkdown(page.contentHtml)
     const responseFormat = canvas != null ? 'html_canvas' : format
 
     return NextResponse.json({
