@@ -19,6 +19,7 @@ const { blockerStillOpen } = jiti(
 const { columnRole } = jiti(
   path.join(root, 'src/lib/mcp/boards/columnRole.ts')
 )
+const listParams = jiti(path.join(root, 'src/lib/mcp/listParams.ts'))
 const routeSource = fs.readFileSync(
   path.join(root, 'src/lib/mcp/operations/tasks/next/operation.ts'),
   'utf8'
@@ -133,6 +134,9 @@ function loadRoute({ tasks, sectionsByProject }) {
     }
     if (request === '@/utils/controllers/notifications/inboxZero') {
       return { loadDoneTitlesByProject }
+    }
+    if (request === '@/lib/mcp/listParams') {
+      return listParams
     }
     throw new Error(`Unexpected import: ${request}`)
   }
