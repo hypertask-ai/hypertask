@@ -73,5 +73,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8301 reads a linked pull request's head check runs from the free public GitHub REST API so its check state stops sitting on the pending default. It runs at most once per linked pull request per minute, needs no token and bills nothing; a refused or rate-limited response leaves the stored state untouched.",
     "source": "https://docs.github.com/en/rest/checks/runs?apiVersion=2022-11-28#list-check-runs-for-a-git-reference"
+  },
+  "src/components/Modals/SubtaskLinkingModal/SubtaskLinking.tsx:fd2c456547a4a966d0591847fc9dfd0bae2c9218242f74e63320df41f375e112": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8250 links one task to its parent through Hypertask's own same-origin add-parent route. The refactor only moves the listed option lookup; the request, payload and route are the ones that already shipped, so no provider, retry or token budget is added.",
+    "source": "https://app.hypertask.ai/detail/project-15/8250"
   }
 }
