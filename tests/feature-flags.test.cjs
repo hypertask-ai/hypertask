@@ -98,15 +98,12 @@ test("Flags dropdown filters default to Owner + QA as a feature and respect OFF"
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
-test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", async () => {
-  const key = flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG;
-  assert.equal(key, "htpr-7056-ctrlj-split-tasks");
-  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF" };
-  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+test("Ctrl+J split tasks are permanent and their flag is gone", async () => {
+  assert.equal(flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === "htpr-7056-ctrlj-split-tasks"), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === "htpr-7056-ctrlj-split-tasks"), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, "htpr-7056-ctrlj-split-tasks"), false);
 });
 
 test("Background Claude 5.5 fix defaults to Everyone as a bugfix and respects OFF", async () => {

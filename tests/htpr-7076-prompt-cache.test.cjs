@@ -119,12 +119,11 @@ function moduleWithStubs(file, stubs) {
   return mod.exports;
 }
 
-async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", split = false, dueDate = false, language = false, skill = "" }) {
+async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", dueDate = false, language = false, skill = "" }) {
   const dates = load(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
   const keys = load(path.join(root, "src/lib/flags/keys.ts"));
   const on = new Set([keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG]);
   if (cacheOn) on.add(FLAG);
-  if (split) on.add(keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   if (dueDate) on.add(keys.HTPR_7054_CTRLJ_DUE_DATE_FLAG);
   if (language) on.add(keys.HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG);
   const flags = { isFeatureEnabled: async (flag) => on.has(flag), ...keys };
@@ -163,26 +162,25 @@ async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", spli
   return result.instructions;
 }
 
-test("task writer: cached prefix is identical whether or not the flag-dependent suffixes apply", async () => {
-  const variants = [{}, { split: true }, { dueDate: true }, { language: true }, { skill: "Skill body." }, { split: true, dueDate: true, language: true, skill: "Skill body." }];
+test("task writer: cached prefix is identical whatever the flag-dependent suffix is", async () => {
+  const variants = [{}, { dueDate: true }, { language: true }, { skill: "Skill body." }, { dueDate: true, language: true, skill: "Skill body." }];
   const prefixes = new Set();
   for (const variant of variants) {
     const result = await writerInstructions({ cacheOn: true, ...variant });
     assert.ok(Array.isArray(result), JSON.stringify(variant));
     assert.deepEqual(result[0].providerOptions, CACHE_OPTIONS);
     prefixes.add(result[0].content);
-    if (Object.keys(variant).length) assert.ok(result.length === 2 && !result[1].providerOptions, "suffix stays uncached");
+    assert.ok(result.length === 2 && !result[1].providerOptions, "suffix stays uncached");
   }
   assert.deepEqual([...prefixes], [LONG]);
 });
 
-test("task writer: flag off or non-Claude model keeps the exact old string", async () => {
-  assert.equal(await writerInstructions({ cacheOn: false }), LONG);
-  const off = await writerInstructions({ cacheOn: false, split: true, language: true, skill: "Skill body." });
-  const on = await writerInstructions({ cacheOn: true, split: true, language: true, skill: "Skill body." });
+test("task writer: cache off keeps the same text as the cached prefix plus its suffix", async () => {
+  const off = await writerInstructions({ cacheOn: false, language: true, skill: "Skill body." });
+  const on = await writerInstructions({ cacheOn: true, language: true, skill: "Skill body." });
   assert.equal(typeof off, "string");
   assert.equal(off.replace(/\s+/g, " "), `${on[0].content}\n\n${on[1].content}`.replace(/\s+/g, " "));
-  assert.equal(await writerInstructions({ cacheOn: true, modelId: "openai/gpt-6-luna" }), LONG);
+  assert.equal(typeof await writerInstructions({ cacheOn: true, modelId: "openai/gpt-6-luna" }), "string");
 });
 
 test("task questions use the cached helper and task summaries stay below the minimum", () => {

@@ -82,7 +82,7 @@ function harness(options = {}) {
       if (options.fail) throw new Error("Writer unavailable");
       options.onGenerate?.();
       return {
-        content: [{ type: "text", text: options.split ? JSON.stringify({ tasks: options.tasks }) : options.output ?? output }],
+        content: [{ type: "text", text: JSON.stringify({ tasks: options.tasks }) }],
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 20 } },
         finishReason: { unified: "stop" },
       };
@@ -121,7 +121,7 @@ function harness(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
+      return key === flag ? options.labels !== false : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
     } },
     "@/lib/flags/keys": keys,
     "@/app/api/ai/_lib/customInstructions": moduleWithStubs("src/app/api/ai/_lib/customInstructions.ts", new Proxy({ "@/lib/prisma": { __esModule: true, default: prisma }, "ai": ai }, { has: () => true, get: (target, id) => target[id] ?? {} })),
@@ -300,57 +300,51 @@ function harness(options = {}) {
 
 const savedIds = (h, surface) => surface === "chat" ? h.saved.map((task) => task.labels) : h.saved.map((_, i) => h.labelSaves.flat().filter((entry) => entry.taskId === i + 1).map((entry) => entry.labelId));
 
-for (const surface of ["compose", "chat"]) {
-  for (const [name, id] of [["Multiprompt", "multiprompt-id"], ["Wazig", "wazig-id"]]) {
-    test(`${surface}: ${name} project label survives the real writer and save path`, async () => {
-      const h = harness({ enabled: true, output: output + labelMarker([id]) });
-      const result = surface === "chat" ? await h.execute({ project_id: 15, brief: `Fix ${name}; the other project is only a comparison` }) : await h.compose({ text: `Fix ${name}` });
-      assert.equal(surface === "chat" ? result.success : !result.writerFailed, true);
-      assert.deepEqual(savedIds(h, surface), [[id]]);
-      const prompt = JSON.stringify(h.calls[0].prompt);
-      for (const label of boardLabels) { assert.ok(prompt.includes(label.id)); assert.ok(prompt.includes(label.value)); }
-      assert.match(prompt, /project.*ticket is about/i);
-      assert.match(prompt, /(?:unclear|ambiguous)/i);
-      assert.deepEqual(h.labelCreates, []);
-      assert.doesNotMatch(JSON.stringify(h.saved), /ai-generated-task-tags/);
-    });
-  }
-  test(`${surface}: unknown, foreign ids, invented names and duplicates are ignored`, async () => {
-    const h = harness({ enabled: true, output: output + labelMarker(["wazig-id", "foreign-id", "unknown", "Invented Project", "Multiprompt", "wazig-id"]) });
-    if (surface === "chat") assert.equal((await h.execute({ project_id: 15, brief: "Fix Wazig" })).success, true);
-    else assert.equal((await h.compose()).writerFailed, false);
-    assert.deepEqual(savedIds(h, surface), [["wazig-id"]]);
+for (const [name, id] of [["Multiprompt", "multiprompt-id"], ["Wazig", "wazig-id"]]) {
+  test(`chat: ${name} project label survives the real writer and save path`, async () => {
+    const h = harness({ enabled: true, output: output + labelMarker([id]) });
+    const result = await h.execute({ project_id: 15, brief: `Fix ${name}; the other project is only a comparison` });
+    assert.equal(result.success, true);
+    assert.deepEqual(savedIds(h, "chat"), [[id]]);
+    const prompt = JSON.stringify(h.calls[0].prompt);
+    for (const label of boardLabels) { assert.ok(prompt.includes(label.id)); assert.ok(prompt.includes(label.value)); }
+    assert.match(prompt, /project.*ticket is about/i);
+    assert.match(prompt, /(?:unclear|ambiguous)/i);
     assert.deepEqual(h.labelCreates, []);
-  });
-  test(`${surface}: unclear project never falls back to the first label`, async () => {
-    const h = harness({ enabled: true, output: output + labelMarker(["Invented Project"]) });
-    if (surface === "chat") await h.execute({ project_id: 15, brief: "Fix something" });
-    else await h.compose();
-    assert.equal(h.saved.length, 1);
-    assert.deepEqual(savedIds(h, surface), [[]]);
-    assert.deepEqual(h.labelCreates, []);
-  });
-  test(`${surface}: explicit labels win over writer labels`, async () => {
-    const h = harness({ enabled: true, output: output + labelMarker(["wazig-id"]) });
-    if (surface === "chat") await h.execute({ project_id: 15, brief: "Fix Wazig", labels: ["multiprompt-id", "bug-id"] });
-    else await h.compose({ fields: { tags: [boardLabels[0], boardLabels[2]] } });
-    assert.deepEqual(savedIds(h, surface), [["multiprompt-id", "bug-id"]]);
-  });
-  test(`${surface}: flag off keeps old label behavior including explicit choices`, async () => {
-    for (const explicit of [false, true]) {
-      const h = harness({ enabled: true, labels: false, output: output + labelMarker(["wazig-id"]) });
-      if (surface === "chat") await h.execute({ project_id: 15, brief: "Fix Wazig", ...(explicit ? { labels: ["bug-id"] } : {}) });
-      else await h.compose({ ...(explicit ? { fields: { tags: [boardLabels[2]] } } : {}) });
-      assert.deepEqual(savedIds(h, surface), [explicit ? ["bug-id"] : []]);
-      assert.equal(h.saved.length, 1);
-      assert.deepEqual(h.labelCreates, []);
-      assert.doesNotMatch(JSON.stringify(h.calls[0].prompt), /wazig-id|multiprompt-id/);
-    }
+    assert.doesNotMatch(JSON.stringify(h.saved), /ai-generated-task-tags/);
   });
 }
+test("chat: unknown, foreign ids, invented names and duplicates are ignored", async () => {
+  const h = harness({ enabled: true, output: output + labelMarker(["wazig-id", "foreign-id", "unknown", "Invented Project", "Multiprompt", "wazig-id"]) });
+  assert.equal((await h.execute({ project_id: 15, brief: "Fix Wazig" })).success, true);
+  assert.deepEqual(savedIds(h, "chat"), [["wazig-id"]]);
+  assert.deepEqual(h.labelCreates, []);
+});
+test("chat: unclear project never falls back to the first label", async () => {
+  const h = harness({ enabled: true, output: output + labelMarker(["Invented Project"]) });
+  await h.execute({ project_id: 15, brief: "Fix something" });
+  assert.equal(h.saved.length, 1);
+  assert.deepEqual(savedIds(h, "chat"), [[]]);
+  assert.deepEqual(h.labelCreates, []);
+});
+test("chat: explicit labels win over writer labels", async () => {
+  const h = harness({ enabled: true, output: output + labelMarker(["wazig-id"]) });
+  await h.execute({ project_id: 15, brief: "Fix Wazig", labels: ["multiprompt-id", "bug-id"] });
+  assert.deepEqual(savedIds(h, "chat"), [["multiprompt-id", "bug-id"]]);
+});
+test("chat: label flag off keeps old label behavior including explicit choices", async () => {
+  for (const explicit of [false, true]) {
+    const h = harness({ enabled: true, labels: false, output: output + labelMarker(["wazig-id"]) });
+    await h.execute({ project_id: 15, brief: "Fix Wazig", ...(explicit ? { labels: ["bug-id"] } : {}) });
+    assert.deepEqual(savedIds(h, "chat"), [explicit ? ["bug-id"] : []]);
+    assert.equal(h.saved.length, 1);
+    assert.deepEqual(h.labelCreates, []);
+    assert.doesNotMatch(JSON.stringify(h.calls[0].prompt), /wazig-id|multiprompt-id/);
+  }
+});
 
-test("split JSON: Multiprompt and Wazig tickets keep their own validated labels", async () => {
-  const h = harness({ split: true, tasks: [
+test("structured write: Multiprompt and Wazig tickets keep their own validated labels", async () => {
+  const h = harness({ tasks: [
     { title: "Fix Multiprompt", description: "<p>Multiprompt body</p>", labelIds: ["multiprompt-id", "foreign-id", "multiprompt-id"] },
     { title: "Fix Wazig", description: "<p>Wazig body</p>", labelIds: ["wazig-id", "Invented", "unknown", "Multiprompt"] },
   ] });
@@ -359,16 +353,16 @@ test("split JSON: Multiprompt and Wazig tickets keep their own validated labels"
   assert.deepEqual(h.labelCreates, []);
 });
 
-test("split JSON: view-default tags win for every ticket; flag off ignores writer ids", async () => {
+test("structured write: view-default tags win for every ticket; flag off ignores writer ids", async () => {
   const tasks = [
     { title: "Multiprompt", description: "<p>Body</p>", labelIds: ["multiprompt-id"] },
     { title: "Wazig", description: "<p>Body</p>", labelIds: ["wazig-id"] },
   ];
   for (const labels of [true, false]) {
-    const h = harness({ split: true, tasks, labels, viewTags: [boardLabels[2]] });
+    const h = harness({ tasks, labels, viewTags: [boardLabels[2]] });
     assert.equal((await h.compose({ viewProject: { id: 15 } })).writerFailed, false);
     assert.deepEqual(savedIds(h, "compose"), [["bug-id"], ["bug-id"]]);
-    const bare = harness({ split: true, tasks, labels });
+    const bare = harness({ tasks, labels });
     assert.equal((await bare.compose()).writerFailed, false);
     assert.deepEqual(savedIds(bare, "compose"), labels ? [["multiprompt-id"], ["wazig-id"]] : [[], []]);
   }
@@ -410,7 +404,7 @@ test("bugfix flag has the requested rollout and small release risk", () => {
 test("filling an empty Ctrl+J task saves writer labels but keeps existing user labels", async () => {
   for (const labels of [true, false]) {
     for (const existingLabels of [[], ["bug-id"]]) {
-      const h = harness({ labels, existingLabels, output: output + labelMarker(["wazig-id"]) });
+      const h = harness({ labels, existingLabels, tasks: [{ title: "Fix Wazig", description: "<p>Wazig body</p>", labelIds: ["wazig-id"] }] });
       const result = await h.compose({ existingTaskId: 52 });
       assert.equal(result.writerFailed, false);
       assert.equal(result.task.id, 52);

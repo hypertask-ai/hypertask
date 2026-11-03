@@ -8,7 +8,6 @@ const { Output } = require("ai");
 const { createJiti } = require("jiti");
 const { load } = require("./helpers/create-view-context.cjs");
 const root = path.resolve(__dirname, "..");
-const flag = "htpr-7056-ctrlj-split-tasks";
 const dueDateFlag = "htpr-7054-ctrlj-due-date";
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const dates = jiti(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
@@ -22,13 +21,12 @@ const priority = { priority_index: 2, priority_title: "High" };
 const estimate = { estimate_index: 4, estimate_title: "Large" };
 const board = { id: 15, uniqueIdentifier: "HTPR" };
 
-function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = [], sonnet = true, malformed = false } = {}) {
+function harness({ dueDates = false, tasks = drafts, failAt = [], sonnet = true, malformed = false } = {}) {
   const checks = [], calls = [], creates = [], bindings = [], usage = [];
   const flags = {
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
-    HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: flag,
     HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG: "empty-research",
-    isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? enabled : key === dueDateFlag ? dueDates : key === "compose"; },
+    isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === dueDateFlag ? dueDates : key === "compose"; },
   };
   const editor = {
     selectTaskWriterModel: async () => ({ model: sonnet ? "sonnet-5.5-medium" : "saved-model", settings: { maxOutputTokens: 16000 }, teamId: "team", usageProvider: "fixture" }),
@@ -142,7 +140,6 @@ for (const sonnet of [true, false]) {
       assert.equal(create.sectionId, 12);
     }
     assert.deepEqual(h.bindings, [91, 92, 93]);
-    assert.ok(h.checks.some(([key, userId]) => key === flag && userId === 985));
     const message = h.composeTaskAssistantMessage("HTPR-101", false, false, result);
     for (const task of result.tasks) assert.ok(message.includes(`<a href="/detail/project-15/${task.uniqueIndex}">${task.ticketNumber}: ${task.title}</a>`));
   });
@@ -209,17 +206,6 @@ test("single task with sub-steps creates one ticket and keeps the exact existing
   assert.match(h.calls[0].instructions, /If uncertain, return one task/);
 });
 
-test("server flag off returns the legacy stream and creates exactly one ticket", async () => {
-  const h = harness({ enabled: false });
-  const result = await h.compose();
-  assert.equal(h.creates.length, 1);
-  assert.equal(h.creates[0].title, "Legacy task");
-  assert.equal(result.writerFailed, false);
-  assert.equal(h.calls[0].kind, "legacy");
-  assert.equal(h.calls[0].instructions, "Return one HTML title and body.");
-  assert.equal(h.calls[0].output, undefined);
-});
-
 test("more than ten tasks are capped by both the output schema and defensive server limit", async () => {
   const tasks = Array.from({ length: 13 }, (_, i) => ({ title: `Task ${i + 1}`, description: `<p>Deliverable ${i + 1}</p>` }));
   const h = harness({ tasks });
@@ -264,14 +250,14 @@ test("invalid model output falls back to one original note, not partial tasks", 
   assert.equal(h.creates[0].title, multiPrompt);
 });
 
-test("manual and Write with AI requests keep their legacy output even when the split flag is on", async () => {
+test("manual and Write with AI requests keep the single HTML task stream", async () => {
   const h = harness();
   for (const input of [{ requestKind: "manual" }, { requestKind: "compose-task", aiMode: "WriteWithAI" }]) {
     const response = await h.route.POST({ json: async () => ({ projectId: 15, PROMPT: multiPrompt, ...input }) });
     assert.match(await response.text(), /Legacy task/);
     assert.equal(h.calls.at(-1).kind, "legacy");
   }
-  assert.ok(!h.checks.some(([key]) => key === flag));
+  assert.ok(!h.checks.some(([key]) => key === dueDateFlag));
 });
 
 test("empty existing task is filled once and the other deliverables create new tickets", async () => {
@@ -312,7 +298,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
-    user: { id: 985 }, currentProject: board, mounted: { current: true }, writerModelPicker: true, writerModel: { id: "claude-sonnet-5-5-instant", source: "anthropic" }, writerReasonEnabled: false, inlineAgentImages: false, applyWriterProperties: false, splitTasksEnabled: true, skillFollowupEnabled: false, actionChipsEnabled: true,
+    user: { id: 985 }, currentProject: board, mounted: { current: true }, writerModelPicker: true, writerModel: { id: "claude-sonnet-5-5-instant", source: "anthropic" }, writerReasonEnabled: false, inlineAgentImages: false, applyWriterProperties: false, skillFollowupEnabled: false, actionChipsEnabled: true,
     createComposedTask: async () => result,
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
     ticketQuestionsEnabled: true, setQuestionsTaskId: value => questionsTaskIds.push(value), setOriginalNote() {},
@@ -328,14 +314,4 @@ test("actual composer send caches every saved ticket and publishes the complete 
   assert.equal(intros[0].content, h.composeTaskAssistantMessage("HTPR-101", false, false, result));
   assert.equal(navigations[0], "/detail/project-15/101");
   assert.ok(!intros[0].content.includes("/detail/project-15/102"));
-
-  context.splitTasksEnabled = false;
-  cache.length = 0;
-  intros.length = 0;
-  navigations.length = 0;
-  await new Function(...Object.keys(context), compiled)(...Object.values(context))();
-  assert.deepEqual(questionsTaskIds, [result.task.id]);
-  assert.deepEqual(cache, [result.task]);
-  assert.equal(intros[0].content, h.composeTaskAssistantMessage("HTPR-101", false, false));
-  assert.equal(navigations[0], "/detail/project-15/101");
 });

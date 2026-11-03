@@ -16,7 +16,7 @@ const agentId = "44444444-4444-4444-8444-444444444444";
 const output = "<h1>Draft</h1><p>Expected task description</p>";
 
 function harness() {
-  const state = { cookieId: null, cookieAgentId: undefined, cookieTeamScope: null, mode: "EVERYONE", flagError: false, revocationError: false, revoked: new Set(), split: false, feature: true, providerError: null };
+  const state = { cookieId: null, cookieAgentId: undefined, cookieTeamScope: null, mode: "EVERYONE", flagError: false, revocationError: false, revoked: new Set(), feature: true, providerError: null };
   const users = [owner, member, outsider].map(user => ({ ...user, mcpTokensRevokedAt: null }));
   const projects = [15, 16, 99].map(id => ({
     id, ownerId: id === 99 ? outsider.id : owner.id, status: "Normal", title: `Board ${id}`, uniqueIdentifier: `B${id}`,
@@ -70,14 +70,14 @@ function harness() {
   };
   const flags = {
     HTPR_7699_DESKTOP_CLI_TOKEN_FLAG: FLAG,
-    HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: "split",
+    HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     isFeatureEnabled: async (key, id) => {
       calls.flags.push({ key, id });
       if (key === FLAG) {
         if (state.flagError) throw new Error("flag store unavailable");
         return state.mode === "EVERYONE" || (state.mode === "OWNER_AND_QA" && [owner.id, member.id].includes(id));
       }
-      return key === "compose" || (key === "split" && state.split);
+      return key === "compose";
     },
   };
   const mocks = {
@@ -335,9 +335,9 @@ test("Task Writer keeps OAuth and cookie access with CLI flag Off; shared resolv
   assert.deepEqual(decisions(), []); assert.deepEqual(outcomes(), []);
 });
 
-test("Task Writer CLI and cookie preserve split output and usage identity", async () => {
+test("Task Writer CLI and cookie preserve structured output and usage identity", async () => {
   for (const cookie of [false, true]) {
-    const h = harness(); h.state.split = true; if (cookie) h.state.cookieId = member.id;
+    const h = harness(); if (cookie) h.state.cookieId = member.id;
     const response = await h.call("writer", h.token(), { body: { requestKind: "compose-task" } });
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.body, { tasks: [{ title: "Draft", description: output }] });

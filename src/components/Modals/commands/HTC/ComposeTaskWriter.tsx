@@ -34,7 +34,7 @@ import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } 
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
@@ -77,7 +77,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
   const newTaskWindow = enabled;
-  const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
@@ -366,13 +365,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           if (syncContent) context.setDescription(task.description_?.content ?? "");
         }
       }
-      if (splitTasksEnabled) {
-        for (const createdTask of existingTaskId ? (splitResult ?? [task]).slice(1) : splitResult ?? [task]) {
-          createTaskGlobally({ task: createdTask, sectionId: createdTask.sectionId!, position: "top" });
-        }
-      } else if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
+      for (const createdTask of existingTaskId ? (splitResult ?? [task]).slice(1) : splitResult ?? [task]) {
+        createTaskGlobally({ task: createdTask, sectionId: createdTask.sectionId!, position: "top" });
+      }
       if (mobile && newTaskWindow) await onCreated();
-      const content = composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason);
+      const content = composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason);
       if (ticketQuestionsEnabled && / from your note\. Want me to refine it\?/.test(content)) {
         if (actionChipsEnabled) setOriginalNote({ taskId: task.id, note: text });
         setQuestionsTaskId(task.id);
@@ -383,7 +380,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           const result = await requestComposeSkillFollowup(task.id, skills, text);
           if (result) queryClient.setQueryData(["task-questions", "new-ticket", task.id], { questions: result.questions });
           const enriched = result
-            ? composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, false, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, undefined, result.followup)
+            ? composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, false, Boolean(existingTaskId), splitResult ? { tasks: splitResult, failedTitles } : undefined, undefined, result.followup)
             : content;
           setIntro({ taskId: task.id, content: enriched, skillFollowup: true });
           setPendingFollowup((pending) => pending?.taskId === task.id ? null : pending);
