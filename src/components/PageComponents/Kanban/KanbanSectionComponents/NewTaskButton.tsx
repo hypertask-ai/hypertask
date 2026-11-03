@@ -1,6 +1,7 @@
 import Tooltip from '@/components/Common/Tooltip';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_7047_SHARP_PLUS_SIGNS_FLAG } from '@/lib/flags/keys';
+import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from '@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model';
 import { TDefaultEditFocus, TSectionPayload } from '@/models/CreateTaskModalModels/model';
 import React, { useState } from 'react'
 import { DroppableStateSnapshot } from '@hello-pangea/dnd';
@@ -20,6 +21,7 @@ interface INewTaskButton{
 }
 
 const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, snapshot, sectionPayload}) => {
+    const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
     
     if (buttonPosition == "top"){
         const  left= -160;
@@ -30,7 +32,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 className="
                 group create-new-task-button
                 scale-100  relative group-hover/main:scale-100 cursor-pointer">
-                <TooltipAndIcon text='Create task at top' keyCombination={["C"]} left={left} bottom={bottom}/>
+                <TooltipAndIcon text='Create task at top' keyCombination={quickAddShortcutsEnabled ? ["N"] : ["C"]} left={left} bottom={bottom}/>
             </div>
         )
     }
@@ -45,7 +47,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={["N / Shift+C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
+                <TooltipAndIcon text='Create task' keyCombination={quickAddShortcutsEnabled ? ["N"] : ["N / Shift+C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }

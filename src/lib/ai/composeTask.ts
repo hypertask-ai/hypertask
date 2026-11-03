@@ -64,9 +64,10 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, inlineAgentImages = false,
-  applyWriterProperties = false, invokeSkills = false,
+  applyWriterProperties = false, invokeSkills = false, writerModel,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
+  writerModel?: { id: string; source: string };
   invokeSkills?: boolean;
   inlineAgentImages?: boolean;
   applyWriterProperties?: boolean;
@@ -115,8 +116,8 @@ export async function createComposedTask({
         PROMPT: `Write a task title and description from this note in the board's style.\n\n${media.html}`,
         userRetrievalTexts: [text],
         customInstructions: project.ai_custom_instructions?.[0]?.customInstruction ?? "",
-        sourceSelected: project.ai_custom_instructions?.[0]?.source_selected ?? "openai",
-        modelSelected: project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
+        sourceSelected: writerModel?.source ?? project.ai_custom_instructions?.[0]?.source_selected ?? "openai",
+        modelSelected: writerModel?.id ?? project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
         aiMode: "AiTaskWriter",
         requestKind: "compose-task",
         ...(invokeSkills ? { invokeSkills } : {}),

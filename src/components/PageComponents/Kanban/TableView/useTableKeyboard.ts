@@ -3,7 +3,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
-import { shouldIgnoreTaskShortcutTarget } from "@/lib/keyboard/taskShortcuts";
+import { shouldIgnoreTaskShortcutTarget, quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from "@/lib/keyboard/taskShortcuts";
 import { createTaskFromTableSelection } from "./tableCreateTask";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import type { TableViewProps } from "./tableViewShared";
@@ -11,6 +11,8 @@ import type { useTableRows } from "./useTableRows";
 import type { useTableState } from "./useTableState";
 import type { useTableActions } from "./useTableActions";
 import { isTaskRow } from "./tableViewShared";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
 
 type Context = Pick<TableViewProps, "_currentProject" | "handleBoardChange" | "_sections" | "enableMyTasksBulkSelection"> &
   Pick<ReturnType<typeof useTableRows>, "rows" | "focusTo" | "expandSection"> &
@@ -27,6 +29,8 @@ export function useTableKeyboard(context: Context) {
   } = context;
 
 
+  const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
+  const quickAddShortcuts = quickAddShortcutsEnabled ? quickAddShortcutsWithPointer() : quickAddShortcutsFromFocus();
   const { createItem } = useAddDeleteTaskInBoards();
   const quickCreateTask = (
     title: string,
@@ -170,7 +174,7 @@ export function useTableKeyboard(context: Context) {
       if (
         !_currentProject ||
         !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
-          (e.key.toLowerCase() === "c" && e.shiftKey)) ||
+          (quickAddShortcuts.acceptShiftC && e.key.toLowerCase() === "c" && e.shiftKey)) ||
         e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
         showCommands.show || assignTask || returnIfModalOrInputActive() ||
         shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
@@ -182,7 +186,7 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   };
-  useEffect(registerQuickAdd, [_currentProject, showCommands.show, assignTask]);
+  useEffect(registerQuickAdd, [_currentProject, showCommands.show, assignTask, quickAddShortcutsEnabled]);
 
   return {
   quickCreateTask,

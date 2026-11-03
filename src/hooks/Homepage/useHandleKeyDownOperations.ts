@@ -1,5 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
+import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
 
 import { ISection, ITask } from '@/models/model'
 import  { useContext, useEffect, useRef, useState } from 'react'
@@ -35,6 +36,7 @@ import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
+import { quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
     initialSections: ISection[];
@@ -50,6 +52,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
+    const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG)
     const queryClient = useQueryClient();   
     const store = useStore();
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
@@ -101,11 +104,16 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     };
 
-    const registerQuickAdd = () => {
-      const handleNQuickAdd = (e: KeyboardEvent) => {
+    const hoveredColumn = useRef<Element | null>(null);
+    const quickAddShortcuts = quickAddShortcutsEnabled ? quickAddShortcutsWithPointer() : quickAddShortcutsFromFocus();
+    const registerQuickAdd = (shortcuts: { acceptShiftC: boolean; useHoveredColumn: boolean }) => {
+      const trackHoveredColumn = (e: MouseEvent) => {
+        hoveredColumn.current = (e.target as HTMLElement | null)?.closest('.section-container') ?? null;
+      };
+      const handleQuickAdd = (e: KeyboardEvent) => {
+        const shiftCQuickAdd = shortcuts.acceptShiftC && e.key.toLowerCase() === "c" && e.shiftKey;
         if (
-          !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
-            (e.key.toLowerCase() === "c" && e.shiftKey)) ||
+          !((e.key.toLowerCase() === "n" && !e.shiftKey) || shiftCQuickAdd) ||
           e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
           showCommands.show || returnIfModalOrInputActive() ||
           shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||
@@ -113,22 +121,30 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
         ) return;
         const sectionEls = document.getElementById("sectionsContainer")?.children;
         if (!sectionEls) return;
-        const focusedColumn = document.activeElement?.closest('.section-container');
-        const focusedColumnIndex = Array.from(sectionEls).indexOf(focusedColumn!);
+        const columnIndex = (element: Element | null | undefined) =>
+          element ? Array.from(sectionEls).indexOf(element) : -1;
+        const focusedColumnIndex = columnIndex(document.activeElement?.closest('.section-container'));
         const activeItem = store.get(activeItemAtom);
         const taskColumnIndex = filteredSections.findIndex(section =>
           section.items.some(task => task.id === activeItem)
         );
+        const hoveredColumnIndex = shortcuts.useHoveredColumn ? columnIndex(hoveredColumn.current) : -1;
         const targetIndex = focusedColumnIndex >= 0
           ? focusedColumnIndex
-          : Math.max(taskColumnIndex, 0);
+          : taskColumnIndex >= 0
+            ? taskColumnIndex
+            : Math.max(hoveredColumnIndex, 0);
         e.preventDefault();
         sectionEls[targetIndex]?.dispatchEvent(new CustomEvent('OPEN_QUICK_ENTRY'));
       };
-      document.addEventListener("keydown", handleNQuickAdd);
-      return () => document.removeEventListener("keydown", handleNQuickAdd);
+      document.addEventListener("keydown", handleQuickAdd);
+      if (shortcuts.useHoveredColumn) document.addEventListener("mouseover", trackHoveredColumn);
+      return () => {
+        document.removeEventListener("keydown", handleQuickAdd);
+        document.removeEventListener("mouseover", trackHoveredColumn);
+      };
     };
-    useEffect(registerQuickAdd, [showCommands.show, filteredSections, store]);
+    useEffect(() => registerQuickAdd(quickAddShortcuts), [showCommands.show, filteredSections, store, quickAddShortcutsEnabled]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;

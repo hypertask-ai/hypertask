@@ -37,6 +37,8 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/flags/definitions/htpr-7736-chat-follows-task") return jiti(path.join(root, "src/lib/flags/definitions/htpr-7736-chat-follows-task.ts"));
     if (id === "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys") return { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG: "htpr-8260-ctrlj-composer-keys" };
+    if (id === "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model") return { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" };
+    if (id === "@/components/Global/ModelSelectorDropdown") return { TaskWriterModelPicker: () => null, useTaskWriterModel: () => undefined };
     if (id === "@/lib/configs/composeWriterFooterKeys") return jiti(path.join(root, "src/lib/configs/composeWriterFooterKeys.ts"));
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
     if (id === "@/lib/ai/prompts/registry") return registry;

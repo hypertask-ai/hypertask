@@ -36,6 +36,10 @@ import {
 } from "@/store";
 import { getSettingsPath } from "@/components/Modals/Settings/settingsNavigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
+import { aiOptions } from "@/lib/constants/constants";
+import { resolveTaskWriterBoardContext } from "@/lib/ai/taskWriterBoardContext";
+import type { IProject } from "@/models/model";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -867,6 +871,45 @@ const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
     ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
     : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
+};
+
+function useTaskWriterBoardContext(destinationProject: IProject | null | undefined) {
+  const openProject = useRecoilValue(currentProjectAtom);
+  const openBilling = useCurrentBoardBilling();
+  return resolveTaskWriterBoardContext({ destinationProject: destinationProject ?? undefined, openProject, openBilling });
+}
+
+export function useTaskWriterModel(destinationProject: IProject | null | undefined) {
+  const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(destinationProject);
+  const { currentAiOption } = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
+  return currentAiOption
+    ? { id: currentAiOption.id, source: currentAiOption.source }
+    : undefined;
+}
+
+export const TaskWriterModelPicker = ({
+  project,
+  mobile,
+  className,
+}: {
+  project?: IProject | null;
+  mobile?: boolean;
+  className?: ClassNameValue;
+}) => {
+  const { teamId, billing, boardDefaultId } = useTaskWriterBoardContext(project);
+  const { currentAiOption, setAiOption } = useAiModelPreference("taskWriter", { teamId, billing, boardDefaultId });
+  return (
+    <AIModelDropDownButton
+      optionCallback={setAiOption}
+      aiSelected={currentAiOption}
+      currentOptions={aiOptions}
+      modelTeamId={teamId}
+      modelBilling={billing}
+      stackSubmenus
+      mobileQuickPicker={mobile}
+      className={className}
+    />
+  );
 };
 
 export default AIModelDropDownButton;
