@@ -49,12 +49,11 @@ function loadRoute({ session = null, task = null, deleteOutcome = "success" } = 
             calls.taskLookups.push(query);
             if (
               task?.id !== query.where.id ||
-              task.status !== query.where.status ||
               !projectMatches(task.project, query.where.project)
             ) {
               return null;
             }
-            return { projectId: task.projectId };
+            return { projectId: task.projectId, status: task.status };
           },
         },
       },
@@ -130,10 +129,9 @@ test("hard deletion rejects a task outside the caller's writable projects", asyn
     {
       where: {
         id: 101,
-        status: "Deleted",
         project: taskWriteAccessWhere(23),
       },
-      select: { projectId: true },
+      select: { projectId: true, status: true },
     },
   ]);
   assert.deepEqual(calls.deletes, []);
