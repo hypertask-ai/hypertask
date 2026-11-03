@@ -2,12 +2,14 @@ import prisma from '@/lib/prisma'
 import { aiFeedbackEnabled } from './enabled'
 import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
+import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
+import { accountCategory } from '@/lib/telemetry/accountCategory'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskCore'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
-import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
+import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports } from './callerFixable'
 
@@ -45,13 +47,17 @@ function tallyComment(content: string, marker: string, count: number, displayNam
     reporterLine('Clients', reportingNames(content, 'Clients', client))
 }
 
-function description(input: AutomaticFeedbackInput, fingerprint: string, displayName?: string) {
+export type StoredNote = { kind?: string; note?: string }
+
+function description(input: AutomaticFeedbackInput, fingerprint: string, displayName?: string, stored?: StoredNote) {
   const rows = [
     ['Surface', input.surface], ['Tool', input.tool], ['HTTP status', input.status],
     ['Error code', input.errorCode], ['Field', input.field], ['Category', input.category ?? 'other'],
+    ['Kind', stored?.kind],
   ].filter(([, value]) => value !== undefined && value !== '')
   return rows.map(([label, value]) => `<p>${label}: ${escapeHtml(String(value))}</p>`).join('') +
-    (input.note !== undefined || input.error !== undefined ? '<p>Free text was supplied and not stored, for privacy.</p>' : '') +
+    (stored?.note ? `<p>Note: ${escapeHtml(stored.note)}</p>` : '') +
+    (input.error !== undefined || (input.note !== undefined && !stored?.note) ? '<p>Free text was supplied and not stored, for privacy.</p>' : '') +
     `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p><p>Last seen: ${new Date().toISOString()}</p>` +
     reporterLine('Reporting display names', displayName ? [displayName] : []) +
     reporterLine('Clients', input.client ? [input.client] : [])
@@ -89,7 +95,23 @@ async function noEvidenceRefused(userId?: number): Promise<boolean> {
   }
 }
 
-export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }) {
+async function agentNoteAllowed(userId?: number): Promise<boolean> {
+  if (userId === undefined) return false
+  try {
+    const { isFeatureEnabled } = await import('@/lib/flags')
+    if (!await isFeatureEnabled(HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG, userId)) return false
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } })
+    return user ? accountCategory(user) === 'internal' : false
+  } catch {
+    return false
+  }
+}
+
+function shortNote(note: string): string {
+  return note.length <= 64 ? note : `${note.slice(0, 61).replace(/\s\S*$/, '')}...`
+}
+
+export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const failureKind = input.category ?? 'other'
@@ -121,12 +143,12 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
     ? `${reporter.agentName}${reporter.ownerName ? `, owned by ${reporter.ownerName}` : ''}`
     : reporter?.ownerName ? `an agent owned by ${reporter.ownerName}` : 'unknown agent'
   return {
-    title: `${happened} (${date})`,
+    title: stored?.kind ? `Agent feedback, ${stored.kind}: ${shortNote(stored.note ?? happened)}` : `${happened} (${date})`,
     description: `<p><strong>What happened</strong>: ${escapeHtml(happened)}.</p>` +
       `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
       `<p><strong>Is it a real bug?</strong> ${escapeHtml(reading)}</p>` +
       `<p><strong>What to do</strong>: ${escapeHtml(action)}</p>` +
-      '<h2>Details for engineers</h2>' + description(input, fingerprint, reporter?.ownerName),
+      '<h2>Details for engineers</h2>' + description(input, fingerprint, reporter?.ownerName, stored),
   }
 }
 
@@ -147,7 +169,11 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
       ? await featureFlagCandidateUserIds(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG) === null
       : await isFeatureEnabled(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG, userId)
   } catch {}
-  const fingerprint = feedbackFingerprint(input)
+  const noteAllowed = reporter.origin === 'agent' && (input.kind !== undefined || input.note !== undefined) && await agentNoteAllowed(userId)
+  const stored: StoredNote | undefined = noteAllowed
+    ? { kind: input.kind, note: scrubFeedbackNote(input.note ?? '') || undefined }
+    : undefined
+  const fingerprint = feedbackFingerprint(input, stored)
   const marker = `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p>`
   const doneSections = await prisma.section.findMany({ where: { projectId: PROJECT_ID, OR: [{ isDone: true }, { section_title: { equals: 'Done', mode: 'insensitive' } }] }, select: { id: true, section_title: true } })
   const where = {
@@ -243,15 +269,15 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           }
         }
         const count = 1
-        const readable = plain ? plainFeedback(input, fingerprint, {
+        const readable = plain || stored?.kind ? plainFeedback(input, fingerprint, {
           agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
           ownerName: displayName,
           origin: reporter.origin,
-        }) : undefined
+        }, stored) : undefined
         const { task } = await createProvisionedTaskCore({
           creationChannel: "agent",
           title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
-          description: readable?.description ?? description(input, fingerprint, displayName),
+          description: (plain ? readable?.description : undefined) ?? description(input, fingerprint, displayName, stored),
           userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
           projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
           priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,

@@ -5,8 +5,21 @@ import { validateMcpAuth } from '@/lib/mcp/auth'
 import { getMcpExecutionContext } from '@/lib/mcp/operationContext'
 import { TOOL_METADATA } from '../config/tool-metadata'
 import { TOOL_ANNOTATIONS } from '../config/tool-annotations'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
 
 const OPERATION_ORIGIN = 'http://mcp.internal'
+
+function parseFeedbackArgs(args: unknown) {
+  return aiFeedbackSchema.omit({ surface: true, client: true }).parse(args)
+}
+
+export async function feedbackInput(args: unknown, userId: number) {
+  const input = parseFeedbackArgs(args)
+  const noteEnabled = await isFeatureEnabled(HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG, userId)
+  if (noteEnabled) return input
+  return { ...input, kind: undefined }
+}
 
 export const reportFeedbackTool = {
   name: TOOL_METADATA.REPORT_FEEDBACK.name,
@@ -23,8 +36,9 @@ export const reportFeedbackTool = {
     if (!auth) throw new Error('Unauthorized. Invalid or missing authentication token.')
 
     const { fileAiFeedback } = await import('@/lib/aiFeedback/report')
+    const input = await feedbackInput(args, auth.user.id).catch(() => parseFeedbackArgs(args))
     return JSON.stringify(await fileAiFeedback({
-      ...aiFeedbackSchema.omit({ surface: true, client: true }).parse(args),
+      ...input,
       surface: 'mcp',
       client: feedbackClient(invocation?.clientName) ?? await getFeedbackClient(token),
     }, auth.user.id, { origin: 'agent', agentName: auth.agentDisplayName }))
