@@ -3,9 +3,6 @@ const assert = require("node:assert/strict");
 
 const { loadRoute, commentFixture } = require("./helpers/comment-list-route.cjs");
 
-// HTPR-8377: an activity read is a page, not the whole ticket. Prisma returns
-// the rows the query asks for, so asking oldest-first meant a limited read
-// handed back the oldest rows and never the entry just posted.
 const newestFirst = [
   commentFixture({ id: 14, text: "moved to QA", activity: { type: "TaskMoved" }, createdAt: new Date("2026-11-03T12:00:00.000Z") }),
   commentFixture({ id: 13, text: "assigned", activity: { type: "TaskAssigned" }, createdAt: new Date("2026-11-03T11:00:00.000Z") }),
