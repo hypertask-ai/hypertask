@@ -2,7 +2,6 @@ import type Stripe from "stripe";
 import prisma from "@/lib/prisma";
 import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { isActivationEligible } from "./activationAnalytics";
-import { isInviteSeatAnalyticsEnabled } from "./inviteAnalytics";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 
 type Coupon = {
@@ -127,7 +126,7 @@ export async function captureStripeSubscriptionEvent(
 ): Promise<void> {
   const customerId = idOf(subscription.customer);
   const team = await billedTeam(customerId);
-  if (!team || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
+  if (!team || !(await isActivationEligible(team.googleAccount.userId))) return;
   const properties = subscriptionAnalyticsProperties(subscription);
   const canceled = event.type === "customer.subscription.deleted";
   const previousItems = previousAttributes?.items?.data.map((item) => ({
@@ -208,7 +207,7 @@ export async function captureStripeInvoicePaid(
     if (!subscriptionId) return;
     const customerId = idOf(invoice.customer);
     const team = await (teamLookup ??= billedTeam(customerId));
-    if (!team || !customerId || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
+    if (!team || !customerId || !(await isActivationEligible(team.googleAccount.userId))) return;
     const history = paidInvoiceHistory(invoice, subscriptionId, await listPaidInvoices(customerId));
     if (!history.isFirstForSubscription) return;
     const subscription = await retrieveSubscription(subscriptionId);

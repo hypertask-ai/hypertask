@@ -492,25 +492,6 @@ test("invite requests return before analytics eligibility resolves", async () =>
   assert.equal(h.captures.length, 1);
 });
 
-test("with the HTPR-7268 flag off, invites keep the legacy events and Stripe sends nothing", async () => {
-  const h = harness();
-  h.setFlagEnabled("htpr-7268-invite-seat-analytics", false);
-  h.users.set(234, { id: 234, uid: "real_joiner", email: "joiner@example.test" });
-  h.members.push({ id: 7, projectId: 15, userId: 234, agentId: null, role: "Member", acceptedAt: new Date(1769999000000) });
-  const invites = h.load("src/lib/telemetry/inviteAnalytics.ts");
-  const stripe = h.load("src/lib/telemetry/stripeAnalytics.ts");
-  h.capture.invite({ id: "invitation", userId: 123, projectId: 15 }, "email");
-  h.capture.member(7, 234, 15, "invitation", 123);
-  h.capture.member(7, 234, 15);
-  await stripe.captureStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
-  await stripe.captureStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
-  await h.drain();
-  assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId, capture.properties]).sort(), [
-    ["invite_accepted", "123", { inviteeId: 234 }],
-    ["teammate_invited", "123", { method: "email" }],
-  ]);
-});
-
 test("first-for-user is unknown when the billed user owns another billed workspace", async () => {
   const h = harness();
   const findTeam = h.prisma.team.findFirst;
@@ -528,15 +509,6 @@ test("an invoice paid earlier wins over one created earlier but paid later", asy
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captures[0].properties.invoice_id, "in_paid");
-});
-
-test("with the flag off, legacy teammate_invited keeps the original caller attribution", async () => {
-  const h = harness();
-  h.setFlagEnabled("htpr-7268-invite-seat-analytics", false);
-  h.users.set(234, { id: 234, uid: "real_resender", email: "resender@example.test" });
-  h.capture.invite({ id: "invitation", userId: 123, projectId: 15 }, "email", 123, 234);
-  await h.drain();
-  assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["teammate_invited", "234"]]);
 });
 
 test("an earlier one-off invoice does not make the first subscription a repeat", async () => {

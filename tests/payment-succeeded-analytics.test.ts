@@ -6,7 +6,6 @@ import { activationHarness } from "./helpers/activation-harness";
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 const paymentFlag = "htpr-7272-payment-login-agent-events";
-const subscriptionFlag = "htpr-7268-invite-seat-analytics";
 const paidAt = 1769999990;
 
 function harness() {
@@ -92,7 +91,6 @@ test("renewals capture exact payment properties once per invoice, not per Stripe
 
 test("payment_succeeded rejects an unmapped customer so the intent is retried once the mapping exists", async () => {
   const h = harness();
-  h.setFlagEnabled(subscriptionFlag, false);
   await assert.rejects(record(h, event(invoice({ customer: "cus_unmapped" }))), /No stored customer mapping/);
   assert.deepEqual(h.captures, []);
   assert.deepEqual(h.logs, []);
@@ -104,7 +102,6 @@ for (const [scenario, overrides] of Object.entries({
 })) {
   test(`payment_succeeded skips ${scenario}`, async () => {
     const h = harness();
-    h.setFlagEnabled(subscriptionFlag, false);
     const warn = console.warn;
     console.warn = () => {};
     try {
@@ -116,7 +113,7 @@ for (const [scenario, overrides] of Object.entries({
   });
 }
 
-test("payment and legacy paths share one stored customer lookup and never fall back to invoice email", async () => {
+test("payment and seat paths share one stored customer lookup and never fall back to invoice email", async () => {
   const h = harness();
   let lookups = 0;
   h.prisma.team.findFirst = async ({ where }: any) => {
@@ -124,41 +121,28 @@ test("payment and legacy paths share one stored customer lookup and never fall b
     assert.deepEqual(where, { stripe_customer_id: "cus_stored" });
     return { id: "team", googleAccount: { userId: 123 } };
   };
-  h.setFlagEnabled(subscriptionFlag, false);
   await record(h);
   await h.drain();
   assert.equal(lookups, 1);
   assert.deepEqual(payments(h), [expected()]);
 });
 
-test("payment flag is independent from subscription_started and flag off preserves legacy output", async () => {
+test("payment flag is independent from subscription_started", async () => {
   for (const paymentEnabled of [false, true]) {
-    for (const subscriptionEnabled of [false, true]) {
-      const h = harness();
-      h.setFlagEnabled(paymentFlag, paymentEnabled);
-      h.setFlagEnabled(subscriptionFlag, subscriptionEnabled);
-      const evt = event(invoice({ billing_reason: "subscription_create" }));
-      await record(h, evt, async () => subscription(), async () => ({ data: [], has_more: false }));
-      await h.drain();
-      assert.deepEqual(h.captures.map((capture) => capture.event).sort(), [
-        ...(paymentEnabled ? ["payment_succeeded"] : []), ...(subscriptionEnabled ? ["subscription_started"] : []),
-      ].sort());
-      if (!paymentEnabled && subscriptionEnabled) {
-        const legacy = harness();
-        legacy.setFlagEnabled(paymentFlag, false);
-        await legacy.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(evt, async () => subscription(), async () => ({ data: [], has_more: false }));
-        await legacy.drain();
-        assert.deepEqual(h.captures, legacy.captures);
-      }
-      if (paymentEnabled) assert.deepEqual(payments(h), [expected(evt)]);
-    }
+    const h = harness();
+    h.setFlagEnabled(paymentFlag, paymentEnabled);
+    const evt = event(invoice({ billing_reason: "subscription_create" }));
+    await record(h, evt, async () => subscription(), async () => ({ data: [], has_more: false }));
+    await h.drain();
+    assert.deepEqual(h.captures.map((capture) => capture.event).sort(),
+      [...(paymentEnabled ? ["payment_succeeded"] : []), "subscription_started"].sort());
+    if (paymentEnabled) assert.deepEqual(payments(h), [expected(evt)]);
   }
 });
 
 test("payment eligibility excludes QA, guests, and missing users", async () => {
   for (const scenario of ["qa", "guest", "missing"]) {
     const h = harness();
-    h.setFlagEnabled(subscriptionFlag, false);
     if (scenario === "qa") h.prisma.team.findFirst = async () => ({ id: "team", googleAccount: { userId: 985 } });
     if (scenario === "guest") h.users.get(123).uid = "guest_123";
     if (scenario === "missing") h.users.delete(123);
@@ -183,7 +167,6 @@ test("subscription lookup failures cannot suppress an independent payment", asyn
 
 test("modern invoice parent and price payloads work without extra Stripe calls", async () => {
   const h = harness();
-  h.setFlagEnabled(subscriptionFlag, false);
   const evt = event(invoice({
     subscription: null, customer: { id: "cus_stored" },
     parent: { subscription_details: { subscription: { id: "sub_paid" } } },
@@ -192,7 +175,7 @@ test("modern invoice parent and price payloads work without extra Stripe calls",
       { parent: { type: "subscription_item_details" }, pricing: { price_details: { price: { id: "price_modern" } } } },
     ] },
   }));
-  await record(h, evt, async () => { throw Error("must not retrieve subscription"); }, async () => { throw Error("must not list invoices"); });
+  await record(h, evt, async () => { throw Error("must not retrieve subscription"); }, async () => ({ data: [], has_more: true }));
   await h.drain();
   assert.deepEqual(h.captures, [expected(evt, "price_modern")]);
 });
@@ -200,7 +183,6 @@ test("modern invoice parent and price payloads work without extra Stripe calls",
 for (const lines of [undefined, { data: [] }, { data: [{ type: "invoiceitem", price: { id: "price_not_subscription" } }] }, { data: [{ type: "subscription" }] }]) {
   test(`missing subscription line price stays null: ${JSON.stringify(lines)}`, async () => {
     const h = harness();
-    h.setFlagEnabled(subscriptionFlag, false);
     const evt = event(invoice({ lines, billing_reason: null, status_transitions: { paid_at: null } }));
     await record(h, evt);
     await h.drain();
@@ -210,7 +192,6 @@ for (const lines of [undefined, { data: [] }, { data: [{ type: "invoiceitem", pr
 
 test("failed payment delivery retries with the same business UUID even after the billed user changes", async () => {
   const h = harness();
-  h.setFlagEnabled(subscriptionFlag, false);
   h.setFailure("capture");
   await assert.rejects(record(h), /mock capture unavailable/);
   await h.drain();

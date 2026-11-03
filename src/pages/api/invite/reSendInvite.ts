@@ -105,7 +105,7 @@ export default  async function handler(
         title: invite.project.title ?? "",
         link: inviteLink,
       })
-      if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId, user.id));
+      if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId));
       return res.status(200).json({message:"Success!"})
   } catch (error) {
       console.log(error)

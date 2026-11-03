@@ -46,7 +46,7 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
             },
             include:{project:{select:{name:true}}},
         })
-        const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", userId, newInvite.userId);
+        const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", userId);
         return { newInvite, analyticsKey };
     });
     processAnalyticsIntentSoon(analyticsKey);
