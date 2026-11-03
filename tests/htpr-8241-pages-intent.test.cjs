@@ -37,10 +37,10 @@ function withDom() {
   };
 }
 
-function loadPanel({ flags = { pages: true, standalone: true, hold: true }, created, requested, gate } = {}) {
+function loadPanel({ flags = { pages: true, standalone: true, hold: true }, created, requested, gate, taskRef } = {}) {
   const calls = created || [];
   const fetched = requested || [];
-  const task = { id: 42, projectId: 15, uniqueIndex: 8241, title: 'Link page click' };
+  const task = taskRef || { current: { id: 42, projectId: 15, uniqueIndex: 8241, title: 'Link page click' } };
   return loadModule(PANEL, {
     'date-fns': { formatDistanceToNow: () => 'now' },
     'lucide-react': { FileText: () => null, Plus: () => null },
@@ -71,7 +71,7 @@ function loadPanel({ flags = { pages: true, standalone: true, hold: true }, crea
     },
     '@/lib/configs/taskDetail.config': { taskDetailSpacing: { mobile: { descriptionContainer: '' } } },
     '@/lib/contexts/TaskDetail/TaskProvider': {
-      useTaskContext: () => ({ editMode: 'view', currentTask: task }),
+      useTaskContext: () => ({ editMode: 'view', currentTask: task.current }),
     },
     '@/lib/navigation/pageReturn': { createPageReturnHref: () => '/page/page-4' },
     '@/utils/undoActions/helperFuncs': { cn: (...parts) => parts.filter(Boolean).join(' ') },
@@ -94,9 +94,11 @@ async function mountPanel(options) {
   const { createRoot } = require('react-dom/client');
   const Panel = loadPanel(options).default;
   const root = createRoot(document.getElementById('root'));
-  await React.act(async () => root.render(React.createElement(Panel)));
+  const element = React.createElement(Panel);
+  await React.act(async () => root.render(element));
   return {
     picker: () => document.querySelector('[data-picker]'),
+    rerender: () => React.act(async () => root.render(element)),
     unmount: () => React.act(async () => root.unmount()),
   };
 }
@@ -179,6 +181,24 @@ test('with the flag off a held click is ignored, waiting for nothing to arrive',
     assert.equal(panel.picker(), null);
     assert.deepEqual(created, []);
     assert.deepEqual(fetched, []);
+    await panel.unmount();
+  } finally {
+    dom.restore();
+  }
+});
+
+test('a click held while the ticket is still unknown opens once the ticket arrives', async () => {
+  const dom = withDom();
+  reset();
+  try {
+    const taskRef = { current: null };
+    intents.holdPagesIntent('link', SURFACE);
+    const panel = await mountPanel({ taskRef });
+    await panel.rerender();
+    assert.equal(panel.picker(), null);
+    taskRef.current = { id: 42, projectId: 15, uniqueIndex: 8241, title: 'Link page click' };
+    await panel.rerender();
+    assert.equal(panel.picker()?.getAttribute('data-picker'), 'Link page to ticket');
     await panel.unmount();
   } finally {
     dom.restore();

@@ -46,7 +46,8 @@ export const claimPagesIntent = (
   intent: PagesIntent,
   surface: string | null
 ) => {
-  if (!surface || held.get(intent) !== surface) {
+  if (!surface) return false;
+  if (held.get(intent) !== surface) {
     held.delete(intent);
     return false;
   }
