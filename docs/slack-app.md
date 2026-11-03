@@ -51,6 +51,8 @@ Subscribe to `app_mention`, `message.im`, `message.channels`, `message.groups`, 
 
 Runtime configuration uses `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, `SLACK_SIGNING_SECRET`, the app's existing encrypted-secret configuration, `REDIS_URL` and the team's AI gateway configuration. Never expose any of their values in documentation, test output or logs.
 
+`SLACK_FEEDBACK_CHANNEL_ID` (HTPR-8276) names the channel that receives one line per new agent feedback ticket on board 15. It posts with the workspace's installed bot token, needs the app invited to that channel, and posts nothing while it is empty. Repeat reports bump the open ticket's activity instead, so they post nothing new.
+
 ## Commands and tools
 
 The thirteen slash commands are `create`, `search`, `list`, `view`, `comment`, `assign`, `move`, `update`, `inbox`, `projects`, `help`, `connect`, `disconnect`. Run `/ht help` for arguments. Creation requires a title and `--project`; quoted project names are supported.
