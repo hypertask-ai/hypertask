@@ -117,7 +117,6 @@ export function normalizeMentionSpans(
   return html.replace(MENTION_SPAN, (whole) => {
     const openEnd = whole.indexOf(">") + 1;
     const tag = whole.slice(0, openEnd);
-    const inner = whole.slice(openEnd, -SPAN_CLOSE.length);
     const member = memberFor(
       readAttribute(tag, "data-id") ?? "",
       readAttribute(tag, "data-label") ?? "",
@@ -130,8 +129,7 @@ export function normalizeMentionSpans(
       "data-label",
       escapeHtml(labelFor(member)),
     );
-    const visible = inner.replace(/<[^>]*>/g, "").replace(/^@/, "").trim();
-    return `${normalizedTag}${escapeHtml(visible || member.displayName)}${SPAN_CLOSE}`;
+    return `${normalizedTag}${escapeHtml(member.displayName)}${SPAN_CLOSE}`;
   });
 }
 
