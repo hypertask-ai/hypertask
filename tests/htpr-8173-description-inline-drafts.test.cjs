@@ -3,10 +3,8 @@ const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
 const flag = "htpr-8173-description-inline-drafts";
-const oldFlag = "htpr-7337-edit-with-ai";
 const commentFlag = "htpr-7393-comment-inline-ai";
 const keys = {
-  HTPR_7337_EDIT_WITH_AI_FLAG: oldFlag,
   HTPR_7393_COMMENT_INLINE_AI_FLAG: commentFlag,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
   HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
@@ -15,7 +13,7 @@ function harness(enabled, commentInline = false) {
   const actions = [];
   let writer = false;
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === commentFlag ? commentInline : [oldFlag, "compose", "new-task"].includes(key), useFlagLoaded: () => true },
+    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === commentFlag ? commentInline : ["compose", "new-task"].includes(key), useFlagLoaded: () => true },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useSetRecoilState: () => value => actions.push(["commands", value]) },
     "@/store": { showCommandsAtom: "commands" },

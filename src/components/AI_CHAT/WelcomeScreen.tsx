@@ -14,7 +14,7 @@ import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup"
 import { useFlag } from "@/hooks/useFlag"
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys"
+import { HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -122,12 +122,10 @@ export const WelcomeScreen = () => {
   const currentProject = useRecoilValue(currentProjectAtom) as IProject | null;
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
-  let isEditMode = false;
-  if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
+  const isEditMode = Boolean(taskId) && editTaskId === taskId;
   const taskSummaryAction = taskSummaryActionFor(taskId);
   const ticketRef = taskId
     ? inViewObject.taskTicketNumber || "this ticket"

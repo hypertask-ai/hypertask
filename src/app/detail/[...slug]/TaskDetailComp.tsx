@@ -1,6 +1,6 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef } from "react";
 import { useRecoilValue } from "@/lib/state";
 import { inViewObjectAtom } from "@/store";
@@ -21,7 +21,6 @@ import { useTaskDetailReadiness } from "./useTaskDetailReadiness";
 import { TaskDetailPanels } from "./TaskDetailPanels";
 import type { TaskDetailProps } from "./useTaskDetailState";
 const TaskDetail: React.FC<TaskDetailProps> = (props) => {
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
   const { editTicketWithAi } = useCommentToAiChat();
   const state = useTaskDetailState(props);
@@ -57,9 +56,7 @@ const TaskDetail: React.FC<TaskDetailProps> = (props) => {
   Object.assign(context, useTaskDetailCommandActions(() => context));
   Object.assign(context, useTaskDetailCommentActions(() => context));
   Object.assign(context, useTaskDetailModalActions(() => context));
-  const keyboard = editWithAiEnabled
-    ? createTaskDetailKeyboard(context, true)
-    : createTaskDetailKeyboard(context, false);
+  const keyboard = createTaskDetailKeyboard(context);
   const keyboardContext = { ...context, ...keyboard };
   const effects0 = useTaskDetailInitialScroll(keyboardContext);
   useLinkedCommentScroll(keyboardContext);

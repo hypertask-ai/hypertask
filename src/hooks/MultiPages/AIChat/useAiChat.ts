@@ -14,7 +14,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import { HTPR_7768_CHAT_SKILL_DRAFTS_FLAG } from "@/lib/flags/keys";
 import { signalAiChip } from "@/lib/ai/chipEvents";
-import { HTPR_7764_CHAT_RUNNING_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, HTPR_7765_PARALLEL_CHATS_FLAG, HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7764_CHAT_RUNNING_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, HTPR_7765_PARALLEL_CHATS_FLAG, HTPR_7756_CHAT_OPENS_TASK_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 
 import { useRecoilState } from "@/lib/state";
 import { aiChatEditTaskIdAtom } from "@/store";
@@ -39,7 +39,6 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   let agentSidebarChatsEnabled = false;
   if (agentSidebarChatsFlag) agentSidebarChatsEnabled = true;
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
@@ -74,16 +73,13 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams: sessionStreams,
   } = useAiChatState(parallelChatsEnabled, chatWindowScope);
   const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
-  useEffect(editWithAiEnabled ? () => {
+  useEffect(() => {
     if (chatWindowScope) return;
     if (editTaskId === null) return;
     if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
       setEditTaskId(null);
     }
-  } : () => {
-    if (chatWindowScope) return;
-    if (editTaskId !== null) setEditTaskId(null);
-  }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId, chatWindowScope]);
+  }, [editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId, chatWindowScope]);
 
   const sessionContext = {
     parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,

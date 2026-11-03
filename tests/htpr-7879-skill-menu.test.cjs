@@ -9,7 +9,6 @@ const sidebarFlag = "htpr-7800-skill-runs-in-sidebar";
 const keys = {
   HTPR_7480_COMMENT_SKILL_RUN_FLAG: "comment-skills",
   HTPR_7393_COMMENT_INLINE_AI_FLAG: "inline-ai",
-  HTPR_7337_EDIT_WITH_AI_FLAG: "edit-ai",
 };
 const boardSkills = [
   { slug: "deeper", name: "Deeper", enabled: true, projectId: 15 },

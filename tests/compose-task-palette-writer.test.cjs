@@ -757,9 +757,9 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
   });
 });
 
-test('edit-mode and empty writer events retain inline writer with 6937 off but redirect with both flags on', async (t) => {
+test('an empty description writer event keeps the inline description writer without New Task or auto generation', async (t) => {
   for (const enabled of [false, true]) for (const newWindow of [false, true]) {
-    await withPalette(t, { enabled, newWindow, open: false }, async ({ source, jiti, mountProbe, dom, values }) => {
+    await withPalette(t, { enabled, newWindow, open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
       source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });
@@ -769,19 +769,17 @@ test('edit-mode and empty writer events retain inline writer with 6937 off but r
         setShouldShowAITaskWriter: (value) => openings.push(value), setAiTriggerData() {}, divIds: {}, currentTask: {}, handleFocus() {} };
       function Probe() { useTaskDetailEditorEvents(context); return null; }
       await mountProbe(() => React.createElement(Probe));
-      assert.equal(openings.at(-1), !(enabled && newWindow));
+      assert.equal(openings.at(-1), true, 'inline description drafts keep the description writer open');
       await React.act(async () => window.dispatchEvent(new dom.window.CustomEvent('test-open-writer', { detail: { targetId: 'description', prompt: '' } })));
-      if (enabled && newWindow) {
-        assert.equal(openings.at(-1), false);
-        assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
-      } else assert.equal(openings.at(-1), true);
+      assert.equal(openings.at(-1), true);
+      assert.equal(values.get('showCommandsAtom').show, false);
     });
   }
 });
 
 test('description prompts and comment AI toggle, mode trigger, hidden trigger and reply events keep their writer with both flags on', async (t) => {
   for (const mode of ['read-edit-description', 'create-comment', 'read-edit-comments']) for (const mobile of [false, true]) {
-    await withPalette(t, { newWindow: true, open: false, mobile }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
+    await withPalette(t, { newWindow: true, open: false, mobile, commentInline: true, inlineDrafts: true }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
       const task = { id: 52, title: 'Existing task', projectId: 7, description_: { content: '<p>Existing body</p>' } };
       source('src/hooks/General/useCurrentUserCheckFromCookies.tsx', { default: () => null });
       source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { useTaskContext: () => ({ parsedTask: JSON.stringify(task) }) });
@@ -821,7 +819,7 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
       }
       await mountProbe(() => React.createElement(Probe));
       const isDescription = mode === 'read-edit-description';
-      assert.equal(Boolean(document.querySelector('[data-existing-writer]')), !isDescription, 'comment edit-mode trigger is not suppressed');
+      assert.equal(Boolean(document.querySelector('[data-existing-writer]')), true, 'the inline writer owns comment and description modes');
       if (!isDescription) {
         await React.act(async () => document.getElementById('test-hidden-writer').click());
         assert.equal(state.shouldShowAiTaskWriter, false);
@@ -837,7 +835,7 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
       global.CustomEvent = dom.window.CustomEvent;
       try {
         await React.act(async () => triggerAITaskWriter('another-editor', 'Ignore this'));
-        assert.equal(Boolean(document.querySelector('[data-existing-writer]')), !isDescription);
+        assert.equal(Boolean(document.querySelector('[data-existing-writer]')), true);
         if (!isDescription) {
           await React.act(async () => triggerAITaskWriter('description', ''));
           assert.equal(state.shouldShowAiTaskWriter, true, 'empty comment/reply events retain the inline writer');
@@ -848,12 +846,12 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
         if (saved) global.CustomEvent = saved;
         else delete global.CustomEvent;
       }
-      assert.deepEqual(state.aiTriggerData, { autoTrigger: true, initialPrompt: 'Summarize the existing task' });
+      assert.deepEqual(state.aiTriggerData, { autoTrigger: !isDescription, initialPrompt: 'Summarize the existing task' });
       assert.equal(state.shouldShowAiTaskWriter, true);
       const writer = document.querySelector('[data-existing-writer="52"]');
       assert.ok(writer);
       assert.equal(writer.textContent, 'Summarize the existing task');
-      assert.equal(writer.dataset.autoTrigger, 'true');
+      assert.equal(writer.dataset.autoTrigger, String(!isDescription));
       assert.equal(values.get('showCommandsAtom').show, false);
     });
   }

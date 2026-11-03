@@ -69,7 +69,7 @@ import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-772
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { commentsStackedSetting, foldCommentsFromFirstPaintNow } from "@/lib/taskDetailCommentsStacked";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export type TReturnFocusedEl =
   | "Description"
@@ -95,7 +95,6 @@ const useTaskDetailGlobalStates = (
   const queryClient = useQueryClient();
 
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
   const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
@@ -448,7 +447,7 @@ const useTaskDetailGlobalStates = (
   };
 
   const refocusAndOpenTaskWriter = (prevActive: string) => {
-    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (prevActive === "comment" || prevActive.startsWith("comment-"))) && !(descriptionInlineDrafts && prevActive === descriptionContainerId);
+    const sidebarEditWithAi = !(commentInlineAi && (prevActive === "comment" || prevActive.startsWith("comment-"))) && !(descriptionInlineDrafts && prevActive === descriptionContainerId);
     if (sidebarEditWithAi) {
       void editTicketWithAi(currentTask!.id);
       return;
@@ -459,7 +458,7 @@ const useTaskDetailGlobalStates = (
 
   const CTRL_J_ENTER_Handler = (shouldTriggerAi: boolean = false) => {
     const currentFocusedType = returnCurrentFocusedType();
-    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (currentFocusedType === "Edit-Comment" || currentFocusedType === "New-Comment")) && !(descriptionInlineDrafts && currentFocusedType === "Description");
+    const sidebarEditWithAi = !(commentInlineAi && (currentFocusedType === "Edit-Comment" || currentFocusedType === "New-Comment")) && !(descriptionInlineDrafts && currentFocusedType === "Description");
     if (shouldTriggerAi && sidebarEditWithAi) {
       setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
