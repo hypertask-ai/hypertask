@@ -44,6 +44,7 @@ function setup(findTask) {
     '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
     '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
+    '@/lib/mcp/comments/contentPresence': require('./task-route-loader.cjs').load('src/lib/mcp/comments/contentPresence.ts', {}),
     '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => text },
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
     '@/lib/mcp/comments/activityMetadata': {},

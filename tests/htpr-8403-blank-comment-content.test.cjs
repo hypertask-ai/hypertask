@@ -26,7 +26,7 @@ test('comment add refuses a body whose HTML renders nothing', async () => {
 });
 
 test('comment add still posts a body with real text', async () => {
-  const { post, calls } = setup();
+  const { post, calls } = setup({ flag: false });
   const created = await post({ text: '<p>Progress &amp; next step</p>' });
   assert.equal(created.status, 201);
   assert.equal(calls.comments.length, 1);

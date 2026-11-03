@@ -67,6 +67,7 @@ function loadRoute(comments, listQuery = null) {
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (html) => html },
     "@/utils/helperFunctions/multiPages": { extractTipTapContent: () => "" },
     "@/lib/mcp/normalizeBlockHtml": { normalizeBlockHtml: (html) => html },
+    "@/lib/mcp/comments/contentPresence": require("./task-route-loader.cjs").load("src/lib/mcp/comments/contentPresence.ts", {}),
     "@/utils/helperFunctions/markdownToHtml": { formatRichTextInput: (text) => text },
     "@/lib/mcp/fieldError": { buildFieldError: () => ({}) },
     "@/lib/mcp/tasks/validators": { CONTENT_TYPE_ALLOWED_VALUES: [] },
