@@ -22,12 +22,10 @@ test("semantic scrollbar colors reach both native and WebKit scrollbar renderers
   }
 });
 
-test("legacy tooltip keeps centered content and its stacking class after interpolation", () => {
+test("tooltip keeps centered content and its scale class after interpolation", () => {
   const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
   const load = loader({
-    "@/hooks/useFlag": { useFlag: () => false },
-    "@/lib/flags/keys": {},
-    "./TooltipPortal": { default: () => null },
+    "./TooltipPortal": { default: ({ children }) => typeof children === "function" ? children({ top: 0 }) : children },
     "@/lib/constants/APIRouteConstants": {},
     "@/lib/realtime/client": {},
     "../api/global": {},
@@ -39,6 +37,6 @@ test("legacy tooltip keeps centered content and its stacking class after interpo
     const tooltip = view.container.firstElementChild;
     assert.equal(tooltip.textContent, "Tooltip content");
     assert.equal(tooltip.classList.contains("items-center"), true);
-    assert.equal(tooltip.classList.contains("z-tooltip"), true);
+    assert.equal(tooltip.classList.contains("scale-100"), true);
   } finally { view.close(); }
 });

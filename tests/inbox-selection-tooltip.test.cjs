@@ -19,12 +19,11 @@ test("inbox select-all hints sit beyond the desktop checkbox gutter", () => {
   }
 });
 
-test("string-only hover hints ignore mouse input in legacy inline, legacy portal and top-layer modes", async () => {
+test("string-only hover hints ignore mouse input in inline and portal placements", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>");
   const keys = ["window", "document", "React", "IS_REACT_ACT_ENVIRONMENT"];
   const globals = keys.map((key) => Object.getOwnPropertyDescriptor(global, key));
   const cached = new Map(Object.entries(require.cache));
-  let enabled = false;
   let reactRoot;
   try {
     Object.assign(global, { window: dom.window, document: dom.window.document, React, IS_REACT_ACT_ENVIRONMENT: true });
@@ -33,7 +32,6 @@ test("string-only hover hints ignore mouse input in legacy inline, legacy portal
       const filename = path.join(root, file);
       require.cache[filename] = { id: filename, filename, loaded: true, exports };
     };
-    stub("src/hooks/useFlag.tsx", { useFlag: () => enabled });
     stub("src/utils/undoActions/helperFuncs.ts", { cn: (...classes) => classes.filter(Boolean).join(" ") });
     const jiti = createJiti(__filename, { interopDefault: true, fsCache: false, jsx: true, alias: { "@": path.join(root, "src") } });
     const Tooltip = jiti(path.join(root, "src/components/Common/Tooltip.tsx")).default;
@@ -44,20 +42,18 @@ test("string-only hover hints ignore mouse input in legacy inline, legacy portal
     document.head.append(sheet);
     const container = document.getElementById("root");
     reactRoot = require("react-dom/client").createRoot(container);
-    for (enabled of [false, true]) {
-      for (const portal of [false, true]) {
-        await React.act(async () => reactRoot.render(React.createElement("div", { className: "group" }, React.createElement(Tooltip, {
-          text: "Select all", keyCombination: ["CTRL", "SHIFT", "A"], bottom: 0, left: 48, portal,
-        }))));
-        await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
-        const surface = document.querySelector(enabled ? "[data-hover-tooltip-portal]" : ".z-tooltip");
-        assert.ok(surface, `enabled=${enabled}, portal=${portal}: hint opens`);
-        assert.equal(window.getComputedStyle(surface).pointerEvents, "none", `enabled=${enabled}, portal=${portal}: hint cannot intercept the checkbox click`);
-        assert.equal(surface.textContent, "Select allCTRLSHIFTA");
-        await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseleave")));
-        if (enabled || portal) assert.equal(surface.isConnected, false, "leaving the trigger closes the hint");
-        await React.act(async () => reactRoot.render(null));
-      }
+    for (const portal of [false, true]) {
+      await React.act(async () => reactRoot.render(React.createElement("div", { className: "group" }, React.createElement(Tooltip, {
+        text: "Select all", keyCombination: ["CTRL", "SHIFT", "A"], bottom: 0, left: 48, portal,
+      }))));
+      await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
+      const surface = document.querySelector("[data-hover-tooltip-portal]");
+      assert.ok(surface, `portal=${portal}: hint opens`);
+      assert.equal(window.getComputedStyle(surface).pointerEvents, "none", `portal=${portal}: hint cannot intercept the checkbox click`);
+      assert.equal(surface.textContent, "Select allCTRLSHIFTA");
+      await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseleave")));
+      assert.equal(surface.isConnected, false, `portal=${portal}: leaving the trigger closes the hint`);
+      await React.act(async () => reactRoot.render(null));
     }
     let clicks = 0;
     await React.act(async () => reactRoot.render(React.createElement(TooltipPortal, { interactive: true }, React.createElement("button", { onClick: () => clicks++ }, "Copy email"))));

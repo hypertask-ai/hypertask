@@ -438,11 +438,11 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
 });
 
 test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated tablists alone', async (t) => {
-  for (const topLayer of [false, true]) await withPalette(t, { newWindow: true, realTooltip: true, topLayer }, async ({ press, values, dom }) => {
+  await withPalette(t, { newWindow: true, realTooltip: true }, async ({ press, values, dom }) => {
     const tabs = [...document.querySelectorAll('[aria-label="Commands mode"] [role="tab"]')];
     for (const [tab, shortcut] of [[tabs[0], 'CTRL'], [tabs[1], 'CTRL']]) {
       await React.act(async () => tab.focus());
-      const portal = document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-tooltip"].fixed');
+      const portal = document.body.querySelector('[data-hover-tooltip-portal]');
       assert.ok(portal, 'the actual Tooltip portal opens on the focusable tab');
       assert.ok(portal.textContent.includes(tab.textContent));
       assert.ok(portal.textContent.includes(shortcut));
@@ -451,7 +451,7 @@ test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated ta
     otherTab.setAttribute('role', 'tab');
     document.body.append(otherTab);
     await React.act(async () => otherTab.focus());
-    assert.equal(document.body.querySelector(topLayer ? '[data-hover-tooltip-portal]' : '[class*="z-tooltip"].fixed'), null, 'focusout closes the tooltip');
+    assert.equal(document.body.querySelector('[data-hover-tooltip-portal]'), null, 'focusout closes the tooltip');
     assert.equal((await press('Tab', {}, otherTab)).defaultPrevented, false);
     assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
     otherTab.remove();

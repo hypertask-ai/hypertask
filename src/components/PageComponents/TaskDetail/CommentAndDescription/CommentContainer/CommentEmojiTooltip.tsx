@@ -1,12 +1,8 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
-import { createPortal } from "react-dom"
-import Tooltip from '@/components/Common/Tooltip'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
 import TooltipPortal from '@/components/Common/TooltipPortal'
 
-const ShortcutTooltip = ({ text, shortcut, topLayer = false }: { text: string; shortcut: string; topLayer?: boolean }) => (
-    <div className={`hidden sm:flex items-center ${topLayer ? "" : "z-tooltip"} font-semibold border-light-black-border-1 border-[1px] bg-labelComponent gap-2 py-[6px] px-2 whitespace-nowrap text-dense xl:text-content rounded-[4px]`}>
+const ShortcutTooltip = ({ text, shortcut }: { text: string; shortcut: string }) => (
+    <div className="hidden sm:flex items-center font-semibold border-light-black-border-1 border-[1px] bg-labelComponent gap-2 py-[6px] px-2 whitespace-nowrap text-dense xl:text-content rounded-[4px]">
         <span className="text-black">{text}</span>
         <kbd className="px-1 pt-[2px] mx-[1.5px] rounded-[2px] pb-0 bg-[var(--bg-keycap)] border-[var(--border-keycap)]">
             {shortcut}
@@ -28,52 +24,6 @@ const getReactionTooltipPosition = (anchorElement: HTMLElement, tooltipElement: 
     }
 }
 
-const LegacyCommentEmojiTooltip = ({ anchorElement = null }: { anchorElement?: HTMLElement | null }) => {
-    const portalRef = useRef<HTMLDivElement>(null)
-    const [position, setPosition] = useState({ left: 0, top: 0 })
-
-    useEffect(() => {
-        if (!anchorElement) return
-        const updatePosition = () => {
-            setPosition(getReactionTooltipPosition(anchorElement, portalRef.current))
-        }
-        updatePosition()
-        window.addEventListener('resize', updatePosition)
-        window.addEventListener('scroll', updatePosition, true)
-        return () => {
-            window.removeEventListener('resize', updatePosition)
-            window.removeEventListener('scroll', updatePosition, true)
-        }
-    }, [anchorElement])
-
-    if (anchorElement && typeof document !== 'undefined') {
-        return createPortal(
-            <div ref={portalRef} className="fixed z-tooltip flex flex-col gap-[5px]" style={position}>
-                <ShortcutTooltip text="Add Reaction" shortcut="R" />
-                <ShortcutTooltip text="Fast Like" shortcut="L" />
-            </div>,
-            document.body
-        )
-    }
-
-    return (
-        <>
-            <Tooltip
-                left={0}
-                bottom={-40}
-                keyCombination={["R"]}
-                text={"Add Reaction"}
-            />
-            <Tooltip
-                left={0}
-                bottom={-75}
-                keyCombination={["L"]}
-                text={"Fast Like"}
-            />
-        </>
-    )
-}
-
 const TopLayerCommentEmojiTooltip = ({ anchorElement = null }: { anchorElement?: HTMLElement | null }) => {
     const portalRef = useRef<HTMLDivElement>(null)
     const [position, setPosition] = useState({ left: 0, top: 0 })
@@ -86,8 +36,8 @@ const TopLayerCommentEmojiTooltip = ({ anchorElement = null }: { anchorElement?:
         return (
             <TooltipPortal placement="fixed" anchorElement={anchorElement} onPosition={updatePosition}>
                 <div ref={portalRef} className="fixed flex flex-col gap-[5px]" style={position}>
-                    <ShortcutTooltip topLayer text="Add Reaction" shortcut="R" />
-                    <ShortcutTooltip topLayer text="Fast Like" shortcut="L" />
+                    <ShortcutTooltip text="Add Reaction" shortcut="R" />
+                    <ShortcutTooltip text="Fast Like" shortcut="L" />
                 </div>
             </TooltipPortal>
         )
@@ -96,16 +46,13 @@ const TopLayerCommentEmojiTooltip = ({ anchorElement = null }: { anchorElement?:
     return (
         <TooltipPortal hover placement="trigger">
             <div className="absolute flex flex-col gap-[5px]" style={{ left: 0, top: 'calc(100% + 8px)' }}>
-                <ShortcutTooltip topLayer text="Add Reaction" shortcut="R" />
-                <ShortcutTooltip topLayer text="Fast Like" shortcut="L" />
+                <ShortcutTooltip text="Add Reaction" shortcut="R" />
+                <ShortcutTooltip text="Fast Like" shortcut="L" />
             </div>
         </TooltipPortal>
     )
 }
 
-const CommentEmojiTooltip = (props: { anchorElement?: HTMLElement | null }) => {
-  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-  return topLayer ? <TopLayerCommentEmojiTooltip {...props} /> : <LegacyCommentEmojiTooltip {...props} />;
-};
+const CommentEmojiTooltip = (props: { anchorElement?: HTMLElement | null }) => <TopLayerCommentEmojiTooltip {...props} />;
 
 export default CommentEmojiTooltip;
