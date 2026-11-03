@@ -6,10 +6,13 @@ import { requireRole } from '@/lib/mcp/agents/scopes'
 import prisma from '@/lib/prisma'
 import { updateSection, deleteSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8354_SECTION_NAME_FLAG } from '@/lib/flags/definitions/htpr-8354-section-name'
 
 export interface SectionListItem {
   id: number
   section_title: string
+  name?: string
   projectId: number
   visibility: boolean
   deleted: boolean
@@ -44,6 +47,7 @@ export async function PATCH(
       if (roleError) return roleError
     }
     const user = ctx.user;
+    const named = await isFeatureEnabled(HTPR_8354_SECTION_NAME_FLAG, user.id)
     const projectId = parseInt(params.projectId)
     const sectionId = parseInt(params.sectionId)
 
@@ -200,7 +204,11 @@ export async function PATCH(
     return NextResponse.json(
       {
         success: true,
-        section: { ...result.section, taskCount },
+        section: {
+          ...result.section,
+          taskCount,
+          ...(named ? { name: result.section.section_title } : {})
+        },
         message: 'Section updated successfully'
       },
       { status: 200 }
