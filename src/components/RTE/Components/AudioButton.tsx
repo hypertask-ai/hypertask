@@ -859,18 +859,18 @@ export const AudioButton = ({
             data-ai-chat-recording-cancel={isAiChat || undefined}
             onClick={closeHandler}
             aria-label="Cancel dictation"
-            className="flex h-[18px] w-[18px] items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
+            className="flex h-5 w-5 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
           >
-            <X size={12} strokeWidth={1.75} />
+            <X size={14} strokeWidth={1.75} />
           </button>
           <button
             type="button"
             data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Stop dictation"
-            className="group relative flex h-[18px] w-[18px] items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
+            className="group relative flex h-5 w-5 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
           >
-            <Square size={10} strokeWidth={2.2} />
+            <Square size={14} strokeWidth={2.2} />
             <Tooltip
               left={0}
               bottom={-45}
