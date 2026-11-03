@@ -487,8 +487,10 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     flags[flag] = true;
     await rerender();
     assert.equal(input().disabled, false, 're-enabling Compose must not resurrect stale recording state');
-    await press('Enter');
-    assert.equal(requests[0].body.text, 'Keep my typed note Spoken text');
+    assert.equal(input().value, '');
+    await type('Fresh note after re-enabling');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.text, 'Fresh note after re-enabling');
   });
 });
 
