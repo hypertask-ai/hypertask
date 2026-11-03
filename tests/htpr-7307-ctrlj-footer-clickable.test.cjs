@@ -7,7 +7,7 @@ const { createJiti } = require('jiti');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7307-ctrlj-footer-clickable';
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
-const config = { newWindow: true, tab: 'compose', boards: [
+const config = { tab: 'compose', boards: [
   { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' },
   { id: 8, title: 'Product', uniqueIdentifier: 'PROD' },
 ] };

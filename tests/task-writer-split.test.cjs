@@ -25,10 +25,10 @@ const board = { id: 15, uniqueIdentifier: "HTPR" };
 function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = [], sonnet = true, malformed = false } = {}) {
   const checks = [], calls = [], creates = [], bindings = [], usage = [];
   const flags = {
-    HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-window",
+    HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: flag,
     HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG: "empty-research",
-    isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? enabled : key === dueDateFlag ? dueDates : key === "compose" || key === "new-window"; },
+    isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? enabled : key === dueDateFlag ? dueDates : key === "compose"; },
   };
   const editor = {
     selectTaskWriterModel: async () => ({ model: sonnet ? "sonnet-5.5-medium" : "saved-model", settings: { maxOutputTokens: 16000 }, teamId: "team", usageProvider: "fixture" }),

@@ -12,7 +12,7 @@ import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
 import { Prisma } from "@prisma/client";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { getNextUniqueTaskIndex } from "@/utils/controllers/tasks/getNextUniqueTaskIndex";
@@ -67,8 +67,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, session.userId))) {
       return NextResponse.json({ message: "Compose task writer is turned off" }, { status: 403, headers: responseHeaders });
     }
-    if (body.existingTaskId != null && (body.requestKind !== "compose-task" ||
-        !(await isFeatureEnabled(HTPR_6937_NEW_TASK_WINDOW_FLAG, session.userId)))) {
+    if (body.existingTaskId != null && body.requestKind !== "compose-task") {
       return NextResponse.json({ message: "New Task window is turned off" }, { status: 403, headers: responseHeaders });
     }
     const projectId = Number(requestedProjectId);

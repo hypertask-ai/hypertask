@@ -10,7 +10,7 @@ const writer = () => document.querySelector("[data-compose-task-writer]");
 
 for (const apple of [false, true]) {
   test(`desktop ${apple ? "Mac" : "PC"}: flag on removes only Esc Close; flag off restores the exact footer`, async (t) => {
-    await withPalette(t, { apple, newWindow: true, tab: "compose", url: "/inbox" }, async ({ flags, rerender }) => {
+    await withPalette(t, { apple, tab: "compose", url: "/inbox" }, async ({ flags, rerender }) => {
       const original = writer().innerHTML;
       const expected = writer().cloneNode(true);
       const hint = [...expected.querySelectorAll("span")].find((span) => span.textContent === "Esc Close");
@@ -28,7 +28,7 @@ for (const apple of [false, true]) {
 }
 
 test("phone New Task sheet hides the footer and the one-line flag does not change it", async (t) => {
-  await withPalette(t, { mobile: true, newWindow: true, tab: "compose" }, async ({ flags, rerender }) => {
+  await withPalette(t, { mobile: true, tab: "compose" }, async ({ flags, rerender }) => {
     const original = document.getElementById("root").innerHTML;
     assert.equal(writer().textContent.includes("Esc Close"), false);
     flags[flag] = true;
@@ -37,19 +37,9 @@ test("phone New Task sheet hides the footer and the one-line flag does not chang
   });
 });
 
-test("legacy Compose keeps its Esc Close hint and markup", async (t) => {
-  await withPalette(t, { tab: "compose", newWindow: false }, async ({ flags, rerender }) => {
-    const original = writer().innerHTML;
-    assert.match(writer().textContent, /Esc Close/);
-    flags[flag] = true;
-    await rerender();
-    assert.equal(writer().innerHTML, original);
-  });
-});
-
 for (const enabled of [false, true]) {
   test(`Escape still closes New Task with the footer flag ${enabled ? "on" : "off"}`, async (t) => {
-    await withPalette(t, { newWindow: true, tab: "compose" }, async ({ flags, rerender, press, values, input }) => {
+    await withPalette(t, { tab: "compose" }, async ({ flags, rerender, press, values, input }) => {
       flags[flag] = enabled;
       await rerender();
       assert.equal(document.activeElement, input());

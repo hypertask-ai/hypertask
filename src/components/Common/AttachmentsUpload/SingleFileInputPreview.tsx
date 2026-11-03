@@ -5,7 +5,7 @@ import 'react-circular-progressbar/dist/styles.css';
 
 import { useEffect, useRef, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
@@ -150,9 +150,7 @@ interface ISingleFile {
 
     const isChat = variant === "chat";
     const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-    const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-    let newTaskWindow = false;
-    if (composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+    const newTaskWindow = composeEnabled;
 
     return (
       <div

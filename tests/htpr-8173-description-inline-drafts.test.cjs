@@ -7,7 +7,6 @@ const commentFlag = "htpr-7393-comment-inline-ai";
 const keys = {
   HTPR_7393_COMMENT_INLINE_AI_FLAG: commentFlag,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
-  HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
 };
 function harness(enabled, commentInline = false) {
   const actions = [];

@@ -108,10 +108,10 @@ function fixture(kind, scenario) {
     "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => { throw new Error("Legacy parity must not resolve writer dates"); } },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date", HTPR_7740_CREATE_RESPONSE_FLAG: "htpr-7740-create-response" },
     "@/lib/flags": {
-      HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
+      HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
       isFeatureEnabled: async (key, userId) => {
         if (key === "htpr-7740-create-response") return false;
-        effects.push(["product-flag", key, userId]); return !scenario.productOff && !(key === "new-task" && scenario.newWindowOff);
+        effects.push(["product-flag", key, userId]); return !scenario.productOff;
       },
     },
     "@/utils/generateRank": { default: (...args) => { effects.push(["rank", ...clean(args)]); return scenario.noRank ? undefined : "new-rank"; } },
@@ -216,7 +216,6 @@ const scenarios = {
     ["compose existing empty target updates and broadcasts", { body: { ...defaults.global, existingTaskId: 42, requestKind: "compose-task" }, emptyTarget: true }],
     ["compose update controller refusal", { body: { ...defaults.global, existingTaskId: 42, requestKind: "compose-task" }, emptyTarget: true, result: { status: 409, json: { message: "Conflict" } }, expected: error(409, "Conflict") }],
     ["compose missing target", { body: { ...defaults.global, existingTaskId: 42, requestKind: "compose-task" }, noRankTask: true, expected: error(403, "Forbidden") }],
-    ["existing target new-window flag disabled", { body: { ...defaults.global, existingTaskId: 42, requestKind: "compose-task" }, newWindowOff: true, expected: error(403, "New Task window is turned off") }],
     ["invalid existing task id", { body: { ...defaults.global, existingTaskId: -1, requestKind: "compose-task" }, expected: error(400, "Invalid task id") }],
     ["invalid labels", { body: { ...defaults.global, tags: "label" }, expected: error(400, "Invalid labels") }],
     ["invalid label id", { body: { ...defaults.global, tags: [{ id: 2 }] }, expected: error(400, "Invalid labels") }],

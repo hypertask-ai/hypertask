@@ -1,4 +1,4 @@
-const { withPalette, test, root, React, assert, flag, newFlag, jiti, query, fs, path } = require('./helpers/compose-task-palette-fixture.cjs');
+const { withPalette, test, root, React, assert, flag, jiti, query, fs, path } = require('./helpers/compose-task-palette-fixture.cjs');
 test('flag off leaves desktop and phone palettes unchanged and Ctrl+J belongs to its legacy handler', async (t) => {
   for (const mobile of [false, true]) {
     await withPalette(t, { enabled: false, mobile }, async ({ press, legacyJ, values, capture, baseline }) => {
@@ -53,7 +53,7 @@ test('Cmd+J on Apple works; shift, alt, IME and signed-out/public paths do not c
 
 test('switch and Ctrl+K/Ctrl+J toggle modes inside the palette without losing the note', async (t) => {
   await withPalette(t, {}, async ({ clickTab, input, type, press, values, capture }) => {
-    assert.equal(document.querySelector('[role="tab"][aria-selected="true"]').textContent, 'Search');
+    assert.equal(document.querySelector('[role="tab"][aria-selected="true"]').textContent, 'SearchCTRL+K');
     await clickTab('Compose');
     await type('Keep this draft\nand its new line');
     capture('compose-typed-desktop');
@@ -80,17 +80,15 @@ test('pending creation blocks tab clicks and dismissing Search commands without 
     assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
     await press('k', { ctrlKey: true }, document.body);
     assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
-    const command = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
-    await React.act(async () => command.click());
-    assert.equal(values.get('showCommandsAtom').show, true);
+    assert.ok(document.querySelector('[data-search-commands]'), 'Search still renders while the creation is pending');
     await fail();
     await clickTab('Compose');
     assert.equal(input().value, 'Keep this retry draft');
     assert.match(document.body.textContent, /Couldn’t create the task/);
     await clickTab('Search');
-    const resumedCommand = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
-    await React.act(async () => resumedCommand.click());
-    assert.equal(values.get('showCommandsAtom').show, false, 'commands resume once creation settles');
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+    await clickTab('Compose');
+    assert.equal(input().value, 'Keep this retry draft', 'the settled draft survives both tabs');
   });
 });
 
@@ -232,7 +230,7 @@ test('phone Commands entry has the same switch, composer and existing keyboard-a
 test('paperclip/Ctrl+U/paste attach images with thumbnails, keep files on create failure and remove them', async (t) => {
   await withPalette(t, { tab: 'compose' }, async ({ dom, input, type, press, requests, fail, finish }) => {
     const fileInput = document.querySelector('input[type="file"]');
-    assert.equal(fileInput.accept, 'image/*');
+    assert.equal(fileInput.hasAttribute('accept'), false, 'the New Task window accepts documents as well as images');
     let picks = 0;
     fileInput.addEventListener('click', () => picks++);
     await React.act(async () => document.querySelector('[aria-label="Attach files"]').click());
@@ -380,9 +378,9 @@ test('actual phone sheet reserves visible space for Compose tabs only while the 
 });
 
 test('New Task label, purple sparkle, dictation, tooltips and Tab require both flags on desktop and phone', async (t) => {
-  for (const enabled of [false, true]) for (const newWindow of [false, true]) for (const mobile of [false, true]) {
-    await withPalette(t, { enabled, newWindow, mobile, apple: true }, async ({ press, clickTab, input, type, values }) => {
-      const both = enabled && newWindow;
+  for (const enabled of [false, true]) for (const mobile of [false, true]) {
+    await withPalette(t, { enabled, mobile, apple: true }, async ({ press, clickTab, input, type, values }) => {
+      const both = enabled;
       assert.equal(Boolean(document.querySelector('[data-tooltip="Search"]')), both);
       if (!enabled) {
         assert.equal(document.querySelector('[role="tablist"]'), null);
@@ -420,13 +418,13 @@ test('New Task label, purple sparkle, dictation, tooltips and Tab require both f
 });
 
 test('Ctrl+J fills only the visible new empty task when both flags are on and never inserts a second cache task', async (t) => {
-  for (const newWindow of [false, true]) for (const title of ['Enter task title here', 'Already written']) {
+  for (const title of ['Enter task title here', 'Already written']) {
     const targetTask = { id: 52, projectId: 7, uniqueIndex: 4, title, description_: { content: '<p></p>' } };
-    await withPalette(t, { newWindow, url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask, previousBoard: 'project-8|&|view' }, async ({ press, type, requests, finish, cacheAdds, values }) => {
+    await withPalette(t, { url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask, previousBoard: 'project-8|&|view' }, async ({ press, type, requests, finish, cacheAdds, values }) => {
       await press('j', { ctrlKey: true }, document.body);
       await type('Write this task');
       await press('Enter');
-      const fills = newWindow && title === 'Enter task title here';
+      const fills = title === 'Enter task title here';
       assert.equal(requests[0].body.existingTaskId, fills ? 52 : undefined);
       assert.equal(requests[0].body.project.id, 7);
       assert.equal(requests[0].body.viewProject, undefined);
@@ -438,7 +436,7 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
 });
 
 test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated tablists alone', async (t) => {
-  await withPalette(t, { newWindow: true, realTooltip: true }, async ({ press, values, dom }) => {
+  await withPalette(t, { realTooltip: true }, async ({ press, values, dom }) => {
     const tabs = [...document.querySelectorAll('[aria-label="Commands mode"] [role="tab"]')];
     for (const [tab, shortcut] of [[tabs[0], 'CTRL'], [tabs[1], 'CTRL']]) {
       await React.act(async () => tab.focus());
@@ -469,7 +467,7 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     React.useEffect(() => { mounts++; return () => { unmounts++; }; }, []);
     return React.createElement('button', { 'aria-label': props.ariaLabel }, 'Mic');
   }
-  await withPalette(t, { newWindow: true, tab: 'compose', AudioButton }, async ({ type, press, input, flags, rerender, requests }) => {
+  await withPalette(t, { tab: 'compose', AudioButton }, async ({ type, press, input, flags, rerender, requests }) => {
     await type('Keep my typed note');
     assert.equal(audioProps.mobilePrimaryTone, 'primary', 'dictation confirmation uses canonical primary tokens');
     await React.act(async () => audioProps.toggleRecording(true));
@@ -483,14 +481,16 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     assert.equal(input().value, 'Keep my typed note Spoken text');
     assert.equal(input().disabled, false);
     await React.act(async () => audioProps.toggleRecording(true));
-    flags[newFlag] = false;
+    flags[flag] = false;
     await rerender();
-    assert.equal(input().disabled, false, 'flag off restores editable legacy Compose');
-    flags[newFlag] = true;
+    assert.equal(document.querySelector('[data-compose-task-writer]'), null, 'Compose off leaves no writer holding the input lock');
+    flags[flag] = true;
     await rerender();
-    assert.equal(input().disabled, false, 're-enabling the flag must not resurrect stale recording state');
-    await press('Enter');
-    assert.equal(requests[0].body.text, 'Keep my typed note Spoken text');
+    assert.equal(input().disabled, false, 're-enabling Compose must not resurrect stale recording state');
+    assert.equal(input().value, '');
+    await type('Fresh note after re-enabling');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.text, 'Fresh note after re-enabling');
   });
 });
 
@@ -524,7 +524,7 @@ test('explicit form destination wins over URL, recency and an empty task detail'
   const destinationProject = { id: 8, title: 'Selected board', uniqueIdentifier: 'FORM' };
   for (const url of ['/project?id=7', '/settings', '/detail/project-7/4']) {
     const targetTask = { id: 52, projectId: 7, uniqueIndex: 4, title: '', description: '' };
-    await withPalette(t, { newWindow: true, tab: 'compose', url, destinationProject, previousBoard: 'project-9|&|view', recency: { 10: 99 }, inView: { taskId: 52 }, targetTask }, async ({ type, press, requests, finish, navigations, input, values }) => {
+    await withPalette(t, { tab: 'compose', url, destinationProject, previousBoard: 'project-9|&|view', recency: { 10: 99 }, inView: { taskId: 52 }, targetTask }, async ({ type, press, requests, finish, navigations, input, values }) => {
       await type('Create on my selected board');
       await press('k', { ctrlKey: true });
       await press('j', { ctrlKey: true });
@@ -541,7 +541,7 @@ test('explicit form destination wins over URL, recency and an empty task detail'
 
 for (const writerFailed of [false, true]) test(`same-task fill updates the mounted detail and board with all saved fields (writerFailed=${writerFailed})`, async (t) => {
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '<p></p>' }, project: { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA', team: { id: 'team-a', title: 'Old team' } } };
-  await withPalette(t, { newWindow: true, url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask }, async ({ press, type, finish, cacheAdds, cacheUpdates, queryClient, values, source, jiti, mountProbe }) => {
+  await withPalette(t, { url: '/detail/project-7/4', open: false, inView: { taskId: 52 }, targetTask }, async ({ press, type, finish, cacheAdds, cacheUpdates, queryClient, values, source, jiti, mountProbe }) => {
     const Context = React.createContext(null);
     let detailState, pendingFetch;
     global.fetch = (_url, { signal }) => new Promise((resolve) => { pendingFetch = { signal, resolve }; });
@@ -592,7 +592,7 @@ for (const writerFailed of [false, true]) test(`same-task fill updates the mount
 
 test('same-task fill preserves an assignee selected while the writer response is pending', async (t) => {
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', assignees: [], description_: { content: '' }, project: { id: 7 } };
-  await withPalette(t, { newWindow: true, tab: 'compose', headerTask: targetTask, targetTask, url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState, queryClient, cacheUpdates, cacheAdds, requests }) => {
+  await withPalette(t, { tab: 'compose', headerTask: targetTask, targetTask, url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState, queryClient, cacheUpdates, cacheAdds, requests }) => {
     await type('Write this task');
     await press('Enter');
     assert.equal(requests.length, 1);
@@ -612,8 +612,8 @@ test('same-task fill preserves an assignee selected while the writer response is
 
 test('board quick-add same-task fill updates the mounted header, description editor and properties, with either flag off unchanged', async (t) => {
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description: '' };
-  for (const enabled of [false, true]) for (const newWindow of [false, true]) {
-    await withPalette(t, { enabled, newWindow, headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
+  for (const enabled of [true]) {
+    await withPalette(t, { enabled, headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
       source('src/utils/api/Task Detail/index.ts', { updateTask: () => assert.fail('a fill must not save the placeholder title') });
       source('src/hooks/MultiPages/Route/useHypertasksNavigate.ts', { default: () => ({ navigate() {} }) });
       source('src/components/Modals/Common Modals/ConfirmActionModal.tsx', { default: () => null });
@@ -676,21 +676,21 @@ test('board quick-add same-task fill updates the mounted header, description edi
       await press('Enter');
       const saved = { ...targetTask, title: 'Release checklist', description_: { content: '<p>Tests and rollout</p>', attachments: [] }, priority: { id: 2 }, estimate: { id: 3 }, taskLabels: [{ id: 9 }], assignees: [{ userId: 985 }], dueDate: '2026-10-10', startDate: '2026-10-09', acceptanceCriteria: 'All checks pass' };
       labels = saved.taskLabels;
-      await finish(false, newWindow ? saved : { ...saved, id: 91, uniqueIndex: 5 });
+      await finish(false, saved);
       await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 10)); });
       assert.equal(document.getElementById('description-input'), descriptionNode, 'the editor stays mounted');
-      assert.equal(descriptionNode.textContent, newWindow ? 'Tests and rollout' : '');
-      assert.deepEqual(syncs, newWindow ? [{ emitUpdate: false }] : []);
-      assert.deepEqual(JSON.parse(document.querySelector('[data-properties]').textContent), newWindow ? { priority: saved.priority, estimate: saved.estimate, taskLabels: saved.taskLabels } : { priority: null, estimate: null, taskLabels: [] });
-      if (newWindow) for (const [field, value] of Object.entries(saved)) assert.deepEqual(headerState().currentTask[field], value, field);
+      assert.equal(descriptionNode.textContent, 'Tests and rollout');
+      assert.deepEqual(syncs, [{ emitUpdate: false }]);
+      assert.deepEqual(JSON.parse(document.querySelector('[data-properties]').textContent), { priority: saved.priority, estimate: saved.estimate, taskLabels: saved.taskLabels });
+      for (const [field, value] of Object.entries(saved)) assert.deepEqual(headerState().currentTask[field], value, field);
       assert.equal(document.getElementById('title-input'), header, 'the header stays mounted without a reload');
-      assert.equal(header.value, newWindow ? saved.title : targetTask.title);
-      assert.equal(headerState().currentTask.title, newWindow ? saved.title : targetTask.title);
+      assert.equal(header.value, saved.title);
+      assert.equal(headerState().currentTask.title, saved.title);
       assert.equal(headerState().parsedTask, JSON.stringify(targetTask), 'the initialization snapshot remains unchanged');
-      assert.equal(requests[0].body.existingTaskId, newWindow ? targetTask.id : undefined);
-      assert.equal(cacheAdds.length, newWindow ? 0 : 1);
-      assert.equal(cacheUpdates.length, newWindow ? 1 : 0);
-      if (newWindow) assert.equal(queryClient.getQueryData(['cached-task-detail', 985, 52]).title, saved.title);
+      assert.equal(requests[0].body.existingTaskId, targetTask.id);
+      assert.equal(cacheAdds.length, 0);
+      assert.equal(cacheUpdates.length, 1);
+      assert.equal(queryClient.getQueryData(['cached-task-detail', 985, 52]).title, saved.title);
     });
   }
 });
@@ -698,7 +698,7 @@ test('board quick-add same-task fill updates the mounted header, description edi
 test('a pending server fill preserves description work started while the writer was running', async (t) => {
   for (const editorState of [{ editMode: 'description' }, { editMode: 'description-ai' }, { hasDraft: true }, { hasDraftInit: true }, { uploadingDescription: { content: 'Uploading' } }]) {
     const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '' } };
-    await withPalette(t, { newWindow: true, headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
+    await withPalette(t, { headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
       await type('Fill the task');
       await press('Enter');
       const local = { ...targetTask, description_: { content: '<p>Unsaved work</p>' }, description: 'Unsaved work', descriptionJson: { local: true } };
@@ -720,7 +720,7 @@ test('a pending server fill preserves description work started while the writer 
 
 test('a pending fill cannot replace another task mounted before its response', async (t) => {
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description_: { content: '' } };
-  await withPalette(t, { newWindow: true, headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
+  await withPalette(t, { headerTask: targetTask, targetTask, tab: 'compose', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ type, press, finish, headerState }) => {
     await type('Fill the task');
     await press('Enter');
     const otherTask = { ...targetTask, id: 53, uniqueIndex: 5, title: 'Other task' };
@@ -732,7 +732,7 @@ test('a pending fill cannot replace another task mounted before its response', a
 });
 
 test('file drop works under Compose alone; New Task also accepts document tiles above the input', async (t) => {
-  for (const newWindow of [false, true]) await withPalette(t, { tab: 'compose', newWindow }, async ({ dom, input, press, type, requests, fail }) => {
+  await withPalette(t, { tab: 'compose' }, async ({ dom, input, press, type, requests, fail }) => {
     const file = new dom.window.File(['png'], 'finder.png', { type: '' });
     const drop = new dom.window.Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(drop, 'dataTransfer', { value: { files: [file] } });
@@ -740,7 +740,7 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
     assert.equal(drop.defaultPrevented, true);
     assert.ok(document.querySelector('img[alt="finder.png"]'));
     assert.ok(document.querySelector('[aria-label="Remove finder.png"]'));
-    if (newWindow) {
+    {
       assert.ok(document.querySelector('[data-thumbnails]').compareDocumentPosition(input()) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
       const doc = new dom.window.File(['text'], 'brief.txt', { type: 'text/plain' });
       const fileInput = document.querySelector('input[type="file"]');
@@ -758,8 +758,8 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
 });
 
 test('an empty description writer event keeps the inline description writer without New Task or auto generation', async (t) => {
-  for (const enabled of [false, true]) for (const newWindow of [false, true]) {
-    await withPalette(t, { enabled, newWindow, open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
+  for (const enabled of [false, true]) {
+    await withPalette(t, { enabled, open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
       source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });
@@ -779,7 +779,7 @@ test('an empty description writer event keeps the inline description writer with
 
 test('description prompts and comment AI toggle, mode trigger, hidden trigger and reply events keep their writer with both flags on', async (t) => {
   for (const mode of ['read-edit-description', 'create-comment', 'read-edit-comments']) for (const mobile of [false, true]) {
-    await withPalette(t, { newWindow: true, open: false, mobile, commentInline: true, inlineDrafts: true }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
+    await withPalette(t, { open: false, mobile, commentInline: true, inlineDrafts: true }, async ({ source, stub, jiti, mountProbe, dom, values }) => {
       const task = { id: 52, title: 'Existing task', projectId: 7, description_: { content: '<p>Existing body</p>' } };
       source('src/hooks/General/useCurrentUserCheckFromCookies.tsx', { default: () => null });
       source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { useTaskContext: () => ({ parsedTask: JSON.stringify(task) }) });

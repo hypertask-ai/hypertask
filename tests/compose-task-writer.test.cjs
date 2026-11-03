@@ -420,10 +420,9 @@ test('document attachments stay links rather than broken images and are still bo
   });
 });
 
-test('save existing target enforces both flags, edit permissions, board match and empty state before normal update controller', async () => {
-  const newFlag = 'htpr-6937-new-task-window';
+test('save existing target enforces the compose flag, edit permissions, board match and empty state before normal update controller', async () => {
   const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
-  let compose = true, newWindow = false, authorized = true, target = null;
+  let compose = true, authorized = true, target = null;
   const taskReads = [], updates = [], broadcasts = [], flags = [];
   const sharedRoute = loadSharedRoute(async () => ({ userId: 985 }));
   const stubs = {
@@ -432,8 +431,8 @@ test('save existing target enforces both flags, edit permissions, board match an
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
-    '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
-      isFeatureEnabled: async (key) => { flags.push(key); return key === flag ? compose : newWindow; } },
+    '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag,
+      isFeatureEnabled: async (key) => { flags.push(key); return compose; } },
     '@/lib/prisma': { __esModule: true, default: {
       user: { findUnique: async () => ({ id: 985 }) },
       project: { findFirst: async () => authorized ? { id: 7 } : null },
@@ -458,11 +457,9 @@ test('save existing target enforces both flags, edit permissions, board match an
     } }, res);
     return res;
   };
+  compose = false;
   assert.equal((await post()).code, 403);
-  assert.deepEqual(flags, [flag, newFlag]);
-  assert.equal(taskReads.length, 0);
-  compose = false; newWindow = true;
-  assert.equal((await post()).code, 403);
+  assert.deepEqual(flags, [flag]);
   assert.equal(taskReads.length, 0);
   compose = true; authorized = false;
   assert.equal((await post()).code, 403);
@@ -484,18 +481,17 @@ test('save existing target enforces both flags, edit permissions, board match an
   assert.equal(broadcasts.length, 2);
 });
 
-test('writer existing-task requests gate new flag and task edit scope before any AI or board retrieval', async () => {
+test('writer existing-task requests gate the compose flag and task edit scope before any AI or board retrieval', async () => {
   const cached = new Map(Object.entries(require.cache));
-  const newFlag = 'htpr-6937-new-task-window';
-  let compose = true, newWindow = false, target = null;
+  let compose = true, target = null;
   const taskQueries = []; let boardReads = 0;
   const source = (file, exports) => {
     const filename = path.join(root, file);
     require.cache[filename] = { id: filename, filename, loaded: true, exports };
   };
   try {
-    source('src/lib/flags.ts', { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
-      isFeatureEnabled: async (key) => key === flag ? compose : newWindow });
+    source('src/lib/flags.ts', { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag,
+      isFeatureEnabled: async () => compose });
     source('src/lib/prisma.ts', { default: {
       task: { findFirst: async (query) => { taskQueries.push(query); return target; } },
       project: { findFirst: async () => { boardReads++; return null; } },
@@ -505,11 +501,10 @@ test('writer existing-task requests gate new flag and task edit scope before any
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
     const { prepareTaskWriterRun, taskWriterRequestSchema, AiFeatureDisabledError, ProjectAccessError } = jiti(path.join(root, 'src/app/api/ai/_lib/taskWriterRun.ts'));
     const body = taskWriterRequestSchema.parse({ projectId: 7, PROMPT: 'note', requestKind: 'compose-task', existingTaskId: 52 });
+    compose = false;
     await assert.rejects(prepareTaskWriterRun(body, 985), AiFeatureDisabledError);
     assert.equal(taskQueries.length, 0);
-    compose = false; newWindow = true;
-    await assert.rejects(prepareTaskWriterRun(body, 985), AiFeatureDisabledError);
-    assert.equal(taskQueries.length, 0);
+    assert.equal(boardReads, 0);
     compose = true;
     await assert.rejects(prepareTaskWriterRun(body, 985), ProjectAccessError);
     assert.deepEqual(taskQueries[0].where, { id: 52, projectId: 7, status: 'Normal', project: { writer: 985, agentId: undefined } });

@@ -65,7 +65,7 @@ test("board names are literal, blank aliases are ignored and repeated mentions c
 
 for (const mobile of [false, true]) {
   test(`text match updates the existing ${mobile ? "phone" : "desktop"} chip before saving on its displayed board`, async (t) => {
-    await withPalette(t, { mobile, newWindow: true, tab: "compose", boards, url: "/project?id=7" }, async ({ flags, rerender, type, press, requests, input }) => {
+    await withPalette(t, { mobile, tab: "compose", boards, url: "/project?id=7" }, async ({ flags, rerender, type, press, requests, input }) => {
       flags[flag] = true;
       await rerender();
       const note = "Improve search for the project hypertask product";
@@ -82,7 +82,7 @@ for (const mobile of [false, true]) {
 }
 
 test("a manual chip choice after a text match wins, including after more typing", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", boards, url: "/inbox", previousBoard: "project-7" }, async ({ flags, rerender, type, press, requests }) => {
+  await withPalette(t, { tab: "compose", boards, url: "/inbox", previousBoard: "project-7" }, async ({ flags, rerender, type, press, requests }) => {
     flags[flag] = true;
     await rerender();
     await type("Improve search in Hypertask Product");
@@ -102,7 +102,7 @@ test("a manual chip choice after a text match wins, including after more typing"
 });
 
 test("flag off retains the old destination and input with the board chip on", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", boards, url: "/inbox", previousBoard: "project-7" }, async ({ type, press, requests, input }) => {
+  await withPalette(t, { tab: "compose", boards, url: "/inbox", previousBoard: "project-7" }, async ({ type, press, requests, input }) => {
     const note = "Improve search in Hypertask Product";
     await type(note);
     assert.equal(chip().textContent, "QA Sandbox");
@@ -114,7 +114,7 @@ test("flag off retains the old destination and input with the board chip on", as
 });
 
 test("text routing still works when the board chip is shown", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", boards, url: "/detail/project-7/42", inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: "", description_: { content: "" } } }, async ({ flags, rerender, type, press, requests }) => {
+  await withPalette(t, { tab: "compose", boards, url: "/detail/project-7/42", inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: "", description_: { content: "" } } }, async ({ flags, rerender, type, press, requests }) => {
     flags[flag] = true;
     await rerender();
     await type("Improve search in HTPR");
@@ -128,7 +128,7 @@ test("text routing still works when the board chip is shown", async (t) => {
 for (const [url, expected] of [["/project?id=7", 7], ["/inbox", 9]]) {
   for (const note of ["Improve search", "Improve in Hypertask Product and on board QA Sandbox"]) {
     test(`no unique text match preserves destination ${expected} from ${url}: ${note}`, async (t) => {
-      await withPalette(t, { newWindow: true, tab: "compose", boards, url, previousBoard: "project-9" }, async ({ flags, rerender, type, press, requests }) => {
+      await withPalette(t, { tab: "compose", boards, url, previousBoard: "project-9" }, async ({ flags, rerender, type, press, requests }) => {
         flags[flag] = true;
         await rerender();
         await type(note);
@@ -141,7 +141,7 @@ for (const [url, expected] of [["/project?id=7", 7], ["/inbox", 9]]) {
 }
 
 test("removing a match or adding a second board restores the contextual board before saving", async (t) => {
-  await withPalette(t, { newWindow: true, tab: "compose", boards, url: "/inbox", previousBoard: "project-7" }, async ({ flags, rerender, type }) => {
+  await withPalette(t, { tab: "compose", boards, url: "/inbox", previousBoard: "project-7" }, async ({ flags, rerender, type }) => {
     flags[flag] = true;
     await rerender();
     await type("Improve search in Hypertask Product");
@@ -159,7 +159,7 @@ test("removing a match or adding a second board restores the contextual board be
 test("a cold board list cannot race Enter or Send and save on the old board", async (t) => {
   notifyManager.setScheduler(queueMicrotask);
   t.after(() => notifyManager.setScheduler(defaultScheduler));
-  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7", coldBoards: boards }, async ({ flags, rerender, type, press, requests, boardsArrive }) => {
+  await withPalette(t, { tab: "compose", url: "/project?id=7", coldBoards: boards }, async ({ flags, rerender, type, press, requests, boardsArrive }) => {
     flags[flag] = true;
     await rerender();
     await type("Improve search in Hypertask Product");
