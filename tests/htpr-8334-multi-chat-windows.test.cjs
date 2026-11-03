@@ -187,6 +187,6 @@ test("multi chat windows: choosing a chat at the cap leaves the current conversa
 test("multi chat windows: a new chat adds a window instead of replacing the open one", () => {
   const header = read("src/components/AI_CHAT/ChatHeader.tsx");
   assert.match(header, /if \(!windowDrag && multiChatWindowsEnabled && chatWindowControls\) \{\n      const opened = await chatWindowControls\.openNewChatWindow\(\);/);
-  const sidebar = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
-  assert.match(sidebar, /const startChat = async \(\) => \{\n    if \(multiChatWindowsEnabled && chat\.chatWindows\?\.enabled\) \{\n      const opened = await chat\.chatWindows\.openNewChatWindow\(\);/);
+  const shortcuts = read("src/hooks/MultiPages/AIChat/useChatShortcuts.tsx");
+  assert.match(shortcuts, /const startNewChat = chat\.chatWindows\?\.enabled \? chat\.chatWindows\.openNewChatWindow : options\.onNewChat \?\? chat\.startNewSession;/);
 });
