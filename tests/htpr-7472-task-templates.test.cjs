@@ -323,8 +323,8 @@ test("flag off retains the already-released board-format rule without adding ide
   assert.doesNotMatch(prompt, /FINISHED IDEAS AND TEMPLATE TITLES/);
 });
 const productionPromptHashes = {
-  "false/false": "d6c7f5dbf6f0d5e3f2803c541eaf791975bc881770d58832e2a983b6483863a6",
-  "false/true": "7258852b9c4974bc530eafff29c85b164f2dda6b18abc8499ac45db1623b3794",
+  "false/false": "4df0baca1d375e6554a4ae62a4160612ba1007905dec572619461e0113b3e258",
+  "false/true": "31d97f39ea4f08ac3053f7e99aedc4cbaa1431b08a8fd64d10a3358d38f63a0b",
   "true/false": "a36bbc7434b72d12df26a35e7116b4a7a17f380bfcd26d7efcc13a698c9350eb",
   "true/true": "8326ea1356969091d7c5ff0a8199da18d1d9eff7dffa1e300c2341b01a919b37"
 };

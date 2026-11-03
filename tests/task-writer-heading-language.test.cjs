@@ -98,7 +98,7 @@ test("Write with AI has its own comment template and stays unchanged", async () 
   const on = await prepare({ prompt, aiMode: "WriteWithAI" });
   const off = await prepare({ prompt, aiMode: "WriteWithAI", enabled: false });
   assert.equal(on.run.instructions, off.run.instructions);
-  assert.equal(on.run.instructions, `${editorPrompts.createKanbanSystemPrompt("write_with_ai")}\n\nUse the board structure.`);
+  assert.equal(on.run.instructions, `${editorPrompts.createKanbanSystemPrompt("write_with_ai", editorPrompts.TASK_AUTHORING_WEB_STYLE)}\n\nUse the board structure.`);
   assert.ok(!on.checks.some(([key]) => key === flag));
   assert.doesNotMatch(on.run.instructions, /sections covering: problem, affected screen, acceptance criteria, out of scope/);
 });
