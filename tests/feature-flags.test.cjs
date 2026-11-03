@@ -373,6 +373,16 @@ test("phone task writer sheet is permanent and no longer registered", async () =
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("task-writing progress is permanent and no longer registered", async () => {
+  const key = ["htpr", "6951", "task", "writing", "progress"].join("-");
+  const identifier = ["HTPR", "6951", "TASK", "WRITING", "PROGRESS", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 test("demo login own-board bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG;
   assert.equal(key, "htpr-7035-demo-login-own-board");
@@ -1001,7 +1011,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
 });
 
 test("listed related keys cannot mutate registered flag metadata", async () => {
-  const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
+  const key = flags.HTPR_8251_DESCRIPTION_AI_EDIT_FLAG;
   const first = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   const expected = [...first.related];
   first.related.length = 0;
