@@ -2395,15 +2395,6 @@ jobs:
           VISUAL_BASE_ONLY: 'false'
           VISUAL_HEAD_BUILD: artifact
         run: node head/scripts/visual-regression-ci.mjs
-      # HYCI-99: a pull-request comparison that rebuilt or downloaded the base
-      # screens publishes them into its own pull-request cache scope, so the next
-      # push to the same pull request skips the base build too.
-      - name: Save the validated visual baseline
-        if: success() && steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/visual-expected
-          key: ${{ steps.baseline-cache.outputs.cache-primary-key }}
       - name: Summarize failed screens
         if: always() && steps.scope.outputs.visual_needed != 'false' && hashFiles('head/scripts/visual-regression-ci.mjs') != ''
         env:

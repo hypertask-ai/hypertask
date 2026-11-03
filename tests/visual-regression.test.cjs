@@ -133,11 +133,6 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(compareJob.steps.find(step => step.name === "Summarize failed screens").if, "always() && steps.scope.outputs.visual_needed != 'false' && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(compareJob.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
-  const compareSave = compareJob.steps.find(step => step.name === "Save the validated visual baseline");
-  assert.equal(compareSave.if, "success() && steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'");
-  assert.equal(compareSave.with.key, "${{ steps.baseline-cache.outputs.cache-primary-key }}");
-  assert.equal(compareSave.with.path, "${{ runner.temp }}/visual-expected");
-  assert.ok(compareJob.steps.indexOf(compareSave) > compareJob.steps.findIndex(step => step.name === "Build and capture base, then compare head"));
   const required = yaml.load(source("docs/ci-policy.yml")).required_checks.contexts;
   assert.equal(required.includes("visual-regression"), false);
   assert.equal(required.includes("verify-qa"), false);
