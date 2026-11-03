@@ -25,7 +25,7 @@ const { searchFilterWhere } = jiti(path.join(root, 'src/lib/search/filters.ts'))
 const { rankedSearchWhere } = jiti(path.join(root, 'src/lib/search/rankedWhere.ts'))
 const parse = (raw) => parseSearchQuery(raw, {}, false, true)
 
-test('with the flag off nothing new is parsed', () => {
+test('with logic off nothing new is parsed', () => {
   for (const raw of ['type:comment priority:high', '"exact phrase" -word', 'bug -"a b"']) {
     const parsed = parseSearchQuery(raw)
     assert.equal(parsed.text, raw)

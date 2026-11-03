@@ -123,16 +123,15 @@ test('four new tips describe operators and plain text without inventing phrase o
   assert.deepEqual(operatorSuggestions('exclude', true, true), [])
 })
 
-test('ticket bugfix flag defaults to Everyone and also requires the original logic gate', () => {
+test('ticket bugfix flag defaults to Everyone', () => {
   const flag = jiti(path.join(root, 'src/lib/flags/definitions/htpr-7387-search-operator-colours.ts'))
   assert.equal(flag.key, 'htpr-7387-search-operator-colours')
   assert.equal(flag.kind, 'bugfix')
   assert.equal(flag.defaultMode, 'EVERYONE')
-  assert.ok(flag.related.includes('htpr-6368-search-operator-logic'))
   assert.equal(flag.releaseRisk.risk, 'small')
 })
 
-test('existing input keeps autocomplete on across all four logic/colour flag combinations and accepts priority/type suggestions', async () => {
+test('existing input keeps autocomplete on across both colour flag states and accepts priority/type suggestions', async () => {
   const React = require('react')
   const { JSDOM } = require('jsdom')
   const { createJiti } = require('jiti')
@@ -179,17 +178,15 @@ test('existing input keeps autocomplete on across all four logic/colour flag com
       Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value)
       input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
     })
-    for (const [logic, colours] of [[false, false], [false, true], [true, false], [true, true]]) {
-      for (const [key, enabled] of [['htpr-6368-search-operator-logic', logic], ['htpr-7387-search-operator-colours', colours]]) {
-        if (enabled) flags.add(key)
-        else flags.delete(key)
-      }
-      const enabled = logic && colours
+    for (const colours of [false, true]) {
+      if (colours) flags.add('htpr-7387-search-operator-colours')
+      else flags.delete('htpr-7387-search-operator-colours')
+      const enabled = colours
       for (const operator of LOGIC_OPERATORS) {
         const value = localValueSuggestions(operator)[0].id
         const input = await render(`${operator}:${value}`)
         const chip = document.querySelector(`[aria-label="Remove ${operator}:${value} filter"]`)
-        assert.equal(Boolean(chip), enabled, `${operator}: logic=${logic}, colours=${colours}`)
+        assert.equal(Boolean(chip), enabled, `${operator}: colours=${colours}`)
         if (chip) assert.ok(chip.classList.contains(`bg-search-filter-${families[operator]}`))
         else assert.equal(input.value, `${operator}:${value}`)
       }

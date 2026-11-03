@@ -1,5 +1,4 @@
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from "@/lib/flags/keys";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
@@ -35,8 +34,7 @@ export async function searchDocuments(
     return { status: 403, json: { message: "Project access denied" } };
   }
 
-  const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, userId);
-  const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, requestedProjectIds, logicEnabled);
+  const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, requestedProjectIds, true);
   if (parsed.filters.label &&
     ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated)) {
     const labels = await prisma.label.findMany({
