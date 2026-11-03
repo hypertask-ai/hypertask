@@ -205,6 +205,8 @@ for (const refusal of [
   { status: 401, errorCode: 'token_expired' },
   { status: 403, errorCode: 'insufficient_scope' },
   { status: 403, error: 'Permission denied' },
+  { status: 403, errorCode: 'not-a-member' },
+  { status: 403, errorCode: 'not_member', error: 'This agent is not a member of this board. Ask the board owner to add it.' },
 ]) {
   test(`now refused: ${JSON.stringify(refusal)} files nothing without an open match`, async t => {
     const log = t.mock.method(console, 'info', () => {})
@@ -229,6 +231,7 @@ for (const report of [
   { status: 403, category: 'auth_failed' },
   { errorCode: 'unauthorized', category: 'auth_failed' },
   { status: 500, errorCode: 'unauthorized', category: 'auth_failed' },
+  { status: 500, errorCode: 'not-a-member', category: 'auth_failed' },
 ]) {
   test(`still filed: agent report ${JSON.stringify(report)}`, async () => {
     const f = setup()
@@ -239,6 +242,22 @@ for (const report of [
     else assert.doesNotMatch(f.created[0].description, /usually not a Hypertask bug|usually means the agent used/)
   })
 }
+
+test('a CLI board-membership refusal files no ticket and never reads as a wrong key', async t => {
+  const log = t.mock.method(console, 'info', () => {})
+  const f = setup()
+  const reported = { surface: 'cli', client: 'hypertask-cli', tool: 'task.create', errorCode: 'not-a-member', category: 'auth_failed' }
+  const result = await f.fileAiFeedback(reported, 42, { origin: 'agent', agentName: 'Runner 9' })
+  assert.deepEqual(result, { success: false, filed: false, reason: 'access_refused', error: 'Normal access refusal; no new ticket was filed.' })
+  assert.equal(f.created.length, 0)
+  assert.equal(f.comments.length, 0)
+  assert.match(log.mock.calls[0].arguments[0], /normal access refusal/)
+  for (const origin of ['agent', 'automatic']) {
+    const rendered = f.plainFeedback(reported, 'b'.repeat(64), { origin }).description
+    assert.doesNotMatch(rendered, /wrong or expired key|refused when it signed in/)
+  }
+  assert.match(f.plainFeedback(reported, 'b'.repeat(64), { origin: 'agent' }).description, /may not use that board or action/)
+})
 
 for (const reason of ['invalid_token', 'insufficient_scope', new Error('Classifier unavailable')]) {
   test(`still filed: automatic MCP 401 allowed through by 7498 (${String(reason)})`, async () => {
