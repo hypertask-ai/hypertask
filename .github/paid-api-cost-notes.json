@@ -78,5 +78,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8250 links one task to its parent through Hypertask's own same-origin add-parent route. The refactor only moves the listed option lookup; the request, payload and route are the ones that already shipped, so no provider, retry or token budget is added.",
     "source": "https://app.hypertask.ai/detail/project-15/8250"
+  },
+  "src/lib/slack/api.ts:358f54578c5f4b9f87252011a8fcb3513c6b94b60e70fa98c555a6aeaa09567c": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8276 keeps the existing single Slack chat.postMessage call per new board-15 feedback ticket; only its notification fallback text now carries the line instead of the words 'Hypertask response'. Slack Web API calls are not billed per call.",
+    "source": "https://api.slack.com/methods/chat.postMessage"
   }
 }

@@ -23,7 +23,7 @@ secretGroup = 1
 entropy = 4.0
 keywords = ["token", "secret", "key", "password"]
 
-[allowlist]
+[[allowlists]]
 description = "Known false positives"
 regexes = [
   '''AIzaSy[0-9A-Za-z_-]{33}''',
@@ -37,4 +37,18 @@ regexes = [
   '''^(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG$''',
   # QA login unit-test fixture, never a live secret.
   '''correct-horse-battery-staple-32b''',
+]
+
+# `.github/paid-api-cost-notes.json` keys are `source path:sha256` pairs written by
+# `paid-api-cost-notes.mjs`. When the source path names a service the generic rules watch
+# (Slack, for example) the digest next to it reads as a key. Digests on that file's lines are
+# not credentials.
+[[allowlists]]
+description = "Source digests in the paid API cost notes, never credentials"
+paths = [
+  '''^\.github/paid-api-cost-notes\.json$''',
+]
+regexTarget = "line"
+regexes = [
+  '''[0-9a-f]{64}''',
 ]
