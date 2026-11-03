@@ -235,18 +235,18 @@ process.on("exit", (exitCode) => {
 });
 
 if (cjsTests.length > 0) {
-  const { serial, pool, safe, weightOf } = await classifySuite({ root, files: cjsTests });
+  const { serial, pool, safe, weightOf, workOf } = await classifySuite({ root, files: cjsTests });
   for (const file of serial) {
     await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`, { serial: true });
   }
   const width = Math.max(1, Number(TEST_CONCURRENCY));
   let poolFiles = safe.length > 1 ? pool : [...pool, ...safe];
   let sharedFiles = safe.length > 1 ? safe : [];
-  const weightOfClass = (files) => files.reduce((total, file) => total + weightOf(file), 0);
+  const workOfClass = (files) => files.reduce((total, file) => total + workOf(file), 0);
   const laneBudget = poolFiles.length === 0 ? width : width - 1;
   const pickLanes = () => {
-    const poolWeight = weightOfClass(poolFiles);
-    const safeWeight = weightOfClass(sharedFiles);
+    const poolWeight = workOfClass(poolFiles);
+    const safeWeight = workOfClass(sharedFiles);
     return Math.min(laneBudget, Math.max(1, Math.round(width * safeWeight / Math.max(1, safeWeight + poolWeight))));
   };
   let lanes = sharedFiles.length === 0 || laneBudget < 1 ? 0 : pickLanes();
@@ -265,7 +265,7 @@ if (cjsTests.length > 0) {
       { concurrency: poolWidth, deferred: true },
     ));
   }
-  const laneGroups = partitionSafeFiles(sharedFiles, lanes, weightOf);
+  const laneGroups = partitionSafeFiles(sharedFiles, lanes, workOf);
   for (const [index, files] of laneGroups.entries()) {
     const batches = batchLaneFiles(files, { maxFiles: TEST_LANE_FILE_CAP, maxBytes: TEST_LANE_BYTE_CAP, weightOf });
     jobs.push((async () => {

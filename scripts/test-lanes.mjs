@@ -60,6 +60,15 @@ export async function hazardousHelpers(root) {
   return helpers;
 }
 
+const DURATION_WEIGHTS = "config/test-duration-weights.json";
+
+async function measuredWork(root) {
+  const parsed = JSON.parse(await readFile(path.join(root, DURATION_WEIGHTS), "utf8").catch(() => "null"));
+  const defaultWorkMs = Number(parsed?.defaultWorkMs);
+  if (!Number.isFinite(defaultWorkMs) || defaultWorkMs <= 0) return null;
+  return (file) => Number(parsed.files?.[file]) || defaultWorkMs;
+}
+
 export async function classifySuite({ root, files }) {
   const serial = [];
   const pool = [];
@@ -76,7 +85,8 @@ export async function classifySuite({ root, files }) {
     if (needsOwnProcess(file, source, helpers)) pool.push(file);
     else safe.push(file);
   }
-  return { serial, pool, safe, weightOf: (file) => weights.get(file) ?? 1 };
+  const bytesOf = (file) => weights.get(file) ?? 1;
+  return { serial, pool, safe, weightOf: bytesOf, workOf: await measuredWork(root) ?? bytesOf };
 }
 
 export const LANE_BATCH = { maxFiles: 20, maxBytes: 100_000, concurrentFiles: 2 };
