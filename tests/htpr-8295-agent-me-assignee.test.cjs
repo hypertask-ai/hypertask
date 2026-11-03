@@ -79,8 +79,7 @@ function fixture(surface, { personFilter = true, agentFilter = true, agentId = c
   };
   const implementation = load(files[surface], mocks);
   return {
-    // Every assignee predicate the handler put in a where, so the test does not depend on query order.
-    assigneeFilters() {
+    allAssigneePredicates() {
       return queries.map((where) => where.assignees).filter(Boolean);
     },
     flagKeys() {
@@ -111,7 +110,7 @@ for (const surface of ["MCP list", "MCP search"]) {
   test(`${surface} assignee=me as an agent filters by that agent's assignment`, async () => {
     const f = fixture(surface);
     await f.run({ assigned_to: "me" });
-    const filters = f.assigneeFilters();
+    const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0, "the handler must filter on an assignee");
     for (const filter of filters) assert.deepEqual(filter, { some: { agentId: callerAgent } });
     assert.deepEqual(f.flagKeys(), [personFlag, agentFlag]);
@@ -120,7 +119,7 @@ for (const surface of ["MCP list", "MCP search"]) {
   test(`${surface} assignee=me as an agent with the flag off keeps owner matching`, async () => {
     const f = fixture(surface, { agentFilter: false });
     await f.run({ assigned_to: "me" });
-    const filters = f.assigneeFilters();
+    const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { some: { userId: user.id, agentId: null } });
     assert.deepEqual(f.flagKeys(), [personFlag, agentFlag]);
@@ -129,7 +128,7 @@ for (const surface of ["MCP list", "MCP search"]) {
   test(`${surface} assignee=me as a person is unchanged and reads no agent flag`, async () => {
     const f = fixture(surface, { agentId: null });
     await f.run({ assigned_to: "me" });
-    const filters = f.assigneeFilters();
+    const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { some: { userId: user.id, agentId: null } });
     assert.deepEqual(f.flagKeys(), [personFlag]);
@@ -138,7 +137,7 @@ for (const surface of ["MCP list", "MCP search"]) {
   test(`${surface} assignee=me as an agent with both flags off keeps every owner-backed row`, async () => {
     const f = fixture(surface, { personFilter: false, agentFilter: false });
     await f.run({ assigned_to: "me" });
-    const filters = f.assigneeFilters();
+    const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { some: { userId: user.id } });
   });
@@ -146,7 +145,7 @@ for (const surface of ["MCP list", "MCP search"]) {
   test(`${surface} unassigned is unchanged for an agent`, async () => {
     const f = fixture(surface);
     await f.run({ assigned_to: "unassigned" });
-    const filters = f.assigneeFilters();
+    const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { none: {} });
   });
@@ -154,7 +153,7 @@ for (const surface of ["MCP list", "MCP search"]) {
   test(`${surface} an explicit user id is unchanged for an agent`, async () => {
     const f = fixture(surface);
     await f.run({ assigned_to: "6" });
-    const filters = f.assigneeFilters();
+    const filters = f.allAssigneePredicates();
     assert.ok(filters.length > 0);
     for (const filter of filters) assert.deepEqual(filter, { some: { userId: { in: [6] }, agentId: null } });
   });
