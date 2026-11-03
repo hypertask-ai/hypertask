@@ -239,8 +239,8 @@ export async function GET(request: NextRequest) {
         })),
         status: project.status,
         createdAt: project.createdAt.toISOString(),
+        teamId: showTeamId ? project.teamId ?? null : undefined,
       }
-      if (showTeamId) row.teamId = project.teamId ?? null
       return row
     })
 
