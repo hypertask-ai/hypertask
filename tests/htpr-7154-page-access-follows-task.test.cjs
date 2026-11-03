@@ -108,6 +108,7 @@ for (const operation of ['get', 'versions', 'update', 'archive', 'restore']) {
         '@/utils/controllers/pages/pageService': h.service,
         '@/lib/mcp/operations/pages/helpers': helpers(board),
         '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (s) => s, htmlToMarkdownWithTables: (s) => s },
+        '@/utils/controllers/pages/standaloneContent': { storedPageContentType: async ({ contentType }) => contentType },
         '@/utils/controllers/pages/htmlCanvas': { decodeHtmlCanvas: () => null },
         '@/lib/flags': { isFeatureEnabled: async () => true },
       });
