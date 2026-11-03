@@ -75,7 +75,7 @@ function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
   const { removeFromListWithStatus } = load(['reAdjustFocusFromCurrContext', 'removeFromListWithStatus'], 'src/hooks/MultiPages/useUpdateTaskInBoards.tsx', env);
   const latestRef = { current: {} };
   const { markAsDone } = load(['markAsDone'], 'src/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage.tsx', {
-    latestRef, lastgClick: { current: null }, updateParentTask() {}, useCallback: callback => callback,
+    latestRef, lastgClick: { current: null }, updateParentTask() {}, useCallback: callback => callback, archiveShortcutAlwaysRuns: true,
   });
   return {
     document, column, archived, undo, active: () => active, sections: () => sections,
