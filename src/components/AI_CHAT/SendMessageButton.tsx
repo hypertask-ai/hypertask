@@ -49,6 +49,9 @@ export function SendMessageButton({
   if (mobile) {
     buttonClassName =
       "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-sm bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+  } else if (cleanup && label) {
+    buttonClassName =
+      "relative group flex h-7 items-center justify-center rounded bg-shadcn-primary px-2 text-dense text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
   } else if (!disabled && queueMode) {
     buttonClassName += " text-text-light-gray hover:text-white-black";
   } else if (!disabled) {

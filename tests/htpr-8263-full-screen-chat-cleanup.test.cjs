@@ -46,6 +46,7 @@ test('the text Send button keeps the mobile arrow and an icon fallback', () => {
   const button = read('src/components/AI_CHAT/SendMessageButton.tsx');
   assert.match(button, new RegExp(`useFlag\\(${FLAG}\\)`));
   assert.match(button, /aria-label=\{queueMode \? "Queue message" : cleanup && label \? label : "Send message"\}/);
+  assert.match(button, /bg-shadcn-primary px-2 text-dense text-primary-foreground/, 'the labelled Send keeps primary action styling');
   assert.match(button, /\) : cleanup && label \? \(\s*<span>\{label\}<\/span>/, 'desktop renders the text label');
   assert.match(button, /\{mobile \? \(\s*<SendArrow size=\{22\} \/>/, 'mobile keeps the arrow button');
   assert.match(button, /<Send size=\{16\} strokeWidth=\{1\.75\} \/>/, 'callers without a label keep the paper plane');
@@ -68,7 +69,7 @@ test('the full-screen placeholder loses the shortcut text and the focus hint bec
 test('dictation chrome is words-only: no device chevron, a Dictate tooltip and an elapsed pill', () => {
   const audio = read('src/components/RTE/Components/AudioButton.tsx');
   assert.match(audio, new RegExp(`useFlag\\(${FLAG}\\)`));
-  assert.match(audio, /\{!isMobileView && !\(isAiChat && chatCleanup\) && \(/, 'the chat mic has no device chevron');
+  assert.match(audio, /\{!isMobileView && !hideDevicePicker && \(/, 'the device chevron is hidden only where the surface asks');
   assert.match(audio, /text=\{"Dictate"\}/);
   assert.match(audio, /\{isAiChat && chatCleanup && \(\s*<span\s*data-ai-chat-recording-elapsed/);
   assert.match(audio, /const \[elapsedSeconds, setElapsedSeconds\] = useState\(0\);/);

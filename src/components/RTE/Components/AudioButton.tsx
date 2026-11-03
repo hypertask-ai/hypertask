@@ -45,6 +45,7 @@ interface IProp {
   disabled?: boolean;
   active?: boolean;
   projectId?: number | null;
+  hideDevicePicker?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -76,6 +77,7 @@ export const AudioButton = ({
   dictationCoordinator,
   disabled = false,
   active = true,
+  hideDevicePicker = false,
 }: IProp) => {
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -767,7 +769,7 @@ export const AudioButton = ({
             );
           })()}
 
-          {!isMobileView && !(isAiChat && chatCleanup) && (
+          {!isMobileView && !hideDevicePicker && (
             <button
               type="button"
               aria-label="Choose microphone"
