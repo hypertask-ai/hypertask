@@ -268,6 +268,7 @@ function loadCommentsRoute({
     if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs")
     if (modules[request]) return modules[request]
     if (request === "@/lib/planLimits") return { isPlanLimitReachedError: () => false }
+    if (request === "@/lib/mcp/comments/contentPresence") return jiti(path.join(root, 'src/lib/mcp/comments/contentPresence.ts'))
     throw new Error(`Unexpected import: ${request}`)
   }
   modules['@/lib/mcp/comments/visibleReactionAgents'] =

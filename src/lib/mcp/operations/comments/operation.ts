@@ -38,6 +38,7 @@ import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
 import { withActivityMetadata } from '@/lib/mcp/comments/activityMetadata'
+import { hasVisibleContent } from '@/lib/mcp/comments/contentPresence'
 import type { TaskAgentLogEntry } from '@/lib/agentRuns/taskAgentLog'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import {
@@ -936,6 +937,16 @@ export async function POST(request: NextRequest) {
     )
     sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images, attachments: images?.map((url: string) => ({ url })) })
     sanitizedText = normalizeBlockHtml(sanitizedText)
+
+    if (!hasVisibleContent(sanitizedText) && (images?.length ?? 0) === 0 && !hasImageAttachments && has_attachments !== true) {
+      return NextResponse.json(
+        {
+          ...buildFieldError('missing_field', 'text', 'Comment text is required'),
+          ...(dryRun && { valid: false })
+        },
+        { status: 400 }
+      )
+    }
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
     if (textMentionIds.length > 0) {

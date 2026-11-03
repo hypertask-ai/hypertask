@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
+import { hasVisibleContent } from '@/lib/mcp/comments/contentPresence'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
@@ -289,6 +290,17 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     }
     sanitizedText = await inlineAgentImagesForUser(sanitizeRichHtml(sanitizedText), user.id, { inlineImages: body.inline_images })
     sanitizedText = normalizeBlockHtml(sanitizedText)
+
+    if (!hasVisibleContent(sanitizedText)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Comment text is required',
+          message: 'text must be a non-empty string'
+        },
+        { status: 400 }
+      )
+    }
 
     const textMentionIds = extractTipTapContent(sanitizedText).mentions.map((id) => parseInt(id, 10))
     if (textMentionIds.length > 0) {
