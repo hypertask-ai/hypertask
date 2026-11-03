@@ -11,23 +11,24 @@ const route = taskWriteRoute({
   schema: z.custom<{ parsedTaskId: number }>((body) => Number.isInteger((body as any)?.parsedTaskId) && (body as any).parsedTaskId >= 0),
   validationMessage: "Missing required information",
   operation: async ({ parsedTaskId }, session) => {
-    const deletedTask = await prisma.task.findFirst({
+    const visibleTask = await prisma.task.findFirst({
       where: {
         id: parsedTaskId,
-        status: "Deleted",
         project: taskWriteAccessWhere(session.userId),
       },
-      select: { projectId: true },
+      select: { projectId: true, status: true },
     });
-    if (!deletedTask)
+    if (!visibleTask)
       return NextResponse.json({ message: "Task not found or access denied" }, { status: 404 });
+    if (visibleTask.status !== "Deleted")
+      return NextResponse.json({ message: "Task is not in the trash" }, { status: 409 });
     const invokeDelete = await permanentlyDeleteTask(
       parsedTaskId,
       session.userId,
     );
 
     if (invokeDelete === "success") {
-      void broadcastBoardChange(deletedTask?.projectId);
+      void broadcastBoardChange(visibleTask.projectId);
       return NextResponse.json({ message: "Success" }, { status: 200 });
     }
     return NextResponse.json({ message: "Task is being restored or permanently deleted" }, { status: 409 });
