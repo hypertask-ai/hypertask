@@ -1,32 +1,20 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
+const commandMode = new Proxy({}, {
+  get: (_target, name) => (typeof name === "string" ? name : undefined),
+});
 
-function loadTaskCommands() {
-  const file = "src/components/Modals/commands/HTC/taskCommands.ts";
-  const dependencies = {
-    "@/models/enums": {
-      CommandMode: new Proxy({}, { get: (_target, name) => String(name) }),
-    },
+const { getCommentCommands } = loadModule(
+  "src/components/Modals/commands/HTC/taskCommands.ts",
+  {
+    "@/models/enums": { CommandMode: commandMode },
     "@/models/model": {},
     "./HTCTypes": {},
     "@/lib/shortcuts/shareTaskShortcuts": { shareTaskShortcutKeys: () => [] },
-  };
-  const exports = {};
-  const javascript = ts.transpileModule(
-    fs.readFileSync(path.join(root, file), "utf8"),
-    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }
-  ).outputText;
-  new Function("require", "exports", javascript)((name) => {
-    assert.ok(Object.hasOwn(dependencies, name), `Unexpected import ${name} in ${file}`);
-    return dependencies[name];
-  }, exports);
-  return exports;
-}
+  }
+);
 
 const commentOptions = ({
   isBlocker = false,
@@ -42,8 +30,7 @@ const commentOptions = ({
 });
 
 function commentCommands(options) {
-  return loadTaskCommands().getCommentCommands({ commentOptions: options })
-    .commandLists;
+  return getCommentCommands({ commentOptions: options }).commandLists;
 }
 
 test("a blocker comment puts Unmark as blocker first in the comment actions", () => {
