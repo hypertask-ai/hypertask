@@ -21,7 +21,7 @@ function viewport({ mobile, enabled, userId = 985 }) {
     "@/lib/flags/definitions/htpr-8145-phone-zoom": { HTPR_8145_PHONE_ZOOM_FLAG: key },
   };
   const unusedImports = [
-    "@/styles/globals.scss", "@/styles/tailwindThemes/rounded.css", "../../tokens.css",
+    "@/styles/globals.scss", "@/styles/tailwindThemes/rounded.css", "@/styles/tailwindThemes/graphite-2.css", "../../tokens.css",
     "@/utils/Providers", "@/hooks/useFlag", "@/components/Analytics/PostHogAnalytics",
     "@vercel/speed-insights/next", "@/components/ErrorBoundary/ClientErrorReporter",
     "@/lib/ai/AiChipEventRecorder", "@/components/System/DeploySkewGuard",

@@ -1334,7 +1334,13 @@ export const getAllCommands = (
   blockerCommentEnabled = false,
   shareKeyLabels = false,
   removeImageGeneration = false,
+  graphite2Enabled = false,
 ): CommandGroup[] => {
+  const appearanceCommands = graphite2Enabled ? { ...appearance, commandLists: [
+    ...appearance.commandLists.slice(0, 3),
+    { key: "graphite2Theme", name: "Graphite 2", commandMode: CommandMode.ToggleGraphite2Theme, keywords: "dark graphite 2 iconoir theme appearance" },
+    ...appearance.commandLists.slice(3),
+  ] } : appearance;
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
@@ -1369,11 +1375,11 @@ export const getAllCommands = (
     teamAndBilling,
     snippets,
     ai,
-    roundedEnabled ? { ...appearance, commandLists: [
-      ...appearance.commandLists.slice(0, 5),
+    roundedEnabled ? { ...appearanceCommands, commandLists: [
+      ...appearanceCommands.commandLists.slice(0, graphite2Enabled ? 6 : 5),
       { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
-      ...appearance.commandLists.slice(5),
-    ] } : appearance,
+      ...appearanceCommands.commandLists.slice(graphite2Enabled ? 6 : 5),
+    ] } : appearanceCommands,
     { ...settings, commandLists: settings.commandLists.filter((command) => !removeImageGeneration || command.key !== "settingsAiFeaturesImageGeneration").map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
       ? aiChatAutoOpenCommandName
         ? { ...command, name: aiChatAutoOpenCommandName, keywords: "settings open ai chat on newly created tickets when I open a ticket boards task page" }

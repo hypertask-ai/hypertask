@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { themeOptions } from "@/lib/themePreferences";
 import setMemberRole from "@/utils/controllers/projects/setMemberRole";
 import { notificationCategories, notificationCellValue, updateNotificationMatrix } from "@/utils/controllers/notifications/updateNotificationMatrix";
@@ -12,7 +13,8 @@ export class SettingChangeRejectedError extends Error {}
 export async function readSettingsPage(userId: number, scope: SettingsScope) {
   if (scope.section === "appearance") {
     const rounded = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId);
-    return { theme: scope.theme ?? "system", options: themeOptions.filter((option) => rounded || option.value !== "rounded") };
+    const graphite2 = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId);
+    return { theme: scope.theme ?? "system", options: themeOptions.filter((option) => (rounded || option.value !== "rounded") && (graphite2 || option.value !== "graphite-2")) };
   }
   if (scope.section === "notifications") {
     const settings = await prisma.userSetting.findUnique({
@@ -56,6 +58,9 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
   if (change.kind === "theme") {
     if (destination === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId))) {
       throw new Error("Material theme is not available for your account.");
+    }
+    if (destination === "graphite-2" && !(await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId))) {
+      throw new Error("Graphite 2 theme is not available for your account.");
     }
     return { label: "Theme", value: scope.theme ?? "system" };
   }

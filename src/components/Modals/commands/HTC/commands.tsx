@@ -1,5 +1,6 @@
 import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import {
   useCallback,
   useContext,
@@ -179,6 +180,7 @@ const Commands = (props: Props) => {
   if (blockerCommentFlag) blockerCommentEnabled = true;
   const shareKeyLabels = useFlag(HTPR_7891_PALETTE_SHARE_KEY_LABELS_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   let aiChatAutoOpenCommandName = "";
@@ -186,16 +188,16 @@ const Commands = (props: Props) => {
   const keepAiChatClosedEnabled = useFlag(HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG);
   let keepAiChatClosedKeywords = "";
   if (keepAiChatClosedEnabled) keepAiChatClosedKeywords = "keep ai chat closed always";
-  const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
-    [isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
+  const getThemeCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, roundedEnabled && !isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled),
+    [roundedEnabled, isMobile, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration, graphite2Enabled]
   );
   const getLegacyCommands = useCallback(
     (options?: IAllCommands) => getAllCommands(options, options?.kanbanSelectAllEnabled, false, keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration),
     [keepAiChatClosedKeywords, aiChatAutoOpenCommandName, blockerCommentEnabled, shareKeyLabels, removeImageGeneration]
   );
   let getCommands = getLegacyCommands;
-  if (roundedEnabled) getCommands = getRoundedCommands;
+  if (roundedEnabled || graphite2Enabled) getCommands = getThemeCommands;
   const excludeTicketPrefixCommand = useCallback(
     (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
     []

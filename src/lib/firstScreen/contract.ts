@@ -10,7 +10,7 @@ export type FirstScreenDisplayPreferences = {
   timeZone: string;
   locale: string;
   boardLayout: "board" | "table";
-  theme: "porcelain" | "graphite" | "amoled" | "dia";
+  theme: "porcelain" | "graphite" | "graphite-2" | "amoled" | "dia";
   railCollapsed: boolean;
   quickTips: boolean;
   draftsFirst: boolean;
@@ -30,7 +30,7 @@ export function hasFirstScreenDisplayPreferences(
   const p = value as Partial<FirstScreenDisplayPreferences>;
   if (p.version !== 1 || p.accountId !== accountId ||
       !["board", "table"].includes(p.boardLayout ?? "") ||
-      !["porcelain", "graphite", "amoled", "dia"].includes(p.theme ?? "") ||
+      !["porcelain", "graphite", "graphite-2", "amoled", "dia"].includes(p.theme ?? "") ||
       typeof p.railCollapsed !== "boolean" || typeof p.quickTips !== "boolean" ||
       typeof p.draftsFirst !== "boolean" || typeof p.timeZone !== "string" || typeof p.locale !== "string") return false;
   try {
