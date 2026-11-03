@@ -163,8 +163,8 @@ test("rich and tutorial tooltips keep their widths and wrapping, while shortcut 
     assert.equal(rows.length, 2);
     for (const row of rows) assert.ok(row.classList.contains("whitespace-nowrap"));
     const person = read("src/components/Common/PersonHovercard.tsx");
-    assert.match(person, /className=\{`relative \$\{topLayer[^\n]+ w-\[272px\]/);
-    assert.match(person, /\{surface\}[\s\S]+: surface\}/, "both person hovercard paths reuse the fixed-width surface");
+    assert.match(person, /className="relative w-\[272px\]/);
+    assert.match(person, /<TooltipPortal placement="fixed"[\s\S]+\{surface\}[\s\S]+<\/TooltipPortal>/, "the person hovercard renders its fixed-width surface through the portal");
   });
 });
 
