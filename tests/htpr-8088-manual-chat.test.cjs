@@ -62,11 +62,11 @@ test("the new-ticket greeting lands in the conversation that is open, not a new 
   assert.match(history, /composeIntro && currentSession &&\s*\(manualChat \|\| \(isTaskScoped && taskId === composeIntro\.taskId/);
 });
 
-test("the settings keep the new-ticket switch and hide the automatic ones", () => {
+test("the settings hide every chat auto-open switch once the chat is manual", () => {
   const source = read("src/components/Modals/Settings/TaskPageSection.tsx");
-  assert.match(source, /label="Open AI chat on newly created tickets"/);
-  assert.match(source, /!manualChat && \(\s*<SettingsToggle\s+label="Open AI chat when I open a ticket"/);
-  assert.match(source, /!manualChat && \(\s*<SettingsToggle\s+label="Open AI chat on boards"/);
+  for (const label of ["Open AI chat on newly created tickets", "Open AI chat when I open a ticket", "Open AI chat on boards"]) {
+    assert.match(source, new RegExp(`!manualChat && \\(\\s*<SettingsToggle\\s+label="${label}"`));
+  }
 });
 
 test("the flag is an improvement that defaults to everyone", () => {

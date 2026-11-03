@@ -459,9 +459,9 @@ test("settings replaces old controls only with flag on, reuses SettingsToggle, a
   assert.deepEqual(toggles(false, false).rows.map((row) => row.label), ["Open AI chat by default"]);
 });
 
-test("manual chat hides the two automatic switches and keeps the new-ticket one", () => {
+test("manual chat hides every automatic switch", () => {
   const { rows } = toggles(true, true, true);
-  assert.deepEqual(rows.map((row) => row.label), ["Open AI chat on newly created tickets"]);
+  assert.deepEqual(rows.map((row) => row.label), []);
 });
 test("flag is an Everyone feature with release risk and production smoke mode", () => {
   const definition = load(`src/lib/flags/definitions/${flag}.ts`).default;
@@ -570,13 +570,15 @@ test("manual chat: navigation never closes an open chat, on desktop and phone", 
   }
 });
 
-test("manual chat: the new-ticket exception follows its own switch", () => {
-  const on = manual(settings({ aiChatOpenNewTickets: true }));
-  on.navigate("/detail/project-15/1");
-  assert.equal(on.values.showAIChatInterfaceAtom, true);
-  const off = manual(settings({ aiChatOpenNewTickets: false }));
-  off.navigate("/detail/project-15/1");
-  assert.equal(off.values.showAIChatInterfaceAtom, false);
+test("manual chat: creating a new ticket never opens the chat, whatever the old switch says", () => {
+  for (const on of [false, true]) {
+    const h = manual(settings({ aiChatOpenNewTickets: on }));
+    h.navigate("/detail/project-15/1");
+    assert.equal(h.values.showAIChatInterfaceAtom, false, `switch ${on} must not open the chat on a new ticket`);
+    h.navigate("/detail/project-15/2");
+    h.navigate("/detail/project-15/1");
+    assert.equal(h.values.showAIChatInterfaceAtom, false, `switch ${on} must not open the chat coming back to a new ticket`);
+  }
 });
 
 test("manual chat: no width is reserved for a chat the user did not open", () => {
