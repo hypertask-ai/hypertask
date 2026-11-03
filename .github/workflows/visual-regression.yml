@@ -25,8 +25,8 @@ on:
         options: [visual, inbox-cycle, inbox-cycle-broken]
 
 concurrency:
-  group: ${{ inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.ref) }}
-  cancel-in-progress: ${{ !inputs.journey || inputs.journey == 'visual' }}
+  group: ${{ inputs.journey && inputs.journey != 'visual' && 'verify-qa' || format('visual-regression-{0}', github.event.pull_request.number || github.sha) }}
+  cancel-in-progress: ${{ (!inputs.journey || inputs.journey == 'visual') && github.event_name != 'push' }}
 
 jobs:
   visual-regression:
@@ -89,16 +89,24 @@ jobs:
       - name: Identify exact baseline
         id: baseline
         shell: bash
+        env:
+          RENDER: ${{ hashFiles('base/**', '!base/.git/**', '!base/.claude/**', '!base/docs/**', '!base/tests/**', '!base/.github/**') }}
         run: |
+          set -eo pipefail
+          if [ -z "${RENDER:-}" ]; then
+            echo "::error::The base render source hashed to nothing, so no saved baseline can be proven to match it"
+            exit 1
+          fi
           echo "sha=$(git -C base rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "head=$(git -C head rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-          echo "image=$ImageVersion" >> "$GITHUB_OUTPUT"
+          echo "image=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "render=$RENDER" >> "$GITHUB_OUTPUT"
       - name: Restore production baseline
         id: baseline-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/visual-expected
-          key: visual-base-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
+          key: visual-base-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.render }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
       - name: Restore base Next.js build cache
         id: restore-base-nextjs-cache
         if: steps.baseline-cache.outputs.cache-hit != 'true'
@@ -182,8 +190,8 @@ jobs:
           VISUAL_BASE_CACHE_HIT: ${{ steps.baseline-cache.outputs.cache-hit }}
           VISUAL_BASE_ONLY: ${{ github.event_name == 'push' }}
         run: node head/scripts/visual-regression-ci.mjs
-      - name: Save successful production baseline
-        if: github.event_name == 'push' && steps.baseline-cache.outputs.cache-hit != 'true'
+      - name: Save successful visual baseline
+        if: success() && steps.baseline-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/visual-expected
@@ -198,7 +206,7 @@ jobs:
         if: github.event_name == 'push' && steps.baseline-cache.outputs.cache-hit != 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: visual-baseline-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.sha }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
+          name: visual-baseline-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.render }}-${{ hashFiles('head/e2e/visual/**', 'head/scripts/seed-browser-smoke.mjs', 'head/scripts/premerge-local-search.mjs', 'head/scripts/visual-regression-ci.mjs', 'head/.github/workflows/visual-regression.yml') }}
           path: ${{ runner.temp }}/visual-expected
           if-no-files-found: error
       - name: Summarize failed screens

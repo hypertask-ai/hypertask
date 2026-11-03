@@ -86,13 +86,13 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.doesNotMatch(workflow, /secrets\.|: write|workflow_run|pull_request_target/);
   const parsed = yaml.load(workflow);
   const evaluate = (expression, event, journey) => vm.runInNewContext(expression.replace(/^\$\{\{\s*|\s*\}\}$/g, ""), {
-    github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production" },
+    github: { event_name: event, event: { pull_request: { number: event === "pull_request" ? 19 : null, draft: false } }, ref: "refs/heads/production", sha: "push-sha" },
     inputs: { journey }, format: (template, value) => template.replace("{0}", value),
   });
   for (const [event, journey, group, cancel, visual, verify] of [
-    ["push", "", "visual-regression-refs/heads/production", true, true, false],
-    ["workflow_dispatch", "", "visual-regression-refs/heads/production", true, true, false],
-    ["workflow_dispatch", "visual", "visual-regression-refs/heads/production", true, true, false],
+    ["push", "", "visual-regression-push-sha", false, true, false],
+    ["workflow_dispatch", "", "visual-regression-push-sha", true, true, false],
+    ["workflow_dispatch", "visual", "visual-regression-push-sha", true, true, false],
     ["workflow_dispatch", "inbox-cycle", "verify-qa", false, false, true],
     ["workflow_dispatch", "inbox-cycle-broken", "verify-qa", false, false, true],
   ]) {
@@ -101,6 +101,7 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
     assert.equal(evaluate(job.if, event, journey), visual);
     assert.equal(evaluate(parsed.jobs["verify-qa"].if, event, journey), verify);
   }
+  assert.match(parsed.concurrency["cancel-in-progress"], /github\.event_name != 'push' \}\}$/);
   assert.match(workflow, /name: visual-regression/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /timeout-minutes: 35/);
@@ -137,21 +138,31 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.doesNotMatch(source("docs/ci.md"), /visual\/harness\.mjs|visual\/baseline/);
 });
 
-test("baseline caches restore an exact production key and only production pushes save successful PNGs", () => {
+test("baseline caches key on the base render source and every successful capture saves the screens", () => {
   const workflow = yaml.load(source(".github/workflows/visual-regression.yml"));
   assert.deepEqual(workflow.on.push.branches, ["production"]);
   const steps = workflow.jobs["visual-regression"].steps;
+  const identify = steps.find(step => step.id === "baseline");
+  for (const pattern of ["base/**", "!base/.git/**", "!base/.claude/**", "!base/docs/**", "!base/tests/**", "!base/.github/**"]) assert.ok(identify.env.RENDER.includes(pattern), pattern);
+  assert.match(identify.run, /if \[ -z "\$\{RENDER:-\}" \]/);
+  assert.match(identify.run, /exit 1/);
+  assert.match(identify.run, /echo "render=\$RENDER" >> "\$GITHUB_OUTPUT"/);
   const restore = steps.find(step => step.id === "baseline-cache");
   assert.match(restore.uses, /^actions\/cache\/restore@[a-f0-9]{40}$/);
   assert.equal(restore.with.path, "${{ runner.temp }}/visual-expected");
   assert.equal(restore.with["restore-keys"], undefined);
-  for (const input of ["runner.os", "runner.arch", "steps.baseline.outputs.image", "steps.baseline.outputs.sha", "head/e2e/visual/**", "head/scripts/seed-browser-smoke.mjs", "head/scripts/premerge-local-search.mjs", "head/scripts/visual-regression-ci.mjs", "head/.github/workflows/visual-regression.yml"]) assert.ok(restore.with.key.includes(input), input);
-  const save = steps.find(step => step.name === "Save successful production baseline");
-  assert.equal(save.if, "github.event_name == 'push' && steps.baseline-cache.outputs.cache-hit != 'true'");
+  assert.ok(restore.with.key.startsWith("visual-base-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.render }}-"));
+  assert.ok(!restore.with.key.includes("steps.baseline.outputs.sha"));
+  for (const input of ["head/e2e/visual/**", "head/scripts/seed-browser-smoke.mjs", "head/scripts/premerge-local-search.mjs", "head/scripts/visual-regression-ci.mjs", "head/.github/workflows/visual-regression.yml"]) assert.ok(restore.with.key.includes(input), input);
+  const save = steps.find(step => step.name === "Save successful visual baseline");
+  assert.equal(save.if, "success() && steps.baseline-cache.outputs.cache-hit != 'true'");
   assert.match(save.uses, /^actions\/cache\/save@[a-f0-9]{40}$/);
   assert.equal(save.with.path, restore.with.path);
   assert.equal(save.with.key, "${{ steps.baseline-cache.outputs.cache-primary-key }}");
   assert.ok(steps.indexOf(save) > steps.findIndex(step => step.name === "Build and capture base, then compare head"));
+  const publish = steps.find(step => step.name === "Publish the validated baseline");
+  assert.ok(publish.with.name.includes("${{ steps.baseline.outputs.render }}"));
+  assert.ok(!publish.with.name.includes("${{ steps.baseline.outputs.sha }}"));
 });
 
 test("paired lifecycle resets each schema, seeds both from the same harness, builds sequentially and never updates head snapshots", async () => {
