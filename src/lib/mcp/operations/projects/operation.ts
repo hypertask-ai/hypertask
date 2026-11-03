@@ -214,7 +214,6 @@ export async function GET(request: NextRequest) {
       ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
-    const showTeamId = await isFeatureEnabled(HTPR_8413_BOARD_TEAM_FLAG, user.id)
     projects.forEach(project => recordAgentBoardScopeMiss(project.id, "read"));
     const projectList: ProjectListItem[] = projects.map(project => {
       const row: ProjectListItem = {
@@ -239,10 +238,14 @@ export async function GET(request: NextRequest) {
         })),
         status: project.status,
         createdAt: project.createdAt.toISOString(),
-        teamId: showTeamId ? project.teamId ?? null : undefined,
       }
       return row
     })
+    if (await isFeatureEnabled(HTPR_8413_BOARD_TEAM_FLAG, user.id)) {
+      projectList.forEach((row, index) => {
+        row.teamId = projects[index].teamId ?? null
+      })
+    }
 
     const response: ListProjectsResponse = {
       success: true,

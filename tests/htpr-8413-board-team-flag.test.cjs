@@ -18,6 +18,6 @@ test('HTPR-8413 board team id is a small reversible improvement for everyone', (
 
 test('the board read gates the team id on the switch', () => {
   const source = read('src/lib/mcp/operations/projects/operation.ts');
-  assert.match(source, /isFeatureEnabled\(HTPR_8413_BOARD_TEAM_FLAG, user\.id\)/);
-  assert.match(source, /teamId: showTeamId \? project\.teamId \?\? null : undefined/);
+  assert.match(source, /if \(await isFeatureEnabled\(HTPR_8413_BOARD_TEAM_FLAG, user\.id\)\)/);
+  assert.match(source, /row\.teamId = projects\[index\]\.teamId \?\? null/);
 });
