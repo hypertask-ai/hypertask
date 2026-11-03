@@ -309,6 +309,11 @@ const ParentPersonHovercard = ({
       if (fromMouse(event)) return;
       show();
     };
+    const showOnFocus = (event: FocusEvent) => {
+      const target = event.target as Element | null;
+      if (!target?.matches?.(":focus-visible")) return;
+      show();
+    };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
@@ -316,7 +321,7 @@ const ParentPersonHovercard = ({
     parent.addEventListener("pointerenter", showOnHover);
     parent.addEventListener("pointerleave", hideOnLeave);
     parent.addEventListener("click", showOnTap);
-    parent.addEventListener("focusin", show);
+    parent.addEventListener("focusin", showOnFocus);
     parent.addEventListener("focusout", scheduleClose);
     parent.addEventListener("keydown", dismissOnEscape);
     return () => {
@@ -324,7 +329,7 @@ const ParentPersonHovercard = ({
       parent.removeEventListener("pointerenter", showOnHover);
       parent.removeEventListener("pointerleave", hideOnLeave);
       parent.removeEventListener("click", showOnTap);
-      parent.removeEventListener("focusin", show);
+      parent.removeEventListener("focusin", showOnFocus);
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
     };
