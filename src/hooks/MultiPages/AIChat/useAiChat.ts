@@ -133,7 +133,7 @@ export function useAiChat() {
   }, sharedShortcutsEnabled ? { focusedShortcuts: true } : undefined);
   const {
   dropDownButtonAICallback, handleRemoveContext, handleAddContext, handleMessageListScroll, registerMessageListRef,
-  scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat,
+  scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat, openDockedChat,
   } = useAiChatPresentation({
     setAiOption, contextList, setContextList, editor, handleCancelStream,
     streamingSessionRef, showAiChatInterface, aiChatExplicitOpenAt, setAiChatExplicitOpenAt, setChatMounted,
@@ -208,6 +208,7 @@ export function useAiChat() {
     selectSession,
     toggleRenameChatModal,
     renameChat,
+    openDockedChat,
     deleteSession,
     ...fileUpload,
   };

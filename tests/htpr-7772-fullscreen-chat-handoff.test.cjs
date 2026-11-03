@@ -39,6 +39,11 @@ test("a ticket link in the full-screen chat opens the side panel before the app 
   const presentation = read("src/hooks/MultiPages/AIChat/useAiChatPresentation.ts");
   assert.match(presentation, /const openDockedChat = \(\) => \{\n    setAiChatAutoOpenSuppressed\(false\);\n    setAiChatExplicitOpenAt\(Date\.now\(\)\);\n    setChatMounted\(true\);\n    setShowAIChat\(true\);\n  \};/);
   assert.match(presentation, /renameChat, openDockedChat,/);
+  const chat = read("src/hooks/MultiPages/AIChat/useAiChat.ts");
+  assert.match(chat, /toggleRenameChatModal, renameChat, openDockedChat,/);
+  assert.equal((chat.match(/^    openDockedChat,$/gm) ?? []).length, 1);
+  const context = read("src/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx");
+  assert.match(context, /^  openDockedChat: \(\) => void;$/m);
 });
 
 test("docked tickets keep the manual chat contract", () => {
