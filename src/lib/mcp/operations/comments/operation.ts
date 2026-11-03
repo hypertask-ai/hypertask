@@ -56,7 +56,13 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
 import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
-import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
+import {
+  assertKnownProjectionFields,
+  ListQueryParseError,
+  parseNumericCursor,
+  parseUpdatedSince,
+  projectRows,
+} from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
 export interface CommentItem {
@@ -187,6 +193,23 @@ async function htmlToLogText(html: string) {
 function escapeHtmlText(value: string) {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
+
+const COMMENT_LIST_FIELDS = [
+  'id',
+  'text',
+  'commentText',
+  'createdAt',
+  'editedAt',
+  'editedBy',
+  'creatorId',
+  'creator',
+  'agent',
+  'agent_display_name',
+  'attachments',
+  'reactions',
+] as const
+
+const COMMENT_LIST_ACTIVITY_FIELDS = ['type', 'activity'] as const
 
 const commentInclude = (userId: number, projectId: number) => ({
   creator: {
@@ -366,6 +389,27 @@ export async function GET(request: NextRequest) {
         },
         { status: 400 },
       )
+    }
+    try {
+      assertKnownProjectionFields(
+        listQuery?.fields ?? [],
+        includeActivity
+          ? [...COMMENT_LIST_FIELDS, ...COMMENT_LIST_ACTIVITY_FIELDS]
+          : COMMENT_LIST_FIELDS,
+        includeActivity ? undefined : 'type and activity need include_activity',
+      )
+    } catch (error) {
+      if (error instanceof ListQueryParseError) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Validation error',
+            message: error.message,
+          },
+          { status: 400 },
+        )
+      }
+      throw error
     }
     const cursorId = listQuery?.cursor ? parseNumericCursor(listQuery.cursor) : null
     if (listQuery?.cursor && cursorId === null) {
