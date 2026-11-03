@@ -113,6 +113,7 @@ export interface ChatContextType {
   selectSession: (sessionId: string) => void;
   toggleRenameChatModal: () => void;
   renameChat: (newTitle: string) => void;
+  openDockedChat: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
   fileItems: FileItem[];
   files: File[];

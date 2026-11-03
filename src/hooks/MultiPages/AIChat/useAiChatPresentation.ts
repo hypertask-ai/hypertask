@@ -12,7 +12,7 @@ import type { useAiChatState } from "./useAiChatState";
 import type { useAiChatAttachments } from "./useAiChatAttachments";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextList" | "setContextList" | "editor" | "streamingSessionRef" | "showAiChatInterface" | "aiChatExplicitOpenAt" | "setAiChatExplicitOpenAt" | "setChatMounted" | "hasAttemptedRestoreRef" | "currentUser" | "setShowAIChat" | "messageListRef" | "setShowScrollUpIndicator" | "toggleCreateTaskGlobally" | "inViewObject" | "setShowRenameChatModal" | "currentSession" | "updateSessionTitle"> &
+type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextList" | "setContextList" | "editor" | "streamingSessionRef" | "showAiChatInterface" | "aiChatExplicitOpenAt" | "setAiChatExplicitOpenAt" | "setChatMounted" | "hasAttemptedRestoreRef" | "currentUser" | "setShowAIChat" | "messageListRef" | "setShowScrollUpIndicator" | "toggleCreateTaskGlobally" | "inViewObject" | "setShowRenameChatModal" | "currentSession" | "updateSessionTitle" | "setAiChatAutoOpenSuppressed"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
 export function useAiChatPresentation(context: Context) {
@@ -32,6 +32,7 @@ export function useAiChatPresentation(context: Context) {
   streamingSessionRef, showAiChatInterface, aiChatExplicitOpenAt, setAiChatExplicitOpenAt, setChatMounted,
   hasAttemptedRestoreRef, currentUser, setShowAIChat, messageListRef, setShowScrollUpIndicator,
   toggleCreateTaskGlobally, inViewObject, setShowRenameChatModal, currentSession, updateSessionTitle,
+  setAiChatAutoOpenSuppressed,
   } = context;
 
 
@@ -173,6 +174,13 @@ export function useAiChatPresentation(context: Context) {
 
   const toggleRenameChatModal = () => setShowRenameChatModal((prev) => !prev);
 
+  const openDockedChat = () => {
+    setAiChatAutoOpenSuppressed(false);
+    setAiChatExplicitOpenAt(Date.now());
+    setChatMounted(true);
+    setShowAIChat(true);
+  };
+
   const renameChat = (newTitle: string) => {
     const sessionId = currentSession?.id;
     if (!sessionId) {
@@ -185,6 +193,6 @@ export function useAiChatPresentation(context: Context) {
   };
   return {
   dropDownButtonAICallback, handleRemoveContext, handleAddContext, handleMessageListScroll, registerMessageListRef,
-  scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat,
+  scrollMessagesToBottom, copyResponse, createTaskFromResponse, toggleRenameChatModal, renameChat, openDockedChat,
   };
 }
