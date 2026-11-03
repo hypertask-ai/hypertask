@@ -7,8 +7,6 @@
  "getPushNotificationStatus/GET": "544e10716f534e42",
  "matrix/GET": "7858d315e12e67fa",
  "matrix/POST": "d480f59fe417075f",
- "mute/GET": "a5d87baafaf9d571",
- "mute/POST": "fff3ac1a83991eda",
  "preference/POST": "9eb78f18bc8ff631",
  "splits/GET": "f011ef4e26626ebe",
  "splits/POST": "418c0f3061243b21"

@@ -7,7 +7,7 @@ const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-slice-11");
-const SPECIAL = { "matrix save": "matrix/POST", "splits save": "splits/POST", "archive meta": "getAllInbox/GET", "archived list": "getAllInbox/GET", mute: "mute/POST", unmute: "mute/POST", "304 getPushNotificationStatus": "getPushNotificationStatus/GET", "304 changePushNotificationStatus": "changePushNotificationStatus/POST" };
+const SPECIAL = { "matrix save": "matrix/POST", "splits save": "splits/POST", "archive meta": "getAllInbox/GET", "archived list": "getAllInbox/GET", "304 getPushNotificationStatus": "getPushNotificationStatus/GET", "304 changePushNotificationStatus": "changePushNotificationStatus/POST" };
 const groupOf = key => SPECIAL[key] ?? key.match(/([A-Za-z]+\/(?:GET|POST))/)?.[1] ?? key;
 const pin = (key, value) => rawPin(groupOf(key), key, value);
 const root = path.resolve(__dirname, "..");
@@ -19,7 +19,6 @@ const routes = {
   getCount: { module: "count-read", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/getCount.ts" },
   getPushNotificationStatus: { module: "push-status-read", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/getPushNotificationStatus.ts" },
   matrix: { module: "matrix", methods: ["GET", "POST"], anyMethod: false, path: "src/pages/api/notifications/matrix.ts" },
-  mute: { module: "mute", methods: ["GET", "POST"], anyMethod: false, path: "src/pages/api/notifications/mute.ts" },
   preference: { module: "preference", methods: ["POST"], anyMethod: false, path: "src/pages/api/notifications/preference.ts" },
   splits: { module: "splits", methods: ["GET", "POST"], anyMethod: false, path: "src/pages/api/notifications/splits.ts" },
 };
@@ -43,7 +42,6 @@ const inputs = {
   preference: { body: { notificationLevel: "direct", userId: 6 } },
   matrix: { body: { matrix: { mentions: { email: true, push: false } }, userId: 6 } },
   splits: { body: { splitsNoImportant: ["project:15", "system:Assigned", "project:15"], userId: 6 } },
-  mute: { query: { taskId: "42" }, body: { taskId: "42", muted: true, userId: 6 } },
 };
 function fixture(endpoint, scenario = {}) {
   const effects = [], loads = [], auth = [], realtime = [];
@@ -57,7 +55,6 @@ function fixture(endpoint, scenario = {}) {
       },
     },
     device: scenario.noDevice ? null : { id: 21, firebaseId: "device", userId: 985, sendNotifications: true },
-    mute: scenario.noMute ? null : { id: 31, taskId: 42, userId: 985 },
   };
   const step = (label, ...args) => {
     effects.push([label, ...clean(args)]);
@@ -79,11 +76,6 @@ function fixture(endpoint, scenario = {}) {
         if (!state.device || state.device.userId !== args.where.userId || state.device.firebaseId !== args.where.firebaseId) return { count: 0 };
         Object.assign(state.device, structuredClone(args.data)); return { count: 1 };
       },
-    },
-    taskMute: {
-      findUnique: async args => { step("mute-read", args); return structuredClone(state.mute); },
-      upsert: async args => { step("mute-upsert", args); state.mute = { id: 31, ...args.create }; return structuredClone(state.mute); },
-      deleteMany: async args => { step("mute-delete", args); state.mute = null; return { count: 1 }; },
     },
     notification: {
       findMany: async args => { step("inbox-read", args); return scenario.noRows ? [] : [{ id: 20, taskId: 42, status: "Archive" }, { id: 19, taskId: 43, status: "Archive" }]; },
@@ -242,11 +234,6 @@ const branches = {
     { body: { splitsNoImportant: ["system:" + "x".repeat(201)] } }, { body: { splitsNoImportant: Array(201).fill("project:15") } },
     { body: { splitsNoImportant: ["system:Any custom split", "project:2343"] } },
   ],
-  "mute/GET": [{ noMute: true }, ...["42tail", "0", "-1", "1.5", "invalid", ["42", "43"]].map(taskId => ({ query: { taskId } }))],
-  "mute/POST": [
-    { body: { taskId: 42, muted: false } }, { body: { taskId: "42tail", muted: true } }, { body: { taskId: 42, muted: "true" } },
-    { body: { taskId: [], muted: true } }, { body: { taskId: 0, muted: true } },
-  ],
   "changePushNotificationStatus/POST": [{ body: { firebaseId: "device", newStatus: true } }, { body: { firebaseId: "foreign", newStatus: true } }, { body: { firebaseId: "device" } }],
   "getPushNotificationStatus/GET": [{ query: { firebaseId: ["device", "foreign"] } }],
   "getAll/GET": [{ controllerStatus: 500 }], "getCount/GET": [{ controllerStatus: 500 }],
@@ -294,12 +281,6 @@ test("archived list retains query parsing, cursor, access, reminders, order and 
   assert.deepEqual(args.distinct, ["type", "taskId"]);
   assert.deepEqual(args.orderBy, [{ archivedAt: { sort: "desc", nulls: "last" } }, { id: "desc" }]);
   assert.deepEqual(args.where, { userId: 985, status: "Archive", agentId: null, task: { project: { status: "Normal", OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }] }, projectId: 15, title: { contains: "task", mode: "insensitive" }, Reminders: { every: { status: { not: "Normal" } } } } });
-});
-test("mute retains upsert and unmute delete scoped to signed actor with no new authorization or broadcast", async () => {
-  const muted = await parity(endpoint("mute", "POST"), {}, "mute");
-  assert.deepEqual(muted.old.effects, [["mute-upsert", { where: { taskId_userId: { taskId: 42, userId: 985 } }, update: {}, create: { taskId: 42, userId: 985 } }]]);
-  const unmuted = await parity(endpoint("mute", "POST"), { body: { taskId: 42, muted: false } }, "unmute");
-  assert.deepEqual(unmuted.old.effects, [["mute-delete", { where: { taskId: 42, userId: 985 } }]]);
 });
 test("304 bodies remain available to Pages until its HTTP boundary", async () => {
   for (const row of [endpoint("getPushNotificationStatus", "GET"), endpoint("changePushNotificationStatus", "POST")]) {

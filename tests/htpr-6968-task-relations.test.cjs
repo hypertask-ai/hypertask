@@ -15,7 +15,6 @@ const slice3Routes = {
   removeRelation: { module: "remove-relation", method: "POST" },
   "waiting-on": { module: "waiting-on", method: "POST" },
   reactToDescription: { module: "description-reaction", method: "POST" },
-  linkPullRequest: { module: "link-pull-request", method: "POST" },
 };
 const { isRecurrenceRule, RECURRENCE_RULES } = load("src/lib/recurrence.ts", {});
 const { isTaskRelationType, taskRelationTypes } = load("src/utils/controllers/tasks/addRelatedTasks.ts", {
@@ -30,9 +29,6 @@ class FixedDate extends RealDate {
 }
 class LeaseError extends Error {}
 class DeleteError extends Error {}
-class LinkError extends Error {
-  constructor() { super("Invalid pull request"); this.status = 422; this.code = "INVALID_URL"; }
-}
 const defaults = {
   recoverTask: { taskId: 42 }, deleteTask: undefined,
   setDueDate: { taskId: 42, dueDate: "2026-10-08T12:00:00Z" },
@@ -42,7 +38,6 @@ const defaults = {
   addRelations: { relations: { currentTaskId: "42", relatedTasks: [{ projectId: 16, uniqueIndex: 43, relationType: "RelatedTo" }] } },
   removeRelation: { relationId: "9" }, "waiting-on": { taskId: 42, userId: 2343 },
   reactToDescription: { taskId: 42, descriptionId: "desc", unified: "smile", emoji: "😃", names: ["smile"] },
-  linkPullRequest: { taskId: 42, url: "https://github.com/example/app/pull/1" },
 };
 function fixture(name, scenario) {
   const effects = [], loads = [];
@@ -51,7 +46,6 @@ function fixture(name, scenario) {
   const failure = kind => {
     if (kind === "lease") return new LeaseError("Task lease conflict");
     if (kind === "delete") return new DeleteError("Hard deletion in progress");
-    if (kind === "link") return new LinkError();
     return new Error(kind);
   };
   const record = (key, value, error) => async (...args) => {
@@ -101,7 +95,6 @@ function fixture(name, scenario) {
     "@/lib/mcp/tasks/agentMutationFence": { AgentMutationLeaseConflictError: LeaseError },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { upsertTaskToTurbopuffer: record("search", undefined) },
     "@/utils/controllers/tasks/invokeTaskDelete": { permanentlyDeleteTask: record("delete", scenario.deleteConflict ? "conflict" : "success", scenario.writeThrows) },
-    "@/lib/pullRequests/taskPullRequests": { PullRequestLinkError: LinkError, linkTaskPullRequest: record("link", { created: !scenario.existingLink, pullRequest: { id: "pr" } }, scenario.writeThrows) },
     "@/utils/controllers/tasks/getTask": { getReactionsByDescriptionId: record("reactions", [{ id: 3 }]) },
     "@/utils/controllers/notifications/creation-service/check-reminder_create-notification": { default: record("reaction-inbox", !scenario.noNotification, scenario.notificationThrows && "Notification unavailable") },
     "@/utils/controllers/FCM": { sendDataNewCommentFCM: record("push", undefined) },
@@ -198,12 +191,6 @@ const scenarios = {
     ["bad task", { body: { ...defaults.reactToDescription, taskId: 0 }, expected: error(400, "Missing required information") }],
     ["write failure", { writeThrows: "Write unavailable", expected: error(500, "Internal server error") }], ["notification failure after create", { notificationThrows: true, expected: error(500, "Internal server error") }],
   ],
-  linkPullRequest: [
-    ["new link 201", {}], ["existing link 200", { existingLink: true }], ["Better Auth cannot replace signed cookie", { noSigned: true, expected: error(401, "Unauthorized") }],
-    ["signed cookie owns attribution", { signedUser: 2343 }], ["missing task", { body: {}, expected: error(400, "Bad request") }], ["bad task", { body: { taskId: 1.5, url: "x" }, expected: error(400, "Bad request") }],
-    ["missing URL", { body: { taskId: 42 }, expected: error(400, "Pull request URL is required") }], ["typed link error", { writeThrows: "link", expected: { status: 422, body: { message: "Invalid pull request", code: "INVALID_URL" } } }],
-    ["lease conflict", { writeThrows: "lease", expected: error(409, "Task lease conflict") }], ["realtime failure remains success", { realtimeThrows: true }], ["service failure", { writeThrows: "Service unavailable", expected: error(500, "Internal server error") }], ["signed verification throws", { signedThrows: true }],
-  ],
 };
 for (const [label, descriptionContent, expectedText] of [
   ["normal HTML", '  <p>Hello <strong>world</strong>&nbsp;&amp;</p><br><p>Next</p>\n', '  Hello world&nbsp;&amp;Next\n'],
@@ -228,7 +215,7 @@ scenarios.setRecurrence.push(...RECURRENCE_RULES.map(recurrence => [recurrence, 
 scenarios.addRelations.push(...taskRelationTypes.map(relationType => [relationType, { body: { relations: { currentTaskId: "42", relatedTasks: [{ projectId: 16, uniqueIndex: 43, relationType }] } } }]));
 for (const name of Object.keys(slice3Routes)) {
   const cases = [...scenarios[name], ["null body", { body: null }], ["undefined body", { body: undefined }], ["unauthenticated", { noAuth: true }], ["unauthenticated invalid body", { noAuth: true, body: {} }]];
-  if (name !== "linkPullRequest") cases.push(["auth lookup throws", { authThrows: true }]);
+  cases.push(["auth lookup throws", { authThrows: true }]);
   if (["setDueDate", "setStartDate", "setRecurrence", "addParent", "removeParent", "waiting-on"].includes(name)) cases.push(["actor lookup throws", { actorThrows: true }]);
   for (const [label, scenario] of cases) test(`${name}: ${label}; shared handler matches pinned contract (Pages adapter and Web)`, async () => {
     const log = { log: console.log, warn: console.warn, error: console.error };
@@ -249,7 +236,7 @@ for (const name of Object.keys(slice3Routes)) {
         }
         if (mode === "current") {
           assert.equal(fx.loads.length, 1, "the shared operation loads once and is never retried");
-          if (!scenario.noAuth && !scenario.authThrows && name !== "linkPullRequest") assert.equal(fx.authCalls(), 1, "reuse authenticated dispatch session");
+          if (!scenario.noAuth && !scenario.authThrows) assert.equal(fx.authCalls(), 1, "reuse authenticated dispatch session");
         }
       }
     } finally { global.Date = RealDate; Object.assign(console, log); }

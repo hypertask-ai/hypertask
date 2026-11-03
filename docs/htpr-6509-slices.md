@@ -228,6 +228,15 @@ Zero tracked callers is not proof of zero unknown external use. No dead endpoint
 - `/api/section/getAll`: kept, 2 hits in 72h from a Linux browser, caller unknown. Now always uses the shared handler.
 - `/api/tasks/linkPullRequest`, `/api/projects/views/sync-view`, `/api/section/getByTaskId`, `/api/notifications/mute`: zero hits in 72h and no caller in any repo, but a weekly or rarer caller would not show in 72 hours. Kept pending a coordinator decision. Each logs `legacy route hit: <path>` with `console.warn` so any remaining outside use shows up in the logs. `sync-view` keeps its unchanged handler and historical 101 status; the other three always use their shared handlers.
 
+### Retired legacy routes (2026-11-03)
+
+Four zero-caller legacy endpoints and their route-level glue are removed, after the 14 quiet days the warning log required ended on 2026-11-01:
+
+- `/api/tasks/linkPullRequest`, `/api/section/getByTaskId`, `/api/notifications/mute`, `/api/projects/views/sync-view`.
+- `src/lib/api/task-writes/link-pull-request.ts`, `src/lib/api/section-writes/get-by-task.ts`, `src/lib/api/notification-writes/mute.ts`, `src/utils/controllers/section/getByTask.ts`, `src/lib/telemetry/legacyRouteHit.ts` and the legacy-hit telemetry test go with them; nothing else imported any of them.
+- Live replacements stay: the PR-link service and its MCP operation, `/api/section/getAll` plus `getProjectSections`, `/api/notifications/project-mute`, and `/api/projects/views/update-view`.
+- The `TaskMute` rows are still read by notification fan-out and cleared on task delete. No app screen writes them, so removing the write route changes no user-visible behavior.
+
 ### Per-file inventory
 
 Counts are src / CLI / e2e; reads are included so none of the remaining 33 task files is silently omitted. Paths describe current files; domain slices create the corresponding shared operations and later same-path App owner.

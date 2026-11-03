@@ -467,93 +467,6 @@ test("linkTaskPullRequest is idempotent and does not duplicate activity", async 
   assert.equal(calls.activities.length, 0);
 });
 
-function loadBrowserLinkRoute(verifySession, { broadcastError = null } = {}) {
-  const linkCalls = [];
-  const broadcastCalls = [];
-  const { POST } = load("src/lib/api/task-writes/link-pull-request.ts", {
-    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession },
-    "@/lib/pullRequests/taskPullRequests": {
-      PullRequestLinkError: class PullRequestLinkError extends Error {},
-      linkTaskPullRequest: async (input) => {
-        linkCalls.push(input);
-        return { created: false, pullRequest: { id: "linked-pr-id" } };
-      },
-    },
-    "@/lib/mcp/tasks/agentMutationFence": {
-      AgentMutationLeaseConflictError: class AgentMutationLeaseConflictError extends Error {},
-    },
-    "@/lib/realtime/server": {
-      broadcastTaskChange: async (...args) => {
-        broadcastCalls.push(args);
-        if (broadcastError) throw broadcastError;
-      },
-    },
-  });
-  const handler = async (req, res) => {
-    const response = await POST({
-      headers: new Headers(),
-      cookies: req.cookies,
-      json: async () => req.body,
-    });
-    return res.status(response.status).json(await response.json());
-  };
-  return { handler, linkCalls, broadcastCalls };
-}
-
-function responseRecorder() {
-  const result = { status: null, body: null };
-  const response = {
-    status(status) {
-      result.status = status;
-      return response;
-    },
-    json(body) {
-      result.body = body;
-      return response;
-    },
-  };
-  return { response, result };
-}
-
-test("browser linking rejects an unsigned profile cookie", async () => {
-  const { handler, linkCalls } = loadBrowserLinkRoute(() => null);
-  const { response, result } = responseRecorder();
-  await handler(
-    {
-      method: "POST",
-      cookies: { nookies_user: JSON.stringify({ id: 999 }) },
-      body: { taskId: 36202, url: canonicalPullRequestUrl },
-    },
-    response,
-  );
-
-  assert.equal(result.status, 401);
-  assert.deepEqual(linkCalls, []);
-});
-
-test("browser linking uses only the signed session identity", async () => {
-  const { handler, linkCalls, broadcastCalls } = loadBrowserLinkRoute((token) =>
-    token === "signed" ? { id: 6 } : null,
-  );
-  const { response, result } = responseRecorder();
-  const url = "https://github.com/hypertask-ai/hypertask/pull/110";
-  await handler(
-    {
-      method: "POST",
-      cookies: {
-        ht_session: "signed",
-        nookies_user: JSON.stringify({ id: 999 }),
-      },
-      body: { taskId: 36202, url },
-    },
-    response,
-  );
-
-  assert.equal(result.status, 200);
-  assert.deepEqual(linkCalls, [{ taskId: 36202, userId: 6, url }]);
-  assert.deepEqual(broadcastCalls, [[36202, { originUserId: 6 }]]);
-});
-
 test("webhook does not fall back to an unrelated ticket when the pull request is linked elsewhere", async () => {
   const prismaPath = path.join(root, "src/lib/prisma.ts");
   const syncPath = path.join(
@@ -683,29 +596,5 @@ test("webhook does not return a fallback task after a concurrent global link win
     else delete require.cache[prismaPath];
     if (previousSync) require.cache[syncPath] = previousSync;
     else delete require.cache[syncPath];
-  }
-});
-
-test("browser linking succeeds when realtime delivery fails", async () => {
-  const warning = console.warn;
-  console.warn = () => {};
-  try {
-    const { handler } = loadBrowserLinkRoute(() => ({ id: 6 }), {
-      broadcastError: new Error("realtime unavailable"),
-    });
-    const { response, result } = responseRecorder();
-    await handler(
-      {
-        method: "POST",
-        cookies: { ht_session: "signed" },
-        body: { taskId: 36202, url: canonicalPullRequestUrl },
-      },
-      response,
-    );
-
-    assert.equal(result.status, 200);
-    assert.equal(result.body.created, false);
-  } finally {
-    console.warn = warning;
   }
 });

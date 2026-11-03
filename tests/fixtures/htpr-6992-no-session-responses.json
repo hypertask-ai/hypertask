@@ -199,26 +199,6 @@
       }
     }
   },
-  "src/pages/api/notifications/mute.ts": {
-    "GET": {
-      "status": 401,
-      "body": {
-        "message": "Unauthorized"
-      }
-    },
-    "POST": {
-      "status": 401,
-      "body": {
-        "message": "Unauthorized"
-      }
-    },
-    "wrong:PATCH": {
-      "status": 405,
-      "body": {
-        "message": "Method not allowed"
-      }
-    }
-  },
   "src/pages/api/notifications/preference.ts": {
     "POST": {
       "status": 401,
@@ -677,20 +657,6 @@
       }
     }
   },
-  "src/pages/api/section/getByTaskId.ts": {
-    "POST": {
-      "status": 401,
-      "body": {
-        "message": "Unauthorized"
-      }
-    },
-    "wrong:PATCH": {
-      "status": 405,
-      "body": {
-        "message": "Method not allowed"
-      }
-    }
-  },
   "src/pages/api/section/getProjectSections.ts": {
     "POST": {
       "status": 401,
@@ -937,20 +903,6 @@
   },
   "src/pages/api/tasks/getUnscheduled.ts": {
     "GET": {
-      "status": 401,
-      "body": {
-        "message": "Unauthorized"
-      }
-    },
-    "wrong:PATCH": {
-      "status": 405,
-      "body": {
-        "message": "Method not allowed"
-      }
-    }
-  },
-  "src/pages/api/tasks/linkPullRequest.ts": {
-    "POST": {
       "status": 401,
       "body": {
         "message": "Unauthorized"
