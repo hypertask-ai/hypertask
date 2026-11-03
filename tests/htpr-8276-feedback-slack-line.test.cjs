@@ -1,38 +1,32 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const path = require('node:path')
-const root = path.resolve(__dirname, '..')
-const jiti = require('jiti')(__filename, { alias: { '@': path.resolve(__dirname, '../src') }, cache: false })
-const stub = (file, exports) => {
-  const filename = path.join(root, file)
-  require.cache[filename] = { id: filename, filename, loaded: true, exports }
-}
+const { loadModule } = require('./helpers/loadModule.cjs')
 
 const posts = []
-const labelIds = []
 let installRow = null
-stub('src/lib/crypto/byokCipher.ts', { decryptSecret: (value) => `plain:${value}` })
-stub('src/lib/slack/api.ts', {
-  postSlackMessage: async (...args) => {
-    posts.push(args)
-    if (posts.length === 2) throw new Error('channel_not_found')
-  },
-})
-stub('src/lib/prisma.ts', {
-  default: {
-    label: {
-      findFirst: async ({ where }) => {
-        labelIds.push(where.id.in)
-        assert.equal(where.projectId, 15)
-        assert.equal(where.value, 'ai-feedback')
-        return where.id.in.includes('label-ai') ? { id: 'label-ai' } : null
-      },
+const modules = () => loadModule('src/lib/aiFeedback/slackLine.ts', {
+  '@/lib/crypto/byokCipher': { decryptSecret: (value) => `plain:${value}` },
+  '@/lib/slack/api': {
+    postSlackMessage: async (...args) => {
+      posts.push(args)
+      if (posts.length === 2) throw new Error('channel_not_found')
     },
-    slackInstall: { findFirst: async () => installRow },
+  },
+  '@/lib/prisma': {
+    default: {
+      label: {
+        findFirst: async ({ where }) => {
+          assert.equal(where.projectId, 15)
+          assert.equal(where.value, 'ai-feedback')
+          return where.id.in.includes('label-ai') ? { id: 'label-ai' } : null
+        },
+      },
+      slackInstall: { findFirst: async ({ orderBy }) => (assert.deepEqual(orderBy, { updatedAt: 'desc' }), installRow) },
+    },
   },
 })
 
-const { announceFeedbackTicket, feedbackLine, feedbackTicketUrl } = jiti('../src/lib/aiFeedback/slackLine.ts')
+const { announceFeedbackTicket, feedbackLine, feedbackTicketUrl } = modules()
 
 const feedbackTicket = {
   projectId: 15,
@@ -42,7 +36,6 @@ const feedbackTicket = {
 }
 const slackReady = () => {
   posts.length = 0
-  labelIds.length = 0
   process.env.SLACK_FEEDBACK_CHANNEL_ID = 'C-FEEDBACK'
   installRow = { encryptedBotToken: 'cipher' }
 }
@@ -55,7 +48,13 @@ test('the line names the kind, the short summary and the ticket link and carries
   assert.equal(feedbackLine('Agent feedback, friction: Two lists disagree', 'https://app.hypertask.ai/detail/project-15/2'), '*friction* · Two lists disagree · https://app.hypertask.ai/detail/project-15/2')
   assert.equal(feedbackLine("An agent's CLI call to list had a problem (3 Nov)", 'https://app.hypertask.ai/detail/project-15/3'), "*feedback* · An agent's CLI call to list had a problem (3 Nov) · https://app.hypertask.ai/detail/project-15/3")
   assert.equal(feedbackLine('Agent feedback, idea: ', 'https://app.hypertask.ai/detail/project-15/4'), '*idea* · Agent feedback, idea:  · https://app.hypertask.ai/detail/project-15/4')
-  assert.equal(feedbackLine('Agent feedback, bug: <!channel> & <https://evil.test|click>', 'https://app.hypertask.ai/detail/project-15/5'), '*bug* · &lt;!channel&gt; &amp; &lt;https://evil.test|click&gt; · https://app.hypertask.ai/detail/project-15/5')
+})
+
+test('a Slack line cannot ping the channel or disguise a link', () => {
+  assert.equal(
+    feedbackLine('Agent feedback, bug: <!channel> & <https://evil.test|click>', 'https://app.hypertask.ai/detail/project-15/5'),
+    '*bug* · &lt;!channel&gt; &amp; &lt;https://evil.test|click&gt; · https://app.hypertask.ai/detail/project-15/5',
+  )
 })
 
 test('a new feedback ticket on board 15 posts exactly one line with the workspace bot', async () => {
