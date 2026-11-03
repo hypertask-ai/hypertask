@@ -117,6 +117,7 @@ export function AI_Tiptap_Container({
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
@@ -125,8 +126,9 @@ export function AI_Tiptap_Container({
   const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
+  let hideMicrophonePicker = fullScreenCleanup;
+  if (chatCleanupEnabled) hideMicrophonePicker = true;
   const isMbl = useContext(MobileViewContext);
-  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
     tiptapKeydown,
@@ -503,7 +505,7 @@ export function AI_Tiptap_Container({
                 editor={editor}
                 id={audioButtonId}
                 active={active}
-                hideDevicePicker={fullScreenCleanup}
+                hideDevicePicker={hideMicrophonePicker}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}

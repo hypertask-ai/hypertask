@@ -41,6 +41,7 @@ test("the chat composer turns the pill on only on desktop", () => {
   const composer = read("src/components/AI_CHAT/AI_Tiptap_Container.tsx");
   assert.match(composer, /const chatCleanupEnabled = useFlag\(HTPR_8261_CHAT_CLEANUP_FLAG\)/);
   assert.match(composer, /compactListeningPill=\{chatCleanupEnabled && !isMbl\}/);
+  assert.match(composer, /hideDevicePicker=\{hideMicrophonePicker\}/);
 });
 
 test("no sparkle is left in the chat surfaces", () => {
