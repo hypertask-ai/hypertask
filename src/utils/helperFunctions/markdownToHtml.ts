@@ -81,52 +81,48 @@ function codeDepthDelta(line: string): number {
 
 function quotedLinesToBlockquote(value: string): string {
   if (!value.includes('>')) return value
+  const out: string[] = []
+  let text: string[] = []
+  let quoted: string[] | null = null
+  let codeDepth = 0
   let converted = false
-  const blocks = value.replace(/\r\n?/g, '\n').split(/\n{2,}/).map((paragraph) => {
-    const parts: string[] = []
-    let text: string[] = []
-    let quoted: string[] | null = null
-    let codeDepth = 0
-    const flushText = () => {
-      const lines = text
-      text = []
-      const body = lines.join('\n')
-      if (!body.trim()) return
-      parts.push(BLOCK_TAG.test(body) ? body : `<p>${body.replace(/\n/g, '<br>')}</p>`)
-    }
-    const flushQuote = () => {
-      if (!quoted) return
-      const body = quoted.join('<br>')
-      quoted = null
-      if (!body.trim()) return
-      parts.push(`<blockquote><p>${body}</p></blockquote>`)
-      converted = true
-    }
-    for (const line of paragraph.split('\n')) {
-      if (codeDepth === 0) {
-        const match = QUOTED_LINE.exec(line)
-        if (match) {
-          flushText()
-          ;(quoted ??= []).push(match[1].trim())
-          continue
-        }
+  const flushQuote = () => {
+    if (!quoted) return
+    const body = quoted.join('<br>')
+    quoted = null
+    if (!body.trim()) return
+    out.push(`<blockquote><p>${body}</p></blockquote>`)
+    converted = true
+  }
+  const flushText = () => {
+    const body = text.join('\n')
+    text = []
+    if (!body.trim()) return
+    out.push(BLOCK_TAG.test(body) ? body : normalizeBlockHtml(body))
+  }
+  for (const line of value.split('\n')) {
+    if (codeDepth === 0) {
+      const match = QUOTED_LINE.exec(line)
+      if (match && match[1].trim()) {
+        flushText()
+        ;(quoted ??= []).push(match[1].trim())
+        continue
       }
-      flushQuote()
-      codeDepth = Math.max(0, codeDepth + codeDepthDelta(line))
-      text.push(line)
     }
     flushQuote()
-    flushText()
-    return parts.join('')
-  })
-  return converted ? blocks.join('') : value
+    codeDepth = Math.max(0, codeDepth + codeDepthDelta(line))
+    text.push(line)
+  }
+  flushQuote()
+  flushText()
+  return converted ? out.join('') : value
 }
 
 export function formatRichTextInput(
   value: string,
   contentType?: 'html' | 'markdown'
 ): string {
-  if (contentType === 'html') return quotedLinesToBlockquote(value)
+  if (contentType === 'html') return value
   if (contentType === 'markdown' || hasMarkdownStructure(value)) {
     return markdownToHtml(value)
   }

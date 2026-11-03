@@ -172,20 +172,25 @@ test("quote lines stay quoted when the same input also carries HTML", () => {
   );
 
   assert.equal(
-    formatRichTextInput("<p>Before</p>\n> quoted\n<p>After</p>", "html"),
-    "<p>Before</p><blockquote><p>quoted</p></blockquote><p>After</p>"
+    formatRichTextInput("Text\n> one\n> two\n\n<pre>&gt; not a quote</pre>"),
+    "<p>Text</p><blockquote><p>one<br>two</p></blockquote>\n<pre>&gt; not a quote</pre>"
   );
 
-  assert.equal(
-    formatRichTextInput("Text\n> one\n> two\n\n<pre>&gt; not a quote</pre>", "html"),
-    "<p>Text</p><blockquote><p>one<br>two</p></blockquote><pre>&gt; not a quote</pre>"
-  );
-  assert.equal(
-    formatRichTextInput("<pre>\n> literal\n</pre>", "html"),
-    "<pre>\n> literal\n</pre>"
-  );
+  assert.equal(formatRichTextInput("<pre>\n> literal\n</pre>"), "<pre>\n> literal\n</pre>");
+
+  const codeWithBlankLine = formatRichTextInput("> note\n\n<pre>a\n\n> b\n</pre>");
+  assert.ok(codeWithBlankLine.startsWith("<blockquote><p>note</p></blockquote>"), codeWithBlankLine);
+  assert.ok(codeWithBlankLine.includes("<pre>a\n\n> b\n</pre>"), codeWithBlankLine);
+
+  const emptyArrow = formatRichTextInput('<p class="a">\n>\ntext\n\n> q');
+  assert.ok(emptyArrow.includes("\n>\ntext"), emptyArrow);
+  assert.ok(emptyArrow.endsWith("<blockquote><p>q</p></blockquote>"), emptyArrow);
 
   assert.equal(formatRichTextInput("<p>Keep <b>this</b></p>"), "<p>Keep <b>this</b></p>");
+  assert.equal(
+    formatRichTextInput("<p>Before</p>\n> quoted\n<p>After</p>", "html"),
+    "<p>Before</p>\n> quoted\n<p>After</p>"
+  );
 
   const created = validateCreateTaskBody(
     {
