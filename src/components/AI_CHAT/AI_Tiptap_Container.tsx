@@ -503,7 +503,7 @@ export function AI_Tiptap_Container({
                 editor={editor}
                 id={audioButtonId}
                 active={active}
-                hideDevicePicker={fullScreenCleanup}
+                hideDevicePicker={fullScreenCleanup || chatCleanupEnabled}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}
