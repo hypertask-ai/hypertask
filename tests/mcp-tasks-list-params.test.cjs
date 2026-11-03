@@ -8,7 +8,7 @@ const jiti = require('jiti')(__filename, {
   cache: false,
   alias: { '@': path.join(root, 'src') },
 })
-const { parseSortOrderParam, findParamWithNulByte, findIdParamOutOfRange } = jiti(path.join(root, 'src/lib/mcp/listParams.ts'))
+const { parseSortOrderParam, findParamWithNulByte, findIdParamOutOfRange, parseSectionFilter } = jiti(path.join(root, 'src/lib/mcp/listParams.ts'))
 
 test('sort_order accepts asc and desc in any case', () => {
   assert.equal(parseSortOrderParam('desc', 'desc'), 'desc')
@@ -47,4 +47,21 @@ test('ids past the database integer range are found and named (HTPR-7345 log: ta
 
 test('ids inside the database integer range pass', () => {
   assert.equal(findIdParamOutOfRange({ task_id: [64140], cursor: 2147483647, created_by: null, section_id: undefined, assigned_to: [] }), null)
+})
+
+// HTPR-8460: section=4389 was read as a column name, so an id filter answered zero tasks.
+test('a numeric section filter is a column id, not a column name', () => {
+  assert.deepEqual(parseSectionFilter('4389'), { sectionId: 4389 })
+  assert.deepEqual(parseSectionFilter(' 4389 '), { sectionId: 4389 })
+})
+
+test('a named section filter stays a column name', () => {
+  assert.deepEqual(parseSectionFilter('AI Review'), { section: 'AI Review' })
+  assert.deepEqual(parseSectionFilter(' UX needed '), { section: 'UX needed' })
+})
+
+test('a missing or blank section filter is no filter at all', () => {
+  assert.deepEqual(parseSectionFilter(null), {})
+  assert.deepEqual(parseSectionFilter(undefined), {})
+  assert.deepEqual(parseSectionFilter('   '), {})
 })

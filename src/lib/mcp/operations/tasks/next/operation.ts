@@ -9,6 +9,7 @@ import { blockerStillOpen } from '@/lib/mcp/tasks/blockerStillOpen'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
+import { parseSectionFilter } from '@/lib/mcp/listParams'
 
 const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -104,7 +105,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const section = searchParams.get('section')?.trim() || undefined
+    const sectionFilter = parseSectionFilter(searchParams.get('section'))
+    const section = sectionFilter.section
     const excludeBlockedParam = searchParams.get('exclude_blocked')
     if (
       excludeBlockedParam !== null &&
@@ -127,19 +129,24 @@ export async function GET(request: NextRequest) {
     )
     const projectDoneTitles = doneTitlesByProject.get(projectId)
 
+    const sectionWhere: ClaimableTaskWhereInput =
+      sectionFilter.sectionId !== undefined
+        ? { sectionId: sectionFilter.sectionId }
+        : section
+          ? { section }
+          : projectDoneTitles && projectDoneTitles.size > 0
+            ? {
+                section: {
+                  notIn: Array.from(projectDoneTitles),
+                  mode: 'insensitive',
+                },
+              }
+            : {}
+
     const where: ClaimableTaskWhereInput = {
       projectId,
       status: 'Normal',
-      ...(section
-        ? { section }
-        : projectDoneTitles && projectDoneTitles.size > 0
-          ? {
-              section: {
-                notIn: Array.from(projectDoneTitles),
-                mode: 'insensitive',
-              },
-            }
-          : {}),
+      ...sectionWhere,
       ...(labelFilters.length > 0
         ? {
             taskLabels: {

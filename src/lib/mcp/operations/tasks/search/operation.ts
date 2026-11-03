@@ -26,6 +26,7 @@ import {
   withTaskPresentation,
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
+import { parseSectionFilter } from '@/lib/mcp/listParams'
 
 const SEARCH_SORT_FIELDS = ['id', 'createdAt', 'updatedAt', 'title', 'dueDate', 'ticketNumber'] as const
 type SearchSortField = (typeof SEARCH_SORT_FIELDS)[number]
@@ -89,7 +90,9 @@ export async function GET(request: NextRequest) {
     const projectId = searchParams.get('project_id') ? parseInt(searchParams.get('project_id')!) : null
     let assignedTo = searchParams.get('assigned_to') || undefined
     const priorityParam = searchParams.get('priority')
-    let section = searchParams.get('section') || undefined
+    const sectionFilter = parseSectionFilter(searchParams.get('section'))
+    let sectionId = sectionFilter.sectionId
+    let section = sectionFilter.section
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
     const statusParam = parseTaskStatusParam(searchParams.get('status'), ['Normal', 'Archive'])
     if (!statusParam) {
@@ -100,7 +103,11 @@ export async function GET(request: NextRequest) {
     }
     let status = statusParam
     let limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
-    if (listQuery?.filter.section) section = listQuery.filter.section
+    if (listQuery?.filter.section) {
+      const filterSection = parseSectionFilter(listQuery.filter.section)
+      sectionId = filterSection.sectionId
+      section = filterSection.section
+    }
     let assigneeFromFilter = false
     if (listQuery?.filter.assignee !== undefined) {
       assignedTo = String(listQuery.filter.assignee)
@@ -200,7 +207,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (section) {
+    if (sectionId !== undefined) {
+      where.sectionId = sectionId
+    } else if (section) {
       where.section = section
     }
     if (labelsParam.length > 0) {

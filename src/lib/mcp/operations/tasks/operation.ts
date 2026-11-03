@@ -39,7 +39,7 @@ import {
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
-import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSortOrderParam } from '@/lib/mcp/listParams'
+import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSectionFilter, parseSortOrderParam } from '@/lib/mcp/listParams'
 
 export interface ParentTaskSummary {
   id: number
@@ -396,7 +396,8 @@ export async function GET(request: NextRequest) {
     const listQuery = parsedListQuery.listQuery
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
     if (!sectionIdParam.ok) return sectionIdParam.response
-    let section = searchParams.get('section') || undefined
+    const sectionFilter = parseSectionFilter(searchParams.get('section'))
+    let section = sectionFilter.section
     let assignedTo = searchParams.get('assigned_to') || undefined
     const priorityFilter = parsePriorityFilter(searchParams.getAll('priority'))
     if (!priorityFilter) {
@@ -424,14 +425,15 @@ export async function GET(request: NextRequest) {
     const sortOrderParam = parseSortOrderParam(searchParams.get('sort_order'), 'desc')
     if (!sortOrderParam) return validationError('sort_order must be asc or desc')
     let sortOrder = sortOrderParam
-    let sectionId = sectionIdParam.value
+    let sectionId = sectionIdParam.value ?? sectionFilter.sectionId
     if (listQuery) {
       if (listQuery.query) search = listQuery.query
       if (listQuery.filter.section) {
-        if (/^\d+$/.test(listQuery.filter.section)) {
-          sectionId = Number(listQuery.filter.section)
+        const filterSection = parseSectionFilter(listQuery.filter.section)
+        if (filterSection.sectionId !== undefined) {
+          sectionId = filterSection.sectionId
         } else {
-          section = listQuery.filter.section
+          section = filterSection.section
         }
       }
       if (listQuery.filter.assignee !== undefined) {
