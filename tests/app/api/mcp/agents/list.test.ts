@@ -100,6 +100,20 @@ async function demo() {
       badBody.error,
       'Unauthorized. Invalid or missing authentication token.'
     )
+
+    prismaMock.agent.findFirst = async () => {
+      throw new Error('database unavailable')
+    }
+    const brokenLookupResponse = await handleListAgentsRequest(
+      request(agentToken),
+      'management'
+    )
+    const brokenLookupBody = await json(brokenLookupResponse)
+    assert.equal(brokenLookupResponse.status, 401)
+    assert.equal(
+      brokenLookupBody.error,
+      'Unauthorized. Invalid or missing authentication token.'
+    )
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.user.findUnique = originalUserFindUnique

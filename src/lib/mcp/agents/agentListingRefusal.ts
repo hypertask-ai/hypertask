@@ -6,8 +6,12 @@ export const AGENT_LISTING_REFUSAL =
 
 export async function isAgentTokenCaller(request: NextRequest): Promise<boolean> {
   if (!request.headers.has('Authorization')) return false
-  const ctx = await validateMcpAuth(request, {
-    deferManagementPermissionCheck: true,
-  })
-  return Boolean(ctx?.agentId)
+  try {
+    const ctx = await validateMcpAuth(request, {
+      deferManagementPermissionCheck: true,
+    })
+    return Boolean(ctx?.agentId)
+  } catch {
+    return false
+  }
 }
