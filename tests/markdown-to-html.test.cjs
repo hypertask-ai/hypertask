@@ -163,3 +163,50 @@ test("task create normalizes inferred markdown to stored HTML", () => {
     "<p><strong>Done</strong></p>\n<ol>\n<li><p>First</p></li>\n<li><p>Second</p></li>\n</ol>"
   );
 });
+
+test("quote lines stay quoted when the same input also carries HTML", () => {
+  const mixed = 'See the <a href="https://example.com/a">link</a>\n\n> quoted line\n\nDone';
+  assert.equal(
+    formatRichTextInput(mixed),
+    '<p>See the <a href="https://example.com/a">link</a></p><blockquote><p>quoted line</p></blockquote><p>Done</p>'
+  );
+
+  assert.equal(
+    formatRichTextInput("Text\n> one\n> two\n\n<pre>&gt; not a quote</pre>"),
+    "<p>Text</p><blockquote><p>one<br>two</p></blockquote>\n<pre>&gt; not a quote</pre>"
+  );
+
+  assert.equal(formatRichTextInput("<pre>\n> literal\n</pre>"), "<pre>\n> literal\n</pre>");
+  assert.equal(
+    formatRichTextInput("Line <b>x</b>\r\n\r\n> windows quote"),
+    "<p>Line <b>x</b></p><blockquote><p>windows quote</p></blockquote>"
+  );
+
+  const codeWithBlankLine = formatRichTextInput("> note\n\n<pre>a\n\n> b\n</pre>");
+  assert.ok(codeWithBlankLine.startsWith("<blockquote><p>note</p></blockquote>"), codeWithBlankLine);
+  assert.ok(codeWithBlankLine.includes("<pre>a\n\n> b\n</pre>"), codeWithBlankLine);
+
+  const emptyArrow = formatRichTextInput('<p class="a">\n>\ntext\n\n> q');
+  assert.ok(emptyArrow.includes("\n>\ntext"), emptyArrow);
+  assert.ok(emptyArrow.endsWith("<blockquote><p>q</p></blockquote>"), emptyArrow);
+
+  assert.equal(formatRichTextInput("<p>Keep <b>this</b></p>"), "<p>Keep <b>this</b></p>");
+  assert.equal(
+    formatRichTextInput("<p>Before</p>\n> quoted\n<p>After</p>", "html"),
+    "<p>Before</p>\n> quoted\n<p>After</p>"
+  );
+
+  const created = validateCreateTaskBody(
+    {
+      project_id: 15,
+      title: "Agent report",
+      description: "Fixed <b>now</b>\n\n> Keep this quote.",
+    },
+    null
+  );
+  assert.equal(created.valid, true);
+  assert.equal(
+    created.data.description,
+    "<p>Fixed <b>now</b></p><blockquote><p>Keep this quote.</p></blockquote>"
+  );
+});

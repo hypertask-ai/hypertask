@@ -69,6 +69,55 @@ export function hasMarkdownStructure(value: string): boolean {
   return state.hasStructure && !state.hasHtml
 }
 
+const QUOTED_LINE = /^[ \t]{0,3}>[ \t]?(.*)$/
+const CODE_BLOCK_TAG = /<(\/?)(?:pre|code)\b/gi
+const BLOCK_TAG = /<\/?(?:p|div|ul|ol|li|h[1-6]|pre|blockquote|table|hr|figure|section|article)\b/i
+
+function codeDepthDelta(line: string): number {
+  let delta = 0
+  for (const match of line.matchAll(CODE_BLOCK_TAG)) delta += match[1] ? -1 : 1
+  return delta
+}
+
+function quotedLinesToBlockquote(value: string): string {
+  if (!value.includes('>')) return value
+  const out: string[] = []
+  let text: string[] = []
+  let quoted: string[] | null = null
+  let codeDepth = 0
+  let converted = false
+  const flushQuote = () => {
+    if (!quoted) return
+    const body = quoted.join('<br>')
+    quoted = null
+    if (!body.trim()) return
+    out.push(`<blockquote><p>${body}</p></blockquote>`)
+    converted = true
+  }
+  const flushText = () => {
+    const body = text.join('\n')
+    text = []
+    if (!body.trim()) return
+    out.push(BLOCK_TAG.test(body) ? body : normalizeBlockHtml(body))
+  }
+  for (const line of value.split(/\r\n?|\n/)) {
+    if (codeDepth === 0) {
+      const match = QUOTED_LINE.exec(line)
+      if (match && match[1].trim()) {
+        flushText()
+        ;(quoted ??= []).push(match[1].trim())
+        continue
+      }
+    }
+    flushQuote()
+    codeDepth = Math.max(0, codeDepth + codeDepthDelta(line))
+    text.push(line)
+  }
+  flushQuote()
+  flushText()
+  return converted ? out.join('') : value
+}
+
 export function formatRichTextInput(
   value: string,
   contentType?: 'html' | 'markdown'
@@ -77,7 +126,7 @@ export function formatRichTextInput(
   if (contentType === 'markdown' || hasMarkdownStructure(value)) {
     return markdownToHtml(value)
   }
-  return value
+  return quotedLinesToBlockquote(value)
 }
 
 export function markdownToHtml(markdown: string): string {
