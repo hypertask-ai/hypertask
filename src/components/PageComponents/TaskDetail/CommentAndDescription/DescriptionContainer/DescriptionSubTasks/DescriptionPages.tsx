@@ -35,6 +35,8 @@ const DescriptionPages = () => {
   const holdIntent = useFlag(HTPR_8241_PAGES_INTENT_HOLD_FLAG);
   const [pageOptions, setPageOptions] = useState<BrowserPage[] | null>(null);
   const mounted = useRef(true);
+  const pendingRun = useRef(0);
+  const linkRun = useRef(0);
   const surface = currentTask ? taskSurface(currentTask) : null;
   const surfaceRef = useRef(surface);
   useEffect(() => {
@@ -42,21 +44,27 @@ const DescriptionPages = () => {
   }, [surface]);
   useEffect(() => {
     mounted.current = true;
-    return () => { mounted.current = false; };
-  }, []);
+    return () => {
+      mounted.current = false;
+      if (pendingRun.current === 0) return;
+      pendingRun.current = 0;
+      const pending = surfaceRef.current;
+      if (holdIntent && pending) holdPagesIntent("link", pending);
+    };
+  }, [holdIntent]);
   const openLinkPicker = useCallback(async () => {
+    const run = linkRun.current + 1;
+    linkRun.current = run;
+    pendingRun.current = run;
     try {
       const list = await listBrowserPages();
-      if (!mounted.current) {
-        const pending = surfaceRef.current;
-        if (holdIntent && pending) holdPagesIntent("link", pending);
-        return;
-      }
-      setPageOptions(list);
+      if (pendingRun.current === run) pendingRun.current = 0;
+      if (mounted.current) setPageOptions(list);
     } catch {
+      if (pendingRun.current === run) pendingRun.current = 0;
       if (mounted.current) toast.error("Could not load pages");
     }
-  }, [holdIntent]);
+  }, []);
   const linkFromEvent = useCallback(() => {
     forgetPagesIntent("link");
     void openLinkPicker();

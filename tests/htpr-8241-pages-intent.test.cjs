@@ -185,17 +185,20 @@ test('with the flag off a held click is ignored, waiting for nothing to arrive',
   }
 });
 
-test('a click whose chooser is cut off while the ticket loads stays held for the next mount', async () => {
+test('a click whose chooser is cut off mid-load opens in the replacement panel and is not held twice', async () => {
   const dom = withDom();
   reset();
   try {
     let release;
-    const panel = await mountPanel({ gate: () => new Promise((resolve) => { release = resolve; }) });
+    const first = await mountPanel({ gate: () => new Promise((resolve) => { release = resolve; }) });
     await React.act(async () => intents.requestPagesIntent('link', SURFACE));
-    await panel.unmount();
+    await first.unmount();
+    const second = await mountPanel();
+    assert.equal(second.picker()?.getAttribute('data-picker'), 'Link page to ticket');
     release();
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(intents.claimPagesIntent('link', SURFACE), true);
+    assert.equal(intents.claimPagesIntent('link', SURFACE), false);
+    await second.unmount();
   } finally {
     dom.restore();
   }
