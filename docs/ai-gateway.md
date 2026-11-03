@@ -130,18 +130,20 @@ repurpose a team key for tooling:
 
 - **Model canary** — set server-only `MODEL_CANARY_AI_GATEWAY_API_KEY` to
   an approved internal tooling key. The production `/api/cron/ai-model-canary`
-  probe never falls back to `AI_GATEWAY_API_KEY`. Missing, malformed or
-  trials-key-identical configuration disables the entire run without inference
-  or model-status writes; the run then records
-  `state: "disabled"` with its reason, and
+  probe never falls back to `AI_GATEWAY_API_KEY`. A missing, malformed or
+  trials-key-identical value removes the gateway lane from the run and is never
+  used for inference. The run still probes every enabled direct-provider QA key,
+  because those probes bill the team's own key, and records `state: "enabled"`
+  with the rows it managed to check. With no usable credential on any lane the
+  run records `state: "disabled"` with its reason and writes no model rows, and
   `GET /api/mcp/ai/models/status` reports that state next to the model rows, so
   a disabled canary never reads as an empty-but-healthy list. `state:
   "never_run"` means the cron has not run at all, and `configured: false` (with
-  `configuredReason`) shows a missing or invalid key before the next daily run.
+  `configuredReason`) always shows a missing or invalid internal key, so an
+  enabled run with only direct-provider rows is never read as a fully checked
+  list.
   Those extra fields sit behind the `htpr-7748-model-canary-state` flag; with it
-  off the route returns the older `checkedAt` and `models` pair. After
-  configuration, existing enabled direct-provider QA keys continue to be probed
-  separately.
+  off the route returns the older `checkedAt` and `models` pair.
   Check the `model-canary` gateway tag and key identity after a run;
   org-wide `/v1/credits` totals do not prove isolation.
 

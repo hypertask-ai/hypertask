@@ -197,10 +197,6 @@ export async function runModelCanary(): Promise<ModelCanaryCounts> {
 async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCounts> {
   const counts: ModelCanaryCounts = { checked: 0, pass: 0, fail: 0, skipped: 0, inconclusive: 0 };
   const { key: gatewayKey, reason } = modelCanaryGatewayKeyState();
-  if (!gatewayKey) {
-    await (await getRedis()).set(STATE, JSON.stringify({ state: "disabled", reason, checkedAt: new Date().toISOString() }));
-    return counts;
-  }
   const started = Date.now();
   const deadline = started + BUDGET_MS;
   const redis = await getRedis();
@@ -212,7 +208,7 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
     if (teams.length !== 1) throw new Error("Model canary requires exactly one QA-owned team");
     const team = teams[0];
     const targets = modelCanaryInventory();
-    const credentials = new Map<string, string | undefined>([["gateway", gatewayKey]]);
+    const credentials = new Map<string, string | undefined>(gatewayKey ? [["gateway", gatewayKey]] : []);
     for (const provider of new Set(targets.flatMap((target) => target.provider ? [target.provider] : []))) {
       signal.throwIfAborted();
       const definition = targets.find((target) => target.provider === provider)?.option;
@@ -221,8 +217,12 @@ async function executeModelCanary(signal: AbortSignal): Promise<ModelCanaryCount
       const credential = await resolveTeamByokApiKey(provider, { trustedTeamId: team.id, userId: FEATURE_FLAG_QA_USER_ID });
       if (credential && !isVercelAiGatewayKey(credential)) credentials.set(`byok:${provider}`, credential);
     }
+    if (credentials.size === 0) {
+      await redis.set(STATE, JSON.stringify({ state: "disabled", reason, checkedAt: new Date().toISOString() }));
+      return counts;
+    }
     const work = targets.flatMap((target) => [
-      { target, lane: "gateway" },
+      ...(gatewayKey ? [{ target, lane: "gateway" }] : []),
       ...(target.capability === "chat" && target.provider && credentials.has(`byok:${target.provider}`) ? [{ target, lane: `byok:${target.provider}` }] : []),
     ]);
     const previous = new Map((await redis.hvals(LATEST)).map((value) => {
