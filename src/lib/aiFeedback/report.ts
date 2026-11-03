@@ -63,11 +63,17 @@ function description(input: AutomaticFeedbackInput, fingerprint: string, display
     reporterLine('Clients', input.client ? [input.client] : [])
 }
 
+function membershipRefusal(input: AiFeedbackInput): boolean {
+  const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
+  return /\bnot a member\b/i.test(code) || /\bnot a member of (?:this|that|the) (?:board|project|team)\b/i.test(input.error ?? '')
+}
+
 function scopeRefusal(input: AiFeedbackInput): boolean {
-  if (![401, 403, 404].includes(input.status ?? 0)) return false
   const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
   if (code === 'route not found' || code === 'not found' && /\/api\//i.test(input.error ?? '')) return false
   const refusal = `${code} ${input.error ?? ''}`
+  if (membershipRefusal(input) && (input.status === undefined || [400, 401, 403, 404].includes(input.status))) return true
+  if (![401, 403, 404].includes(input.status ?? 0)) return false
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
 }
 
