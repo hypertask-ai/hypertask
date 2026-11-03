@@ -854,6 +854,13 @@ export const AudioButton = ({
             aria-hidden="true"
           />
           <span className="text-dense text-white-black">Dictation</span>
+          <span
+            data-ai-chat-recording-elapsed
+            className="shrink-0 text-dense tabular-nums text-icon-dark-gray"
+          >
+            {String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:
+            {String(elapsedSeconds % 60).padStart(2, "0")}
+          </span>
           <button
             type="button"
             data-ai-chat-recording-cancel={isAiChat || undefined}
