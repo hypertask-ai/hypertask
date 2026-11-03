@@ -6,7 +6,7 @@ import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
-import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG } from "@/lib/flags/keys";
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -1017,6 +1017,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Agent log unavailable. Retry later or use kind (question|qa|done) for a people comment.' }, { status: 503 })
     }
     const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
+    const logStatusFlagOn = routedTo === 'log'
+      ? await isFeatureEnabled(HTPR_8344_LOG_POST_STATUS_FLAG, user.id)
+      : false
     const skillContext = await getMcpSkillContext(ctx, task.projectId, [text])
 
     if (dryRun) {
@@ -1160,7 +1163,9 @@ export async function POST(request: NextRequest) {
       ctx.teamScope
     )
 
-    return NextResponse.json({ ...mcpResponse, skill_context: skillContext }, { status: 201 })
+    const createdStatus = mcpResponse.routedTo === 'log' && logStatusFlagOn ? 202 : 201
+
+    return NextResponse.json({ ...mcpResponse, skill_context: skillContext }, { status: createdStatus })
   } catch (error) {
     if (error instanceof AgentLogUnavailableError) return NextResponse.json({ success: false, error: error.message }, { status: 503 })
     if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
