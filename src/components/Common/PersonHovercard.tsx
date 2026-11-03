@@ -318,7 +318,8 @@ const ParentPersonHovercard = ({
       show();
     };
     const showOnFocus = (event: FocusEvent) => {
-      if (!(event.target instanceof Element) || !event.target.matches(":focus-visible")) return;
+      const target = event.target as Element | null;
+      if (!target?.matches?.(":focus-visible")) return;
       show();
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
