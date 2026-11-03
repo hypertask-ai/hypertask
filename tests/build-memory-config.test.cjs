@@ -86,3 +86,20 @@ test("production build names the builder the heap cap bounds", () => {
       "heap error (HYCI-61)",
   );
 });
+
+test("production build caps webpack parallelism at the build machine's cores", () => {
+  const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
+  const parallelism = /NEXT_WEBPACK_PARALLELISM=(\d+)/.exec(pkg.scripts.build);
+  assert.ok(
+    parallelism,
+    "the build script must cap webpack parallelism: webpack defaults it to 100 concurrent module builds, and " +
+      "each concurrent SWC transform holds native memory outside the V8 heap cap, so the 8 GB build container is " +
+      "OOM-killed while the heap is still inside its own cap (HTPR-8342)",
+  );
+  const VERCEL_STANDARD_MACHINE_CORES = 4;
+  assert.ok(
+    Number(parallelism[1]) <= VERCEL_STANDARD_MACHINE_CORES,
+    `webpack parallelism ${parallelism[1]} must not exceed the ${VERCEL_STANDARD_MACHINE_CORES} cores of the ` +
+      "build machine (HTPR-8342)",
+  );
+});
