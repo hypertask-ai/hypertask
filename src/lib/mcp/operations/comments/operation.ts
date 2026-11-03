@@ -202,6 +202,7 @@ const COMMENT_LIST_FIELDS = [
   'createdAt',
   'editedAt',
   'editedBy',
+  'kind',
   'creatorId',
   'creator',
   'agent',

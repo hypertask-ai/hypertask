@@ -12,7 +12,7 @@ const {
   transpile,
 } = require(path.join(root, "tests/helpers/load-mcp-agents.cjs"));
 
-function loadRoute(comments) {
+function loadRoute(comments, listQuery = null) {
   const javascript = transpile(routePath);
 
   let commentFindManyQuery;
@@ -87,12 +87,8 @@ function loadRoute(comments) {
     },
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/flags/keys": {},
-    "@/lib/mcp/listQuery": {
-      parseNumericCursor: () => null,
-      parseUpdatedSince: () => null,
-      projectRows: (rows) => rows,
-    },
-    "@/lib/mcp/readListQuery": { readListQuery: () => ({ listQuery: null }) },
+    "@/lib/mcp/listQuery": require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}),
+    "@/lib/mcp/readListQuery": { readListQuery: () => ({ listQuery }) },
   };
   const loaded = new Module(routePath);
   loaded.filename = routePath;
@@ -165,4 +161,30 @@ test("a comment with no stored kind still answers with an explicit null", async 
 
   assert.equal(response.body.comments[0].kind, null);
   assert.ok(Object.hasOwn(response.body.comments[0], "kind"));
+});
+
+test("an agent can ask for fields=kind without a 400", async () => {
+  const route = loadRoute(
+    [commentFixture({ id: 5, kind: "question" })],
+    { fields: ["kind"] },
+  );
+
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ task_id: "100" }) },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.comments, [{ kind: "question" }]);
+});
+
+test("a field Hypertask does not serve is still refused", async () => {
+  const route = loadRoute([], { fields: ["kindred"] });
+
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ task_id: "100" }) },
+  });
+
+  assert.equal(response.status, 400);
+  assert.match(response.body.message, /not known: kindred/);
+  assert.match(response.body.message, /kind/);
 });
