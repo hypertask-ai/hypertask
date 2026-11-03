@@ -187,10 +187,7 @@ export async function getInboxNotifications(
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     relationLoadStrategy: "join",
   });
-  if (
-    withCachedDescription &&
-    await isFeatureEnabled(HTPR_8264_INBOX_ROW_FILL_FLAG, userId).catch(() => false)
-  ) {
+  if (withCachedDescription && await isFeatureEnabled(HTPR_8264_INBOX_ROW_FILL_FLAG, userId)) {
     return withLatestHumanComments(rows, client);
   }
   return rows;
