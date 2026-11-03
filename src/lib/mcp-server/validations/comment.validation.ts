@@ -37,12 +37,26 @@ const replyToInvocationIdSchema = z.coerce
   .optional()
   .describe('For agent replies, the agent Mentioned notification ID that invoked the agent. Use this when the mention was in the task description, which has no comment ID. Routes the answer to the requester\'s Important inbox.');
 
-export const mentionSchema = z.object({
-  user_id: z.coerce.number().int().positive('user_id must be a positive integer'),
-  display_name: z.string().min(1, 'display_name cannot be empty'),
-});
+export const mentionEntrySchema = z.union([
+  z
+    .string()
+    .trim()
+    .min(1, 'mention name cannot be empty')
+    .max(120, 'mention name cannot exceed 120 characters'),
+  z.object({
+    user_id: z.coerce.number().int().positive('user_id must be a positive integer'),
+    display_name: z.string().min(1, 'display_name cannot be empty'),
+  }),
+]);
 
-export type MentionInput = z.infer<typeof mentionSchema>;
+export type MentionEntryInput = z.infer<typeof mentionEntrySchema>;
+
+const mentionsDescription =
+  'One entry per person mentioned in the text. Pass a display name or user id ("Mohsin" or "193") and the server resolves it against the board members, turning each @Name in the text into a real mention that notifies the person. An unknown or ambiguous name is refused with close matches and nothing posts. Object form { user_id, display_name } still works. List names with list_project_members.';
+
+export const mentionsSchema = z.array(mentionEntrySchema).optional().describe(mentionsDescription);
+
+export type MentionInput = MentionEntryInput;
 
 export function getAddCommentInputSchema() {
   const baseSchema = createTaskIdentificationBaseSchema().extend({
@@ -54,10 +68,7 @@ export function getAddCommentInputSchema() {
       .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
     content_type: commentContentTypeSchema,
     inline_images: z.boolean().optional(),
-    mentions: z
-      .array(mentionSchema)
-      .optional()
-      .describe('Required when text contains @mentions. Resolve each @DisplayName via list_project_members, then include { user_id, display_name } for each. Use longest match first (e.g. prefer "John Doe" over "John" when both exist).'),
+    mentions: mentionsSchema,
     attachments: inlineAttachmentsSchema,
     kind: commentKindSchema,
     has_attachments: hasAttachmentsSchema,
@@ -131,7 +142,7 @@ export function getUpdateCommentBaseSchema() {
         .max(5000, 'Comment text cannot exceed 5000 characters'),
       content_type: commentContentTypeSchema,
       inline_images: z.boolean().optional(),
-      mentions: z.array(mentionSchema).optional(),
+      mentions: mentionsSchema,
     })
     .strict();
 }
@@ -164,10 +175,7 @@ export function getAddCommentBaseSchema() {
         .describe('Comment text. HTML or structural markdown; content_type can explicitly select either format. Use @DisplayName with matching mentions entries.'),
       content_type: commentContentTypeSchema,
       inline_images: z.boolean().optional(),
-      mentions: z
-        .array(mentionSchema)
-        .optional()
-        .describe('Required when text contains @mentions. Resolve each @DisplayName via list_project_members, then include { user_id, display_name } for each. Use longest match first (e.g. prefer "John Doe" over "John" when both exist).'),
+      mentions: mentionsSchema,
       attachments: inlineAttachmentsSchema,
       kind: commentKindSchema,
       has_attachments: hasAttachmentsSchema,
@@ -274,10 +282,7 @@ export function getAddCommentCrudBaseSchema() {
         .describe('Comment text for add/update. HTML or structural markdown; content_type can explicitly select either format.'),
       content_type: commentContentTypeSchema,
       inline_images: z.boolean().optional(),
-      mentions: z
-        .array(mentionSchema)
-        .optional()
-        .describe('Required when text contains @mentions. Resolve via list_project_members, then include { user_id, display_name } for each.'),
+      mentions: mentionsSchema,
       attachments: inlineAttachmentsSchema,
       kind: commentKindSchema,
       has_attachments: hasAttachmentsSchema,

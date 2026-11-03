@@ -14,6 +14,11 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
+import {
+  mentionProblemMessage,
+  resolveMentionInputs,
+  type RawMentionInput,
+} from '@/utils/controllers/comments/resolveMentionInputs'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
 import { deleteCommentService } from '@/utils/controllers/comments/deleteCommentService'
 import { persistUrlsForComment } from '@/utils/controllers/urls/extractUrlsFromContent'
@@ -35,7 +40,7 @@ export interface UpdateCommentRequest {
   text: string
   inline_images?: boolean
   content_type?: 'html' | 'markdown'
-  mentions?: McpMentionInput[]
+  mentions?: RawMentionInput[]
 }
 
 export interface UpdateCommentResponse {
@@ -101,7 +106,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     if (body.inline_images !== undefined && typeof body.inline_images !== "boolean") {
       return NextResponse.json({ success: false, error: "inline_images must be a boolean" }, { status: 400 });
     }
-    const { text, content_type, mentions } = body
+    const { text, content_type, mentions: mentionInputs } = body
+    let mentions: McpMentionInput[] | undefined
 
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
@@ -135,35 +141,14 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       )
     }
 
-    if (mentions !== undefined) {
-      if (!Array.isArray(mentions)) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'mentions must be an array'
-          },
-          { status: 400 }
-        )
-      }
-
-      const invalidMention = mentions.find(
-        (mention) =>
-          !mention ||
-          typeof mention.user_id !== 'number' ||
-          !Number.isInteger(mention.user_id) ||
-          mention.user_id <= 0 ||
-          typeof mention.display_name !== 'string' ||
-          mention.display_name.trim().length === 0
+    if (mentionInputs !== undefined && !Array.isArray(mentionInputs)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'mentions must be an array'
+        },
+        { status: 400 }
       )
-      if (invalidMention) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: 'mentions must include positive integer user_id and non-empty display_name'
-          },
-          { status: 400 }
-        )
-      }
     }
 
     const comment = await prisma.comment.findUnique({
@@ -221,6 +206,38 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         },
         { status: 403 }
       )
+    }
+
+    if (mentionInputs && mentionInputs.length > 0) {
+      const resolution = await resolveMentionInputs({
+        inputs: mentionInputs,
+        projectId: comment.task.projectId,
+        requestingUserId: user.id,
+      })
+      if (resolution.invalid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'each mention must be a board member name or id, or { user_id, display_name }'
+          },
+          { status: 400 }
+        )
+      }
+      if (resolution.problems.length > 0) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: mentionProblemMessage(resolution.problems[0]),
+            details: {
+              field: 'mentions',
+              code: resolution.problems[0].reason === 'ambiguous' ? 'ambiguous_mention' : 'unknown_mention',
+              problems: resolution.problems,
+            }
+          },
+          { status: 400 }
+        )
+      }
+      mentions = resolution.mentions
     }
 
     if (mentions && mentions.length > 0) {

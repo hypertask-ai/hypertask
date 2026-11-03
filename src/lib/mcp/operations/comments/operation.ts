@@ -25,6 +25,11 @@ import {
   persistUrlsForComment,
 } from '@/utils/controllers/urls/extractUrlsFromContent'
 import { convertPlainTextMentionsToHtml, resolveTextMentions } from '@/utils/controllers/comments/processMentions'
+import {
+  mentionProblemMessage,
+  resolveMentionInputs,
+  type RawMentionInput,
+} from '@/utils/controllers/comments/resolveMentionInputs'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { AgentInvocationNotPendingError } from '@/utils/controllers/comments/agentInvocationCorrelation'
 import { findTaskByIdentifier, taskIdentifierErrorResponse, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
@@ -123,7 +128,7 @@ export interface AddCommentRequest {
   project_id?: number
   images?: string[]
   has_attachments?: boolean
-  mentions?: McpMentionInput[]
+  mentions?: RawMentionInput[]
   reply_to_comment_id?: number
   reply_to_invocation_id?: number
 }
@@ -542,7 +547,8 @@ export async function POST(request: NextRequest) {
       const { isBrowserRenderableImage } = await import("@/lib/media/browserRenderableImage");
       hasImageAttachments = attachmentInput.data?.some((file) => isBrowserRenderableImage(file.content_type, file.filename)) ?? false;
     }
-    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions, reply_to_comment_id, reply_to_invocation_id } = body
+    const { dry_run, task_id, ticket_number, unique_index, text, content_type, project_id, images, has_attachments, mentions: mentionInputs, reply_to_comment_id, reply_to_invocation_id } = body
+    let mentions: McpMentionInput[] | undefined
     if (dry_run !== undefined && typeof dry_run !== 'boolean') {
       return NextResponse.json(
         buildFieldError('invalid_field', 'dry_run', 'dry_run must be a boolean'),
@@ -758,39 +764,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (mentions !== undefined) {
-      if (!Array.isArray(mentions)) {
-        return NextResponse.json(
-          {
-            ...buildFieldError('invalid_field', 'mentions', 'mentions must be an array'),
-            ...(dryRun && { valid: false })
-          },
-          { status: 400 }
-        )
-      }
-
-      const invalidMention = mentions.find(
-        (mention) =>
-          !mention ||
-          typeof mention.user_id !== 'number' ||
-          !Number.isInteger(mention.user_id) ||
-          mention.user_id <= 0 ||
-          typeof mention.display_name !== 'string' ||
-          mention.display_name.trim().length === 0
+    if (mentionInputs !== undefined && !Array.isArray(mentionInputs)) {
+      return NextResponse.json(
+        {
+          ...buildFieldError('invalid_field', 'mentions', 'mentions must be an array'),
+          ...(dryRun && { valid: false })
+        },
+        { status: 400 }
       )
-      if (invalidMention) {
-        return NextResponse.json(
-          {
-            ...buildFieldError(
-              'invalid_field',
-              'mentions',
-              'mentions must include positive integer user_id and non-empty display_name'
-            ),
-            ...(dryRun && { valid: false })
-          },
-          { status: 400 }
-        )
-      }
     }
 
     const task = await findTaskByIdentifier(
@@ -831,6 +812,42 @@ export async function POST(request: NextRequest) {
         },
         { status: 404 }
       )
+    }
+
+    if (mentionInputs && mentionInputs.length > 0) {
+      const resolution = await resolveMentionInputs({
+        inputs: mentionInputs,
+        projectId: taskWithOwner.projectId,
+        requestingUserId: user.id,
+      })
+      if (resolution.invalid) {
+        return NextResponse.json(
+          {
+            ...buildFieldError(
+              'invalid_field',
+              'mentions',
+              'each mention must be a board member name or id, or { user_id, display_name }'
+            ),
+            ...(dryRun && { valid: false })
+          },
+          { status: 400 }
+        )
+      }
+      if (resolution.problems.length > 0) {
+        return NextResponse.json(
+          {
+            ...buildFieldError('invalid_field', 'mentions', mentionProblemMessage(resolution.problems[0])),
+            details: {
+              field: 'mentions',
+              code: resolution.problems[0].reason === 'ambiguous' ? 'ambiguous_mention' : 'unknown_mention',
+              problems: resolution.problems,
+            },
+            ...(dryRun && { valid: false })
+          },
+          { status: 400 }
+        )
+      }
+      mentions = resolution.mentions
     }
 
     if (mentions && mentions.length > 0) {
