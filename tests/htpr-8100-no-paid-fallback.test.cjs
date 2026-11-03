@@ -1,32 +1,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const jiti = require("jiti")(__filename, {
-  interopDefault: true,
-  alias: { "@": path.join(root, "src") },
-  fsCache: false,
-});
-
-const definition = jiti(path.join(root, "src/lib/flags/definitions/htpr-8100-no-paid-fallback.ts"));
+const definition = loadModule("src/lib/flags/definitions/htpr-8100-no-paid-fallback.ts");
 
 function guardWithFunding(fundingFor) {
-  const code = ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/ai/modelFundingGuard.ts"), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const loaded = { exports: {} };
-  vm.runInNewContext(code, {
-    module: loaded,
-    exports: loaded.exports,
-    require: (id) => id === "@/app/api/ai/_lib/modelProvider"
-      ? { gatewayFundingSourceForApiKey: fundingFor }
-      : require(id),
-  }, { filename: path.join(root, "src/lib/ai/modelFundingGuard.ts") });
-  return loaded.exports;
+  return loadModule("src/lib/ai/modelFundingGuard.ts", {
+    "@/app/api/ai/_lib/modelProvider": { gatewayFundingSourceForApiKey: fundingFor },
+  });
 }
 
 test("the flag is a bugfix money flag that starts at Owner and QA with a release-risk entry", () => {
@@ -43,18 +24,18 @@ test("the flag is a bugfix money flag that starts at Owner and QA with a release
 });
 
 test("a fallback paid by our own shared gateway key is refused", () => {
-  const stubbed = guardWithFunding((apiKey) => apiKey === "vck_shared_platform_key" ? "shared" : "customer");
-  assert.equal(stubbed.fallbackRunsOnOurOwnGatewayKey("vck_shared_platform_key"), true);
+  const guard = guardWithFunding((apiKey) => apiKey === "vck_shared_platform_key" ? "shared" : "customer");
+  assert.equal(guard.fallbackRunsOnOurOwnGatewayKey("vck_shared_platform_key"), true);
 });
 
 test("a team's own key keeps its fallback", () => {
-  const stubbed = guardWithFunding((apiKey) => {
+  const guard = guardWithFunding((apiKey) => {
     if (apiKey === "vck_shared_platform_key") return "shared";
     if (apiKey === "vck_managed_team_key") return "managed";
     return "customer";
   });
-  assert.equal(stubbed.fallbackRunsOnOurOwnGatewayKey("vck_managed_team_key"), false);
-  assert.equal(stubbed.fallbackRunsOnOurOwnGatewayKey("sk-team-own-key"), false);
-  assert.equal(stubbed.fallbackRunsOnOurOwnGatewayKey({ kind: "baseten", apiKey: "x", modelKey: "y" }), false);
-  assert.equal(stubbed.fallbackRunsOnOurOwnGatewayKey(undefined), false);
+  assert.equal(guard.fallbackRunsOnOurOwnGatewayKey("vck_managed_team_key"), false);
+  assert.equal(guard.fallbackRunsOnOurOwnGatewayKey("sk-team-own-key"), false);
+  assert.equal(guard.fallbackRunsOnOurOwnGatewayKey({ kind: "baseten", apiKey: "x", modelKey: "y" }), false);
+  assert.equal(guard.fallbackRunsOnOurOwnGatewayKey(undefined), false);
 });
