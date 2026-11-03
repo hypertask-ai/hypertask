@@ -37,6 +37,7 @@ test("rich text hovercards accept only canonical person mention labels", () => {
   assert.match(source, /identityChanged/);
   assert.match(source, /mention\.removeAttribute\("tabindex"\)/);
   assert.match(source, /onFloatingFocusEnter=\{cancelClose\}/);
+  assert.match(source, /matches\(":focus-visible"\)/);
 });
 
 test("task people and persisted mentions share the hovercard", () => {

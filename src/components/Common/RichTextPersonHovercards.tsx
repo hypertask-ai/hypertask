@@ -122,7 +122,11 @@ const RichTextPersonHovercards = ({
       setActive(mention);
       setOpen(true);
     };
-    const onFocusIn = (event: FocusEvent) => activate(event.target);
+    const onFocusIn = (event: FocusEvent) => {
+      const mention = mentionFromTarget(event.target);
+      if (!mention || !mention.element.matches(":focus-visible")) return;
+      activate(event.target);
+    };
     const onFocusOut = (event: FocusEvent) => {
       const mention = mentionFromTarget(event.target);
       const next = event.relatedTarget;
