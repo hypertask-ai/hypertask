@@ -230,7 +230,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
 
   const handleStartNewSession = async () => {
     if (isStartingNewSessionRef.current) return;
-    if (!windowDrag && chatWindowControls) {
+    if (chatWindowControls) {
       const opened = await chatWindowControls.openNewChatWindow();
       if (!opened && chatWindowControls.atCapacity) toast("Close a chat window to open another chat.");
       return;
@@ -279,13 +279,11 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                 sidebarChats?.onSelect({ kind: "ai" });
                 if (!isFullScreenChat && chat.id !== resolvedSessionId && chatWindowControls) {
                   if (chatWindowControls.focusOpenSessionWindow(chat.id)) return;
-                  if (!windowDrag) {
-                    if (chatWindowControls.atCapacity) {
-                      toast("Close a chat window to open another chat.");
-                      return;
-                    }
-                    if (chatWindowControls.openSessionWindow(chat.id)) return;
+                  if (chatWindowControls.atCapacity) {
+                    toast("Close a chat window to open another chat.");
+                    return;
                   }
+                  if (chatWindowControls.openSessionWindow(chat.id)) return;
                 }
                 selectSession(chat.id);
               }
