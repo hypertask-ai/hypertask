@@ -37,8 +37,11 @@ import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
+import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
+import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
+import { X } from "lucide-react";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
@@ -85,6 +88,12 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const queueEnterWhileBoardsLoad = useFlag(HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG);
   const holdEnterUntilTextRenders = useFlag(HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
+  const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
+  const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
+  const stopDictationButtonId = "compose-task-stop-dictation";
+  const cancelDictationButtonId = "compose-task-cancel-dictation";
+  const createAfterDictation = useRef(false);
+  const dictationDelivered = useRef(false);
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
@@ -234,12 +243,23 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
       if (boardChipEnabled && boardPickerOpen) return;
+      const cmdControl = (isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey);
+      if (composerKeysLayout && dictating && cmdControl && !event.altKey && !event.shiftKey && !event.isComposing && event.key === "Enter") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        createAfterDictation.current = true;
+        document.getElementById(stopDictationButtonId)?.click();
+        return;
+      }
       if (dictationShortcutEnabled && newTaskWindow && !event.repeat && !event.isComposing &&
-          ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
+          cmdControl &&
           !event.altKey && event.shiftKey && event.code === "KeyD") {
         event.preventDefault();
         event.stopImmediatePropagation();
-        if (!addingImages) document.getElementById("compose-task-audio-button")?.click();
+        if (!addingImages) {
+          const dictationButtonId = composerKeysLayout && dictating ? stopDictationButtonId : "compose-task-audio-button";
+          document.getElementById(dictationButtonId)?.click();
+        }
         return;
       }
       if (boardChipEnabled && event.target === input.current && !event.isComposing &&
@@ -259,7 +279,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow]);
+  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -401,6 +421,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   };
 
   useEffect(() => {
+    if (!createAfterDictation.current || dictating) return;
+    createAfterDictation.current = false;
+    const delivered = dictationDelivered.current;
+    dictationDelivered.current = false;
+    if (delivered && text.trim()) void send();
+  }, [dictating, text]);
+
+  useEffect(() => {
     if (!active || !focusProxy || focusProxy.pendingEnter === undefined ||
         text !== focusProxy.pendingEnter || document.activeElement !== input.current) return;
     delete focusProxy.pendingEnter;
@@ -432,6 +460,52 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         }} />
     </Suspense>
   );
+
+  const dictationControl = newTaskWindow && (
+    <div className={composerKeysLayout && dictating ? "hidden" : undefined}>
+      <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
+        defaultContent={text} hasText={Boolean(text.trim())} toggleRecording={(on: boolean) => {
+          if (on) dictationDelivered.current = false;
+          setRecording(on);
+        }} onProcessingChange={setTranscribing}
+        disabled={!active || addingImages} projectId={boardChipEnabled ? targetBoardId : destinationProject?.id} mobilePrimaryTone="primary" mobilePresentation="compact"
+        {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
+        callbackHandler={(transcript, replace) => {
+          dictationDelivered.current = true;
+          if (replace) {
+            const plain = new DOMParser().parseFromString(transcript, "text/html").body.textContent ?? "";
+            setText((previous) => `${previous} ${plain}`.trim());
+          } else setText((previous) => previous + transcript);
+        }} />
+    </div>
+  );
+
+  const boardControl = boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
+    {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
+    <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
+      aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
+      aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
+      disabled={dictating} onClick={openBoardPicker}
+      onKeyDown={(event) => {
+        if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          input.current?.focus({ preventScroll: true });
+        } else if ((event.key === "Enter" || event.key === " ") && !event.nativeEvent.isComposing) {
+          event.preventDefault();
+          event.stopPropagation();
+          openBoardPicker();
+        }
+      }} />
+  </div>;
+
+  const footerKeys = composeWriterFooterKeys({
+    recording,
+    transcribing,
+    commandKey: isApple ? "Cmd" : "Ctrl",
+    board: Boolean(boardChipEnabled && showBoardChip),
+    dictate: Boolean(dictationShortcutEnabled),
+  });
 
   return enabled ? (
     <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} data-compose-skill-menu-open={skillMenuEnabled && skillMenu.menu ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
@@ -509,36 +583,38 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             {!newTaskWindow && !phoneTaskWriterSheet && attachments}
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
+                {composerKeysLayout && boardControl}
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
-                {newTaskWindow && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
-                  defaultContent={text} hasText={Boolean(text.trim())} toggleRecording={setRecording} onProcessingChange={setTranscribing}
-                  disabled={!active || addingImages} projectId={boardChipEnabled ? targetBoardId : destinationProject?.id} mobilePrimaryTone="primary" mobilePresentation="compact"
-                  callbackHandler={(transcript, replace) => {
-                    if (replace) {
-                      const plain = new DOMParser().parseFromString(transcript, "text/html").body.textContent ?? "";
-                      setText((previous) => `${previous} ${plain}`.trim());
-                    } else setText((previous) => previous + transcript);
-                  }} />}
-                {boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
-                  {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
-                  <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
-                    aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
-                    aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
-                    disabled={dictating} onClick={openBoardPicker}
-                    onKeyDown={(event) => {
-                      if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        input.current?.focus({ preventScroll: true });
-                      } else if ((event.key === "Enter" || event.key === " ") && !event.nativeEvent.isComposing) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openBoardPicker();
-                      }
-                    }} />
-                </div>}
+                {!composerKeysLayout && dictationControl}
+                {!composerKeysLayout && boardControl}
               </div>
-              <SendMessageButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={mobile} onClick={() => void send()} />
+              <div className={composerKeysLayout ? "flex shrink-0 items-center gap-2" : "flex items-center"}>
+                {composerKeysLayout && dictating && (
+                  <div className="flex items-center rounded-[4px] bg-hover-active pl-2 pr-1 text-dense text-white-black max-sm:min-h-11">
+                    <button type="button" aria-label="Stop dictation" disabled={transcribing}
+                      onClick={() => document.getElementById(stopDictationButtonId)?.click()}
+                      className="flex items-center gap-2 py-1 disabled:cursor-wait disabled:opacity-60 max-sm:min-h-11 max-sm:px-1">
+                      <span className="h-2 w-2 rounded-full bg-white-black" aria-hidden />
+                      Dictation
+                    </button>
+                    <button type="button" aria-label="Cancel dictation" disabled={transcribing}
+                      onClick={() => document.getElementById(cancelDictationButtonId)?.click()}
+                      className="ml-1 flex h-6 w-6 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black disabled:cursor-wait disabled:opacity-60 max-sm:h-11 max-sm:w-11">
+                      <X size={14} strokeWidth={1.75} aria-hidden />
+                    </button>
+                  </div>
+                )}
+                {composerKeysLayout && dictationControl}
+                {composerKeysEnabled && newTaskWindow ? (
+                  <button type="button" aria-label="Create task" disabled={addingImages || waitingForBoards || dictating || !text.trim()}
+                    onClick={() => void send()}
+                    className="rounded-[4px] bg-shadcn-primary px-3 py-1 text-dense font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 max-sm:min-h-11">
+                    Create
+                  </button>
+                ) : (
+                  <SendMessageButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={mobile} onClick={() => void send()} />
+                )}
+              </div>
             </div>
           </div>
           <input type="file" accept={newTaskWindow ? undefined : "image/*"} multiple hidden ref={fileInputRef} onChange={(event) => {
@@ -548,13 +624,20 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           {error && <p role="alert" className="px-2 pt-2 text-meta text-text-light-gray">{error}</p>}
         </div>
       )}
-      {!phoneTaskWriterSheet && <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
+      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className="flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
+        <div className="flex min-w-0 flex-wrap items-center gap-4">
+          {footerKeys.left.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
+        </div>
+        <div className="flex shrink-0 items-center gap-4">
+          {footerKeys.right.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
+        </div>
+      </div> : <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
         {clickableFooter ? <button type="button" aria-label="Send" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating || !text.trim()} onClick={() => void send()}><HintKey>Enter</HintKey> Send</button> : <span><HintKey>Enter</HintKey> Send</span>}
         {clickableFooter ? <button type="button" aria-label={newTaskWindow ? "Attach files" : "Add images"} className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating} onClick={handleAttachmentClick}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>}
         {clickableFooter ? <button type="button" aria-label="Search" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} onClick={onSearch}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>}
         {boardChipEnabled && (clickableFooter ? <button type="button" aria-label="Board" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || dictating} onClick={openBoardPicker}><HintKey>{boardShortcut}</HintKey> Board</button> : <span><HintKey>{boardShortcut}</HintKey> Board</span>)}
         {(!ctrljFooterOneLine || !newTaskWindow || mobile) && (clickableFooter ? <button type="button" aria-label="Close" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing} onClick={onClose}><HintKey>Esc</HintKey> Close</button> : <span><HintKey>Esc</HintKey> Close</span>)}
-      </div>}
+      </div>)}
       {boardChipEnabled && active && boardPickerOpen && <MoveTaskGlobal
         boards={loadingBoards && !boards.length ? undefined : boards}
         closeHTC={() => setBoardPickerOpen(false)}

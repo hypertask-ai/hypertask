@@ -636,6 +636,95 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
 });
 
 
+test('HTPR-8260 Ctrl+J footer spells every key in words and offers a Create text button', async (t) => {
+  for (const apple of [false, true]) {
+    await withPalette(t, { newWindow: true, tab: 'compose', apple, boardChip: true, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
+      flags['htpr-8260-ctrlj-composer-keys'] = true;
+      flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
+      await rerender();
+      const footer = () => [...document.querySelector('[data-compose-task-writer]').children].find((child) => child.className.includes('border-t'));
+      const cmd = apple ? 'Cmd' : 'Ctrl';
+      assert.deepEqual([...footer().querySelectorAll('span')].map((span) => span.textContent.replace(/\s+/g, ' ').trim()),
+        ['Enter create', 'Shift Enter new line', 'Esc close', `${cmd} Shift B board`, `${cmd} U attach`, `${cmd} Shift D dictate`]);
+      assert.doesNotMatch(footer().textContent, /[\u21e7\u21b5]|Enter Send|Attach files|Search/);
+      const create = document.querySelector('[aria-label="Create task"]');
+      assert.equal(create.textContent.trim(), 'Create');
+      assert.equal(create.disabled, true, 'Create waits for a note');
+      assert.equal(document.querySelector('[aria-label="Send message"]'), null);
+      flags['htpr-8260-ctrlj-composer-keys'] = false;
+      await rerender();
+      assert.match(footer().textContent, /Enter Send/);
+      assert.ok(document.querySelector('[aria-label="Send message"]'), 'flag off keeps the icon Send button');
+      assert.equal(document.querySelector('[aria-label="Create task"]'), null);
+    });
+  }
+});
+
+test('HTPR-8260 microphone sits after the board picker and left of Create, with a Dictation pill while listening', async (t) => {
+  const DictationAudioButton = (props) => {
+    const [listening, setListening] = React.useState(false);
+    React.useEffect(() => {
+      props.toggleRecording?.(listening);
+      props.onProcessingChange?.(false);
+    }, [listening]);
+    return React.createElement(React.Fragment, null,
+      React.createElement('button', { id: props.id, 'aria-label': props.ariaLabel, 'data-dictate-tooltip': props.hoverTooltip?.text, onClick: () => setListening(true) }, 'Mic'),
+      listening && React.createElement('button', { id: props.stopButtonId, 'aria-label': 'Send recording', onClick: () => { setListening(false); props.callbackHandler(' spoken words'); } }, 'Stop'));
+  };
+  await withPalette(t, { newWindow: true, tab: 'compose', boardChip: true, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: DictationAudioButton }, async ({ flags, rerender, press, requests }) => {
+    flags['htpr-8260-ctrlj-composer-keys'] = true;
+    flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
+    await rerender();
+    const buttons = () => [...document.querySelectorAll('[data-compose-task-writer] button')];
+    const mic = document.querySelector('[aria-label="Start dictation"]');
+    const create = document.querySelector('[aria-label="Create task"]');
+    assert.ok(buttons().indexOf(chip()) < buttons().indexOf(document.querySelector('[aria-label="Attach files"]')), 'board picker comes first');
+    assert.ok(buttons().indexOf(document.querySelector('[aria-label="Attach files"]')) < buttons().indexOf(mic), 'the microphone leaves the leading controls');
+    assert.equal(mic.getAttribute('data-dictate-tooltip'), 'Dictate');
+    assert.equal((mic.parentElement.className ?? '').includes('hidden'), false);
+    assert.ok(buttons().indexOf(mic) < buttons().indexOf(create), 'the microphone sits left of Create');
+    assert.equal(document.querySelector('[aria-label="Stop dictation"]'), null);
+    const footer = () => [...document.querySelector('[data-compose-task-writer]').children].find((child) => child.className.includes('border-t'));
+    const words = () => [...footer().querySelectorAll('span')].map((span) => span.textContent.replace(/\s+/g, ' ').trim());
+
+    await React.act(async () => mic.click());
+    const pill = document.querySelector('[aria-label="Stop dictation"]');
+    assert.ok(pill, 'listening shows the Dictation pill');
+    assert.equal(pill.textContent.trim(), 'Dictation');
+    assert.ok(buttons().indexOf(pill) < buttons().indexOf(create), 'the pill sits next to Create');
+    assert.ok(document.querySelector('[aria-label="Cancel dictation"]'), 'touch users can discard the recording');
+    assert.equal((mic.parentElement.className ?? '').includes('hidden'), true, 'the pill replaces the microphone');
+    assert.deepEqual(words(), ['Enter keep text', 'Ctrl Enter create', 'Esc cancel', 'Ctrl Shift D stop']);
+
+    await press('Enter', { ctrlKey: true }, document.body);
+    assert.equal(requests.length, 1, 'Ctrl+Enter stops listening and creates the task');
+    assert.equal(requests.at(-1).body.text, ' spoken words');
+  });
+});
+
+test('HTPR-8260 Ctrl+Enter after a silent or failed dictation never creates a task', async (t) => {
+  const SilentAudioButton = (props) => {
+    const [listening, setListening] = React.useState(false);
+    React.useEffect(() => {
+      props.toggleRecording?.(listening);
+      props.onProcessingChange?.(false);
+    }, [listening]);
+    return React.createElement(React.Fragment, null,
+      React.createElement('button', { id: props.id, 'aria-label': props.ariaLabel, onClick: () => setListening(true) }, 'Mic'),
+      listening && React.createElement('button', { id: props.stopButtonId, 'aria-label': 'Send recording', onClick: () => setListening(false) }, 'Stop'));
+  };
+  await withPalette(t, { newWindow: true, tab: 'compose', boardChip: true, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: SilentAudioButton }, async ({ flags, rerender, press, type, requests }) => {
+    flags['htpr-8260-ctrlj-composer-keys'] = true;
+    await rerender();
+    await type('Keep this draft');
+    await React.act(async () => document.querySelector('[aria-label="Start dictation"]').click());
+    assert.ok(document.querySelector('[aria-label="Stop dictation"]'), 'listening starts before the create key');
+    const event = await press('Enter', { ctrlKey: true }, document.body);
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(requests.length, 0, 'a dictation that delivered nothing must not create the ticket');
+  });
+});
+
 test('HTPR-8141 board tooltip matches platform footer and preserves picker and flag-off behavior', async (t) => {
   for (const apple of [false, true]) {
     await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {

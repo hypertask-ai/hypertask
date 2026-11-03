@@ -36,6 +36,8 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/flags/definitions/htpr-7736-chat-follows-task") return jiti(path.join(root, "src/lib/flags/definitions/htpr-7736-chat-follows-task.ts"));
+    if (id === "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys") return { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG: "htpr-8260-ctrlj-composer-keys" };
+    if (id === "@/lib/configs/composeWriterFooterKeys") return jiti(path.join(root, "src/lib/configs/composeWriterFooterKeys.ts"));
     if (id === "@/lib/net/downloadWithoutBrotli") return { downloadWithoutBrotli: undefined };
     if (id === "@/lib/ai/prompts/registry") return registry;
     if (id === "@/lib/ai/chipEvents") return { signalAiChip: () => {} };

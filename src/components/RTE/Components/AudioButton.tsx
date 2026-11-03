@@ -46,6 +46,9 @@ interface IProp {
   active?: boolean;
   projectId?: number | null;
   hideDevicePicker?: boolean;
+  hoverTooltip?: { text: string; keyCombination: string[] };
+  stopButtonId?: string;
+  cancelButtonId?: string;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -78,6 +81,9 @@ export const AudioButton = ({
   disabled = false,
   active = true,
   hideDevicePicker = false,
+  hoverTooltip,
+  stopButtonId,
+  cancelButtonId,
 }: IProp) => {
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -746,8 +752,17 @@ export const AudioButton = ({
                     text={"Dictate"}
                   />
                 )}
+                {hover && !isProcessing && hoverTooltip && (
+                  <Tooltip
+                    left={0}
+                    bottom={45}
+                    keyCombination={hoverTooltip.keyCombination}
+                    text={hoverTooltip.text}
+                  />
+                )}
                 {hover &&
                   !isProcessing &&
+                  !hoverTooltip &&
                   !isAiChat &&
                   id !== "inline-draft-ai-audio-button" && (
                   <>
@@ -847,6 +862,7 @@ export const AudioButton = ({
           )}
           <button
             type="button"
+            id={cancelButtonId}
             data-ai-chat-recording-cancel={isAiChat || undefined}
             onClick={closeHandler}
             aria-label="Cancel"
@@ -859,6 +875,7 @@ export const AudioButton = ({
           </button>
           <button
             type="button"
+            id={stopButtonId}
             data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Send"
