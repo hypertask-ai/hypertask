@@ -67,5 +67,6 @@ test("the page read picks the table export only while the flag is on", () => {
 
 test("create names the page type it stored", () => {
   const source = read("src/lib/mcp/operations/pages/create/operation.ts");
-  assert.match(source, /content_type: contentType,/);
+  assert.match(source, /const storedContentType = await storedPageContentType\(/);
+  assert.match(source, /content_type: storedContentType,/);
 });

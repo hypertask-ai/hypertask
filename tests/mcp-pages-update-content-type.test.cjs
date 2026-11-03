@@ -81,6 +81,7 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
     },
     "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
+    "@/utils/controllers/pages/standaloneContent": { storedPageContentType: async ({ contentType }) => contentType },
     "@/utils/controllers/pages/pageService": service,
     "@/utils/controllers/pages/htmlCanvas": canvas,
     "@/utils/controllers/pages/htmlToMarkdown": jiti(path.join(root, "src/utils/controllers/pages/htmlToMarkdown.ts")),

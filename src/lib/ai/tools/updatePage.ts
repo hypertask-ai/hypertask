@@ -2,6 +2,7 @@ import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePage
 import { tool } from "ai";
 import { z } from "zod";
 import { getPage, updatePage, PageConflictError } from "@/utils/controllers/pages/pageService";
+import { storedPageContentType } from "@/utils/controllers/pages/standaloneContent";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { getPageUrl } from "@/app/api/mcp/pages/_lib/routeUtils";
 import { htmlToMarkdown } from "@/utils/controllers/pages/htmlToMarkdown";
@@ -50,7 +51,11 @@ export function createUpdatePageTool(context: ToolContext) {
           const page = await updatePage({
             id: existingPage.id,
             content: input.content,
-            contentType: input.content_type ?? "markdown",
+            contentType: await storedPageContentType({
+              content: input.content,
+              contentType: input.content_type ?? "markdown",
+              userId: user.id,
+            }),
             mode: input.mode,
             ifVersion: input.if_version,
             note: input.note,

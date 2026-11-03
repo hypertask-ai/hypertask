@@ -48,6 +48,7 @@ function fixture(enabled) {
       IdempotencyInProgressError: class extends Error {},
     },
     '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (html) => html, htmlToMarkdownWithTables: (html) => html },
+    '@/utils/controllers/pages/standaloneContent': { storedPageContentType: async ({ contentType }) => contentType },
     ai: { tool: (value) => value },
     '@/lib/ai/tools/execution': { withToolErrors: (fn) => fn },
     '@/lib/ai/tools/helpers': { sanitizeForJson: (value) => value, getAccessibleProjectIds: async () => [1, 2, 3] },

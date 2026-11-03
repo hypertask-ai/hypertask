@@ -118,6 +118,7 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
     '@/lib/mcp/featureCatalog': { getFeaturePageWarnings: async () => [] },
     '@/lib/mcp/fieldError': fieldError,
     '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
+    '@/utils/controllers/pages/standaloneContent': { storedPageContentType: async ({ contentType }) => contentType },
     [servicePath]: service,
     [helperPath]: helpers,
     '@/app/api/mcp/pages/_lib/routeUtils': helpers,

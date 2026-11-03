@@ -10,6 +10,7 @@ import { loadCurrentUser } from '@/lib/auth/currentUser'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from '@/lib/flags/definitions/htpr-7298-standalone-pages'
 import { getProjectWhere, taskWriteAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { storedPageContentType } from '@/utils/controllers/pages/standaloneContent'
 import {
   createPage,
   type PageContentType,
@@ -124,7 +125,11 @@ export async function POST(request: NextRequest) {
       ...(standalone ? { projectId: projectId! } : { taskId: taskId! }),
       title: body.title as string | undefined,
       content: body.content,
-      contentType: contentType as PageContentType,
+      contentType: await storedPageContentType({
+        content: body.content,
+        contentType: contentType as PageContentType,
+        userId,
+      }),
       parentPageId,
       userId,
       agentId: null,

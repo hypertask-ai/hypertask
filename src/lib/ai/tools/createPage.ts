@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { createPage } from "@/utils/controllers/pages/pageService";
+import { storedPageContentType } from "@/utils/controllers/pages/standaloneContent";
 import { getPageUrl } from "@/app/api/mcp/pages/_lib/routeUtils";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
@@ -41,7 +42,11 @@ export function createCreatePageTool(context: ToolContext) {
           taskId: input.task_id,
           title: input.title,
           content: input.content,
-          contentType: input.content_type ?? "markdown",
+          contentType: await storedPageContentType({
+            content: input.content,
+            contentType: input.content_type ?? "markdown",
+            userId: user.id,
+          }),
           parentPageId: input.parent_page_id,
           userId: user.id,
           agentId: actingAgentId,
