@@ -1,11 +1,6 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const path = require('node:path')
-const root = path.resolve(__dirname, '..')
-const stubModule = (file, exports) => {
-  const filename = path.join(root, file)
-  require.cache[filename] = { id: filename, filename, loaded: true, exports }
-}
+const { loadModule: load } = require('./helpers/loadModule.cjs')
 
 const members = [
   { id: 193, displayName: 'Abdul Wahhab', email: 'abdul@example.com' },
@@ -14,16 +9,13 @@ const members = [
   { id: 6, displayName: 'Valentin Yeo', email: 'valentin.yeo@gmail.com' },
 ]
 
-stubModule('src/utils/controllers/projects/getProjectMembers.ts', {
-  getProjectMembers: async () => ({ members, error: null }),
-})
-stubModule('src/lib/prisma.ts', { __esModule: true, default: {} })
-
-const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false })
-const load = (file) => jiti(path.join(root, file))
+const boardMembers = { getProjectMembers: async () => ({ members, error: null }) }
 
 const { resolveMentionEntries, closeMentionMatches } = load('src/utils/controllers/comments/resolveMentions.ts')
-const { resolveMentionInputs, mentionProblemMessage, isValidMentionObject } = load('src/utils/controllers/comments/resolveMentionInputs.ts')
+const { resolveMentionInputs, mentionProblemMessage, isValidMentionObject } = load(
+  'src/utils/controllers/comments/resolveMentionInputs.ts',
+  { '@/utils/controllers/projects/getProjectMembers': boardMembers },
+)
 const { getAddCommentInputSchema } = load('src/lib/mcp-server/validations/comment.validation.ts')
 
 test('a display name resolves to its user id', () => {

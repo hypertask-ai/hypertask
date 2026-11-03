@@ -14,11 +14,7 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
-import {
-  mentionProblemMessage,
-  resolveMentionInputs,
-  type RawMentionInput,
-} from '@/utils/controllers/comments/resolveMentionInputs'
+import type { RawMentionInput } from '@/utils/controllers/comments/resolveMentionInputs'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
 import { deleteCommentService } from '@/utils/controllers/comments/deleteCommentService'
 import { persistUrlsForComment } from '@/utils/controllers/urls/extractUrlsFromContent'
@@ -209,6 +205,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     }
 
     if (mentionInputs && mentionInputs.length > 0) {
+      const { mentionProblemMessage, resolveMentionInputs } = await import('@/utils/controllers/comments/resolveMentionInputs')
       const resolution = await resolveMentionInputs({
         inputs: mentionInputs,
         projectId: comment.task.projectId,

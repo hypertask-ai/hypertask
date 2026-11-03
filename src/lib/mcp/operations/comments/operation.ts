@@ -25,11 +25,7 @@ import {
   persistUrlsForComment,
 } from '@/utils/controllers/urls/extractUrlsFromContent'
 import { convertPlainTextMentionsToHtml, resolveTextMentions } from '@/utils/controllers/comments/processMentions'
-import {
-  mentionProblemMessage,
-  resolveMentionInputs,
-  type RawMentionInput,
-} from '@/utils/controllers/comments/resolveMentionInputs'
+import type { RawMentionInput } from '@/utils/controllers/comments/resolveMentionInputs'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { AgentInvocationNotPendingError } from '@/utils/controllers/comments/agentInvocationCorrelation'
 import { findTaskByIdentifier, taskIdentifierErrorResponse, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
@@ -815,6 +811,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (mentionInputs && mentionInputs.length > 0) {
+      const { mentionProblemMessage, resolveMentionInputs } = await import('@/utils/controllers/comments/resolveMentionInputs')
       const resolution = await resolveMentionInputs({
         inputs: mentionInputs,
         projectId: taskWithOwner.projectId,
