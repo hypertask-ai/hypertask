@@ -204,11 +204,14 @@ test("multi chat windows: Ctrl+Shift+O opens a window while the shared chat shor
   const press = { key: "O", code: "KeyO", ctrlKey: true, metaKey: false, altKey: false, shiftKey: true, repeat: false, defaultPrevented: false };
   assert.equal(isNewChatWindowShortcut({ ...press }), true);
   assert.equal(isNewChatWindowShortcut({ ...press, ctrlKey: false, metaKey: true }), true);
+  assert.equal(isNewChatWindowShortcut({ ...press, key: "o", code: "KeyO" }), true);
+  assert.equal(isNewChatWindowShortcut({ ...press, repeat: true }), false);
   assert.equal(isNewChatWindowShortcut({ ...press, shiftKey: false }), false);
   assert.equal(isNewChatWindowShortcut({ ...press, altKey: true }), false);
   assert.equal(isNewChatWindowShortcut({ ...press, key: "P", code: "KeyP" }), false);
   const runtime = read("src/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx");
-  assert.match(runtime, /if \(windowScope \|\| !chatWindows \|\| chatShortcutLayerEnabled\) return;/);
-  assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow, true\);/);
+  assert.match(runtime, /if \(windowScope \|\| !chatWindows\) return;/);
+  assert.match(runtime, /if \(event\.defaultPrevented \|\| !isNewChatWindowShortcut\(event\)\) return;/);
+  assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow\);/);
   assert.match(runtime, /chatWindows\.openNewChatWindow\(\)\.then/);
 });
