@@ -23,10 +23,21 @@ test("a guessed person label is rewritten to the member's real label", () => {
   assert.doesNotMatch(out, /valentin-6/);
 });
 
-test("a person mention carrying an agent label points back at the person", () => {
+test("a valid label is never retargeted, even when the name names another kind", () => {
   const out = normalizeMentionSpans(personSpan(`agent-${LEAD_AGENT_ID}`), members);
-  assert.match(out, /data-label="name-6"/);
-  assert.doesNotMatch(out, /data-label="agent-/);
+  assert.match(out, new RegExp(`data-label="agent-${LEAD_AGENT_ID}"`));
+  assert.match(out, /data-id="HT Product Lead"/);
+});
+
+test("a valid label survives a cross-kind rename that hands the name on", () => {
+  const renamed = [
+    { id: 2, displayName: "Alex" },
+    { id: LEAD_AGENT_ID, displayName: "Alexander" },
+  ];
+  const html = `<p><span data-type="mention" class="mention" data-id="Alex" data-label="agent-${LEAD_AGENT_ID}">Alex</span></p>`;
+  const out = normalizeMentionSpans(html, renamed);
+  assert.match(out, new RegExp(`data-label="agent-${LEAD_AGENT_ID}"`));
+  assert.match(out, /data-id="Alexander"/);
 });
 
 test("an agent mention keeps its agent label and display name", () => {

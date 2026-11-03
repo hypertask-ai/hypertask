@@ -77,20 +77,12 @@ function memberByLabel(
   return members.find((member) => labelFor(member) === wanted);
 }
 
-const isPersonLabel = /^name-\d+$/;
-
 function memberFor(
   name: string,
   label: string,
   members: ResolvableMember[],
 ): ResolvableMember | undefined {
-  const byLabel = memberByLabel(label, members);
-  const byName = memberByName(name, members);
-  if (!byLabel || !byName) return byLabel ?? byName;
-  if (labelFor(byLabel) === labelFor(byName)) return byLabel;
-  const sameKind =
-    isPersonLabel.test(labelFor(byLabel)) === isPersonLabel.test(labelFor(byName));
-  return sameKind ? byLabel : byName;
+  return memberByLabel(label, members) ?? memberByName(name, members);
 }
 
 function mapOutsideMentionSpans(
