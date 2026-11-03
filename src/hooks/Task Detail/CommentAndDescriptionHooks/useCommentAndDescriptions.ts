@@ -1,6 +1,5 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
@@ -22,9 +21,8 @@ import { useGetAllComments } from "../useGetComments";
 import globalConstants from "@/lib/constants";
 import { useTaskCommentsRealtime } from "@/hooks/realtime/useTaskCommentsRealtime";
 import { shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
-import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
 import {
-  agentLaneCollapsedAtom,
   currentUserAtom,
   idToDeleteCommentAtom,
   taskDetailNonEssentialReadyAtom,
@@ -156,7 +154,6 @@ const useDescriptionAndCommentsStates = () => {
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const agentLaneCollapse = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
   const commentsStackedRef = useRef<boolean | undefined>(undefined);
   commentsStackedRef.current = foldCommentsFromFirstPaint ? stackData : undefined;
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
@@ -184,7 +181,6 @@ const useDescriptionAndCommentsStates = () => {
   const [allStacked, setAllStacked] = useState<boolean>(true);
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
-  const setAgentLaneCollapsed = useSetRecoilState(agentLaneCollapsedAtom);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
   const nonEssentialReady = useRecoilValue(taskDetailNonEssentialReadyAtom);
   const [emojiFinder, setEmojiFinder] = useState<(unified: any) => string>(
@@ -630,7 +626,6 @@ const useDescriptionAndCommentsStates = () => {
         initialMap[index] = !allStacked;
       });
     setStacked(ensureAtLeastOneCommentIsOpen(comments, initialMap));
-    if (agentLaneCollapse) setAgentLaneCollapsed(!allStacked);
     setAllStacked((prev) => !prev);
   };
 

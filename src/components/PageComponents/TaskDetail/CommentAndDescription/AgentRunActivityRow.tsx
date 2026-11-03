@@ -7,18 +7,17 @@ import {
   ExternalLink,
   Lightbulb,
 } from "lucide-react";
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 import RelativeTime from "@/components/Common/RelativeTime";
 import { useFlag } from "@/hooks/useFlag";
+import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { safeAgentRunActivityLink } from "@/lib/agentRuns/taskActivityFeed";
 import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
-import { useRecoilValue } from "@/lib/state";
-import { agentLaneCollapsedAtom } from "@/store";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 const ACTIVITY_ICONS = {
@@ -39,7 +38,11 @@ const AgentRunActivityRow = ({
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const selectionLocked = activity.selectedOption !== null || pendingValue !== null;
   const collapseLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
-  const laneCollapsed = useRecoilValue(agentLaneCollapsedAtom);
+  const { stacked } = useTaskContext();
+  const laneCollapsed = useMemo(() => {
+    const folds = Object.values(stacked ?? {});
+    return folds.length > 0 && folds.every(Boolean);
+  }, [stacked]);
   const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
 
   useEffect(() => {

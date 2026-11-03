@@ -19,7 +19,7 @@ const thought = {
   selectedOption: null,
 };
 
-function render({ flagEnabled, laneCollapsed }) {
+function render({ flagEnabled, stacked = { 0: true, 1: true } }) {
   const source = fs.readFileSync(
     path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/AgentRunActivityRow.tsx"),
     "utf8",
@@ -35,12 +35,11 @@ function render({ flagEnabled, laneCollapsed }) {
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/components/Common/RelativeTime": { default: () => React.createElement("time", null, "2h") },
     "@/hooks/useFlag": { useFlag: () => flagEnabled },
+    "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ stacked }) },
     "@/lib/agentRuns/model": {},
     "@/lib/agentRuns/taskActivityFeed": { safeAgentRunActivityLink: () => null },
     "@/lib/flags/definitions/htpr-8262-agent-lane-collapse": { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG: flagKey },
     "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
-    "@/lib/state": { useRecoilValue: () => laneCollapsed },
-    "@/store": { agentLaneCollapsedAtom: {} },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
   };
   for (const stub of Object.values(stubs)) {
@@ -64,8 +63,8 @@ function render({ flagEnabled, laneCollapsed }) {
 
 const isCollapsedRow = (html) => html.includes("text-ellipsis");
 
-test("the lane row keeps today's inset and card with the flag off, even after Shift+O", () => {
-  const html = render({ flagEnabled: false, laneCollapsed: true });
+test("the lane row keeps today's inset and card with the flag off, even when every comment is folded", () => {
+  const html = render({ flagEnabled: false, stacked: { 0: true, 1: true } });
   assert.equal(isCollapsedRow(html), false);
   assert.match(html, /role="group"/);
   assert.match(html, /px-3 py-1/);
@@ -73,8 +72,8 @@ test("the lane row keeps today's inset and card with the flag off, even after Sh
   assert.doesNotMatch(html, /px-4 py-5/);
 });
 
-test("Shift+O collapses lane rows onto the one-line comment row", () => {
-  const html = render({ flagEnabled: true, laneCollapsed: true });
+test("folded comments fold the lane rows onto the one-line comment row", () => {
+  const html = render({ flagEnabled: true, stacked: { 0: true, 1: true } });
   assert.equal(isCollapsedRow(html), true);
   assert.match(html, /my-\[4px\]/);
   assert.match(html, /whitespace-nowrap/);
@@ -82,30 +81,25 @@ test("Shift+O collapses lane rows onto the one-line comment row", () => {
   assert.match(html, /Read the ticket and the two comments/);
 });
 
-test("Shift+O again expands the lane back to the card", () => {
-  const html = render({ flagEnabled: true, laneCollapsed: false });
+test("one open comment keeps the lane row open, in step with the comments", () => {
+  const html = render({ flagEnabled: true, stacked: { 0: true, 1: false } });
   assert.equal(isCollapsedRow(html), false);
   assert.match(html, /aria-expanded="true"/);
   assert.match(html, /my-\[8px\]/);
   assert.match(html, /px-4 py-5/);
 });
 
+test("a thread with no comments leaves the lane row open", () => {
+  const html = render({ flagEnabled: true, stacked: {} });
+  assert.equal(isCollapsedRow(html), false);
+  assert.match(html, /aria-expanded="true"/);
+});
+
 test("the folded row is keyboard operable and avoids the bright secondary focus ring", () => {
-  const html = render({ flagEnabled: true, laneCollapsed: true });
+  const html = render({ flagEnabled: true, stacked: { 0: true } });
   assert.match(html, /tabindex="0"/);
   assert.match(html, /focus-visible:bg-hover-active/);
   assert.doesNotMatch(html, /focus-visible:ring-white-black/);
-});
-
-test("Shift+O gives the lane the same fold direction as the comments", () => {
-  const hook = fs.readFileSync(
-    path.join(root, "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts"),
-    "utf8",
-  );
-  const body = hook.slice(hook.indexOf("const toggleAllComments = () => {"));
-  const toggle = body.slice(0, body.indexOf("\n  };"));
-  assert.match(toggle, /initialMap\[index\] = !allStacked/);
-  assert.match(toggle, /if \(agentLaneCollapse\) setAgentLaneCollapsed\(!allStacked\)/);
 });
 
 test("the flag is a reversible low-risk improvement for everyone", () => {
