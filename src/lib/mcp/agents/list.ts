@@ -10,6 +10,7 @@ import {
   listOwnedAgents,
   type AgentManagementDatabase,
 } from './ownedAgents'
+import { AGENT_LISTING_REFUSAL, isAgentTokenCaller } from './agentListingRefusal'
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7179_AGENT_TEAM_BOUND_FLAG } from '@/lib/flags/definitions/htpr-7179-agent-team-bound'
@@ -25,6 +26,12 @@ export async function handleListAgentsRequest(
     ? await validateManagementOrSessionAuth(request, 'read')
     : await validateMcpAuth(request, { deferManagementPermissionCheck: true })
   if (!ctx) {
+    if (authMode === 'management' && (await isAgentTokenCaller(request))) {
+      return NextResponse.json(
+        { success: false, error: AGENT_LISTING_REFUSAL },
+        { status: 403 }
+      )
+    }
     return NextResponse.json(
       {
         success: false,
@@ -35,7 +42,7 @@ export async function handleListAgentsRequest(
   }
   if (ctx.agentId) {
     return NextResponse.json(
-      { success: false, error: 'Agents cannot list managed agent identities' },
+      { success: false, error: AGENT_LISTING_REFUSAL },
       { status: 403 }
     )
   }

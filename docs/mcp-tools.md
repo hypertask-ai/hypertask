@@ -74,6 +74,10 @@ A person's MCP connection (OAuth or account token, not an agent token or managem
 3. `hypertask_inbox list {as_agent}` returns the agent's notifications in `agent_notifications`, each with the comment id to pass as `reply_to_comment_id` (or the notification id for `reply_to_invocation_id` when the mention was in a description). `archive` and `unarchive` take `as_agent` too.
 4. `hypertask_webhooks configure {agent_id, url, events: ["comment.mention", "comment.created"]}` makes Hypertask post a signed delivery with the ticket number, comment id and author whenever someone mentions the agent, so a host that supports external wakes can start a session. Polling `inbox list {as_agent}` stays the fallback.
 
+## Agent identity listing
+
+`hypertask agents list`, `GET /api/mcp/admin/agents` and `hypertask_list_agents` refuse an agent token with 403 and say what to do instead: an agent finds an id with `hypertask projects members <board id>`, then `hypertask task assign <ticket> --assignee <agent id>`, or assigns itself with `--self`. The old reply claimed the token was invalid or missing. People and management keys are unchanged.
+
 ## Autonomous anonymous feedback
 
 `hypertask_report_feedback` lets an AI client report a failed or unexpected Hypertask operation on its own, without being asked. Never send task, board or comment content, request bodies or tool arguments. The server stores structured fields including an optional category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other), reporting display names and client slugs. A report from one of our own team's agents also keeps its kind (bug, friction, missing or idea) and its short note, cleaned of links, emails, keys and long numbers. For customer agents a free-form error and note remain accepted for compatibility but are never stored. Credential-shaped tool, client and errorCode values are rejected. This tool is available only to the audience of `htpr-7195-ai-feedback`, a feature flag defaulting to Owner + QA. It adds one tool to either catalog; with feedback off, the existing legacy and consolidated catalogs stay unchanged.
