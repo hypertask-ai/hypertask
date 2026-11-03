@@ -100,3 +100,49 @@ for (const [fixture, batchAllowed, expected] of [
     assert.deepEqual(switches ? [...switches] : null, expected);
   });
 }
+
+const shapedQuestion = (question) => `<p><strong>What this is:</strong> a flag that keeps a running chat.</p>
+<p>It changes what every customer sees.</p>
+<p><strong>Question:</strong> ${question}</p>
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>
+<p>Impact: not only the QA account, and it holds until we say otherwise.</p>`;
+
+const { parse: parseHtml } = require("node-html-parser");
+const shapedWords = (question) => normalizeVisibleText(shapedQuestion(question));
+const shapedText = (question) => parseHtml(shapedQuestion(question)).text;
+
+for (const [question, expected] of [
+  ["Switch x to Everyone?", [["x", "Everyone"]]],
+  ["Switch x to Only me?", [["x", "Only me"]]],
+  ["Switch htpr-7764-chat-running to Owner + QA?", [["htpr-7764-chat-running", "Owner + QA"]]],
+]) {
+  test(`a Question in the required shape approves ${JSON.stringify(question)}`, () => {
+    assert.deepEqual([...parseSwitchQuestion(shapedWords(question), true)], expected);
+    assert.deepEqual([...strictSwitchRequest(shapedText(question), false, true)], expected);
+  });
+}
+
+for (const question of [
+  "Switch x to Everyone only if it passes?",
+  "Switch x to Everyone unless QA is red?",
+  "Do not switch x to Everyone?",
+  "Switch x to Everyone? No, keep it.",
+  "Switch x to not Everyone?",
+]) {
+  test(`a shaped Question saying ${JSON.stringify(question)} still refuses`, () => {
+    assert.equal(parseSwitchQuestion(shapedWords(question), true), null);
+    assert.equal(strictSwitchRequest(shapedText(question), false, true), null);
+  });
+}
+
+test("a shaped Question refuses while its switch is off, and free wording keeps its guards", () => {
+  const question = "Switch x to Everyone?";
+  assert.equal(parseSwitchQuestion(shapedWords(question)), null);
+  assert.equal(strictSwitchRequest(shapedText(question), false), null);
+  assert.equal(parseSwitchQuestion(shapedWords(question).replace(/question\s*:/, "asks:"), true), null);
+  assert.equal(parseSwitchQuestion("Switch x to Everyone? No, keep it.", true), null);
+  assert.equal(strictSwitchRequest("Question: Switch x to Everyone? Switch y to Off?", false, true), null);
+});

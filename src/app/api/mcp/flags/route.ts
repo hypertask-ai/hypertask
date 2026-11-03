@@ -21,6 +21,7 @@ import {
 } from "@/lib/flags";
 import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
+import { HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG } from "@/lib/flags/definitions/htpr-8339-template-switch-question";
 import { authorize } from "@/lib/flags/agentAuthorization";
 import { YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG } from "@/lib/flags/definitions/yper4-801-manager-lease-flag-switch";
 import { isManagerClassAgentName, MANAGER_GRANT_HEADER, requireCurrentManagerGrant } from "@/lib/flags/managerLease";
@@ -119,6 +120,7 @@ export async function PATCH(request: NextRequest) {
     });
     const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
     const plainYesAllowed = await isFeatureEnabled(HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG, ctx.user.id);
+    const templateQuestionAllowed = await isFeatureEnabled(HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG, ctx.user.id);
     const requiresManagerGrant = isManagerClassAgentName(agent.displayName)
       && await isFeatureEnabled(YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG, ctx.user.id);
     const managerGrant = request.headers.get(MANAGER_GRANT_HEADER);
@@ -221,8 +223,8 @@ export async function PATCH(request: NextRequest) {
       if (human && answer === "no") {
         throw new FeatureFlagApprovalError(`Valentin said no on comment ${comment.id}; no switch`);
       }
-      let switches = plainYesAllowed ? parseSwitchQuestion(words)
-        : strictSwitchRequest(parse(comment.text || comment.commentText || "").text, batchAllowed);
+      let switches = plainYesAllowed ? parseSwitchQuestion(words, templateQuestionAllowed)
+        : strictSwitchRequest(parse(comment.text || comment.commentText || "").text, batchAllowed, templateQuestionAllowed);
       let kind: "thumbs-up" | "ticket-yes" | "chat-record";
       let questionCommentIds = [comment.id];
       let approvedAt = comment.createdAt;
@@ -277,14 +279,14 @@ export async function PATCH(request: NextRequest) {
           };
           const candidates = (await tx.comment.findMany({
             where: window, orderBy: { id: "asc" }, select: commentSelect,
-          })).filter((candidate) => parseSwitchQuestion(normalizeVisibleText(candidate.text || candidate.commentText || "")));
+          })).filter((candidate) => parseSwitchQuestion(normalizeVisibleText(candidate.text || candidate.commentText || ""), templateQuestionAllowed));
           for (const candidate of candidates) {
             await tx.$queryRaw`SELECT id FROM "Comment" WHERE id = ${candidate.id} ORDER BY id FOR UPDATE`;
           }
           const questions = (await tx.comment.findMany({
             where: { ...window, id: { in: candidates.map((candidate) => candidate.id) } },
             orderBy: { id: "asc" }, select: commentSelect,
-          })).filter((candidate) => parseSwitchQuestion(normalizeVisibleText(candidate.text || candidate.commentText || "")));
+          })).filter((candidate) => parseSwitchQuestion(normalizeVisibleText(candidate.text || candidate.commentText || ""), templateQuestionAllowed));
           if (questions.length !== 1) {
             throw new FeatureFlagApprovalError("Ambiguous or missing question: Valentin's yes must follow exactly one switch question; ask him to thumbs-up the one he means");
           }
@@ -292,7 +294,7 @@ export async function PATCH(request: NextRequest) {
           if (question.editedAt !== null || question.editedByUserId !== null || question.editedByAgentId !== null) {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
-          switches = parseSwitchQuestion(normalizeVisibleText(question.text || question.commentText || ""));
+          switches = parseSwitchQuestion(normalizeVisibleText(question.text || question.commentText || ""), templateQuestionAllowed);
           questionCommentIds = [question.id];
         }
       }
