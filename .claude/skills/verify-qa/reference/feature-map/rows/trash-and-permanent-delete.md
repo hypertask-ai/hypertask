@@ -1,0 +1,1 @@
+| Trash and permanent delete | [trash-and-permanent-delete.md](trash-and-permanent-delete.md) | no smoke id; delete one QA fixture, recover it, delete it again, permanent delete it, then drive the two refusals |
