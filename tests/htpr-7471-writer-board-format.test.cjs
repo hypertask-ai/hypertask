@@ -79,7 +79,7 @@ function harness(options = {}) {
       if (options.fail) throw new Error("Writer unavailable");
       options.onGenerate?.();
       return {
-        content: [{ type: "text", text: JSON.stringify({ tasks: options.tasks ?? [{ title: "First", description: "<p>First body.</p>", customFields: [{ fieldId: "score-field", value: 19 }] }, { title: "Second", description: "<p>Second body.</p>", customFields: [{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 30 }] }] }) }],
+        content: [{ type: "text", text: options.tasks ? JSON.stringify({ tasks: options.tasks }) : options.output ?? output }],
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 20 } },
         finishReason: { unified: "stop" },
       };
@@ -433,7 +433,10 @@ test("vocabulary includes select options, budgets fields at whole records withou
 
 
 test("structured compose carries each task's own validated fields through the real SDK and save route", async () => {
-  const h = harness();
+  const h = harness({ tasks: [
+    { title: "First", description: "<p>First body.</p>", customFields: [{ fieldId: "score-field", value: 19 }] },
+    { title: "Second", description: "<p>Second body.</p>", customFields: [{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 30 }] },
+  ] });
   const result = await h.compose();
   assert.equal(result.writerFailed, false);
   assert.equal(result.tasks.length, 2);

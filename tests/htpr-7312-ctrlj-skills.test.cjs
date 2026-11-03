@@ -284,7 +284,11 @@ test('flag off, missing opt-in and popup retain the exact production instruction
     const expected = taskPrompts.createTaskWriterSystemPromptTemplate(
       `${prompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`,
     ) + `\n\n${resolved.systemPromptAddition}`;
-    assert.equal(result.instructions, expected);
+    if (extra.requestKind === 'manual') assert.equal(result.instructions, expected);
+    else {
+      assert.ok(result.instructions.startsWith(expected));
+      assert.match(result.instructions, /replace the single HTML output contract with the structured tasks object/);
+    }
     assert.equal(h.parts[0].taskDescription, '<p>/review Audit checkout</p>');
     assert.deepEqual(h.retrieval, ['/review Audit checkout']);
     assert.equal(h.resolutions.length, 1);
