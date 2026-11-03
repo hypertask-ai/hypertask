@@ -134,22 +134,25 @@ test('modified Enter in New Task over a populated form never also saves the form
   }
 });
 
-test('New Task desktop leaves action tooltips unclipped and scrolls only attachments; phone and flag-off keep their layout', async (t) => {
+test('New Task desktop leaves action tooltips unclipped and scrolls only attachments; phone keeps its keyboard sheet', async (t) => {
   for (const mobile of [false, true]) for (const newWindow of [false, true]) {
     await withPalette(t, { tab: 'compose', mobile, newWindow }, async ({ dom, input, flags, rerender }) => {
       const writer = document.querySelector('[data-compose-task-writer]');
-      assert.equal(writer.className, newWindow && mobile ? 'max-h-[65dvh] overflow-y-auto' : '');
+      assert.equal(writer.className, mobile ? 'flex min-h-0 flex-1 flex-col' : '');
       const picker = writer.querySelector('input[type="file"]');
       const images = Array.from({ length: 30 }, (_, i) => new dom.window.File(['png'], `image-${i}.png`, { type: 'image/png' }));
       Object.defineProperty(picker, 'files', { configurable: true, value: images });
       await React.act(async () => picker.dispatchEvent(new dom.window.Event('change', { bubbles: true })));
       const previews = writer.querySelector('[data-thumbnails]');
       assert.equal(previews.children.length, 30);
-      if (newWindow && !mobile) {
+      if (mobile) {
+        assert.equal(previews.parentElement.className, 'min-h-0 overflow-y-auto');
+        assert.equal(previews.parentElement.nextElementSibling, input(), 'text and actions stay outside attachment scrolling');
+      } else if (newWindow) {
         assert.equal(previews.parentElement.className, 'max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto');
         assert.equal(previews.parentElement.contains(input()), false, 'text and actions stay outside attachment scrolling');
       } else assert.equal(previews.parentElement.className, 'flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2');
-      assert.equal(input().className.includes('max-h-52 overflow-y-auto'), newWindow);
+      assert.equal(input().className.includes('max-h-52 overflow-y-auto'), newWindow && !mobile);
       flags[flag] = false;
       await rerender();
       assert.equal(document.querySelector('[data-compose-task-writer]'), null);

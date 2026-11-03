@@ -23,14 +23,14 @@ for (const mobile of [false, true]) {
         return html;
       })();
       assert.equal(writer().className, mobile ? 'flex min-h-0 flex-1 flex-col' : '');
-      assert.equal(shells.at(-1).fullHeight, true);
-      assert.equal(shells.at(-1).keyboardAware, true);
-      assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
       if (!mobile) {
         assert.ok(input().classList.contains('max-h-52'));
         assert.equal(input().style.height, '64px');
         assert.match(writer().textContent, /Enter Send/);
       } else {
+        assert.equal(shells.at(-1).fullHeight, true);
+        assert.equal(shells.at(-1).keyboardAware, true);
+        assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
         assert.equal(input().classList.contains('max-h-52'), false);
         assert.ok(input().classList.contains('flex-1'));
         assert.equal(input().style.height, '');

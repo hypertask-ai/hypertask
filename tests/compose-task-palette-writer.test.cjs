@@ -402,7 +402,7 @@ test('New Task label, purple sparkle, dictation, tooltips and Tab require both f
       } else await clickTab('Compose');
       assert.equal(Boolean(document.querySelector('[aria-label="Start dictation"]')), both);
       assert.equal(input().rows, mobile ? 3 : 2);
-      assert.equal(input().className.includes("max-h-52"), both);
+      assert.equal(input().className.includes("max-h-52"), both && !mobile);
       await type('Typed');
       if (both) {
         await React.act(async () => document.querySelector('[aria-label="Start dictation"]').click());
