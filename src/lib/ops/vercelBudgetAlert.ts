@@ -66,8 +66,12 @@ export function parseVercelBudgetAlert(payload: unknown): VercelBudgetAlert | nu
   };
 }
 
+function scopeSlug(alert: VercelBudgetAlert) {
+  return alert.budgetScope.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
 export function budgetAlertMarker(alert: VercelBudgetAlert) {
-  return `vercel-budget-alert:team:${alert.teamId}:budget:${alert.budgetAmount}:threshold:${alert.thresholdPercent}`;
+  return `vercel-budget-alert:team:${alert.teamId}:budget:${alert.budgetAmount}:threshold:${alert.thresholdPercent}:scope:${scopeSlug(alert)}`;
 }
 
 export function budgetAlertTitle(alert: VercelBudgetAlert) {

@@ -5,6 +5,7 @@ const DUPLICATE_RECHECKS = 3;
 const DUPLICATE_RECHECK_DELAY_MS = 250;
 
 export type BudgetAlertEmail = "not-needed" | "sent" | "already-sent" | "failed";
+export type BudgetAlertEmailClaim = "claimed" | "already-sent" | "unavailable";
 
 export interface FiledVercelBudgetAlert {
   taskId: number;
@@ -17,8 +18,9 @@ export interface BudgetAlertStore {
   createTicket(alert: VercelBudgetAlert): Promise<number>;
   addComment(taskId: number, alert: VercelBudgetAlert): Promise<void>;
   reserve(marker: string): Promise<boolean>;
-  reserveUpdate(marker: string, currentSpend: number): Promise<boolean>;
-  claimEmail(marker: string): Promise<boolean>;
+  reserveSpend(key: string): Promise<boolean>;
+  releaseSpend(key: string): Promise<void>;
+  claimEmail(marker: string): Promise<BudgetAlertEmailClaim>;
   releaseEmail(marker: string): Promise<void>;
   email(taskId: number, alert: VercelBudgetAlert): Promise<void>;
 }
@@ -31,6 +33,10 @@ export class BudgetAlertRaceError extends Error {
 
 function sleep(delayMs: number) {
   return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+function spendKey(alert: VercelBudgetAlert) {
+  return `${budgetAlertMarker(alert)}:spend:${alert.currentSpend}`;
 }
 
 async function waitForExistingTicket(store: BudgetAlertStore, marker: string) {
@@ -47,9 +53,13 @@ async function recordSpendOnce(
   alert: VercelBudgetAlert,
   store: BudgetAlertStore,
 ) {
-  const updateKey = `${budgetAlertMarker(alert)}:spend:${alert.currentSpend}`;
-  if (await store.reserveUpdate(updateKey, alert.currentSpend)) {
+  const key = spendKey(alert);
+  if (!(await store.reserveSpend(key))) return;
+  try {
     await store.addComment(taskId, alert);
+  } catch (error) {
+    await store.releaseSpend(key);
+    throw error;
   }
 }
 
@@ -60,7 +70,9 @@ async function deliverOwnerEmail(
   store: BudgetAlertStore,
 ): Promise<BudgetAlertEmail> {
   if (alert.thresholdPercent < FULL_THRESHOLD_PERCENT) return "not-needed";
-  if (!(await store.claimEmail(marker))) return "already-sent";
+  const claim = await store.claimEmail(marker);
+  if (claim === "already-sent") return "already-sent";
+  if (claim === "unavailable") return "failed";
   try {
     await store.email(taskId, alert);
     return "sent";
@@ -87,6 +99,7 @@ export async function fileBudgetAlert(
     taskId = raced;
     await recordSpendOnce(taskId, alert, store);
   } else {
+    await store.reserveSpend(spendKey(alert));
     taskId = await store.createTicket(alert);
     created = true;
   }

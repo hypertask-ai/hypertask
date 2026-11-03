@@ -80,17 +80,26 @@ export const prismaBudgetAlertStore: BudgetAlertStore = {
     const redis = await getRedis();
     return (await redis.set(`vercel:budget-alert:reserve:${marker}`, "1", "EX", RESERVATION_TTL_SECONDS, "NX")) === "OK";
   },
-  async reserveUpdate(marker) {
+  async reserveSpend(key) {
     const redis = await getRedis();
-    return (await redis.set(`vercel:budget-alert:update:${marker}`, "1", "EX", CLAIM_TTL_SECONDS, "NX")) === "OK";
+    return (await redis.set(`vercel:budget-alert:spend:${key}`, "1", "EX", CLAIM_TTL_SECONDS, "NX")) === "OK";
+  },
+  async releaseSpend(key) {
+    try {
+      const redis = await getRedis();
+      await redis.del(`vercel:budget-alert:spend:${key}`);
+    } catch (error) {
+      console.error("[vercel-budget-alert] spend release failed", error);
+    }
   },
   async claimEmail(marker) {
     try {
       const redis = await getRedis();
-      return (await redis.set(`vercel:budget-alert:email:${marker}`, "1", "EX", CLAIM_TTL_SECONDS, "NX")) === "OK";
+      const claimed = await redis.set(`vercel:budget-alert:email:${marker}`, "1", "EX", CLAIM_TTL_SECONDS, "NX");
+      return claimed === "OK" ? "claimed" : "already-sent";
     } catch (error) {
       console.error("[vercel-budget-alert] email claim failed", error);
-      return false;
+      return "unavailable";
     }
   },
   async releaseEmail(marker) {

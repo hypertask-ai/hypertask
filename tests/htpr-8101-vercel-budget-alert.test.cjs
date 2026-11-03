@@ -88,10 +88,13 @@ function memoryStore({ createDelayMs = 0 } = {}) {
     async addComment() {
       calls.comments += 1;
     },
-    async reserveUpdate(marker) {
-      if (updates.has(marker)) return false;
-      updates.add(marker);
+    async reserveSpend(key) {
+      if (updates.has(key)) return false;
+      updates.add(key);
       return true;
+    },
+    async releaseSpend(key) {
+      updates.delete(key);
     },
     async reserve(marker) {
       if (reservations.has(marker)) return false;
@@ -99,9 +102,9 @@ function memoryStore({ createDelayMs = 0 } = {}) {
       return true;
     },
     async claimEmail(marker) {
-      if (emailClaims.has(marker)) return false;
+      if (emailClaims.has(marker)) return "already-sent";
       emailClaims.add(marker);
-      return true;
+      return "claimed";
     },
     async releaseEmail(marker) {
       calls.releases += 1;
@@ -178,10 +181,21 @@ test("each threshold and budget gets its own marker", () => {
   const { budgetAlertMarker, budgetAlertMarkerHtml } = loadAlertLib();
   const base = alert();
   const marker = budgetAlertMarker(base);
-  assert.equal(marker, "vercel-budget-alert:team:team_jkT8yZ3oE1u6xLo8h6dxfNc3:budget:500:threshold:50");
+  assert.equal(
+    marker,
+    "vercel-budget-alert:team:team_jkT8yZ3oE1u6xLo8h6dxfNc3:budget:500:threshold:50:scope:team-budget",
+  );
   assert.equal(budgetAlertMarkerHtml(base), `<p>${marker}</p>`);
   assert.notEqual(marker, budgetAlertMarker(alert({ thresholdPercent: 100 })));
   assert.notEqual(marker, budgetAlertMarker(alert({ budgetAmount: 900 })));
+  assert.notEqual(marker, budgetAlertMarker(alert({ budgetScope: "ai gateway budget" })));
+});
+
+test("two scopes on one team never share a ticket", () => {
+  const { budgetAlertMarker } = loadAlertLib();
+  const team = alert();
+  const gateway = alert({ budgetScope: "ai gateway budget" });
+  assert.notEqual(budgetAlertMarker(team), budgetAlertMarker(gateway));
 });
 
 test("a threshold of 10 never matches an existing 100 ticket", () => {
@@ -307,6 +321,32 @@ test("a redelivered alert does not repeat its spend comment", async () => {
   assert.equal(store.calls.comments, 0);
   await fileBudgetAlert(alert({ currentSpend: 300 }), store);
   assert.equal(store.calls.comments, 1);
+});
+
+test("a failed comment write is retried by the next delivery", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const store = memoryStore();
+  await fileBudgetAlert(alert(), store);
+  store.addComment = async () => {
+    throw new Error("comment write failed");
+  };
+  await assert.rejects(fileBudgetAlert(alert({ currentSpend: 300 }), store));
+  store.addComment = async () => {
+    store.calls.comments += 1;
+  };
+  await fileBudgetAlert(alert({ currentSpend: 300 }), store);
+  assert.equal(store.calls.comments, 1);
+});
+
+test("a missing email claim is retryable, an occupied one is not", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const unavailable = memoryStore();
+  unavailable.claimEmail = async () => "unavailable";
+  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
+  assert.equal((await fileBudgetAlert(full, unavailable)).email, "failed");
+  const occupied = memoryStore();
+  await fileBudgetAlert(full, occupied);
+  assert.equal((await fileBudgetAlert(full, occupied)).email, "already-sent");
 });
 
 test("the flag switches the intake off", async () => {
