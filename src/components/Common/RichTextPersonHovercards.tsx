@@ -101,7 +101,7 @@ const RichTextPersonHovercards = ({
       attributeFilter: ["data-label"],
     });
 
-    const fromMouse = (event: PointerEvent) => event.pointerType === "mouse";
+    const fromMouse = (event: PointerEvent | MouseEvent) => (event as PointerEvent).pointerType === "mouse";
     const onPointerOver = (event: PointerEvent) => {
       if (!fromMouse(event)) return;
       activate(event.target);
@@ -114,7 +114,7 @@ const RichTextPersonHovercards = ({
         scheduleClose();
       }
     };
-    const onPointerUp = (event: PointerEvent) => {
+    const onTap = (event: MouseEvent) => {
       if (fromMouse(event)) return;
       const mention = mentionFromTarget(event.target);
       if (!mention) return;
@@ -133,14 +133,14 @@ const RichTextPersonHovercards = ({
 
     root.addEventListener("pointerover", onPointerOver);
     root.addEventListener("pointerout", onPointerOut);
-    root.addEventListener("pointerup", onPointerUp);
+    root.addEventListener("click", onTap);
     root.addEventListener("focusin", onFocusIn);
     root.addEventListener("focusout", onFocusOut);
     return () => {
       observer.disconnect();
       root.removeEventListener("pointerover", onPointerOver);
       root.removeEventListener("pointerout", onPointerOut);
-      root.removeEventListener("pointerup", onPointerUp);
+      root.removeEventListener("click", onTap);
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };
