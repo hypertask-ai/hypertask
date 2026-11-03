@@ -17,6 +17,7 @@ const source = (overrides = {}) => ({
   descriptionText: "",
   title: "Redesign AI chat chips after ticket creation",
   reason: "",
+  reasonShowsText: false,
   ...overrides,
 });
 
@@ -63,6 +64,16 @@ test("a mention row leads with its author and never shows the same comment twice
   }));
   assert.deepEqual(parts.map((part) => part.kind), ["comment"]);
   assert.equal(parts[0].author, "Mohsin");
+});
+
+test("a comment row never denies the comment it just showed", () => {
+  const parts = buildInboxRowFillParts(source({ commentId: 9, commentText: "chips should match the tags", commentAuthor: "Valentin" }));
+  assert.deepEqual(parts.map((part) => part.kind), ["comment"]);
+});
+
+test("a row whose reason already carries text adds no empty note", () => {
+  const parts = buildInboxRowFillParts(source({ reason: "Reacted with heart on chips should match the tags", reasonShowsText: true }));
+  assert.deepEqual(parts.map((part) => part.kind), ["reason"]);
 });
 
 test("a row with a reason but no text says so instead of leaving a gap", () => {

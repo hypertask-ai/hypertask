@@ -11,6 +11,7 @@ export interface InboxRowFillSource {
   descriptionText: string;
   title: string;
   reason: string;
+  reasonShowsText?: boolean;
 }
 
 export type InboxRowFillPartKind = "comment" | "reason" | "description" | "empty";
@@ -48,7 +49,7 @@ export function buildInboxRowFillParts(source: InboxRowFillSource): InboxRowFill
   }
 
   if (parts.length === 0) return [];
-  if (parts.length === 1 && !latestComment && !description) {
+  if (parts.length === 1 && parts[0].kind === "reason" && !source.reasonShowsText) {
     parts.push({ kind: "empty", text: INBOX_ROW_FILL_FALLBACK_TEXT });
   }
   return parts;

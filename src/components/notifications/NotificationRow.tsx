@@ -233,6 +233,8 @@ function notificationReasonText(context: NotificationReasonContext): string {
 
 export type InboxRowFillDecor = { kind: InboxRowFillPartKind; node: React.ReactNode };
 
+const COMMENT_LED_TYPES = new Set<string>(["Comment", "Mentioned", "AddedToFollowerInTask"]);
+
 export function inboxRowFillDecor({
     notification,
     projection,
@@ -248,22 +250,25 @@ export function inboxRowFillDecor({
 }): InboxRowFillDecor[] {
     const toPlain = (html: string) => plain(html.slice(0, 1200)) ?? "";
     const commentText = notification.comment?.text ?? "";
+    const commentLeads = Boolean(notification.commentId) && commentText.length > 0 && COMMENT_LED_TYPES.has(notification.type);
     const latestHumanComment = notification.task?.comments?.[0];
+    const latestCommentText = toPlain(latestHumanComment?.text ?? "");
     const parts = buildInboxRowFillParts({
-        commentText: toPlain(commentText),
+        commentText: commentLeads ? toPlain(commentText) : "",
         commentAuthor: notification.fromUser?.displayName ?? notification.fromAgent?.displayName ?? "",
-        commentId: notification.commentId ?? null,
-        latestCommentText: toPlain(latestHumanComment?.text ?? ""),
+        commentId: commentLeads ? notification.commentId ?? null : null,
+        latestCommentText: latestCommentText === toPlain(commentText) ? "" : latestCommentText,
         latestCommentAuthor: latestHumanComment?.creator?.displayName ?? "",
         descriptionText: toPlain(notification.task?.description_?.content ?? ""),
         title: notification.task?.title ?? "",
         reason: notificationReasonText({ notification, projection, plain, formattedDueDate, flipMentionHierarchy: false }),
+        reasonShowsText: commentText.length > 0 || notification.type === "AgentMessage",
     });
 
     return parts.map((part) => {
-        if (highlightComment && part.kind === "comment" && notification.commentId != null && part.text === toPlain(commentText)) {
+        if (highlightComment && commentLeads && part.kind === "comment" && part.text === toPlain(commentText)) {
             const body = notification.type === "Comment"
-                ? renderCommentPreview(commentText)
+                ? projection ? projection.projectCommentPreview(commentText).text : renderCommentPreview(commentText)
                 : renderCommentMentionSimple(commentText, notification.userId, projection);
             return { kind: part.kind, node: part.author ? <>{part.author}: {body}</> : body };
         }
