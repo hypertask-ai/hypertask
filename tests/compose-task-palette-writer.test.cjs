@@ -757,7 +757,7 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
   });
 });
 
-test('an empty description writer event opens New Task only with both writer flags on; inline drafts keep the description writer', async (t) => {
+test('an empty description writer event keeps the inline description writer without New Task or auto generation', async (t) => {
   for (const enabled of [false, true]) for (const newWindow of [false, true]) {
     await withPalette(t, { enabled, newWindow, open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
@@ -772,10 +772,7 @@ test('an empty description writer event opens New Task only with both writer fla
       assert.equal(openings.at(-1), true, 'inline description drafts keep the description writer open');
       await React.act(async () => window.dispatchEvent(new dom.window.CustomEvent('test-open-writer', { detail: { targetId: 'description', prompt: '' } })));
       assert.equal(openings.at(-1), true);
-      if (enabled && newWindow) {
-        assert.equal(values.get('showCommandsAtom').show, true);
-        assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
-      } else assert.equal(values.get('showCommandsAtom').show, false);
+      assert.equal(values.get('showCommandsAtom').show, false);
     });
   }
 });
