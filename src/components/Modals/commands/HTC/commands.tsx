@@ -77,7 +77,6 @@ import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7328_ROUNDED_THEME_FLAG, HT
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
-  HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -133,13 +132,12 @@ const Commands = (props: Props) => {
   if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
     selectedTasksFirst = true;
   }
-  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const ctrlJSkillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
   let skillMenuOwnsKeys = false;
   if (ctrlJSkillMenuFlag) skillMenuOwnsKeys = true;
   const isApple = useDeviceContext();
   const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
-  const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
+  const composeEnabled = !props.isDemo && !props.isInteractive;
   const newTaskWindow = composeEnabled;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
@@ -745,7 +743,7 @@ const Commands = (props: Props) => {
     return () => document.removeEventListener("keydown", switchTab, true);
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
-  const modeSwitch = composeTaskWriterEnabled && !isDemo && !isInteractive ? (
+  const modeSwitch = !isDemo && !isInteractive ? (
     <div className="absolute -top-12 left-0 flex w-full justify-center">
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
@@ -844,7 +842,7 @@ const Commands = (props: Props) => {
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
         contentClassName={cn(
           floatingElevation && "shadow-floating",
-          composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden",
+          !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden",
         )}
       >
         {isInteractive && (

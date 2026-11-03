@@ -66,7 +66,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
 import { HTPR_8035_SIDEBAR_NEW_TASK_FLAG } from "@/lib/flags/definitions/htpr-8035-sidebar-new-task";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/definitions/htpr-6929-compose-task-writer";
 import { HTPR_8146_SETTINGS_NAME_FLAG } from "@/lib/flags/definitions/htpr-8146-settings-name";
 import { prefetchInboxQuery } from "@/hooks/Inbox/useGetNotifications";
 
@@ -124,7 +123,6 @@ const AppShellRail = ({
   }
   const settingsAccessibleName = useFlag(HTPR_8146_SETTINGS_NAME_FLAG);
   const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
@@ -350,7 +348,7 @@ const AppShellRail = ({
       </div>
 
       <div className={`mt-3 flex flex-col ${wide ? "w-full" : "items-center"}`}>
-        {sidebarNewTask && composeEnabled && (
+        {sidebarNewTask && (
           <button
             type="button"
             aria-label="New Task"

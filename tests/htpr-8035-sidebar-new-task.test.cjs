@@ -23,7 +23,7 @@ const flagPath = "src/lib/flags/definitions/htpr-8035-sidebar-new-task.ts";
 const flag = load(flagPath, {}).default;
 const { CommandMode } = load("src/models/enums.ts", {});
 
-function renderRail({ enabled = true, compose = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
+function renderRail({ enabled = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
   const updates = [];
   const navigation = [];
   const icon = (props) => React.createElement("svg", props);
@@ -54,13 +54,12 @@ function renderRail({ enabled = true, compose = true, wide = false, apple = fals
     "@/components/Modals/Settings/settingsNavigation": { useSettingsNavigation: () => ({ openSettings: () => navigation.push("settings") }) },
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/store/currentPageActions": { currentPageActionsAtom: "page-actions" },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === "htpr-6929-compose-task-writer" ? compose : false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : false },
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
     "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
     "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: flag.key },
-    "@/lib/flags/definitions/htpr-6929-compose-task-writer": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer" },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
   };
   const Rail = load("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", dependencies).default;
@@ -118,12 +117,10 @@ test("rail keeps its existing glyphs until Graphite 2 replacements are enabled",
   }
 });
 
-test("feature off or compose unavailable leaves no new entry", () => {
-  for (const options of [{ enabled: false }, { compose: false }]) {
-    const rail = renderRail(options);
-    assert.equal(rail.nodes.some((node) => node.props["aria-label"] === "New Task"), false);
-    assert.ok(rail.nodes.some((node) => node.props["aria-label"] === "Your Kanban boards"));
-  }
+test("feature off leaves no new entry", () => {
+  const rail = renderRail({ enabled: false });
+  assert.equal(rail.nodes.some((node) => node.props["aria-label"] === "New Task"), false);
+  assert.ok(rail.nodes.some((node) => node.props["aria-label"] === "Your Kanban boards"));
 });
 
 test("New Task is available across sidebar routes with platform-correct tooltip", () => {

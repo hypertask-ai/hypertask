@@ -59,7 +59,7 @@ test("one conversation follows the user instead of the ticket", () => {
 
 test("the new-ticket greeting lands in the conversation that is open, not a new thread", () => {
   const history = read("src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts");
-  assert.match(history, /composeIntro && currentSession &&\s*\(manualChat \|\| \(isTaskScoped && taskId === composeIntro\.taskId/);
+  assert.match(history, /pendingComposeIntro && currentSession &&\s*\(manualChat \|\| \(isTaskScoped && taskId === pendingComposeIntro\.taskId/);
 });
 
 test("the settings hide every chat auto-open switch once the chat is manual", () => {

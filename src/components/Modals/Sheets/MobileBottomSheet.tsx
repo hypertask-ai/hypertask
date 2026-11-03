@@ -3,8 +3,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { cn } from "@/utils/undoActions/helperFuncs";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { AppSheet, SheetScroller } from "./AppSheet";
 
 interface MobileBottomSheetProps {
@@ -42,8 +40,7 @@ export const MobileBottomSheet = ({
   zIndex = 10000,
   onCloseEnd,
 }: MobileBottomSheetProps) => {
-  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const aboveSlot = composeTaskWriterEnabled ? requestedAboveSlot : undefined;
+  const aboveSlot = requestedAboveSlot;
   const viewport = useMobileVisualViewport(isOpen);
   const keyboardOpen = keyboardAware && (viewport?.bottomInset ?? 0) > 0;
   const availableHeight = viewport?.visibleHeight ?? 0;
@@ -83,7 +80,7 @@ export const MobileBottomSheet = ({
       defaultLibraryHeader={false}
       zIndex={zIndex}
       onCloseEnd={onCloseEnd}
-      aboveSlot={composeTaskWriterEnabled ? requestedAboveSlot : undefined}
+      aboveSlot={requestedAboveSlot}
       panelClassName={cn("!overflow-hidden !rounded-t-[5px] !border-0 !bg-modalBackground text-white-black shadow-customshadow-2", aboveSlot && "!overflow-visible")}
       bodyClassName="flex min-h-0 flex-1 flex-col overflow-hidden !bg-modalBackground"
       backdropClassName="bg-pageBackground opacity-60"

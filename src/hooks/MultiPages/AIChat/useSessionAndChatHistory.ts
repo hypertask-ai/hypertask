@@ -1,6 +1,6 @@
 import { HTPR_7736_CHAT_FOLLOWS_TASK_FLAG } from "@/lib/flags/definitions/htpr-7736-chat-follows-task";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7783_REMEMBER_CHAT_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
+import { HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7783_REMEMBER_CHAT_FLAG, HTPR_7794_STOP_CLOSES_STREAM_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, currentProjectAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -45,17 +45,14 @@ export const useSessionAndChatHistory = (
   const rememberChat = useFlag(HTPR_7783_REMEMBER_CHAT_FLAG);
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
-  let composeIntro: typeof pendingComposeIntro = null;
-  if (composeEnabled) composeIntro = pendingComposeIntro;
   const skillFollowupEnabled = useFlag(HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG);
   const pendingFollowupState = useRecoilValue(composeTaskSkillFollowupAtom);
   let pendingFollowup: typeof pendingFollowupState = null;
   if (skillFollowupEnabled) pendingFollowup = pendingFollowupState;
   const waitingForSkillFollowup = isTaskScoped && Boolean(taskId) && pendingFollowup?.taskId === taskId;
-  const hasPendingSkillIntro = isTaskScoped && composeIntro?.skillFollowup && composeIntro.taskId === taskId;
+  const hasPendingSkillIntro = isTaskScoped && pendingComposeIntro?.skillFollowup && pendingComposeIntro.taskId === taskId;
   const consumedComposeIntro = useRef<string | null>(null);
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
@@ -64,7 +61,7 @@ export const useSessionAndChatHistory = (
   let followsTaskNavigation = false;
   if (taskNavigationEnabled && isTaskScoped && !pathname?.startsWith("/chat")) followsTaskNavigation = true;
   const explicitTaskRef = useRef<{ taskId: number | undefined; generation: number }>({ taskId: undefined, generation: 0 });
-  const hasExplicitTask = taskId !== undefined && (composeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
+  const hasExplicitTask = taskId !== undefined && (pendingComposeIntro?.taskId === taskId || pendingFollowup?.taskId === taskId);
   if (hasExplicitTask && explicitTaskRef.current.taskId !== taskId) explicitTaskRef.current.generation += 1;
   explicitTaskRef.current.taskId = hasExplicitTask ? taskId : undefined;
   const selectionScope = manualChat ? `manual:${teamKey ?? "none"}` : followsTaskNavigation ? `following:${explicitTaskRef.current.generation}` : taskId;
@@ -583,13 +580,13 @@ export const useSessionAndChatHistory = (
   const currentSession = followsTaskNavigation && hasExplicitTask && selectedSession?.taskId !== taskId ? undefined : selectedSession;
   useEffect(() => {
     if (windowScoped) return;
-    if (!waitingForSkillFollowup && composeEnabled && composeIntro && currentSession &&
-        (manualChat || (isTaskScoped && taskId === composeIntro.taskId && currentSession.taskId === composeIntro.taskId))) {
-      const id = `compose-task-${composeIntro.taskId}`;
+    if (!waitingForSkillFollowup && pendingComposeIntro && currentSession &&
+        (manualChat || (isTaskScoped && taskId === pendingComposeIntro.taskId && currentSession.taskId === pendingComposeIntro.taskId))) {
+      const id = `compose-task-${pendingComposeIntro.taskId}`;
       if (consumedComposeIntro.current !== id && !currentSession.messages.some((message) => message.id === id)) {
         const greeting: IChatMessage = {
           id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
-          createdAt: new Date(), content: composeIntro.content,
+          createdAt: new Date(), content: pendingComposeIntro.content,
         };
         if (paged) {
           if (!pagedHistory.addMessageToSessionQuery(currentSession.id, greeting)) return;
@@ -600,7 +597,7 @@ export const useSessionAndChatHistory = (
       }
       setComposeIntro(null);
     }
-  }, [windowScoped, waitingForSkillFollowup, composeEnabled, composeIntro, isTaskScoped, manualChat, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
+  }, [windowScoped, waitingForSkillFollowup, pendingComposeIntro, isTaskScoped, manualChat, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
 
   const isSessionPending =
     !isDemo &&

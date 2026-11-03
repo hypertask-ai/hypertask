@@ -113,23 +113,20 @@ test("the palette memoizes the registry and keeps selection and theme arguments 
   assert.equal(command.name, "Show agent log");
 });
 
-test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", () => {
+test("both shortcut-help surfaces advertise the one Ctrl/Cmd+J action", () => {
   for (const [file, dataName] of [
     ["src/components/Modals/Settings/ShortcutsSection.tsx", "shortcutGroups"],
     ["src/components/sidebars/keyboardShortcuts.tsx", "mainData"],
   ]) {
-    for (const enabled of [false, true]) {
-      const includeComposeTaskShortcut = gatedValue(file, "includeComposeTaskShortcut", { composeTaskWriterEnabled: enabled }, [], "composeTaskWriterEnabled");
-      for (const isApple of [false, true]) {
-        const shortcuts = evaluate(initializer(file, dataName).text, {
-          getKeyboardShortcuts, isApple, appShellRailOn: false,
-          historyToggleLabel: "Toggle history events", includeComposeTaskShortcut, newTaskWindow: false,
-        });
-        const titles = shortcuts.flatMap((group) => group.sub)
-          .filter((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} J`)
-          .map((item) => item.shortTitle);
-        assert.deepEqual(titles, enabled ? ["Compose task"] : ["Add task with AI Task Writer", "Write with AI"]);
-      }
+    for (const isApple of [false, true]) {
+      const shortcuts = evaluate(initializer(file, dataName).text, {
+        getKeyboardShortcuts, isApple, appShellRailOn: false,
+        historyToggleLabel: "Toggle history events",
+      });
+      const titles = shortcuts.flatMap((group) => group.sub)
+        .filter((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} J`)
+        .map((item) => item.shortTitle);
+      assert.deepEqual(titles, ["New Task"]);
     }
   }
 });

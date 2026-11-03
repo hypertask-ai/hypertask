@@ -57,7 +57,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
+import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
@@ -109,7 +109,6 @@ export function AI_Tiptap_Container({
 } = {}) {
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
-  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
@@ -117,7 +116,6 @@ export function AI_Tiptap_Container({
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
-  const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
   let hideMicrophonePicker = fullScreenCleanup;
@@ -374,7 +372,7 @@ export function AI_Tiptap_Container({
                 onEditor={setControlledEditor}
               />
             ) : (
-            <ComposerTextarea
+            <AiComposerTextarea
               ref={controlledComposer.inputRef}
               value={controlledComposer.value}
               onChange={(event) =>
@@ -387,7 +385,6 @@ export function AI_Tiptap_Container({
               rows={1}
               placeholder={controlledComposer.placeholder}
               aria-label={controlledComposer.ariaLabel}
-              className={composeTaskWriterEnabled ? undefined : "block w-full resize-none bg-transparent py-2 text-dense outline-none placeholder:text-text-light-gray disabled:opacity-50"}
             />
             )
           ) : editor ? (

@@ -1,5 +1,4 @@
 import { HTPR_5908_RETYPE_LOWERCASE_FLAG } from "@/lib/flags/definitions/htpr-5908-retype-lowercase";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import Highlight from "@tiptap/extension-highlight";
 import OrderedList from "@tiptap/extension-ordered-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -97,9 +96,7 @@ const useTiptap = ({
   const skillProjectIdRef = useRef(mentionProjectId);
   skillProjectIdRef.current = mentionProjectId;
   const isApple = useDeviceContext();
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  let newTaskWindow = false;
-  if (mode === "read-edit-description" && composeEnabled) newTaskWindow = true;
+  const newTaskWindow = mode === "read-edit-description";
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;

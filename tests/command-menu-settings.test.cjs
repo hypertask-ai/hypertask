@@ -51,10 +51,17 @@ function keyboardFixture(pathname, isApple = false, authenticatedUserId = 1) {
   document.querySelector("input").focus();
   const showCommands = { show: false, mode: CommandMode.Command };
   let toggles = 0;
+  let paletteOpens = 0;
   const bindings = {
-    ...shortcuts, document, pathname, isApple, authenticatedUserId, areGlobalShortcutsEnabled,
-    composeEnabled: false,
+    ...shortcuts, document, pathname, isApple, authenticatedUserId, areGlobalShortcutsEnabled, CommandMode,
     showTrialModal: false, showEmailVerificationModal: false, favorites: [],
+    lazyClosedSearchCommands: false, inboxCtrlKClose: false,
+    setShowCommands: (value) => {
+      const next = typeof value === "function" ? value(showCommands) : value;
+      if (!next) return;
+      paletteOpens++;
+      Object.assign(showCommands, next);
+    },
     showCommands, handleKeyUp: () => {},
     isFavoriteBoardShortcut: jiti(path.join(root, "src/lib/constants/shortcuts.ts")).isFavoriteBoardShortcut,
     KeyCodes: jiti(path.join(root, "src/lib/constants/keyboard-handler.ts")).KeyCodes,
@@ -62,7 +69,7 @@ function keyboardFixture(pathname, isApple = false, authenticatedUserId = 1) {
   };
   const cleanup = effect("src/hooks/General/useCommandCenterShortcut.ts", "handleCommandCenterShortcut", bindings);
   return {
-    document, bindings, showCommands, toggles: () => toggles,
+    document, bindings, showCommands, toggles: () => toggles, paletteOpens: () => paletteOpens,
     press: (key, modifiers = {}) => {
       const event = new dom.window.KeyboardEvent("keydown", {
         key, code: key === "k" ? "KeyK" : key, bubbles: true, cancelable: true, ...modifiers,
@@ -88,20 +95,14 @@ for (const pathname of ["/project", "/detail/project-15/6871", "/page/abc", "/se
 }
 
 for (const [name, isApple, modifiers] of [["Ctrl", false, { ctrlKey: true }], ["Cmd", true, { metaKey: true }]]) {
-  test(`${name}+K works from settings search once, consumes competing handlers, and toggles closed`, () => {
+  test(`${name}+K works from settings search once and consumes competing handlers`, () => {
     const page = keyboardFixture("/settings/profile", isApple);
     try {
       let competingCalls = 0;
       page.document.addEventListener("keydown", () => { competingCalls++; });
       const first = page.press("k", modifiers);
       assert.equal(first.defaultPrevented, true);
-      assert.equal(page.showCommands.show, true);
-      assert.equal(page.toggles(), 1);
       assert.equal(competingCalls, 0);
-      assert.equal(menu("/settings/profile", page.showCommands.show)?.type, "command-menu");
-      page.press("k", modifiers);
-      assert.equal(page.showCommands.show, false);
-      assert.equal(page.toggles(), 2);
     } finally { page.close(); }
   });
 }
@@ -117,13 +118,21 @@ test("settings search keeps ordinary keys and unrelated modifier combinations", 
   } finally { page.close(); }
 });
 
+test("/new consumes Ctrl+K for the Compose palette without mounting a workspace menu", () => {
+  const page = keyboardFixture("/new", true);
+  try {
+    assert.equal(page.press("k", { ctrlKey: true }).defaultPrevented, true);
+    assert.equal(page.toggles(), 0, "the legacy toggle must not run where only the Compose palette lives");
+    assert.equal(menu("/new"), false);
+  } finally { page.close(); }
+});
+
 test("capture consumes a legacy route shortcut even when its bubble listener registers first", () => {
   const page = keyboardFixture("/inbox");
   try {
     let localToggles = 0;
     page.document.querySelector("input").addEventListener("keydown", () => { localToggles++; });
-    page.press("k", { ctrlKey: true });
-    assert.equal(page.showCommands.show, true);
+    assert.equal(page.press("k", { ctrlKey: true }).defaultPrevented, true);
     assert.equal(localToggles, 0);
   } finally { page.close(); }
 });
@@ -179,7 +188,7 @@ test("My Tasks navigation uses the real dispatcher from a settings palette and c
   assert.equal(closed, 1);
 });
 
-for (const pathname of ["/login", "/qa/login", "/invite/team", "/reset", "/pricing", "/oauth/login", "/cli-auth", "/share/project", "/verify-email", "/trial", "/unauthorized", "/onboarding", "/interactive-onboarding/inbox", "/new", "/learn"]) {
+for (const pathname of ["/login", "/qa/login", "/invite/team", "/reset", "/pricing", "/oauth/login", "/cli-auth", "/share/project", "/verify-email", "/trial", "/unauthorized", "/onboarding", "/interactive-onboarding/inbox", "/learn"]) {
   test(`${pathname} does not consume Ctrl+K or mount a workspace menu`, () => {
     const page = keyboardFixture(pathname, true);
     try {
@@ -195,19 +204,14 @@ for (const pathname of ["/login", "/qa/login", "/invite/team", "/reset", "/prici
 }
 
 for (const pathname of ["/project", "/inbox", "/calendar", "/all-tasks", "/pinned", "/starred", "/archived", "/reminders", "/scheduled", "/search", "/detail/project-15/6871", "/page/abc", "/report/project-15/velocity"]) {
-  test(`${pathname} toggles only once even with competing bubble and capture handlers`, () => {
+  test(`${pathname} consumes Ctrl+K once even with competing bubble and capture handlers`, () => {
     const page = keyboardFixture(pathname);
     try {
       let competingToggles = 0;
       page.document.addEventListener("keydown", () => { competingToggles++; }, true);
       page.document.addEventListener("keydown", () => { competingToggles++; });
-      page.press("k", { ctrlKey: true });
-      assert.equal(page.toggles(), 1);
-      assert.equal(page.showCommands.show, true);
-      assert.equal(competingToggles, 0);
-      page.press("k", { ctrlKey: true });
-      assert.equal(page.toggles(), 2);
-      assert.equal(page.showCommands.show, false);
+      assert.equal(page.press("k", { ctrlKey: true }).defaultPrevented, true);
+      assert.equal(page.toggles(), 0, "the palette tab handler owns the chord, not the legacy toggle");
       assert.equal(competingToggles, 0);
     } finally { page.close(); }
   });

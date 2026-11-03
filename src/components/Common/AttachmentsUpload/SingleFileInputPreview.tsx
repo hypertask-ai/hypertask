@@ -5,7 +5,6 @@ import 'react-circular-progressbar/dist/styles.css';
 
 import { useEffect, useRef, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { Paperclip, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
@@ -149,8 +148,6 @@ interface ISingleFile {
     }, [backgroundTaskUpload, file, hasCallback, id, shouldUpload, showPlanLimitToast]);
 
     const isChat = variant === "chat";
-    const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-    const newTaskWindow = composeEnabled;
 
     return (
       <div
@@ -211,15 +208,15 @@ interface ISingleFile {
         {
           allowDelete && handleRemove && (!shouldUpload || progressPercentage === 100) ? (
             <X size={18}
-              aria-label={newTaskWindow ? `Remove ${file.name}` : undefined}
-              role={newTaskWindow ? "button" : undefined}
-              tabIndex={newTaskWindow ? 0 : undefined}
-              onKeyDown={newTaskWindow ? (event) => {
+              aria-label={`Remove ${file.name}`}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   handleRemove(file.name);
                 }
-              } : undefined}
+              }}
               className="absolute z-10 top-0 right-0 text-white-black rounded-full cursor-pointer xs:text-subheading sm:text-emphasis bg-red-600"
               onClick={() => handleRemove(file.name)}
               strokeWidth={1.75}

@@ -158,9 +158,9 @@ These fire from raw keydown listeners and will NOT show up when scanning `AllCom
 
 When auditing whether a key is free, grep for the letter in ALL of: `src/app`, `src/components`, `src/hooks`, `src/lib/contexts` — the palette alone is not the truth.
 
-## Compose task writer (Owner + QA)
+## Compose task writer
 
-Behind `htpr-6929-compose-task-writer`, `Ctrl+J` (`Cmd+J` on Apple)
+`Ctrl+J` (`Cmd+J` on Apple)
 opens Commands in Compose from any signed-in app surface. `Ctrl+K` opens or
 switches to the unchanged Search mode. The existing phone Commands button
 opens the same palette with Search and Compose tabs.

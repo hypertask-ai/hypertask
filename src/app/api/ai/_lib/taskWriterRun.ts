@@ -43,7 +43,7 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
 import { HTPR_7514_INLINE_AGENT_IMAGES_FLAG } from "@/lib/flags/keys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
@@ -149,13 +149,6 @@ export async function prepareTaskWriterRun(
   agentId?: string | null,
   teamScope?: AgentTokenTeamScope | null,
 ) {
-  if (body.requestKind === "compose-task" &&
-      !(await isFeatureEnabled(HTPR_6929_COMPOSE_TASK_WRITER_FLAG, userId))) {
-    const error = new AiFeatureDisabledError();
-    error.message = "Compose task writer is turned off";
-    throw error;
-  }
-
   if (body.existingTaskId != null) {
     if (body.requestKind !== "compose-task") {
       throw new AiFeatureDisabledError();

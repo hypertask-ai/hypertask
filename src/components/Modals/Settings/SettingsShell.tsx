@@ -5,7 +5,7 @@ import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai
 import { settingsScopeFromPath } from "@/lib/ai/settings/catalog";
 import { subscribeAiSettingsEvents } from "@/lib/ai/settings/client";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_7472_TASK_TEMPLATES_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_7472_TASK_TEMPLATES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -283,7 +283,6 @@ const SECTION_COMPONENTS: Record<SettingsSectionId, ComponentType> = {
 };
 
 const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
-  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const aiSettingsEnabled = useFlag(HTPR_7622_AI_SETTINGS_FLAG);
   const [settingsRevision, setSettingsRevision] = useState(0);
   const taskTemplatesEnabled = useFlag(HTPR_7472_TASK_TEMPLATES_FLAG);
@@ -605,36 +604,14 @@ const SettingsShell: React.FC<SettingsShellProps> = ({ section }) => {
           ) : (
             <div className="w-full shrink-0">
               <div className="mx-auto flex w-full max-w-[760px] items-center gap-4 px-6 py-3">
-                {composeTaskWriterEnabled ? <SettingsScopeTabs
+                <SettingsScopeTabs
                   tabs={SETTINGS_TABS}
                   activeId={activeTab.id}
                   onSelect={(id) => {
                     const tab = SETTINGS_TABS.find((item) => item.id === id);
                     if (tab) setSettingsSection(tab.defaultSection);
                   }}
-                /> : (
-                  <div
-                    aria-label="Settings scopes"
-                    className="no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
-                    role="tablist"
-                  >
-                    {SETTINGS_TABS.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        aria-selected={activeTab.id === tab.id}
-                        className={cn(
-                          "shrink-0 rounded-[5px] px-3 py-1.5 text-content font-medium text-text-light-gray transition hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none",
-                          activeTab.id === tab.id && "bg-active-modal-element text-white-black",
-                        )}
-                        onClick={() => setSettingsSection(tab.defaultSection)}
-                        role="tab"
-                      >
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                />
                 {activeTab.id !== "profile" && <SettingsTeamPicker />}
               </div>
             </div>

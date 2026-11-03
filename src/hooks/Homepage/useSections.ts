@@ -17,7 +17,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG } from "@/lib/flags/keys";
 
 type SectionKeydownHandler = (event: KeyboardEvent) => void;
 
@@ -48,9 +48,7 @@ const useSections = ({
   const router = useRouter();
   const ctrlJWaitsForFlags = useFlag(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
   const ctrlJWaitsForFlagsLoaded = useFlagLoaded(HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG);
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const composeLoaded = useFlagLoaded(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const blockLegacyCtrlJ = (ctrlJWaitsForFlags || !ctrlJWaitsForFlagsLoaded) && (!composeLoaded || composeEnabled);
+  const blockLegacyCtrlJ = ctrlJWaitsForFlags || !ctrlJWaitsForFlagsLoaded;
   const store = useStore();
   const { createItem } = useAddDeleteTaskInBoards();
   const { toggleCreateTaskGlobally }= useHypertasksRecoilStates()

@@ -13,7 +13,6 @@ import {
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
   const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
@@ -31,10 +30,6 @@ const KeyboardShortcuts = () => {
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
-  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  let includeComposeTaskShortcut = false;
-  if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
-  const newTaskWindow = composeTaskWriterEnabled;
   const historyToggleLabel = "Toggle agent log";
   const [_showShortcuts, setShowShortcuts] = useRecoilState(showShortcutsAtom);
   const [keyword, setKeyword] = useState("");
@@ -42,8 +37,8 @@ const KeyboardShortcuts = () => {
     isApple,
     appShellRailOn,
     historyToggleLabel,
-    includeComposeTaskShortcut,
-    newTaskWindow,
+    true,
+    true,
   );
 
   const onKeyChange = (e: any) => {

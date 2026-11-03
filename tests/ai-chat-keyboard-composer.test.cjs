@@ -23,7 +23,10 @@ function composerView(controlled = false) {
     "@/hooks/useFlag": { useFlag: (key) => [FLAG, "htpr-7734-agent-chat-context"].includes(key) },
     "@/lib/flags/keys": { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
     "@/lib/controlledComposerEditor": { ControlledComposerEditor: () => null },
-    "./AiComposerTextarea": { AiComposerTextarea: () => null },
+    "./AiComposerTextarea": { AiComposerTextarea: React.forwardRef((props, ref) => React.createElement("textarea", {
+      ref, value: props.value ?? "", onChange: props.onChange, onKeyDown: props.onKeyDown,
+      rows: props.rows, placeholder: props.placeholder, "aria-label": props["aria-label"],
+    })) },
     "./ChatScopeChip": { ChatScopeChip: ({ label, title, isOpen, onClick }) => React.createElement("button", { type: "button", title, "aria-haspopup": "dialog", "aria-expanded": isOpen, onClick }, label) },
     "@/store": {},
     "@/lib/state": { useRecoilState: () => [[], noop], useRecoilValue: () => null },

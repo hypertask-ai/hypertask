@@ -10,7 +10,6 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-7586-one-questions-call";
-const composeFlag = "htpr-6929-compose-task-writer";
 const questionsFlag = "htpr-7317-ctrlj-ticket-questions";
 const intro = { taskId: 43, content: "I created QASA-43 from your note. Want me to refine it?" };
 const newQuestions = ["Which boards get the sidebar first?", "Add steps for the empty sidebar"];
@@ -39,7 +38,7 @@ async function withSidebar(options, check) {
   let questionsTaskId = options.questionsTaskId ?? null;
   let dataReady = options.dataReady ?? true;
   let session = { id: "s1", taskId: 43, messages: [] };
-  const flags = new Set([composeFlag, questionsFlag, flag]);
+  const flags = new Set([questionsFlag, flag]);
   for (const disabled of options.disabledFlags ?? []) flags.delete(disabled);
   const atoms = {
     currentProjectAtom: "project", inViewObjectAtom: "task", taskDetailNonEssentialReadyAtom: "ready",
@@ -54,7 +53,6 @@ async function withSidebar(options, check) {
     "@/lib/ai/composeIntroTaskId": { composeIntroTaskId: () => undefined },
     "@/lib/flags/keys": {
       HTPR_7586_ONE_QUESTIONS_CALL_FLAG: flag,
-      HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,
       HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: questionsFlag,
     },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
@@ -230,7 +228,6 @@ test("unrelated or non-question intros and disabled source flags do not suppress
     { pendingIntro: { ...intro, taskId: 99 } },
     { pendingIntro: { ...intro, content: "I created 2 tickets from your note." } },
     { pendingIntro: intro, disabledFlags: [questionsFlag] },
-    { pendingIntro: intro, disabledFlags: [composeFlag] },
   ]) {
     await withSidebar(options, async (view) => {
       assert.deepEqual(view.requests, [request({ taskId: 43 })]);
