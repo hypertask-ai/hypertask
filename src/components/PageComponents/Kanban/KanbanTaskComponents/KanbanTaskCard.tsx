@@ -112,9 +112,7 @@ const KanbanTaskCard = ({
     ref={cardRef}
     tabIndex={0}
     id={`task-${task.id}`}
-    className={`outline-none xs:border-[1px] md:border-none xs:border-light-black-border-1 ${
-      cleanup ? "rounded-md" : "rounded-[5px]"
-    }`}
+    className="outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
     onFocusCapture={onFocusCapture}
     onBlurCapture={onBlurCapture}
     onMouseEnter={onMouseEnter}

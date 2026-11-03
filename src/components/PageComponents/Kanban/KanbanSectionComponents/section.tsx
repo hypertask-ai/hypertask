@@ -56,27 +56,15 @@ export const LARGE_BOARD_PROGRESSIVE_RENDER_THRESHOLD = 40;
 const INITIAL_PROGRESSIVE_TASKS_PER_SECTION = 2;
 const PROGRESSIVE_REVEAL_SETTLE_MS = 160;
 
-const TaskSkeleton = ({
-  provided,
-  cleanup = false,
-}: {
-  provided?: DraggableProvided;
-  cleanup?: boolean;
-}) => {
+const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
   return (
     <div
       ref={provided?.innerRef}
       {...provided?.draggableProps}
       style={provided?.draggableProps.style}
-      className={`outline-none ${cleanup ? "rounded-md" : "rounded-[5px]"}`}
+      className="outline-none rounded-[5px]"
     >
-      <div
-        className={`bg-cardBackground outline-none min-h-[100px] ${
-          cleanup
-            ? "shadow-card rounded-md"
-            : "shadow-md border-l-4 border-transparent rounded-[5px]"
-        }`}
-      />
+      <div className="shadow-md border-l-4 border-transparent bg-cardBackground rounded-[5px] outline-none min-h-[100px]" />
     </div>
   );
 };
@@ -539,7 +527,7 @@ export const Section = ({
                   >
                     {(provided, snapshot) =>
                       renderMode === "skeleton" ? (
-                        <TaskSkeleton provided={provided} cleanup={cleanup} />
+                        <TaskSkeleton provided={provided} />
                       ) : renderMode === "placeholder" ? (
                         <ProgressiveTaskPlaceholder
                           task={task}

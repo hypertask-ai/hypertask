@@ -2,9 +2,11 @@
   {
     "flag": "htpr-8255-kanban-cleanup",
     "page": "board",
-    "anchors": ["column-title"],
+    "anchors": [
+      "column-title"
+    ],
     "ticket": "https://app.hypertask.ai/detail/project-15/8255",
-    "reason": "The ticket asks the column title to line up with the card text, so the column header's left padding goes from 8px to 20px and the To do column title moves 12px right at every width and sidebar state. Card text, column boxes and every other anchor keep their place.",
+    "reason": "The ticket asks the column title to line up with the card text, so the column header's left padding goes from 8px to 20px and the To do column title moves 12px right at every width and sidebar state. Card text, card radii, column boxes and every other anchor keep their place.",
     "approvedIn": "https://app.hypertask.ai/detail/project-15/8255"
   }
 ]

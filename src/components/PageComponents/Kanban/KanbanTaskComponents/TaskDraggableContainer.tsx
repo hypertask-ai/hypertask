@@ -83,10 +83,8 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     cardState === "active" ||
     cardState === "active-blocked" ||
     cardState === "selected-blocked";
-  const cardBody = "kanban-task-card group/kanban-selection relative";
-  const cardShape = cleanup
-    ? "rounded-md outline-none cursor-pointer"
-    : "rounded-[5px] outline-none cursor-pointer";
+  const cardBody =
+    "kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer";
 
   const getStyle = useCallback(
     (style: any, snapshot: DraggableStateSnapshot) => {
@@ -108,11 +106,11 @@ const TaskDraggableContainer: React.FC<ITaskDraggableContainer> = ({
     <div
       ref={provided?.innerRef}
       className={cn(
-        cleanup ? "shadow-card" : isMbl ? "shadow-sm" : "shadow-md",
-        !cleanup && isMbl && snapshot?.isDragging && "shadow-md",
+        isMbl ? "shadow-sm" : "shadow-md",
+        isMbl && snapshot?.isDragging && "shadow-md",
         cleanup ? cleanupStroke : legacyStroke,
         cleanup ? cleanupStateClasses : cardStateClasses,
-        `${cardBody} ${cardShape}`,
+        cardBody,
         parentClassName
       )}
       onClick={openDetail}

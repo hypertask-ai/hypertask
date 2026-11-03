@@ -39,8 +39,8 @@ const ProgressiveTaskPlaceholder = ({
     id={`task-${task.id}`}
     data-progressive-task-id={task.id}
     aria-label={task.title}
-    className={`block border-thin border-transparent bg-cardBackground py-2 text-dense text-white-black ${
-      cleanup ? "rounded-md pl-3 pr-2" : "rounded-[5px] px-2"
+    className={`block rounded-[5px] border-thin border-transparent bg-cardBackground py-2 text-dense text-white-black ${
+      cleanup ? "pl-3 pr-2" : "px-2"
     }`}
     {...provided.draggableProps}
     {...provided.dragHandleProps}

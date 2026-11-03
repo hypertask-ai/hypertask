@@ -54,13 +54,11 @@ for (const mobile of [false, true]) {
     const off = parts(false, mobile, {});
     assert.ok(off.card.includes("rounded-[5px]"));
     assert.ok(off.card.includes("border-transparent"));
-    assert.ok(on.card.includes("rounded-md"));
-    assert.ok(!on.card.includes("rounded-[5px]"));
+    assert.ok(on.card.includes("rounded-[5px]"), "the card keeps the canonical radius");
     assert.ok(!on.card.includes("border-transparent"));
     assert.ok(on.card.includes("border-l-0"));
-    assert.ok(on.card.includes("shadow-card"));
-    assert.ok(!on.card.some(name => /^shadow-(?:sm|md)$/.test(name)), "one card shadow only");
-    assert.ok(!on.card.includes("hover:shadow-md"), "hover keeps the same card shadow");
+    assert.ok(on.card.includes(mobile ? "shadow-sm" : "shadow-md"));
+    assert.ok(!on.card.includes("hover:shadow-md"), "hover never raises a second shadow");
     assert.deepEqual(on.link.sort(), ["flex", "flex-wrap", "gap-1.5", "items-center", "pl-3", "pr-2", "py-2"].sort());
   });
 
@@ -72,6 +70,7 @@ for (const mobile of [false, true]) {
     ]) {
       const on = parts(true, mobile, props);
       assert.ok(on.card.includes("border-l-4"), `${JSON.stringify(props)} keeps the 4px stroke`);
+      assert.ok(!on.card.includes("hover:shadow-md"), "a stroked card keeps one shadow");
       assert.ok(on.card.includes(stroke));
       assert.ok(!on.card.includes("border-l-[3px]"), "the blocked stripe is no longer 3px");
       assert.ok(on.link.includes("p-2"));
@@ -89,7 +88,7 @@ for (const mobile of [false, true]) {
       const stroke = props.blocked ? "border-l-[3px]" : "border-l-4";
       assert.equal(off.card.join(" "),
         `${mobile ? "shadow-sm" : "shadow-md"} ${stroke} ${state} kanban-task-card group/kanban-selection relative rounded-[5px] outline-none cursor-pointer`);
-      assert.equal(render(false, mobile, props), render(false, mobile, props));
+      assert.equal(off.link.join(" "), "flex items-center p-2 gap-1.5 flex-wrap");
     }
   });
 }
