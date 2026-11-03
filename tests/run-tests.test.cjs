@@ -425,7 +425,7 @@ test("shared lanes pack on measured time, not on source length", async () => {
     const onBytes = laneWall(partitionSafeFiles(safe, 2, weightOf), workOf);
     const average = (walls) => walls.reduce((total, wall) => total + wall, 0) / walls.length;
     assert.ok(Math.max(...onTime) <= average(onTime) * 1.05, `time packed lanes ${onTime} balance`);
-    assert.ok(Math.max(...onBytes) > average(onBytes) * 10, `byte packed lanes ${onBytes} do not`);
+    assert.ok(Math.max(...onBytes) > average(onBytes) * 1.9, `byte packed lanes ${onBytes} leave one lane nearly all of it`);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
