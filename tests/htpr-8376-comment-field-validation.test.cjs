@@ -10,10 +10,11 @@ const comments = [
 
 test("a field the comment row does not have is refused with the valid names", async () => {
   const route = loadRoute(comments);
-  const response = await route.get({ task_id: "100", fields: "createdAt,kind" });
+  const response = await route.get({ task_id: "100", fields: "createdAt,author" });
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "Validation error");
-  assert.match(response.body.message, /not known: kind/);
+  assert.match(response.body.message, /not known: author/);
+  assert.match(response.body.message, /kind/);
   assert.match(response.body.message, /commentText/);
   assert.match(response.body.message, /agent_display_name/);
   assert.equal(route.getQuery(), undefined, "a refused projection must not read the comments");
