@@ -21,6 +21,7 @@ import { requireRole } from '@/lib/mcp/agents/scopes';
 import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
+import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
 import prisma from '@/lib/prisma';
 
 export interface CreateTaskResponse {
@@ -128,10 +129,13 @@ export async function POST(request: NextRequest) {
         }
 
         if (ctx.agentId && !(await isAgentOnBoard(project_id, ctx.agentId))) {
+            const boardAccessGuidance = await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id)
             return NextResponse.json(
                 {
                     ...buildFieldError('forbidden', 'project_id', 'Permission error'),
-                    message: 'This agent is not a member of this board. Ask the board owner to add it.',
+                    message: boardAccessGuidance
+                        ? `This agent is not a member of this board. Request access with the hypertask_request_board_access tool (project_id ${project_id}); your owner approves it in Inbox → Decisions.`
+                        : 'This agent is not a member of this board. Ask the board owner to add it.',
                     ...(dryRun && { valid: false }),
                     ...(correlationId && { correlationId })
                 },

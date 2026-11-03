@@ -37,6 +37,10 @@ const SAFE_AUTHORIZATION_MESSAGES = new Set([
   ),
 ])
 
+const SAFE_AUTHORIZATION_PATTERNS = [
+  /^This agent is not a member of this board\. Request access with the hypertask_request_board_access tool \(project_id \d+\);/,
+]
+
 export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; nearestField?: boolean; fields?: readonly string[] }
 
 export function actionableToolError(error: unknown, hints: ErrorHints = {}): string {
@@ -73,7 +77,7 @@ export function actionableToolError(error: unknown, hints: ErrorHints = {}): str
   if (detail?.code === -32003) {
     const hint = 'Access denied. Use a credential with the required scope and confirm membership in the target board.'
     const message = detail.message ?? ''
-    return SAFE_AUTHORIZATION_MESSAGES.has(message)
+    return SAFE_AUTHORIZATION_MESSAGES.has(message) || SAFE_AUTHORIZATION_PATTERNS.some((pattern) => pattern.test(message))
       ? `${message.replace(/[.!]$/, '')}. ${hint}`
       : hint
   }
