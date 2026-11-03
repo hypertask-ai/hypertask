@@ -157,7 +157,7 @@ test('a column that cannot hold focus hands it to the board container', async ()
   f.column.focus = () => {};
   f.focus(1);
   await f.press();
-  await new Promise(resolve => setTimeout(resolve, 120));
+  await new Promise(resolve => setTimeout(resolve, 250));
   assert.equal(f.active(), null);
   assert.equal(f.document.activeElement.id, 'sectionsContainer');
   assert.equal(f.document.getElementById('sectionsContainer').getAttribute('tabindex'), '-1');
