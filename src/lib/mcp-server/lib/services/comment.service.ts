@@ -55,6 +55,7 @@ export interface CommentDetail {
   commentText: string;
   createdAt: string;
   type?: 'comment' | 'activity';
+  kind?: string | null;
   activity?: unknown;
   creatorId?: number;
   agent_display_name?: string;

@@ -73,6 +73,7 @@ export interface CommentItem {
   editedAt: string | null
   editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
   type?: 'comment' | 'activity'
+  kind: string | null
   activity?: Prisma.JsonValue | null
   creatorId?: number
   creator?: {
@@ -201,6 +202,7 @@ const COMMENT_LIST_FIELDS = [
   'createdAt',
   'editedAt',
   'editedBy',
+  'kind',
   'creatorId',
   'creator',
   'agent',
@@ -252,6 +254,7 @@ function mapCommentToResponse(
     commentText: comment.commentText || comment.text,
     createdAt: comment.createdAt.toISOString(),
     editedAt: comment.editedAt?.toISOString() ?? null,
+    kind: comment.kind ?? null,
     editedBy: comment.editedByUserId != null
       ? {
           userId: comment.editedByUserId,
