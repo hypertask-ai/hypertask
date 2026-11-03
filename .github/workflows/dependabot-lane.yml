@@ -1,0 +1,82 @@
+name: Dependabot Lane
+
+# HYCI-107. A Dependabot PR gets its lane label, and a major bump gets its board
+# ticket, from this one run. Until 2026-10-29 the lane label was written by
+# `dependabot-stack.yml` and the ticket was written by `dependabot-major-ticket.yml`
+# only after that label event fired, so the two-step chain had two ways to fail
+# silently. It did: `dependabot-stack.yml` was disabled by hand on 2026-09-27, so
+# PR 2460 (seroval 1.6.9 -> 1.6.12) and PR 2462 (@hono/node-server 1.19.17 ->
+# 2.1.5) arrived with no lane label, the ticket workflow never started, and the
+# major bump sat five days with no owner.
+#
+# One run now owns the whole decision, so there is no label event to miss. The
+# PR's own events are the main road; the fifteen-minute sweep heals a PR whose
+# event was lost, and anything this run cannot finish is commented on the PR and
+# fails the run instead of passing quietly.
+#
+# `pull_request_target`, for the reason recorded on `pr-guards-trusted.yml`: a
+# `pull_request` run on a Dependabot PR gets no repository secrets, so the MCP
+# token would arrive empty and no ticket could ever be filed. Only the
+# `production` copy of this file and the scripts it requires run here; no pull
+# request code is checked out or executed.
+#
+# A cron is a best-effort tick on a repository this busy (HYCI-71 measured 33 of
+# roughly 1049 five-minute triggers delivered), so the sweep is a heal path and
+# never the reason a label lands.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [production]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+# One line for the whole lane, sweep runs included, so a sweep and a PR event can
+# never read the same pull request at once and file two tickets for it. Nothing
+# is cancelled: a run that is midway through filing a ticket must finish, so a
+# newer event waits in the queue instead of replacing it.
+concurrency:
+  group: dependabot-lane
+  queue: max
+  cancel-in-progress: false
+
+# Labels, comments and reading the pull request only. Arming a small bump's
+# auto-merge needs the PAT instead, because a merge performed with GITHUB_TOKEN
+# does not start the push workflows that follow a production merge; it also only
+# happens when the repository allows auto-merge at all, and it is off today. The
+# old labeller ended its life red on every small bump over exactly that setting.
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lane:
+    # A human PR must not pay a job for this. The spellings are all the ones this
+    # repository has seen GitHub report for the bot (HTPR-6299: PR 443 slipped
+    # past the major lane because `app/dependabot` was not matched).
+    if: >-
+      github.event_name != 'pull_request_target' ||
+      contains(fromJSON('["dependabot[bot]","app/dependabot","dependabot"]'), github.event.pull_request.user.login)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 1
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Classify the bump, label it, and file the ticket a major needs
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7
+        env:
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          PAT_PRESENT: ${{ secrets.AUTOMERGE_TOKEN != '' }}
+        with:
+          # The PAT when it exists: it has its own rate-limit bucket and its
+          # merges are ordinary pushes. Falls back to the job token so labelling
+          # and ticketing still work if the secret is rotated and forgotten.
+          github-token: ${{ secrets.AUTOMERGE_TOKEN || github.token }}
+          script: |
+            await require('./.github/scripts/dependabot-lane.cjs')({ github, context, core });

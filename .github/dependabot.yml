@@ -1,13 +1,13 @@
 # Automated stack updates (Valentin, 2026-09-08).
 #
 # Small updates (patch + minor) arrive as ONE grouped PR named `stack-minor`,
-# which `dependabot-stack.yml` labels `full-ci` and puts on GitHub's native
+# which `dependabot-lane.yml` labels `full-ci` and puts on GitHub's native
 # auto-merge, so a green one lands the same day without anyone looking at it.
 #
 # Major bumps are deliberately left OUT of the group, so each one arrives as its
-# own PR. `dependabot-stack.yml` labels those `major-upgrade` and never
-# auto-merges them; `dependabot-major-ticket.yml` opens a board-15 ticket so a
-# dev picks it up within the week.
+# own PR. `dependabot-lane.yml` labels those `major-upgrade`, never auto-merges
+# them, and opens the board-15 ticket in the same run, so a dev picks it up
+# within the week.
 #
 # This file only takes effect from the repository's DEFAULT branch, which is
 # `production` (checked 2026-09-15), so editing it here is what changes
