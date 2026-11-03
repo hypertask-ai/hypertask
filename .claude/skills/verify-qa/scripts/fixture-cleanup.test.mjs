@@ -35,7 +35,7 @@ async function run(t, { cookies = [cookie()], args = ['83060'], replies = {}, ex
       const entry = replies[`${req.method} ${req.url.split('?')[0]}`] ?? { status: 200, json: { message: 'Success' } };
       const reply = typeof entry === 'function' ? entry({ body, url: req.url }) : entry;
       res.writeHead(reply.status, { 'Content-Type': 'application/json' });
-      res.end(reply.json === null ? 'null' : JSON.stringify(reply.json));
+      res.end('raw' in reply ? reply.raw : reply.json === null ? 'null' : JSON.stringify(reply.json));
     });
   });
   t.after(() => new Promise(resolve => {
@@ -160,8 +160,26 @@ test('no app cookie is refused without contacting the server', async t => {
   await run(t, {
     cookies: [cookie({ domain: '.elsewhere.example' })],
     code: 2,
-    expected: ['fixture-cleanup no valid app cookies'],
+    expected: ['fixture-cleanup no valid app cookies for /api/queues/tasks/taskDeleteReminder'],
     requests: 0,
+  });
+});
+
+test('a cookie outside an endpoint path is not sent to it', async t => {
+  await run(t, {
+    cookies: [cookie({ path: '/api/queues/tasks' })],
+    code: 2,
+    expected: ['fixture-cleanup no valid app cookies for /api/tasks/deleteTask'],
+    requests: 0,
+  });
+});
+
+test('an empty read back is not proof the fixture is gone', async t => {
+  await run(t, {
+    replies: { ...cleaned, 'POST /api/tasks/getTaskMinimal': { status: 200, raw: '' } },
+    code: 1,
+    expected: ['failed 83060 read back sent no answer'],
+    requests: 3,
   });
 });
 

@@ -22,9 +22,10 @@ It reads the cookies for `app.hypertask.ai` from a Playwright storage state
 
 Each id prints one line, `cleaned <id>` or `failed <id> <reason>`. The run
 exits `0` when every id is cleaned, `1` when any failed, and `2` for unusable
-arguments or a state file without an app cookie. A fixture that is already
-gone reports `cleaned`, so a second run is safe. Cookie values are never
-printed.
+arguments or when the state has no app cookie for one of the three endpoints.
+Cookies are chosen per endpoint, so a path-restricted cookie only reaches its
+own route. A fixture that is already gone reports `cleaned`, so a second run is
+safe. Cookie values are never printed.
 
 ## By hand
 
