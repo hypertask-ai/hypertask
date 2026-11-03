@@ -35,7 +35,7 @@ async function picker({ enabled = true, compose = true, history = { 2: 200, 4: 1
     '@/utils/helperFunctions/multiPages': { returnActiveOrDefaultColumnSections: () => [] },
     '@/lib/constants/APIRouteConstants': { moveTaskToDifferentBoardAPI: '/unused' },
     '@/hooks/useFlag': { useFlag: key => key === 'order' ? enabled : true },
-    '@/lib/flags/keys': { HTPR_7053_COMPOSE_BOARD_CHIP_FLAG: 'chip', HTPR_8014_COMPOSE_BOARD_ORDER_FLAG: 'order' },
+    '@/lib/flags/keys': { HTPR_8014_COMPOSE_BOARD_ORDER_FLAG: 'order' },
     'next/navigation': { usePathname: () => '/my-tasks', useRouter: () => ({}) },
     formik: { useFormik: () => ({ values: {}, setValues() {} }) },
     reactstrap: { ModalBody: block },

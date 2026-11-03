@@ -223,25 +223,6 @@ const chip = () => document.querySelector('[data-compose-board-chip]');
 const boardList = () => document.querySelector('input[id="input-addTask"]');
 const boardKey = (apple = false) => ({ code: 'KeyB', keyCode: 66, shiftKey: true, ...(apple ? { metaKey: true } : { ctrlKey: true }) });
 
-test('board chip flag off preserves legacy inbox board selection, Tab and shortcuts', async (t) => {
-  await withPalette(t, { boardChip: false, newWindow: true, tab: 'compose', url: '/inbox?split=Board&projectId=8', previousBoard: 'project-7|&|QA Sandbox', inView: { taskId: 42, taskProjectId: 9 } }, async ({ type, press, requests, values, queryClient, loadedBoards }) => {
-    assert.equal(chip(), null);
-    assert.equal(queryClient.getQueryData(['projectsAllMinimal', 985]), undefined, 'flag off must not seed an empty shared board cache');
-    assert.equal(loadedBoards.length, 0, 'flag off must not fetch the new board list');
-    assert.doesNotMatch(document.querySelector('[data-compose-task-writer]').textContent, /CTRL\+SHIFT\+B/);
-    await press('B', boardKey());
-    assert.equal(boardList(), null);
-    await type('Legacy target');
-    await press('Enter', { code: 'Enter' });
-    assert.equal(requests[0].body.project.id, 7);
-    assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
-  });
-  await withPalette(t, { boardChip: false, newWindow: true, tab: 'compose', url: '/inbox' }, async ({ press, values }) => {
-    await press('Tab', { code: 'Tab' });
-    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
-  });
-});
-
 test('inbox chip shows the rule target and submission uses exactly the displayed board', async (t) => {
   for (const [url, inView, previousBoard, expected] of [
     ['/inbox?split=Board&projectId=8', { taskId: 42, taskProjectId: 9 }, 'project-7', 9],
@@ -249,7 +230,7 @@ test('inbox chip shows the rule target and submission uses exactly the displayed
     ['/inbox?split=All', { taskId: null }, 'project-7', 7],
     ['/inbox?split=Important', { taskId: null }, undefined, 8],
   ]) {
-    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url, inView, previousBoard, recency: { 7: 1, 8: 2 } }, async ({ type, press, requests }) => {
+    await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url, inView, previousBoard, recency: { 7: 1, 8: 2 } }, async ({ type, press, requests }) => {
       assert.equal(chip().textContent, composeBoards.find((board) => board.id === expected).title);
       await type('Use this board');
       await press('Enter', { code: 'Enter' });
@@ -260,12 +241,12 @@ test('inbox chip shows the rule target and submission uses exactly the displayed
 
 test('mixed-board views show a chip; board and ticket views hide it until choosing a different board', async (t) => {
   for (const url of ['/my-tasks', '/search', '/all-tasks', '/calendar', '/starred', '/inbox']) {
-    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, previousBoard: 'project-7', url }, async () => {
+    await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, previousBoard: 'project-7', url }, async () => {
       assert.equal(chip().textContent, 'QA Sandbox');
     });
   }
   for (const url of ['/project?id=7', '/detail/project-7/42']) {
-    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url, previousBoard: 'project-8', inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: '', description_: { content: '' } } }, async ({ input, type, press, requests }) => {
+    await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url, previousBoard: 'project-8', inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: '', description_: { content: '' } } }, async ({ input, type, press, requests }) => {
       assert.equal(chip(), null);
       await type('Keep my draft');
       input().setSelectionRange(3, 7, 'backward');
@@ -287,7 +268,7 @@ test('mixed-board views show a chip; board and ticket views hide it until choosi
 
 test('Tab and Shift+Tab connect textarea and chip, Enter/Space open shared picker, Esc closes only list', async (t) => {
   for (const mobile of [false, true]) {
-    await withPalette(t, { boardChip: true, newWindow: true, mobile, tab: 'compose', boards: composeBoards, url: '/inbox', previousBoard: 'project-7' }, async ({ input, type, press, values, requests, capture }) => {
+    await withPalette(t, { newWindow: true, mobile, tab: 'compose', boards: composeBoards, url: '/inbox', previousBoard: 'project-7' }, async ({ input, type, press, values, requests, capture }) => {
       await type('Caret stays here');
       capture(`board-chip-${mobile ? 'mobile' : 'desktop'}`);
       input().setSelectionRange(6, 6);
@@ -319,7 +300,7 @@ test('Tab and Shift+Tab connect textarea and chip, Enter/Space open shared picke
 
 test('board shortcut matches platform footer, filters list, and restores caret after Enter picks', async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/search', previousBoard: 'project-7' }, async ({ dom, input, type, press, requests }) => {
+    await withPalette(t, { newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/search', previousBoard: 'project-7' }, async ({ dom, input, type, press, requests }) => {
       assert.match(document.querySelector('[data-compose-task-writer]').textContent, apple ? /CMD\+SHIFT\+B/ : /CTRL\+SHIFT\+B/);
       await type('Still writing');
       input().setSelectionRange(4, 4);
@@ -346,18 +327,8 @@ test('board shortcut matches platform footer, filters list, and restores caret a
   }
 });
 
-test('board chip flag off renders exactly clean production Compose on desktop and phone', async (t) => {
-  for (const mobile of [false, true]) {
-    await withPalette(t, { boardChip: false, newWindow: true, mobile, tab: 'compose', url: '/inbox', previousBoard: 'project-7' }, async ({ baseline, loadedBoards }) => {
-      assert.equal(chip(), null);
-      assert.equal(loadedBoards.length, 0);
-      if (process.env.COMPOSE_BASELINE_DIR) await baseline(process.env.COMPOSE_BASELINE_DIR);
-    });
-  }
-});
-
 test('board list bounds arrows to filtered rows, tolerates no matches, and reveals same-board choice', async (t) => {
-  await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url: '/project?id=7' }, async ({ dom, input, type, press, requests }) => {
+  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url: '/project?id=7' }, async ({ dom, input, type, press, requests }) => {
     await type('Do not send from the board list');
     input().setSelectionRange(4, 8, 'backward');
     await press('B', boardKey());
@@ -383,7 +354,7 @@ test('board list bounds arrows to filtered rows, tolerates no matches, and revea
 });
 
 test('board chip without a current or remembered board lets the user pick before creating', async (t) => {
-  await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, project: null, url: '/inbox' }, async ({ type, press, requests }) => {
+  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, project: null, url: '/inbox' }, async ({ type, press, requests }) => {
     assert.equal(chip().textContent, 'Choose a board');
     await press('B', boardKey());
     await press('Enter', { code: 'Enter' });
@@ -633,7 +604,7 @@ test('HTPR-8140 Ctrl+J dictation shortcut activates its existing microphone and 
 
 test('HTPR-8260 Ctrl+J footer spells every key in words and offers a Create text button', async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { newWindow: true, tab: 'compose', apple, boardChip: true, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
+    await withPalette(t, { newWindow: true, tab: 'compose', apple, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
       flags['htpr-8260-ctrlj-composer-keys'] = true;
       flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
       await rerender();
@@ -666,7 +637,7 @@ test('HTPR-8260 microphone sits after the board picker and left of Create, with 
       React.createElement('button', { id: props.id, 'aria-label': props.ariaLabel, 'data-dictate-tooltip': props.hoverTooltip?.text, onClick: () => setListening(true) }, 'Mic'),
       listening && React.createElement('button', { id: props.stopButtonId, 'aria-label': 'Send recording', onClick: () => { setListening(false); props.callbackHandler(' spoken words'); } }, 'Stop'));
   };
-  await withPalette(t, { newWindow: true, tab: 'compose', boardChip: true, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: DictationAudioButton }, async ({ flags, rerender, press, requests }) => {
+  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: DictationAudioButton }, async ({ flags, rerender, press, requests }) => {
     flags['htpr-8260-ctrlj-composer-keys'] = true;
     flags['htpr-8140-ctrlj-dictation-shortcut'] = true;
     await rerender();
@@ -708,7 +679,7 @@ test('HTPR-8260 Ctrl+Enter after a silent or failed dictation never creates a ta
       React.createElement('button', { id: props.id, 'aria-label': props.ariaLabel, onClick: () => setListening(true) }, 'Mic'),
       listening && React.createElement('button', { id: props.stopButtonId, 'aria-label': 'Send recording', onClick: () => setListening(false) }, 'Stop'));
   };
-  await withPalette(t, { newWindow: true, tab: 'compose', boardChip: true, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: SilentAudioButton }, async ({ flags, rerender, press, type, requests }) => {
+  await withPalette(t, { newWindow: true, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7', AudioButton: SilentAudioButton }, async ({ flags, rerender, press, type, requests }) => {
     flags['htpr-8260-ctrlj-composer-keys'] = true;
     await rerender();
     await type('Keep this draft');
@@ -722,7 +693,7 @@ test('HTPR-8260 Ctrl+Enter after a silent or failed dictation never creates a ta
 
 test('HTPR-8141 board tooltip matches platform footer and preserves picker and flag-off behavior', async (t) => {
   for (const apple of [false, true]) {
-    await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {
+    await withPalette(t, { newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, type, press, input }) => {
       const before = chip().outerHTML;
       assert.equal(document.querySelector('[data-tooltip="Change board"]'), null);
       flags['htpr-8141-board-shortcut-tooltip'] = true;

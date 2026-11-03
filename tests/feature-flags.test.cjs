@@ -353,6 +353,16 @@ test("web-writing task writer style is permanent and no longer registered", asyn
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("compose board chip is permanent and no longer registered", async () => {
+  const key = ["htpr", "7053", "compose", "board", "chip"].join("-");
+  const identifier = ["HTPR", "7053", "COMPOSE", "BOARD", "CHIP", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 test("edit-with-ai ticket actions are permanent and no longer registered", async () => {
   const key = ["htpr", "7337", "edit", "with", "ai"].join("-");
   const identifier = ["HTPR", "7337", "EDIT", "WITH", "AI", "FLAG"].join("_");

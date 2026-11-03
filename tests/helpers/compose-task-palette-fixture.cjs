@@ -42,7 +42,6 @@ const newFlag = 'htpr-6937-new-task-window';
 const commentInlineFlag = 'htpr-7393-comment-inline-ai';
 const inlineDraftsFlag = 'htpr-8173-description-inline-drafts';
 const keepClosedFlag = 'htpr-7530-keep-ai-chat-closed';
-const boardChipFlag = 'htpr-7053-compose-board-chip';
 
 const oneWindowPerFile = () => {
   const state = { dom: null };
@@ -266,7 +265,7 @@ async function withPalette(t, config, check) {
   }
   const stub = (filename, exports) => { (replacingStubs ? testStubs : setupStubs).set(filename, exports); installStubProxy(filename); };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, [commentInlineFlag]: config.commentInline ?? false, [inlineDraftsFlag]: config.inlineDrafts ?? false, [boardChipFlag]: config.boardChip ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
+  const flags = { 'htpr-8015-amoled-mode-outline': config.modeOutline ?? false, 'htpr-7650-ai-chat-open-switches': config.autoOpenSwitches ?? false, 'htpr-7547-search-lazy-closed': config.preserveColdCommandInput ?? false, [keepClosedFlag]: config.keepClosedFlag ?? false, [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, [commentInlineFlag]: config.commentInline ?? false, [inlineDraftsFlag]: config.inlineDrafts ?? false, 'htpr-7317-ctrlj-ticket-questions': config.ticketQuestions ?? false };
   const atomNames = ['aiChatNewTicketPathAtom', 'keepAiChatClosedAtom', 'boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'composeTaskSkillFollowupAtom', 'composeTaskOriginalNoteAtom', 'composeTaskQuestionsTaskIdAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
@@ -313,7 +312,9 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useClickOutside.ts', { default: () => {} });
     source('src/lib/constants/index.ts', { default: {} });
     source('src/utils/helperFunctions/helperFunctions.ts', { processFiles: config.processImages ?? (async (files, start) => [...files].map((file, id) => ({ id: start + id, file }))) });
-    source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return config.boards ?? [project, { ...project, id: 8 }]; } } });
+    let releaseBoards;
+    const pendingBoards = config.coldBoards ? new Promise((resolve) => { releaseBoards = resolve; }) : null;
+    source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return pendingBoards ?? config.boards ?? [project, { ...project, id: 8 }]; } } });
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
     source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => {
@@ -409,7 +410,8 @@ async function withPalette(t, config, check) {
       callbacks.forEach((callback) => callback());
     });
     replacingStubs = true;
-    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
+    const boardsArrive = () => { if (!releaseBoards) return Promise.resolve(); return React.act(async () => { releaseBoards(config.coldBoards); }); };
+    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, boardsArrive, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {
@@ -441,4 +443,4 @@ after(() => {
   proxies.clear();
 });
 
-module.exports = { assert, fs, path, React, query, root, jiti, test, withPalette, flag, newFlag, keepClosedFlag, boardChipFlag };
+module.exports = { assert, fs, path, React, query, root, jiti, test, withPalette, flag, newFlag, keepClosedFlag };

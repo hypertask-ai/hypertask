@@ -1,11 +1,8 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
 const { test } = require("node:test");
 const { loadModule } = require("./helpers/loadModule.cjs");
-const React = require("react");
 const { notifyManager, defaultScheduler } = require("@tanstack/react-query");
 
-const root = path.resolve(__dirname, "..");
 const flag = "htpr-7652-ctrlj-enter-queue";
 const boardFromTextFlag = "htpr-7305-board-from-text";
 const boards = [
@@ -17,20 +14,11 @@ const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 async function withColdBoards(t, queueEnabled, check) {
   notifyManager.setScheduler(queueMicrotask);
   t.after(() => notifyManager.setScheduler(defaultScheduler));
-  await withPalette(t, { newWindow: true, boardChip: false, tab: "compose", url: "/project?id=7" }, async (palette) => {
-    let resolveBoards;
-    const api = require.cache[path.join(root, "src/utils/api/global/index.ts")].exports.default;
-    api.getAllProjectsMinimal = () => new Promise((resolve) => { resolveBoards = resolve; });
+  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7", coldBoards: boards }, async (palette) => {
     palette.flags[boardFromTextFlag] = true;
     palette.flags[flag] = queueEnabled;
     await palette.rerender();
-    const boardsArrive = async () => {
-      api.getAllProjectsMinimal = async () => boards;
-      await React.act(async () => {
-        resolveBoards(boards);
-      });
-    };
-    await check({ ...palette, boardsArrive });
+    await check(palette);
   });
 }
 

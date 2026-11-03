@@ -7,7 +7,7 @@ const { createJiti } = require('jiti');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7307-ctrlj-footer-clickable';
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
-const config = { newWindow: true, boardChip: true, tab: 'compose', boards: [
+const config = { newWindow: true, tab: 'compose', boards: [
   { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' },
   { id: 8, title: 'Product', uniqueIdentifier: 'PROD' },
 ] };
@@ -180,12 +180,7 @@ test('Close click and Escape use the existing close action', async (t) => {
   }
 });
 
-test('Board label remains absent when its existing flag is off; the phone sheet still has no footer', async (t) => {
-  await withPalette(t, { ...config, boardChip: false }, async (ui) => {
-    await enable(ui);
-    assert.equal(button('Board'), null);
-    assert.equal(footer().querySelectorAll('button').length, 4);
-  });
+test('the phone sheet still has no footer', async (t) => {
   await withPalette(t, { ...config, mobile: true }, async (ui) => {
     const original = writer().outerHTML;
     await enable(ui);

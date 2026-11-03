@@ -1,7 +1,5 @@
 import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { ChevronDown, Layers, ListTodo, SquareKanban } from "lucide-react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
 
 export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithoutRef<"button"> & {
   kind: "task" | "board" | "boards";
@@ -10,8 +8,6 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
   isOpen: boolean;
   compose?: boolean;
 }>(function ChatScopeChip({ kind, label, mobile = false, isOpen, compose = false, ...props }, ref) {
-  const composeBoardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
-  if (compose && !composeBoardChipEnabled) return null;
   const chatMobile = mobile && !compose;
   const iconSize = compose ? 14 : 13;
   return (
@@ -25,7 +21,7 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
         chatMobile
           ? "h-11 max-w-[65vw] rounded-[4px] bg-ai-tiptap px-3"
           : `rounded-[4px] px-2 py-1${compose && mobile ? " min-h-11" : ""}`
-      }${compose && composeBoardChipEnabled ? " focus-visible:bg-hover-active" : ""}`}
+      }${compose ? " focus-visible:bg-hover-active" : ""}`}
     >
       {chatMobile && (
         <span className="mr-1 flex-none text-text-light-gray">Context:</span>

@@ -13,7 +13,7 @@ import { ModalBody } from 'reactstrap';
 import { useRecoilState, useRecoilValue } from '@/lib/state';
 import { moveTaskToDifferentBoardAPI } from '@/lib/constants/APIRouteConstants';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_8014_COMPOSE_BOARD_ORDER_FLAG } from '@/lib/flags/keys';
+import { HTPR_8014_COMPOSE_BOARD_ORDER_FLAG } from '@/lib/flags/keys';
 
 interface ICreateTask {
     projectId: number;
@@ -34,8 +34,7 @@ type IProps = {
     boards?: IProject[];
 }
 const MoveTaskGlobal = (props: IProps) => {
-    const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
-    const composeBoardPicker = boardChipEnabled && Boolean(props.onSelectBoard);
+    const composeBoardPicker = Boolean(props.onSelectBoard);
     const projects = useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, { enabled: !composeBoardPicker });
     const usageOrderEnabled = useFlag(HTPR_8014_COMPOSE_BOARD_ORDER_FLAG);
     const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
@@ -192,9 +191,6 @@ interface FilterableMenuScreenProps {
 }
 
 const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ title, data, value, next, prev, screenCallback, composeBoardPicker = false, onClose }) => {
-    const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
-    const composePicker = boardChipEnabled && composeBoardPicker;
-
     const [keyword, setKeyword] = useState<string>("");
     const [selectedIndex, setSelectedIndex] = useState<number>(0)
     const [filteredData, setFilteredData] = useState<typeof data>([])
@@ -203,7 +199,7 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
     const handleKeyDown = (e: KeyboardEvent) => {
-        if (composePicker) {
+        if (composeBoardPicker) {
             if (e.isComposing) return;
             if (e.key === "Escape") {
                 e.preventDefault();
@@ -288,13 +284,13 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
     }, []);
 
     useEffect(() => {
-        document.addEventListener('keydown', handleKeyDown, composePicker);
-        return () => document.removeEventListener('keydown', handleKeyDown, composePicker);
-    }, [document.activeElement, keyword, selectedIndex, filteredData, value, composePicker, onClose]);
+        document.addEventListener('keydown', handleKeyDown, composeBoardPicker);
+        return () => document.removeEventListener('keydown', handleKeyDown, composeBoardPicker);
+    }, [document.activeElement, keyword, selectedIndex, filteredData, value, composeBoardPicker, onClose]);
 
     useEffect(() => {
-        if (composePicker) document.getElementById(`command-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
-    }, [composePicker, selectedIndex]);
+        if (composeBoardPicker) document.getElementById(`command-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
+    }, [composeBoardPicker, selectedIndex]);
 
 
     const handleKeyWordChange = (e: any) => {

@@ -79,7 +79,6 @@ import {
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
-  HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -137,12 +136,9 @@ const Commands = (props: Props) => {
   }
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ctrlJSkillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
   let skillMenuOwnsKeys = false;
   if (ctrlJSkillMenuFlag) skillMenuOwnsKeys = true;
-  let composeBoardChipEnabled = false;
-  if (composeTaskWriterEnabled && composeBoardChipFlag) composeBoardChipEnabled = true;
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
@@ -722,7 +718,7 @@ const Commands = (props: Props) => {
     if (!composeEnabled) return;
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (composeBoardChipEnabled && document.querySelector("[data-compose-board-picker-open]")) return;
+      if (document.querySelector("[data-compose-board-picker-open]")) return;
       if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -730,7 +726,7 @@ const Commands = (props: Props) => {
     };
     document.addEventListener("keydown", close, true);
     return () => document.removeEventListener("keydown", close, true);
-  }, [composeEnabled, writing, composeBoardChipEnabled, skillMenuOwnsKeys]);
+  }, [composeEnabled, writing, skillMenuOwnsKeys]);
   useEffect(() => {
     if (composeEnabled && !isCompose) inputRef.current?.focus();
   }, [composeEnabled, isCompose]);
@@ -741,7 +737,7 @@ const Commands = (props: Props) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
       if (skillMenuOwnsKeys && document.querySelector("[data-compose-skill-menu-open]")) return;
       const target = event.target as HTMLElement;
-      if (composeBoardChipEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
+      if (isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
       if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
@@ -750,7 +746,7 @@ const Commands = (props: Props) => {
     };
     document.addEventListener("keydown", switchTab, true);
     return () => document.removeEventListener("keydown", switchTab, true);
-  }, [newTaskWindow, isCompose, writing, setShowCommands, composeBoardChipEnabled, skillMenuOwnsKeys]);
+  }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
   const modeSwitch = composeTaskWriterEnabled && !isDemo && !isInteractive ? (
     <div className="absolute -top-12 left-0 flex w-full justify-center">

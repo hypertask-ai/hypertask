@@ -9,7 +9,7 @@ const flag = "htpr-7675-ctrlj-enter-before-text-renders";
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
 async function withComposer(t, holdEnabled, check) {
-  await withPalette(t, { newWindow: true, boardChip: false, tab: "compose", url: "/project?id=7" }, async (palette) => {
+  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7" }, async (palette) => {
     palette.flags[flag] = holdEnabled;
     await palette.rerender();
     const typeKeysBeforeRender = (...keys) => React.act(async () => {

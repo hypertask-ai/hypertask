@@ -170,12 +170,11 @@ for (const ticketQuestions of [true, false]) {
 }
 
 test('non-board page uses previousBoard instead of stale currentProject and reports raw fallback in chat', async (t) => {
-  await withPalette(t, { url: '/settings', previousBoard: 'project-8|&|view', tab: 'compose' }, async ({ type, press, requests, finish, navigations, values, loadedBoards }) => {
+  await withPalette(t, { url: '/settings', previousBoard: 'project-8|&|view', tab: 'compose' }, async ({ type, press, requests, finish, navigations, values }) => {
     await type('Raw note');
     await press('Enter', { code: 'Enter' });
     assert.equal(requests[0].body.project.id, 8);
     assert.equal(requests[0].body.viewProject, undefined);
-    assert.equal(loadedBoards.length, 1);
     await finish(true);
     assert.deepEqual(navigations, ['/detail/project-8/44']);
     assert.match(values.get('composeTaskChatIntroAtom').content, /original text as the title and description/);
@@ -429,7 +428,7 @@ test('Ctrl+J fills only the visible new empty task when both flags are on and ne
       await press('Enter');
       const fills = newWindow && title === 'Enter task title here';
       assert.equal(requests[0].body.existingTaskId, fills ? 52 : undefined);
-      assert.equal(requests[0].body.project.id, fills ? 7 : 8);
+      assert.equal(requests[0].body.project.id, 7);
       assert.equal(requests[0].body.viewProject, undefined);
       await finish();
       assert.equal(cacheAdds.length, fills ? 0 : 1);

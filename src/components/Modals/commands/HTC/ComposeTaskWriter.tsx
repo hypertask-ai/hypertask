@@ -34,7 +34,7 @@ import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } 
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
@@ -81,7 +81,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
-  const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const boardFromTextEnabled = useFlag(HTPR_7305_BOARD_FROM_TEXT_FLAG);
   const alwaysShowBoardChip = useFlag(HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG);
   const clickableFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
@@ -155,27 +154,20 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const { data: boards = [], isFetching: loadingBoards, isSuccess: boardsLoaded } = useQuery<IProject[]>({
     queryKey: ["projectsAllMinimal", user?.id],
     queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-    enabled: (boardChipEnabled || boardFromTextEnabled) && enabled && active && Boolean(user?.id),
+    enabled: enabled && active && Boolean(user?.id),
   });
   const waitingForBoards = boardFromTextEnabled && loadingBoards && !boards.length;
   const textBoardId = boardFromTextEnabled && selectedBoardId === undefined ? matchComposeTaskBoard(text, boards) : undefined;
-  let targetBoardId: number | undefined;
-  let showBoardChip = false;
-  if (boardChipEnabled) {
-    const target = resolveComposeBoardTarget({
-      url: typeof window === "undefined" ? "/" : window.location.href,
-      focusedTicketBoardId: inView?.taskId ? inView.taskProjectId : undefined,
-      lastUsedBoardId: composeTaskBoardId("/", parseCookies().previousBoard, lastUsedBoards),
-      destinationBoardId: destinationProject?.id,
-      selectedBoardId: selectedBoardId ?? textBoardId,
-    });
-    targetBoardId = target.boardId;
-    showBoardChip = target.showChip;
-    if (alwaysShowBoardChip) showBoardChip = true;
-  } else {
-    targetBoardId = textBoardId;
-    showBoardChip = false;
-  }
+  const target = resolveComposeBoardTarget({
+    url: typeof window === "undefined" ? "/" : window.location.href,
+    focusedTicketBoardId: inView?.taskId ? inView.taskProjectId : undefined,
+    lastUsedBoardId: composeTaskBoardId("/", parseCookies().previousBoard, lastUsedBoards),
+    destinationBoardId: destinationProject?.id,
+    selectedBoardId: selectedBoardId ?? textBoardId,
+  });
+  const targetBoardId: number | undefined = target.boardId;
+  let showBoardChip = target.showChip;
+  if (alwaysShowBoardChip) showBoardChip = true;
   const targetBoard: IProject | undefined = boards.find((board) => board.id === targetBoardId)
     ?? (destinationProject?.id === targetBoardId ? destinationProject : undefined)
     ?? (currentProject && currentProject.id === targetBoardId ? currentProject : undefined);
@@ -184,14 +176,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const skillMenuConsumedKey = useRef(false);
   const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
   const openBoardPicker = () => {
-    if (!boardChipEnabled || writing || dictating) return;
+    if (writing || dictating) return;
     const field = input.current;
     if (field) caret.current = { start: field.selectionStart, end: field.selectionEnd, direction: field.selectionDirection };
     setBoardPickerOpen(true);
   };
   useEffect(() => {
-    if (!active || !boardChipEnabled) setBoardPickerOpen(false);
-  }, [active, boardChipEnabled]);
+    if (!active) setBoardPickerOpen(false);
+  }, [active]);
 
   useEffect(() => {
     if (!newTaskWindow || !active || !input.current) return;
@@ -213,12 +205,12 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
   }, []);
   useEffect(() => {
-    if (!active || writing || dictating || (boardChipEnabled && boardPickerOpen)) return;
+    if (!active || writing || dictating || boardPickerOpen) return;
     let cancelled = false;
     let tries = 0;
     const focus = () => {
       const field = input.current;
-      if (cancelled || !field || (document.activeElement === field && !(boardChipEnabled && caret.current))) return;
+      if (cancelled || !field || (document.activeElement === field && !caret.current)) return;
       const proxy = focusProxy?.current;
       const transferring = proxy && (document.activeElement === proxy || (tries === 0 && proxy.value));
       const selectionStart = proxy?.selectionStart ?? null;
@@ -233,7 +225,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         field.setSelectionRange(selectionStart, selectionEnd);
         proxy.value = "";
       }
-      if (boardChipEnabled && caret.current && document.activeElement === field) {
+      if (caret.current && document.activeElement === field) {
         const { start, end, direction } = caret.current;
         field.setSelectionRange(start, end, direction);
         caret.current = null;
@@ -242,11 +234,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     focus();
     return () => { cancelled = true; };
-  }, [active, writing, mobile, dictating, boardChipEnabled, boardPickerOpen, focusProxy]);
+  }, [active, writing, mobile, dictating, boardPickerOpen, focusProxy]);
   useEffect(() => {
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
-      if (boardChipEnabled && boardPickerOpen) return;
+      if (boardPickerOpen) return;
       const cmdControl = (isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey);
       if (composerKeysLayout && dictating && cmdControl && !event.altKey && !event.shiftKey && !event.isComposing && event.key === "Enter") {
         event.preventDefault();
@@ -266,7 +258,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         }
         return;
       }
-      if (boardChipEnabled && event.target === input.current && !event.isComposing &&
+      if (event.target === input.current && !event.isComposing &&
           ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
           !event.altKey && event.shiftKey && event.code === "KeyB") {
         event.preventDefault();
@@ -283,7 +275,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
+  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -319,22 +311,15 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     const assigneesAtFetchStart = taskContextRef.current?.currentTask?.assignees;
     try {
       let existingTaskId: number | undefined;
-      let targetProjectId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       if (newTaskWindow && !destinationProject && detail && inView?.taskId &&
-          ((!boardChipEnabled && !textBoardId) || targetBoardId === Number(detail[1]))) {
+          targetBoardId === Number(detail[1])) {
         const { data: task } = await axios.get("/api/tasks/single", { params: { id: inView.taskId } });
         if (task.projectId === Number(detail[1]) && task.uniqueIndex === Number(detail[2]) && isEmptyComposeTarget(task)) {
           existingTaskId = task.id;
-          targetProjectId = task.projectId;
         }
       }
-      let projectId: number | undefined;
-      if (boardChipEnabled) {
-        projectId = targetBoardId;
-      } else {
-        projectId = textBoardId ?? destinationProject?.id ?? targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
-      }
+      const projectId: number | undefined = targetBoardId;
       if (!projectId || !user?.id) throw new Error("Open a board first, then try again. Your note is still here.");
       let project = destinationProject?.id === projectId ? destinationProject : (currentProject?.id === projectId ? currentProject : undefined);
       if (!project) {
@@ -473,7 +458,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           if (on) dictationDelivered.current = false;
           setRecording(on);
         }} onProcessingChange={setTranscribing}
-        disabled={!active || addingImages} projectId={boardChipEnabled ? targetBoardId : destinationProject?.id} mobilePrimaryTone="primary" mobilePresentation="compact"
+        disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact"
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
@@ -485,7 +470,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     </div>
   );
 
-  const boardControl = boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
+  const boardControl = showBoardChip && <div className="min-w-0 max-w-full">
     {boardShortcutTooltip && <Tooltip portal bottom={0} left={0} text="Change board" keyCombination={boardShortcut.split("+")} />}
     <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
       aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
@@ -508,13 +493,13 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     recording,
     transcribing,
     commandKey,
-    board: Boolean(boardChipEnabled && showBoardChip),
+    board: Boolean(showBoardChip),
     dictate: Boolean(dictationShortcutEnabled),
     ctrlEnterSends,
   });
 
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} data-compose-skill-menu-open={skillMenuEnabled && skillMenu.menu ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
+    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={active && boardPickerOpen ? "" : undefined} data-compose-skill-menu-open={skillMenuEnabled && skillMenu.menu ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
@@ -567,7 +552,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               onKeyDown={(event) => {
                 skillMenuConsumedKey.current = skillMenuEnabled && !event.nativeEvent.isComposing && skillMenu.onKeyDown(event);
                 if (skillMenuConsumedKey.current) return;
-                if (boardChipEnabled && showBoardChip && event.key === "Tab" && !event.shiftKey &&
+                if (showBoardChip && event.key === "Tab" && !event.shiftKey &&
                     !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.stopPropagation();
@@ -644,10 +629,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         {clickableFooter ? <button type="button" aria-label="Send" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating || !text.trim()} onClick={() => void send()}><HintKey>{sendHint}</HintKey> Send</button> : <span><HintKey>{sendHint}</HintKey> Send</span>}
         {clickableFooter ? <button type="button" aria-label={newTaskWindow ? "Attach files" : "Add images"} className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating} onClick={handleAttachmentClick}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>}
         {clickableFooter ? <button type="button" aria-label="Search" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} onClick={onSearch}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>}
-        {boardChipEnabled && (clickableFooter ? <button type="button" aria-label="Board" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || dictating} onClick={openBoardPicker}><HintKey>{boardShortcut}</HintKey> Board</button> : <span><HintKey>{boardShortcut}</HintKey> Board</span>)}
+        {(clickableFooter ? <button type="button" aria-label="Board" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || dictating} onClick={openBoardPicker}><HintKey>{boardShortcut}</HintKey> Board</button> : <span><HintKey>{boardShortcut}</HintKey> Board</span>)}
         {(!ctrljFooterOneLine || !newTaskWindow || mobile) && (clickableFooter ? <button type="button" aria-label="Close" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing} onClick={onClose}><HintKey>Esc</HintKey> Close</button> : <span><HintKey>Esc</HintKey> Close</span>)}
       </div>)}
-      {boardChipEnabled && active && boardPickerOpen && <MoveTaskGlobal
+      {active && boardPickerOpen && <MoveTaskGlobal
         boards={loadingBoards && !boards.length ? undefined : boards}
         closeHTC={() => setBoardPickerOpen(false)}
         onSelectBoard={(boardId) => {

@@ -3,19 +3,18 @@ const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 const { load } = require("./task-route-loader.cjs");
 const flag = "htpr-7316-chat-scope-ticket";
-const chipFlag = "htpr-7053-compose-board-chip";
 const noop = () => {};
 
-function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, scope = null, mobile = false, reuseChip = true } = {}) {
+function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, scope = null, mobile = false } = {}) {
   const atoms = Object.fromEntries(["currentProjectAtom", "currentUserAtom", "inViewObjectAtom", "dockedChatScopeAtom", "recentChatBoardIdsAtom", "aiChatExplicitOpenAtAtom", "fullScreenChatScopeAtom"].map((key) => [key, key]));
   const board = { id: 15, title: "Current board name" };
   let recent = [], state;
   const value = (atom) => atom === atoms.currentProjectAtom ? board : atom === atoms.currentUserAtom ? { id: 7 } : atom === atoms.inViewObjectAtom ? { taskId, taskTicketNumber: "HTPR-42", taskTitle: "Ticket title" } : null;
   const source = loader({
     "next/navigation": { usePathname: () => pathname },
-    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key === chipFlag && reuseChip },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : false },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-    "@/lib/flags/keys": { HTPR_7316_CHAT_SCOPE_TICKET_FLAG: flag, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG: chipFlag, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
+    "@/lib/flags/keys": { HTPR_7316_CHAT_SCOPE_TICKET_FLAG: flag, HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
     "@/store": atoms,
     "@/lib/state": {
       useRecoilValue: value,
@@ -68,32 +67,30 @@ function ui({ enabled = true, pathname = "/detail/project-15/42", taskId = 42, s
 }
 
 for (const mobile of [false, true]) {
-  for (const reuseChip of [false, true]) {
-    test(`existing ${mobile ? "mobile" : "desktop"} scope menu and chip choose the current ticket (shared chip: ${reuseChip})`, async () => {
-      const h = ui({ mobile, reuseChip });
-      try {
-        assert.equal(h.scope(), null);
-        assert.equal(h.trigger().textContent.includes("Current board name"), true);
-        h.open();
-        assert.deepEqual(h.rows().map((row) => row.textContent), ["Current ticket", "Current board", "All boards", "Pinned board"]);
-        assert.equal(h.rows().find((row) => row.textContent === "Current board").getAttribute("aria-checked"), "true");
-        h.pick("Current ticket");
-        assert.equal(h.scope(), "ticket");
-        assert.equal(h.trigger().textContent.includes("HTPR-42"), true);
-        assert.equal(h.trigger().title, "Ticket title");
-        assert.equal(h.state().ticketScopeSelected, true);
-        const payload = await sendPayload(h.state());
-        assert.equal(payload.default_context.scope, "ticket");
-        assert.equal(payload.default_context.task_id, 42);
-        assert.equal(payload.default_context.project_id, 15);
-        h.open();
-        assert.equal(h.rows()[0].getAttribute("aria-checked"), "true");
-        h.pick("Current board");
-        assert.equal(h.state().ticketScopeSelected, false);
-        assert.equal((await sendPayload(h.state())).default_context.scope, undefined);
-      } finally { h.close(); }
-    });
-  }
+  test(`existing ${mobile ? "mobile" : "desktop"} scope menu and chip choose the current ticket`, async () => {
+    const h = ui({ mobile });
+    try {
+      assert.equal(h.scope(), null);
+      assert.equal(h.trigger().textContent.includes("Current board name"), true);
+      h.open();
+      assert.deepEqual(h.rows().map((row) => row.textContent), ["Current ticket", "Current board", "All boards", "Pinned board"]);
+      assert.equal(h.rows().find((row) => row.textContent === "Current board").getAttribute("aria-checked"), "true");
+      h.pick("Current ticket");
+      assert.equal(h.scope(), "ticket");
+      assert.equal(h.trigger().textContent.includes("HTPR-42"), true);
+      assert.equal(h.trigger().title, "Ticket title");
+      assert.equal(h.state().ticketScopeSelected, true);
+      const payload = await sendPayload(h.state());
+      assert.equal(payload.default_context.scope, "ticket");
+      assert.equal(payload.default_context.task_id, 42);
+      assert.equal(payload.default_context.project_id, 15);
+      h.open();
+      assert.equal(h.rows()[0].getAttribute("aria-checked"), "true");
+      h.pick("Current board");
+      assert.equal(h.state().ticketScopeSelected, false);
+      assert.equal((await sendPayload(h.state())).default_context.scope, undefined);
+    } finally { h.close(); }
+  });
 }
 
 for (const options of [{ enabled: false }, { pathname: "/project-15", taskId: 42 }, { taskId: null }]) {
