@@ -11,7 +11,7 @@ import { useSetRecoilState } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, isAiChatSidebarModeAtom, showAIChatInterfaceAtom } from "@/store";
 import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } from "@/lib/flags/keys";
 import {
   autoUpdate,
   flip,
@@ -59,7 +59,6 @@ type PersonHovercardSurfaceProps = {
 };
 
 const PersonHovercardSurfaceContent = ({
-  topLayer = false,
   quiet,
   projectId,
   subject,
@@ -71,7 +70,7 @@ const PersonHovercardSurfaceContent = ({
   onFloatingPointerLeave,
   onFloatingFocusEnter,
   onFloatingFocusLeave,
-}: PersonHovercardSurfaceProps & { topLayer?: boolean }) => {
+}: PersonHovercardSurfaceProps) => {
   const [internalOpen, setInternalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const controlled = externallyOpen !== undefined;
@@ -162,7 +161,7 @@ const PersonHovercardSurfaceContent = ({
         style={floatingStyles}
         aria-labelledby={profile ? headingId : undefined}
         aria-label={profile ? undefined : "Person contact details"}
-        className={`relative ${topLayer ? "" : "z-tooltip"} w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]`}
+        className="relative w-[272px] rounded-[4px] border-thin border-border-light-gray-thin bg-modalBackground p-3 text-white-black shadow-[0_12px_36px_rgba(0,0,0,0.28)]`}
         {...getFloatingProps({
           onPointerEnter: onFloatingPointerEnter,
           onPointerLeave: onFloatingPointerLeave,
@@ -249,27 +248,21 @@ const PersonHovercardSurfaceContent = ({
       {reference}
       {open && (quiet === false || !detailRoute || profile || query.isError) && (
         <FloatingPortal>
-          {topLayer ? (
-            <TooltipPortal placement="fixed" anchorElement={refs.domReference.current} interactive>
-              {surface}
-            </TooltipPortal>
-          ) : surface}
+          <TooltipPortal placement="fixed" anchorElement={refs.domReference.current} interactive>
+            {surface}
+          </TooltipPortal>
         </FloatingPortal>
       )}
     </>
   );
 };
 
-const PersonHovercardSurface = (props: PersonHovercardSurfaceProps) => {
-  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-  return topLayer ? <PersonHovercardSurfaceContent {...props} topLayer /> : <PersonHovercardSurfaceContent {...props} />;
-};
+const PersonHovercardSurface = (props: PersonHovercardSurfaceProps) => <PersonHovercardSurfaceContent {...props} />;
 
 const PersonHovercard = ({ projectId, subject, children }: PersonHovercardProps) => {
-  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
   if (!projectId || !subject) return children;
   const surfaceProps = { projectId, subject, quiet: true, children };
-  return topLayer ? <PersonHovercardSurface {...surfaceProps} /> : <PersonHovercardSurfaceContent {...surfaceProps} />;
+  return <PersonHovercardSurface {...surfaceProps} />;
 };
 
 const ParentPersonHovercard = ({
@@ -279,7 +272,6 @@ const ParentPersonHovercard = ({
   projectId?: number;
   subject?: PersonHovercardSubject | null;
 }) => {
-  const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -359,7 +351,7 @@ const ParentPersonHovercard = ({
   return (
     <>
       <span ref={markerRef} hidden />
-      {anchor && subject && (topLayer ? <PersonHovercardSurface {...surfaceProps} /> : <PersonHovercardSurfaceContent {...surfaceProps} />)}
+      {anchor && subject && <PersonHovercardSurface {...surfaceProps} />}
     </>
   );
 };

@@ -21,7 +21,7 @@ const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
 const overrides = {
   "react": React,
-  "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : key !== "htpr-6950-tooltip-top-layer" },
+  "@/hooks/useFlag": { useFlag: (key) => key === flag ? enabled : true },
   "@/hooks/MultiPages/useClickOutside": { default: noop },
   "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-11 min-w-11" },
   "@/lib/constants/constants": { PriorityConstants: [], EstimateConstants: [] },

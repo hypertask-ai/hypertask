@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
 import { INotification } from '@/models/model'
 import formatDateDifference from '@/utils/generateTime';
 import React from 'react'
@@ -16,8 +14,7 @@ interface Props {
 
 const NotificationAssigned = (props: Props) => {
     const { notification, markAsDone, _selectedInbox, setSelectedInbox, openTask } = props
-    const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-    const tooltip = <span style={topLayer ? { left: "100%", top: 0 } : undefined} data-hover-tooltip-content={topLayer || undefined} className={`absolute ${topLayer ? "scale-100 whitespace-nowrap" : "scale-0"} transition-transform rounded bg-white p-2 text-meta text-black ${topLayer ? "" : "group-hover:scale-100"}`}>Mark Done   <kbd className="rounded-lg bg-[var(--bg-notification-key)] text-[var(--color-notification-key)] border-[var(--border-keycap)] px-0.5 py-0.5">E</kbd></span>;
+    const tooltip = <span style={{ left: "100%", top: 0 }} data-hover-tooltip-content className="absolute scale-100 whitespace-nowrap transition-transform rounded bg-white p-2 text-meta text-black">Mark Done   <kbd className="rounded-lg bg-[var(--bg-notification-key)] text-[var(--color-notification-key)] border-[var(--border-keycap)] px-0.5 py-0.5">E</kbd></span>;
  
     
       
@@ -47,9 +44,8 @@ const NotificationAssigned = (props: Props) => {
                  
                  >
                     <Check size={15} color={(notification.status) === 'Archive' ? 'green' : '#8E9093'} strokeWidth={1.75} />
-                    {topLayer && <TooltipPortal hover placement="trigger">{tooltip}</TooltipPortal>}
+                    <TooltipPortal hover placement="trigger">{tooltip}</TooltipPortal>
                 </button>
-                {!topLayer && tooltip}
             </div>
         </div>
     )

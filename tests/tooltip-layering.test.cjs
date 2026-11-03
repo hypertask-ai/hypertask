@@ -37,21 +37,22 @@ test("the shared hover-tooltip layer clears every numeric app layer", () => {
   assert.ok(![1000000001].every((layer) => tooltipLayer > layer), "the layer oracle rejects an excessive overlay");
 });
 
-test("all custom hover implementations gate the shared top-layer portal", () => {
-  const implementations = [
-    "src/components/Common/Tooltip.tsx",
-    "src/components/Common/ReactTooltip.tsx",
-    "src/components/Common/TimeTooltip.tsx",
-    "src/components/Common/PersonHovercard.tsx",
-    "src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx",
-    "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentEmojiTooltip.tsx",
-    "src/components/notifications/comment.tsx",
-    "src/components/notifications/assigned.tsx",
-  ];
-  for (const file of implementations) {
+test("all custom hover implementations render the shared top-layer portal", () => {
+  const implementations = {
+    "src/components/Common/Tooltip.tsx": "<TopLayerTooltip {...safeProps} />",
+    "src/components/Common/ReactTooltip.tsx": "<TopLayerReactTooltip {...props} />",
+    "src/components/Common/TimeTooltip.tsx": "<TopLayerTimeTooltip {...props} />",
+    "src/components/Common/PersonHovercard.tsx": "<PersonHovercardSurfaceContent {...props} />",
+    "src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx": "<TopLayerTutorialTooltip {...props} />",
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentEmojiTooltip.tsx": "<TopLayerCommentEmojiTooltip {...props} />",
+    "src/components/notifications/comment.tsx": '<TooltipPortal hover placement="trigger">{tooltip}</TooltipPortal>',
+    "src/components/notifications/assigned.tsx": '<TooltipPortal hover placement="trigger">{tooltip}</TooltipPortal>',
+  };
+  for (const [file, render] of Object.entries(implementations)) {
     const source = read(file);
     assert.match(source, /<TooltipPortal(?:\s|>)/, file);
-    assert.match(source, /useFlag\(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG\)/, file);
+    assert.ok(source.includes(render), `${file} renders ${render}`);
+    assert.doesNotMatch(source, /htpr-6950-tooltip-top-layer|HTPR_6950_TOOLTIP_TOP_LAYER_FLAG/, file);
   }
   const portal = read("src/components/Common/TooltipPortal.tsx");
   assert.match(portal, /createPortal\(/);
@@ -60,20 +61,16 @@ test("all custom hover implementations gate the shared top-layer portal", () => 
   assert.match(portal, /closest\("dialog\[open\]"\)/);
 });
 
-let fixtureTopLayer = true;
-
 async function withTooltipFixture(check) {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://app.hypertask.ai" });
   const globalKeys = ["window", "document", "React", "IS_REACT_ACT_ENVIRONMENT"];
   const previousGlobals = globalKeys.map((key) => Object.getOwnPropertyDescriptor(global, key));
   const stubs = {
-    "src/hooks/useFlag.tsx": { useFlag: () => fixtureTopLayer },
     "src/utils/generateTime.ts": { default: () => "Just now" },
     "src/utils/helperFunctions/helperFunctions.ts": { convertToPlain: (text) => text, formatDateToGMT: () => "5 October 2026, 12:00 GMT" },
     "src/utils/undoActions/helperFuncs.ts": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
   const previousModules = Object.keys(stubs).map((file) => require.cache[path.join(root, file)]);
-  fixtureTopLayer = true;
   let reactRoot;
   try {
     global.window = dom.window;
@@ -103,12 +100,10 @@ async function withTooltipFixture(check) {
       load: (file) => jiti(path.join(root, file)).default,
       container,
       observers,
-      setFlag: (enabled) => { fixtureTopLayer = enabled; },
       render: async (element) => React.act(async () => reactRoot.render(element)),
     });
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
-    fixtureTopLayer = true;
     dom.window.close();
     globalKeys.forEach((key, index) => {
       if (previousGlobals[index]) Object.defineProperty(global, key, previousGlobals[index]);
@@ -124,38 +119,31 @@ async function withTooltipFixture(check) {
 
 const reactionFile = "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentEmojiTooltip.tsx";
 
-test("label tooltips size to their text in both legacy and top-layer placements", async () => {
-  await withTooltipFixture(async ({ load, container, render, setFlag }) => {
+test("label tooltips size to their text in top-layer placements", async () => {
+  await withTooltipFixture(async ({ load, container, render }) => {
     const Tooltip = load("src/components/Common/Tooltip.tsx");
     const anchor = document.createElement("button");
     document.body.append(anchor);
-    for (const enabled of [true, false]) {
-      setFlag(enabled);
-      for (const portal of [false, true]) {
-        for (const text of ["Copy task ID", "A long related-ticket title that must remain a single line", "Superhuman Command"]) {
-          await render(React.createElement("div", { className: "relative group" }, React.createElement(Tooltip, {
-            text, keyCombination: ["ctrl", "K"], left: 0, bottom: -40, portal,
-            anchorElement: portal ? anchor : null,
-          })));
-          await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
-          const surface = enabled
-            ? document.querySelector("[data-hover-tooltip-portal]").firstElementChild
-            : portal ? document.body.querySelector(".fixed") : container.firstElementChild.firstElementChild;
-          const singleLine = surface.classList.contains("whitespace-nowrap")
-            || (surface.classList.contains("w-max") && surface.classList.contains("max-w-[calc(100vw-16px)]"));
-          assert.ok(singleLine, `flag=${enabled}, portal=${portal}: ${text}`);
-          assert.equal(surface.firstElementChild.textContent.trim(), text);
-          await render(null);
-        }
+    for (const portal of [false, true]) {
+      for (const text of ["Copy task ID", "A long related-ticket title that must remain a single line", "Superhuman Command"]) {
+        await render(React.createElement("div", { className: "relative group" }, React.createElement(Tooltip, {
+          text, keyCombination: ["ctrl", "K"], left: 0, bottom: -40, portal,
+          anchorElement: portal ? anchor : null,
+        })));
+        await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
+        const surface = document.querySelector("[data-hover-tooltip-portal]").firstElementChild;
+        const singleLine = surface.classList.contains("whitespace-nowrap")
+          || (surface.classList.contains("w-max") && surface.classList.contains("max-w-[calc(100vw-16px)]"));
+        assert.ok(singleLine, `portal=${portal}: ${text}`);
+        assert.equal(surface.firstElementChild.textContent.trim(), text);
+        await render(null);
       }
     }
   });
 });
 
-test("rich and tutorial tooltips retain legacy widths and wrapping, while shortcut labels remain nowrap", async () => {
-  await withTooltipFixture(async ({ load, container, render, setFlag }) => {
-    const layout = (surface) => [surface, ...surface.querySelectorAll("*")].map((element) =>
-      [...element.classList].filter((name) => /(?:^|:)(?:whitespace-|text-wrap|break-|(?:min-|max-)?w-)/.test(name)).sort());
+test("rich and tutorial tooltips keep their widths and wrapping, while shortcut labels remain nowrap", async () => {
+  await withTooltipFixture(async ({ load, container, render }) => {
     const cases = [
       ["src/components/Common/ReactTooltip.tsx", { className: "scale-100", children: "A wrapping reaction hovercard" }, "sm:w-[200px]"],
       ["src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx", { top: 15, left: 0, text: "A wrapping tutorial tip", className: "w-[240px]" }, "w-[240px]"],
@@ -163,18 +151,11 @@ test("rich and tutorial tooltips retain legacy widths and wrapping, while shortc
     ];
     for (const [file, props, required] of cases) {
       const Component = load(file);
-      let legacyLayout;
-      for (const enabled of [false, true]) {
-        setFlag(enabled);
-        await render(React.createElement("div", { className: "relative group" }, React.createElement(Component, props)));
-        const surface = enabled ? document.querySelector("[data-hover-tooltip-portal]").firstElementChild : container.firstElementChild.firstElementChild;
-        assert.ok(surface.classList.contains(required), file);
-        if (enabled) assert.deepEqual(layout(surface), legacyLayout, file);
-        else legacyLayout = layout(surface);
-        await render(null);
-      }
+      await render(React.createElement("div", { className: "relative group" }, React.createElement(Component, props)));
+      const surface = document.querySelector("[data-hover-tooltip-portal]").firstElementChild;
+      assert.ok(surface.classList.contains(required), file);
+      await render(null);
     }
-    setFlag(true);
     const ReactionTooltip = load(reactionFile);
     await render(React.createElement("div", { className: "relative group" }, React.createElement(ReactionTooltip)));
     await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
@@ -237,7 +218,7 @@ test("intrinsic-width labels stay clamped on narrow viewports and after content 
 });
 
 test("notification tooltip rect aligns beside its trigger, not the offsetParent origin", async () => {
-  await withTooltipFixture(async ({ load, container, render, setFlag }) => {
+  await withTooltipFixture(async ({ load, container, render }) => {
     const nativeBounds = window.HTMLElement.prototype.getBoundingClientRect;
     Object.defineProperty(window.HTMLElement.prototype, "offsetParent", { configurable: true, get: () => container });
     container.getBoundingClientRect = () => new window.DOMRect(20, 30, 900, 700);
@@ -256,7 +237,6 @@ test("notification tooltip rect aligns beside its trigger, not the offsetParent 
       let done = 0;
       let opened = 0;
       const props = { notification: { id: 1, createdAt: new Date(), status: "Normal" }, markAsDone: () => done++, openTask: () => opened++, setSelectedInbox: () => {}, _selectedInbox: null };
-      setFlag(true);
       await render(React.createElement(Component, props));
       const group = container.querySelector(".group");
       await React.act(async () => group.dispatchEvent(new window.MouseEvent("mouseenter")));
@@ -277,14 +257,7 @@ test("notification tooltip rect aligns beside its trigger, not the offsetParent 
       assert.equal(opened, 0);
       await React.act(async () => group.dispatchEvent(new window.MouseEvent("mouseleave")));
       assert.equal(document.querySelector("[data-hover-tooltip-portal]"), null);
-      setFlag(false);
-      await render(React.createElement(Component, props));
-      const legacy = container.querySelector(".group > span");
-      assert.equal(legacy.getAttribute("style"), null, "flag-off span retains offset-free legacy layout");
-      assert.equal(legacy.textContent, "Mark Done   E");
-      assert.equal(container.querySelector("button").children.length, 1);
     }
-    setFlag(true);
     const ReactTooltip = load("src/components/Common/ReactTooltip.tsx");
     await render(React.createElement("button", null, React.createElement(ReactTooltip, { className: "scale-100" }, "Reaction")));
     const richPopup = document.querySelector("[data-hover-tooltip-portal]");
@@ -371,51 +344,6 @@ test("anchored reaction content measures after popover opening and remeasures on
   });
 });
 
-test("legacy reaction placement retains composer boundaries, clamping and shortcut markup", async () => {
-  await withTooltipFixture(async ({ load, container, render, setFlag }) => {
-    setFlag(false);
-    const anchor = document.createElement("button");
-    document.body.append(anchor);
-    const composer = document.createElement("div");
-    composer.id = "comment";
-    document.body.append(composer);
-    const nativeBounds = window.HTMLElement.prototype.getBoundingClientRect;
-    let width = 200;
-    let height = 70;
-    window.HTMLElement.prototype.getBoundingClientRect = function () {
-      return this.classList.contains("fixed") && this.textContent === "Add ReactionRFast LikeL"
-        ? new window.DOMRect(0, 0, width, height) : nativeBounds.call(this);
-    };
-    const Component = load(reactionFile);
-    for (const scenario of [
-      { rect: [100, 100, 14, 14], boundary: 500, left: 100, top: 122 },
-      { rect: [100, 450, 14, 14], boundary: 500, left: 100, top: 372 },
-      { rect: [1000, 700, 14, 14], boundary: null, left: 824, top: 622 },
-      { rect: [-10, 20, 14, 14], boundary: 30, left: 0, top: 0 },
-      { rect: [1000, 700, 14, 14], boundary: null, width: 300, height: 100, left: 724, top: 592 },
-    ]) {
-      await render(null);
-      width = scenario.width ?? 200;
-      height = scenario.height ?? 70;
-      anchor.getBoundingClientRect = () => new window.DOMRect(...scenario.rect);
-      composer.getBoundingClientRect = () => new window.DOMRect(0, scenario.boundary, 100, 100);
-      if (scenario.boundary === null) composer.remove();
-      else document.body.append(composer);
-      await render(React.createElement(Component, { anchorElement: anchor }));
-      const surface = document.querySelector(".fixed");
-      assert.equal(surface.style.left, `${scenario.left}px`);
-      assert.equal(surface.style.top, `${scenario.top}px`);
-      assert.equal(surface.textContent, "Add ReactionRFast LikeL");
-      assert.ok(surface.classList.contains("z-tooltip"));
-      assert.equal(document.querySelector("[data-hover-tooltip-portal]"), null);
-    }
-    await render(React.createElement(Component));
-    assert.equal(container.children.length, 2, "legacy inline shortcuts stay separate");
-    assert.deepEqual([...container.children].map((child) => child.style.bottom), ["-40px", "-75px"]);
-    assert.equal(container.textContent, "Add ReactionRFast LikeL");
-  });
-});
-
 test("real tooltip components escape clipped and transformed ancestors without changing content", async () => {
   const dom = new JSDOM("<!doctype html><div id='root'></div>", { url: "https://app.hypertask.ai" });
   const globalKeys = ["window", "document", "React", "IS_REACT_ACT_ENVIRONMENT"];
@@ -423,7 +351,6 @@ test("real tooltip components escape clipped and transformed ancestors without c
   const stubPaths = [
     "src/utils/undoActions/helperFuncs.ts",
     "src/utils/helperFunctions/helperFunctions.ts",
-    "src/hooks/useFlag.tsx",
     "src/styles/_tooltip-portal.scss",
   ].map((file) => path.join(root, file));
   const previousModules = stubPaths.map((file) => require.cache[file]);
@@ -446,7 +373,6 @@ test("real tooltip components escape clipped and transformed ancestors without c
         exports: [
           { cn: (...classes) => classes.filter(Boolean).join(" ") },
           { formatDateToGMT: () => "5 October 2026, 12:00 GMT" },
-          { useFlag: (key) => key === "htpr-6950-tooltip-top-layer" },
           { default: { portal: "tooltip-portal" } },
         ][index],
       };

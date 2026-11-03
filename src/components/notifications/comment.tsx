@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG } from "@/lib/flags/keys";
 import { INotification } from '@/models/model'
 import formatDateDifference from '@/utils/generateTime';
 import { convertToPlain } from '@/utils/helperFunctions/helperFunctions';
@@ -18,8 +16,7 @@ interface Props {
 const NotificationComment = (props: Props) => {
  
     const { notification, markAsDone, _selectedInbox, setSelectedInbox, openTask } = props
-    const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-    const tooltip = <span style={topLayer ? { left: "100%", top: 0 } : undefined} data-hover-tooltip-content={topLayer || undefined} className={`absolute ${topLayer ? "scale-100 whitespace-nowrap" : "scale-0"} transition-transform rounded bg-white p-2 text-meta text-black ${topLayer ? "" : "group-hover:scale-100"}`}>Mark Done   <kbd className="rounded-lg bg-[var(--bg-notification-key)] text-[var(--color-notification-key)] border-[var(--border-keycap)] px-0.5 py-0.5">E</kbd></span>;
+    const tooltip = <span style={{ left: "100%", top: 0 }} data-hover-tooltip-content className="absolute scale-100 whitespace-nowrap transition-transform rounded bg-white p-2 text-meta text-black">Mark Done   <kbd className="rounded-lg bg-[var(--bg-notification-key)] text-[var(--color-notification-key)] border-[var(--border-keycap)] px-0.5 py-0.5">E</kbd></span>;
 
     return (
         <div id={`inbox-${notification.id}`} onClick={() => openTask()} onMouseEnter={() => setSelectedInbox()} key={notification.id} className={`flex space-x-8 h-[70] py-2 border-l-8 border-transparent px-4 rounded-md ${(_selectedInbox && _selectedInbox.id === notification.id) ? "bg-[#363A40]  border-l-[#7396CB]" : "transparent"} justify-between  w-full flex-col md:flex-row`}>
@@ -43,9 +40,8 @@ const NotificationComment = (props: Props) => {
                     markAsDone()}}
                 >
                     <Check size={15} color={(notification.status) === 'Archive' ? 'green' : '#8E9093'} strokeWidth={1.75} />
-                    {topLayer && <TooltipPortal hover placement="trigger">{tooltip}</TooltipPortal>}
+                    <TooltipPortal hover placement="trigger">{tooltip}</TooltipPortal>
                 </button>
-                {!topLayer && tooltip}
             </div>
         </div>
     )
