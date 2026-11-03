@@ -54,7 +54,7 @@ test("one conversation follows the user instead of the ticket", () => {
   assert.match(history, /const taskScopedHistory = isTaskScoped && !manualChat;/);
   const state = read("src/hooks/MultiPages/AIChat/useAiChatState.ts");
   assert.match(state, /if \(manualChat\) historyTaskId = undefined;/);
-  assert.match(state, /useSessionAndChatHistory\(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat \|\| parallelChatsEnabled, manualDockedChat, modelTeamId\)/);
+  assert.match(state, /useSessionAndChatHistory\(\s*historyTaskId,\s*shouldLoadChatHistory,\s*windowSecondary \|\| isDetailPage,\s*manualDockedChat \|\| parallelChatsEnabled \|\| multiChatWindowsEnabled,\s*manualDockedChat,\s*modelTeamId,\s*pinnedSessionId,\s*windowSecondary,?\s*\)/);
 });
 
 test("the new-ticket greeting lands in the conversation that is open, not a new thread", () => {

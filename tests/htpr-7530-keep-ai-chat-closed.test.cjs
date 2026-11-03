@@ -38,7 +38,7 @@ test("the shared veto ignores a saved value with flag off and waits only when a 
     for (const ready of [false, true]) {
       for (const saved of [false, true]) {
         const { useKeepAiChatClosed } = load("src/hooks/General/useKeepAiChatClosed.ts", {
-          "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return enabled; }, useFlagReady: () => ready },
+          "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-8334-multi-chat-windows") return false; assert.equal(key, flagKey); return enabled; }, useFlagReady: () => ready },
           "@/lib/state": { useRecoilValue: () => saved }, "@/store": { keepAiChatClosedAtom: "saved" },
           "@/lib/flags/keys": flagModule,
         });

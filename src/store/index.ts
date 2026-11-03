@@ -1,4 +1,5 @@
 import type { AiChatAutoOpenPreferences } from "@/lib/aiChat/autoOpenPreferences";
+import type { ChatWindowState } from "@/lib/aiChat/chatWindows";
 import { ICommandList } from "@/components/Modals/commands/HTC/HTCTypes";
 import { DisplayDate } from "@/components/Modals/RemindMe/RemindMeComponent";
 import { Tgroup } from "@/components/sidebars/leftSidebar";
@@ -422,6 +423,12 @@ export const aiChatPinnedSessionIdsAtom = atom<string[]>({
 export const aiChatBoardSessionMapAtom = atom<Record<number, string>>({
     key: "aiChatBoardSessionMap",
     default: {},
+    effects_UNSTABLE: [persistAtom],
+});
+
+export const aiChatWindowsAtom = atom<ChatWindowState[]>({
+    key: "aiChatWindows",
+    default: [],
     effects_UNSTABLE: [persistAtom],
 });
 

@@ -31,3 +31,15 @@ With `htpr-7800-skill-runs-in-sidebar` on (Everyone by default), picking a slash
 ## Ticket rows in answers
 
 With `htpr-7683-ai-chat-ticket-rows` enabled (Everyone by default), ticket answers can show compact rows grouped under headings such as Done or New. Each row opens the ticket and shows its current status, assignee avatars and priority. Five rows appear per group; choose “+N more” to see the rest. Reopened conversations refresh the rows and omit tickets you can no longer access. Turning the flag off keeps the existing text-only answers.
+
+# Several chat windows
+
+`htpr-8334-multi-chat-windows` (feature, Everyone) keeps more than one floating AI chat window open on a desktop board, ticket or inbox page.
+
+The first window is the one that already existed: same shortcut set, same auto-open, same memory of which board had which chat. Every extra window is its own chat runtime with a fixed conversation, so a second window never replaces the first. Picking a different conversation from the first window's chat list opens it in a new window and leaves the current one where it is; inside an extra window the chat list switches that window. Ctrl+Shift+O in a window opens a fresh chat in a new window. Each window keeps its own place, size, minimised state and conversation, and all four come back after a reload. Minimised windows sit in one row above the first chat and show their title only; the window stays mounted while it is minimised, so a reply that is still arriving keeps arriving. Closing one leaves the conversation in the chat list. Four extra windows is the limit: picking another conversation at the limit says so and leaves the open chat as it is.
+
+A second window never writes the board-to-chat memory, never runs the chat open/restore effects and never installs its own document Ctrl+Q handler, so opening one cannot change the first. Phones keep one window, and saved windows only come back for the signed-in account the server vouches for. Off brings back one window.
+
+Sources: `src/lib/aiChat/chatWindows.ts`, `src/hooks/MultiPages/AIChat/useChatWindows.ts`, `src/hooks/MultiPages/AIChat/useAiChat.ts` (window controls on the chat context), `src/components/AI_CHAT/ChatWindowStack.tsx`, `src/components/AI_CHAT/ChatWindowFrame.tsx`.
+Regression proof: `node --test tests/htpr-8334-multi-chat-windows.test.cjs`.
+Ticket: https://app.hypertask.ai/detail/project-15/8334

@@ -22,8 +22,16 @@ import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG, HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG } 
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 import { createSessionMessageQueue, type QueuedAiChatMessage } from "@/lib/aiChat/sessionMessageQueue";
 import { HTPR_7767_SESSION_MESSAGE_QUEUE_FLAG } from "@/lib/flags/definitions/htpr-7767-session-message-queue";
+import type { AiChatWindowScope } from "@/lib/aiChat/chatWindows";
+import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
-export function useAiChatState(parallelChatsEnabled = false) {
+type BoardSessionMap = Record<number, string>;
+
+const EMPTY_CHAT_BOARD_SESSION_MAP: BoardSessionMap = {};
+
+export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiChatWindowScope) {
+  const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
+  const windowSecondary = multiChatWindowsEnabled && Boolean(windowScope);
   const agentSessionsEnabled = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const agentSidebarEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
 
@@ -31,14 +39,25 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
-  const [showAiChatInterface, setShowAIChat] = useRecoilState(
+  const [storedChatOpen, setShowAIChat] = useRecoilState(
     showAIChatInterfaceAtom
   );
+  const showAiChatInterface = windowSecondary || storedChatOpen;
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const setAiChatExplicitOpenAt = useSetRecoilState(aiChatExplicitOpenAtAtom);
   const aiChatExplicitOpenAt = useRecoilValue(aiChatExplicitOpenAtAtom);
-  const [aiChatBoardSessionMap, setAiChatBoardSessionMap] = useRecoilState(
+  const [storedBoardSessionMap, setStoredBoardSessionMap] = useRecoilState(
     aiChatBoardSessionMapAtom
+  );
+  const aiChatBoardSessionMap = windowSecondary
+    ? EMPTY_CHAT_BOARD_SESSION_MAP
+    : storedBoardSessionMap;
+  const setAiChatBoardSessionMap = useMemo(
+    () => (value: BoardSessionMap | ((previous: BoardSessionMap) => BoardSessionMap)) => {
+      if (windowSecondary) return;
+      setStoredBoardSessionMap(value);
+    },
+    [setStoredBoardSessionMap, windowSecondary],
   );
   const setRecentChatBoardIds = useSetRecoilState<number[]>(
     recentChatBoardIdsAtom
@@ -56,7 +75,8 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const isSettingsPage = settingsEnabled && (pathname === "/settings" || pathname?.startsWith("/settings/"));
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
-  const manualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const storedManualChat = useFlag(HTPR_8088_MANUAL_CHAT_FLAG);
+  const manualChat = windowSecondary || storedManualChat;
   const fullScreenHandoff = useFlag(HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG);
   const manualDockedChat = manualChat && !(pathname?.startsWith("/demo") ?? false) && (!isFullScreenChat || fullScreenHandoff);
   const ticketScopeEnabled = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
@@ -140,7 +160,7 @@ export function useAiChatState(parallelChatsEnabled = false) {
   const [showRenameChatModal, setShowRenameChatModal] =
     useState<boolean>(false);
   const messageListRef = useRef<HTMLDivElement | null>(null);
-  const hasAttemptedRestoreRef = useRef(false);
+  const hasAttemptedRestoreRef = useRef(windowSecondary);
   const previousProjectIdRef = useRef<number | undefined>(undefined);
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();
   const { token } = useMcpToken();
@@ -217,11 +237,12 @@ export function useAiChatState(parallelChatsEnabled = false) {
     if (showAiChatInterface || isFullScreenChat) setEditorEnabled(true);
   }, [showAiChatInterface, isFullScreenChat]);
   const taskId =
-    isDetailPage && inViewObject?.taskId ? inViewObject.taskId : undefined;
+    !windowSecondary && isDetailPage && inViewObject?.taskId ? inViewObject.taskId : undefined;
   const shouldLoadChatHistory =
     isFullScreenChat || showAiChatInterface || chatMounted;
   let historyTaskId = taskId;
   if (manualChat) historyTaskId = undefined;
+  const pinnedSessionId = windowScope?.sessionId ?? null;
 
   const {
     startNewSession: createSession,
@@ -237,7 +258,16 @@ export function useAiChatState(parallelChatsEnabled = false) {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat || parallelChatsEnabled, manualDockedChat, modelTeamId);
+  } = useSessionAndChatHistory(
+    historyTaskId,
+    shouldLoadChatHistory,
+    windowSecondary || isDetailPage,
+    manualDockedChat || parallelChatsEnabled || multiChatWindowsEnabled,
+    manualDockedChat,
+    modelTeamId,
+    pinnedSessionId,
+    windowSecondary,
+  );
   useAiChatDraft({ editor, userId: currentUser?.id, sessionId: currentSession?.id, enabled: !currentSession?.agentId });
   sessionQueue.sessionId = currentSession?.id;
   useEffect(() => {

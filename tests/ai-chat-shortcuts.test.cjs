@@ -81,7 +81,7 @@ function fixture(surface, { enabled = true, width = 1440, active = true } = {}) 
     "@/lib/state": { useRecoilState: () => [pins, (next) => { pins = next(pins); }] },
     "@/store": {},
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => context },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flag.default.key); return enabled; } },
+    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-8334-multi-chat-windows") return false; assert.equal(key, flag.default.key); return enabled; } },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": flag,
     "@/lib/aiChat/chatShortcuts": registry,

@@ -36,7 +36,9 @@ export const useSessionAndChatHistory = (
   isTaskScoped = false,
   preserveSessionSelection = false,
   manualChat = false,
-  teamKey?: string | null
+  teamKey?: string | null,
+  pinnedSessionId: string | null = null,
+  windowScoped = false
 ) => {
   const stopClosesStream = useFlag(HTPR_7794_STOP_CLOSES_STREAM_FLAG);
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
@@ -75,10 +77,11 @@ export const useSessionAndChatHistory = (
   }
   if (chatNames) nameBoardRef.current = scopedBoardId;
   else nameBoardRef.current = undefined;
-  const [activeSession, setActiveSession] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<string | null>(pinnedSessionId);
   useEffect(() => {
+    if (pinnedSessionId) return;
     if (manualChat) setActiveSession(null);
-  }, [manualChat, teamKey]);
+  }, [manualChat, teamKey, pinnedSessionId]);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
   const queryClient = useQueryClient();
@@ -89,6 +92,16 @@ export const useSessionAndChatHistory = (
   const hasRequiredData = !!currentUser?.uid;
   const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: selectionScope, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId });
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
+  const pagedActiveSession = pagedHistory.activeSession;
+  const setPagedActiveSession = pagedHistory.setActiveSession;
+  useEffect(() => {
+    if (!pinnedSessionId || activeSession) return;
+    setActiveSession(pinnedSessionId);
+  }, [pinnedSessionId, activeSession]);
+  useEffect(() => {
+    if (!pinnedSessionId || !paged || pagedActiveSession) return;
+    setPagedActiveSession(pinnedSessionId);
+  }, [pinnedSessionId, paged, pagedActiveSession, setPagedActiveSession]);
 
   const {
     data: sessionsData,
@@ -569,6 +582,7 @@ export const useSessionAndChatHistory = (
     : sessions[0];
   const currentSession = followsTaskNavigation && hasExplicitTask && selectedSession?.taskId !== taskId ? undefined : selectedSession;
   useEffect(() => {
+    if (windowScoped) return;
     if (!waitingForSkillFollowup && composeEnabled && composeIntro && currentSession &&
         (manualChat || (isTaskScoped && taskId === composeIntro.taskId && currentSession.taskId === composeIntro.taskId))) {
       const id = `compose-task-${composeIntro.taskId}`;
@@ -586,7 +600,7 @@ export const useSessionAndChatHistory = (
       }
       setComposeIntro(null);
     }
-  }, [waitingForSkillFollowup, composeEnabled, composeIntro, isTaskScoped, manualChat, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
+  }, [windowScoped, waitingForSkillFollowup, composeEnabled, composeIntro, isTaskScoped, manualChat, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
 
   const isSessionPending =
     !isDemo &&

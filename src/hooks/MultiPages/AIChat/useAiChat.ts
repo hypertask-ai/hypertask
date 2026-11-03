@@ -18,8 +18,16 @@ import { HTPR_7764_CHAT_RUNNING_FLAG, HTPR_7758_PROGRESSIVE_CHAT_CREATE_FLAG, HT
 
 import { useRecoilState } from "@/lib/state";
 import { aiChatEditTaskIdAtom } from "@/store";
+import type { AiChatWindowScope } from "@/lib/aiChat/chatWindows";
+import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
-export function useAiChat() {
+
+export function useAiChat(windowScope?: AiChatWindowScope) {
+  const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
+  let chatWindowScope: AiChatWindowScope | undefined;
+  if (multiChatWindowsEnabled) {
+    chatWindowScope = windowScope;
+  }
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const { navigateToTask } = useHypertasksNavigate();
   const skillDraftsFlag = useFlag(HTPR_7768_CHAT_SKILL_DRAFTS_FLAG);
@@ -64,16 +72,18 @@ export function useAiChat() {
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue, parallelStreams: sessionStreams,
-  } = useAiChatState(parallelChatsEnabled);
+  } = useAiChatState(parallelChatsEnabled, chatWindowScope);
   const parallelStreams = parallelChatsEnabled ? sessionStreams : undefined;
   useEffect(editWithAiEnabled ? () => {
+    if (chatWindowScope) return;
     if (editTaskId === null) return;
     if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
       setEditTaskId(null);
     }
   } : () => {
+    if (chatWindowScope) return;
     if (editTaskId !== null) setEditTaskId(null);
-  }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId]);
+  }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId, chatWindowScope]);
 
   const sessionContext = {
     parallelStreams, agentSidebarChatsEnabled, sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,

@@ -162,7 +162,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container", DELIBERATE_DOUBLE_CLICK_MS: 500 },
     "@/hooks/MultiPages/useDoubleTap": useDoubleTap,
-    "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG); return true; } },
+    "@/hooks/useFlag": { useFlag: key => { if (key === "htpr-8334-multi-chat-windows") return false; assert.equal(key, flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG); return true; } },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": flags,
     "@/lib/taskDetailEditTarget": load("src/lib/taskDetailEditTarget.ts"),

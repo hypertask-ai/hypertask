@@ -10,6 +10,8 @@ import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { IChatMessage, IChatSession, MentionItem } from "@/models/model";
 import type { Editor } from "@tiptap/react";
+import type { AiChatWindowScope, ChatWindowControls } from "@/lib/aiChat/chatWindows";
+import { useChatWindows } from "@/hooks/MultiPages/AIChat/useChatWindows";
 import dynamic from "next/dynamic";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +19,7 @@ import {
   Dispatch,
   memo,
   ReactNode,
+  useMemo,
   RefObject,
   SetStateAction,
   useEffect,
@@ -56,6 +59,7 @@ export interface ChatContextType {
   restoreChat: () => void;
   isSidebarMode: boolean;
   setIsSidebarMode: Dispatch<SetStateAction<boolean>>;
+  chatWindows?: ChatWindowControls;
   chatMounted: boolean;
   setChatMounted: Dispatch<SetStateAction<boolean>>;
   currentAiOption: TAiModal;
@@ -135,16 +139,50 @@ const AiChatEditorMount = dynamic(
 
 export const ChatRuntime = memo(function ChatRuntime({
   onValue,
+  windowScope,
+  overrides,
   children,
 }: {
   onValue: (value: ChatContextType | undefined) => void;
+  windowScope?: AiChatWindowScope;
+  overrides?: Partial<ChatContextType>;
   children?: ReactNode;
 }) {
-  const contextProps = useAiChat();
+  const contextProps = useAiChat(windowScope);
+  const windowController = useChatWindows();
+  const creatingWindowRef = useRef(false);
+  const chatWindows = useMemo<ChatWindowControls | undefined>(() => {
+    if (!windowController.enabled) return undefined;
+    return {
+      enabled: true,
+      atCapacity: windowController.atCapacity,
+      openSessionWindow: windowController.open,
+      focusOpenSessionWindow: windowController.focusOpenSession,
+      openNewChatWindow: async () => {
+        if (windowController.atCapacity || creatingWindowRef.current) return false;
+        creatingWindowRef.current = true;
+        try {
+          const previousSessionId = contextProps.currentSession?.id ?? null;
+          const created = await contextProps.startNewSession();
+          if (!created) return false;
+          const opened = windowController.open(created.id);
+          if (previousSessionId) contextProps.selectSession(previousSessionId);
+          return opened;
+        } finally {
+          creatingWindowRef.current = false;
+        }
+      },
+    };
+  }, [contextProps, windowController]);
+  const contextValue = useMemo<ChatContextType>(
+    () => (overrides ? { ...contextProps, chatWindows, ...overrides } : { ...contextProps, chatWindows }),
+    [contextProps, overrides, chatWindows],
+  );
   const layoutKeydownRef = useRef(contextProps.layoutKeydown);
   layoutKeydownRef.current = contextProps.layoutKeydown;
 
   useEffect(() => {
+    if (windowScope) return;
     const handleLayoutKeydownCapture = (event: KeyboardEvent) => {
       if (!isControlQFocusShortcut(event)) return;
       if (event.target instanceof HTMLElement && event.target.closest("[data-ai-chat-surface]")) return;
@@ -161,7 +199,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       document.removeEventListener("keydown", handleLayoutKeydownCapture, true);
       document.removeEventListener("keydown", handleLayoutKeydown);
     };
-  }, []);
+  }, [windowScope]);
 
   const [pendingAiChatPrompt, setPendingAiChatPrompt] = useRecoilState(
     aiChatPendingPromptAtom
@@ -187,6 +225,7 @@ export const ChatRuntime = memo(function ChatRuntime({
     sending: boolean;
   } | null>(null);
   useEffect(() => {
+    if (windowScope) return;
     if (pendingAiChatPrompt && typeof pendingAiChatPrompt !== "string" && !askAiFullscreenEnabled) {
       pendingFullScreenSessionRef.current = null;
       setPendingAiChatPrompt(null);
@@ -257,6 +296,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       editor.commands.focus("end");
     }
   }, [
+    windowScope,
     pendingAiChatPrompt, contextProps.sessionPagingEnabled,
     askAiFullscreenEnabled,
     contextProps.isByokBlocked,
@@ -274,12 +314,12 @@ export const ChatRuntime = memo(function ChatRuntime({
   ]);
 
   useLayoutEffect(() => {
-    onValue(contextProps);
+    onValue(contextValue);
   });
   useLayoutEffect(() => () => onValue(undefined), [onValue]);
 
   return (
-    <ChatContext.Provider value={contextProps}>
+    <ChatContext.Provider value={contextValue}>
       {contextProps.editorEnabled && (
         <AiChatEditorMount {...contextProps.editorMountProps} />
       )}
