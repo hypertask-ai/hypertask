@@ -14,6 +14,8 @@ export interface McpTaskAssignee {
 export interface TaskDetail {
     id: number;
     blockerCommentId?: number | null;
+    waitingOnUserId?: number | null;
+    waitingOnSetAt?: string | null;
     ticketNumber?: string;
     title: string;
     description: string;
