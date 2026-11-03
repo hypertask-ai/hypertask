@@ -70,28 +70,26 @@ function setupObserver() {
   return { filed, waiting, observeFeedbackTools }
 }
 
-async function callOnce(observer, replies, userId = 42) {
+async function call(observer, reply, userId = 42) {
   const [tool] = observer.observeFeedbackTools([{
     name: 'hypertask_tasks',
-    execute: async () => {
-      const next = replies.shift()
-      if (next instanceof Error) throw next
-      return JSON.stringify(next)
-    },
+    execute: async () => JSON.stringify(reply),
   }], userId)
   return tool.execute({ limit: 5 }, 'token')
 }
 
 test('a 500 then a real success files nothing', async () => {
   const observer = setupObserver()
-  await callOnce(observer, [{ status: 500 }, { ok: true }])
+  await call(observer, { status: 500 })
+  await call(observer, { ok: true })
   await Promise.all(observer.waiting)
   assert.equal(observer.filed.length, 0)
 })
 
 test('a 500 then another refusal still files, an error reply is not a success', async () => {
   const observer = setupObserver()
-  await callOnce(observer, [{ status: 500 }, { status: 400 }])
+  await call(observer, { status: 500 })
+  await call(observer, { status: 400 })
   await Promise.all(observer.waiting)
   assert.equal(observer.filed.length, 1)
   assert.equal(observer.filed[0].status, 500)
@@ -99,8 +97,8 @@ test('a 500 then another refusal still files, an error reply is not a success', 
 
 test('a 500 then the same call succeeding for another caller still files', async () => {
   const observer = setupObserver()
-  await callOnce(observer, [{ status: 500 }], 42)
-  await callOnce(observer, [{ ok: true }], 43)
+  await call(observer, { status: 500 }, 42)
+  await call(observer, { ok: true }, 43)
   await Promise.all(observer.waiting)
   assert.equal(observer.filed.length, 1)
 })

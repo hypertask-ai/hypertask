@@ -60,6 +60,7 @@ function setup({ plain = true } = {}) {
 }
 
 const refusalCodes = /^(unrecognized_keys|invalid_type|invalid_literal|invalid_union|invalid_enum_value|invalid_string|invalid_date|invalid_key|too_small|too_big|not_multiple_of|unrecognized|custom)$/
+const listedValueCodes = /^(unrecognized_keys|invalid_enum_value|unrecognized)$/
 
 async function observe(error, options) {
   const f = setup(options)
@@ -73,6 +74,7 @@ async function observe(error, options) {
   assert.deepEqual(f.reports[0][2], { origin: 'automatic' })
   const input = f.reports[0][0]
   const refused = input.status === 400 && refusalCodes.test(input.errorCode ?? '')
+    && (listedValueCodes.test(input.errorCode ?? '') || Boolean(input.field))
   assert.equal(f.created.length, refused ? 0 : 1)
   const filed = JSON.stringify(f.created)
   for (const secret of [...Object.values(privateArgs), 'private-auth-token', 'private-error-message']) assert.equal(filed.includes(secret), false, secret)
@@ -121,12 +123,13 @@ test('automatic Zod too_small and unrecognized_keys keep only the first issue co
   }
 })
 
-test('automatic root Zod issues keep their code without inventing a field', async () => {
+test('automatic root Zod issues keep their code without inventing a field, and file because they name nothing', async () => {
   const result = z.number().safeParse('private-project-value')
   const f = await observe(result.error)
   assert.equal(f.input.errorCode, 'invalid_type')
   assert.equal(f.input.field, undefined)
   assert.doesNotMatch(f.description, /<p>Field:/)
+  assert.equal(f.created.length, 1)
 })
 
 for (const [name, wrap] of [

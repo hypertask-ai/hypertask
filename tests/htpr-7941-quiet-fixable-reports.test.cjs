@@ -48,17 +48,18 @@ test('an old ticket edited today does not keep a fresh fingerprint quiet', () =>
   assert.equal(fixable.filedRecently(null, now), false)
 })
 
-test('a fieldless custom 400 is a genuine refusal and files (HTPR-7941 acceptance)', () => {
+test('a 400 that names no field and no value is a genuine refusal and files (HTPR-7941 acceptance)', () => {
   assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'custom' }), false)
+  assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'invalid_type' }), false)
   assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'custom', field: '' }), false)
   assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'tool-exception' }), false)
   assert.equal(fixable.quietInputRefusal({ status: 400 }), false)
 })
 
-test('a 400 naming the field, or a schema shape refusal, stays quiet', () => {
+test('a 400 naming the field, or listing the accepted values, stays quiet', () => {
   assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'unrecognized_keys', field: 'contnet' }), true)
+  assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'invalid_enum_value' }), true)
   assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'invalid_type', field: 'project_id' }), true)
-  assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'invalid_type' }), true)
   assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'custom', field: 'input' }), true)
   assert.equal(fixable.quietInputRefusal({ status: 500, errorCode: 'custom', field: 'input' }), false)
 })
