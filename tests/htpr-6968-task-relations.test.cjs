@@ -72,7 +72,7 @@ function fixture(name, scenario) {
       return scenario.noAuth || scenario.noSigned ? null : { id: scenario.signedUser ?? 985 };
     } },
     "@/lib/prisma": { default: {
-      task: { findFirst: record("task-access", scenario.denied ? null : task, scenario.lookupThrows && "Lookup unavailable"), findUnique: record("task-board", task), update: record("waiting-write", ({ data }) => ({ id: 42, ...data }), scenario.writeThrows) },
+      task: { findFirst: record("task-access", scenario.denied ? null : name === "deleteTask" ? { ...task, status: scenario.taskStatus ?? "Deleted" } : task, scenario.lookupThrows && "Lookup unavailable"), findUnique: record("task-board", task), update: record("waiting-write", ({ data }) => ({ id: 42, ...data }), scenario.writeThrows) },
       agent: { findFirst: record("owned-agent", scenario.unownedAgent ? null : { id: "owned" }), findUnique: record("agent", { id: "owned", userId: 985 }) },
       taskRelations: { findFirst: record("relation-access", scenario.denied ? null : { sourceTask: { projectId: 15 }, targetTask: { projectId: scenario.sameBoard ? 15 : 16 } }) },
       user: { findUnique: record("waiting-user", scenario.noWaitingUser ? null : { displayName: "Member" }) },
@@ -138,6 +138,7 @@ const scenarios = {
   ],
   deleteTask: [
     ["permanent delete", {}], ["restore/delete conflict", { deleteConflict: true, expected: error(409, "Task is being restored or permanently deleted") }],
+    ["live task", { taskStatus: "Normal", expected: error(409, "Task is not in the trash") }], ["archived task", { taskStatus: "Archive", expected: error(409, "Task is not in the trash") }],
     ["denied or not deleted", { denied: true, expected: error(404, "Task not found or access denied") }], ["invalid task", { query: { taskId: "NaN" }, expected: error(400, "Missing required information") }],
     ["validation before auth", { query: { taskId: "NaN" }, noAuth: true, expected: error(400, "Missing required information") }],
     ["missing query", { query: {}, expected: error(400, "Missing required information") }], ["query array", { query: { taskId: ["42", "43"] }, expected: error(400, "Missing required information") }],
