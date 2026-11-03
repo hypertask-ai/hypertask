@@ -1,4 +1,3 @@
-// Loader for the comment list route: real readListQuery and listQuery, stubbed data layer.
 const path = require("node:path");
 const Module = require("node:module");
 

@@ -1,4 +1,3 @@
-// HTPR-8376: a comment list projection must name the valid fields instead of dropping a name it does not know.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
