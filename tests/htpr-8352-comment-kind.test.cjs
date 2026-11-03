@@ -166,7 +166,7 @@ test("a comment with no stored kind still answers with an explicit null", async 
 test("an agent can ask for fields=kind without a 400", async () => {
   const route = loadRoute(
     [commentFixture({ id: 5, kind: "question" })],
-    { fields: ["kind"] },
+    { fields: ["kind"], filter: {} },
   );
 
   const response = await route.GET({
@@ -178,7 +178,7 @@ test("an agent can ask for fields=kind without a 400", async () => {
 });
 
 test("a field Hypertask does not serve is still refused", async () => {
-  const route = loadRoute([], { fields: ["kindred"] });
+  const route = loadRoute([], { fields: ["kindred"], filter: {} });
 
   const response = await route.GET({
     nextUrl: { searchParams: new URLSearchParams({ task_id: "100" }) },
