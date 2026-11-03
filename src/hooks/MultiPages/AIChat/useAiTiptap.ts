@@ -19,6 +19,8 @@ import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6906_AUTOCAP_UNDO_FLAG, LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
+import { usePathname } from "next/navigation";
 
 const DisableEnter = Extension.create({
   addKeyboardShortcuts() {
@@ -50,6 +52,11 @@ const useTiptapForAI = ({
   else autocapUndoRef.current = false;
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
+  const pathname = usePathname();
+  const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const fullScreenChat = chatCleanup && (pathname ?? "").startsWith("/chat");
+  const fullScreenChatRef = useRef(false);
+  fullScreenChatRef.current = fullScreenChat;
 
   const editor = useEditor({
     extensions: [
@@ -74,10 +81,11 @@ const useTiptapForAI = ({
       }),
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
-        placeholder: () =>
-          isMobileRef.current
-            ? `@ for context`
-            : `Focus with CTRL + Q, @ for context`,
+        placeholder: () => {
+          if (isMobileRef.current) return `@ for context`;
+          if (fullScreenChatRef.current) return `Ask anything, @ for context`;
+          return `Focus with CTRL + Q, @ for context`;
+        },
         emptyEditorClass: `${styles.is_editor_empty}`,
         emptyNodeClass: "New Comment",
       }),

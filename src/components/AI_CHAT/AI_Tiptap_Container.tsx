@@ -58,6 +58,7 @@ import { AiComposerTextarea } from "./AiComposerTextarea";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
@@ -114,6 +115,7 @@ export function AI_Tiptap_Container({
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
+  const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
@@ -121,6 +123,7 @@ export function AI_Tiptap_Container({
   if (composeBoardChipFlag) composeBoardChipEnabled = true;
   const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
   const pathname = usePathname();
+  const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
   const isMbl = useContext(MobileViewContext);
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
@@ -314,7 +317,7 @@ export function AI_Tiptap_Container({
               flex flex-col
               scrollbar-none items-center bg-ai-tiptap
               ${styles.aiChatInput} outline-none border-0
-              ${isMbl ? "!rounded-[5px] px-3 pb-2 pt-3" : "!rounded-lg p-2"}
+              ${isMbl ? "!rounded-[5px] px-3 pb-2 pt-3" : fullScreenCleanup ? "!rounded-[4px] p-2" : "!rounded-lg p-2"}
             `}
         onKeyDown={controlledComposer ? undefined : tiptapKeydown}
         data-agent-chat-ai-composer={controlledComposer ? true : undefined}
@@ -352,6 +355,11 @@ export function AI_Tiptap_Container({
             controlledComposer
               ? "agent-chat-composer-editor"
               : "ai-chat-tiptap-editor"
+          }
+          title={
+            fullScreenCleanup && sharedShortcuts
+              ? `Focus · ${chatShortcutHint("focus")}`
+              : undefined
           }
           onPaste={controlledComposer ? undefined : handleEditorPaste}
         >
@@ -493,6 +501,7 @@ export function AI_Tiptap_Container({
                 editor={editor}
                 id={audioButtonId}
                 active={active}
+                hideDevicePicker={fullScreenCleanup}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}
@@ -516,6 +525,7 @@ export function AI_Tiptap_Container({
                 disabled={controlledComposer.sendDisabled}
                 queueMode={controlledComposer.queueMode}
                 mobile={Boolean(isMbl)}
+                label={fullScreenCleanup ? "Send" : undefined}
                 onClick={controlledComposer.onSend}
               />
             ) : !isTyping || !isEditorEmpty ? (
@@ -524,6 +534,7 @@ export function AI_Tiptap_Container({
                 isByokBlocked={isByokBlocked}
                 queueMode={isTyping}
                 mobile={Boolean(isMbl)}
+                label={fullScreenCleanup ? "Send" : undefined}
                 onClick={() => handleSendMessage()}
               />
             ) : null
@@ -699,6 +710,11 @@ function ContextList({
   onClick: (index: number) => void;
   mobile?: boolean;
 }) {
+  const pathname = usePathname();
+  const cleanup =
+    useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG) &&
+    (pathname?.startsWith("/chat") ?? false);
+
   if (mobile) {
     return (
       <div className="contents">
@@ -723,7 +739,7 @@ function ContextList({
     <div className="flex items-center gap-2 self-start flex-wrap">
       {items.map((item: MentionItem, index: number) => (
         <div
-          className={`relative group flex items-center justify-center gap-2 ${destination ? "rounded-sm border-thin border-border-light-gray-thin" : "rounded-md border-[2px] border-icon-dark-gray"} px-2 py-1 text-white-black hover:bg-hover-active`}
+          className={`relative group flex items-center justify-center gap-2 ${destination ? "rounded-sm border-thin border-border-light-gray-thin" : `${cleanup ? "rounded" : "rounded-md"} border-[2px] border-icon-dark-gray`} px-2 py-1 text-white-black hover:bg-hover-active`}
           key={`context-value-${index}`}
         >
           <X

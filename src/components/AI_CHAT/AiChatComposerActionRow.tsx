@@ -1,3 +1,5 @@
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
+import { useFlag } from "@/hooks/useFlag";
 import { Plus } from "lucide-react";
 import React, { type ReactNode, useEffect, useRef } from "react";
 
@@ -32,6 +34,7 @@ export function AiChatComposerActionRow({
   sendControl,
 }: AiChatComposerActionRowProps) {
   const overflowRef = useRef<HTMLDetailsElement>(null);
+  const cleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
 
   useEffect(() => {
     if (!mobile) return;
@@ -142,6 +145,14 @@ export function AiChatComposerActionRow({
                 {sendControl}
               </div>
             ) : null}
+          </>
+        ) : cleanup ? (
+          <>
+            {attachmentControl}
+            {contextControl}
+            {recorder}
+            {streamControl}
+            {sendControl}
           </>
         ) : (
           <>

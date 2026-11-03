@@ -12,6 +12,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG } from "@/lib/flags/definitions/htpr-7762-chat-new-session-focus";
 import { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG } from "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch";
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
@@ -420,6 +421,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const newSessionFocusEnabled = useFlag(HTPR_7762_CHAT_NEW_SESSION_FOCUS_FLAG);
   const ctrlTabSessionSwitchEnabled = useFlag(HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG);
+  const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const historyEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -708,91 +710,93 @@ export default function Chat({ initialSessionId }: ChatProps) {
             }
           }}
         >
-          {pagingRequested && sessionPagingEnabled && pagingError && (
-            <p role="alert" className="px-3 py-2 text-meta text-icon-dark-gray">
-              Couldn’t load older chats. Scroll to try again.
-            </p>
-          )}
-          {displayedSessionGroups.length === 0 ? (
-            <p className="px-3 py-2 text-meta text-icon-dark-gray">
-              {searchQuery ? "No chats found" : "No previous chats"}
-            </p>
-          ) : (
-            displayedSessionGroups.map((group) => (
-              <section key={group.title} className="mb-3">
-                <h2 className="px-3 pb-1 pt-2 text-micro font-medium text-icon-dark-gray">
-                  {group.title}
-                </h2>
-                <ul className="space-y-0.5">
-                  {group.sessions.map((session) => {
-                    const isActive = session.id === currentSession?.id;
-                    const isPinned = aiChatPinnedSessionIds.includes(
-                      session.id
-                    );
-                    return (
-                      <li key={session.id}>
-                        <div
-                          className={`group relative flex w-full items-center rounded transition-colors hover:bg-hover-active ${
-                            isActive || (shortcuts.enabled && searchQuery && displayedSessions[searchIndex]?.id === session.id) ? "bg-kanban-active-cardbg" : ""
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            aria-current={shortcuts.enabled && displayedSessions[searchIndex]?.id === session.id && searchQuery ? "true" : undefined}
-                            onClick={() => {
-                              selectSession(session.id);
-                              router.replace(
-                                buildFullScreenChatPath(returnPath, session.id)
-                              );
-                            }}
-                            className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left text-content"
+          <div className={cleanupEnabled ? "px-2" : undefined}>
+            {pagingRequested && sessionPagingEnabled && pagingError && (
+              <p role="alert" className="px-3 py-2 text-meta text-icon-dark-gray">
+                Couldn’t load older chats. Scroll to try again.
+              </p>
+            )}
+            {displayedSessionGroups.length === 0 ? (
+              <p className="px-3 py-2 text-meta text-icon-dark-gray">
+                {searchQuery ? "No chats found" : "No previous chats"}
+              </p>
+            ) : (
+              displayedSessionGroups.map((group) => (
+                <section key={group.title} className={cleanupEnabled ? "mb-4" : "mb-3"}>
+                  <h2 className={`pb-1 pt-2 text-micro font-medium text-icon-dark-gray ${cleanupEnabled ? "px-1" : "px-3"}`}>
+                    {group.title}
+                  </h2>
+                  <ul className={cleanupEnabled ? "space-y-2" : "space-y-0.5"}>
+                    {group.sessions.map((session) => {
+                      const isActive = session.id === currentSession?.id;
+                      const isPinned = aiChatPinnedSessionIds.includes(
+                        session.id
+                      );
+                      return (
+                        <li key={session.id}>
+                          <div
+                            className={`group relative flex w-full items-center rounded transition-colors hover:bg-hover-active ${
+                              isActive || (shortcuts.enabled && searchQuery && displayedSessions[searchIndex]?.id === session.id) ? "bg-kanban-active-cardbg" : ""
+                            }`}
                           >
-                            <span className="min-w-0 flex-1 truncate">
-                              {session.title}
-                            </span>
-                            <span className="shrink-0 text-micro text-icon-dark-gray transition-opacity group-hover:opacity-[0]">
-                              {formatDateDifference(session.updatedAt)}
-                            </span>
-                          </button>
-                          <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-[0] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
                             <button
                               type="button"
-                              title={shortcuts.enabled ? chatShortcutHint("pin") : undefined}
-                              aria-label={isPinned ? "Unpin chat" : "Pin chat"}
-                              onClick={(event) =>
-                                handleTogglePinnedSession(event, session.id)
-                              }
-                              className={cn(
-                                "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black",
-                                isPinned && "text-white-black"
-                              )}
+                              aria-current={shortcuts.enabled && displayedSessions[searchIndex]?.id === session.id && searchQuery ? "true" : undefined}
+                              onClick={() => {
+                                selectSession(session.id);
+                                router.replace(
+                                  buildFullScreenChatPath(returnPath, session.id)
+                                );
+                              }}
+                              className={`flex min-w-0 flex-1 items-center gap-3 text-left text-content ${cleanupEnabled ? "h-[29px] px-1" : "px-3 py-2"}`}
                             >
-                              <Pin
-                                size={16}
-                                fill={isPinned ? "currentColor" : "none"}
-                                strokeWidth={1.75}
-                              />
+                              <span className="min-w-0 flex-1 truncate">
+                                {session.title}
+                              </span>
+                              <span className="shrink-0 text-micro text-icon-dark-gray transition-opacity group-hover:opacity-[0]">
+                                {formatDateDifference(session.updatedAt)}
+                              </span>
                             </button>
-                            <button
-                              type="button"
-                              title={shortcuts.enabled ? chatShortcutHint("delete") : undefined}
-                              aria-label="Delete chat"
-                              onClick={(event) =>
-                                handleDeleteSession(event, session.id)
-                              }
-                              className="rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black"
-                            >
-                              <Trash2 size={16} strokeWidth={1.75} />
-                            </button>
+                            <div className="pointer-events-none absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-[0] transition-opacity group-hover:pointer-events-auto group-hover:opacity-100">
+                              <button
+                                type="button"
+                                title={shortcuts.enabled ? chatShortcutHint("pin") : undefined}
+                                aria-label={isPinned ? "Unpin chat" : "Pin chat"}
+                                onClick={(event) =>
+                                  handleTogglePinnedSession(event, session.id)
+                                }
+                                className={cn(
+                                  "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black",
+                                  isPinned && "text-white-black"
+                                )}
+                              >
+                                <Pin
+                                  size={16}
+                                  fill={isPinned ? "currentColor" : "none"}
+                                  strokeWidth={1.75}
+                                />
+                              </button>
+                              <button
+                                type="button"
+                                title={shortcuts.enabled ? chatShortcutHint("delete") : undefined}
+                                aria-label="Delete chat"
+                                onClick={(event) =>
+                                  handleDeleteSession(event, session.id)
+                                }
+                                className="rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black"
+                              >
+                                <Trash2 size={16} strokeWidth={1.75} />
+                              </button>
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </section>
-            ))
-          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ))
+            )}
+          </div>
           {pagingRequested && sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
         </div>
         <FullScreenChatRailResizeHandle />
@@ -801,11 +805,13 @@ export default function Chat({ initialSessionId }: ChatProps) {
       <section className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-12 shrink-0 items-center justify-between px-3 md:px-4">
           <div className="flex min-w-0 items-center gap-2">
-            <Sparkles
-              size={14}
-              className="shrink-0 text-hypertasks-ai-purple"
-              strokeWidth={1.75}
-            />
+            {!cleanupEnabled && (
+              <Sparkles
+                size={14}
+                className="shrink-0 text-hypertasks-ai-purple"
+                strokeWidth={1.75}
+              />
+            )}
             <h1 className="truncate text-content font-medium">
               {currentSession?.title ?? "AI Chat"}
             </h1>
