@@ -9,6 +9,7 @@ import {
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
+import { withoutInternalFlags } from "@/lib/flags/internal";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -32,7 +33,9 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true });
+    const flags = withoutInternalFlags(
+      await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true }),
+    );
     return noStore({ flags, detailsEnabled: true });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);
