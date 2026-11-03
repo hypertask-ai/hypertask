@@ -545,7 +545,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                 )}
                 <span>{aiChatPinned ? "Unpin AI chat" : "Pin AI chat open"}</span>
               </button>
-              {!isMbl && aiSessionActionsAvailable && !windowDrag && (
+              {!isMbl && aiSessionActionsAvailable && (!multiChatWindowsEnabled || !windowDrag) && (
                 <button
                   type="button"
                   role="menuitem"
