@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { loadModule } = require("./helpers/loadModule.cjs");
+const { load } = require("./task-route-loader.cjs");
 
 const FLAG = "htpr-8471-board-refusal-next-step";
 
@@ -19,7 +19,7 @@ class StubResponse {
 
 function loadCreateRoute({ flagOn }) {
   const calls = { created: 0, flagChecks: [] };
-  const POST = loadModule("src/lib/mcp/operations/tasks/create/operation.ts", {
+  const route = load("src/lib/mcp/operations/tasks/create/operation.ts", {
     "next/server": { NextResponse: StubResponse },
     "@/lib/agents/writing": { AgentWritingError: class extends Error {} },
     "@/lib/agents/writingEnforcement": { enforceAgentWriting: async () => {} },
@@ -78,7 +78,7 @@ function loadCreateRoute({ flagOn }) {
     "@/lib/flags/definitions/htpr-8471-board-refusal-next-step": { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG: FLAG },
     "@/lib/prisma": { default: { label: { findMany: async () => [] } } },
   });
-  return { POST, calls };
+  return { POST: route.POST, calls };
 }
 
 const request = () => ({ body: { title: "CI idea" }, headers: { get: () => null } });
