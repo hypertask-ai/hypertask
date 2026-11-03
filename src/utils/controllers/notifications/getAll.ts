@@ -1,7 +1,6 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
-import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -176,7 +175,7 @@ export async function getInboxNotifications(
 
   if (!selectedRows.length) return [];
 
-  const rows = await client.notification.findMany({
+  return client.notification.findMany({
     include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
@@ -186,30 +185,6 @@ export async function getInboxNotifications(
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     relationLoadStrategy: "join",
-  });
-  if (withCachedDescription && await isFeatureEnabled(HTPR_8264_INBOX_ROW_FILL_FLAG, userId)) {
-    return withLatestHumanComments(rows, client);
-  }
-  return rows;
-}
-
-async function withLatestHumanComments<T extends { taskId: number | null; task?: unknown }>(
-  rows: T[],
-  client: typeof prisma,
-): Promise<T[]> {
-  const taskIds = rows.flatMap((row) => (row.taskId == null ? [] : [row.taskId]));
-  if (taskIds.length === 0) return rows;
-  const comments = await client.comment.findMany({
-    where: { taskId: { in: taskIds }, agentId: null, creatorId: { not: null } },
-    orderBy: [{ taskId: "asc" }, { createdAt: "desc" }],
-    distinct: ["taskId"],
-    select: { taskId: true, text: true, creator: { select: { displayName: true } } },
-  });
-  const latestByTask = new Map(comments.map((comment) => [comment.taskId, comment]));
-  return rows.map((row) => {
-    const latest = row.taskId == null ? undefined : latestByTask.get(row.taskId);
-    if (!latest || row.task == null || typeof row.task !== "object") return row;
-    return { ...row, task: { ...(row.task as object), comments: [latest] } };
   });
 }
 

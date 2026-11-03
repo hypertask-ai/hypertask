@@ -95,11 +95,3 @@ test("the preview keeps one line and the tags and date stay outside it", () => {
   assert.match(row, /className="truncate line-clamp-1 xs:max-w-\[92vw\] md:max-w-full xs:whitespace-pre-wrap md:whitespace-nowrap"/);
   assert.match(row, /md:min-w-\[62px\] md:shrink-0/);
 });
-
-test("the inbox list sends the latest human comment and description for the row, behind the flag", () => {
-  const controller = read("src/utils/controllers/notifications/getAll.ts");
-  assert.match(controller, /if \(withCachedDescription && await isFeatureEnabled\(HTPR_8264_INBOX_ROW_FILL_FLAG, userId\)\)/);
-  assert.match(controller, /return withLatestHumanComments\(rows, client\)/);
-  assert.match(controller, /select: \{ taskId: true, text: true, creator: \{ select: \{ displayName: true \} \} \}/);
-  assert.match(controller, /\.\.\.\(includeCachedDescription \? \{ description_: \{ select: \{ content: true \} \} \} : \{\}\)/);
-});
