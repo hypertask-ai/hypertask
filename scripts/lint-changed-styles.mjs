@@ -37,6 +37,7 @@ function utilityOffsets(value) {
   for (const match of value.matchAll(/\S+/g)) {
     const token = match[0];
     if (palette.test(token) || typography.test(token)) offsets.push(match.index);
+    if (/!?z-\[/.test(token)) offsets.push(match.index);
     const start = token.indexOf("[");
     const end = token.lastIndexOf("]");
     if (start >= 0 && end > start) offsets.push(...styleOffsets(token.slice(start + 1, end)).map((offset) => match.index + start + 1 + offset));
