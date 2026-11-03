@@ -85,6 +85,7 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
     "@/utils/controllers/pages/htmlCanvas": canvas,
     "@/utils/controllers/pages/htmlToMarkdown": jiti(path.join(root, "src/utils/controllers/pages/htmlToMarkdown.ts")),
     "@/lib/mcp/operations/pages/helpers": { ...routeUtils, canAccessProject: async () => accessible },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
   };
   const { POST } = load("src/lib/mcp/operations/pages/update/operation.ts", stubs);
   const { GET } = load("src/lib/mcp/operations/pages/get/operation.ts", stubs);

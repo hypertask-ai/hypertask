@@ -144,6 +144,7 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
     },
     '@/utils/controllers/pages/htmlToMarkdown': load('src/utils/controllers/pages/htmlToMarkdown.ts', { turndown: require('turndown') }),
     '@/utils/controllers/pages/htmlCanvas': { decodeHtmlCanvas: () => null },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     ai: { tool: (definition) => definition },
     zod: require('zod'),
     '@/lib/ai/tools/execution': { withToolErrors: (fn) => fn },

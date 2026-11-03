@@ -325,7 +325,7 @@ test('agent feature-title warnings are nonblocking and idempotent receipts retai
       assert.equal(receipt.warnings[0].message.includes(DECISIONS_GUIDANCE), false)
       assert.doesNotMatch(receipt.warnings[0].message, /Question:|@mention|split=Decisions/)
     }
-    assert.deepEqual(receipt.page, { publicId: 'fixture-page', id: 3, title, version: 1, url: 'https://app.hypertask.ai/page/fixture-page' })
+    assert.deepEqual(receipt.page, { publicId: 'fixture-page', id: 3, title, version: 1, content_type: 'markdown', url: 'https://app.hypertask.ai/page/fixture-page' })
     assert.deepEqual(await (await route.post(title, 'repeat-key')).json(), receipt)
     assert.equal(route.creates(), 1)
   }

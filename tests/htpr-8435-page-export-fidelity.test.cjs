@@ -38,6 +38,20 @@ test("the table export renders back to the same cells", () => {
   assert.equal((html.match(/<tr>/g) ?? []).length, 3);
 });
 
+test("a table caption and a nested table keep their text without extra columns", () => {
+  const { htmlToMarkdownWithTables } = loadModule("src/utils/controllers/pages/htmlToMarkdown.ts");
+  const markdown = htmlToMarkdownWithTables(
+    '<table><caption>All amounts in USD</caption><thead><tr><th>Case</th><th>Result</th></tr></thead>' +
+    '<tbody><tr><td>Outer</td><td><table><tr><th>In</th><th>Val</th></tr></table></td></tr></tbody></table>'
+  );
+  assert.match(markdown, /^All amounts in USD$/m);
+  assert.match(markdown, /^\| Case \| Result \|$/m);
+  const rows = markdown.split("\n").filter((line) => line.startsWith("|"));
+  assert.equal(rows.length, 3);
+  assert.match(rows[2], /^\| Outer \| \\?\| In/);
+  assert.equal((rows[2].match(/(?<!\\)\|/g) ?? []).length, 3);
+});
+
 test("the old export still flattens tables so the flag can revert it", () => {
   const { htmlToMarkdown } = loadModule("src/utils/controllers/pages/htmlToMarkdown.ts");
   const markdown = htmlToMarkdown(report);
@@ -47,9 +61,8 @@ test("the old export still flattens tables so the flag can revert it", () => {
 
 test("the page read picks the table export only while the flag is on", () => {
   const source = read("src/lib/mcp/operations/pages/get/operation.ts");
-  assert.match(source, /HTPR_8435_PAGE_EXPORT_TABLES_FLAG/);
-  assert.match(source, /await isFeatureEnabled\(HTPR_8435_PAGE_EXPORT_TABLES_FLAG, ctx\.user\.id\)/);
-  assert.match(source, /keepTables[\s\S]{0,120}htmlToMarkdownWithTables\(page\.contentHtml\)[\s\S]{0,120}htmlToMarkdown\(page\.contentHtml\)/);
+  assert.match(source, /await isFeatureEnabled\('htpr-8435-page-export-tables', ctx\.user\.id\)/);
+  assert.match(source, /keepTables[\s\S]{0,160}htmlToMarkdownWithTables\(page\.contentHtml\)[\s\S]{0,120}htmlToMarkdown\(page\.contentHtml\)/);
 });
 
 test("create names the page type it stored", () => {
