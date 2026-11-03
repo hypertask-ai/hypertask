@@ -64,10 +64,8 @@ const NotificationRow = (props: Props) => {
             handleMouseEnter={handleMouseEnter}
             handleMouseLeave={handleMouseLeave}
             openTask={handleClick}
-            className={cn(
-                "relative flex cursor-pointer  py-[8px]   px-[20px] md:px-0 rounded-md justify-between w-full flex-col md:flex-row",
-                rowFill ? "md:space-x-4" : "md:space-x-8"
-            )}
+            className={`relative flex cursor-pointer  ${rowFill ? "md:space-x-4" : "md:space-x-8"}  py-[8px]   px-[20px] md:px-0 rounded-md
+                justify-between w-full flex-col md:flex-row`}
         >
 
             <div className={cn('flex md:space-x-6', rowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>

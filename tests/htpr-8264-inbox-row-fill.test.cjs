@@ -37,7 +37,7 @@ test("the row drops the fixed sender and title columns only when the flag is on"
   assert.match(row, /rowFill \? "md:flex-1" : "md:w-\[40%\]"/);
   assert.match(row, /rowFill \? "md:space-x-4" : "md:space-x-8"/);
   assert.match(row, /const flipMentionHierarchy = !rowFill && notification.type === "Mentioned"/);
-  assert.match(row, /rowFill\s*\?\s*"flex-1 min-w-0 truncate flex-column"/);
+  assert.match(row, /rowFill\s*\?\s*"flex-1 min-w-0 truncate"/);
 });
 
 test("a reminder row fills with its reason, the latest human comment and the description", () => {
