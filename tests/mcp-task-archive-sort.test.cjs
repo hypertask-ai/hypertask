@@ -71,6 +71,7 @@ function loadRoute(tasks = []) {
       encodeCursor: () => null,
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/pullRequests/taskPullRequests": { refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests },
     "@/lib/mcp/tasks/resolveTask": {
       findTaskByIdentifier: async () => null,
       TaskIdentifierAmbiguityError: class TaskIdentifierAmbiguityError extends Error {},
