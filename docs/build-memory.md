@@ -156,3 +156,26 @@ The build script now sets `NEXT_WEBPACK_PARALLELISM=2`, half of the 4 vCPU / 8 G
 The expected cost is build wall-clock only, which the 45 minute build timeout leaves room for.
 
 If a production build still reports `out_of_memory` at 2, the next step is 1. Below that, the remaining lever without money is the heap cap: lowering `--max-old-space-size` from 4096 makes V8 collect earlier and hands the difference to native memory, and if the heap is then genuinely too small the log says "Reached heap limit" instead of dying silently. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
+
+## Parallelism 1 (2026-11-03)
+
+Ticket: https://app.hypertask.ai/detail/project-15/8458
+
+The 2 cap (HYCI-98, merged in `319f94d7a5` at 06:07:13 UTC) held for most of the day, then stopped holding. Measured from the GitHub deployment record and the two build logs, not from a local build:
+
+| Fact | Value |
+| --- | --- |
+| Production deployments created after the 2 cap landed | 57 |
+| Of those green | 52 |
+| Of those failed | 5 (`77c07358e1` 07:21, `f79e9a2f6d` 07:28, `c85a55ac24` 07:30, `58a2d31036` 18:50, `9e5741caf7` 18:51) |
+| Confirmed `out_of_memory` from the build log | `58a2d31036` (`dpl_ASKr2CGug9kgdCsZjNHKMoc7KMz2`) and `9e5741caf7` (`dpl_4QPHMwemMHgrsuQdkBZpBg4nTTvo`) |
+| Kill point in `dpl_4QPHMwemMHgrsuQdkBZpBg4nTTvo` | 117 s into "Creating an optimized production build", no module output yet |
+| Live build served by the app at 19:03 UTC | `dc91c23a26` (last green, 18:36), two merges behind |
+
+Both confirmed kills are the same signature as the 4 cap: `SIGKILL` with no "Reached heap limit", so the V8 heap stayed inside its 4096 MB cap and the container filled from the native side. The three 07:21 to 07:30 failures are not confirmed from this host (no Vercel token, `api.vercel.com` unreachable); they cluster at the same ceiling and the next deployment at 07:48 was green.
+
+`e0209bbe59` (HTPR-8377) has no deployment record at all. Its build was superseded by the two later pushes on `production` before it started, so nothing was skipped by `scripts/vercel-ignore-build.cjs`; the merge is contained in the newer commits, so it needs no rebuild of its own.
+
+The build script now sets `NEXT_WEBPACK_PARALLELISM=1`: one module build at a time, so the native side of the compile no longer adds a second SWC transform's AST on top of the first. `tests/build-memory-config.test.cjs` fails if the cap goes above 1 or is dropped. The expected cost is build wall-clock only, inside the 45 minute build timeout.
+
+If one module build at a time still reports `out_of_memory`, the same ceiling is being reached from a single module and the remaining lever without money is the heap cap below. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
