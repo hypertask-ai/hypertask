@@ -181,8 +181,18 @@ export const baseTaskCommands: ICommandList[] = [
 
 export const getCommentCommands = (commandOptions?: IAllCommands): CommandGroup => {
   const commentProps = commandOptions?.commentOptions;
+  const blockerCommentCommand: ICommandList | null =
+    commentProps?.blockerCommentEnabled
+      ? {
+          key: "blockerComment",
+          name: commentProps.isBlocker ? "Unmark as blocker" : "Mark as blocker",
+          commandMode: CommandMode.BlockerComment,
+          keywords: "blocker blocked reason unblock mark unmark comment",
+        }
+      : null;
   const commandLists: Array<ICommandList | null> = commentProps
     ? [
+        commentProps.isBlocker ? blockerCommentCommand : null,
         commentProps.isCurrentUserCreator
           ? {
               key: "editcomment",
@@ -225,13 +235,8 @@ export const getCommentCommands = (commandOptions?: IAllCommands): CommandGroup 
           keyboard: ["CTRL", "SHIFT", "P"],
           keywords: "pin unpin comment message top important fixed save highlight",
         },
-        commentProps.blockerCommentEnabled
-          ? {
-              key: "blockerComment",
-              name: commentProps.isBlocker ? "Unmark as blocker" : "Mark as blocker",
-              commandMode: CommandMode.BlockerComment,
-              keywords: "blocker blocked reason unblock mark unmark comment",
-            }
+        commentProps.blockerCommentEnabled && !commentProps.isBlocker
+          ? blockerCommentCommand
           : null,
         {
           key: "copyCommentContent",
