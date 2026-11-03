@@ -406,7 +406,7 @@ const UpdateKanban = () => {
       archiveColumnBoundary || keepColumnFocus ? scope : "board",
     );
     updateActiveItemAndItemInView(nextId, projectId, sectionId);
-    if (keepColumnFocus && nextId === null) {
+    if (nextId === null && (keepColumnFocus || (archiveColumnBoundary && scope === "column"))) {
       globalThis.document
         ?.getElementById(`droppable-section-container-${sectionId}`)
         ?.closest<HTMLElement>(".section-container")
@@ -480,8 +480,7 @@ const UpdateKanban = () => {
         itemIndex,
         projectId,
         scope: status === "Archive" ? "column" : "board",
-        keepColumnFocus:
-          status === "Archive" && (archiveColumnBoundary || options.focusSections !== undefined),
+        keepColumnFocus: status === "Archive" && options.focusSections !== undefined,
       });
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);

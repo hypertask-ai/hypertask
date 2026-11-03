@@ -36,7 +36,7 @@ function load(name, file, env) {
   return compile(declaration, env, `{${name}}`)[name];
 }
 
-function fixture({ droppable = true } = {}) {
+function fixture({ droppable = true, boundary = true } = {}) {
   const dom = new JSDOM(
     '<div id="sectionsContainer">' +
       `<div class="section-container" tabindex="-1">${droppable ? '<div id="droppable-section-container-11"></div>' : ''}` +
@@ -52,7 +52,7 @@ function fixture({ droppable = true } = {}) {
   let activeId = 1;
   const reAdjustFocusFromCurrContext = load('reAdjustFocusFromCurrContext', 'src/hooks/MultiPages/useUpdateTaskInBoards.tsx', {
     nextFocusAfterRemoval,
-    archiveColumnBoundary: true,
+    archiveColumnBoundary: boundary,
     updateActiveItemAndItemInView: (id) => {
       activeId = id;
       focused.push(id);
@@ -105,8 +105,8 @@ test('a column with cards left keeps visible card order and does not take column
   assert.equal(f.document.activeElement.id, 'task-1');
 });
 
-test('without column focus the helper keeps the old behaviour', () => {
-  const f = fixture();
+test('with the column-boundary rule off the helper keeps the old behaviour', () => {
+  const f = fixture({ boundary: false });
   f.adjust([{ sectionId: 11, items: [{ id: 1 }] }], { keepColumnFocus: false });
   assert.equal(f.active(), null);
   assert.equal(f.document.activeElement.id, 'task-1');
