@@ -1,39 +1,28 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const path = require('node:path')
-const { createJiti } = require('jiti')
+const { loadModule } = require('./helpers/loadModule.cjs')
 
-const root = path.resolve(__dirname, '..')
 const calls = []
 let rows = []
-function stub(relativePath, exports) {
-  const filename = path.join(root, relativePath)
-  require.cache[filename] = { id: filename, filename, loaded: true, exports }
-}
-stub('src/utils/controllers/projects/getAllIncludes.ts', {
-  projectContentAccessWhere: (userId, agentId, teamScope) => ({
-    probe: 'project-access',
-    userId,
-    agentId,
-    teamScope,
-  }),
-})
-stub('src/lib/prisma.ts', {
-  __esModule: true,
-  default: {
-    agentRunActivity: {
-      findMany: async (query) => {
-        calls.push(query)
-        return rows.slice(query.skip ?? 0, (query.skip ?? 0) + query.take)
-      },
+const prisma = {
+  agentRunActivity: {
+    findMany: async (query) => {
+      calls.push(query)
+      return rows.slice(query.skip ?? 0, (query.skip ?? 0) + query.take)
     },
   },
+}
+const { loadTaskAgentLog } = loadModule('src/lib/agentRuns/taskAgentLog.ts', {
+  '@/lib/prisma': { __esModule: true, default: prisma },
+  '@/utils/controllers/projects/getAllIncludes': {
+    projectContentAccessWhere: (userId, agentId, teamScope) => ({
+      probe: 'project-access',
+      userId,
+      agentId,
+      teamScope,
+    }),
+  },
 })
-
-const { loadTaskAgentLog } = createJiti(__filename, {
-  alias: { '@': path.join(root, 'src') },
-  interopDefault: true,
-})(path.join(root, 'src/lib/agentRuns/taskAgentLog.ts'))
 
 const baseCall = {
   taskId: 42,

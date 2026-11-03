@@ -77,7 +77,7 @@ function fixture() {
   }
   const prisma = {
     task: model(tasks, 'task'), project: model(projects, 'project'), notification: model(notifications, 'notification'), user: model([user], 'user'), agent: model(user.agents, 'agent'), taskNumberAlias: model([], 'alias'), section: model(projects.map(project => ({ id: project.id, projectId: project.id, section_title: 'Todo', deleted: false })), 'section'),
-    revokedToken: model([], 'revoked'), team: model([{ id: 'team', googleAccountId: 'account' }], 'team'),
+    revokedToken: model([], 'revoked'), team: model([{ id: 'team', googleAccountId: 'account' }], 'team'), agentRunActivity: model([], 'agentRunActivity'),
     userSetting: { findUnique: async () => null },
     $transaction: async run => run(prisma),
   };

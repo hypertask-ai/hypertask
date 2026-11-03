@@ -15,6 +15,7 @@ function loadRoute(comments) {
 
   let commentFindManyQuery;
   const prisma = {
+    agentRunActivity: { findMany: async () => [] },
     comment: {
       count: async () => comments.length,
       findMany: async (query) => {
