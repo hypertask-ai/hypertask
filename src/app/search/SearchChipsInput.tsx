@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6371_MOBILE_SEARCH_FLAG, HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG, HTPR_7563_SEARCH_ESC_FOOTER_FLAG, HTPR_7559_ENTER_RUNS_SEARCH_FLAG } from "@/lib/flags/keys";
 import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
@@ -46,9 +46,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const escLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const escFooterEnabled = useFlag(HTPR_7563_SEARCH_ESC_FOOTER_FLAG);
   const escFooterText = escFooterEnabled && escLeavesEnabled ? 'Esc to go back' : 'Esc to close';
-  const operatorLogicEnabled = useFlag(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG);
   const operatorColoursEnabled = useFlag(HTPR_7387_SEARCH_OPERATOR_COLOURS_FLAG);
-  const logicEnabled = operatorLogicEnabled && operatorColoursEnabled;
+  const logicEnabled = operatorColoursEnabled;
   const [editing, setEditing] = useState(false);
   const [names, setNames] = useState<Names>({});
   const [chipLabels, setChipLabels] = useState<Record<string, string>>({});
@@ -76,7 +75,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     }))].join(',') : '';
   const summary = [...chips.map(chipText), text.trim()].filter(Boolean).join(' ');
   const completion = operatorColoursEnabled
-    ? searchCompletion(text, names, layoutEnabled, operatorLogicEnabled)
+    ? searchCompletion(text, names, layoutEnabled, logicEnabled)
     : searchCompletion(text, names, layoutEnabled);
   const tips = (focused || layoutEnabled) && !value.trim();
   const plainSearch = enterRunsSearchEnabled && !tips && !typedFilter(text, completion);
