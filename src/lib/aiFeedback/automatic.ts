@@ -144,7 +144,7 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
     ...tool,
     execute: async (args, token, invocation) => {
       if (tool.name === 'hypertask_report_feedback') return tool.execute(args, token, invocation)
-      const key = failureKey(tool.name, args)
+      const key = failureKey(userId, tool.name, args)
       try {
         const text = await tool.execute(args, token, invocation)
         let result: unknown
@@ -154,7 +154,7 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
           const input: AutomaticFeedbackInput = { surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }
           if (await quietFixableReports(userId)) deferAutomaticFeedback(key, input, userId)
           else queueAiFeedback(input, userId)
-        } else {
+        } else if (!status || status < 400) {
           noteSuccess(key)
         }
         return text

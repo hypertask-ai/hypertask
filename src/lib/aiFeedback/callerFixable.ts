@@ -13,11 +13,12 @@ export function callerCanFixRefusal(details: FeedbackRefusal | undefined, status
   return status < 500 && callerCanFix(details ?? {});
 }
 
-const INPUT_REFUSAL_CODES = new Set(["unrecognized_keys", "invalid_type", "invalid_literal", "invalid_union", "invalid_enum_value", "invalid_string", "invalid_date", "invalid_key", "too_small", "too_big", "not_multiple_of", "unrecognized", "custom"]);
+const SHAPE_REFUSAL_CODES = new Set(["unrecognized_keys", "invalid_type", "invalid_literal", "invalid_union", "invalid_enum_value", "invalid_string", "invalid_date", "invalid_key", "too_small", "too_big", "not_multiple_of", "unrecognized"]);
 
 export function quietInputRefusal(input: { status?: number; errorCode?: string; field?: string }): boolean {
   const code = (input.errorCode ?? "").toLowerCase();
-  return input.status === 400 && Boolean(input.field) && INPUT_REFUSAL_CODES.has(code);
+  if (input.status !== 400) return false;
+  return SHAPE_REFUSAL_CODES.has(code) || (code === "custom" && Boolean(input.field));
 }
 
 export const RECENTLY_FILED_HOURS = 24;
