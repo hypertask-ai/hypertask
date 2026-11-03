@@ -88,7 +88,7 @@ async function prepare({ prompt, enabled = true, aiMode = "AiTaskWriter" }) {
   test(`flag off preserves today's full prompt`, async () => {
     const prompt = "Behebe den Fehler beim Speichern. Bitte auf Deutsch schreiben";
     const { run } = await prepare({ prompt, enabled: false });
-    const expected = taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_RULES}`);
+    const expected = taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`);
     assert.equal(run.instructions, `${expected}\n\nUse the board structure.`);
   });
 }

@@ -177,7 +177,7 @@ function harness({ enabled = true, plan = "Pro", saved = null, teamByok = false,
     "@/app/api/ai/_lib/skills": { resolveSkills: async (text) => ({ cleanedText: text, skills: [] }) },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", createTaskWriterSystemPromptTemplate: () => "Fixture" },
-    "@/app/api/ai/_lib/taskWriterBoardResearch": { buildTaskWriterRetrievalQuery: ({ prompt }) => prompt, formatRelatedTicketCandidates: () => "", formatStyleExamples: () => "", formatBoardVocabulary: () => "", TASK_WRITER_BOARD_RESEARCH_RULES: "", TASK_WRITER_RELATED_CANDIDATE_LIMIT: 8, TASK_WRITER_STYLE_EXAMPLE_LIMIT: 3 },
+    "@/app/api/ai/_lib/taskWriterBoardResearch": { buildTaskWriterRetrievalQuery: ({ prompt }) => prompt, formatRelatedTicketCandidates: () => "", formatStyleExamples: () => "", formatBoardVocabulary: () => "", TASK_WRITER_BOARD_RESEARCH_WEB_RULES: "", TASK_WRITER_RELATED_CANDIDATE_LIMIT: 8, TASK_WRITER_STYLE_EXAMPLE_LIMIT: 3 },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { searchTasks: async () => [] },
     "@/app/api/ai/_lib/boardTemplateContext": { BOARD_TEMPLATE_LIMIT: 10 },
   });
