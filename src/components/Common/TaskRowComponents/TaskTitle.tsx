@@ -10,6 +10,8 @@ import { useNotificationContext } from '@/lib/contexts/NotificationContext';
 import { cn } from '@/utils/undoActions/helperFuncs';
 import { inboxConfig, systemDefinedSplits } from '@/lib/configs/inbox.config';
 import { formatWaitingOnAge } from '@/lib/waitingOn';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-row-fill';
 
 interface ITitleContainer {
     notification?: INotification;
@@ -152,7 +154,8 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
     const isBlockedByMe =
         task.waitingOnUserId != null &&
         task.waitingOnUserId === notification?.userId;
-    const flipMentionHierarchy = notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
+    const flipMentionHierarchy = !rowFill && notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
 
