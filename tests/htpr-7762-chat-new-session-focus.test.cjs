@@ -85,6 +85,7 @@ function fullScreenNewChat(chat, { enabled = false, sessions = [], activeSession
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7762-chat-new-session-focus": flag,
     "@/lib/flags/definitions/htpr-7763-ctrl-tab-session-switch": { HTPR_7763_CTRL_TAB_SESSION_SWITCH_FLAG: "htpr-7763-ctrl-tab-session-switch" },
+    "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
     "@/hooks/MultiPages/AIChat/useChatShortcuts": { useChatShortcuts: () => ({ enabled: false }) },
     "@/lib/aiChat/chatShortcuts": { chatShortcutHint: () => "" },
     "@/components/Modals/OptionPicker": { default: "OptionPicker" },
