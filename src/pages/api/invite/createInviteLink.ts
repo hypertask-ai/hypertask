@@ -202,7 +202,7 @@ async function sendInviteToNonMember(
     title: invite.project.title ?? "",
     link: inviteLink,
   });
-  if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId, userId));
+  if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId));
 }
 
 export const generateInviteLink = async (

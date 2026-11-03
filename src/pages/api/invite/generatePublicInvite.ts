@@ -84,7 +84,7 @@ export default  async function handler(
                 },
                 include:{project:{select:{name:true}}},
             })
-            const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", session.userId, newInvite.userId);
+            const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", session.userId);
             return { newInvite, analyticsKey };
         });
         processAnalyticsIntentSoon(analyticsKey);

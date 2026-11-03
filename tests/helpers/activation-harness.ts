@@ -149,7 +149,7 @@ export function activationHarness() {
     "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
       constructor() { if (failure === "constructor") throw Error("mock client unavailable"); }
@@ -221,7 +221,7 @@ export function activationHarness() {
       if (!agentId || after.status === "Deleted" || (before.sectionId === after.sectionId && before.section === after.section && before.status === after.status)) return;
       scheduleCapture(() => load("src/lib/telemetry/activationOccurrences.ts").captureAgentTaskCompletion({ before, after, completedAt: (after.updatedAt ?? new Date()).toISOString() }));
     },
-    invite: (invite: any, method: string, inviterUserId = invite.userId, legacyUserId = inviterUserId) => scheduleCapture(() => load("src/lib/telemetry/inviteAnalytics.ts").captureInviteSent({ invite, method, inviterUserId, legacyUserId, occurredAt: new Date().toISOString() })),
+    invite: (invite: any, method: string, inviterUserId = invite.userId) => scheduleCapture(() => load("src/lib/telemetry/inviteAnalytics.ts").captureInviteSent({ invite, method, inviterUserId, occurredAt: new Date().toISOString() })),
     member: (membershipId: number, userId: number, projectId: number, invitationId: string | null = null, inviterUserId: number | null = null) => scheduleCapture(() => load("src/lib/telemetry/inviteAnalytics.ts").captureMemberJoined({ membershipId, userId, projectId, invitationId, inviterUserId, occurredAt: new Date().toISOString() })),
   };
   async function connect(...args: any[]) {
