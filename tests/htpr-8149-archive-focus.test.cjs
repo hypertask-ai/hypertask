@@ -9,7 +9,7 @@ const os = require('node:os');
 const { loadModule } = require('./helpers/loadModule.cjs');
 const { JSDOM } = require('jsdom');
 const jiti = require('jiti')(__filename);
-const { focusCardNextTo, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
+const { focusCardNextTo, keepBoardFocus, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
 
 function source(file) {
   return ts.createSourceFile(file, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -63,8 +63,7 @@ function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
   };
   render();
   const env = {
-    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCardNextTo, document,
-    requestAnimationFrame: callback => callback(),
+    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCardNextTo, keepBoardFocus, document,
     updateActiveItemAndItemInView: id => { active = id; },
     _currentProject: { id: 7049 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [{ sections, filteredSections: sections, tasks: sections.flatMap(s => s.items) }] }, projectToUpdateIndex: 0 }),
@@ -158,6 +157,7 @@ test('a column that cannot hold focus hands it to the board container', async ()
   f.column.focus = () => {};
   f.focus(1);
   await f.press();
+  await new Promise(resolve => setTimeout(resolve, 120));
   assert.equal(f.active(), null);
   assert.equal(f.document.activeElement.id, 'sectionsContainer');
   assert.equal(f.document.getElementById('sectionsContainer').getAttribute('tabindex'), '-1');

@@ -20,6 +20,20 @@ export function focusCardNextTo(column: HTMLElement | null, removedId: number): 
   return Number(target.id.slice("task-".length));
 }
 
+export function keepBoardFocus(attempt = 0): void {
+  setTimeout(() => {
+    const doc = globalThis.document;
+    const active = doc?.activeElement as HTMLElement | null;
+    const focusLost = !active || active === doc?.body || active.id === "body-layout";
+    if (!focusLost) return;
+    const container = doc?.getElementById("sectionsContainer");
+    if (!container) return;
+    container.setAttribute("tabindex", "-1");
+    container.focus({ preventScroll: true });
+    if (doc?.activeElement !== container && attempt < 10) keepBoardFocus(attempt + 1);
+  }, 50);
+}
+
 export function nextFocusAfterRemoval(
   sections: FocusSection[],
   sectionIndex: number,
