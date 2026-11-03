@@ -42,13 +42,9 @@ test("listening replaces the microphone with a Dictation pill", () => {
   assert.match(read("src/components/AI_CHAT/AI_Tiptap_Container.tsx"), /compactListeningPill=\{chatCleanupEnabled && !isMbl\}/);
 });
 
-test("no sparkle or purple is left in the chat surfaces", () => {
+test("no sparkle is left in the chat surfaces", () => {
   const window = read("src/components/AI_CHAT/ChatWindow.tsx");
   assert.match(window, /\{!chatCleanupEnabled && \(\s*<Sparkles/);
   const welcome = read("src/components/AI_CHAT/WelcomeScreen.tsx");
   assert.match(welcome, /\{!chatCleanupEnabled && \(\s*<Sparkles/);
-  const message = read("src/components/AI_CHAT/MessageItem.tsx");
-  assert.match(message, /const chatCleanupEnabled = useFlag\(HTPR_8261_CHAT_CLEANUP_FLAG\)/);
-  assert.match(message, /chatCleanupEnabled \? "font-bold text-white-black" : "invisible font-bold"/);
-  assert.match(message, /\{!chatCleanupEnabled && \(\s*<span className="absolute inset-0 bg-gradient-to-r/);
 });

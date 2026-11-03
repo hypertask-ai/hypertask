@@ -1,7 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
-import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -247,18 +246,14 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
   showCursor,
   isContentEmpty,
 }) => {
-  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
-
   if (agentStatus) {
     return (
       <div className="status-indicator">
         <div className="relative transition-all duration-300 ease-linear">
-          <span className={chatCleanupEnabled ? "font-bold text-white-black" : "invisible font-bold"}>{agentStatus}</span>
-          {!chatCleanupEnabled && (
-            <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent bg-size-200 animate-gradient">
-              {agentStatus}
-            </span>
-          )}
+          <span className="invisible font-bold">{agentStatus}</span>
+          <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent bg-size-200 animate-gradient">
+            {agentStatus}
+          </span>
         </div>
       </div>
     );
