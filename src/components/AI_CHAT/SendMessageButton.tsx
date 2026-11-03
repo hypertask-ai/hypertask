@@ -70,8 +70,8 @@ export function SendMessageButton({
       <Tooltip {...tooltipProps} />
       {mobile ? (
         <SendArrow size={22} />
-      ) : textLabel ? (
-        <span>{textLabel}</span>
+      ) : cleanup && label ? (
+        <span>{label}</span>
       ) : (
         <Send size={16} strokeWidth={1.75} />
       )}

@@ -113,7 +113,6 @@ export const AudioButton = ({
     isMobileView && id === "create-task-modal-audio-button";
   const isAiChat = id === "ai-chat-audio-button" || id.startsWith("ai-chat-audio-button-");
   const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-  const aiChatCleanup = isAiChat && chatCleanup;
   const isMobileAiChat = isMobileView && isAiChat;
   const isKeyboardAccessible =
     isMobileTaskWriter || Boolean(ariaLabel || idleLabel);
@@ -737,7 +736,7 @@ export const AudioButton = ({
                 {!isProcessing && idleLabel && (
                   <span className="text-dense">{idleLabel}</span>
                 )}
-                {hover && !isProcessing && aiChatCleanup && (
+                {hover && !isProcessing && isAiChat && chatCleanup && (
                   <Tooltip
                     left={0}
                     bottom={tooltipsOpenUpward ? 45 : -45}
@@ -768,7 +767,7 @@ export const AudioButton = ({
             );
           })()}
 
-          {!isMobileView && !aiChatCleanup && (
+          {!isMobileView && !(isAiChat && chatCleanup) && (
             <button
               type="button"
               aria-label="Choose microphone"
@@ -835,7 +834,7 @@ export const AudioButton = ({
               aria-hidden="true"
             />
           </div>
-          {aiChatCleanup && (
+          {isAiChat && chatCleanup && (
             <span
               data-ai-chat-recording-elapsed
               className="shrink-0 text-dense tabular-nums text-icon-dark-gray"

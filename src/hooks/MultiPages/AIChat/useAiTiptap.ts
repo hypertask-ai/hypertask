@@ -53,9 +53,9 @@ const useTiptapForAI = ({
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
   const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const fullScreenChat = chatCleanup && (usePathname() ?? "").startsWith("/chat");
   const fullScreenChatRef = useRef(false);
-  fullScreenChatRef.current =
-    chatCleanup && (usePathname() ?? "").startsWith("/chat");
+  fullScreenChatRef.current = fullScreenChat;
 
   const editor = useEditor({
     extensions: [
