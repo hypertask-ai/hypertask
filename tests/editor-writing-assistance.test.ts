@@ -414,7 +414,7 @@ test("HTPR-6906: deleting the only word with a plain selection also preserves lo
   editor.commands.deleteSelection();
   assert.equal(editor.getText(), "");
   assert.equal(dispatchTextInput(editor, "h"), false);
-  editor.commands.insertContent("ello");
+  editor.commands.insertContent("hello");
   assert.equal(editor.getText(), "hello");
 });
 

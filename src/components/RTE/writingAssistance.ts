@@ -165,7 +165,13 @@ export const LocalWritingAssistance = Extension.create<{
               const mapped = tr.mapping.mapResult(value.pos);
               const $mapped = tr.doc.resolve(mapped.pos);
               const textblockStart = tr.mapping.map(tr.before.resolve(value.pos).start(), -1);
-              if (tr.doc.textBetween(mapped.pos, mapped.pos + value.capital.length) === value.capital) {
+              const textHere = $mapped.parent.isTextblock
+                ? $mapped.parent.textBetween(
+                    $mapped.parentOffset,
+                    Math.min($mapped.parentOffset + value.capital.length, $mapped.parent.content.size),
+                  )
+                : "";
+              if (textHere === value.capital) {
                 memory.pos = null;
                 return { ...value, pos: mapped.pos, allowUndo: false };
               }
