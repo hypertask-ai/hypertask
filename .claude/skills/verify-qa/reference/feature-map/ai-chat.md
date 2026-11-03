@@ -40,11 +40,13 @@ bounds and composer placement before and after; no controls or layout change.
 Flag `htpr-7772-fullscreen-chat-handoff` (Everyone). Open `/chat`, pick a
 conversation with a ticket link in an answer, and click the link at 1440x900.
 The ticket must open with the chat side panel already open, showing the same
-conversation and its last message. No ticket-scoped conversation may start:
-the app must not call `/api/ai-chat/task-sessions`. Check the ticket rows
-under an answer the same way. On a phone the chat closes on tap as before, and
-**New chat** still starts a clean conversation. Flag off closes the chat on
-the link click and reopening it shows the ticket's own conversation.
+conversation and its last message. No new conversation may start: the app
+must not call `/api/ai-chat/create-session`. The welcome screen still reads
+`/api/ai-chat/task-sessions` once while the transcript loads; that read
+creates nothing. Check the ticket rows under an answer the same way. On a
+phone the chat closes on tap as before, and **New chat** still starts a clean
+conversation. Flag off closes the chat on the link click and reopening it
+shows the ticket's own conversation.
 
 ## How to drive it
 
