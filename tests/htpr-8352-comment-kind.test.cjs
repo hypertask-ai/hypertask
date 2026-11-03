@@ -3,10 +3,6 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const Module = require("node:module");
 
-// HTPR-8352: agents read comments through GET /api/mcp/comments. Without a
-// kind field an agent cannot tell a Question from a QA note or the closing
-// done summary, so it answers ticket after ticket blind. This loads the real
-// route (only prisma/auth are stubbed) and reads the projected comments back.
 const root = path.resolve(__dirname, "..");
 const routePath = path.join(root, "src/lib/mcp/operations/comments/operation.ts");
 
@@ -138,7 +134,7 @@ function commentFixture(overrides) {
   };
 }
 
-test("comment list names the kind of every comment", async () => {
+test("HTPR-8352: comment list names the kind of every comment, so a Question is not answered as a QA note", async () => {
   const route = loadRoute([
     commentFixture({ id: 1, kind: "question", text: "Question", commentText: "Question" }),
     commentFixture({ id: 2, kind: "qa", text: "QA verdict", commentText: "QA verdict" }),
