@@ -12,8 +12,9 @@ function projectsRoute(enabled = true) {
   const GET = f.load('src/lib/mcp/operations/projects/operation.ts', {
     '@/lib/flags/keys': { HTPR_8018_PROJECT_PAGE_SIZE_FLAG: key },
     '@/lib/flags': { isFeatureEnabled: async (requested, userId) => {
-      assert.equal(requested, key);
       assert.equal(userId, f.user.id);
+      if (requested === 'htpr-8413-board-team-id') return false;
+      assert.equal(requested, key);
       return enabled;
     } },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (_request, error) => crashes.push(error) },
