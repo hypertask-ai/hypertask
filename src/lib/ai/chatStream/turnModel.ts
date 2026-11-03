@@ -14,6 +14,7 @@ import { getAiProviderInfo, resolveTeamProviderEnabled } from "@/lib/aiProviders
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { resolveAiFallbackCredential, getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { keyOnlyReplacementModelKey, resolveTeamAiFunding, TeamKeyOnlyRefusal } from "@/lib/ai/teamAiFunding";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -125,17 +126,21 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     keyLookupContext = { ...keyLookupContext, agentId: actingAgent?.id ?? null };
     let hasEligibleByokCredential = false;
     if (storePlanId === "BYOK") {
-      const credential = await getByokOrTeamGatewayApiKeyForModelOption(
-        preferredAiModelOption,
-        body.byokProviderFlags,
-        keyLookupContext,
-      );
-      const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
-      hasEligibleByokCredential =
-        (typeof credential === "string" &&
-          credential.trim().length > 0 &&
-          credential.trim() !== sharedKey) ||
-        (credential !== null && typeof credential === "object");
+      try {
+        const credential = await getByokOrTeamGatewayApiKeyForModelOption(
+          preferredAiModelOption,
+          body.byokProviderFlags,
+          keyLookupContext,
+        );
+        const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
+        hasEligibleByokCredential =
+          (typeof credential === "string" &&
+            credential.trim().length > 0 &&
+            credential.trim() !== sharedKey) ||
+          (credential !== null && typeof credential === "object");
+      } catch (error) {
+        if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+      }
     }
     const deepseekFlashFastEnabled = await import("@/lib/flags")
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, dbUser.id))
@@ -210,9 +215,20 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled, grokGemini4Enabled),
       );
     }
-    const haikuByok = defaultContext.byok?.provider === "openrouter" &&
+    const keyOnlyDecision = gatewayTags.teamId && typeof resolveTeamAiFunding === "function"
+      ? await resolveTeamAiFunding(gatewayTags.teamId, { provider: "claude", feature: "chat" })
+      : { mode: "unrestricted" as const };
+    const replacementModelKey = typeof keyOnlyReplacementModelKey === "function"
+      ? keyOnlyReplacementModelKey(keyOnlyDecision, selection.provider, haiku55Enabled)
+      : null;
+    if (replacementModelKey) {
+      const replacement = getAiModelOptionById(replacementModelKey, haiku55Enabled);
+      if (replacement) selection = selectionFromModelOption(replacement);
+    }
+    let haikuByok = defaultContext.byok?.provider === "openrouter" &&
       !resolveTeamProviderEnabled(teamProviderSettings, "openrouter")
       ? undefined : defaultContext.byok;
+    if (keyOnlyDecision.mode === "byok" && haikuByok?.provider !== "claude") haikuByok = undefined;
     const getSelectionApiKey = (
       selected: ModelSelection
     ) =>
@@ -297,15 +313,20 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       byokApiKey,
     );
 
-    titleByokApiKey =
-      selection.provider === "openai" && typeof byokApiKey === "string"
-        ? byokApiKey
-        : await getByokOrTeamGatewayApiKeyForProvider(
+    if (selection.provider === "openai" && typeof byokApiKey === "string") {
+      titleByokApiKey = byokApiKey;
+    } else {
+      try {
+        titleByokApiKey = await getByokOrTeamGatewayApiKeyForProvider(
           "openai",
           body.byokProviderFlags,
           keyLookupContext,
           { resolveOpenRouterWithoutFlag: false }
         );
+      } catch (error) {
+        if (!(typeof TeamKeyOnlyRefusal === "function" && error instanceof TeamKeyOnlyRefusal)) throw error;
+      }
+    }
     streamCredential = byokApiKey;
     streamModelOption = selection.modelOption;
     const resolvedModel = selectModel(

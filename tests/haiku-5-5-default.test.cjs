@@ -17,7 +17,7 @@ const haiku = catalog.getAiModelOptionById("claude-haiku-5-5");
 const aliases = ["claude-haiku-4.5", "claude-haiku-4-5", "anthropic/claude-haiku-4.5", "anthropic/claude-haiku-4-5", "claude-haiku-4-5-20251001"];
 
 function stubbedModule(file, stubs) {
-  stubs = { "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" }, ...stubs };
+  stubs = { "@/lib/net/downloadWithoutBrotli": { downloadWithoutBrotli: undefined }, "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/definitions/htpr-7634-openai-only-default": { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG: "htpr-7634-openai-only-default" }, "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" }, "@/lib/flags/definitions/htpr-7844-team-ai-key-only": { HTPR_7844_TEAM_AI_KEY_ONLY_FLAG: "htpr-7844-team-ai-key-only" }, "@/lib/ai/teamAiFunding": { isPlatformAiCredential: () => false, resolveTeamAiFunding: async () => ({ mode: "unrestricted" }), resolveSideCallFunding: async () => ({ mode: "unrestricted" }), TeamKeyOnlyRefusal: class TeamKeyOnlyRefusal extends Error {}, applyKeyOnlyProviderVisibility: (rows) => rows, aiProvidersForSavedByokKeys: () => [], modelOptionsForKeyOnlyTeam: (options) => options }, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -237,7 +237,9 @@ test("server title default sites retain Free Luna and route paid or compatible B
             getByokOrTeamGatewayApiKeyForProvider: async () => "fixture-team",
             resolveAiFallbackCredential: async (load) => load(),
             resolveAutomaticAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
+            keyOnlySideCallModel: async () => null,
           },
+          "@/lib/ai/teamAiFunding": { TeamKeyOnlyRefusal: class TeamKeyOnlyRefusal extends Error {} },
           "@/app/api/ai/_lib/modelProvider": {
             resolveAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
             isAiGatewayEnabled: () => true,

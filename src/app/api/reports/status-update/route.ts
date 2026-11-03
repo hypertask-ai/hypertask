@@ -43,6 +43,9 @@ async function generateStatusUpdate(request: NextRequest) {
       headline: update.headline,
     });
   } catch (error) {
+    if (error instanceof Error && error.name === "TeamKeyOnlyRefusal") {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
     if (error instanceof StatusUpdateBoardNotFoundError) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }

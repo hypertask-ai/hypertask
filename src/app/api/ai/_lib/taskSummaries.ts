@@ -1,6 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { createHash, randomUUID } from "node:crypto";
@@ -185,10 +185,25 @@ async function generateAndStoreTaskSummaryWithLease(
     return null;
   }
 
+  let fundedSummary: Awaited<ReturnType<typeof keyOnlySideCallModel>> = null;
+  try {
+    fundedSummary = typeof keyOnlySideCallModel === "function"
+      ? await keyOnlySideCallModel(
+        { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: task.userId },
+        systemModel.provider,
+      )
+      : null;
+  } catch (error) {
+    if (error instanceof Error && error.name === "TeamKeyOnlyRefusal") {
+      console.error(`[taskSummaries] ${error.message}`);
+      return null;
+    }
+    throw error;
+  }
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
   let gatewayApiKey: string | undefined;
   try {
-    gatewayApiKey = haikuByok?.credential ?? await getTeamGatewayApiKey({
+    gatewayApiKey = fundedSummary ? "funded" : haikuByok?.credential ?? await getTeamGatewayApiKey({
       trustedTeamId: task.project.teamId,
     });
   } catch (error) {
@@ -263,6 +278,7 @@ async function generateAndStoreTaskSummaryWithLease(
       haiku55Enabled: defaultContext.haiku55Enabled,
       haikuByok,
       gatewayApiKey,
+      fundedModel: fundedSummary,
       gatewayTags,
       userId: task.userId,
       teamId: task.project.teamId,
@@ -439,6 +455,7 @@ async function generateTaskSummary(args: {
   haiku55Enabled: boolean;
   haikuByok?: Awaited<ReturnType<typeof getAiDefaultModelContext>>["byok"];
   gatewayApiKey?: string;
+  fundedModel?: Awaited<ReturnType<typeof keyOnlySideCallModel>>;
   gatewayTags?: AiGatewayTags;
   userId: number;
   teamId?: string | null;
@@ -454,7 +471,7 @@ async function generateTaskSummary(args: {
     };
   }
 
-  const model = args.haiku55Enabled ? resolveAutomaticAiModel(
+  const model = args.fundedModel?.model ?? (args.haiku55Enabled ? resolveAutomaticAiModel(
     args.haikuByok?.provider === "claude" ? "claude" : args.haikuByok?.provider === "openrouter" ? "openrouter" : "gateway",
     args.haikuByok?.provider === "claude" ? "claude-haiku-5-5" : args.systemModel.model,
     args.gatewayApiKey,
@@ -463,14 +480,14 @@ async function generateTaskSummary(args: {
       lookup: { trustedTeamId: args.teamId, projectId: args.projectId, userId: args.userId },
       feature: "summary",
     },
-  ) : resolveLegacyAiModel("gateway", args.systemModel.model, args.gatewayApiKey);
+  ) : resolveLegacyAiModel("gateway", args.systemModel.model, args.gatewayApiKey));
   configureAiModelUsage(model, {
     userId: args.userId,
     teamId: args.teamId,
     projectId: args.projectId,
     taskId: args.taskId,
     agentId: args.agentId,
-    provider: args.haikuByok ? aiUsageProviderForCredential(args.haikuByok.provider, args.haikuByok.credential) : args.systemModel.provider,
+    provider: args.fundedModel?.usageProvider ?? (args.haikuByok ? aiUsageProviderForCredential(args.haikuByok.provider, args.haikuByok.credential) : args.systemModel.provider),
     feature: "summary",
     reasoningFeature: "summaries",
   });

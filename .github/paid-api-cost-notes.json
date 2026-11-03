@@ -63,5 +63,15 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8215 sends the Trash write from an agent door to Hypertask's own same-origin app route with the agent's signed session. It calls no paid service and costs nothing.",
     "source": "https://app.hypertask.ai/detail/project-15/8215"
+  },
+  "src/app/api/ai/_lib/customInstructions.ts:39df171e88323f5632870e3dd1b4437dc68b32245a0da15e3f30b45da11499d1": {
+    "maxUsdPerDay": 0,
+    "reason": "Key-only document extraction uses the team\u2019s own Anthropic key, not a Hypertask-funded key. The customer\u2019s provider charges remain their responsibility.",
+    "source": "https://app.hypertask.ai/detail/project-15/7844"
+  },
+  "src/utils/controllers/turbopuffer/turbopufferHelper.ts:aadc9db2794d7e3ce3e6919997aa09d228a1c4569c23fdf7fc9bd4ffc229e9cd": {
+    "maxUsdPerDay": 0,
+    "reason": "Zero additional spend relative to production: the existing embedding request, model, retries and indexing workloads are unchanged. Key-only teams now refuse it unless explicitly opted into the approved inne search exception. Opt-in preserves the existing platform-funded search and indexing behavior; no teams are opted in by this change.",
+    "source": "https://app.hypertask.ai/detail/project-15/7844"
   }
 }

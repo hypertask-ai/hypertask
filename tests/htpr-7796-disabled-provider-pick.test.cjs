@@ -5,6 +5,7 @@ const { load } = require('./task-route-loader.cjs');
 function harness({ enabled = true, settings = {}, pin = null } = {}) {
   const calls = [];
   const { loadTurnModel } = load('src/lib/ai/chatStream/turnModel.ts', {
+    '@/lib/ai/teamAiFunding': require('./helpers/team-ai-funding-stub.cjs'),
     '@/lib/prisma': { default: {
       chatSession: { findFirst: async () => null },
       userSetting: { findUnique: async () => null },

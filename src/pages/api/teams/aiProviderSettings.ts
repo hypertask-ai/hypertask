@@ -15,6 +15,11 @@ import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/update
 import prisma from "@/lib/prisma";
 import { getOpenAiOnlyDefaultContext } from "@/app/api/ai/_lib/byokKeys";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { isFeatureEnabled } from "@/lib/flags";
+import {
+  aiProvidersForSavedByokKeys,
+  applyKeyOnlyProviderVisibility,
+} from "@/lib/ai/teamAiFunding";
 
 class ProviderSettingsError extends Error {}
 
@@ -86,10 +91,17 @@ const handler: NextApiHandler = async (
     }
 
     const { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute } = await getOpenAiOnlyDefaultContext({ trustedTeamId: teamId, userId: user.id }).catch(() => ({ openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false }));
+    const keyOnly = Boolean(lookup.aiKeyOnly);
+    if (keyOnly && (!Number.isSafeInteger(lookup.ownerUserId) || lookup.ownerUserId <= 0 ||
+      !await isFeatureEnabled("htpr-7844-team-ai-key-only", lookup.ownerUserId))) {
+      return res.status(503).json({ message: "Team AI is paused." });
+    }
+    const savedProviders = aiProvidersForSavedByokKeys(lookup.savedByokProviders ?? []);
     return res.status(200).json({
       defaultModelContext: { openaiOnlyDefaultEnabled, hasDirectOpenAiKey, hasClaudeRoute },
       gdprSafeMode: isGdprSafeModeEnabled(lookup.settings),
-      providers: providerRows(lookup.settings),
+      providers: applyKeyOnlyProviderVisibility(providerRows(lookup.settings), savedProviders, keyOnly),
+      aiKeyOnly: keyOnly,
     });
   }
 

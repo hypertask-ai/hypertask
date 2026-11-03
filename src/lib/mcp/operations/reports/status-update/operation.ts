@@ -69,6 +69,9 @@ export const POST = wrapMcpRoute(async (request: NextRequest) => {
       title: statusUpdate.title,
     })
   } catch (error) {
+    if (error instanceof Error && error.name === 'TeamKeyOnlyRefusal') {
+      return NextResponse.json({ success: false, error: error.message }, { status: 403 })
+    }
     if (error instanceof StatusUpdateBoardNotFoundError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     }

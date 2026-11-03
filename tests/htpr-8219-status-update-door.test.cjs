@@ -41,6 +41,11 @@ function world({ enabled = true, authed = true, result = RESULT, throwError = nu
         if (throwError === "board") throw new BoardNotFound("Board not found");
         if (throwError === "disabled") throw new Disabled("Status updates are turned off for this team");
         if (throwError === "generation") throw new GenerationFailed("Could not generate the status update", new Error("model call failed"));
+        if (throwError === "funding") {
+          const error = new Error("Add a team AI key to continue");
+          error.name = "TeamKeyOnlyRefusal";
+          throw error;
+        }
         return result;
       },
       StatusUpdateBoardNotFoundError: BoardNotFound,
@@ -121,6 +126,14 @@ test("a team with status updates turned off gets a plain refusal", async () => {
   const response = await POST(request({ project_id: 15 }));
   assert.equal(response.status, 400);
   assert.equal(response.body.error, "Status updates are turned off for this team");
+});
+
+test("a team requiring an AI key gets a clear refusal without a crash report", async () => {
+  const { POST, crashes } = world({ throwError: "funding" });
+  const response = await POST(request({ project_id: 15 }));
+  assert.equal(response.status, 403);
+  assert.deepEqual(response.body, { success: false, error: "Add a team AI key to continue" });
+  assert.deepEqual(crashes, []);
 });
 
 test("a model failure is a 502 that reports the real cause", async () => {

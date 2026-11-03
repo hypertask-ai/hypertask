@@ -19,6 +19,7 @@ function resetModules() {
   for (const relativePath of stubbedModulePaths) {
     delete require.cache[path.join(root, relativePath)];
   }
+  stubModule("src/lib/ai/teamAiFunding.ts", require("./helpers/team-ai-funding-stub.cjs"));
 }
 
 function stubModule(relativePath, exports) {

@@ -1,6 +1,7 @@
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { dictationConfig } from "@/lib/configs/dictation.config";
 import { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
+import { dictationAuthorization, resolveTeamAiFunding } from "@/lib/ai/teamAiFunding";
 
 export { MAX_DICTATION_AUDIO_BYTES } from "@/lib/dictationLimits";
 
@@ -9,6 +10,7 @@ export type TranscribeOptions = {
   language?: string;
   tags?: string[];
   usage?: { userId: number; teamId: string | null; projectId: number };
+  teamId?: string | null;
 };
 
 export class DictationAudioTooLargeError extends Error {
@@ -30,11 +32,13 @@ export async function transcribeWithDeepgram(
     throw new DictationAudioTooLargeError();
   }
 
-  const apiKey =
-    process.env.DEEPGRAM_API_KEY || dictationConfig.api.deepgram.apiKey;
-  if (!apiKey) {
-    throw new Error("Deepgram API key not configured");
-  }
+  const decision = options.teamId
+    ? await resolveTeamAiFunding(options.teamId, { provider: "deepgram", feature: "dictation" })
+    : { mode: "unrestricted" as const };
+  const apiKey = dictationAuthorization(
+    decision,
+    process.env.DEEPGRAM_API_KEY || dictationConfig.api.deepgram.apiKey,
+  );
 
   const params = new URLSearchParams({
     model: dictationConfig.api.deepgram.model,

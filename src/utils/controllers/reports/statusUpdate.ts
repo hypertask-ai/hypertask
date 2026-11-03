@@ -1,6 +1,6 @@
 import { downloadWithoutBrotli } from "@/lib/net/downloadWithoutBrotli";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
-import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, keyOnlySideCallModel, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -243,16 +243,19 @@ export async function generateStatusUpdateReport({
   const verdict = velocityVerdict(report);
 
   try {
-    const gatewayApiKey = await getTeamGatewayApiKey({
+    const funded = typeof keyOnlySideCallModel === "function"
+      ? await keyOnlySideCallModel({ trustedTeamId: project.team?.id, projectId, userId }, systemModel.provider)
+      : null;
+    const gatewayApiKey = funded ? undefined : await getTeamGatewayApiKey({
       trustedTeamId: project.team?.id ?? null,
     });
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId, userId: userId }, feature: "status-update" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
+    const model = funded?.model ?? (defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId, userId: userId }, feature: "status-update" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey));
     configureAiModelUsage(model, {
       userId: userId,
       teamId: project.team?.id ?? null,
       projectId,
-      provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
+      provider: funded?.usageProvider ?? (haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider),
       feature: "status-update",
     });
     const result = await generateText({
@@ -326,7 +329,7 @@ Write the status update:
       title,
     };
   } catch (error) {
-    if (error instanceof StatusUpdateBoardNotFoundError || error instanceof StatusUpdatesDisabledError) throw error;
+    if (error instanceof StatusUpdateBoardNotFoundError || error instanceof StatusUpdatesDisabledError || (error instanceof Error && error.name === "TeamKeyOnlyRefusal")) throw error;
     console.log("🚀 ~ status-update ~ error:", error);
     throw new StatusUpdateGenerationError("Could not generate the status update", { cause: error });
   }
