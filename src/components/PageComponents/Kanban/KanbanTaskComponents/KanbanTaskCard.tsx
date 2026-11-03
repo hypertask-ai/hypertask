@@ -182,6 +182,7 @@ const KanbanTaskCard = ({
         archiveNotificationCallback={archiveNotificationCallback}
         hover={hover}
         handleStarTask={handleStarTask}
+        avatarSize={cleanup ? (isMobile ? 18 : 20) : undefined}
       />
       <TaskTitle title={task.title} />
       <TaskTagsRow

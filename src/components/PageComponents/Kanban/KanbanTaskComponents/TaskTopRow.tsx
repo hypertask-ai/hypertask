@@ -13,8 +13,6 @@ import SubtaskCount from "./SubtaskCount";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import HTCButton from "../../TaskDetail/TaskOptions/HTCButton";
 import { IAgent, ITask, IUser } from "@/models/model";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 
 interface ITaskTopRow {
   task: ITask;
@@ -34,6 +32,7 @@ interface ITaskTopRow {
   hover: boolean;
   archiveNotificationCallback: () => void;
   handleStarTask: () => void;
+  avatarSize?: number;
 }
 const TaskTopRow: React.FC<ITaskTopRow> = ({
   task,
@@ -49,6 +48,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   countSubtasks,
   subTaskSetting,
   hover,
+  avatarSize,
 }) => {
   const updateTaskFocus = updateActiveItemAndItemInView;
   const taskSaved =
@@ -62,8 +62,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   const [_, _setCurrentUser] = useRecoilState(currentUserAtom);
 
   const isMbl = useContext(MobileViewContext);
-  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
-  const avatarSize = isMbl ? 18 : cleanup ? 20 : 22;
+  const assigneeAvatarSize = avatarSize ?? (isMbl ? 18 : 22);
 
   const htcButtonCallback = () => updateTaskFocus(task);
 
@@ -160,7 +159,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
                     }`}
                     name={assignee.displayName}
                     photoURL={assignee.photoURL}
-                    size={avatarSize}
+                    size={assigneeAvatarSize}
                     title={assignee.displayName}
                   />
                 )
@@ -175,7 +174,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
                 }`}
                 name={agent.displayName}
                 photoURL={agent.photoURL}
-                size={avatarSize}
+                size={assigneeAvatarSize}
                 title={agent.displayName}
               />
             ))}

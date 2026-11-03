@@ -3,8 +3,6 @@ import React from "react";
 
 import { ITask } from "@/models/model";
 import type { DraggableProvided } from "@hello-pangea/dnd";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 
 type ProgressiveTaskPlaceholderProps = {
   task: ITask;
@@ -12,6 +10,7 @@ type ProgressiveTaskPlaceholderProps = {
   onReveal: (taskId: number, restoreFocus?: boolean) => void;
   onOpen: (task: ITask) => void;
   keyboardAccessible?: boolean;
+  cleanup?: boolean;
 };
 
 const estimatedTaskHeight = (task: ITask) => {
@@ -32,8 +31,8 @@ const ProgressiveTaskPlaceholder = ({
   onReveal,
   onOpen,
   keyboardAccessible = false,
+  cleanup = false,
 }: ProgressiveTaskPlaceholderProps) => {
-  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   return (
   <div
     ref={provided.innerRef}

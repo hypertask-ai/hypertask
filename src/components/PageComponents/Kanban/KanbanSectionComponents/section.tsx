@@ -547,6 +547,7 @@ export const Section = ({
                           onReveal={revealTask}
                           onOpen={openTask}
                           keyboardAccessible={taskModuleFailed}
+                          cleanup={cleanup}
                         />
                       ) : (
                         <TaskRenderer

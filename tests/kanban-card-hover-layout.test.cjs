@@ -70,6 +70,8 @@ const TaskTopRow = loadComponent(
     ),
     "@/components/Common/UserAvatar": empty,
     "../../TaskDetail/TaskOptions/HTCButton": HTCButton,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
   },
 );
 const TaskDraggableContainer = loadComponent(

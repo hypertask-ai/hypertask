@@ -115,7 +115,9 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
               ref={scrollerRef}
               id="view-tabs-bar"
               className={appShellRail
-                ? cn('flex min-w-0 flex-1 flex-wrap items-center', cleanup ? 'gap-6' : 'gap-[9px]')
+                ? cleanup
+                  ? 'flex min-w-0 flex-1 flex-wrap items-center gap-6'
+                  : 'flex min-w-0 flex-1 flex-wrap items-center gap-[9px]'
                 : 'flex items-center gap-1 overflow-x-auto scrollbar-none'}
             >
               {renderedViews.map((view, index) => {
