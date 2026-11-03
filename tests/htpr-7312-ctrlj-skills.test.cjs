@@ -36,7 +36,7 @@ function moduleWithStubs(file, stubs) {
   return mod.exports;
 }
 
-function harness({ enabled = true, skills = available, splitTasks = false, cache = false, model } = {}) {
+function harness({ enabled = true, skills = available, cache = false, model } = {}) {
   const checks = [], resolutions = [], lookups = [], retrieval = [], parts = [];
   const run = moduleWithStubs('src/app/api/ai/_lib/taskWriterRun.ts', {
     '@/lib/rag/authorizeIndexedRows': { authorizeIndexedRows: async (taskRows, commentRows, principal) => {
@@ -46,8 +46,7 @@ function harness({ enabled = true, skills = available, splitTasks = false, cache
     '@/lib/flags/keys': keys,
     '@/lib/flags': { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG || (key === flag && enabled) ||
-        (key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG && splitTasks);
+      return key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG || (key === flag && enabled);
     } },
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/ai/composeTaskTarget': {},
@@ -202,9 +201,8 @@ test('a skill-only prompt is not reintroduced after stripping', async () => {
   assert.ok(result.instructions.includes(available[0].body));
 });
 
-for (const splitTasks of [false, true]) {
-  for (const cache of [false, true]) {
-    test(`Ctrl+J skill body and precedence reach the model prompt (structured=${splitTasks}, cache=${cache})`, async () => {
+for (const cache of [false, true]) {
+    test(`Ctrl+J skill body and precedence reach the model prompt (cache=${cache})`, async () => {
       const qaSkill = skill(42, 'qa-7480-check', {
         userId: 985, body: 'Answer with one short line that starts with: Skill qa-7480-check ran.',
       });
@@ -228,7 +226,7 @@ for (const splitTasks of [false, true]) {
           }),
         },
       });
-      const h = harness({ skills: [qaSkill], splitTasks, cache, model });
+      const h = harness({ skills: [qaSkill], cache, model });
       const errors = [];
       const route = moduleWithStubs('src/app/api/ai/task-writer/route.ts', {
         ai: require('ai'),
@@ -257,7 +255,7 @@ for (const splitTasks of [false, true]) {
       assert.equal(response.status, 200);
       assert.ok((await response.text()).includes(draft.title));
       assert.deepEqual(errors, []);
-      const calls = splitTasks ? model.doGenerateCalls : model.doStreamCalls;
+      const calls = model.doGenerateCalls;
       assert.equal(calls.length, 1);
       const system = calls[0].prompt.filter((message) => message.role === 'system');
       const instructions = system.map((message) => message.content).join('\n');
@@ -274,7 +272,6 @@ for (const splitTasks of [false, true]) {
       assert.deepEqual(h.lookups, [{ slugs: ['qa-7480-check'], scope: { userId: 985, agentId: undefined, teamScope: undefined, projectId: 15 } }]);
       assert.deepEqual(h.retrieval, ['Add a CSV export to the reports page']);
     });
-  }
 }
 
 test('flag off, missing opt-in and popup retain the exact production instruction suffix', async () => {
@@ -287,7 +284,11 @@ test('flag off, missing opt-in and popup retain the exact production instruction
     const expected = taskPrompts.createTaskWriterSystemPromptTemplate(
       `${prompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`,
     ) + `\n\n${resolved.systemPromptAddition}`;
-    assert.equal(result.instructions, expected);
+    if (extra.requestKind === 'manual') assert.equal(result.instructions, expected);
+    else {
+      assert.ok(result.instructions.startsWith(expected));
+      assert.match(result.instructions, /replace the single HTML output contract with the structured tasks object/);
+    }
     assert.equal(h.parts[0].taskDescription, '<p>/review Audit checkout</p>');
     assert.deepEqual(h.retrieval, ['/review Audit checkout']);
     assert.equal(h.resolutions.length, 1);

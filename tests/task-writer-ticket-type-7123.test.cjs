@@ -11,6 +11,7 @@ const properties = load(path.join(root, "src/app/api/ai/_lib/taskWriterPropertie
 const key = "htpr-7123-writer-ticket-type";
 const MARKER = "TICKET TYPE MARKER";
 const typeSpan = (value) => `<span id="ai-generated-task-type" style="display:none">${value}</span>`;
+const { Output } = require("ai");
 
 function moduleWithStubs(file, stubs, globals = {}) {
   const filename = path.join(root, file);
@@ -32,7 +33,7 @@ function moduleWithStubs(file, stubs, globals = {}) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, output = "", finishReason = "stop", mode = "task_writer", requestKind } = {}) {
+function harness({ enabled = true, output = "", tasks, finishReason = "stop", mode = "task_writer", requestKind } = {}) {
   const checks = [], calls = [];
   const editor = {
     ...moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {}),
@@ -72,7 +73,8 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
   });
   const stubs = {
     ai: {
-      generateText: async (args) => { calls.push(args); return { text: output, finishReason }; },
+      Output,
+      generateText: async (args) => { calls.push(args); return { text: output, output: tasks ? { tasks } : undefined, finishReason }; },
       streamText: (args) => { calls.push(args); return { textStream: (async function* () {
         for (let i = 0; i < output.length; i += 3) yield output.slice(i, i + 3);
       })(), finishReason: Promise.resolve(finishReason) }; },
@@ -157,51 +159,29 @@ test("a defect stays a bug, while an improvement or feature gets no bug label or
   assert.match(rule, /improvement or feature label or column when the board has one/);
 });
 
-test("compose-task with the flag on asks for the type marker and announces it with a header", async () => {
-  const h = harness({ enabled: true, output: draft + typeSpan("improvement"), requestKind: "compose-task" });
+test("structured compose normalizes each task's type and announces it with a header", async () => {
+  const h = harness({ enabled: true, tasks: [{ title: "Agents react with emoji", description: draft + typeSpan("improvement") }], requestKind: "compose-task" });
   const r = await h.post("app");
   assert.ok(h.calls[0].instructions.includes(MARKER));
   assert.equal(r.headers.get("X-Task-Writer-Ticket-Type"), "enabled");
-  assert.ok(r.content.endsWith(typeSpan("improvement")));
+  assert.equal(JSON.parse(r.content).tasks[0].description, draft + typeSpan("improvement"));
 });
 
-test("the server keeps only a valid type and drops junk, so compose never sees one", async () => {
-  const junk = await harness({ enabled: true, output: draft + typeSpan("chore"), requestKind: "compose-task" }).post("app");
-  assert.ok(!junk.content.includes("ai-generated-task-type"));
-  assert.ok(junk.content.startsWith('<h1 id="ai-generated-task-title">Agents react with emoji</h1>'));
-  const none = await harness({ enabled: true, output: draft, requestKind: "compose-task" }).post("app");
-  assert.equal(none.content, draft);
-  const messy = await harness({ enabled: true, output: draft + typeSpan("Bug") + typeSpan("feature"), requestKind: "compose-task" }).post("app");
-  assert.ok(messy.content.endsWith(typeSpan("bug")));
-  assert.equal(messy.content.split("ai-generated-task-type").length - 1, 1);
-});
-
-test("the draft keeps streaming chunk by chunk and only the trailing marker is held back and normalized", async () => {
-  const body = '<h1 id="ai-generated-task-title">A fairly long title for streaming</h1><p>' + "Body words. ".repeat(20) + "</p>";
-  const typedRun = await harness({ enabled: true, output: body + typeSpan("Improvement"), requestKind: "compose-task" }).post("app");
-  const plain = await harness({ enabled: false, output: body, requestKind: "compose-task" }).post("app");
-  assert.ok(typedRun.chunks.length > 10);
-  assert.equal(typedRun.chunks[0], plain.chunks[0]);
-  assert.equal(typedRun.chunks.slice(0, 5).join(""), plain.chunks.slice(0, 5).join(""));
-  assert.equal(typedRun.chunks.filter((c) => c.includes("ai-generated-task-type")).length, 1);
-  assert.ok(typedRun.chunks[typedRun.chunks.length - 1].includes("ai-generated-task-type"));
-  assert.equal(typedRun.content, body + typeSpan("improvement"));
-  assert.ok(typedRun.chunks.slice(0, -1).join("").length >= body.length - 8);
-});
-
-test("a body with its own span streams through and a model that adds no marker loses nothing", async () => {
-  const body = '<h1 id="ai-generated-task-title">T</h1><p>Use a <span>span</span> here and then more text after it, long enough to pass the hold back window. ' + "More. ".repeat(60) + "</p>";
-  const r = await harness({ enabled: true, output: body, requestKind: "compose-task" }).post("app");
-  assert.equal(r.content, body);
-  assert.ok(r.chunks[0].length > 0);
+test("the server keeps only a valid structured type and drops junk", async () => {
+  const junk = await harness({ enabled: true, tasks: [{ title: "T", description: draft + typeSpan("chore") }], requestKind: "compose-task" }).post("app");
+  assert.equal(JSON.parse(junk.content).tasks[0].description, draft);
+  const messy = await harness({ enabled: true, tasks: [{ title: "T", description: draft + typeSpan("Bug") + typeSpan("feature") }], requestKind: "compose-task" }).post("app");
+  const description = JSON.parse(messy.content).tasks[0].description;
+  assert.ok(description.endsWith(typeSpan("bug")));
+  assert.equal(description.split("ai-generated-task-type").length - 1, 1);
 });
 
 test("flag off or not a compose request: no marker prompt, no header, output untouched", async () => {
-  const off = harness({ enabled: false, output: draft + typeSpan("improvement"), requestKind: "compose-task" });
+  const off = harness({ enabled: false, tasks: [{ title: "T", description: draft + typeSpan("improvement") }], requestKind: "compose-task" });
   const offResult = await off.post("app");
   assert.ok(!off.calls[0].instructions.includes(MARKER));
   assert.equal(offResult.headers.get("X-Task-Writer-Ticket-Type"), null);
-  assert.equal(offResult.content, draft + typeSpan("improvement"));
+  assert.equal(JSON.parse(offResult.content).tasks[0].description, draft + typeSpan("improvement"));
   const manual = harness({ enabled: true, output: draft });
   const manualResult = await manual.post("app");
   assert.ok(!manual.calls[0].instructions.includes(MARKER));

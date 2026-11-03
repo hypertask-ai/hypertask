@@ -53,6 +53,11 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
+const DEFAULT_TASKS = [
+  { title: "First", description: "<p>First body.</p>", customFields: [{ fieldId: "score-field", value: 19 }] },
+  { title: "Second", description: "<p>Second body.</p>", customFields: [{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 30 }] },
+];
+
 function harness(options = {}) {
   const saved = [], calls = [], usage = [], selections = [], confirmations = [], retrieval = [], reports = [];
   const instructionLoads = [], fieldLoads = [], fieldSaves = [], checks = [];
@@ -79,7 +84,7 @@ function harness(options = {}) {
       if (options.fail) throw new Error("Writer unavailable");
       options.onGenerate?.();
       return {
-        content: [{ type: "text", text: options.split ? JSON.stringify({ tasks: [{ title: "First", description: "<p>First body.</p>", customFields: [{ fieldId: "score-field", value: 19 }] }, { title: "Second", description: "<p>Second body.</p>", customFields: [{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 30 }] }] }) : options.output ?? output }],
+        content: [{ type: "text", text: params.responseFormat ? JSON.stringify({ tasks: options.tasks ?? DEFAULT_TASKS }) : options.output ?? output }],
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 20 } },
         finishReason: { unified: "stop" },
       };
@@ -115,7 +120,7 @@ function harness(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG ? Boolean(options.split) : key === flag ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
+      return key === flag ? options.format !== false : [keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG, keys.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG].includes(key);
     } },
     "@/lib/flags/keys": keys,
     "@/app/api/ai/_lib/customInstructions": moduleWithStubs("src/app/api/ai/_lib/customInstructions.ts", new Proxy({ "@/lib/prisma": { __esModule: true, default: prisma }, "ai": ai }, { has: () => true, get: (target, id) => target[id] ?? {} })),
@@ -316,22 +321,19 @@ test("recurring skeleton and title pattern outrank brevity only with the flag", 
   assert.doesNotMatch(promptText(off), skeletonRule);
 });
 
-for (const surface of ["chat", "compose"]) {
+for (const surface of ["chat"]) {
   test(`${surface}: vocabulary includes the board Number definition and saves model customFields=19`, async () => {
     const h = harness({ enabled: true, output: output + marker([{ fieldId: "score-field", value: 19 }]) });
-    if (surface === "chat") assert.equal((await h.execute({ project_id: 15, brief: "Make this change" })).success, true);
-    else assert.equal((await h.compose()).writerFailed, false);
+    assert.equal((await h.execute({ project_id: 15, brief: "Make this change" })).success, true);
     assert.match(promptText(h), /score-field/);
     assert.match(promptText(h), /ICE/);
     assert.match(promptText(h), /Number/);
     assert.deepEqual(h.fieldSaves, [["score-field", 1, 19]]);
-    const description = surface === "chat" ? h.saved[0].description : h.saved[0].description_.create.content;
-    assert.doesNotMatch(description, /ai-generated-task-custom-fields|score-field/);
+    assert.doesNotMatch(h.saved[0].description, /ai-generated-task-custom-fields|score-field/);
   });
   test(`${surface}: invalid Number and foreign or unknown fields are ignored without failing creation`, async () => {
     const h = harness({ enabled: true, output: output + marker([{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 20 }, { fieldId: "unknown", value: 19 }]) });
-    if (surface === "chat") assert.equal((await h.execute({ project_id: 15, brief: "Make this change" })).success, true);
-    else assert.equal((await h.compose()).writerFailed, false);
+    assert.equal((await h.execute({ project_id: 15, brief: "Make this change" })).success, true);
     assert.equal(h.saved.length, 1);
     assert.deepEqual(h.fieldSaves, []);
     assert.match(promptText(h), /score-field/);
@@ -339,8 +341,7 @@ for (const surface of ["chat", "compose"]) {
   });
   test(`${surface}: a board without custom fields gets no field block or save`, async () => {
     const h = harness({ enabled: true, noFields: true });
-    if (surface === "chat") await h.execute({ project_id: 15, brief: "Make this change" });
-    else await h.compose();
+    await h.execute({ project_id: 15, brief: "Make this change" });
     assert.equal(h.saved.length, 1);
     assert.doesNotMatch(promptText(h), /customFields:|CUSTOM_FIELDS|"fieldId"/);
     assert.deepEqual(h.fieldSaves, []);
@@ -437,7 +438,10 @@ test("vocabulary includes select options, budgets fields at whole records withou
 
 
 test("structured compose carries each task's own validated fields through the real SDK and save route", async () => {
-  const h = harness({ split: true });
+  const h = harness({ tasks: [
+    { title: "First", description: "<p>First body.</p>", customFields: [{ fieldId: "score-field", value: 19 }] },
+    { title: "Second", description: "<p>Second body.</p>", customFields: [{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 30 }] },
+  ] });
   const result = await h.compose();
   assert.equal(result.writerFailed, false);
   assert.equal(result.tasks.length, 2);
@@ -448,8 +452,9 @@ test("structured compose carries each task's own validated fields through the re
 });
 
 test("compose without a field marker saves the same description as flag off", async () => {
-  const on = harness({ output });
-  const off = harness({ output, format: false });
+  const task = { title: "First", description: "<p>Body</p>" };
+  const on = harness({ tasks: [task] });
+  const off = harness({ tasks: [task], format: false });
   assert.equal((await on.compose()).writerFailed, false);
   assert.equal((await off.compose()).writerFailed, false);
   assert.match(on.saved[0].description_.create.content, /\S/);

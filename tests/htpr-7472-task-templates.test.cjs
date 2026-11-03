@@ -73,7 +73,7 @@ function writerHarness(options = {}) {
       if (key === keys.HTPR_7500_WRITER_OLD_STRUCTURE_FLAG) return Boolean(options.oldStructure);
       if (key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG) return true;
       if (key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG) return options.boardFormat !== false;
-      return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG && Boolean(options.split);
+      return false;
     } },
     "@/lib/ai/prompts/registry": load("src/lib/ai/prompts/registry.ts"),
     "@/lib/doneColumns": { doneColumnTitles: () => new Set() },
