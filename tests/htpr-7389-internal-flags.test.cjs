@@ -1,46 +1,37 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
 const test = require("node:test");
 const { NextRequest, NextResponse } = require("next/server");
-const { createJiti } = require("jiti");
-
-const root = path.resolve(__dirname, "..");
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 let owner = true;
 let rows = [];
 let reads = 0;
 class FeatureFlagInputError extends Error {}
 
-stubModule("src/lib/flags/http.ts", {
-  noStore: (body, status = 200) => {
-    const response = NextResponse.json(body, { status });
-    response.headers.set("Cache-Control", "private, no-store");
-    return response;
+const stubs = {
+  "@/lib/flags/http": {
+    noStore: (body, status = 200) => {
+      const response = NextResponse.json(body, { status });
+      response.headers.set("Cache-Control", "private, no-store");
+      return response;
+    },
   },
-});
-stubModule("src/lib/flags.ts", {
-  FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
-  FeatureFlagInputError,
-  isFeatureFlagOwner: async () => owner,
-  listFeatureFlagModes: async () => {
-    reads++;
-    return rows;
+  "@/lib/flags": {
+    FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
+    FeatureFlagInputError,
+    isFeatureFlagOwner: async () => owner,
+    listFeatureFlagModes: async () => {
+      reads++;
+      return rows;
+    },
+    setFeatureFlagKeep: async () => ({}),
+    setFeatureFlagMode: async () => ({}),
   },
-  setFeatureFlagKeep: async () => ({}),
-  setFeatureFlagMode: async () => ({}),
-});
-stubModule("src/lib/realtime/server.ts", { broadcastFeatureFlagsChange: async () => {} });
-stubModule("src/lib/auth/getSessionUser.ts", {
-  getSessionUser: async () => ({ userId: 6, source: "session" }),
-});
-
-const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { GET } = jiti(path.join(root, "src/app/api/admin/flags/route.ts"));
-const { withoutInternalFlags } = jiti(path.join(root, "src/lib/flags/internal.ts"));
+  "@/lib/realtime/server": { broadcastFeatureFlagsChange: async () => {} },
+  "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6, source: "session" }) },
+};
+const { GET } = loadModule("src/app/api/admin/flags/route.ts", stubs);
+const { withoutInternalFlags } = loadModule("src/lib/flags/internal.ts");
 
 function request() {
   return new NextRequest("https://app.hypertask.ai/api/admin/flags", {
