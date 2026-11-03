@@ -32,6 +32,7 @@ interface ITaskTopRow {
   hover: boolean;
   archiveNotificationCallback: () => void;
   handleStarTask: () => void;
+  avatarSize?: number;
 }
 const TaskTopRow: React.FC<ITaskTopRow> = ({
   task,
@@ -47,6 +48,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   countSubtasks,
   subTaskSetting,
   hover,
+  avatarSize,
 }) => {
   const updateTaskFocus = updateActiveItemAndItemInView;
   const taskSaved =
@@ -60,6 +62,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   const [_, _setCurrentUser] = useRecoilState(currentUserAtom);
 
   const isMbl = useContext(MobileViewContext);
+  const assigneeAvatarSize = avatarSize ?? (isMbl ? 18 : 22);
 
   const htcButtonCallback = () => updateTaskFocus(task);
 
@@ -156,7 +159,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
                     }`}
                     name={assignee.displayName}
                     photoURL={assignee.photoURL}
-                    size={isMbl ? 18 : 22}
+                    size={assigneeAvatarSize}
                     title={assignee.displayName}
                   />
                 )
@@ -171,7 +174,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
                 }`}
                 name={agent.displayName}
                 photoURL={agent.photoURL}
-                size={isMbl ? 18 : 22}
+                size={assigneeAvatarSize}
                 title={agent.displayName}
               />
             ))}

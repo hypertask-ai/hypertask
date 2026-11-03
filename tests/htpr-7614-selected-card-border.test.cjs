@@ -22,6 +22,7 @@ const cn = loader({
 function render(enabled, mobile, props = {}) {
   const Component = loader({
     "@/hooks/useFlag": { useFlag: key => key === flagKey && enabled },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": flag,
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/utils/undoActions/helperFuncs": { cn },

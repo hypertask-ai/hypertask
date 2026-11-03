@@ -69,6 +69,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": {},
     "@/lib/state": { useSetRecoilState: () => () => {} },
     "@/store": {},
@@ -117,6 +118,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/inboxQueryKeys": { inboxDataQueryKey: (id) => ["inbox", "data", id] },
     "@/hooks/General/useMobileVisualViewport": { useMobileVisualViewport: () => null },
     "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
   });
   const { useTaskDetailEditorFocus } = load("src/components/RTE/useTaskDetailEditorFocus.tsx", {
     "@/lib/demo/guest": { isGuestUser: () => false },
@@ -152,6 +154,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "../BackgroundTaskAttachments": () => null,
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: content => content },
     "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": {},
   }).default;
   const Container = load("src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/index.tsx", {
@@ -160,6 +163,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container", DELIBERATE_DOUBLE_CLICK_MS: 500 },
     "@/hooks/MultiPages/useDoubleTap": useDoubleTap,
     "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG); return true; } },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": flags,
     "@/lib/taskDetailEditTarget": load("src/lib/taskDetailEditTarget.ts"),
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
@@ -172,6 +176,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
     "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": flags,
   }).default;
   const cache = load("src/lib/navigation/cachedTaskDetail.ts", {
@@ -195,6 +200,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": {},
     "@/hooks/useFlag": { useFlag: () => cachedLayout },
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": {},
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },

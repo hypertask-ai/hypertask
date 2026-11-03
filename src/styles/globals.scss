@@ -916,3 +916,28 @@ svg.lucide.fill-current {
     }
   }
 }
+
+[data-kanban-cleanup-scroll] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-horizontal-scrollbar-track) transparent;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    border-radius: 9999px;
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border: 0;
+    border-radius: 9999px;
+    background-color: var(--color-horizontal-scrollbar-track);
+  }
+
+  &::-webkit-scrollbar-button,
+  &::-webkit-scrollbar-corner {
+    display: none;
+  }
+}

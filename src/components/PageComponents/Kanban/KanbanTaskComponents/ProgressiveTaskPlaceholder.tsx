@@ -10,6 +10,7 @@ type ProgressiveTaskPlaceholderProps = {
   onReveal: (taskId: number, restoreFocus?: boolean) => void;
   onOpen: (task: ITask) => void;
   keyboardAccessible?: boolean;
+  cleanup?: boolean;
 };
 
 const estimatedTaskHeight = (task: ITask) => {
@@ -30,13 +31,17 @@ const ProgressiveTaskPlaceholder = ({
   onReveal,
   onOpen,
   keyboardAccessible = false,
-}: ProgressiveTaskPlaceholderProps) => (
+  cleanup = false,
+}: ProgressiveTaskPlaceholderProps) => {
+  return (
   <div
     ref={provided.innerRef}
     id={`task-${task.id}`}
     data-progressive-task-id={task.id}
     aria-label={task.title}
-    className="block rounded-[5px] border-thin border-transparent bg-cardBackground px-2 py-2 text-dense text-white-black"
+    className={`block rounded-[5px] border-thin border-transparent bg-cardBackground py-2 text-dense text-white-black ${
+      cleanup ? "pl-3 pr-2" : "px-2"
+    }`}
     {...provided.draggableProps}
     {...provided.dragHandleProps}
     style={{
@@ -75,6 +80,7 @@ const ProgressiveTaskPlaceholder = ({
       {task.title}
     </Link>
   </div>
-);
+  );
+};
 
 export default React.memo(ProgressiveTaskPlaceholder);

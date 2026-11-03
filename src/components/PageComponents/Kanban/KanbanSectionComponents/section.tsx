@@ -1,5 +1,6 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 
@@ -126,6 +127,7 @@ export const Section = ({
   const TaskRenderer = seeded ? SeededTask : loadedTask?.default ?? Task;
   const currentProject = project;
   const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
+  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
   const setActiveSection = useSetRecoilState(activeSectionAtom);
@@ -458,14 +460,18 @@ export const Section = ({
               scrollbar-thumb-list-scroll
               scrollbar-track-kanban-column-scrollbar
               `}
+            data-kanban-cleanup-scroll={cleanup ? "" : undefined}
           >
             <div
               {...dragHandleProps}
-              className="task-detail-heading-tag bg-containerBackground px-2 py-2 !cursor-default"
+              className={`task-detail-heading-tag bg-containerBackground py-2 !cursor-default ${
+                cleanup ? "pl-5 pr-2" : "px-2"
+              }`}
             >
               <TitleAndTasks
                 itemLen={section.items?.length ?? 0}
                 wipLimit={workLimits ? section.wipLimit : null}
+                cleanup={cleanup}
                 wipCount={!workLimits || section.wipLimit == null ? 0 : getManageColumnRows([section], currentProject.tasks)[0].taskCount}
                 title={section.section_title}
                 id={section.sectionId!}
@@ -529,6 +535,7 @@ export const Section = ({
                           onReveal={revealTask}
                           onOpen={openTask}
                           keyboardAccessible={taskModuleFailed}
+                          cleanup={cleanup}
                         />
                       ) : (
                         <TaskRenderer
@@ -623,12 +630,14 @@ const TitleAndTasks = ({
   wipCount,
   title,
   id,
+  cleanup = false,
 }: {
   itemLen: number;
   wipLimit?: number | null;
   wipCount: number;
   title: string;
   id: number;
+  cleanup?: boolean;
 }) => {
   const setShowCommands = useSetRecoilState(showCommandsAtom);
 
@@ -637,7 +646,7 @@ const TitleAndTasks = ({
   };
   return (
     <>
-      <div className="flex items-center gap-[6px]">
+      <div className="flex items-center gap-1.5">
         <p
           onClick={toggleOnManageColumnsModal}
           className="kanban-column-title text-left cursor-pointer text-dense text-white-black"
@@ -645,7 +654,7 @@ const TitleAndTasks = ({
           {title}
         </p>
         <p
-          className={`kanban-column-count text-meta font-medium self-center mt-[2px] ${wipLimit != null && wipCount > wipLimit ? "!text-destructive" : "text-text-light-gray"}`}
+          className={`kanban-column-count text-meta font-medium self-center ${wipLimit != null && wipCount > wipLimit ? "!text-destructive" : "text-text-light-gray"} ${cleanup ? "" : "mt-[2px]"}`}
           title={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
           aria-label={wipLimit == null ? undefined : `${wipCount} active tasks; limit ${wipLimit}${wipCount > wipLimit ? "; over limit" : ""}`}
         >
