@@ -457,8 +457,8 @@ test("compose without a field marker saves the same description as flag off", as
   const off = harness({ tasks: [task], format: false });
   assert.equal((await on.compose()).writerFailed, false);
   assert.equal((await off.compose()).writerFailed, false);
-  assert.match(on.saved[0].description, /\S/);
-  assert.equal(on.saved[0].description, off.saved[0].description);
+  assert.match(on.saved[0].description_.create.content, /\S/);
+  assert.equal(on.saved[0].description_.create.content, off.saved[0].description_.create.content);
   assert.deepEqual(on.fieldSaves, []);
   assert.doesNotMatch(JSON.stringify(off.saved), /customFields/);
 });
