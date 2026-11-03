@@ -11,6 +11,7 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { Loader2, Sparkles, X } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
+import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
@@ -25,6 +26,7 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
     ...(chatWindows?.enabled && !isMbl ? { onNewChat: chatWindows.openNewChatWindow } : {}),
   });
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
+  const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const windowFramed = framed && multiChatWindowsEnabled;
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
@@ -75,12 +77,14 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
         amoledChatBorder && !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)] [--bs-border-radius:var(--radius-chat-window)]",
         isMbl || windowFramed
           ? "h-full min-h-0 w-full flex-1 rounded-none"
-          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded"
+          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded",
+        !isMbl && !windowFramed && floatingElevation && "shadow-floating"
       )}
       style={{
-        boxShadow: isMbl || windowFramed
-          ? undefined
-          : "0 0px 75px 45px rgb(0 0 0 / 0.5), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)",
+        boxShadow:
+          isMbl || windowFramed || floatingElevation
+            ? undefined
+            : "var(--shadow-floating-previous)",
       }}
     >
       {shortcuts.modal}
