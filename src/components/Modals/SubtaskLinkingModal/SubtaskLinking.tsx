@@ -6,6 +6,8 @@ import {
   ModalRowElementContainer,
 } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8250_NEW_SUBTASK_BUTTON_FLAG } from "@/lib/flags/definitions/htpr-8250-new-subtask-button";
 import useDebounce from "@/hooks/General/useDebounce";
 import useHandleKeydownBasic from "@/hooks/General/useHandleKeydownBasic";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
@@ -42,6 +44,7 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
     useHandleMouseGlobal({ setSelectedIndex });
   const [filteredOptions, setFilteredOptions] = useState<ITask[]>([]);
   const [defaultTasks, setDefaultTasks] = useState<ITask[]>([]);
+  const newSubtaskButton = useFlag(HTPR_8250_NEW_SUBTASK_BUTTON_FLAG);
 
   async function enterHandler(index: number) {
     if (filteredOptions.length === 0) return toggleCreateSubTask();
@@ -169,6 +172,18 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
           placeholder="Search for a task"
           autofocus={true}
         />
+        {newSubtaskButton && (
+          <div className="flex px-6 pb-2">
+            <button
+              type="button"
+              id="subtask-new-button"
+              onClick={toggleCreateSubTask}
+              className="max-sm:min-h-11 rounded-[4px] bg-shadcn-primary px-3 py-1 text-dense font-medium text-primary-foreground hover:opacity-90"
+            >
+              New sub-task
+            </button>
+          </div>
+        )}
         <ModalListContainer
           handleMouseMove={handleMouseMove}
           id="subtask-linking-modal-list-container"
