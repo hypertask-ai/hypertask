@@ -178,8 +178,8 @@ test("quote lines stay quoted when the same input also carries HTML", () => {
 
   assert.equal(formatRichTextInput("<pre>\n> literal\n</pre>"), "<pre>\n> literal\n</pre>");
   assert.equal(
-    formatRichTextInput("Line\r\n\r\n> windows quote"),
-    "<p>Line</p><blockquote><p>windows quote</p></blockquote>"
+    formatRichTextInput("Line <b>x</b>\r\n\r\n> windows quote"),
+    "<p>Line <b>x</b></p><blockquote><p>windows quote</p></blockquote>"
   );
 
   const codeWithBlankLine = formatRichTextInput("> note\n\n<pre>a\n\n> b\n</pre>");
