@@ -10,7 +10,6 @@ export const maxDuration = 30;
 
 const MAX_BODY_BYTES = 8 * 1024;
 const RELEASE_OWNER_USER_ID = 6;
-const FULL_THRESHOLD_PERCENT = 100;
 
 export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") || 0);
@@ -57,12 +56,12 @@ export async function POST(request: Request) {
     if (!(error instanceof BudgetAlertRaceError)) throw error;
     return NextResponse.json({ error: "Alert is still processing" }, { status: 503 });
   }
-  if (alert.thresholdPercent >= FULL_THRESHOLD_PERCENT && !filed.emailed) {
+  if (filed.email === "failed") {
     return NextResponse.json({ error: "Owner email failed" }, { status: 503 });
   }
   return NextResponse.json({
     taskId: filed.taskId,
     created: filed.created,
-    emailed: filed.emailed,
+    email: filed.email,
   });
 }

@@ -20,7 +20,7 @@ function loadFilingLib() {
   return loadModule("src/lib/ops/budgetAlertFiling.ts");
 }
 
-function loadRoute({ onFile = () => {}, flagOn = true, emailed = false } = {}) {
+function loadRoute({ onFile = () => {}, flagOn = true, email = "not-needed" } = {}) {
   return loadModule(ROUTE, {
     [FLAGS_LIB]: {
       HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG: "htpr-8101-vercel-budget-alerts",
@@ -29,13 +29,13 @@ function loadRoute({ onFile = () => {}, flagOn = true, emailed = false } = {}) {
     [TICKET_LIB]: {
       fileVercelBudgetTicket: async (alert) => {
         onFile(alert);
-        return { taskId: 4242, created: true, emailed };
+        return { taskId: 4242, created: true, email };
       },
     },
     [FILING_LIB]: {
       fileBudgetAlert: async (alert) => {
         onFile(alert);
-        return { taskId: 4242, created: true, emailed };
+        return { taskId: 4242, created: true, email };
       },
       BudgetAlertRaceError: class BudgetAlertRaceError extends Error {},
     },
@@ -70,6 +70,7 @@ function memoryStore({ createDelayMs = 0 } = {}) {
   const tickets = new Map();
   const reservations = new Set();
   const emailClaims = new Set();
+  const updates = new Set();
   const calls = { create: 0, comments: 0, emails: [], releases: 0 };
   let nextId = 100;
   return {
@@ -86,6 +87,11 @@ function memoryStore({ createDelayMs = 0 } = {}) {
     },
     async addComment() {
       calls.comments += 1;
+    },
+    async reserveUpdate(marker) {
+      if (updates.has(marker)) return false;
+      updates.add(marker);
+      return true;
     },
     async reserve(marker) {
       if (reservations.has(marker)) return false;
@@ -228,12 +234,12 @@ test("a failed owner email releases the claim so the next alert sends it", async
   };
   const full = alert({ currentSpend: 500, thresholdPercent: 100 });
   const failed = await fileBudgetAlert(full, store);
-  assert.equal(failed.emailed, false);
+  assert.equal(failed.email, "failed");
   assert.equal(store.calls.releases, 1);
   const sent = [];
   store.email = async (taskId) => sent.push(taskId);
   const retried = await fileBudgetAlert(full, store);
-  assert.equal(retried.emailed, true);
+  assert.equal(retried.email, "sent");
   assert.deepEqual(sent, [retried.taskId]);
 });
 
@@ -265,7 +271,7 @@ test("a signed alert files one urgent ticket", async () => {
   const body = JSON.stringify(documentedPayload());
   const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { taskId: 4242, created: true, emailed: false });
+  assert.deepEqual(await response.json(), { taskId: 4242, created: true, email: "not-needed" });
   assert.equal(filed.length, 1);
   assert.equal(filed[0].thresholdPercent, 50);
   delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
@@ -274,11 +280,33 @@ test("a signed alert files one urgent ticket", async () => {
 test("a full budget whose email failed answers retryable", async () => {
   const secret = "whsec_example";
   process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
-  const route = loadRoute({ emailed: false });
+  const route = loadRoute({ email: "failed" });
   const body = JSON.stringify(documentedPayload({ currentSpend: 500, thresholdPercent: 100 }));
   const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
   assert.equal(response.status, 503);
   delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
+});
+
+test("an alert whose email already went out is acknowledged", async () => {
+  const secret = "whsec_example";
+  process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
+  const route = loadRoute({ email: "already-sent" });
+  const body = JSON.stringify(documentedPayload({ currentSpend: 500, thresholdPercent: 100 }));
+  const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
+  assert.equal(response.status, 200);
+  delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
+});
+
+test("a redelivered alert does not repeat its spend comment", async () => {
+  const { fileBudgetAlert } = loadFilingLib();
+  const store = memoryStore();
+  const once = alert();
+  await fileBudgetAlert(once, store);
+  await fileBudgetAlert(once, store);
+  assert.equal(store.calls.create, 1);
+  assert.equal(store.calls.comments, 0);
+  await fileBudgetAlert(alert({ currentSpend: 300 }), store);
+  assert.equal(store.calls.comments, 1);
 });
 
 test("the flag switches the intake off", async () => {

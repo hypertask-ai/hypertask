@@ -80,6 +80,10 @@ export const prismaBudgetAlertStore: BudgetAlertStore = {
     const redis = await getRedis();
     return (await redis.set(`vercel:budget-alert:reserve:${marker}`, "1", "EX", RESERVATION_TTL_SECONDS, "NX")) === "OK";
   },
+  async reserveUpdate(marker) {
+    const redis = await getRedis();
+    return (await redis.set(`vercel:budget-alert:update:${marker}`, "1", "EX", CLAIM_TTL_SECONDS, "NX")) === "OK";
+  },
   async claimEmail(marker) {
     try {
       const redis = await getRedis();
