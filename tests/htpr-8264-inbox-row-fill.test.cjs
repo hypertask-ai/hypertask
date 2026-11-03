@@ -96,8 +96,10 @@ test("the preview keeps one line and the tags and date stay outside it", () => {
   assert.match(row, /md:min-w-\[62px\] md:shrink-0/);
 });
 
-test("the inbox list sends the latest human comment and description for the row", () => {
+test("the inbox list sends the latest human comment and description for the row, behind the flag", () => {
   const controller = read("src/utils/controllers/notifications/getAll.ts");
-  assert.match(controller, /\.\.\.\(includeCachedDescription \? \{ text: true, creator: \{ select: \{ displayName: true \} \} \} : \{\}\)/);
+  assert.match(controller, /await isFeatureEnabled\(HTPR_8264_INBOX_ROW_FILL_FLAG, userId\)/);
+  assert.match(controller, /withCachedDescription &&\s*await isFeatureEnabled/);
+  assert.match(controller, /\.\.\.\(withLatestHumanComment \? \{ text: true, creator: \{ select: \{ displayName: true \} \} \} : \{\}\)/);
   assert.match(controller, /\.\.\.\(includeCachedDescription \? \{ description_: \{ select: \{ content: true \} \} \} : \{\}\)/);
 });

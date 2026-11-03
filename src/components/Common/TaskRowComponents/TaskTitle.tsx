@@ -10,6 +10,8 @@ import { useNotificationContext } from '@/lib/contexts/NotificationContext';
 import { cn } from '@/utils/undoActions/helperFuncs';
 import { inboxConfig, systemDefinedSplits } from '@/lib/configs/inbox.config';
 import { formatWaitingOnAge } from '@/lib/waitingOn';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-row-fill';
 
 interface ITitleContainer {
     notification?: INotification;

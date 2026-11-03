@@ -1,6 +1,7 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -28,7 +29,11 @@ import {
   directReplyTypesByTask,
 } from "@/utils/controllers/notifications/agentImportantPermission";
 
-export function inboxTaskSelect(userId: number, includeCachedDescription = false): Prisma.TaskSelect {
+export function inboxTaskSelect(
+  userId: number,
+  includeCachedDescription = false,
+  withLatestHumanComment = false,
+): Prisma.TaskSelect {
   return {
     _count: {
       select: {
@@ -61,7 +66,7 @@ export function inboxTaskSelect(userId: number, includeCachedDescription = false
       take: 1,
       select: {
         createdAt: true,
-        ...(includeCachedDescription ? { text: true, creator: { select: { displayName: true } } } : {}),
+        ...(withLatestHumanComment ? { text: true, creator: { select: { displayName: true } } } : {}),
       },
     },
     taskLabels: { include: { label: true }, orderBy: { id: "asc" } },
@@ -77,7 +82,8 @@ export function inboxTaskSelect(userId: number, includeCachedDescription = false
 
 export function notificationInboxInclude(
   userId: number,
-  includeCachedDescription = false
+  includeCachedDescription = false,
+  withLatestHumanComment = false,
 ): Prisma.NotificationInclude {
   return {
     comment: { select: { id: true, text: true } },
@@ -87,7 +93,7 @@ export function notificationInboxInclude(
       select: { id: true, title: true, name: true, teamId: true, stalenessEnabled: true },
     },
     task: {
-      select: inboxTaskSelect(userId, includeCachedDescription),
+      select: inboxTaskSelect(userId, includeCachedDescription, withLatestHumanComment),
     },
     fromUser: { select: { displayName: true, photoURL: true } },
     fromAgent: { select: { displayName: true, photoURL: true } },
@@ -150,10 +156,13 @@ export async function getInboxNotifications(
   agentId?: string | null,
   teamScope?: AgentTokenTeamScope | null,
 ) {
+  const withLatestHumanComment =
+    withCachedDescription &&
+    await isFeatureEnabled(HTPR_8264_INBOX_ROW_FILL_FLAG, userId).catch(() => false);
   if ((teamScope != null || (agentId && agentScopeEnforced()))) {
     return client.notification.findMany({
       where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
-      include: notificationInboxInclude(userId, withCachedDescription),
+      include: notificationInboxInclude(userId, withCachedDescription, withLatestHumanComment),
       distinct: ["taskId", "notification_inviteId"],
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
@@ -179,7 +188,7 @@ export async function getInboxNotifications(
   if (!selectedRows.length) return [];
 
   return client.notification.findMany({
-    include: notificationInboxInclude(userId, withCachedDescription),
+    include: notificationInboxInclude(userId, withCachedDescription, withLatestHumanComment),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },

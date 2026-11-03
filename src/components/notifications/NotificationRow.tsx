@@ -192,10 +192,12 @@ export const NotificationContent = () => {
     return snapshot ? <SeededNotificationContent /> : <NotificationContentBody />;
 }
 
+type PlainText = (html: string) => string | undefined;
+
 type NotificationReasonContext = {
     notification: INotification;
     projection?: typeof CommentProjection;
-    plain: (html: string) => string;
+    plain: PlainText;
     formattedDueDate: string | null;
     flipMentionHierarchy: boolean;
 };
@@ -221,9 +223,9 @@ function notificationReason({ notification, projection, plain, formattedDueDate,
     if (notification.type === "TaskMovedToInbox") return "Task moved to inbox";
     if (notification.type === "TaskOverdue") return "";
     if (notification.type === "TaskUpdateDescription") return "Description updated";
-    if (notification.type === "AgentMessage") return plain(decodeAgentMessage(notification.message));
+    if (notification.type === "AgentMessage") return plain(decodeAgentMessage(notification.message)) ?? "";
     if (notification.type === "Reacted" && !notification.commentId) return `Reacted with ${notification.reaction?.emoji} on description`;
-    return `Reacted with ${notification.reaction?.emoji} on ${plain(notification.comment?.text ?? "")} `;
+    return `Reacted with ${notification.reaction?.emoji} on ${plain(notification.comment?.text ?? "") ?? ""} `;
 }
 
 function notificationReasonText(context: NotificationReasonContext): string {
@@ -242,7 +244,7 @@ export function inboxRowFillDecor({
 }: {
     notification: INotification;
     projection?: typeof CommentProjection;
-    plain: (html: string) => string;
+    plain: PlainText;
     formattedDueDate: string | null;
     highlightComment: boolean;
 }): InboxRowFillDecor[] {
@@ -317,7 +319,7 @@ export const NotificationContentBody = ({ projection }: { projection?: typeof Co
             className={cn(
                 inboxConfig.bulkSelectionStyling.content(isIbxSlctd),
                 rowFill
-                    ? "flex-1 min-w-0 truncate flex-column"
+                    ? "flex-1 min-w-0 truncate"
                     : flipMentionHierarchy
                         ? "truncate flex-column md:flex-1 md:basis-0 md:min-w-0"
                         : "flex-1 truncate flex-column md:min-w-[90px]",
