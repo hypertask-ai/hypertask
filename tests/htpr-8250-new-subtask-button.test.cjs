@@ -128,9 +128,10 @@ test("typing keeps the create row first and names the text", async () => {
   listed = tasks;
   await render(Modal, props());
   const input = document.querySelector("input");
-  act(() => {
+  await act(async () => {
     Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, "value").set.call(input, "release");
     input.dispatchEvent(new dom.window.Event("input", { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
   });
   assert.equal(rows()[0].textContent.trim(), 'Create sub-task "release"');
 });
