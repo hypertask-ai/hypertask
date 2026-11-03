@@ -1017,6 +1017,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Agent log unavailable. Retry later or use kind (question|qa|done) for a people comment.' }, { status: 503 })
     }
     const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
+    const logStatusFlagOn = routedTo === 'log'
+      ? await isFeatureEnabled(HTPR_8344_LOG_POST_STATUS_FLAG, user.id)
+      : false
     const skillContext = await getMcpSkillContext(ctx, task.projectId, [text])
 
     if (dryRun) {
@@ -1160,11 +1163,7 @@ export async function POST(request: NextRequest) {
       ctx.teamScope
     )
 
-    const createdStatus =
-      mcpResponse.routedTo === 'log' &&
-      await isFeatureEnabled(HTPR_8344_LOG_POST_STATUS_FLAG, user.id)
-        ? 202
-        : 201
+    const createdStatus = mcpResponse.routedTo === 'log' && logStatusFlagOn ? 202 : 201
 
     return NextResponse.json({ ...mcpResponse, skill_context: skillContext }, { status: createdStatus })
   } catch (error) {
