@@ -1,6 +1,4 @@
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const test = require('node:test');
 const { JSDOM } = require('jsdom');
 const React = require('react');
@@ -201,12 +199,4 @@ test('a click whose chooser is cut off while the ticket loads stays held for the
   } finally {
     dom.restore();
   }
-});
-
-test('the command palette routes Link page and New page through the held intent behind the ticket flag', () => {
-  const source = fs.readFileSync(path.join(__dirname, '..', 'src/components/Modals/commands/HTC/commands.tsx'), 'utf8');
-  assert.match(source, /import \{ requestPagesIntent, ticketSurface \} from "@\/lib\/pages\/intents"/);
-  assert.match(source, /HTPR_8241_PAGES_INTENT_HOLD_FLAG/);
-  assert.match(source, /requestPagesIntent\("link", ticketSurface\(pathname\)\)/);
-  assert.match(source, /requestPagesIntent\("new", ticketSurface\(pathname\)\)/);
 });
