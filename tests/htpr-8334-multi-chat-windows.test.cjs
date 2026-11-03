@@ -212,6 +212,7 @@ test("multi chat windows: Ctrl+Shift+O opens a window while the shared chat shor
   const runtime = read("src/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context.tsx");
   assert.match(runtime, /if \(windowScope \|\| !chatWindows\) return;/);
   assert.match(runtime, /if \(event\.defaultPrevented \|\| !isNewChatWindowShortcut\(event\)\) return;/);
-  assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow\);/);
+  assert.match(runtime, /event\.stopPropagation\(\);/);
+  assert.match(runtime, /document\.addEventListener\("keydown", handleNewChatWindow, true\);/);
   assert.match(runtime, /chatWindows\.openNewChatWindow\(\)\.then/);
 });

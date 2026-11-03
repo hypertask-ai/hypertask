@@ -208,12 +208,13 @@ export const ChatRuntime = memo(function ChatRuntime({
     const handleNewChatWindow = (event: KeyboardEvent) => {
       if (event.defaultPrevented || !isNewChatWindowShortcut(event)) return;
       event.preventDefault();
+      event.stopPropagation();
       void chatWindows.openNewChatWindow().then((opened) => {
         if (!opened && chatWindows.atCapacity) toast("Close a chat window to open another chat.");
       });
     };
-    document.addEventListener("keydown", handleNewChatWindow);
-    return () => document.removeEventListener("keydown", handleNewChatWindow);
+    document.addEventListener("keydown", handleNewChatWindow, true);
+    return () => document.removeEventListener("keydown", handleNewChatWindow, true);
   }, [chatWindows, windowScope]);
 
   const [pendingAiChatPrompt, setPendingAiChatPrompt] = useRecoilState(
