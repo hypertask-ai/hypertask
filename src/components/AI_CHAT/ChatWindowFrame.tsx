@@ -2,9 +2,7 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
-import { CHAT_WINDOW_MIN_HEIGHT, CHAT_WINDOW_MIN_WIDTH, type ChatWindowRect, type ChatWindowState, type ChatWindowViewport } from "@/lib/aiChat/chatWindows";
-
-const clampDrag = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
+import { CHAT_WINDOW_MIN_HEIGHT, CHAT_WINDOW_MIN_WIDTH, clampChatWindowValue, type ChatWindowRect, type ChatWindowState, type ChatWindowViewport } from "@/lib/aiChat/chatWindows";
 
 export function ChatWindowFrame({
   state,
@@ -43,15 +41,15 @@ export function ChatWindowFrame({
         const rect = latestRect.current;
         move.current({
           ...rect,
-          x: clampDrag(drag.rect.x + event.clientX - drag.pointerX, 0, viewport.width - rect.width),
-          y: clampDrag(drag.rect.y + event.clientY - drag.pointerY, 0, viewport.height - rect.height),
+          x: clampChatWindowValue(drag.rect.x + event.clientX - drag.pointerX, 0, viewport.width - rect.width),
+          y: clampChatWindowValue(drag.rect.y + event.clientY - drag.pointerY, 0, viewport.height - rect.height),
         });
         return;
       }
       const sizing = resizeStart.current;
       if (sizing) {
-        const width = clampDrag(sizing.rect.width - (event.clientX - sizing.pointerX), CHAT_WINDOW_MIN_WIDTH, sizing.rect.x + sizing.rect.width);
-        const height = clampDrag(sizing.rect.height - (event.clientY - sizing.pointerY), CHAT_WINDOW_MIN_HEIGHT, sizing.rect.y + sizing.rect.height);
+        const width = clampChatWindowValue(sizing.rect.width - (event.clientX - sizing.pointerX), CHAT_WINDOW_MIN_WIDTH, sizing.rect.x + sizing.rect.width);
+        const height = clampChatWindowValue(sizing.rect.height - (event.clientY - sizing.pointerY), CHAT_WINDOW_MIN_HEIGHT, sizing.rect.y + sizing.rect.height);
         resize.current({
           x: sizing.rect.x + (sizing.rect.width - width),
           y: sizing.rect.y + (sizing.rect.height - height),

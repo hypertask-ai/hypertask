@@ -40,7 +40,7 @@ export const CHAT_WINDOW_MAX = 4;
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
 
-const clamp = (value: number, min: number, max: number) =>
+export const clampChatWindowValue = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), Math.max(min, max));
 
 export function clampChatWindowRect(
@@ -51,10 +51,10 @@ export function clampChatWindowRect(
   const roomHeight = Math.max(0, viewport.height - CHAT_WINDOW_EDGE * 2);
   const minWidth = Math.min(CHAT_WINDOW_MIN_WIDTH, roomWidth);
   const minHeight = Math.min(CHAT_WINDOW_MIN_HEIGHT, roomHeight);
-  const width = clamp(rect.width, minWidth, roomWidth);
-  const height = clamp(rect.height, minHeight, roomHeight);
-  const x = clamp(rect.x, 0, viewport.width - width - CHAT_WINDOW_EDGE);
-  const y = clamp(rect.y, 0, viewport.height - height - CHAT_WINDOW_EDGE);
+  const width = clampChatWindowValue(rect.width, minWidth, roomWidth);
+  const height = clampChatWindowValue(rect.height, minHeight, roomHeight);
+  const x = clampChatWindowValue(rect.x, 0, viewport.width - width - CHAT_WINDOW_EDGE);
+  const y = clampChatWindowValue(rect.y, 0, viewport.height - height - CHAT_WINDOW_EDGE);
   return { x, y, width, height };
 }
 
@@ -62,8 +62,8 @@ export function cascadeChatWindowRect(
   index: number,
   viewport: ChatWindowViewport,
 ): ChatWindowRect {
-  const width = clamp(Math.round(viewport.width * 0.3), CHAT_WINDOW_MIN_WIDTH, 560);
-  const height = clamp(Math.round(viewport.height * 0.7), CHAT_WINDOW_MIN_HEIGHT, viewport.height - CHAT_WINDOW_EDGE * 2);
+  const width = clampChatWindowValue(Math.round(viewport.width * 0.3), CHAT_WINDOW_MIN_WIDTH, 560);
+  const height = clampChatWindowValue(Math.round(viewport.height * 0.7), CHAT_WINDOW_MIN_HEIGHT, viewport.height - CHAT_WINDOW_EDGE * 2);
   const offset = Math.max(0, index) * CHAT_WINDOW_STAGGER;
   return clampChatWindowRect(
     {
