@@ -188,5 +188,5 @@ test("multi chat windows: a new chat adds a window instead of replacing the open
   const header = read("src/components/AI_CHAT/ChatHeader.tsx");
   assert.match(header, /if \(!windowDrag && multiChatWindowsEnabled && chatWindowControls\) \{\n      const opened = await chatWindowControls\.openNewChatWindow\(\);/);
   const sidebar = read("src/components/AI_CHAT/AI_Chat_Sidebar.tsx");
-  assert.match(sidebar, /if \(multiChatWindowsEnabled && chat\.chatWindows\?\.enabled\) \{\n        const opened = await chat\.chatWindows\.openNewChatWindow\(\);/);
+  assert.match(sidebar, /const startChat = async \(\) => \{\n    if \(multiChatWindowsEnabled && chat\.chatWindows\?\.enabled\) \{\n      const opened = await chat\.chatWindows\.openNewChatWindow\(\);/);
 });

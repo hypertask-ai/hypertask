@@ -242,23 +242,24 @@ export const AI_Chat_Sidebar = ({
     window.addEventListener("ht-sidebar-agent-selected", choose);
     return () => window.removeEventListener("ht-sidebar-agent-selected", choose);
   } : () => {}, [agentSessionsEnabled, agentHoverChat, sidebarEnabled, agents]);
+  const startChat = async () => {
+    if (multiChatWindowsEnabled && chat.chatWindows?.enabled) {
+      const opened = await chat.chatWindows.openNewChatWindow();
+      if (!opened && chat.chatWindows.atCapacity) toast("Close a chat window to open another chat.");
+      return;
+    }
+    resolvingGeneralChat.current = true;
+    try {
+      await selectTarget({ kind: "ai" }, undefined, { createFallbackSession: false });
+      await chat.startNewSession();
+    } finally {
+      resolvingGeneralChat.current = false;
+    }
+  };
   const shortcuts = useChatShortcuts({
     enabled: sharedShortcutsEnabled,
     active: target.kind !== "external-agent",
-    onNewChat: async () => {
-      if (multiChatWindowsEnabled && chat.chatWindows?.enabled) {
-        const opened = await chat.chatWindows.openNewChatWindow();
-        if (!opened && chat.chatWindows.atCapacity) toast("Close a chat window to open another chat.");
-        return;
-      }
-      resolvingGeneralChat.current = true;
-      try {
-        await selectTarget({ kind: "ai" }, undefined, { createFallbackSession: false });
-        await chat.startNewSession();
-      } finally {
-        resolvingGeneralChat.current = false;
-      }
-    },
+    onNewChat: startChat,
     onSelectSession: (id) => { void selectTarget({ kind: "ai" }, id); },
   });
   const selectTargetRef = useRef(selectTarget);
