@@ -87,7 +87,7 @@ test("production build names the builder the heap cap bounds", () => {
   );
 });
 
-test("production build caps webpack parallelism at the build machine's cores", () => {
+test("production build caps webpack parallelism at one module build", () => {
   const pkg = JSON.parse(readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
   const parallelism = /NEXT_WEBPACK_PARALLELISM=(\d+)/.exec(pkg.scripts.build);
   assert.ok(
@@ -97,11 +97,11 @@ test("production build caps webpack parallelism at the build machine's cores", (
       "OOM-killed while the heap is still inside its own cap (HTPR-8342)",
   );
   const VERCEL_STANDARD_MACHINE_CORES = 4;
-  const MEASURED_SAFE_PARALLELISM = 2;
+  const MEASURED_SAFE_PARALLELISM = 1;
   assert.ok(
     Number(parallelism[1]) <= MEASURED_SAFE_PARALLELISM,
-    `webpack parallelism ${parallelism[1]} must stay at ${MEASURED_SAFE_PARALLELISM}: one module build per core ` +
-      `(${VERCEL_STANDARD_MACHINE_CORES}) still OOM-killed five production builds of the 8 GB / ${VERCEL_STANDARD_MACHINE_CORES} vCPU ` +
-      "build machine on 2026-11-03 (HYCI-98)",
+    `webpack parallelism ${parallelism[1]} must stay at ${MEASURED_SAFE_PARALLELISM}: two module builds at once ` +
+      `still OOM-killed production builds of the 8 GB / ${VERCEL_STANDARD_MACHINE_CORES} vCPU ` +
+      "build machine on 2026-11-03 (HTPR-8458)",
   );
 });
