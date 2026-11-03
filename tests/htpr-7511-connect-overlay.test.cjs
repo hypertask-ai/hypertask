@@ -101,7 +101,7 @@ function isOverlayActive(overlay, overrides = {}) {
   const expression = source.match(/const connectOverlayActive = ([\s\S]*?);/);
   assert.ok(expression);
   const scope = {
-    connectOverlayEnabled: true, composeEnabled: true, connectOverlay: overlay, overlaySectionId: overlay.sectionId, tasksHydrated: true, secondaryStartupEnabled: true,
+    connectOverlayEnabled: true, connectOverlay: overlay, overlaySectionId: overlay.sectionId, tasksHydrated: true, secondaryStartupEnabled: true,
     _currentProject: { ownerId: 6 }, currentUser: { id: 6 }, pointerFiltered: false, pointerTaskIds: [71],
     displaySections: [{ sectionId: 10 }], hiddenSectionIndexes: new Set(), ...overrides,
   };
@@ -250,7 +250,7 @@ for (const [name, overrides] of [["network error", { requestError: true }], ["HT
 }
 
 for (const [name, activation] of [
-  ["compose off", { composeEnabled: false }], ["filtered board", { pointerFiltered: true }],
+  ["filtered board", { pointerFiltered: true }],
   ["hidden target section", { hiddenSectionIndexes: new Set([0]) }], ["missing target section", { displaySections: [{ sectionId: 20 }] }],
   ["tasks not hydrated", { tasksHydrated: false }], ["startup not ready", { secondaryStartupEnabled: false }],
   ["non-owner", { _currentProject: { ownerId: 9 } }], ["non-starter tasks", { pointerTaskIds: null }],
@@ -305,7 +305,7 @@ test("integration wires pointer blocking, keeps the independent inline-removal s
   const landing = read("src/app/[...boardURL]/LandingPage.tsx");
   const screen = read("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx");
   assert.match(home, /filtered=\{pointerFiltered \|\| hiddenSectionIndexes.has\(index\) \|\| \(connectOverlayEnabled && connectOverlay.blocked\)\}/);
-  assert.match(home, /const connectOverlayActive = connectOverlayEnabled && composeEnabled && connectOverlay.open/);
+  assert.match(home, /const connectOverlayActive = connectOverlayEnabled && connectOverlay.open/);
   assert.match(home, /\{!connectOverlayActive && inlineConnectCard\}/);
   assert.match(home, /\{connectOverlayActive && \(/);
   assert.match(home, /const connectOverlayEnabled = useFlag\(HTPR_7550_CONNECT_OVERLAY_FLAG\)/);
