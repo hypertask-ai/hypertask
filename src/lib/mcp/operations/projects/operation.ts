@@ -216,30 +216,33 @@ export async function GET(request: NextRequest) {
 
     projects.forEach(project => recordAgentBoardScopeMiss(project.id, "read"));
     const showTeam = await isFeatureEnabled(HTPR_8413_BOARD_TEAM_FLAG, user.id)
-    const projectList: ProjectListItem[] = projects.map(project => ({
-      id: project.id,
-      title: project.title || '',
-      description: project.description || undefined,
-      name: project.name,
-      uniqueIdentifier: project.uniqueIdentifier || undefined,
-      ownerId: project.ownerId,
-      owner: project.owner ? {
-        id: project.owner.id,
-        email: project.owner.email,
-        displayName: project.owner.displayName || undefined
-      } : undefined,
-      memberCount: project._count.members,
-      taskCount: project._count.tasks,
-      defaultSections: project.sections || [],
-      sections: project.section,
-      labels: (project.labels || []).map(l => ({
-        id: l.id,
-        name: l.value || ''
-      })),
-      status: project.status,
-      createdAt: project.createdAt.toISOString(),
-      ...(showTeam ? { teamId: project.teamId ?? null } : {}),
-    }))
+    const projectList: ProjectListItem[] = projects.map(project => {
+      const row: ProjectListItem = {
+        id: project.id,
+        title: project.title || '',
+        description: project.description || undefined,
+        name: project.name,
+        uniqueIdentifier: project.uniqueIdentifier || undefined,
+        ownerId: project.ownerId,
+        owner: project.owner ? {
+          id: project.owner.id,
+          email: project.owner.email,
+          displayName: project.owner.displayName || undefined
+        } : undefined,
+        memberCount: project._count.members,
+        taskCount: project._count.tasks,
+        defaultSections: project.sections || [],
+        sections: project.section,
+        labels: (project.labels || []).map(l => ({
+          id: l.id,
+          name: l.value || ''
+        })),
+        status: project.status,
+        createdAt: project.createdAt.toISOString(),
+      }
+      if (showTeam) row.teamId = project.teamId ?? null
+      return row
+    })
 
     const response: ListProjectsResponse = {
       success: true,
