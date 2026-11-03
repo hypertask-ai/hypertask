@@ -17,6 +17,9 @@ import { useGetPinnedContent } from "@/hooks/General/useGetPinnedContent";
 const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
 });
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
 
 const tabs = [
   {
@@ -53,8 +56,12 @@ const Pinned = (props: IProp) => {
   const router = useRouter();
   const isApple = useDeviceContext();
 
+  const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
+
   const handleKeyDown = async (e: KeyboardEvent) => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
+
+    if (agentChatKeys && isChatSurfaceTarget(e.target)) return;
 
     if (e.key === "Escape") router.back();
 

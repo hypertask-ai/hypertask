@@ -928,13 +928,4 @@ export const processImagesForHyperMention = async (htmlText: string, attachments
     return processedAttachments;
 }
 
-export const isAIChatElementFocused = () => {
-  const el = document.activeElement as HTMLElement | null
-  if (!el) return false
-  return (
-    Boolean(el.closest('.chatwindow')) ||
-    Boolean(el.closest('.bg-ai-chat')) ||
-    (el.id?.startsWith?.('ai-chat-header-') ?? false) ||
-    (el.id?.startsWith?.('ai-chat-message-') ?? false)
-  )
-}
+export { isAIChatElementFocused } from "@/lib/keyboard/chatSurfaceFocus";

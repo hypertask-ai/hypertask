@@ -21,6 +21,9 @@ import toast from 'react-hot-toast';
 import globalConstants from '@/lib/constants';
 import useHypertasksRecoilStates from '@/hooks/RecoilRoot/useHypertasksRecoilStates';
 const HypertasksCommands = dynamic(() => import("@/components/commands"),{ssr:false});
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
 
 const ReminderPageComponent = ({
     _currentUser,
@@ -50,6 +53,7 @@ const ReminderPageComponent = ({
     const [__, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
     const { toggleShowCommands }= useHypertasksRecoilStates()
     const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
+    const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
 
     const queryClient = useQueryClient();   
 
@@ -66,6 +70,8 @@ const ReminderPageComponent = ({
         var cmdControl = osName === "MacOS"&&e.metaKey || osName !== "MacOS"&&e.ctrlKey;
         const classNamesToReturnFrom = ["modal-open","ProseMirror ProseMirror-focused",undefined]
         const index = _reminders.findIndex(rem=>rem.id===_selectedReminder?.id)
+
+        if (agentChatKeys && isChatSurfaceTarget(e.target)) return;
 
         if (showCommands.show||
             document?.activeElement?.role==="dialog"||

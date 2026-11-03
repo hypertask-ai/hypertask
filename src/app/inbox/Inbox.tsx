@@ -4,6 +4,7 @@
 
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 
 import {
   FC,
@@ -59,7 +60,7 @@ import Image from "next/image";
 import toast from "react-hot-toast";
 import useGlobalFocusHandler from "@/hooks/Inbox/useGlobalFocusHandler";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
-import { type InboxQueryPayload, type InboxTabMeta } from "@/utils/helperFunctions/helperFunctions";
+import { type InboxQueryPayload, type InboxTabMeta, isAIChatElementFocused } from "@/utils/helperFunctions/helperFunctions";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import {
@@ -120,6 +121,7 @@ const Inbox = ({
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
   const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
   const inboxKeepsScroll = useFlag(HTPR_7841_INBOX_KEEPS_SCROLL_FLAG);
+  const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {
@@ -289,9 +291,13 @@ const Inbox = ({
     const modalOpenOrCarouselExists =
       document.querySelector(".modal") ||
       document.getElementById("carousel-container");
-    const isAIChatTiptapFocused = document
-      .getElementById("ai-chat-tiptap-editor")
-      ?.contains(document.activeElement);
+    const isAIChatTiptapFocused = agentChatKeys
+      ? isAIChatElementFocused()
+      : Boolean(
+          document
+            .getElementById("ai-chat-tiptap-editor")
+            ?.contains(document.activeElement)
+        );
 
     const searchInputFocused =
       document.activeElement?.id === "search-inbox-filter-input";

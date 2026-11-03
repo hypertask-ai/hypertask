@@ -38,6 +38,8 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import MobileInboxSplitDock from "@/components/notifications/MobileInboxSplitDock";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7892_AGENT_INBOX_KEEPS_SCROLL_FLAG } from "@/lib/flags/definitions/htpr-7892-agent-inbox-keeps-scroll";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isAIChatElementFocused } from "@/lib/keyboard/chatSurfaceFocus";
 import { resolveInboxFocusScroll } from "@/lib/inboxFocusScroll";
 
 const AgentInbox = ({
@@ -60,6 +62,7 @@ const AgentInbox = ({
   originProject: string;
 }) => {
   const agentInboxKeepsScroll = useFlag(HTPR_7892_AGENT_INBOX_KEEPS_SCROLL_FLAG);
+  const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
   const isMbl = useContext(MobileViewContext);
   const queryClient = useQueryClient();
   const [globalFocus, setGlobalFocus] = useRecoilState(
@@ -94,9 +97,13 @@ const AgentInbox = ({
     const modalOpenOrCarouselExists =
       document.querySelector(".modal") ||
       document.getElementById("carousel-container");
-    const isAIChatTiptapFocused = document
-      .getElementById("ai-chat-tiptap-editor")
-      ?.contains(document.activeElement);
+    const isAIChatTiptapFocused = agentChatKeys
+      ? isAIChatElementFocused()
+      : Boolean(
+          document
+            .getElementById("ai-chat-tiptap-editor")
+            ?.contains(document.activeElement)
+        );
 
     if (
       showCommands.show ||

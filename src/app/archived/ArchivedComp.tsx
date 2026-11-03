@@ -24,6 +24,9 @@ import { useArchivedRealtime } from "@/hooks/realtime/useArchivedRealtime";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
 
 const ArchivedTasksContainer = dynamic(()=>import("./ArchivedTasksComp"))
 const ArchivedNotificationsContainer = dynamic(()=>import("./ArchivedInboxComp"))
@@ -153,8 +156,12 @@ const Archived = ({
         setSelectedScreen(tab);
     }, []);
 
+    const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
+
     const handleKeyDown = useCallback(async(e: KeyboardEvent) => {
         var cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
+
+        if (agentChatKeys && isChatSurfaceTarget(e.target)) return;
 
         if (e.key === "Escape") router.back()
     
@@ -172,7 +179,7 @@ const Archived = ({
             setArchiveTab(tabs[0])
         }
     
-    }, [isApple, router, selectedScreen.curr, setArchiveTab, toggleShowCommands]);
+    }, [agentChatKeys, isApple, router, selectedScreen.curr, setArchiveTab, toggleShowCommands]);
 
     useEffect(() => {
         queryClient.refetchQueries({queryKey:["projectsAll"]});

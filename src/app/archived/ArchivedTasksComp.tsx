@@ -20,6 +20,9 @@ import globalConstants from '@/lib/constants';
 import { useDeviceContext } from '@/lib/contexts/deviceContext';
 import useHypertasksNavigate from '@/hooks/MultiPages/Route/useHypertasksNavigate';
 import { useArchiveInfiniteScroll } from './useArchiveInfiniteScroll';
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
 
 const ArchivedTasksContainer = ({
     tasksFromQuery,
@@ -63,6 +66,7 @@ const ArchivedTasksContainer = ({
     const [_activeItem, setActiveItem] = useRecoilState(activeItemAtom);
     const [__, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
     const [showCommands] = useRecoilState(showCommandsAtom);
+    const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
 
     const queryClient = useQueryClient();   
     const router = useRouter();
@@ -74,6 +78,8 @@ const ArchivedTasksContainer = ({
     const handleKeyDown = async(e: KeyboardEvent) => {
         var cmdControl = osName === "MacOS"&&e.metaKey || osName !== "MacOS"&&e.ctrlKey;
         const classNamesToReturnFrom = ["modal-open","ProseMirror ProseMirror-focused",undefined]
+
+        if (agentChatKeys && isChatSurfaceTarget(e.target)) return;
 
         if (showCommands.show||
             document?.activeElement?.role==="dialog"||
