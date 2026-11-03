@@ -284,24 +284,37 @@ test("MCP CLI API contract reuses smoke server before reseeding with explicit pa
   assert.match(runner, /config\/descriptions/);
 });
 
-test("required contract summary needs successful smoke and explicit contract or docs-only output", async () => {
+test("HYCI-108: the contract assertion runs inside the required browser summary", async () => {
   const yaml = require("js-yaml");
   const { spawnSync } = require("node:child_process");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
-  const gate = workflow.jobs["mcp-cli-api-contract"];
-  assert.equal(gate.name, "mcp-cli-api-contract");
-  assert.equal(gate.needs, "browser-smoke");
-  assert.equal(gate.if, "always()");
-  assert.equal(gate.steps[0].env.SMOKE_RESULT, "${{ needs.browser-smoke.result }}");
-  assert.equal(gate.steps[0].env.CONTRACT_RESULT, "${{ needs.browser-smoke.outputs.contract }}");
-  for (const result of ["success", "failure", "skipped", "cancelled", ""]) {
-    for (const output of ["passed", "failed", ""]) {
-      for (const docsOnly of ["true", "false", ""]) {
-        const child = spawnSync("bash", ["-c", gate.steps[0].run], { env: { PATH: process.env.PATH, SMOKE_RESULT: result, CONTRACT_RESULT: output, DOCS_ONLY: docsOnly } });
-        assert.equal(child.status === 0, result === "success" && (output === "passed" || docsOnly === "true"), `${result}/${output}/${docsOnly}`);
-      }
+  assert.equal(workflow.jobs["mcp-cli-api-contract"], undefined, "a separate contract job costs its own queue turn");
+  const gate = workflow.jobs["browser-smoke"].steps.find((step) => step.name === "Require the MCP CLI API contract");
+  assert.ok(gate, "the required browser summary no longer checks the contract");
+  assert.equal(gate.env.CONTRACT_RESULT, "${{ needs.browser-smoke-desktop.outputs.contract }}");
+  assert.equal(gate.env.DOCS_ONLY, "${{ needs.browser-smoke-desktop.outputs.docs_only }}");
+  for (const output of ["passed", "failed", ""]) {
+    for (const docsOnly of ["true", "false", ""]) {
+      const child = spawnSync("bash", ["-c", gate.run], { env: { PATH: process.env.PATH, CONTRACT_RESULT: output, DOCS_ONLY: docsOnly } });
+      assert.equal(child.status === 0, output === "passed" || docsOnly === "true", `${output}/${docsOnly}`);
     }
   }
+});
+
+test("HYCI-108: no pull-request check waits behind a required summary", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const summaries = ["browser-smoke", "ci-tests"];
+  for (const [id, job] of Object.entries(workflow.jobs)) {
+    const needs = [].concat(job.needs ?? []);
+    if (!needs.some((need) => summaries.includes(need))) continue;
+    assert.equal(id, "production-test-warning", `${id} adds a queue turn after a required summary on every pull request`);
+    assert.match(String(job.if), /github\.event_name == 'push'/, "the one push-only reader must stay push-only");
+  }
+  const assertionSteps = Object.values(workflow.jobs)
+    .flatMap((job) => job.steps ?? [])
+    .filter((step) => String(step.run ?? "").includes("CONTRACT_RESULT"));
+  assert.equal(assertionSteps.length, 1, "the contract is asserted exactly once, inside the summary");
 });
 
 test("browser smoke retries its build once, only after a Google font download failure", async () => {
@@ -479,9 +492,7 @@ test("HYCI-32: the required browser-smoke context is a summary over two parallel
   for (const shard of shards.slice(1)) {
     assert.ok(!shard.steps.some((step) => step.name === "Download checksum-verified pinned native CLI"));
   }
-  assert.equal(aggregate.outputs.contract, "${{ needs.browser-smoke-desktop.outputs.contract }}");
-  assert.equal(aggregate.outputs.docs_only, "${{ needs.browser-smoke-desktop.outputs.docs_only }}");
-  assert.equal(workflow.jobs["mcp-cli-api-contract"].needs, "browser-smoke");
+  assert.equal(aggregate.outputs, undefined, "nothing reads this summary any more (HYCI-108)");
   assert.deepEqual(workflow.jobs["visual-compare"].needs, ["browser-build"]);
 
   const step = aggregate.steps[0];
