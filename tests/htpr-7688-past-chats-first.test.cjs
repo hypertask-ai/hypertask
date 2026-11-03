@@ -75,7 +75,7 @@ function menu({ enabled = true, paging = false, mobile = false } = {}) {
     "lucide-react": require("lucide-react"),
     "@/hooks/useFlag": { useFlag: key => {
       if (["htpr-7702-phone-chat-list", "htpr-7764-chat-running"].includes(key)) return false;
-      assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;
+      if (key === "htpr-8334-multi-chat-windows") return false; assert.equal(key, flag.HTPR_7688_PAST_CHATS_FIRST_FLAG); return enabled;
     } },
     "@/lib/flags/definitions/htpr-7688-past-chats-first": flag,
     "@/lib/flags/definitions/htpr-7318-ticket-chat-reminder": { HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "htpr-7318-ticket-chat-reminder" },

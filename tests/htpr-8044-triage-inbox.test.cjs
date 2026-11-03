@@ -145,7 +145,8 @@ test("real pending-prompt effect starts fresh and sends triage without touching 
     isTyping: false, isByokBlocked: false, sessions: [{}], chatHistoryReady: true,
     startNewSession: async () => { created++; },
   };
-  const run = () => evaluate(effect, {
+  const run = (windowScope) => evaluate(effect, {
+    windowScope,
     pendingAiChatPrompt: pending, askAiFullscreenEnabled: true, contextProps: context,
     pathname: "/chat", editor, fileItems: files, pendingFullScreenSessionRef: ref,
     setPendingAiChatPrompt: value => { pending = typeof value === "function" ? value(pending) : value; },
@@ -165,4 +166,8 @@ test("real pending-prompt effect starts fresh and sends triage without touching 
   assert.equal(files.length, 1);
   run();
   assert.equal(sent.length, 1);
+  pending = prompt;
+  run({ windowId: "window-1", sessionId: "chat-a" });
+  assert.equal(sent.length, 1, "an extra chat window never takes the shared handoff");
+  assert.deepEqual(pending, prompt, "the handoff stays for the first window");
 });

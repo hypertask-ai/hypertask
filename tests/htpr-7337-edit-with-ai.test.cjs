@@ -171,6 +171,7 @@ function editModeCleanup({ enabled = true, open = true, taskId = 123, messages =
     "./aiChatSend": { createAiChatSend: () => ({}) },
     "./aiChatKeyboard": { createAiChatKeyboard: () => ({}) },
     "./useAiChatPresentation": { useAiChatPresentation: () => ({}) },
+    "@/lib/flags/definitions/htpr-8334-multi-chat-windows": { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG: "htpr-8334-multi-chat-windows" },
   });
   useAiChat();
   return cleared;

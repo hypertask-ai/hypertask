@@ -13,16 +13,22 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
 import { HTPR_7764_CHAT_RUNNING_FLAG } from "@/lib/flags/definitions/htpr-7764-chat-running";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 
-export const ChatWindow = () => {
+export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
   const sharedShortcutsEnabled = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
-  const shortcuts = useChatShortcuts({ enabled: sharedShortcutsEnabled });
   const isMbl = useContext(MobileViewContext);
+  const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover, runningSessionIds, chatWindows } =
+    useAiChatContext();
+  const shortcuts = useChatShortcuts({
+    enabled: sharedShortcutsEnabled,
+    ...(chatWindows?.enabled && !isMbl ? { onNewChat: chatWindows.openNewChatWindow } : {}),
+  });
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
+  const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
+  const windowFramed = framed && multiChatWindowsEnabled;
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
-  const { currentSession, showWelcomeScreen, minimized, restoreChat, togglePopover, runningSessionIds } =
-    useAiChatContext();
 
   if (minimized)
     return (
@@ -67,18 +73,18 @@ export const ChatWindow = () => {
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
         amoledChatBorder && !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)] [--bs-border-radius:var(--radius-chat-window)]",
-        isMbl
+        isMbl || windowFramed
           ? "h-full min-h-0 w-full flex-1 rounded-none"
           : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded"
       )}
       style={{
-        boxShadow: isMbl
+        boxShadow: isMbl || windowFramed
           ? undefined
           : "0 0px 75px 45px rgb(0 0 0 / 0.5), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)",
       }}
     >
       {shortcuts.modal}
-      <ChatHeader />
+      <ChatHeader windowDrag={windowFramed} />
       <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {showWelcomeScreen ? <WelcomeScreen /> : <MessageList />}
       </div>

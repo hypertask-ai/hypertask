@@ -110,7 +110,7 @@ function ChatSessionRow({
   );
 }
 
-export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext } = {}) => {
+export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?: SidebarChatContext; windowDrag?: boolean } = {}) => {
   const hasAgentSessions = useFlag(HTPR_8048_AGENT_SESSIONS_FLAG);
   const [agentsOpen, setAgentsOpen] = useState(false);
   const agentButtonRef = useRef<HTMLButtonElement>(null);
@@ -131,6 +131,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
   }, [!!sidebarChats, openFromLink]);
   const router = useRouter();
   const pathname = usePathname();
+  const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
@@ -151,6 +152,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
     deleteSession,
     editor,
     currentAiOption,
+    chatWindows: chatWindowControls,
   } = useAiChatContext();
   const sidebarTitle = sidebarChats?.target.kind === "ai"
     ? (chatHeaderNameEnabled && currentSession?.title) || "AI chat"
@@ -270,6 +272,10 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
               if (agent && sidebarChats?.onSelectAgentSession) sidebarChats.onSelectAgentSession(agent, chat.id);
               else {
                 sidebarChats?.onSelect({ kind: "ai" });
+                if (!isFullScreenChat && chat.id !== resolvedSessionId) {
+                  const focused = windowDrag ? chatWindowControls?.focusOpenSessionWindow(chat.id) : chatWindowControls?.openSessionWindow(chat.id);
+                  if (focused) return;
+                }
                 selectSession(chat.id);
               }
             }}
@@ -424,6 +430,7 @@ export const ChatHeader = ({ sidebarChats }: { sidebarChats?: SidebarChatContext
 
   return (
     <div
+      data-chat-window-drag={windowDrag ? "" : undefined}
       className={`z-10 text-content font-bold px-2 gap-4 flex items-center justify-between border-gray-700 text-white-black ${
         isSidebarMode ? "h-[48px] pt-4 pb-0" : "py-2"
       }`}

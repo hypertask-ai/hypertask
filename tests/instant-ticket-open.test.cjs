@@ -73,10 +73,11 @@ export function Shell({ pathname, children, ChatRuntime }) {
   const mobilePullCommandVisible = false;
   const openAIChatInterface = () => {};
   const AIChatPanels = () => null;
+  const multiChatWindowsEnabled = false;
   return (${shell});
 }`, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
 const shellExports = {};
-new Function("require", "exports", "ChatRuntimeHost", "AIChatClosedLayout", "FullScreenChatLoading", "Suspense", "CachedTaskDetailNavigation", compiledShell)(require, shellExports, ChatRuntimeHost, AIChatClosedLayout, FullScreenChatLoading, React.Suspense, CachedTaskDetailNavigation);
+new Function("require", "exports", "ChatRuntimeHost", "AIChatClosedLayout", "FullScreenChatLoading", "Suspense", "CachedTaskDetailNavigation", "ChatWindowStackMount", compiledShell)(require, shellExports, ChatRuntimeHost, AIChatClosedLayout, FullScreenChatLoading, React.Suspense, CachedTaskDetailNavigation, () => null);
 
 for (const mobile of [true, false]) {
   test(`${mobile ? "phone" : "desktop"} ticket shell renders immediately while chat is pending and does not remount when it resolves`, async () => {

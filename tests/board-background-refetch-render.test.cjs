@@ -214,7 +214,7 @@ const shellModule = { exports: {} };
 const shellSource = `
   const { Suspense } = require("react");
   const { BoardStartupContext, ChatRuntimeHost, ChatRuntime, AIChatPanels,
-    AIChatClosedLayout, CachedTaskDetailNavigation, FullScreenChatLoading } = dependencies;
+    AIChatClosedLayout, CachedTaskDetailNavigation, FullScreenChatLoading, ChatWindowStackMount } = dependencies;
   const releaseSecondaryStartup = () => {};
   const markBoardUsable = () => {};
   const secondaryStartupEnabled = false;
@@ -225,6 +225,7 @@ const shellSource = `
   const mobilePullCommandVisible = false;
   const openAIChatInterface = () => {};
   const authenticatedUserId = 8;
+  const multiChatWindowsEnabled = false;
   exports.Workspace = function Workspace({ children, layoutFlagsEnabled, chatMounted }) {
     const shouldMountChatRuntime = chatMounted;
     const showAiChatInterface = chatMounted;
@@ -262,6 +263,7 @@ for (const chatMounted of [false, true]) {
       AIChatClosedLayout: load("./src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx").default,
       CachedTaskDetailNavigation: load("./src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx").default,
       FullScreenChatLoading: noopComponent,
+      ChatWindowStackMount: noopComponent,
     };
     const compiledShell = ts.transpileModule(shellSource, {
       compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS },
