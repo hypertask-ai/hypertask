@@ -118,7 +118,7 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
   let reading: string
   let action: string
   if (reporter?.origin !== 'automatic' && scopeRefusal(input)) {
-    const signIn = input.status === 401 || input.errorCode?.toLowerCase() === 'unauthorized' || input.category === 'auth_failed'
+    const signIn = !membershipRefusal(input) && (input.status === 401 || input.errorCode?.toLowerCase() === 'unauthorized' || input.category === 'auth_failed')
     happened = signIn ? `An agent was refused when it signed in through ${surface}` : `${call} was refused because the agent may not use that board or action`
     reading = signIn ? 'This usually means the agent used a wrong or expired key, not a Hypertask bug.' : 'The agent may have used a board or action it is not allowed to use; this is usually not a Hypertask bug.'
     action = "Tell the agent's owner to check its key and board permissions."

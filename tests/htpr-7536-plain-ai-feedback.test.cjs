@@ -243,7 +243,7 @@ for (const report of [
   })
 }
 
-test('a CLI board-membership refusal files no ticket and stops the wrong-key reading', async t => {
+test('a CLI board-membership refusal files no ticket and never reads as a wrong key', async t => {
   const log = t.mock.method(console, 'info', () => {})
   const f = setup()
   const reported = { surface: 'cli', client: 'hypertask-cli', tool: 'task.create', errorCode: 'not-a-member', category: 'auth_failed' }
@@ -252,7 +252,11 @@ test('a CLI board-membership refusal files no ticket and stops the wrong-key rea
   assert.equal(f.created.length, 0)
   assert.equal(f.comments.length, 0)
   assert.match(log.mock.calls[0].arguments[0], /normal access refusal/)
-  assert.match(f.plainFeedback(reported, 'b'.repeat(64), { origin: 'automatic' }).description, /What to do<\/strong>: An engineer should look/)
+  for (const origin of ['agent', 'automatic']) {
+    const rendered = f.plainFeedback(reported, 'b'.repeat(64), { origin }).description
+    assert.doesNotMatch(rendered, /wrong or expired key|refused when it signed in/)
+  }
+  assert.match(f.plainFeedback(reported, 'b'.repeat(64), { origin: 'agent' }).description, /not allowed to use that board or action/)
 })
 
 for (const reason of ['invalid_token', 'insufficient_scope', new Error('Classifier unavailable')]) {
