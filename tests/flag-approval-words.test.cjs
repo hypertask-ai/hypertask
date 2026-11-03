@@ -175,3 +175,20 @@ for (const recommendation of ["No.", "No, keep it off.", "Yes, but only after QA
     assert.equal(parseSwitchQuestion(words, true), null);
   });
 }
+
+for (const [name, body] of [
+  ["a quoted hedge inside the Question line", `<p><strong>Question:</strong> Switch x to "not" Everyone?</p>`],
+  ["a quoted hedge after the Question line", `<p><strong>Question:</strong> Switch x to Everyone? "not yet"</p>`],
+  ["a quoted No recommendation", `<p><strong>Question:</strong> Switch x to Everyone?</p><p><strong>My recommendation:</strong> "No."</p>`],
+]) {
+  test(`a shaped comment with ${name} refuses in both lanes`, () => {
+    const words = shapedWith(body).replace(/my recommendation: yes\./, "");
+    assert.equal(parseSwitchQuestion(words, true), null);
+    const text = require("node-html-parser").parse(`<p><strong>What this is:</strong> a flag.</p>${body}
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>`).text;
+    assert.equal(strictSwitchRequest(text, false, true), null);
+  });
+}

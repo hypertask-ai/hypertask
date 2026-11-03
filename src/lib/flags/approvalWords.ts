@@ -26,7 +26,7 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;
 const QUOTED = /"[^"]*(?:"|$)/g;
-const ADVICE_HEDGE = /\b(?:no|not|don't|dont|do not|never|wait|later|hold|stop|cancel|only|if|unless|instead|except|but)\b/;
+const ADVICE_HEDGE = /\b(?:no|not|don't|dont|do not|never|wait|later|hold|stop|cancel|only|if|unless|instead|except|but)\b/i;
 
 export function templateQuestionRequest(text: string): string | null {
   const masked = text.replace(QUOTED, (span) => " ".repeat(span.length));
@@ -37,10 +37,10 @@ export function templateQuestionRequest(text: string): string | null {
   if (!first || first[1].toLowerCase() !== "what this is" || questions.length !== 1) return null;
   const question = questions[0];
   const next = labels.find((match) => match.index > question.index);
-  const request = masked.slice(question.index, next?.index ?? masked.length).trim();
+  const request = text.slice(question.index, next?.index ?? text.length).trim();
   const advice = labels.find((match) => match[1].toLowerCase() === "my recommendation");
   const adviceEnd = advice && labels.find((match) => match.index > advice.index);
-  const recommendation = advice ? masked.slice(advice.index, adviceEnd?.index ?? masked.length) : "";
+  const recommendation = advice ? text.slice(advice.index, adviceEnd?.index ?? text.length) : "";
   if (!request || ADVICE_HEDGE.test(recommendation)) return null;
   return request;
 }
