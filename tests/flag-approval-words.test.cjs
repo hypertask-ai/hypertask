@@ -146,3 +146,32 @@ test("a shaped Question refuses while its switch is off, and free wording keeps 
   assert.equal(parseSwitchQuestion("Switch x to Everyone? No, keep it.", true), null);
   assert.equal(strictSwitchRequest("Question: Switch x to Everyone? Switch y to Off?", false, true), null);
 });
+
+const shapedWith = (body) => normalizeVisibleText(`<p><strong>What this is:</strong> a flag that keeps a running chat.</p>${body}
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>`);
+
+test("a quoted switch request in the context block never approves its own switch", () => {
+  const quotedOnly = shapedWith(`<p>He asked "Question: Switch x to Everyone?" last week.</p>`);
+  assert.equal(parseSwitchQuestion(quotedOnly, true), null);
+
+  const quotedThenReal = shapedWith(`<p>He asked "Question: Switch x to Everyone?" last week.</p>
+<p><strong>Question:</strong> Switch x to Off?</p>`);
+  assert.deepEqual([...parseSwitchQuestion(quotedThenReal, true)], [["x", "Off"]]);
+});
+
+test("a shaped comment with two Question lines refuses", () => {
+  const twoQuestions = shapedWith(`<p><strong>Question:</strong> Switch x to Everyone?</p>
+<p><strong>Question:</strong> Switch x to Off?</p>`);
+  assert.equal(parseSwitchQuestion(twoQuestions, true), null);
+});
+
+for (const recommendation of ["No.", "No, keep it off.", "Yes, but only after QA."]) {
+  test(`a shaped comment recommending ${JSON.stringify(recommendation)} refuses a thumbs up`, () => {
+    const words = shapedWith(`<p><strong>Question:</strong> Switch x to Everyone?</p>`)
+      .replace("my recommendation: yes.", `my recommendation: ${recommendation.toLowerCase()}`);
+    assert.equal(parseSwitchQuestion(words, true), null);
+  });
+}

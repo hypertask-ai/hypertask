@@ -25,16 +25,24 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
 }
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;
+const QUOTED = /"[^"]*(?:"|$)/g;
+const ADVICE_HEDGE = /\b(?:no|not|don't|dont|do not|never|wait|later|hold|stop|cancel|only|if|unless|instead|except|but)\b/;
 
 export function templateQuestionRequest(text: string): string | null {
-  const labels = [...text.matchAll(TEMPLATE_LABEL)]
-    .filter((match) => match.index === 0 || /[\s.!?:*-]/.test(text[match.index - 1]));
+  const masked = text.replace(QUOTED, (span) => " ".repeat(span.length));
+  const labels = [...masked.matchAll(TEMPLATE_LABEL)]
+    .filter((match) => match.index === 0 || /[\s.!?:*-]/.test(masked[match.index - 1]));
   const first = labels[0];
-  const question = labels.find((match) => match[1].toLowerCase() === "question");
-  if (!first || first[1].toLowerCase() !== "what this is" || !question) return null;
-  const next = labels.find((match) => (match.index ?? 0) > (question.index ?? 0));
-  const request = text.slice(question.index, next?.index ?? text.length).trim();
-  return request || null;
+  const questions = labels.filter((match) => match[1].toLowerCase() === "question");
+  if (!first || first[1].toLowerCase() !== "what this is" || questions.length !== 1) return null;
+  const question = questions[0];
+  const next = labels.find((match) => match.index > question.index);
+  const request = masked.slice(question.index, next?.index ?? masked.length).trim();
+  const advice = labels.find((match) => match[1].toLowerCase() === "my recommendation");
+  const adviceEnd = advice && labels.find((match) => match.index > advice.index);
+  const recommendation = advice ? masked.slice(advice.index, adviceEnd?.index ?? masked.length) : "";
+  if (!request || ADVICE_HEDGE.test(recommendation)) return null;
+  return request;
 }
 
 const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
