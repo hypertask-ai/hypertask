@@ -2,6 +2,7 @@
 
 Start with `/ship` and [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
 House rules stay in the shared, person-level source.
+Load each skill when its step starts.
 Read the relevant reference section before acting.
 Paths in reference commands are repository-relative.
 
