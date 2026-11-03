@@ -5,6 +5,7 @@ import { automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackIn
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 import { callerCanFixRefusal, quietFixableReports } from './callerFixable'
+import { deferFailure, failureKey, noteSuccess } from './retryQuiet'
 import { HTPR_7838_CONFLICT_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7838-conflict-no-feedback'
 import { HTPR_7819_NOT_FOUND_NO_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7819-not-found-no-feedback'
 
@@ -131,26 +132,44 @@ function feedbackErrorDetails(value: unknown, depth = 0): Pick<AutomaticFeedback
   }
 }
 
+function deferAutomaticFeedback(key: string, input: AutomaticFeedbackInput, userId?: number): void {
+  try {
+    waitUntil(deferFailure(key, () => fileAutomaticFeedback(input, userId)))
+  } catch {
+  }
+}
+
 export function observeFeedbackTools(tools: readonly PortableTool[], userId: number): PortableTool[] {
   return tools.map((tool) => ({
     ...tool,
     execute: async (args, token, invocation) => {
       if (tool.name === 'hypertask_report_feedback') return tool.execute(args, token, invocation)
+      const key = failureKey(userId, tool.name, args)
       try {
         const text = await tool.execute(args, token, invocation)
         let result: unknown
         try { result = JSON.parse(text) } catch {}
         const status = feedbackStatus(result)
-        if (status && status >= 500) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId)
+        if (status && status >= 500) {
+          const input: AutomaticFeedbackInput = { surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }
+          if (await quietFixableReports(userId)) deferAutomaticFeedback(key, input, userId)
+          else queueAiFeedback(input, userId)
+        } else if (!status || status < 400) {
+          noteSuccess(key)
+        }
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
         if (status !== 403 && !await answerIsExpected(status, userId)) {
           const details = feedbackErrorDetails(error)
-          if (callerCanFixRefusal(details && { code: details.errorCode, field: details.field }, status) && await quietFixableReports(userId)) {
+          const input: AutomaticFeedbackInput = { surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...details }
+          const quiet = await quietFixableReports(userId)
+          if (quiet && callerCanFixRefusal(details && { code: details.errorCode, field: details.field }, status)) {
             console.info('AI feedback not filed: the refusal tells the caller what to fix', { tool: tool.name })
+          } else if (quiet) {
+            deferAutomaticFeedback(key, input, userId)
           } else {
-            queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception', ...details }, userId)
+            queueAiFeedback(input, userId)
           }
         }
         throw error

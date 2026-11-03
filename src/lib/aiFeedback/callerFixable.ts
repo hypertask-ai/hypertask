@@ -13,6 +13,15 @@ export function callerCanFixRefusal(details: FeedbackRefusal | undefined, status
   return status < 500 && callerCanFix(details ?? {});
 }
 
+const NAMED_FIELD_REFUSALS = new Set(["unrecognized_keys", "invalid_type", "invalid_literal", "invalid_union", "invalid_enum_value", "invalid_string", "invalid_date", "invalid_key", "too_small", "too_big", "not_multiple_of", "unrecognized", "custom"]);
+const LISTED_VALUE_REFUSALS = new Set(["unrecognized_keys", "invalid_enum_value", "unrecognized"]);
+
+export function quietInputRefusal(input: { status?: number; errorCode?: string; field?: string }): boolean {
+  const code = (input.errorCode ?? "").toLowerCase();
+  if (input.status !== 400) return false;
+  return LISTED_VALUE_REFUSALS.has(code) || (NAMED_FIELD_REFUSALS.has(code) && Boolean(input.field));
+}
+
 export const RECENTLY_FILED_HOURS = 24;
 
 export function filedWithinLastDay(filedAt: Date | string | null | undefined, now: Date = new Date()): boolean {

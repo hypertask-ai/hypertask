@@ -11,7 +11,7 @@ import { createCommentService } from '@/utils/controllers/comments/createComment
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
-import { filedRecently, quietFixableReports } from './callerFixable'
+import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
 
 export { aiFeedbackEnabled } from './enabled'
 
@@ -69,15 +69,6 @@ function scopeRefusal(input: AiFeedbackInput): boolean {
   if (code === 'route not found' || code === 'not found' && /\/api\//i.test(input.error ?? '')) return false
   const refusal = `${code} ${input.error ?? ''}`
   return /\b(?:unauthorized|forbidden|(?:permission|access|scope) (?:denied|refused)|insufficient (?:permissions?|scope)|(?:invalid|expired|revoked) (?:token|key)|(?:token|key) (?:invalid|expired|revoked)|auth(?:entication)? failed|(?:task|board|project) not found)\b/i.test(refusal)
-}
-
-const INPUT_REFUSAL_CODES = new Set([
-  'unrecognized_keys', 'invalid_type', 'invalid_literal', 'invalid_union', 'invalid_enum_value',
-  'invalid_string', 'invalid_date', 'invalid_key', 'too_small', 'too_big', 'not_multiple_of', 'unrecognized', 'custom',
-])
-
-function inputRefusal(input: AiFeedbackInput): boolean {
-  return input.status === 400 && INPUT_REFUSAL_CODES.has((input.errorCode ?? '').toLowerCase())
 }
 
 function toolOnlyFailure(input: AutomaticFeedbackInput): boolean {
@@ -216,7 +207,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           console.info('AI feedback not filed: the report names a tool but no status, error code or field', { surface: input.surface, tool: input.tool, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'no_evidence' as const, error: 'No ticket filed: the report names a tool but no HTTP status or error code. Report again with the status and error code of the failed call.' }
         }
-        if (reporter.origin === 'automatic' && inputRefusal(input) && !existing) {
+        if (reporter.origin === 'automatic' && quietInputRefusal(input) && !existing) {
           console.info('AI feedback not filed: tool input refusal', { surface: input.surface, tool: input.tool, errorCode: input.errorCode, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'input_refused' as const, error: 'Tool input refusal; no new ticket was filed.' }
         }
