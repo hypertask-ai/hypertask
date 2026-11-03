@@ -20,6 +20,7 @@ const artifact = (overrides = {}) => ({
 });
 
 const run = (overrides = {}) => ({
+  event: "push",
   path: ".github/workflows/visual-regression.yml",
   head_branch: "production",
   head_sha: SHA,
@@ -76,4 +77,13 @@ test("the producer run must be a successful production push of this workflow", a
   assert.equal(isTrustedProducer(run({ head_branch: "runner-9/poison" })), false);
   assert.equal(isTrustedProducer(run()), true);
   assert.equal(isTrustedProducer(null), false);
+});
+
+test("a run that only looks like a production push is refused, because a branch name is not a trust signal", async () => {
+  const { isTrustedProducer } = await load();
+  assert.equal(isTrustedProducer(run({ event: "pull_request" })), false);
+  assert.equal(isTrustedProducer(run({ event: "workflow_dispatch" })), false);
+  assert.equal(isTrustedProducer(run({ event: "workflow_run" })), false);
+  assert.equal(isTrustedProducer(run({ event: undefined })), false);
+  assert.equal(isTrustedProducer(run()), true);
 });

@@ -6,14 +6,16 @@
 // ci-tests.yml downloads a published baseline instead of rebuilding the base app.
 // The artifact API filters by name alone, so any run, including a pull request
 // that uploads the same name, could publish the screenshots another pull request
-// compares against and hide the regression the gate exists to catch. Only an
-// artifact of a successful visual-regression.yml run on a production push is
-// trusted; the name carries the runner image, the base render-source fingerprint
-// and the harness fingerprint, which the producer computes from its own checkout.
-// Anything else rebuilds the base.
+// compares against and hide the regression the gate exists to catch. A branch
+// name is not a trust signal, and the artifact listing carries no event, so the
+// run is fetched and must be a successful visual-regression.yml push run on
+// production; the name carries the runner image, the base render-source
+// fingerprint and the harness fingerprint, which the producer computes from its
+// own checkout. Anything else rebuilds the base.
 import { readFileSync } from "node:fs";
 
 export const PRODUCER_BRANCH = "production";
+export const PRODUCER_EVENT = "push";
 export const PRODUCER_PATH = ".github/workflows/visual-regression.yml";
 
 export function selectPublishedBaseline(artifacts) {
@@ -30,6 +32,7 @@ export function selectPublishedBaseline(artifacts) {
 export function isTrustedProducer(run) {
   return Boolean(
     run &&
+      run.event === PRODUCER_EVENT &&
       run.path === PRODUCER_PATH &&
       run.head_branch === PRODUCER_BRANCH &&
       run.status === "completed" &&
