@@ -258,6 +258,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/pullRequests/taskPullRequests": { refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: access.taskWriteAccessWhere, intersectProjectTeamScope: (where, scope) => { assert.equal(scope == null, true); return where; }, getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
