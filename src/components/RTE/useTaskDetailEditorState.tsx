@@ -1,5 +1,5 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
-import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
+import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7659_ARCHIVE_EVERY_SEND_FLAG } from "@/lib/flags/keys";
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
@@ -148,11 +148,10 @@ export function useTaskDetailEditorState({
   const [toggleHighlight, setToggleHighlight] = useState<boolean>(false);
   const [trigger, setTrigger] = useState(false);
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const commentSkillRun = useFlag(HTPR_7480_COMMENT_SKILL_RUN_FLAG) && commentInlineAi;
   const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
-  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
+  const sidebarEditWithAi = !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);

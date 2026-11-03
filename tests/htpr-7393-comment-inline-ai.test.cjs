@@ -3,19 +3,17 @@ const test = require("node:test");
 const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
 
 const flag = "htpr-7393-comment-inline-ai";
-const oldFlag = "htpr-7337-edit-with-ai";
 const keys = {
   HTPR_7393_COMMENT_INLINE_AI_FLAG: flag,
-  HTPR_7337_EDIT_WITH_AI_FLAG: oldFlag,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
   HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
 };
 const modes = ["create-comment", "read-edit-comments", "read-edit-description"];
-function harness(enabled, oldEnabled = true) {
+function harness(enabled) {
   const actions = [];
   let writer = false;
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === oldFlag ? oldEnabled : ["compose", "new-task"].includes(key), useFlagLoaded: () => true },
+    "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : ["compose", "new-task"].includes(key), useFlagLoaded: () => true },
     "@/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar": { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: "htpr-7800-skill-runs-in-sidebar" },
     "@/lib/flags/keys": keys,
     "@/lib/state": { useSetRecoilState: () => value => actions.push(["commands", value]), useRecoilValue: () => true },

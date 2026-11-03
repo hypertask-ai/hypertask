@@ -55,7 +55,6 @@ async function withSidebar(options, check) {
       HTPR_7586_ONE_QUESTIONS_CALL_FLAG: flag,
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,
       HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG: questionsFlag,
-      HTPR_7337_EDIT_WITH_AI_FLAG: "htpr-7337-edit-with-ai",
     },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": {
       useAiChatContext: () => ({

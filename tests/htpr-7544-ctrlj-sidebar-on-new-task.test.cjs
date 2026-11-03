@@ -12,7 +12,6 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const flag = "htpr-7544-ctrlj-sidebar-on-new-task";
-const editFlag = "htpr-7337-edit-with-ai";
 function load(file, mocks = {}) {
   const mod = { exports: {} };
   const compiled = ts.transpileModule(read(file), {
@@ -48,17 +47,14 @@ async function detail(options, run) {
     searchParams: new URLSearchParams(options.openRequest ? "newTaskAi=1" : ""),
     router: { replace: (url) => calls.push(["replace", url]) },
   };
-  const commandContext = { ...state, editWithAiEnabled: options.editFlag ?? true,
-    returnCurrentFocusedType: () => "Others", focusOn: () => {}, setEditMode: (mode) => calls.push(["mode", mode]),
-    setShowCommands: (value) => calls.push(["new-task", value]),
-  };
-  const keyboard = (context, enabled) => ({ handleKeyDown: (event) => {
-    const command = taskDetailNavigationKeymap({ ...commandContext, ...context, editWithAiEnabled: enabled }, event, options.apple ? event.metaKey : event.ctrlKey).find((item) => item.action === "aiWriter");
+  const commandContext = { ...state, setShowCommands: (value) => calls.push(["new-task", value]) };
+  const keyboard = (context) => ({ handleKeyDown: (event) => {
+    const command = taskDetailNavigationKeymap({ ...commandContext, ...context }, event, options.apple ? event.metaKey : event.ctrlKey).find((item) => item.action === "aiWriter");
     if (command.matches()) command.run();
   } });
   const mocks = {
-    "@/hooks/useFlag": { useFlag: (key) => key === flag ? options.enabled !== false : key === editFlag && options.editFlag !== false },
-    "@/lib/flags/keys": { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG: flag, HTPR_7337_EDIT_WITH_AI_FLAG: editFlag },
+    "@/hooks/useFlag": { useFlag: (key) => key === flag && options.enabled !== false },
+    "@/lib/flags/keys": { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG: flag },
     "@/lib/ai/composeTaskTarget": { isEmptyComposeTarget },
     "@/lib/state": { useRecoilValue: () => ({ taskId: 43 }) },
     "@/store": { inViewObjectAtom: "in-view" },
@@ -103,22 +99,20 @@ async function detail(options, run) {
 
 test("fresh task Ctrl+J opens only the existing sidebar on that task, including focused title/editor and Cmd+J", async () => {
   for (const apple of [false, true]) {
-    for (const editFlag of [false, true]) {
-      await detail({ apple, editFlag }, async ({ calls, press }) => {
-        assert.equal(press().defaultPrevented, true);
-        document.getElementById("title-input").focus();
-        press();
-        const editor = document.createElement("div");
-        editor.className = "ProseMirror";
-        editor.tabIndex = 0;
-        document.body.append(editor);
-        editor.focus();
-        press();
-        assert.deepEqual(calls, [["sidebar", 43], ["sidebar", 43], ["sidebar", 43]]);
-        press({ repeat: true });
-        assert.equal(calls.length, 3, "holding the key must not create more sessions");
-      });
-    }
+    await detail({ apple }, async ({ calls, press }) => {
+      assert.equal(press().defaultPrevented, true);
+      document.getElementById("title-input").focus();
+      press();
+      const editor = document.createElement("div");
+      editor.className = "ProseMirror";
+      editor.tabIndex = 0;
+      document.body.append(editor);
+      editor.focus();
+      press();
+      assert.deepEqual(calls, [["sidebar", 43], ["sidebar", 43], ["sidebar", 43]]);
+      press({ repeat: true });
+      assert.equal(calls.length, 3, "holding the key must not create more sessions");
+    });
   }
 });
 
@@ -143,17 +137,13 @@ test("empty saved detail Ctrl+J wins over the global compose capture listener in
   }
 });
 
-test("flag off and nonempty tasks keep the existing New Task route; old AI flag off keeps description-ai", async () => {
+test("flag off and nonempty tasks keep the existing New Task route", async () => {
   for (const options of [{ enabled: false }, { task: { title: "Existing task" } }, { task: { description_: { content: "<p>Written already</p>" } } }, { embedded: true }]) {
     await detail(options, async ({ calls, press }) => {
       press();
       assert.deepEqual(calls, [["new-task", { show: true, mode: "command", paletteTab: "compose" }]]);
     });
   }
-  await detail({ enabled: false, editFlag: false }, async ({ calls, press }) => {
-    press();
-    assert.deepEqual(calls, [["mode", "description-ai"]]);
-  });
 });
 
 test("other shortcuts, open dialogs and chat composer are not intercepted", async () => {

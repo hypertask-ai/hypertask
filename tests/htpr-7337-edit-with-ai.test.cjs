@@ -7,7 +7,6 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
-const flag = "htpr-7337-edit-with-ai";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, mocks = {}) {
   const mod = { exports: {} };
@@ -31,21 +30,11 @@ const labels = [
   "Turn the error log into steps to reproduce",
 ];
 
-test("feature flag is client-safe, explicitly Owner + QA, with a release risk", () => {
-  const definition = load(`src/lib/flags/definitions/${flag}.ts`).default;
-  assert.equal(definition.key, flag);
-  assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
-  assert.equal(definition.releaseRisk.risk, "new");
-  assert.ok(definition.releaseRisk.reason.length > 0);
-});
-
-function summaryButton(enabled, comments, flaggedIncomplete = false) {
+function summaryButton(comments, flaggedIncomplete = false) {
   const actions = [];
   const { default: Button } = load("src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx", {
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+    "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-    "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
     "@/lib/flags/definitions/htpr-8173-description-inline-drafts": { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts" },
     "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({ editTicketWithAi: (id) => actions.push(["chat", id]) }) },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask: { id: 123, description_: { flaggedIncomplete } }, comments, setEditMode: (mode) => actions.push(["mode", mode]) }) },
@@ -53,24 +42,22 @@ function summaryButton(enabled, comments, flaggedIncomplete = false) {
   return { element: Button(), actions };
 }
 
-test("flag off retains AI Description and its comment/incomplete conditions; flag on shows Edit with AI on every ticket", () => {
-  assert.equal(renderToStaticMarkup(summaryButton(false, [{}], true).element), "");
-  assert.match(renderToStaticMarkup(summaryButton(true, [{}], true).element), /Edit with AI/);
-  assert.equal(renderToStaticMarkup(summaryButton(false, []).element), "");
-  assert.match(renderToStaticMarkup(summaryButton(false, [{}]).element), /AI Description/);
-  const edit = summaryButton(true, []);
-  assert.match(renderToStaticMarkup(edit.element), /Edit with AI/);
-  edit.element.props.children.props.onClick();
-  assert.deepEqual(edit.actions, [["chat", 123]]);
+test("Edit with AI shows on every ticket, including empty and unfinished ones, and opens the sidebar chat", () => {
+  for (const [comments, flaggedIncomplete] of [[[{}], true], [[], false], [[{}], false]]) {
+    const edit = summaryButton(comments, flaggedIncomplete);
+    assert.match(renderToStaticMarkup(edit.element), /Edit with AI/);
+    edit.element.props.children.props.onClick();
+    assert.deepEqual(edit.actions, [["chat", 123]]);
+  }
 });
 
-function welcome(enabled, editTaskId = 123) {
+function welcome(editTaskId = 123) {
   const sent = [];
   const { WelcomeScreen } = load("src/components/AI_CHAT/WelcomeScreen.tsx", {
     react: hookReact,
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+    "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-    "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
+    "@/lib/flags/keys": {},
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ isDetailPage: true, handleSendMessage: (message) => sent.push(message) }) },
     "next/navigation": { usePathname: () => "/detail/project-15/123" },
@@ -92,7 +79,7 @@ function buttons(element) {
 }
 
 test("edit welcome uses exactly the five approved chips and sends in-place editing prompts naming the ticket", () => {
-  const { element, sent } = welcome(true);
+  const { element, sent } = welcome();
   assert.match(renderToStaticMarkup(element), /How do you want to edit this task\?/);
   const chips = buttons(element);
   assert.deepEqual(chips.map((button) => button.props.children), labels);
@@ -112,9 +99,9 @@ test("edit welcome uses exactly the five approved chips and sends in-place editi
   assert.match(sent[4], /error log.*steps to reproduce.*description/);
 });
 
-test("flag off or a different viewed task keeps today's generated questions, summary and threads", () => {
-  for (const [enabled, taskId] of [[false, 123], [true, 999], [true, null]]) {
-    const { element, sent } = welcome(enabled, taskId);
+test("a different viewed task or no task keeps today's generated questions, summary and threads", () => {
+  for (const taskId of [999, null]) {
+    const { element, sent } = welcome(taskId);
     const html = renderToStaticMarkup(element);
     assert.doesNotMatch(html, /How do you want to edit this task/);
     assert.match(html, /Generated question/);
@@ -153,14 +140,14 @@ test("opening edit mode opens the existing sidebar and starts a fresh session be
   assert.ok(!calls.some(([name]) => name === "clear-chat-composer"), "unsent chat text survives the handoff");
 });
 
-function editModeCleanup({ enabled = true, open = true, taskId = 123, messages = [] }) {
+function editModeCleanup({ open = true, taskId = 123, messages = [] }) {
   const cleared = [];
   const { useAiChat } = load("src/hooks/MultiPages/AIChat/useAiChat.ts", {
     "@/hooks/MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigateToTask() {} }) },
     react: hookReact,
-    "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
+    "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
-    "@/lib/flags/keys": { HTPR_7337_EDIT_WITH_AI_FLAG: flag },
+    "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
     "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
     "@/lib/state": { useRecoilState: () => [123, (value) => cleared.push(value)] },
@@ -177,14 +164,14 @@ function editModeCleanup({ enabled = true, open = true, taskId = 123, messages =
   return cleared;
 }
 
-test("edit mode clears after typed or chip messages, close, task navigation, or flag disable", () => {
+test("edit mode clears after typed or chip messages, close, or task navigation", () => {
   assert.deepEqual(editModeCleanup({}), []);
-  for (const state of [{ messages: [{ role: "human", content: "typed message" }] }, { open: false }, { taskId: 999 }, { taskId: null }, { enabled: false }]) {
+  for (const state of [{ messages: [{ role: "human", content: "typed message" }] }, { open: false }, { taskId: 999 }, { taskId: null }]) {
     assert.deepEqual(editModeCleanup(state), [null]);
   }
 });
 
-test("Ctrl+J opens the new-ticket composer with the flag on and the description writer with it off", () => {
+test("Ctrl+J opens the new-ticket composer", () => {
   const { taskDetailNavigationKeymap } = load("src/app/detail/[...slug]/taskDetailNavigationKeymap.ts", {
     "@/lib/configs/taskDetail.config": { default: {} },
     "@/lib/keyboard/archiveShortcutGuard": {},
@@ -196,17 +183,14 @@ test("Ctrl+J opens the new-ticket composer with the flag on and the description 
   const previousDocument = global.document;
   global.document = { getElementById: () => null };
   try {
-    for (const enabled of [false, true]) {
-      const actions = [];
-      const keymap = taskDetailNavigationKeymap({ editWithAiEnabled: enabled, currentTask: { id: 123 },
-        returnCurrentFocusedType: () => "Others", focusOn: () => {},
-        setEditMode: (mode) => actions.push(mode), setShowCommands: (value) => actions.push(value),
-      }, { keyCode: 74, preventDefault: () => {} }, true);
-      const command = keymap.find((item) => item.action === "aiWriter");
-      assert.equal(command.matches(), true);
-      assert.equal(command.run().stop, true);
-      assert.deepEqual(actions, enabled ? [{ show: true, mode: "command", paletteTab: "compose" }] : ["description-ai"]);
-    }
+    const actions = [];
+    const keymap = taskDetailNavigationKeymap({ currentTask: { id: 123 },
+      setShowCommands: (value) => actions.push(value),
+    }, { keyCode: 74, preventDefault: () => {} }, true);
+    const command = keymap.find((item) => item.action === "aiWriter");
+    assert.equal(command.matches(), true);
+    assert.equal(command.run().stop, true);
+    assert.deepEqual(actions, [{ show: true, mode: "command", paletteTab: "compose" }]);
   } finally {
     global.document = previousDocument;
   }

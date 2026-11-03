@@ -1,7 +1,7 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -15,12 +15,11 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorContext) {
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const setCommands = useSetRecoilState(showCommandsAtom);
   const { isInboxFlow, isApple, isRecording, isReadOnlyContent, mode, shouldShowInlineDraftAiRef, editor, mobileExistingEditOpen, discardDraft, inInbox, setFilesDropped, allowEdit, shouldShowAiTaskWriter, isMbl, handleTaskOptions, editMode, scrollVirtualize } = getContext();
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
-  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
+  const sidebarEditWithAi = !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
 
 
   const handleKeydown = (e: any) => {

@@ -399,7 +399,6 @@ function editorPanels(cachedStaticFirst = false) {
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
     HTPR_7395_CACHED_STATIC_FIRST_FLAG: "cached-static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
-    HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
     HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
     HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG: "htpr-8173-description-inline-drafts",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",

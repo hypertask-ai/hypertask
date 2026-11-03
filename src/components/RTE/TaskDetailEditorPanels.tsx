@@ -1,5 +1,5 @@
 import { HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG } from "@/lib/flags/definitions/htpr-8173-description-inline-drafts";
-import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -34,10 +34,9 @@ import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentatio
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, chatHandoffOpen, setChatHandoffOpen, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const descriptionInlineDrafts = useFlag(HTPR_8173_DESCRIPTION_INLINE_DRAFTS_FLAG);
-  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
+  const sidebarEditWithAi = !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments")) && !(descriptionInlineDrafts && mode === "read-edit-description");
   const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
   useEffect(() => {
     if (!sidebarEditWithAi || !showAiChatInterface || !mobileExistingEditOpen) setChatHandoffOpen(false);
