@@ -28,6 +28,7 @@ function load(relativePath, modules = {}) {
     if (name === "@/lib/planLimits") return { isPlanLimitReachedError: () => false }
     if (name === "@/lib/storage/verifyTaskAttachmentLinks") return { verifyTaskAttachmentLinks: async () => new Map() }
     if (name === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html }
+    if (name === "@/lib/mcp/comments/contentPresence") return require('jiti')(__filename, { interopDefault: true })(path.join(root, 'src/lib/mcp/comments/contentPresence.ts'))
     throw new Error(`Unexpected import: ${name}`)
   }, FixedDate)
   return loadedModule.exports
@@ -98,14 +99,9 @@ test('shared app, MCP, CLI and AI text change persists the edit time without cha
   assert.equal(result.editedAt.toISOString(), editedAt.toISOString())
 })
 
-for (const agentId of [null, 'agent-editor', 'hidden-editor']) {
-test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human'} editor without changing authorship`, async () => {
-  const fixture = serviceFixture()
-  fixture.stored.task = { id: 91, projectId: 15, project: { ownerId: 6, teamId: 'team', members: agentId ? [{ agentId, status: 'Accepted', agent: { userId: 6, revokedAt: null } }] : [] } }
-  const { access, matches } = require('./helpers/agent-board-scope.cjs')
-  fixture.prisma.task = { findFirst: async ({ where }) => matches(fixture.stored.task, where) ? { id: 91 } : null }
-  fixture.prisma.comment.findUnique = async () => fixture.stored
-  const { PATCH } = load('src/lib/mcp/operations/comments/[comment_id]/operation.ts', {
+function updateRouteStubs(fixture, agentId = null) {
+  const { access } = require('./helpers/agent-board-scope.cjs')
+  return {
     'next/server': { NextResponse: { json } },
     '@/lib/mcp/routeWrapper': {
       wrapMcpRoute: (handler) => handler,
@@ -135,7 +131,17 @@ test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
     '@/lib/mcp/tasks/validators': {},
     '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => text },
-  })
+  }
+}
+
+for (const agentId of [null, 'agent-editor', 'hidden-editor']) {
+test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human'} editor without changing authorship`, async () => {
+  const fixture = serviceFixture()
+  fixture.stored.task = { id: 91, projectId: 15, project: { ownerId: 6, teamId: 'team', members: agentId ? [{ agentId, status: 'Accepted', agent: { userId: 6, revokedAt: null } }] : [] } }
+  const { access, matches } = require('./helpers/agent-board-scope.cjs')
+  fixture.prisma.task = { findFirst: async ({ where }) => matches(fixture.stored.task, where) ? { id: 91 } : null }
+  fixture.prisma.comment.findUnique = async () => fixture.stored
+  const { PATCH } = load('src/lib/mcp/operations/comments/[comment_id]/operation.ts', updateRouteStubs(fixture, agentId))
   const response = await PATCH({ json: async () => ({ text: 'edited' }) }, { params: Promise.resolve({ comment_id: '44' }) })
   assert.equal(response.status, 200)
   assert.deepEqual(response.body, {
@@ -148,6 +154,19 @@ test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human
   assert.equal(fixture.writes[0].editedByAgentId, agentId)
 })
 }
+
+test('MCP PATCH refuses a body whose HTML renders nothing', async () => {
+  const fixture = serviceFixture()
+  fixture.stored.task = { id: 91, projectId: 15, project: { ownerId: 6, teamId: 'team', members: [] } }
+  const { matches } = require('./helpers/agent-board-scope.cjs')
+  fixture.prisma.task = { findFirst: async ({ where }) => matches(fixture.stored.task, where) ? { id: 91 } : null }
+  fixture.prisma.comment.findUnique = async () => fixture.stored
+  const { PATCH } = load('src/lib/mcp/operations/comments/[comment_id]/operation.ts', updateRouteStubs(fixture))
+  const response = await PATCH({ json: async () => ({ text: '<p>&nbsp;</p>' }) }, { params: Promise.resolve({ comment_id: '44' }) })
+  assert.equal(response.status, 400)
+  assert.equal(response.body.error, 'Comment text is required')
+  assert.equal(fixture.writes.length, 0)
+})
 
 test('a later human edit clears the previous agent editor without changing the agent author', async () => {
   const fixture = serviceFixture()

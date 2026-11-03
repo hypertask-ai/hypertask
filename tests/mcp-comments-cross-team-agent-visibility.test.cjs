@@ -71,6 +71,7 @@ function loadRoute(comments) {
       extractTipTapContent: () => "",
     },
     "@/lib/mcp/normalizeBlockHtml": { normalizeBlockHtml: (html) => html },
+    "@/lib/mcp/comments/contentPresence": require("./task-route-loader.cjs").load("src/lib/mcp/comments/contentPresence.ts", {}),
     "@/utils/helperFunctions/markdownToHtml": {
       formatRichTextInput: (text) => text,
     },
