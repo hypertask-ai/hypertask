@@ -89,6 +89,7 @@ const AgentRunActivityRow = ({
     setExpandedOverride(!collapsed);
   };
   const rowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     toggleRow();
@@ -117,8 +118,8 @@ const AgentRunActivityRow = ({
       >
         <Icon
           className={cn(
-            "h-3 w-3 shrink-0",
-            activity.type === "error" && "text-red-500",
+            "h-3.5 w-3.5 shrink-0",
+            activity.type === "error" && "text-destructive",
           )}
           strokeWidth={1.75}
           aria-hidden
@@ -160,7 +161,7 @@ const AgentRunActivityRow = ({
           <Icon
             className={cn(
               "mt-0.5 h-3 w-3 shrink-0",
-              activity.type === "error" && "text-red-500",
+              activity.type === "error" && "text-destructive",
             )}
             strokeWidth={1.75}
             aria-hidden
