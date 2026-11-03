@@ -1,8 +1,3 @@
-// HTPR-8431: DELETE /api/tasks/deleteTask answered "Task not found or access denied"
-// for a live ticket that the caller can see, so every caller read it as a missing
-// ticket. The route now answers "Task is not in the trash" for a live ticket and
-// keeps "not found" for a ticket the caller cannot see.
-// Drives the real handler; only the database layer and next/server are stubbed.
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
