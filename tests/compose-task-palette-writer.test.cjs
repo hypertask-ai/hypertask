@@ -216,10 +216,10 @@ test('phone Commands entry has the same switch, composer and existing keyboard-a
     assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
     assert.equal(shells.at(-1).bottomSlot, undefined);
     assert.ok(shells.at(-1).aboveSlot);
-    assert.match(document.querySelector('[aria-label="Create task"]').className, /h-11 w-11.*bg-shadcn-primary/);
+    assert.match(document.querySelector('[aria-label="Send message"]').className, /h-11 w-11.*bg-shadcn-primary/);
     await type('Fix on phone');
     capture('compose-phone');
-    await React.act(async () => document.querySelector('[aria-label="Create task"]').click());
+    await React.act(async () => document.querySelector('[aria-label="Send message"]').click());
     assert.equal(requests[0].body.text, 'Fix on phone');
     await finish();
     assert.deepEqual(navigations, ['/detail/project-7/44']);
@@ -483,7 +483,10 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     await React.act(async () => audioProps.toggleRecording(true));
     flags[flag] = false;
     await rerender();
-    assert.equal(document.querySelector('[data-compose-task-writer]'), null, 'Compose off leaves no writer to hold the input lock');
+    assert.equal(document.querySelector('[data-compose-task-writer]'), null, 'Compose off leaves no writer holding the input lock');
+    flags[flag] = true;
+    await rerender();
+    assert.equal(input().disabled, false, 're-enabling Compose must not resurrect stale recording state');
     await press('Enter');
     assert.equal(requests[0].body.text, 'Keep my typed note Spoken text');
   });
