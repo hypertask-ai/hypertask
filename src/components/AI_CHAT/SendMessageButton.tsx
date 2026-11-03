@@ -62,9 +62,7 @@ export function SendMessageButton({
     return (
       <button
         type="button"
-        className={`relative group cursor-pointer whitespace-nowrap text-content font-semibold ${
-          disabled ? "text-text-light-gray" : "text-icon-dark-gray hover:text-white-black"
-        }`}
+        className="relative group cursor-pointer whitespace-nowrap rounded-sm text-content font-semibold text-icon-dark-gray hover:text-white-black disabled:cursor-not-allowed disabled:opacity-50"
         onClick={onClick}
         disabled={disabled}
         aria-label={queueMode ? "Queue message" : "Send message"}
