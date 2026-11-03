@@ -104,6 +104,10 @@ function loadRoute(comments) {
     "src/lib/mcp/operations/comments/agentChatterRouting.ts",
     {},
   );
+  stubs["@/lib/agents/writing"] = require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {});
+  stubs["@/lib/agents/writingEnforcement"] = require("./helpers/stub-map.cjs").enforcementFor(
+    stubs["@/lib/agents/writing"],
+  );
   loaded.require = (request) =>
     request === "@/lib/mcp/routeWrapper"
       ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
