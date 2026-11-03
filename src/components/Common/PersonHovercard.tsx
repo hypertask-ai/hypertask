@@ -273,7 +273,6 @@ const ParentPersonHovercard = ({
   subject?: PersonHovercardSubject | null;
 }) => {
   const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-  const touchTap = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
   const markerRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -294,7 +293,7 @@ const ParentPersonHovercard = ({
     parent.tabIndex = parent.tabIndex >= 0 ? parent.tabIndex : 0;
     parent.setAttribute("aria-haspopup", "dialog");
 
-    const fromMouse = (event: PointerEvent) => !touchTap || event.pointerType === "mouse";
+    const fromMouse = (event: PointerEvent) => event.pointerType === "mouse";
     const show = () => {
       cancelClose();
       setOpen(true);
@@ -330,7 +329,7 @@ const ParentPersonHovercard = ({
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
     };
-  }, [projectId, subject, touchTap]);
+  }, [projectId, subject]);
 
   useEffect(() => {
     if (!anchor) return;

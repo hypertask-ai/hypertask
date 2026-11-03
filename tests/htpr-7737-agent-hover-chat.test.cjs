@@ -123,7 +123,6 @@ for (const deepLink of [null, "agent-other"]) for (const sessions of [false, tru
 
 test("a tap keeps the person card open; a mouse hover still closes on leave", async () => {
   const view = mount();
-  let touchTap = true;
   const pass = ({ children }) => children;
   const floating = {
     useFloating: () => ({ refs: { setFloating: noop, setReference: noop, domReference: { current: null } }, context: {}, floatingStyles: {} }),
@@ -137,7 +136,7 @@ test("a tap keeps the person card open; a mouse hover still closes on leave", as
     "@/hooks/MultiPages/usePersonHovercard": { usePersonHovercard: () => ({ data: agent }) },
     "next/link": { default: "a" },
     "next/navigation": { usePathname: () => "/detail/project-7049/42", useRouter: () => ({ replace: noop }) },
-    "@/hooks/useFlag": { useFlag: key => key === FLAG ? touchTap : false },
+    "@/hooks/useFlag": { useFlag: key => key === FLAG },
     "@/lib/flags/keys": { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG: "top-layer", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: SIDEBAR },
     "@/lib/state": { useSetRecoilState: () => noop },
     "@/store": { isAiChatSidebarModeAtom: "sidebar", aiChatAutoOpenSuppressedAtom: "suppressed", aiChatExplicitOpenAtAtom: "explicit", showAIChatInterfaceAtom: "open" },
@@ -167,11 +166,7 @@ test("a tap keeps the person card open; a mouse hover still closes on leave", as
     assert.equal(expanded(), "true");
     await fire("pointerleave", "touch", 200);
     assert.equal(expanded(), "true", "the pointerleave after a tap must not close the card");
-    touchTap = false;
-    await view.render(React.createElement(Harness));
-    await fire("pointerleave", "mouse", 150);
-    assert.equal(expanded(), "false", "a mouse hover still closes on leave with the flag off");
-    await fire("pointerup", "touch", 200);
-    assert.equal(expanded(), "false", "flag off keeps the old touch behaviour");
+    await fire("focusin", "touch");
+    assert.equal(expanded(), "true", "keyboard focus still opens the card");
   } finally { view.close(); }
 });

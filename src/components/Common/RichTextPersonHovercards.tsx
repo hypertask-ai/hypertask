@@ -1,8 +1,6 @@
 "use client";
 
 import { PersonHovercardSurface } from "@/components/Common/PersonHovercard";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7737_AGENT_HOVER_CHAT_FLAG } from "@/lib/flags/definitions/htpr-7737-agent-hover-chat";
 import type { PersonHovercardSubject } from "@/models/personHovercard";
 import { ReactNode, useEffect, useRef, useState } from "react";
 
@@ -37,7 +35,6 @@ const RichTextPersonHovercards = ({
 }) => {
   const rootRef = useRef<HTMLElement>(null);
   const closeTimerRef = useRef<number | null>(null);
-  const touchTap = useFlag(HTPR_7737_AGENT_HOVER_CHAT_FLAG);
   const [active, setActive] = useState<{
     element: HTMLElement;
     subject: PersonHovercardSubject;
@@ -104,7 +101,7 @@ const RichTextPersonHovercards = ({
       attributeFilter: ["data-label"],
     });
 
-    const fromMouse = (event: PointerEvent) => !touchTap || event.pointerType === "mouse";
+    const fromMouse = (event: PointerEvent) => event.pointerType === "mouse";
     const onPointerOver = (event: PointerEvent) => {
       if (!fromMouse(event)) return;
       activate(event.target);
@@ -147,7 +144,7 @@ const RichTextPersonHovercards = ({
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };
-  }, [children, projectId, touchTap]);
+  }, [children, projectId]);
 
   useEffect(() => () => cancelClose(), []);
 
