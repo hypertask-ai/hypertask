@@ -14,6 +14,7 @@ import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/se
 import { parseSearchWithChipNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
 import {
+  ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
   normalizeTaskStatus,
   parseTaskStatusParam,
@@ -100,7 +101,11 @@ export async function GET(request: NextRequest) {
     let status = statusParam
     let limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
     if (listQuery?.filter.section) section = listQuery.filter.section
-    if (listQuery?.filter.assignee !== undefined) assignedTo = String(listQuery.filter.assignee)
+    let assigneeFromFilter = false
+    if (listQuery?.filter.assignee !== undefined) {
+      assignedTo = String(listQuery.filter.assignee)
+      assigneeFromFilter = true
+    }
     if (listQuery?.filter.status) {
       const normalizedStatus = normalizeTaskStatus(listQuery.filter.status)
       if (!normalizedStatus || normalizedStatus === 'Deleted') {
@@ -236,31 +241,18 @@ export async function GET(request: NextRequest) {
 
     if (assignedTo) {
       const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id)
-      if (listQuery) {
-        const assignee = parseAssigneeFilter(assignedTo)
-        if (!assignee.ok) {
-          return NextResponse.json(
-            { success: false, error: 'Validation error', message: assignee.error },
-            { status: 400 },
-          )
-        }
-        if (assignee.kind === 'me') {
-          where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
-        } else if (assignee.kind === 'unassigned') {
-          where.assignees = { none: {} }
-        } else {
-          // @ts-expect-error kind is ids after me/unassigned
-          where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
-        }
-      } else if (assignedTo === 'me') {
+      const assignee = parseAssigneeFilter(assignedTo)
+      if (!assignee.ok) {
+        return NextResponse.json(
+          { success: false, error: 'Validation error', message: assigneeFromFilter ? assignee.error : ASSIGNED_TO_FILTER_MESSAGE },
+          { status: 400 },
+        )
+      } else if (assignee.kind === 'ids') {
+        where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
+      } else if (assignee.kind === 'me') {
         where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
-      } else if (assignedTo === 'unassigned') {
-        where.assignees = { none: {} }
       } else {
-        const userId = parseInt(assignedTo)
-        if (!isNaN(userId)) {
-          where.assignees = { some: { userId, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
-        }
+        where.assignees = { none: {} }
       }
     }
 

@@ -1,6 +1,7 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from "@/lib/flags/keys";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { ASSIGNED_TO_FILTER_MESSAGE, parseAssigneeFilter } from "@/lib/mcp/listQuery";
 import { tool } from "ai";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -63,18 +64,15 @@ export function createListTasksTool(context: ToolContext) {
         if (input.section) where.section = input.section;
         if (input.assigned_to) {
           const assigneeFixEnabled = await isFeatureEnabled(HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, user.id);
-          if (input.assigned_to === "me") {
+          const assignee = parseAssigneeFilter(input.assigned_to);
+          if (!assignee.ok) {
+            return { success: false, error: ASSIGNED_TO_FILTER_MESSAGE };
+          } else if (assignee.kind === "ids") {
+            where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
+          } else if (assignee.kind === "me") {
             where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
-          } else if (input.assigned_to === "unassigned") {
-            where.assignees = { none: {} };
           } else {
-            const userIds = input.assigned_to
-              .split(",")
-              .map((id) => parseInt(id.trim(), 10))
-              .filter(Number.isInteger);
-            if (userIds.length > 0) {
-              where.assignees = { some: { userId: { in: userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } };
-            }
+            where.assignees = { none: {} };
           }
         }
         const priorities = normalizePriorityInput(input.priority);

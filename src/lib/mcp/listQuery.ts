@@ -168,6 +168,8 @@ function parseFilterParam(raw: string | null): ListFilter {
   }
 }
 
+export const ASSIGNED_TO_FILTER_MESSAGE = 'assigned_to must be me, unassigned, or a comma-separated list of user ids'
+
 export function parseAssigneeFilter(value: string | number | undefined): AssigneeFilter {
   if (value === undefined || value === '') {
     return { ok: false, error: 'filter.assignee must be me, unassigned, or a positive user id' }
