@@ -2256,18 +2256,17 @@ jobs:
       - name: Identify exact baseline
         id: baseline
         shell: bash
-        env:
-          RENDER: ${{ hashFiles('base/**', '!base/.git/**', '!base/.claude/**', '!base/docs/**', '!base/tests/**', '!base/.github/**') }}
         run: |
           set -eo pipefail
-          if [ -z "${RENDER:-}" ]; then
+          files=$(git -C base ls-tree -r HEAD | awk -F'\t' '$2 !~ /^(docs|tests|\.github|\.claude)\//')
+          if [ -z "$files" ]; then
             echo "::error::The base render source hashed to nothing, so no saved baseline can be proven to match it"
             exit 1
           fi
           echo "sha=$(git -C base rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "head=$(git -C head rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "image=${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
-          echo "render=$RENDER" >> "$GITHUB_OUTPUT"
+          echo "render=$(printf '%s\n' "$files" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
       - name: Restore production baseline
         id: baseline-cache
         if: steps.scope.outputs.visual_needed != 'false'
@@ -2396,6 +2395,15 @@ jobs:
           VISUAL_BASE_ONLY: 'false'
           VISUAL_HEAD_BUILD: artifact
         run: node head/scripts/visual-regression-ci.mjs
+      # HYCI-99: a pull-request comparison that rebuilt or downloaded the base
+      # screens publishes them into its own pull-request cache scope, so the next
+      # push to the same pull request skips the base build too.
+      - name: Save the validated visual baseline
+        if: success() && steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/visual-expected
+          key: ${{ steps.baseline-cache.outputs.cache-primary-key }}
       - name: Summarize failed screens
         if: always() && steps.scope.outputs.visual_needed != 'false' && hashFiles('head/scripts/visual-regression-ci.mjs') != ''
         env:

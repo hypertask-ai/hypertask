@@ -557,20 +557,22 @@ The job summary reports five phase timings and one matching log line: base build
 Base and head must install the same Playwright version, so one Chromium build draws both sides; a run stops when they differ and a Playwright bump needs fresh production baselines. Each checkout must also install exactly the version its own `package-lock.json` locks, and a cached base is compared against the base commit's locked version. Chromium captures board, task detail, the scrolled comment-box scene, Ctrl+J and inbox in Porcelain at 1440×900 and 390×844.
 On failure, download `visual-regression-diffs` (7-day retention) and compare each screen's expected, actual and diff PNGs; the step summary lists failed screens or setup failures.
 HYCI-99 keys a baseline on the render source it was captured from, not on the base
-commit: OS/architecture, runner image version, a SHA-256 of the base checkout minus
-`.git`, `.claude`, `docs`, `tests` and `.github`, and the head visual harness, seed,
-search stub, paired runner and workflow hashes. Documentation, agent and CI commits
-cannot change a pixel, so they reuse the screens already captured for the same app
-source instead of rebuilding it, while any change under the app source, `public`,
-the lockfile or a config still misses and rebuilds. An empty render fingerprint
-fails the job rather than keying everything to one baseline. The artifact name and
-the cache key carry the same fingerprint; the commit itself is no longer part of
-either, so a production commit whose own capture was cancelled, evicted or skipped
-still reuses an identical tree's screens. There are no fallback keys.
+commit: OS/architecture, runner image version, a SHA-256 over the base commit's tracked
+render files (everything outside `docs`, `tests`, `.github` and `.claude`), and the
+head visual harness, seed, search stub, paired runner and workflow hashes.
+Documentation, agent and CI commits cannot change a pixel, so they reuse the screens
+already captured for the same app source instead of rebuilding it, while any change
+under the app source, `public`, the lockfile or a config still misses and rebuilds.
+An empty render source fails the job rather than keying every screen to one baseline.
+The artifact name and the cache key carry the same fingerprint; the commit itself is
+no longer part of either, so a production commit whose own capture was cancelled,
+evicted or skipped still reuses an identical tree's screens. There are no fallback keys.
 Production pushes still capture the ten base PNGs whenever the key misses. Any run
 that captured and validated them saves the cache entry, which GitHub scopes to its
-own branch or pull request; only a production push can publish the artifact another
-pull request compares against. A hit validates all ten PNG signatures and viewport
+own branch or pull request; a pull-request comparison that rebuilt or downloaded the
+screens saves them in its own pull-request scope, so the next push to that pull
+request skips the base build too. Only a production push can publish the artifact
+another pull request compares against. A hit validates all ten PNG signatures and viewport
 dimensions, skips the base lifecycle, and still seeds and compares the head. A miss
 retains the existing paired lifecycle. Missing or malformed cached screenshots fail
 closed.

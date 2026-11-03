@@ -1,6 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
+const { execFileSync } = require("node:child_process");
+const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL, fileURLToPath } = require("node:url");
 const vm = require("node:vm");
@@ -131,6 +133,11 @@ test("workflow is informational, read-only, path-scoped and uses the smoke servi
   assert.equal(job.steps.find(step => step.name === "Summarize failed screens").if, "always() && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(compareJob.steps.find(step => step.name === "Summarize failed screens").if, "always() && steps.scope.outputs.visual_needed != 'false' && hashFiles('head/scripts/visual-regression-ci.mjs') != ''");
   assert.equal(compareJob.steps.find(step => step.name === "Upload visual differences").with["if-no-files-found"], "ignore");
+  const compareSave = compareJob.steps.find(step => step.name === "Save the validated visual baseline");
+  assert.equal(compareSave.if, "success() && steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true'");
+  assert.equal(compareSave.with.key, "${{ steps.baseline-cache.outputs.cache-primary-key }}");
+  assert.equal(compareSave.with.path, "${{ runner.temp }}/visual-expected");
+  assert.ok(compareJob.steps.indexOf(compareSave) > compareJob.steps.findIndex(step => step.name === "Build and capture base, then compare head"));
   const required = yaml.load(source("docs/ci-policy.yml")).required_checks.contexts;
   assert.equal(required.includes("visual-regression"), false);
   assert.equal(required.includes("verify-qa"), false);
@@ -143,10 +150,8 @@ test("baseline caches key on the base render source and every successful capture
   assert.deepEqual(workflow.on.push.branches, ["production"]);
   const steps = workflow.jobs["visual-regression"].steps;
   const identify = steps.find(step => step.id === "baseline");
-  for (const pattern of ["base/**", "!base/.git/**", "!base/.claude/**", "!base/docs/**", "!base/tests/**", "!base/.github/**"]) assert.ok(identify.env.RENDER.includes(pattern), pattern);
-  assert.match(identify.run, /if \[ -z "\$\{RENDER:-\}" \]/);
-  assert.match(identify.run, /exit 1/);
-  assert.match(identify.run, /echo "render=\$RENDER" >> "\$GITHUB_OUTPUT"/);
+  assert.equal(identify.env, undefined);
+  assert.match(identify.run, /awk -F'\\t' '\$2 !~ \/\^\(docs\|tests\|\\\.github\|\\\.claude\)\\\/\//);
   const restore = steps.find(step => step.id === "baseline-cache");
   assert.match(restore.uses, /^actions\/cache\/restore@[a-f0-9]{40}$/);
   assert.equal(restore.with.path, "${{ runner.temp }}/visual-expected");
@@ -163,6 +168,70 @@ test("baseline caches key on the base render source and every successful capture
   const publish = steps.find(step => step.name === "Publish the validated baseline");
   assert.ok(publish.with.name.includes("${{ steps.baseline.outputs.render }}"));
   assert.ok(!publish.with.name.includes("${{ steps.baseline.outputs.sha }}"));
+});
+
+function git(cwd, args) {
+  return execFileSync("git", ["-c", "user.email=ci@example.com", "-c", "user.name=ci", ...args], { cwd, encoding: "utf8" });
+}
+
+function commitFiles(root, files, message) {
+  for (const [name, text] of Object.entries(files)) {
+    mkdirSync(path.join(root, path.dirname(name)), { recursive: true });
+    writeFileSync(path.join(root, name), text);
+  }
+  git(root, ["add", "-A"]);
+  git(root, ["commit", "-qm", message]);
+}
+
+function renderWorkspace() {
+  const workspace = mkdtempSync(path.join(os.tmpdir(), "visual-render-"));
+  mkdirSync(path.join(workspace, "base"));
+  mkdirSync(path.join(workspace, "head"));
+  git(workspace, ["init", "-q", path.join(workspace, "base")]);
+  git(workspace, ["init", "-q", path.join(workspace, "head")]);
+  commitFiles(path.join(workspace, "base"), {
+    "src/app/page.tsx": "export default 1\n",
+    "package.json": "{}\n",
+    "docs/ci/17-visual-regression.md": "docs\n",
+    "tests/harness.test.cjs": "tests\n",
+    ".github/workflows/x.yml": "workflow\n",
+    ".claude/rules.md": "agent\n",
+  }, "app");
+  commitFiles(path.join(workspace, "head"), { "src/app/page.tsx": "export default 1\n" }, "head");
+  return workspace;
+}
+
+function renderFingerprint(workspace) {
+  const output = path.join(workspace, "github-output");
+  writeFileSync(output, "");
+  const script = yaml.load(source(".github/workflows/visual-regression.yml")).jobs["visual-regression"].steps.find(step => step.id === "baseline").run;
+  execFileSync("bash", ["-c", script], { cwd: workspace, env: { ...process.env, GITHUB_OUTPUT: output, ImageVersion: "" }, encoding: "utf8" });
+  const lines = readFileSync(output, "utf8").trim().split("\n");
+  return Object.fromEntries(lines.map(line => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
+}
+
+test("the render fingerprint reuses screens across commits that cannot move a pixel and follows the app source", () => {
+  const workspace = renderWorkspace();
+  const base = path.join(workspace, "base");
+  const first = renderFingerprint(workspace);
+  assert.match(first.render, /^[0-9a-f]{16}$/);
+  assert.equal(first.sha, git(base, ["rev-parse", "HEAD"]).trim());
+  assert.equal(renderFingerprint(workspace).render, first.render, "the same tree must key the same");
+  commitFiles(base, { "docs/ci/17-visual-regression.md": "docs changed\n", "tests/harness.test.cjs": "tests changed\n", ".github/workflows/x.yml": "workflow changed\n", ".claude/rules.md": "agent changed\n" }, "documentation only");
+  assert.equal(renderFingerprint(workspace).render, first.render, "documentation, test, workflow and agent commits cannot change a screen");
+  commitFiles(base, { "src/app/page.tsx": "export default 2\n" }, "app change");
+  const changed = renderFingerprint(workspace);
+  assert.notEqual(changed.render, first.render, "an app source change must miss the saved screens");
+  commitFiles(base, { "public/logo.svg": "<svg/>\n" }, "new app asset");
+  assert.notEqual(renderFingerprint(workspace).render, changed.render, "a new asset directory cannot ride a stale baseline");
+});
+
+test("an empty render source fails the job instead of keying every screen to one baseline", () => {
+  const workspace = renderWorkspace();
+  const base = path.join(workspace, "base");
+  git(base, ["rm", "-rq", "src", "package.json"]);
+  git(base, ["commit", "-qm", "no app source"]);
+  assert.throws(() => renderFingerprint(workspace), /exit status 1|Command failed/);
 });
 
 test("paired lifecycle resets each schema, seeds both from the same harness, builds sequentially and never updates head snapshots", async () => {
