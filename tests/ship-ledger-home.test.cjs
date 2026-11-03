@@ -29,8 +29,11 @@ function fixture({ realChecker = false } = {}) {
       path.join(home, '.agents/skills/unlazy/scripts/gate-check.mjs'));
   } else {
     fs.writeFileSync(path.join(home, '.agents/skills/unlazy/scripts/gate-check.mjs'),
-      'import { appendFileSync } from "node:fs";\n' +
+      'import { appendFileSync, readdirSync } from "node:fs";\n' +
       'appendFileSync(process.env.GATE_CALLS, JSON.stringify(process.argv.slice(2)) + "\\n");\n' +
+      'let held = 0;\n' +
+      'try { held = readdirSync(process.env.HOME + "/.unlazy/locks").filter((name) => name.endsWith(".filelock")).length; } catch {}\n' +
+      'appendFileSync(process.env.GATE_CALLS + ".held", held + "\\n");\n' +
       'console.log("UNMET: 9 (met: 0)");\nprocess.exit(1);\n');
   }
   return { root, home, project, calls };
@@ -73,6 +76,41 @@ test('a ship run writes its ledger to the home ticket folder and leaves the proj
     assert.equal(fs.existsSync(path.join(f.project, '.unlazy')), false, 'the project is not clean');
     const call = JSON.parse(fs.readFileSync(f.calls, 'utf8').trim().split('\n')[0]);
     assert.deepEqual(call, ['--approve', ledger, '--root', path.dirname(ledger)]);
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('the ledger is verified before its generation lock is released', needsUnlazy, () => {
+  const f = fixture();
+  const checker = path.join(f.home, '.agents/skills/unlazy/scripts/gate-check.mjs');
+  try {
+    gates(f, 'HTPR-6820', 'sessionA-full');
+    const held = () => fs.readFileSync(`${f.calls}.held`, 'utf8').trim().split('\n').map(Number);
+    assert.deepEqual(held(), [1],
+      'the checker ran after the generation lock was released, so a handover could rebind the ledger under it');
+    spawnSync(process.execPath, [checker], {
+      encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls },
+    });
+    assert.deepEqual(held(), [1, 0], 'the lock probe cannot tell a held lock from a released one');
+  } finally {
+    fs.rmSync(f.root, { recursive: true, force: true });
+  }
+});
+
+test('an interrupted checker fails the run instead of reporting unmet gates', needsUnlazy, () => {
+  const f = fixture();
+  fs.writeFileSync(path.join(f.home, '.agents/skills/unlazy/scripts/gate-check.mjs'),
+    'process.kill(process.pid, "SIGTERM");\n');
+  try {
+    const interrupted = spawnSync('bash', [shipGates, 'HTPR-6821'], {
+      cwd: f.project, encoding: 'utf8',
+      env: { PATH: process.env.PATH, HOME: f.home, GATE_CALLS: f.calls, CODEX_SESSION_ID: 'sessionA-full' },
+    });
+    assert.notEqual(interrupted.status, 0, 'a checker killed mid-run was reported as unmet gates');
+    assert.match(interrupted.stderr, /the checker did not finish \(SIGTERM\); .* re-run to approve and run it/);
+    assert.equal(fs.readFileSync(path.join(f.home, '.unlazy/ledgers/HTPR-6821/session'), 'utf8'), 'sessionA-full\n');
   } finally {
     fs.rmSync(f.root, { recursive: true, force: true });
   }

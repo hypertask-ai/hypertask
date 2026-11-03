@@ -37,6 +37,7 @@ node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" "$STATE" <<'
 import { dirname, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 const [ledger, session, ticket, check, scripts, root, envPrefix, state] = process.argv.slice(2);
 const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await import(`${scripts}/lib/gates.mjs`);
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -166,7 +167,7 @@ const carriedGates = (file) => {
   const carriedDoc = parseGates(source, { requireGates: false });
   return carriedDoc.errors.length ? [] : carriedDoc.gates;
 };
-await withFileLock(state, ledger, () => {
+const checked = await withFileLock(state, ledger, () => {
   const folder = dirname(ledger);
   const binding = `${folder}/session`;
   const adoptedFile = `${folder}/adopted`;
@@ -289,10 +290,18 @@ await withFileLock(state, ledger, () => {
   }
   writeAtomic(ledger, text, { root: state });
   writeAtomic(binding, session + '\n', { root: state });
+  // The checker approves and runs this ledger before the lock is released, so a handover that
+  // rebinds the ticket meanwhile cannot have this invocation run its checks against the new
+  // owner's ledger. Its own lock sits beside the ledger, so this one is free for it.
+  const verified = spawnSync(process.execPath, [`${scripts}/gate-check.mjs`, '--approve', ledger, '--root', dirname(ledger)], { stdio: ['ignore', 2, 2] });
+  if (verified.error || verified.signal) {
+    // An interrupted verification is not unmet gates: say so, and fail loudly.
+    process.stderr.write(`ship-gates: the checker did not finish (${verified.signal ?? verified.error.code}); ${ledger} is written, re-run to approve and run it\n`);
+    return 2;
+  }
+  return verified.status;
 });
+console.log(ledger);
+// Unmet ship steps are expected when creating the ledger.
+process.exitCode = checked > 1 ? checked : 0;
 JS
-status=0
-node "$U/gate-check.mjs" --approve "$L" --root "$(dirname "$L")" >&2 || status=$?
-printf '%s\n' "$L"
-# Unmet ship steps are expected when creating the ledger.
-[ "$status" -le 1 ] || exit "$status"
