@@ -6,6 +6,7 @@ import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from '@/lib/flags/definitions/htpr-7
 import { getUniqueTaskCount } from './create';
 import generateRank from '@/utils/generateRank';
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create';
+import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml';
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import { autoAssignForSection } from '@/utils/controllers/assignees/autoAssignForSection';
 import { createTaskWithBoardWebhookOutbox, createProvisionedTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
@@ -75,7 +76,8 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         updateTeamActivity = true
     } = options;
 
-    await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description });
+    const descriptionContent = normalizeBlockHtml(description);
+    await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent });
     const taskCount = await getUniqueTaskCount(projectId);
     const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;
 
@@ -173,9 +175,16 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
             }
         });
         await persistAgentTaskCreatedPending(tx, created.id);
+        const description_ = await upsertTaskDescription({
+            taskId: created.id,
+            creatorId: userId,
+            content: descriptionContent,
+            agentId,
+            actingUserId: userId
+        }, tx);
         return { taskId: created.id,
             firstTaskPointerTaskId: created.project.firstTaskPointerTaskId,
-            result: { ...created, project: { teamId: created.project.teamId } },
+            result: { ...created, project: { teamId: created.project.teamId }, description_ },
             webhookTask: {
                 id: created.id,
                 ticketNumber: created.ticketNumber,
@@ -204,13 +213,7 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         throw new Error('Failed to create task');
     }
 
-    const description_ = await upsertTaskDescription({
-        taskId: newTask.id,
-        creatorId: userId,
-        content: description,
-        agentId,
-        actingUserId: userId
-    });
+    const description_ = newTask.description_;
 
     waitUntil((async () => {
         if (!await isFeatureEnabled(HTPR_7131_INDEX_NEW_TICKETS_FLAG, userId)) return;
