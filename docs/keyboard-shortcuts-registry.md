@@ -165,10 +165,13 @@ opens Commands in Compose from any signed-in app surface. `Ctrl+K` opens or
 switches to the unchanged Search mode. The existing phone Commands button
 opens the same palette with Search and Compose tabs.
 
-Compose accepts a note and images (paperclip, `Ctrl+U`, paste). Enter runs the
-existing board-aware task writer, creates in the current URL board's first
-active column (or the remembered `previousBoard` off-board), then opens the
-ticket with its regular AI chat. Shift+Enter adds a line. The initial assistant
+Compose accepts a note and images (paperclip, `Ctrl+U`, paste). `Ctrl+Enter`
+(`Cmd+Enter` on Apple) runs the existing board-aware task writer, creates in the
+current URL board's first active column (or the remembered `previousBoard`
+off-board), then opens the ticket with its regular AI chat. Enter starts a new
+paragraph, matching comments and descriptions; the footer hint names the
+shortcut (`htpr-8253-ctrlj-ctrl-enter-send`, Everyone). With that flag off, Enter
+sends and Shift+Enter adds a line. The initial assistant
 message is stored without a model call; follow-ups use normal task chat tools.
 A creation finishing after leaving Compose does not replace subsequent navigation.
 Shortcut help shows Compose instead of the superseded board and task-detail

@@ -11,13 +11,15 @@ export type ComposeFooterState = {
   commandKey: string;
   board: boolean;
   dictate: boolean;
+  ctrlEnterSends: boolean;
 };
 
-export function composeWriterFooterKeys({ recording, transcribing, commandKey, board, dictate }: ComposeFooterState): ComposeFooterKeys {
+export function composeWriterFooterKeys({ recording, transcribing, commandKey, board, dictate, ctrlEnterSends }: ComposeFooterState): ComposeFooterKeys {
   const boardKey: ComposeFooterKey = [`${commandKey} Shift B`, "board"];
   const attachKey: ComposeFooterKey = [`${commandKey} U`, "attach"];
   const closeKey: ComposeFooterKey = ["Esc", "close"];
-  const createKey: ComposeFooterKey = [`${commandKey} Enter`, "create"];
+  const createKey: ComposeFooterKey = [ctrlEnterSends ? `${commandKey} Enter` : "Enter", "create"];
+  const lineKey: ComposeFooterKey = ctrlEnterSends ? ["Enter", "new line"] : ["Shift Enter", "new line"];
   const dictateKey: ComposeFooterKey = [`${commandKey} Shift D`, "dictate"];
   const stopKey: ComposeFooterKey = [`${commandKey} Shift D`, "stop"];
   if (recording) {
@@ -29,8 +31,8 @@ export function composeWriterFooterKeys({ recording, transcribing, commandKey, b
   if (transcribing) return { left: [closeKey], right: [] };
   return {
     left: [
-      ["Enter", "create"],
-      ["Shift Enter", "new line"],
+      createKey,
+      lineKey,
       closeKey,
       ...(board ? [boardKey] : []),
       attachKey,
