@@ -25,7 +25,7 @@ same calls the page drives, in this order.
 3. Open `/trash/<boardId>`. `src/utils/controllers/trash/getByProjectId.ts`
    returns that board's tasks with status `Deleted`, newest `deletedAt` first.
    Each row carries id `trash-<index>`, so the first row is `#trash-0`, and
-   shows creator, title and the permanent-delete date.
+   shows creator, board ticket id, title and the permanent-delete date.
 4. Keys, from `src/lib/contexts/Trash/handleKeyboardFunctions.ts`: `j` and `k`
    move the selection, `Escape` goes back to the board, `Shift+3` recovers, and
    `Ctrl+Shift+3` permanently deletes. The two icon buttons appear only on the
@@ -47,9 +47,10 @@ cannot see answers 404 "Task not found or access denied". A task whose hard
 delete is already claimed answers 409 "Task is being restored or permanently
 deleted".
 
-Read titles, not screen position: the list container is `flex-col-reverse`, so
-the newest row (`#trash-0`, selected by default) sits at the bottom of the screen
-and the oldest at the top.
+Row `#trash-0` is the newest deleted task, it carries the selection on load,
+and only the selected row shows the two icon buttons: `Trash2` first, then
+`RotateCcw`. The confirm dialog is a command list, `Delete task` with ENTER and
+`Cancel` with ESC, so ESC closes it and leaves the row in place.
 
 ## What usually breaks
 
