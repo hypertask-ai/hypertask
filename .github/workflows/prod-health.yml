@@ -637,11 +637,17 @@ jobs:
           # 33 minutes covers the health job's whole 30-minute budget plus
           # scheduling slack, so a slow deploy is still smoke-tested. The
           # rollback never waits on this: a health failure ends the wait in one
-          # poll. GATE_BUDGET_SECONDS exists so the gate's own test can reach
-          # the end-of-budget branches without waiting 33 minutes.
+          # poll. The poll count ends the wait as well as the clock: 1980s of
+          # 20s polls is ~99 polls, so the default never cuts a real wait short,
+          # and the gate's own test reaches the end-of-budget branches by
+          # counting polls instead of racing bash's whole-second SECONDS
+          # (HYCI-112: a 1s budget could expire after a few milliseconds).
           budget=${GATE_BUDGET_SECONDS:-1980}
           deadline=$((SECONDS + budget))
-          while [ "$SECONDS" -lt "$deadline" ]; do
+          max_polls=${GATE_MAX_POLLS:-1000}
+          polls=0
+          while [ "$polls" -lt "$max_polls" ] && [ "$SECONDS" -lt "$deadline" ]; do
+            polls=$((polls + 1))
             # Read the job first: health publishes the status before it exits,
             # so a `success` read here can never precede its own status.
             if ! read_json "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs?per_page=50" "$RUNNER_TEMP/gate-jobs.json"; then
