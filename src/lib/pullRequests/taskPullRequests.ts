@@ -143,6 +143,10 @@ async function fetchGithubCheckState(
     if (!response.ok) return null;
     const value = await response.json();
     if (!isRecord(value) || !Array.isArray(value.check_runs)) return null;
+    if (
+      typeof value.total_count === "number" &&
+      value.total_count > value.check_runs.length
+    ) return null;
     return checkStateFromSuites(
       value.check_runs.filter(isRecord).map((run) => ({
         status: typeof run.status === "string" ? run.status : "",

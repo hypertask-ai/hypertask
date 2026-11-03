@@ -240,6 +240,30 @@ test("fetchGithubPullRequest leaves the check state unknown when GitHub refuses 
   );
 });
 
+test("fetchGithubPullRequest keeps the check state unknown when GitHub returns only part of the check runs", async () => {
+  const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
+  await withMockFetch(
+    async (url) => String(url).includes("/check-runs")
+      ? Response.json({
+        total_count: 150,
+        check_runs: [{ status: "completed", conclusion: "success" }],
+      })
+      : Response.json({
+        id: 110,
+        html_url: canonicalPullRequestUrl,
+        title: githubMetadata.title,
+        state: "open",
+        merged_at: null,
+        updated_at: "2026-09-01T12:00:00Z",
+        base: { repo: { id: 1 } },
+        head: { sha: "abc123" },
+      }),
+    async () => {
+      assert.equal((await fetchGithubPullRequest(parsed)).checkState, null);
+    },
+  );
+});
+
 test("fetchGithubPullRequest rejects malformed GitHub JSON", async () => {
   const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
   await withMockFetch(
