@@ -1,6 +1,7 @@
 import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
   useContext,
@@ -10,6 +11,7 @@ import {
   useState,
 } from "react";
 import { CommandMode } from "@/models/enums";
+import { cn } from "@/utils/undoActions/helperFuncs";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
   aiChatPendingPromptAtom,
@@ -122,6 +124,7 @@ const Commands = (props: Props) => {
     focusProxy,
   } = props;
   const removeImageGeneration = useFlag(HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG);
+  const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const columnArchiveEnabled = useFlag(HTPR_7907_COLUMN_ARCHIVE_FLAG);
   const triageInboxFlag = useFlag(HTPR_8044_TRIAGE_INBOX_FLAG);
   const safeInboxBatches = useFlag("htpr-8045-inbox-batches");
@@ -848,7 +851,10 @@ const Commands = (props: Props) => {
         keyboard={false}
         className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
-        contentClassName={composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
+        contentClassName={cn(
+          floatingElevation && "shadow-floating",
+          composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden",
+        )}
       >
         {isInteractive && (
           <TutorialTooltip
