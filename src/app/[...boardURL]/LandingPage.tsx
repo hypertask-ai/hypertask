@@ -92,7 +92,6 @@ const restoreUrlViewSections = useFlag(HTPR_7775_SAVED_URL_VIEW_FLAG)
 const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
-const holdAddressForPendingSwitch = useFlag(HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG)
 const router = useRouter()
 const {
   releaseSecondaryStartup,
@@ -593,6 +592,7 @@ export function useLandingBoardSurface(context: useLandingBoardSurfaceContext) {
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
+  const holdAddressForPendingSwitch = useFlag(HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG)
   const {
   setBoardAccess, boardAccessKey, setNetworkAccess, pilotParameter, setSyncedBoardPilotEnabled,
   setPilotPreferenceResolved, pilotPreferenceResolved, pilotExplicitlyDisabled, latestBoardAuthorizationProofRef, publishedAuthorizationKeyRef,
