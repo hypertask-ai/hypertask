@@ -159,20 +159,14 @@ test("removing a match or adding a second board restores the contextual board be
 test("a cold board list cannot race Enter or Send and save on the old board", async (t) => {
   notifyManager.setScheduler(queueMicrotask);
   t.after(() => notifyManager.setScheduler(defaultScheduler));
-  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7" }, async ({ flags, rerender, type, press, requests }) => {
-    let resolveBoards;
-    const api = require.cache[path.join(root, "src/utils/api/global/index.ts")].exports.default;
-    api.getAllProjectsMinimal = () => new Promise((resolve) => { resolveBoards = resolve; });
+  await withPalette(t, { newWindow: true, tab: "compose", url: "/project?id=7", coldBoards: boards }, async ({ flags, rerender, type, press, requests, boardsArrive }) => {
     flags[flag] = true;
     await rerender();
     await type("Improve search in Hypertask Product");
     assert.equal(document.querySelector('[aria-label="Send message"]').disabled, true);
     await press("Enter", { code: "Enter" });
     assert.equal(requests.length, 0);
-    api.getAllProjectsMinimal = async () => boards;
-    await React.act(async () => {
-      resolveBoards(boards);
-    });
+    await boardsArrive();
     assert.equal(document.querySelector('[aria-label="Send message"]').disabled, false);
     await press("Enter", { code: "Enter" });
     assert.equal(requests[0].body.project.id, 8);

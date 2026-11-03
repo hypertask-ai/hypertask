@@ -11,13 +11,10 @@ import { ControlledComposerEditor } from "@/lib/controlledComposerEditor";
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   ArrowDown,
-  ChevronDown,
   Clipboard,
   Image as ImageIcon,
-  Layers,
   ListTodo,
   Square,
-  SquareKanban,
   User,
   X,
 } from "lucide-react";
@@ -297,7 +294,7 @@ export function AI_Tiptap_Container({
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} mobile reuseChip ticketScopeEnabled={ticketScopeEnabled} />}
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} mobile ticketScopeEnabled={ticketScopeEnabled} />}
           {!controlledComposer && <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
@@ -404,7 +401,7 @@ export function AI_Tiptap_Container({
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
-            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} reuseChip ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
+            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
                 <AIModelDropDownButton
                   keyboardNavigation={sharedShortcuts}
@@ -421,7 +418,7 @@ export function AI_Tiptap_Container({
                     pathname?.startsWith("/chat") ? undefined : "hidden"
                   }
                 />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} reuseChip ticketScopeEnabled={ticketScopeEnabled} />}
+                {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />}
               </>
             )
           }
@@ -569,7 +566,7 @@ export function AI_Tiptap_Container({
   );
 }
 
-function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabled = false, onRestoreFocus }: { mobile?: boolean; reuseChip?: boolean; ticketScopeEnabled?: boolean; onRestoreFocus: () => void }) {
+function ChatScopeDropdown({ mobile = false, ticketScopeEnabled = false, onRestoreFocus }: { mobile?: boolean; ticketScopeEnabled?: boolean; onRestoreFocus: () => void }) {
   const requestedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
   const sharedShortcuts = requestedShortcuts && !mobile;
   const pathname = usePathname();
@@ -632,44 +629,8 @@ function ChatScopeDropdown({ mobile = false, reuseChip = false, ticketScopeEnabl
       data-ai-chat-scope
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
-      {reuseChip ? (
-        <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={sharedShortcuts ? `${scopeChip.title} · ${chatShortcutHint("scope")}` : scopeChip.title}
-          mobile={mobile} isOpen={isOpen} aria-haspopup="dialog" onClick={() => setIsOpen((open) => !open)} />
-      ) : <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={isOpen}
-        className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
-          mobile
-            ? "h-11 max-w-[65vw] rounded-[4px] bg-ai-tiptap px-3"
-            : "rounded-[4px] px-2 py-1"
-        }`}
-        onClick={() => setIsOpen((open) => !open)}
-        title={sharedShortcuts ? `${scopeChip.title} · ${chatShortcutHint("scope")}` : scopeChip.title}
-      >
-        {mobile && (
-          <span className="mr-1 flex-none text-text-light-gray">Context:</span>
-        )}
-        <span className="mr-1 flex-none text-text-light-gray">
-          {scopeChip.kind === "task" ? (
-            <ListTodo size={13} strokeWidth={1.75} />
-          ) : scopeChip.kind === "boards" ? (
-            <Layers size={13} strokeWidth={1.75} />
-          ) : (
-            <SquareKanban size={13} strokeWidth={1.75} />
-          )}
-        </span>
-        <span className="min-w-0 truncate font-medium">
-          {scopeChip.label}
-        </span>
-        <ChevronDown
-          size={16}
-          className={`ml-1 flex-none text-emphasis text-text-light-gray transition-transform ${
-            isOpen ? "rotate-180" : ""
-          }`}
-          strokeWidth={1.75}
-        />
-      </button>}
+      <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={sharedShortcuts ? `${scopeChip.title} · ${chatShortcutHint("scope")}` : scopeChip.title}
+        mobile={mobile} isOpen={isOpen} aria-haspopup="dialog" onClick={() => setIsOpen((open) => !open)} />
 
       {isOpen && (
         <OptionPickerModal

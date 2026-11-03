@@ -312,7 +312,9 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useClickOutside.ts', { default: () => {} });
     source('src/lib/constants/index.ts', { default: {} });
     source('src/utils/helperFunctions/helperFunctions.ts', { processFiles: config.processImages ?? (async (files, start) => [...files].map((file, id) => ({ id: start + id, file }))) });
-    source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return config.boards ?? [project, { ...project, id: 8 }]; } } });
+    let releaseBoards;
+    const pendingBoards = config.coldBoards ? new Promise((resolve) => { releaseBoards = resolve; }) : null;
+    source('src/utils/api/global/index.ts', { default: { getAllProjectsMinimal: async () => { loadedBoards.push(true); return pendingBoards ?? config.boards ?? [project, { ...project, id: 8 }]; } } });
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
     source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => {
@@ -408,7 +410,8 @@ async function withPalette(t, config, check) {
       callbacks.forEach((callback) => callback());
     });
     replacingStubs = true;
-    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
+    const boardsArrive = () => { if (!releaseBoards) return Promise.resolve(); return React.act(async () => { releaseBoards(config.coldBoards); }); };
+    await check({ dom, flushAnimationFrame, focusProxy, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, boardsArrive, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
     try {

@@ -358,7 +358,7 @@ async function withCompose(options, check) {
     "@/hooks/MultiPages/useUpdateTaskInBoards": { default: () => ({ updateTaskInCache() {} }) },
     "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: () => ["task-43"] },
     "@/lib/realtime/taskDetailRefresh": { preserveTaskAssigneesChangedDuringFetch: (_current, saved) => saved, refreshTaskDetailQueryCache: async () => {}, shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_current, saved) => saved },
-    "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": {},
+    "@/lib/ai/composeTaskBoard": {}, "./composeBoardTarget": { resolveComposeBoardTarget: () => ({ boardId: 15, showChip: false }) },
     "@/components/Common/Tooltip": { default: () => null },
     "@/components/AI_CHAT/ChatScopeChip": {}, "@/components/Modals/MoveTaskToBoard": {},
     "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu": { useSkillSlashMenu: () => ({ onKeyDown: () => false, onInput() {}, onCaretMove() {}, close() {}, menu: null }) },

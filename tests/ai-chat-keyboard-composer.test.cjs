@@ -24,7 +24,7 @@ function composerView(controlled = false) {
     "@/lib/flags/keys": { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG: "htpr-7734-agent-chat-context" },
     "@/lib/controlledComposerEditor": { ControlledComposerEditor: () => null },
     "./AiComposerTextarea": { AiComposerTextarea: () => null },
-    "./ChatScopeChip": { ChatScopeChip: () => null },
+    "./ChatScopeChip": { ChatScopeChip: ({ label, title, isOpen, onClick }) => React.createElement("button", { type: "button", title, "aria-haspopup": "dialog", "aria-expanded": isOpen, onClick }, label) },
     "@/store": {},
     "@/lib/state": { useRecoilState: () => [[], noop], useRecoilValue: () => null },
     "@/hooks/MultiPages/AIChat/useDockedChatScope": { useDockedChatScope: () => [null, noop] },
