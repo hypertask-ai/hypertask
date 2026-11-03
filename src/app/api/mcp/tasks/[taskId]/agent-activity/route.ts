@@ -1,9 +1,8 @@
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
-import prisma from '@/lib/prisma'
+import { loadTaskAgentLog } from '@/lib/agentRuns/taskAgentLog'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,32 +50,16 @@ export async function GET(
     if (agentId !== null && !agentId.trim()) {
       return noStore({ success: false, error: 'agent_id must not be empty' }, 400)
     }
-    const rows = await prisma.agentRunActivity.findMany({
-      where: { run: { taskId: task.id, ...(ctx.teamScope != null ? { task: { project: projectContentAccessWhere(ctx.user.id, ctx.agentId, ctx.teamScope) } } : {}), ...(agentId ? { agentId } : {}) } },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      take: Math.min(limit, 100),
-      ...(offset > 0 ? { skip: offset } : {}),
-      select: {
-        id: true,
-        runId: true,
-        type: true,
-        text: true,
-        createdAt: true,
-        run: { select: { agentId: true, agent: { select: { displayName: true } } } },
-      },
+    const activities = await loadTaskAgentLog({
+      taskId: task.id,
+      userId: ctx.user.id,
+      callerAgentId: ctx.agentId,
+      teamScope: ctx.teamScope,
+      limit,
+      offset,
+      agentId,
     })
-    return noStore({
-      success: true,
-      activities: rows.map((row) => ({
-        id: row.id,
-        agentId: row.run.agentId,
-        agentName: row.run.agent.displayName,
-        runId: row.runId,
-        type: row.type.toLowerCase(),
-        text: row.text,
-        createdAt: row.createdAt.toISOString(),
-      })),
-    })
+    return noStore({ success: true, activities })
   } catch (error) {
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) {

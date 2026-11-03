@@ -37,6 +37,7 @@ import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
 import { withActivityMetadata } from '@/lib/mcp/comments/activityMetadata'
+import { loadTaskAgentLog, type TaskAgentLogEntry } from '@/lib/agentRuns/taskAgentLog'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import {
   IdempotencyInProgressError,
@@ -101,6 +102,7 @@ export interface ListCommentsResponse {
   limit: number
   offset: number
   nextCursor?: string | null
+  agent_activity?: TaskAgentLogEntry[]
 }
 
 export interface McpMentionInput {
@@ -479,6 +481,17 @@ export async function GET(request: NextRequest) {
       limit: pageLimit,
       offset: cursorId ? 0 : offset,
       nextCursor: comments.length === pageLimit ? String(comments[comments.length - 1].id) : null,
+      ...(includeActivity
+        ? {
+            agent_activity: await loadTaskAgentLog({
+              taskId: task.id,
+              userId: user.id,
+              callerAgentId: ctx.agentId,
+              teamScope: ctx.teamScope,
+              limit: pageLimit,
+            }),
+          }
+        : {}),
     }
 
     return NextResponse.json(response)
