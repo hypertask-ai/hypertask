@@ -335,7 +335,7 @@ test("bottom shortcut hint shows N; top hint and clicks stay unchanged", async (
 test("retired definition is absent, reused hints and existing full-editor scope are explicit", () => {
   assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions", path.basename(__filename, ".test.cjs") + ".ts")), false);
   assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /boardTips=\{boardTips\.map[\s\S]*key: \["N \/ Shift\+C"\]/);
+  assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /boardTips=\{quickAddShortcutsEnabled \? boardTips : boardTips\.map[\s\S]*key: \["N \/ Shift\+C"\]/);
   assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /quickAddShortcutsEnabled \? \["N"\] : \["N \/ Shift\+C"\]/);
   assert.match(source(sectionPath), /useEffect\(\(\) => \{[\s\S]*?addEventListener\("OPEN_QUICK_ENTRY"/);
   assert.match(source(boardPath), /if \(returnIfModalOrInputActive\(\)\) return/);
@@ -361,8 +361,8 @@ test("global quick-add hints always include N / Shift+C", () => {
   assert.ok(initializer && prop);
   const hints = new Function("KanbanTipsConstants", "quickAddShortcutsEnabled", `const boardTips = ${initializer}; return ${prop};`);
   const original = { key: ["C"], hint: "add task" };
-  assert.deepEqual(hints([original], false), [original, { key: ["N / Shift+C"], hint: "quick add" }]);
   assert.deepEqual(hints([original], true), [original, { key: ["N"], hint: "quick add" }]);
+  assert.deepEqual(hints([original], false), [original, { key: ["N / Shift+C"], hint: "quick add" }]);
 });
 
 test("flag on: N opens the hovered column, Shift+C is cut, hints read N", async () => fixture(async ({ dom, reactRoot, press }) => {
@@ -411,8 +411,9 @@ test("flag on: N opens the hovered column, Shift+C is cut, hints read N", async 
       state.showAddItem && React.createElement("input", { "data-quick": section.sectionId, ref: state.bottomInputRef, "data-position": state.position }),
     );
   };
+  let filtered = sections;
   const Harness = () => {
-    useBoard({ initialSections: sections, filteredSections: sections });
+    useBoard({ initialSections: sections, filteredSections: filtered });
     return React.createElement("div", { id: "sectionsContainer" }, sections.map((section, index) => React.createElement(Column, { key: section.sectionId, section, index })));
   };
   await React.act(async () => reactRoot.render(React.createElement(Harness)));
@@ -427,8 +428,10 @@ test("flag on: N opens the hovered column, Shift+C is cut, hints read N", async 
   await React.act(async () => reactRoot.render(React.createElement(Harness)));
   const secondColumn = document.querySelector('[data-column="20"]');
   await React.act(async () => secondColumn.dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
+  filtered = sections.map((section) => ({ ...section, items: [...section.items] }));
+  await React.act(async () => reactRoot.render(React.createElement(Harness)));
   await press("n");
-  assert.equal(document.querySelector("[data-quick]").dataset.quick, "20", "the hovered column wins when nothing is focused");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "20", "a stationary pointer keeps its column across re-registrations");
   await React.act(async () => reactRoot.render(null));
   await React.act(async () => reactRoot.render(React.createElement(Harness)));
   document.querySelector('[data-column="10"]').focus();

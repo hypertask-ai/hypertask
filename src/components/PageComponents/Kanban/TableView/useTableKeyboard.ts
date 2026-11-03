@@ -3,7 +3,7 @@ import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFuncti
 import { isFavoriteBoardShortcut } from "@/lib/constants/shortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { shouldRunArchiveShortcut } from "@/lib/keyboard/archiveShortcutGuard";
-import { shouldIgnoreTaskShortcutTarget } from "@/lib/keyboard/taskShortcuts";
+import { shouldIgnoreTaskShortcutTarget, quickAddShortcutsFromFocus, quickAddShortcutsWithPointer } from "@/lib/keyboard/taskShortcuts";
 import { createTaskFromTableSelection } from "./tableCreateTask";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import type { TableViewProps } from "./tableViewShared";
@@ -30,6 +30,7 @@ export function useTableKeyboard(context: Context) {
 
 
   const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
+  const quickAddShortcuts = quickAddShortcutsEnabled ? quickAddShortcutsWithPointer() : quickAddShortcutsFromFocus();
   const { createItem } = useAddDeleteTaskInBoards();
   const quickCreateTask = (
     title: string,
@@ -173,7 +174,7 @@ export function useTableKeyboard(context: Context) {
       if (
         !_currentProject ||
         !((e.key.toLowerCase() === "n" && !e.shiftKey) ||
-          (!quickAddShortcutsEnabled && e.key.toLowerCase() === "c" && e.shiftKey)) ||
+          (quickAddShortcuts.acceptShiftC && e.key.toLowerCase() === "c" && e.shiftKey)) ||
         e.ctrlKey || e.metaKey || e.altKey || e.repeat || e.isComposing ||
         showCommands.show || assignTask || returnIfModalOrInputActive() ||
         shouldIgnoreTaskShortcutTarget(e.target as HTMLElement | null) ||

@@ -10,8 +10,12 @@ const { createRefactoredModuleRequire } = require("./refactored-module-require.c
 
 const root = path.resolve(__dirname, "..");
 const sharpPlusFlag = "htpr-7047-sharp-plus-signs";
+const quickAddShortcutsFlag = "htpr-8265-task-shortcuts-writer-model";
 const keys = {
   HTPR_7047_SHARP_PLUS_SIGNS_FLAG: sharpPlusFlag,
+};
+const definitions = {
+  HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: quickAddShortcutsFlag,
 };
 
 function loadButton(enabled) {
@@ -20,6 +24,7 @@ function loadButton(enabled) {
     "@/components/Common/Tooltip": { default: () => null, __esModule: true },
     "@/hooks/useFlag": { useFlag: (key) => enabled.has(key) },
     "@/lib/flags/keys": keys,
+    "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model": definitions,
   })("./src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx").default;
 }
 

@@ -148,3 +148,18 @@ export function getTaskShortcutAction(
   if (event.keyCode === KeyCodes.F2) return "rename";
   return null;
 }
+
+export type QuickAddShortcuts = {
+  acceptShiftC: boolean;
+  useHoveredColumn: boolean;
+};
+
+export const quickAddShortcutsWithPointer = (): QuickAddShortcuts => ({
+  acceptShiftC: false,
+  useHoveredColumn: true,
+});
+
+export const quickAddShortcutsFromFocus = (): QuickAddShortcuts => ({
+  acceptShiftC: true,
+  useHoveredColumn: false,
+});

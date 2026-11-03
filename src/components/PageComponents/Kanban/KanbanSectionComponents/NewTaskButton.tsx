@@ -22,8 +22,6 @@ interface INewTaskButton{
 
 const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, snapshot, sectionPayload}) => {
     const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
-    const topKeyCombination = quickAddShortcutsEnabled ? ["N"] : ["C"];
-    const bottomKeyCombination = quickAddShortcutsEnabled ? ["N"] : ["N / Shift+C"];
     
     if (buttonPosition == "top"){
         const  left= -160;
@@ -34,7 +32,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 className="
                 group create-new-task-button
                 scale-100  relative group-hover/main:scale-100 cursor-pointer">
-                <TooltipAndIcon text='Create task at top' keyCombination={topKeyCombination} left={left} bottom={bottom}/>
+                <TooltipAndIcon text='Create task at top' keyCombination={quickAddShortcutsEnabled ? ["N"] : ["C"]} left={left} bottom={bottom}/>
             </div>
         )
     }
@@ -49,7 +47,7 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
                 group-hover/main:scale-100 w-full mt-[16px] py-2
                 rounded flex justify-center"
                 >
-                <TooltipAndIcon text='Create task' keyCombination={bottomKeyCombination} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
+                <TooltipAndIcon text='Create task' keyCombination={quickAddShortcutsEnabled ? ["N"] : ["N / Shift+C"]} left={20} bottom={-40} size={14} className='text-text-light-gray'/>
             </div>
         )
     }

@@ -117,6 +117,18 @@ empty search and clear it. No task needs creating. Repeat at 1440x900 and
 Flag Off preserves API order; the move-existing-task picker stays unchanged
 in either mode. Do not modify shared QA history outside your browser context.
 
+## New Task model picker
+
+With `htpr-8265-task-shortcuts-writer-model` on, Ctrl+J New Task shows the
+shared model picker left of the attach button. It starts on the board or
+plan default, the same as the AI chat picker, and its model list, effort
+submenu and Reset to default behave the same. Pick a non-default model,
+send a note, and confirm the task writer request carries that model id; the
+created ticket still opens normally. Reopening the writer keeps the choice,
+and the task-detail AI writer shows the same model because both use the
+`taskWriter` preference. Flag Off hides the picker and restores the board
+default. Repeat at 1440x900 and 390x844 in all four themes.
+
 ## New Task dictation shortcut
 
 With `htpr-8140-ctrlj-dictation-shortcut` on, open Ctrl+J and type a draft.

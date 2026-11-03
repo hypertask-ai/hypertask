@@ -241,7 +241,7 @@ const BottomSettings_QuickTips = ({
         </div>
       )}
 
-      {!mbl && <QuickTips boardTips={boardTips.map(tip => tip.hint === "quick add" && !quickAddShortcutsEnabled ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
+      {!mbl && <QuickTips boardTips={quickAddShortcutsEnabled ? boardTips : boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
     </>
   );
 };

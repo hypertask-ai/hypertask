@@ -98,7 +98,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const createAfterDictation = useRef(false);
   const dictationDelivered = useRef(false);
   const writerModelPicker = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
-  const writerModel = useTaskWriterModel();
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
@@ -183,6 +182,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const targetBoard: IProject | undefined = boards.find((board) => board.id === targetBoardId)
     ?? (destinationProject?.id === targetBoardId ? destinationProject : undefined)
     ?? (currentProject && currentProject.id === targetBoardId ? currentProject : undefined);
+  const writerModel = useTaskWriterModel(targetBoard);
   const skillMenu = useSkillSlashMenu({ textAreaRef: input, setValue: setText });
   const skillMenuConsumedKey = useRef(false);
   const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
@@ -595,7 +595,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
-                {writerModelPicker && <TaskWriterModelPicker mobile={mobile} className="bottom-[110%] top-auto" />}
+                {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}

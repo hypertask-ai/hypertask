@@ -63,5 +63,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8215 sends the Trash write from an agent door to Hypertask's own same-origin app route with the agent's signed session. It calls no paid service and costs nothing.",
     "source": "https://app.hypertask.ai/detail/project-15/8215"
+  },
+  "src/lib/ai/composeTask.ts:bdecef1f8810d1296d0625427ca908b64dc195479fe8093f264f1a7435938011": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8265 does not add a request or a provider. It is the same Ctrl+J writer call to Hypertask's own same-origin task writer route; only modelSelected and sourceSelected can now come from the Ctrl+J picker instead of the board default, and that route applies the same team plan, key and BYOK limits to whichever model it receives.",
+    "source": "https://app.hypertask.ai/detail/project-15/8265"
   }
 }
