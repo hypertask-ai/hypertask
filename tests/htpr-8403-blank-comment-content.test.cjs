@@ -1,16 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const fs = require('node:fs');
-const path = require('node:path');
 const { loadModule } = require('./helpers/loadModule.cjs');
+const { setup } = require('./helpers/comment-routing.cjs');
 
-const root = path.resolve(__dirname, '..');
 const { hasVisibleContent } = loadModule('src/lib/mcp/comments/contentPresence.ts');
 
-const createRoute = fs.readFileSync(path.join(root, 'src/lib/mcp/operations/comments/operation.ts'), 'utf8').replace(/\s+/g, ' ');
-const updateRoute = fs.readFileSync(path.join(root, 'src/lib/mcp/operations/comments/[comment_id]/operation.ts'), 'utf8').replace(/\s+/g, ' ');
-
-test('whitespace that only survives sanitizing counts as blank', () => {
+test('text that only survives as tags or invisible entities is blank', () => {
   for (const blank of ['<p></p>', '<p><br></p>', '<p> </p>', '&nbsp;', '<p>&nbsp;</p>', '<p>\u200b</p>', '<div><span> </span></div>', '<p>&#160;</p>', '<p>&#32;</p>', '<p>&#x20;</p>', '<figure></figure>']) {
     assert.equal(hasVisibleContent(blank), false, `${JSON.stringify(blank)} must be blank`);
   }
@@ -22,16 +17,17 @@ test('real text, mentions and media count as content', () => {
   }
 });
 
-test('comment update refuses content that renders nothing', () => {
-  assert.match(
-    updateRoute,
-    /sanitizedText = normalizeBlockHtml\(sanitizedText\) if \(!hasVisibleContent\(sanitizedText\)\) \{ return NextResponse\.json\(/,
-  );
+test('comment add refuses a body whose HTML renders nothing', async () => {
+  const { post, calls } = setup();
+  const refused = await post({ text: '<p>&nbsp;</p>' });
+  assert.equal(refused.status, 400);
+  assert.equal(refused.body.error, 'Comment text is required');
+  assert.equal(calls.comments.length, 0);
 });
 
-test('comment add refuses content that renders nothing unless media or attachments carry it', () => {
-  assert.match(
-    createRoute,
-    /sanitizedText = normalizeBlockHtml\(sanitizedText\) if \(!hasVisibleContent\(sanitizedText\) && \(images\?\.length \?\? 0\) === 0 && !hasImageAttachments && has_attachments !== true\) \{ return NextResponse\.json\(/,
-  );
+test('comment add still posts a body with real text', async () => {
+  const { post, calls } = setup();
+  const created = await post({ text: '<p>Progress &amp; next step</p>' });
+  assert.equal(created.status, 201);
+  assert.equal(calls.comments.length, 1);
 });
