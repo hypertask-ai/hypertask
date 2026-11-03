@@ -1,6 +1,6 @@
 import assert from "node:assert";
 // @ts-expect-error Node strip-types checks require .ts imports without allowImportingTsExtensions.
-import { injectMentionSpans } from "./resolveMentions.ts";
+import { injectMentionSpans, normalizeMentionSpans } from "./resolveMentions.ts";
 
 const members = [
   { id: 193, displayName: "Abdul Wahhab" },
@@ -71,6 +71,31 @@ assert.strictEqual(
   injectMentionSpans("just a note about Abdul Wahhab", members),
   "just a note about Abdul Wahhab",
   "name without @ is unchanged",
+);
+
+assert.ok(
+  normalizeMentionSpans(
+    '<span data-type="mention" data-id="Valentin" data-label="valentin-6">Valentin</span>',
+    members,
+  ).includes('data-label="name-6"'),
+  "a guessed person label is rewritten from the display name",
+);
+
+const nestedSafe = injectMentionSpans(
+  normalizeMentionSpans(
+    '<span data-type="mention" data-id="Valentin" data-label="valentin-6">@Valentin</span> and @Abdul Wahhab',
+    members,
+  ),
+  members,
+);
+assert.strictEqual(
+  (nestedSafe.match(/<span/g) || []).length,
+  2,
+  "no span is written inside an existing mention span",
+);
+assert.ok(
+  nestedSafe.includes('data-label="name-193"'),
+  "plain text mentions next to an existing span still resolve",
 );
 
 console.log("resolveMentions.check.ts: all assertions passed");
