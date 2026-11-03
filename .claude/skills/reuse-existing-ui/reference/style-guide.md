@@ -119,7 +119,6 @@ Destructive actions use the semantic destructive token or an existing destructiv
 ### Approved exceptions to the button hierarchy
 
 - Mobile new-task dictation buttons (title and description empty state, `TaskTitleModal.tsx` and `AttachmentsUpload/index.tsx`, `mobilePrimaryTone="default"`) use the inverted-theme white-black treatment instead of `bg-shadcn-primary`, matching the empty dictation action of the mobile comment field below. Owner-approved by Valentin on 2026-09-04, ticket https://app.hypertask.ai/detail/project-15/5995.
-- The AI chat composer Send (`SendMessageButton` with a `label`) is a ghost text action, not the filled primary. It matches the ticket page Send in `AttachmentControls.tsx`, as the approved chat cleanup asks. Owner-approved by Valentin on 2026-11-01, ticket https://app.hypertask.ai/detail/project-15/8261: "Send is a text button. Same style as Ctrl+J v4 and task page."
 
 ## Reference implementation: mobile comment field
 
