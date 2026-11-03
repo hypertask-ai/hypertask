@@ -139,6 +139,7 @@ export function useAiChat() {
     streamingSessionRef, showAiChatInterface, aiChatExplicitOpenAt, setAiChatExplicitOpenAt, setChatMounted,
     hasAttemptedRestoreRef, currentUser, setShowAIChat, messageListRef, setShowScrollUpIndicator,
     toggleCreateTaskGlobally, inViewObject, setShowRenameChatModal, currentSession, updateSessionTitle,
+    setAiChatAutoOpenSuppressed,
   });
 
   const runningSessionIds = chatRunningEnabled && parallelStreams

@@ -39,6 +39,8 @@ test("a ticket link in the full-screen chat opens the side panel before the app 
   const presentation = read("src/hooks/MultiPages/AIChat/useAiChatPresentation.ts");
   assert.match(presentation, /const openDockedChat = \(\) => \{\n    setAiChatAutoOpenSuppressed\(false\);\n    setAiChatExplicitOpenAt\(Date\.now\(\)\);\n    setChatMounted\(true\);\n    setShowAIChat\(true\);\n  \};/);
   assert.match(presentation, /renameChat, openDockedChat,/);
+  assert.doesNotMatch(presentation, /useSetRecoilState/);
+  assert.match(presentation, /setAiChatAutoOpenSuppressed,\n  \} = context;/);
   const chat = read("src/hooks/MultiPages/AIChat/useAiChat.ts");
   assert.match(chat, /toggleRenameChatModal, renameChat, openDockedChat,/);
   assert.equal((chat.match(/^    openDockedChat,$/gm) ?? []).length, 1);

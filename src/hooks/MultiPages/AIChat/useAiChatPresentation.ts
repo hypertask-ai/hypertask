@@ -1,7 +1,7 @@
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import { useEffect, useRef } from "react";
-import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { useRecoilValue } from "@/lib/state";
 import { aiChatAutoOpenSuppressedAtom, keepAiChatClosedAtom } from "@/store";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { focusAiChatEditorForRequest, isEditableElement } from "@/utils/aiChat/focusRequestWindow";
@@ -12,7 +12,7 @@ import type { useAiChatState } from "./useAiChatState";
 import type { useAiChatAttachments } from "./useAiChatAttachments";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 
-type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextList" | "setContextList" | "editor" | "streamingSessionRef" | "showAiChatInterface" | "aiChatExplicitOpenAt" | "setAiChatExplicitOpenAt" | "setChatMounted" | "hasAttemptedRestoreRef" | "currentUser" | "setShowAIChat" | "messageListRef" | "setShowScrollUpIndicator" | "toggleCreateTaskGlobally" | "inViewObject" | "setShowRenameChatModal" | "currentSession" | "updateSessionTitle"> &
+type Context = Pick<ReturnType<typeof useAiChatState>, "setAiOption" | "contextList" | "setContextList" | "editor" | "streamingSessionRef" | "showAiChatInterface" | "aiChatExplicitOpenAt" | "setAiChatExplicitOpenAt" | "setChatMounted" | "hasAttemptedRestoreRef" | "currentUser" | "setShowAIChat" | "messageListRef" | "setShowScrollUpIndicator" | "toggleCreateTaskGlobally" | "inViewObject" | "setShowRenameChatModal" | "currentSession" | "updateSessionTitle" | "setAiChatAutoOpenSuppressed"> &
   Pick<ReturnType<typeof useAiChatAttachments>, "handleCancelStream">;
 
 export function useAiChatPresentation(context: Context) {
@@ -27,12 +27,12 @@ export function useAiChatPresentation(context: Context) {
   let keepAiChatClosed = false;
   if (keepAiChatClosedEnabled) keepAiChatClosed = savedKeepAiChatClosed;
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
-  const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom);
   const {
   setAiOption, contextList, setContextList, editor, handleCancelStream,
   streamingSessionRef, showAiChatInterface, aiChatExplicitOpenAt, setAiChatExplicitOpenAt, setChatMounted,
   hasAttemptedRestoreRef, currentUser, setShowAIChat, messageListRef, setShowScrollUpIndicator,
   toggleCreateTaskGlobally, inViewObject, setShowRenameChatModal, currentSession, updateSessionTitle,
+  setAiChatAutoOpenSuppressed,
   } = context;
 
 
