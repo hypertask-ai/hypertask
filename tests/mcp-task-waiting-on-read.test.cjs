@@ -32,6 +32,18 @@ const waitingTask = (overrides = {}) => ({
   waitingOnSetAt: new Date("2026-11-03T22:21:26.120Z"),
   createdAt: new Date("2026-11-03T21:15:55.082Z"),
   updatedAt: new Date("2026-11-03T22:21:26.120Z"),
+  user: { id: 6, email: "valentin@yeo.test", displayName: "Valentin" },
+  agent: null,
+  assignees: [],
+  followers: [],
+  taskLabels: [],
+  attachments: [],
+  customFieldValues: [],
+  savedContent: [],
+  pullRequests: [],
+  subTasks: [],
+  parentTask: null,
+  _count: { comments: 0 },
   ...overrides,
 });
 
