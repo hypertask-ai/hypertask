@@ -28,6 +28,15 @@ test("listening replaces the microphone with a Dictation pill", () => {
   assert.match(audio, /data-ai-chat-recording-cancel=\{isAiChat \|\| undefined\}/);
 });
 
+test("the floating and sidebar chat Send is the word, not the paper plane", () => {
+  const button = read("src/components/AI_CHAT/SendMessageButton.tsx");
+  assert.match(button, /\} else if \(label\) \{/);
+  assert.match(button, /\) : label \? \(/);
+  assert.doesNotMatch(button, /HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG/);
+  const composer = read("src/components/AI_CHAT/AI_Tiptap_Container.tsx");
+  assert.match(composer, /label=\{fullScreenCleanup \|\| chatCleanupEnabled \? "Send" : undefined\}/);
+});
+
 test("the chat composer turns the pill on only on desktop", () => {
   const composer = read("src/components/AI_CHAT/AI_Tiptap_Container.tsx");
   assert.match(composer, /const chatCleanupEnabled = useFlag\(HTPR_8261_CHAT_CLEANUP_FLAG\)/);
