@@ -51,6 +51,8 @@ export interface ParentTaskSummary {
 export interface TaskListItem {
   id: number
   blockerCommentId?: number | null
+  waitingOnUserId?: number | null
+  waitingOnSetAt?: string | null
   ticketNumber?: string
   title: string
   description: string
@@ -666,6 +668,8 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         blockerCommentId: true,
+        waitingOnUserId: true,
+        waitingOnSetAt: true,
         ticketNumber: true,
         uniqueIndex: true,
         title: true,
@@ -783,6 +787,8 @@ export async function GET(request: NextRequest) {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         blockerCommentId: task.blockerCommentId ?? null,
+        waitingOnUserId: task.waitingOnUserId ?? null,
+        waitingOnSetAt: task.waitingOnSetAt ? new Date(task.waitingOnSetAt).toISOString() : null,
         uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: mapTaskDescriptionContent(task),
