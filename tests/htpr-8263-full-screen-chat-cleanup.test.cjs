@@ -46,7 +46,7 @@ test('the text Send button keeps the mobile arrow and an icon fallback', () => {
   const button = read('src/components/AI_CHAT/SendMessageButton.tsx');
   assert.match(button, new RegExp(`useFlag\\(${FLAG}\\)`));
   assert.match(button, /const textLabel = cleanup \? label : undefined;/);
-  assert.match(button, /\) : textLabel \? \(\s*<span>\{textLabel\}<\/span>/, 'desktop renders the text label');
+  assert.match(button, /\) : cleanup && label \? \(\s*<span>\{label\}<\/span>/, 'desktop renders the text label');
   assert.match(button, /\{mobile \? \(\s*<SendArrow size=\{22\} \/>/, 'mobile keeps the arrow button');
   assert.match(button, /<Send size=\{16\} strokeWidth=\{1\.75\} \/>/, 'callers without a label keep the paper plane');
   const composer = read('src/components/AI_CHAT/AI_Tiptap_Container.tsx');
@@ -58,7 +58,7 @@ test('the full-screen placeholder loses the shortcut text and the focus hint bec
   const tiptap = read('src/hooks/MultiPages/AIChat/useAiTiptap.ts');
   assert.match(tiptap, new RegExp(`useFlag\\(${FLAG}\\)`));
   assert.match(tiptap, /if \(fullScreenChatRef\.current\) return `Ask anything, @ for context`;/);
-  assert.match(tiptap, /chatCleanup && \(usePathname\(\) \?\? ""\)\.startsWith\("\/chat"\)/);
+  assert.match(tiptap, /const fullScreenChat = chatCleanup && \(usePathname\(\) \?\? ""\)\.startsWith\("\/chat"\);/);
   assert.match(tiptap, /return `Focus with CTRL \+ Q, @ for context`;/, 'the docked chat keeps its placeholder');
   const composer = read('src/components/AI_CHAT/AI_Tiptap_Container.tsx');
   assert.match(composer, /`Focus · \$\{chatShortcutHint\("focus"\)\}`/);
@@ -67,10 +67,9 @@ test('the full-screen placeholder loses the shortcut text and the focus hint bec
 test('dictation chrome is words-only: no device chevron, a Dictate tooltip and an elapsed pill', () => {
   const audio = read('src/components/RTE/Components/AudioButton.tsx');
   assert.match(audio, new RegExp(`useFlag\\(${FLAG}\\)`));
-  assert.match(audio, /const aiChatCleanup = isAiChat && chatCleanup;/);
-  assert.match(audio, /\{!isMobileView && !aiChatCleanup && \(/, 'the chat mic has no device chevron');
+  assert.match(audio, /\{!isMobileView && !\(isAiChat && chatCleanup\) && \(/, 'the chat mic has no device chevron');
   assert.match(audio, /text=\{"Dictate"\}/);
-  assert.match(audio, /\{aiChatCleanup && \(\s*<span\s*data-ai-chat-recording-elapsed/);
+  assert.match(audio, /\{isAiChat && chatCleanup && \(\s*<span\s*data-ai-chat-recording-elapsed/);
   assert.match(audio, /const \[elapsedSeconds, setElapsedSeconds\] = useState\(0\);/);
   assert.match(audio, /\}, \[recording\]\);/, 'the timer ticks only while recording');
 });
