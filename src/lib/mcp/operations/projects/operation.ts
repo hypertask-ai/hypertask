@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { parseSortOrderParam } from '@/lib/mcp/listParams'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8018_PROJECT_PAGE_SIZE_FLAG } from '@/lib/flags/keys'
+import { HTPR_8413_BOARD_TEAM_FLAG } from '@/lib/flags/definitions/htpr-8413-board-team-id'
 
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
@@ -42,6 +43,7 @@ export interface ProjectListItem {
   labels: ProjectLabel[]
   status: 'Normal' | 'Archive' | 'Deleted'
   createdAt: string
+  teamId?: string | null
 }
 
 export interface ListProjectsResponse {
@@ -194,6 +196,7 @@ export async function GET(request: NextRequest) {
           }
         },
         createdAt: true,
+        teamId: true,
         _count: {
           select: {
             members: true,
@@ -211,6 +214,7 @@ export async function GET(request: NextRequest) {
       ...(cursorId ? { cursor: { id: cursorId } } : {}),
     })
 
+    const showTeamId = await isFeatureEnabled(HTPR_8413_BOARD_TEAM_FLAG, user.id)
     projects.forEach(project => recordAgentBoardScopeMiss(project.id, "read"));
     const projectList: ProjectListItem[] = projects.map(project => ({
       id: project.id,
@@ -234,6 +238,7 @@ export async function GET(request: NextRequest) {
       })),
       status: project.status,
       createdAt: project.createdAt.toISOString(),
+      ...(showTeamId ? { teamId: project.teamId ?? null } : {}),
     }))
 
     const response: ListProjectsResponse = {
