@@ -533,7 +533,7 @@ for (const [label, input] of [
 
 test("HTPR-7681 an agent with Claude and OpenAI keys keeps Haiku on its Claude key", async () => {
   const outcome = await chatTurnOutcome({ agentTeamOpenai: true, agentKeys: { claude: agentKey, openai: "fixture-agent-openai" } }, serverDefaultTurn);
-  assert.deepEqual(outcome, { modelId: "claude-haiku-5-5", credential: agentKey });
+  assert.deepEqual(outcome, { modelId: "claude-haiku-5.5", credential: agentKey });
 });
 
 test("HTPR-7681 a hand-picked Luna keeps the agent's own direct OpenAI key", async () => {

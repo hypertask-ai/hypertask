@@ -159,10 +159,11 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7681_AGENT_TEAM_OPENAI_DEFAULT_FLAG, dbUser.id))
       .catch(() => false);
     const teamKeyLookupContext = { ...keyLookupContext, agentId: null };
+    const serverDefaultContext: AiDefaultModelContext = defaultContext;
     const teamOpenAiOnlyContext = agentTeamOpenaiDefaultEnabled &&
       actingAgent !== null &&
       body.modelFromDefault === true &&
-      defaultContext.hasClaudeRoute === false
+      serverDefaultContext.hasClaudeRoute === false
       ? await getAiDefaultModelContext(teamKeyLookupContext, true, storePlanId, body.byokProviderFlags)
       : null;
     const usesTeamOpenAiDefault = Boolean(teamOpenAiOnlyContext && isOpenAiOnlyPaidTeam(teamOpenAiOnlyContext));
