@@ -1,5 +1,6 @@
 'use client'
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
+import { HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG } from "@/lib/flags/definitions/htpr-8243-board-switch-address";
 import Unauthorized from "../unauthorized/page";
 import { HTPR_7799_PROJECT_ENTRY_FLAG, HTPR_7885_INVITE_LINK_DIALOG_FLAG } from "@/lib/flags/keys";
 import { HTPR_7775_SAVED_URL_VIEW_FLAG } from "@/lib/flags/keys";
@@ -8,7 +9,7 @@ import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG } from "@/lib/flags/keys";
 import type { useLandingSectionState } from "./useLandingSectionState";
 import { completeBoardReadinessTrace, emitBoardReadinessAfterPaint, markBoardReadinessPhase } from "@/lib/analytics/boardReadinessPhases";
-import { resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
+import { boardSwitchIntentHoldsAddressRepair, resolveBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 
 import { useLandingSection } from "./LandingPageSection";
 import type { SectionCompProps } from "./LandingPageSection";
@@ -760,6 +761,7 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   queryClient, setHydrationRetryToken, hydrationRetryToken,
   } = context;
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
+  const holdAddressForPendingSwitch = useFlag(HTPR_8243_BOARD_SWITCH_ADDRESS_FLAG)
 
 useEffect(() => {
   if (!pinnedProject) return
@@ -819,6 +821,7 @@ useEffect(() => {
 useEffect(() => {
   if (!searchParams || !slugs || surfaceInitializedFor !== surfaceInitializationKey) return;
   if (window.location.pathname.startsWith("/detail/") && window.history.state?.cachedTaskDetail) return;
+  if (holdAddressForPendingSwitch && boardSwitchIntentHoldsAddressRepair(Number(slugs))) return;
   const currentProject = data?.updatedProjects?.[projectIndex]
   const allViews = currentProject?.project_view?.allViews
   const viewMetadataReady = Boolean(currentProject && Array.isArray(allViews))
@@ -886,7 +889,7 @@ useEffect(() => {
       router.replace(newUrl, { scroll: false });
     }
   }
-}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId]);
+}, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId, holdAddressForPendingSwitch]);
 
 const retryCountRef = useRef(0)
 const MAX_RETRIES = 3

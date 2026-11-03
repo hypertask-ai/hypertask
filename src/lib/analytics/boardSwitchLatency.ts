@@ -34,6 +34,18 @@ export const markBoardSwitchIntent = ({
   window.__htBoardSwitchIntent = { surface, projectId, markedAt: performance.now() };
 };
 
+export const boardSwitchIntentHoldsAddressRepair = (
+  projectId: number,
+): boolean => {
+  if (typeof window === "undefined" || typeof performance === "undefined") {
+    return false;
+  }
+  const intent = window.__htBoardSwitchIntent;
+  if (!intent || intent.projectId === projectId) return false;
+  const intentAgeMs = performance.now() - intent.markedAt;
+  return intentAgeMs >= 0 && intentAgeMs <= MAX_INTENT_AGE_MS;
+};
+
 export const resolveBoardSwitchIntent = (
   completion: BoardReadinessCompletion,
 ): void => {
