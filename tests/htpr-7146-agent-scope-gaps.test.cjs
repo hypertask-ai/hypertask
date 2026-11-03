@@ -85,7 +85,7 @@ for (const [mode, kind] of cases) {
     const flags = f.load('src/lib/flags.ts', { '@/lib/flags/modeCache': { withFlagModeInvalidation: run => run() } });
     const route = f.load('src/app/api/mcp/flags/route.ts', {
       '@/lib/flags': { ...flags, isFeatureFlagOwnerUserId: async () => true, isFeatureEnabled: async flagKey => {
-        assert.ok(['htpr-7364-batch-flag-approval', 'htpr-7727-plain-yes-flag-approval'].includes(flagKey));
+        assert.ok(['htpr-7364-batch-flag-approval', 'htpr-7727-plain-yes-flag-approval', 'htpr-8339-template-switch-question'].includes(flagKey));
         return false;
       } },
       '@/lib/realtime/server': { broadcastFeatureFlagsChange: async () => {} },

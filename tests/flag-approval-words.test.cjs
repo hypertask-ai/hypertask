@@ -100,3 +100,95 @@ for (const [fixture, batchAllowed, expected] of [
     assert.deepEqual(switches ? [...switches] : null, expected);
   });
 }
+
+const shapedQuestion = (question) => `<p><strong>What this is:</strong> a flag that keeps a running chat.</p>
+<p>It changes what every customer sees.</p>
+<p><strong>Question:</strong> ${question}</p>
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>
+<p>Impact: not only the QA account, and it holds until we say otherwise.</p>`;
+
+const { parse: parseHtml } = require("node-html-parser");
+const shapedWords = (question) => normalizeVisibleText(shapedQuestion(question));
+const shapedText = (question) => parseHtml(shapedQuestion(question)).text;
+
+for (const [question, expected] of [
+  ["Switch x to Everyone?", [["x", "Everyone"]]],
+  ["Switch x to Only me?", [["x", "Only me"]]],
+  ["Switch htpr-7764-chat-running to Owner + QA?", [["htpr-7764-chat-running", "Owner + QA"]]],
+]) {
+  test(`a Question in the required shape approves ${JSON.stringify(question)}`, () => {
+    assert.deepEqual([...parseSwitchQuestion(shapedWords(question), true)], expected);
+    assert.deepEqual([...strictSwitchRequest(shapedText(question), false, true)], expected);
+  });
+}
+
+for (const question of [
+  "Switch x to Everyone only if it passes?",
+  "Switch x to Everyone unless QA is red?",
+  "Do not switch x to Everyone?",
+  "Switch x to Everyone? No, keep it.",
+  "Switch x to not Everyone?",
+]) {
+  test(`a shaped Question saying ${JSON.stringify(question)} still refuses`, () => {
+    assert.equal(parseSwitchQuestion(shapedWords(question), true), null);
+    assert.equal(strictSwitchRequest(shapedText(question), false, true), null);
+  });
+}
+
+test("a shaped Question refuses while its switch is off, and free wording keeps its guards", () => {
+  const question = "Switch x to Everyone?";
+  assert.equal(parseSwitchQuestion(shapedWords(question)), null);
+  assert.equal(strictSwitchRequest(shapedText(question), false), null);
+  assert.equal(parseSwitchQuestion(shapedWords(question).replace(/question\s*:/, "asks:"), true), null);
+  assert.equal(parseSwitchQuestion("Switch x to Everyone? No, keep it.", true), null);
+  assert.equal(strictSwitchRequest("Question: Switch x to Everyone? Switch y to Off?", false, true), null);
+});
+
+const shapedWith = (body) => normalizeVisibleText(`<p><strong>What this is:</strong> a flag that keeps a running chat.</p>${body}
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>`);
+
+test("a quoted switch request in the context block never approves its own switch", () => {
+  const quotedOnly = shapedWith(`<p>He asked "Question: Switch x to Everyone?" last week.</p>`);
+  assert.equal(parseSwitchQuestion(quotedOnly, true), null);
+
+  const quotedThenReal = shapedWith(`<p>He asked "Question: Switch x to Everyone?" last week.</p>
+<p><strong>Question:</strong> Switch x to Off?</p>`);
+  assert.deepEqual([...parseSwitchQuestion(quotedThenReal, true)], [["x", "Off"]]);
+});
+
+test("a shaped comment with two Question lines refuses", () => {
+  const twoQuestions = shapedWith(`<p><strong>Question:</strong> Switch x to Everyone?</p>
+<p><strong>Question:</strong> Switch x to Off?</p>`);
+  assert.equal(parseSwitchQuestion(twoQuestions, true), null);
+});
+
+for (const recommendation of ["No.", "No, keep it off.", "Yes, but only after QA."]) {
+  test(`a shaped comment recommending ${JSON.stringify(recommendation)} refuses a thumbs up`, () => {
+    const words = shapedWith(`<p><strong>Question:</strong> Switch x to Everyone?</p>`)
+      .replace("my recommendation: yes.", `my recommendation: ${recommendation.toLowerCase()}`);
+    assert.equal(parseSwitchQuestion(words, true), null);
+  });
+}
+
+for (const [name, body] of [
+  ["a quoted hedge inside the Question line", `<p><strong>Question:</strong> Switch x to "not" Everyone?</p>`],
+  ["a quoted hedge after the Question line", `<p><strong>Question:</strong> Switch x to Everyone? "not yet"</p>`],
+  ["a quoted No recommendation", `<p><strong>Question:</strong> Switch x to Everyone?</p><p><strong>My recommendation:</strong> "No."</p>`],
+]) {
+  test(`a shaped comment with ${name} refuses in both lanes`, () => {
+    const words = shapedWith(body).replace(/my recommendation: yes\./, "");
+    assert.equal(parseSwitchQuestion(words, true), null);
+    const text = require("node-html-parser").parse(`<p><strong>What this is:</strong> a flag.</p>${body}
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>`).text;
+    assert.equal(strictSwitchRequest(text, false, true), null);
+  });
+}

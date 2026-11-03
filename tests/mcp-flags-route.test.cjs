@@ -31,6 +31,7 @@ let approvalQueries;
 let lockQueries;
 let batchFlagOn;
 let plainYesFlagOn;
+let templateQuestionFlagOn;
 let commentLockLost;
 let ticketComments;
 let leadAgent;
@@ -62,6 +63,7 @@ stubModule("src/lib/flags.ts", {
   isFeatureEnabled: async (flagKey, userId) => {
     assert.equal(userId, 6);
     if (flagKey === "htpr-7364-batch-flag-approval") return batchFlagOn;
+    if (flagKey === "htpr-8339-template-switch-question") return templateQuestionFlagOn;
     assert.equal(flagKey, "htpr-7727-plain-yes-flag-approval");
     return plainYesFlagOn;
   },
@@ -217,6 +219,7 @@ test.beforeEach((t) => {
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
   approvalQueries = []; lockQueries = []; batchFlagOn = false; plainYesFlagOn = true; commentLockLost = false;
+  templateQuestionFlagOn = false;
   approvalComment = {
     id: 123, taskId: 900, creatorId: 6, agentId: "runner-3", agentDisplayName: null,
     createdAt: new Date(), editedByUserId: null, editedByAgentId: null,
@@ -520,6 +523,14 @@ function chatRecord(text = `Valentin said in chat (${new Date().toISOString().sl
   approvalComment.agentId = FLAG_CHAT_RECORD_AGENT_ID;
   approvalComment.agentDisplayName = "HT Product Lead";
 }
+const shapedQuestion = (key, mode) => `<p><strong>What this is:</strong> the flag that keeps a running chat.</p>
+<p>It changes what every customer sees.</p>
+<p><strong>Question:</strong> Switch ${key} to ${mode}?</p>
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> live QA passed.</p>
+<p><strong>Yes:</strong> everyone gets it.</p>
+<p><strong>No:</strong> it stays with me and QA.</p>`;
+
 async function assertAllowed(kind, requestedKey = key, mode = "EVERYONE", questionCommentIds = [100]) {
   const response = await result(await PATCH(request("PATCH", { key: requestedKey, mode, reason })));
   assert.equal(response.status, 200);
@@ -831,4 +842,29 @@ test("PATCH treats a higher-id equal-time human no as withdrawal", async () => {
   ticketYes();
   ticketComments.push(ticketComment(124, "no", { agentId: null, createdAt: approvalComment.createdAt }));
   await assertRefused("Valentin said no after that approval (comment 124)");
+});
+
+test("PATCH accepts a thumbs up on a Question in the required shape once its switch is on", async () => {
+  templateQuestionFlagOn = true;
+  approvalComment.text = shapedQuestion(key, "Everyone");
+  await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
+});
+
+test("PATCH accepts the strict lane on a Question in the required shape", async () => {
+  templateQuestionFlagOn = true;
+  plainYesFlagOn = false;
+  approvalComment.text = shapedQuestion(key, "Everyone");
+  approvalComment.commentText = null;
+  await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
+});
+
+test("PATCH refuses a Question in the required shape while its switch is off", async () => {
+  approvalComment.text = shapedQuestion(key, "Everyone");
+  await assertRefused();
+});
+
+test("PATCH refuses a shaped Question whose own question line hedges", async () => {
+  templateQuestionFlagOn = true;
+  approvalComment.text = shapedQuestion(key, "Everyone").replace("to Everyone?", "to Everyone only if QA is green?");
+  await assertRefused();
 });

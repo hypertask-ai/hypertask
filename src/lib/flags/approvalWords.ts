@@ -24,12 +24,33 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
   return tokens.every((token) => vocabulary.has(token)) ? "yes" : "unclear";
 }
 
+const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;
+const QUOTED = /"[^"]*(?:"|$)/g;
+const ADVICE_HEDGE = /\b(?:no|not|don't|dont|do not|never|wait|later|hold|stop|cancel|only|if|unless|instead|except|but)\b/i;
+
+export function templateQuestionRequest(text: string): string | null {
+  const masked = text.replace(QUOTED, (span) => " ".repeat(span.length));
+  const labels = [...masked.matchAll(TEMPLATE_LABEL)]
+    .filter((match) => match.index === 0 || /[\s.!?:*-]/.test(masked[match.index - 1]));
+  const first = labels[0];
+  const questions = labels.filter((match) => match[1].toLowerCase() === "question");
+  if (!first || first[1].toLowerCase() !== "what this is" || questions.length !== 1) return null;
+  const question = questions[0];
+  const next = labels.find((match) => match.index > question.index);
+  const request = text.slice(question.index, next?.index ?? text.length).trim();
+  const advice = labels.find((match) => match[1].toLowerCase() === "my recommendation");
+  const adviceEnd = advice && labels.find((match) => match.index > advice.index);
+  const recommendation = advice ? text.slice(advice.index, adviceEnd?.index ?? text.length) : "";
+  if (!request || ADVICE_HEDGE.test(recommendation)) return null;
+  return request;
+}
+
 const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
 const BATCH_SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question:((?:\s*Switch [a-z0-9]+(?:-[a-z0-9]+)* to (?:Only me|Owner \+ QA|Everyone|Off)\?)+)$/;
 const BATCH_SWITCH_ITEM = /Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?/g;
 
-export function strictSwitchRequest(words: string, batchAllowed: boolean): Map<string, string> | null {
-  const text = words.replace(/\s+/g, " ").trim();
+export function strictSwitchRequest(words: string, batchAllowed: boolean, templateAllowed = false): Map<string, string> | null {
+  const text = (templateAllowed ? templateQuestionRequest(words) ?? words : words).replace(/\s+/g, " ").trim();
   const single = SWITCH_REQUEST.exec(text);
   if (single) return new Map([[single[1], single[2]]]);
   const batch = batchAllowed ? BATCH_SWITCH_REQUEST.exec(text) : null;
@@ -42,7 +63,8 @@ export function strictSwitchRequest(words: string, batchAllowed: boolean): Map<s
   return switches;
 }
 
-export function parseSwitchQuestion(text: string): Map<string, string> | null {
+export function parseSwitchQuestion(words: string, templateAllowed = false): Map<string, string> | null {
+  const text = templateAllowed ? (templateQuestionRequest(words) ?? words).replace(/^question\s*:\s*/i, "") : words;
   const visible = text.toLowerCase().replace(/"[^"]*(?:"|$)/g, '""');
   const switches = new Map<string, string>();
   const modes: Record<string, string> = {
