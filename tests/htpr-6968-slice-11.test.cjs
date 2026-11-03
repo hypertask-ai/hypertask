@@ -55,6 +55,7 @@ function fixture(endpoint, scenario = {}) {
       },
     },
     device: scenario.noDevice ? null : { id: 21, firebaseId: "device", userId: 985, sendNotifications: true },
+    mute: scenario.noMute ? null : { id: 31, taskId: 42, userId: 985 },
   };
   const step = (label, ...args) => {
     effects.push([label, ...clean(args)]);
@@ -76,6 +77,11 @@ function fixture(endpoint, scenario = {}) {
         if (!state.device || state.device.userId !== args.where.userId || state.device.firebaseId !== args.where.firebaseId) return { count: 0 };
         Object.assign(state.device, structuredClone(args.data)); return { count: 1 };
       },
+    },
+    taskMute: {
+      findUnique: async args => { step("mute-read", args); return structuredClone(state.mute); },
+      upsert: async args => { step("mute-upsert", args); state.mute = { id: 31, ...args.create }; return structuredClone(state.mute); },
+      deleteMany: async args => { step("mute-delete", args); state.mute = null; return { count: 1 }; },
     },
     notification: {
       findMany: async args => { step("inbox-read", args); return scenario.noRows ? [] : [{ id: 20, taskId: 42, status: "Archive" }, { id: 19, taskId: 43, status: "Archive" }]; },

@@ -288,7 +288,9 @@ for (const name of ["getAll", "getProjectSections"]) test(`${name}: real read co
   const { fx: old, expected } = await run(`read ${name}`, name, {}, factory);
   assert.equal(expected.status, 200); assert.deepEqual(expected.body.map(row => row.ranking), ["A0100", "A0200"]);
   const select = old.effects.find(([label]) => label === "read-sections");
-  assert.deepEqual(select.slice(1), [{ where: { project: { ownerId: 985 } } }]);
+  assert.deepEqual(select.slice(1), name === "getAll"
+    ? [{ where: { project: { ownerId: 985 } } }]
+    : [{ where: { projectId: 15, deleted: false }, orderBy: { ranking: "asc" } }]);
   if (name === "getProjectSections") assert.deepEqual(old.effects.find(([label]) => label === "read-project")[1].include.project_view.include.user_project_views.where, { userId: 985 });
 });
 
