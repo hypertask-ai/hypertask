@@ -24,6 +24,7 @@ const mocks = {
   "./GuestBoardSpotlight": { GuestBoardSpotlight: () => null },
   "@/utils/generateTime": { __esModule: true, default: () => "now" },
   "./taskSummaryAction": { taskSummaryActionFor: () => null },
+  "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
   "@/hooks/General/useHydrated": { useHydrated: () => true },
 };
 const compiled = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, "../src/components/AI_CHAT/WelcomeScreen.tsx"), "utf8"), {

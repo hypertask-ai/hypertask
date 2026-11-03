@@ -82,6 +82,7 @@ function welcome(enabled, editTaskId = 123) {
     "./GuestBoardSpotlight": { GuestBoardSpotlight: () => null },
     "@/utils/generateTime": { default: () => "now" },
     "./taskSummaryAction": { taskSummaryActionFor: () => ({ label: "Summarize the current task", prompt: "summary" }) },
+    "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
   });
   return { element: WelcomeScreen(), sent };
 }

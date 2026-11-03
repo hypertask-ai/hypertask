@@ -80,6 +80,7 @@ async function withSidebar(options, check) {
     "./GuestBoardSpotlight": { GuestBoardSpotlight: () => null },
     "@/utils/generateTime": { default: () => "now" },
     "./taskSummaryAction": { taskSummaryActionFor: () => ({ label: "Summarize the current task", prompt: "/i Summarize the current task" }) },
+    "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
     "./MessageItem": { MessageItem: ({ message }) => React.createElement("div", null, message.content) },
     "./TypingIndicator": { TypingIndicator: () => React.createElement("span", null, "Loading") },
