@@ -49,7 +49,8 @@ export function buildInboxRowFillParts(source: InboxRowFillSource): InboxRowFill
   }
 
   if (parts.length === 0) return [];
-  if (parts.length === 1 && parts[0].kind === "reason" && !source.reasonShowsText) {
+  const skippedText = Boolean(latestComment || description);
+  if (parts.length === 1 && parts[0].kind === "reason" && !source.reasonShowsText && !skippedText) {
     parts.push({ kind: "empty", text: INBOX_ROW_FILL_FALLBACK_TEXT });
   }
   return parts;

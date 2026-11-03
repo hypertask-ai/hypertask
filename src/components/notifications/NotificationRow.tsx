@@ -231,11 +231,11 @@ function notificationReasonText(context: NotificationReasonContext): string {
     return typeof reason === "string" ? reason.trim() : "";
 }
 
-export type InboxRowFillDecor = { kind: InboxRowFillPartKind; node: React.ReactNode };
+type InboxRowFillDecor = { kind: InboxRowFillPartKind; node: React.ReactNode };
 
 const COMMENT_LED_TYPES = new Set<string>(["Comment", "Mentioned", "AddedToFollowerInTask"]);
 
-export function inboxRowFillDecor({
+function inboxRowFillDecor({
     notification,
     projection,
     plain,

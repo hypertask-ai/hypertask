@@ -86,7 +86,7 @@ test("a row with no text at all shows nothing", () => {
   assert.deepEqual(buildInboxRowFillParts(source()), []);
 });
 
-test("a description that repeats the title is left out", () => {
+test("a description that repeats the title is left out, and no empty note claims otherwise", () => {
   const parts = buildInboxRowFillParts(source({ descriptionText: "Redesign AI chat chips after ticket creation", reason: "Task Reminder" }));
   assert.deepEqual(parts.map((part) => part.kind), ["reason"]);
 });
