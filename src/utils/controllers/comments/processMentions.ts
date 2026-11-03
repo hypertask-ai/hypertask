@@ -5,7 +5,7 @@ import axios from "axios";
 import { sendMentionEmail } from "../notifications/sendMentionEmail";
 import prisma from "@/lib/prisma";
 import { getProjectMembers } from "@/utils/controllers/projects/getProjectMembers";
-import { injectMentionSpans, type ResolvableMember } from "./resolveMentions";
+import { injectMentionSpans, normalizeMentionSpans, type ResolvableMember } from "./resolveMentions";
 import { escapeHtml } from "@/utils/htmlEscape";
 import { createFollowerService } from "@/utils/controllers/followers/createFollowerService";
 import { SESSION_COOKIE, signSession } from "@/lib/auth/session";
@@ -16,7 +16,8 @@ export async function resolveTextMentions(
   requestingUserId: number,
 ): Promise<string> {
   try {
-    if (!text.includes("@")) return text;
+    const hasMentionSpan = /data-type=["']mention["']/i.test(text);
+    if (!text.includes("@") && !hasMentionSpan) return text;
     const { members } = await getProjectMembers(
       projectId,
       undefined,
@@ -27,7 +28,8 @@ export async function resolveTextMentions(
       id: m.id,
       displayName: m.displayName,
     }));
-    return injectMentionSpans(text, resolvable);
+    const normalized = normalizeMentionSpans(text, resolvable);
+    return injectMentionSpans(normalized, resolvable);
   } catch (err) {
     console.warn("[resolveTextMentions] failed, leaving text as-is:", err);
     return text;
