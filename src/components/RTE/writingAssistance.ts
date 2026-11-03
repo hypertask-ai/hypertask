@@ -20,6 +20,7 @@ const abbreviationBeforeCursor =
 type AutoCapital =
   | { kind: "capital"; pos: number; original: string; capital: string; hint: boolean; allowUndo: boolean }
   | { kind: "retype"; pos: number };
+type RetypeMemory = { pos: number | null };
 const autoCapitalKey = new PluginKey<AutoCapital | null>("autoCapitalUndo");
 const AUTO_CAPITAL_HINT_MS = 1800;
 
@@ -31,6 +32,7 @@ function capitalizeTypedSentenceStart(
   from: number,
   to: number,
   text: string,
+  memory: RetypeMemory,
 ) {
   if (
     !localCapitalizationEnabled() ||
@@ -53,6 +55,11 @@ function capitalizeTypedSentenceStart(
 
   const last = autoCapitalKey.getState(view.state);
   if (retypeEnabled() && last?.pos === from && (last.kind === "retype" || to > from)) {
+    memory.pos = null;
+    return false;
+  }
+  if (retypeEnabled() && memory.pos === from) {
+    memory.pos = null;
     return false;
   }
 
@@ -84,6 +91,7 @@ function capitalizeTypedSentenceStart(
       hint: undoEnabled(), allowUndo: undoEnabled(),
     });
   }
+  memory.pos = null;
   view.dispatch(tr);
   return true;
 }
@@ -131,6 +139,7 @@ export const LocalWritingAssistance = Extension.create<{
     const { localCapitalizationEnabled, undoCapitalizationEnabled, retypeLowercaseEnabled } = this.options;
     const undoEnabled = () => localCapitalizationEnabled() && undoCapitalizationEnabled();
     const retypeEnabled = () => localCapitalizationEnabled() && retypeLowercaseEnabled();
+    const memory: RetypeMemory = { pos: null };
     return [
       new Plugin<AutoCapital | null>({
         key: autoCapitalKey,
@@ -138,9 +147,13 @@ export const LocalWritingAssistance = Extension.create<{
           init: () => null,
           apply(tr, value, oldState) {
             const meta = tr.getMeta(autoCapitalKey);
-            if (meta !== undefined) return meta;
+            if (meta !== undefined) {
+              memory.pos = meta?.kind === "retype" ? meta.pos : null;
+              return meta;
+            }
             if (!value) return null;
             if (!retypeEnabled()) {
+              memory.pos = null;
               if (tr.docChanged || tr.selectionSet) return null;
               return value;
             }
@@ -150,19 +163,29 @@ export const LocalWritingAssistance = Extension.create<{
             }
             if (tr.docChanged) {
               const mapped = tr.mapping.mapResult(value.pos);
-              if (mapped.deleted) {
-                if (
-                  oldState.selection.from === 0 && oldState.selection.to === tr.before.content.size &&
-                  tr.doc.childCount === 1 && tr.doc.firstChild?.isTextblock &&
-                  tr.doc.firstChild.content.size === 0 && tr.selection.from === 1
-                ) return { kind: "retype", pos: 1 };
-                const $mapped = tr.doc.resolve(mapped.pos);
-                const paragraphStart = tr.mapping.map(tr.before.resolve(value.pos).start(), -1);
-                if (!$mapped.parent.isTextblock || $mapped.start() !== paragraphStart) return null;
-                return { kind: "retype", pos: mapped.pos };
+              const $mapped = tr.doc.resolve(mapped.pos);
+              const textblockStart = tr.mapping.map(tr.before.resolve(value.pos).start(), -1);
+              const textHere = $mapped.parent.isTextblock
+                ? $mapped.parent.textBetween(
+                    $mapped.parentOffset,
+                    Math.min($mapped.parentOffset + value.capital.length, $mapped.parent.content.size),
+                  )
+                : "";
+              if (textHere === value.capital) {
+                memory.pos = null;
+                return { ...value, pos: mapped.pos, allowUndo: false };
               }
-              if (tr.doc.textBetween(mapped.pos, mapped.pos + value.capital.length) !== value.capital) return null;
-              return { ...value, pos: mapped.pos, allowUndo: false };
+              if (
+                oldState.selection.from === 0 && oldState.selection.to === tr.before.content.size &&
+                tr.doc.childCount === 1 && tr.doc.firstChild?.isTextblock &&
+                tr.doc.firstChild.content.size === 0 && tr.selection.from === 1
+              ) {
+                memory.pos = 1;
+                return { kind: "retype", pos: 1 };
+              }
+              if (!$mapped.parent.isTextblock || $mapped.start() !== textblockStart) return null;
+              memory.pos = mapped.pos;
+              return { kind: "retype", pos: mapped.pos };
             }
             if (tr.selectionSet) return { ...value, allowUndo: false, hint: false };
             return value;
@@ -213,6 +236,7 @@ export const LocalWritingAssistance = Extension.create<{
               from,
               to,
               text,
+              memory,
             ),
         },
       }),
