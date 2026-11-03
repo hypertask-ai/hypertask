@@ -1,4 +1,5 @@
 import { HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG } from "@/lib/flags/definitions/htpr-8149-archive-focus-order";
+import { HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG } from "@/lib/flags/definitions/htpr-8427-kanban-archive-shortcut";
 import { useFlag } from "@/hooks/useFlag";
 import { BoardCardDataProvider } from "../KanbanTaskComponents/BoardCardData";
 import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from "@/lib/flags/definitions/htpr-7677-board-card-data-once";
@@ -108,6 +109,7 @@ const HomePage = ({
 ) => {
   const { secondaryStartupEnabled } = useBoardStartup();
   const archiveFocusOrder = useFlag(HTPR_8149_ARCHIVE_FOCUS_ORDER_FLAG);
+  const archiveShortcutAlwaysRuns = useFlag(HTPR_8427_KANBAN_ARCHIVE_SHORTCUT_FLAG);
   const store = useStore();
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
   const getFocusedTaskId = useCallback(
@@ -474,7 +476,7 @@ const HomePage = ({
       removeFromListWithStatus,
     } = latestRef.current;
     const now = new Date().getTime();
-    if (lastgClick.current && now - lastgClick.current < 5000) return
+    if (!archiveShortcutAlwaysRuns && lastgClick.current && now - lastgClick.current < 5000) return
 
     const sectionIndex = _sections.findIndex(
       (sec) => sec.section_title === section
@@ -490,7 +492,7 @@ const HomePage = ({
       undefined,
       archiveFocusOrder ? { focusSections: displaySections } : undefined,
     )
-  }, [lastgClick, updateParentTask]);
+  }, [archiveShortcutAlwaysRuns, lastgClick, updateParentTask]);
 
   const deleteTaskHandler = async(response: boolean) =>{
     if (!response) {
