@@ -1,12 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const Module = require("node:module");
-const ts = require("typescript");
-
-const root = path.resolve(__dirname, "..");
-const file = path.join(root, "src/lib/api/task-writes/delete.ts");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 class StubResponse {
   constructor(body, status) {
@@ -22,18 +16,14 @@ class StubResponse {
 }
 
 function loadDeleteRoute({ task }) {
-  const js = ts.transpileModule(fs.readFileSync(file, "utf8"), {
-    compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText;
   const calls = { findFirst: [], permanentlyDeleted: [], broadcasts: [] };
-  const stubs = {
+  const mod = loadModule("src/lib/api/task-writes/delete.ts", {
     "next/server": { NextResponse: StubResponse },
     "./route": {
       taskWriteRoute: (config) => async (request, session) =>
         config.operation(await request.json(), session),
     },
     "@/lib/prisma": {
-      __esModule: true,
       default: {
         task: {
           findFirst: async (args) => {
@@ -58,21 +48,8 @@ function loadDeleteRoute({ task }) {
         return "success";
       },
     },
-  };
-  const m = new Module(file, module);
-  m.filename = file;
-  m.paths = Module._nodeModulePaths(path.dirname(file));
-  const originalLoad = Module._load;
-  Module._load = function (request, parent, isMain) {
-    if (request in stubs) return stubs[request];
-    return originalLoad.call(this, request, parent, isMain);
-  };
-  try {
-    m._compile(js, file);
-  } finally {
-    Module._load = originalLoad;
-  }
-  return { DELETE: m.exports.DELETE, calls };
+  });
+  return { DELETE: mod.DELETE, calls };
 }
 
 const deleteTask = async (taskId, options) => {
