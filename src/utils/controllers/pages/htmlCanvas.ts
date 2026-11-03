@@ -24,15 +24,20 @@ export function decodeHtmlCanvas(contentHtml: string): string | null {
   if (!contentHtml) return null;
   const root = parse(contentHtml, { comment: false, lowerCaseTagName: true });
   const elements = root.childNodes.filter((node: any) => node.nodeType === 1);
-  if (elements.length !== 1) return null;
+  if (elements.length === 0) return null;
 
-  const el: any = elements[0];
-  if (String(el.rawTagName ?? "").toLowerCase() !== "div") return null;
-  if (el.getAttribute(TAG_ATTR) == null) return null;
+  const payloads: string[] = [];
+  for (const node of elements) {
+    const el: any = node;
+    if (String(el.rawTagName ?? "").toLowerCase() !== "div") return null;
+    if (el.getAttribute(TAG_ATTR) == null) return null;
 
-  const payload = el.getAttribute(PAYLOAD_ATTR);
-  if (!payload) return null;
-  return decodeHtmlPayloadServer(payload);
+    const payload = el.getAttribute(PAYLOAD_ATTR);
+    if (!payload) return null;
+    payloads.push(decodeHtmlPayloadServer(payload));
+  }
+
+  return payloads.join("");
 }
 
 export function extractCanvasText(raw: string): string {
