@@ -94,11 +94,10 @@ async function mountPanel(options) {
   const { createRoot } = require('react-dom/client');
   const Panel = loadPanel(options).default;
   const root = createRoot(document.getElementById('root'));
-  const element = React.createElement(Panel);
-  await React.act(async () => root.render(element));
+  await React.act(async () => root.render(React.createElement(Panel)));
   return {
     picker: () => document.querySelector('[data-picker]'),
-    rerender: () => React.act(async () => root.render(element)),
+    rerender: () => React.act(async () => root.render(React.createElement(Panel))),
     unmount: () => React.act(async () => root.unmount()),
   };
 }
