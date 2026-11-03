@@ -82,7 +82,7 @@ test("every page writer asks for the stored content type with the acting user", 
     "src/lib/ai/tools/updatePage.ts",
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /import \{ storedPageContentType \} from '@\/utils\/controllers\/pages\/standaloneContent'/, file);
+    assert.match(source, /import \{ storedPageContentType \} from ["']@\/utils\/controllers\/pages\/standaloneContent["']/, file);
     assert.match(source, /await storedPageContentType\(\{[\s\S]{0,200}userId/, file);
   }
 });
