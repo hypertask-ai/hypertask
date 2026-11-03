@@ -53,7 +53,7 @@ function keyboardFixture(pathname, isApple = false, authenticatedUserId = 1) {
   let toggles = 0;
   let paletteOpens = 0;
   const bindings = {
-    ...shortcuts, document, pathname, isApple, authenticatedUserId, areGlobalShortcutsEnabled,
+    ...shortcuts, document, pathname, isApple, authenticatedUserId, areGlobalShortcutsEnabled, CommandMode,
     showTrialModal: false, showEmailVerificationModal: false, favorites: [],
     lazyClosedSearchCommands: false, inboxCtrlKClose: false,
     setShowCommands: (value) => {
