@@ -113,3 +113,25 @@ test('the MCP add-comment schema takes mention names, an unknown shape is refuse
   const refused = schema.safeParse({ task_id: 1, text: 'Hi', mentions: [''] })
   assert.equal(refused.success, false)
 })
+
+test('a flag switches name mentions on for everyone', () => {
+  const { default: flag, HTPR_8268_MENTION_BY_NAME_FLAG: key } = load(
+    'src/lib/flags/definitions/htpr-8268-mention-by-name.ts',
+  )
+  assert.equal(flag.key, key)
+  assert.equal(flag.key, 'htpr-8268-mention-by-name')
+  assert.equal(flag.kind, 'improvement')
+  assert.equal(flag.defaultMode, 'EVERYONE')
+})
+
+test('two people with the same display name are refused, never picked', () => {
+  const twins = [
+    { id: 11, displayName: 'Mohsin', email: 'a@example.com' },
+    { id: 12, displayName: 'mohsin', email: 'b@example.com' },
+  ]
+  const { resolved, problems } = resolveMentionEntries(['Mohsin'], twins)
+  assert.deepEqual(resolved, [])
+  assert.equal(problems.length, 1)
+  assert.equal(problems[0].reason, 'ambiguous')
+  assert.deepEqual(problems[0].closeMatches, ['Mohsin', 'mohsin'])
+})

@@ -14,6 +14,8 @@ import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAge
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8268_MENTION_BY_NAME_FLAG } from '@/lib/flags/keys'
 import type { RawMentionInput } from '@/utils/controllers/comments/resolveMentionInputs'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
 import { deleteCommentService } from '@/utils/controllers/comments/deleteCommentService'
@@ -201,6 +203,19 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
           message: 'You can only edit your own comments'
         },
         { status: 403 }
+      )
+    }
+
+    if (
+      mentionInputs?.some((input) => typeof input === 'string') &&
+      !(await isFeatureEnabled(HTPR_8268_MENTION_BY_NAME_FLAG, user.id))
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'mentions must include positive integer user_id and non-empty display_name'
+        },
+        { status: 400 }
       )
     }
 

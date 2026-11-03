@@ -227,19 +227,33 @@ export function resolveMentionEntries(
       continue;
     }
 
-    const byId = /^\d+$/.test(input)
-      ? people.find((member) => Number(member.id) === Number(input))
-      : undefined;
-    const byName =
-      byId ??
-      people.find(
-        (member) => member.displayName.toLowerCase() === input.toLowerCase(),
-      );
+    if (/^\d+$/.test(input)) {
+      const byId = people.find((member) => Number(member.id) === Number(input));
+      if (byId) {
+        resolved.push({ userId: Number(byId.id), displayName: byId.displayName });
+        continue;
+      }
+    }
 
-    if (byName) {
+    const exactMatches = people.filter(
+      (member) => member.displayName.toLowerCase() === input.toLowerCase(),
+    );
+
+    if (exactMatches.length === 1) {
       resolved.push({
-        userId: Number(byName.id),
-        displayName: byName.displayName,
+        userId: Number(exactMatches[0].id),
+        displayName: exactMatches[0].displayName,
+      });
+      continue;
+    }
+
+    if (exactMatches.length > 1) {
+      problems.push({
+        input,
+        reason: "ambiguous",
+        closeMatches: exactMatches
+          .slice(0, CLOSE_MATCH_LIMIT)
+          .map((member) => member.displayName),
       });
       continue;
     }
