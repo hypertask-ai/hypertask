@@ -437,6 +437,12 @@ test("flag on: N opens the hovered column, Shift+C is cut, hints read N", async 
   document.querySelector('[data-column="10"]').focus();
   await React.act(async () => document.querySelector('[data-column="20"]').dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
   await press("n");
-  assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "a focused column still wins over hover");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "20", "the pointer beats a stale focused column");
+  await React.act(async () => reactRoot.render(null));
+  await React.act(async () => reactRoot.render(React.createElement(Harness)));
+  document.querySelector('[data-column="10"]').focus();
+  await React.act(async () => document.body.dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
+  await press("n");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "with the pointer off the board the focused column wins");
   quickAddShortcutsEnabled = false;
 }));

@@ -52,7 +52,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
-    const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG)
     const queryClient = useQueryClient();   
     const store = useStore();
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
@@ -104,6 +103,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     };
 
+    const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG)
     const hoveredColumn = useRef<Element | null>(null);
     const quickAddShortcuts = quickAddShortcutsEnabled ? quickAddShortcutsWithPointer() : quickAddShortcutsFromFocus();
     const registerQuickAdd = (shortcuts: { acceptShiftC: boolean; useHoveredColumn: boolean }) => {
@@ -129,11 +129,11 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
           section.items.some(task => task.id === activeItem)
         );
         const hoveredColumnIndex = shortcuts.useHoveredColumn ? columnIndex(hoveredColumn.current) : -1;
-        const targetIndex = focusedColumnIndex >= 0
-          ? focusedColumnIndex
-          : taskColumnIndex >= 0
-            ? taskColumnIndex
-            : Math.max(hoveredColumnIndex, 0);
+        const targetIndex = hoveredColumnIndex >= 0
+          ? hoveredColumnIndex
+          : focusedColumnIndex >= 0
+            ? focusedColumnIndex
+            : Math.max(taskColumnIndex, 0);
         e.preventDefault();
         sectionEls[targetIndex]?.dispatchEvent(new CustomEvent('OPEN_QUICK_ENTRY'));
       };
