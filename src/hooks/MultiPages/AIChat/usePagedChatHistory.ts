@@ -17,17 +17,17 @@ const asSummary = (session: IChatSession | ChatSessionSummary): ChatSessionSumma
 };
 const staleTime = 1000 * 60 * 3;
 
-export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined; restoreSelection?: boolean }, navigationKey?: string | null, navigationBoardId?: number) {
+export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: number | undefined, historyEnabled: boolean, isTaskScoped: boolean, nameBoardRef: RefObject<number | undefined>, selectionScope: { key: string | number | undefined; initialTaskId: number | undefined; restoreSelection?: boolean }, navigationKey?: string | null, navigationBoardId?: number, pinnedSessionId?: string | null) {
   const agentSidebarChatsEnabled = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
   const sidebarChat = agentSidebarChatsEnabled ? getNativeSidebarChat() : null;
   const queryClient = useQueryClient();
   const summaryKey = ["chat-session-summaries", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG, "history"];
   const transcriptPrefix = ["aiChatTranscript", user?.uid, user?.id, HTPR_6971_CHAT_HISTORY_PAGING_FLAG];
   const transcriptKey = (id: string | null) => [...transcriptPrefix, id];
-  const identity = `${user?.uid}:${user?.id}:${selectionScope.key}:${enabled}:${navigationKey ?? ""}`;
+  const identity = `${user?.uid}:${user?.id}:${selectionScope.key}:${enabled}:${navigationKey ?? ""}${pinnedSessionId ? `:pin:${pinnedSessionId}` : ""}`;
   const identityRef = useRef(identity);
   identityRef.current = identity;
-  const [activeSession, selectActiveSession] = useChatSessionSelection(identity, navigationKey, selectionScope.restoreSelection);
+  const [activeSession, selectActiveSession] = useChatSessionSelection(identity, pinnedSessionId ? null : navigationKey, selectionScope.restoreSelection, pinnedSessionId ?? null);
   const activeRef = useRef(activeSession);
   activeRef.current = activeSession;
   const [creating, setCreating] = useState(false);
