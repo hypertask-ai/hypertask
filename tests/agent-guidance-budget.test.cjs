@@ -34,3 +34,11 @@ test("the startup map reaches existing reference files and headings", () => {
     }
   }
 });
+
+test("the startup map agrees with the retained emergency flag rule", () => {
+  const map = fs.readFileSync(path.join(root, "AGENTS.md"), "utf8");
+  const flags = fs.readFileSync(path.join(root, ".claude/reference/flags.md"), "utf8");
+  assert.ok(flags.includes("Runners never switch a flag Off"));
+  assert.ok(/Owner \+ QA/.test(map), "map must name the emergency mode");
+  assert.ok(!/switch Off immediately/i.test(map), "map must not contradict the retained rule");
+});
