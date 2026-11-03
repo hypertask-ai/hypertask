@@ -62,10 +62,6 @@ export async function hazardousHelpers(root) {
 
 const DURATION_WEIGHTS = "config/test-duration-weights.json";
 
-// HYCI-111: source length says nothing about run time, so a lane packed by bytes
-// collected the slow files and its shard ended on that lane (323s against 193s in
-// the same run, both with equal planned work). When measured per-file times are
-// on disk, lanes pack on time; bytes stay for the batch caps below.
 async function measuredWork(root) {
   const parsed = JSON.parse(await readFile(path.join(root, DURATION_WEIGHTS), "utf8").catch(() => "null"));
   const defaultWorkMs = Number(parsed?.defaultWorkMs);
