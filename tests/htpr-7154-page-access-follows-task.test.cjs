@@ -137,6 +137,7 @@ for (const [file, factory, tool, actions] of [
           '@/lib/mcp/tasks/services': { validateProjectAccess: async (projectId) => ({ error: projectId === board ? null : { message: 'Page not found' } }) },
           '@/app/api/mcp/pages/_lib/routeUtils': helpers(board),
           '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (s) => s },
+          '@/utils/controllers/pages/standaloneContent': { storedPageContentType: async ({ contentType }) => contentType },
           '@/lib/ai/tools/execution': { withToolErrors: (op) => op },
           '@/lib/ai/tools/helpers': { sanitizeForJson: (value) => value },
         });

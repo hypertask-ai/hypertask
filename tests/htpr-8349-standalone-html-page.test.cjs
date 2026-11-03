@@ -78,6 +78,8 @@ test("every page writer asks for the stored content type with the acting user", 
     "src/lib/mcp/operations/pages/update/operation.ts",
     "src/app/api/pages/create/route.ts",
     "src/app/api/pages/[publicId]/route.ts",
+    "src/lib/ai/tools/createPage.ts",
+    "src/lib/ai/tools/updatePage.ts",
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.match(source, /import \{ storedPageContentType \} from '@\/utils\/controllers\/pages\/standaloneContent'/, file);

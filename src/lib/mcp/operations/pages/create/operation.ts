@@ -238,15 +238,16 @@ export async function POST(request: NextRequest) {
       idempotencyKey,
       body,
       async () => {
+        const storedContentType = await storedPageContentType({
+          content: body.content as string,
+          contentType: contentType as PageContentType,
+          userId: ctx.user.id,
+        })
         const page = await createPage({
           taskId: task.id,
           title: body.title as string | undefined,
           content: body.content as string,
-          contentType: await storedPageContentType({
-            content: body.content as string,
-            contentType: contentType as PageContentType,
-            userId: ctx.user.id,
-          }),
+          contentType: storedContentType,
           parentPageId,
           userId: ctx.user.id,
           agentId: ctx.agentId, teamScope: ctx.teamScope,
@@ -258,7 +259,7 @@ export async function POST(request: NextRequest) {
             id: page.id,
             title: page.title,
             version: page.version,
-            content_type: contentType,
+            content_type: storedContentType,
             url: getPageUrl(page.publicId),
           },
         }
