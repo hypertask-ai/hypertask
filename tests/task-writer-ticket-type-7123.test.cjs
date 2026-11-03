@@ -11,6 +11,7 @@ const properties = load(path.join(root, "src/app/api/ai/_lib/taskWriterPropertie
 const key = "htpr-7123-writer-ticket-type";
 const MARKER = "TICKET TYPE MARKER";
 const typeSpan = (value) => `<span id="ai-generated-task-type" style="display:none">${value}</span>`;
+const { Output } = require("ai");
 
 function moduleWithStubs(file, stubs, globals = {}) {
   const filename = path.join(root, file);
@@ -72,6 +73,7 @@ function harness({ enabled = true, output = "", tasks, finishReason = "stop", mo
   });
   const stubs = {
     ai: {
+      Output,
       generateText: async (args) => { calls.push(args); return { text: output, output: tasks ? { tasks } : undefined, finishReason }; },
       streamText: (args) => { calls.push(args); return { textStream: (async function* () {
         for (let i = 0; i < output.length; i += 3) yield output.slice(i, i + 3);

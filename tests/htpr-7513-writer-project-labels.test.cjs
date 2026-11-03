@@ -82,7 +82,7 @@ function harness(options = {}) {
       if (options.fail) throw new Error("Writer unavailable");
       options.onGenerate?.();
       return {
-        content: [{ type: "text", text: options.tasks ? JSON.stringify({ tasks: options.tasks }) : options.output ?? output }],
+        content: [{ type: "text", text: params.responseFormat ? JSON.stringify({ tasks: options.tasks }) : options.output ?? output }],
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 20 } },
         finishReason: { unified: "stop" },
       };

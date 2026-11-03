@@ -53,6 +53,11 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
+const DEFAULT_TASKS = [
+  { title: "First", description: "<p>First body.</p>", customFields: [{ fieldId: "score-field", value: 19 }] },
+  { title: "Second", description: "<p>Second body.</p>", customFields: [{ fieldId: "score-field", value: "high" }, { fieldId: "foreign-field", value: 30 }] },
+];
+
 function harness(options = {}) {
   const saved = [], calls = [], usage = [], selections = [], confirmations = [], retrieval = [], reports = [];
   const instructionLoads = [], fieldLoads = [], fieldSaves = [], checks = [];
@@ -79,7 +84,7 @@ function harness(options = {}) {
       if (options.fail) throw new Error("Writer unavailable");
       options.onGenerate?.();
       return {
-        content: [{ type: "text", text: options.tasks ? JSON.stringify({ tasks: options.tasks }) : options.output ?? output }],
+        content: [{ type: "text", text: params.responseFormat ? JSON.stringify({ tasks: options.tasks ?? DEFAULT_TASKS }) : options.output ?? output }],
         usage: { inputTokens: { total: 10 }, outputTokens: { total: 20 } },
         finishReason: { unified: "stop" },
       };
