@@ -53,7 +53,7 @@ test('the line names the kind, the short summary and the ticket link and carries
   )
   assert.equal(feedbackLine('Agent feedback, friction: Two lists disagree', 'https://app.hypertask.ai/detail/project-15/2'), '*friction* · Two lists disagree · https://app.hypertask.ai/detail/project-15/2')
   assert.equal(feedbackLine("An agent's CLI call to list had a problem (3 Nov)", 'https://app.hypertask.ai/detail/project-15/3'), "*feedback* · An agent's CLI call to list had a problem (3 Nov) · https://app.hypertask.ai/detail/project-15/3")
-  assert.equal(feedbackLine('Agent feedback, idea: ', 'https://app.hypertask.ai/detail/project-15/4'), '*idea* · Agent feedback, idea:  · https://app.hypertask.ai/detail/project-15/4')
+  assert.equal(feedbackLine('Agent feedback, idea: ', 'https://app.hypertask.ai/detail/project-15/4'), '*idea* · Agent feedback, idea: · https://app.hypertask.ai/detail/project-15/4')
 })
 
 test('a Slack line cannot ping the channel or disguise a link', () => {
