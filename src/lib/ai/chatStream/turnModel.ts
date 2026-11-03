@@ -1,4 +1,5 @@
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG, HTPR_7796_DISABLED_PROVIDER_PICK_FLAG, HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7681_AGENT_TEAM_OPENAI_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7681-agent-team-openai-default";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
@@ -154,6 +155,18 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       defaultContext.haikuDefaultEnabled,
       defaultContext,
     );
+    const agentTeamOpenaiDefaultEnabled = await import("@/lib/flags")
+      .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7681_AGENT_TEAM_OPENAI_DEFAULT_FLAG, dbUser.id))
+      .catch(() => false);
+    const teamKeyLookupContext = { ...keyLookupContext, agentId: null };
+    const teamOpenAiOnlyContext = agentTeamOpenaiDefaultEnabled &&
+      actingAgent !== null &&
+      body.modelFromDefault === true &&
+      defaultContext.hasClaudeRoute === false
+      ? await getAiDefaultModelContext(teamKeyLookupContext, true, storePlanId, body.byokProviderFlags)
+      : null;
+    const usesTeamOpenAiDefault = Boolean(teamOpenAiOnlyContext && isOpenAiOnlyPaidTeam(teamOpenAiOnlyContext));
+    const selectionLookupContext = usesTeamOpenAiDefault ? teamKeyLookupContext : keyLookupContext;
     const requestedModel = isBrowserLunaDefaultUnqualifiedHere(body, defaultContext, storePlanId)
       ? { modelOptionId: null, model: null, provider: null }
       : body;
@@ -173,6 +186,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
       deepseekFlashFastEnabled,
     );
+    if (usesTeamOpenAiDefault) {
+      selection = selectionFromModelOption(getAiModelOptionById("gpt-6-luna", true)!);
+    }
     if (body.modelFromDefault !== true && (requestedModel.modelOptionId || requestedModel.model)) {
       let provider = selection.modelOption
         ? getAiModelDefinition(selection.modelOption.modelKey)?.provider
@@ -222,14 +238,14 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         ? getByokOrTeamGatewayApiKeyForModelOption(
           selected.modelOption,
           body.byokProviderFlags,
-          keyLookupContext
+          selectionLookupContext
         )
         : selected.provider === "gateway"
-          ? getTeamGatewayApiKey(keyLookupContext)
+          ? getTeamGatewayApiKey(selectionLookupContext)
           : getByokOrTeamGatewayApiKeyForProvider(
             selected.provider,
             body.byokProviderFlags,
-            keyLookupContext,
+            selectionLookupContext,
             { resolveOpenRouterWithoutFlag: false }
           );
     let byokApiKey = await getSelectionApiKey(selection);
