@@ -33,11 +33,20 @@ export function mapTaskAssignee(a: {
     const agent = mapVisibleMcpAgent(a.agent, userId, projectId);
     if (a.agent && !agent) return undefined;
 
-    const mapped: McpTaskAssignee = {
-        id: a.user.id,
-        email: a.user.email,
-        displayName: agent?.displayName || a.user.displayName || undefined,
-    };
+    const mapped: McpTaskAssignee = agent
+        ? {
+              id: a.user.id,
+              email: '',
+              displayName: agent.displayName,
+              type: 'agent',
+              agentId: agent.id,
+          }
+        : {
+              id: a.user.id,
+              email: a.user.email,
+              displayName: a.user.displayName || undefined,
+              type: 'person',
+          };
     const agentAssigner = mapVisibleMcpAgent(a.agentAssigner, userId, projectId);
     if (agent) mapped.agent = agent;
     if (agentAssigner) mapped.agentAssigner = agentAssigner;
