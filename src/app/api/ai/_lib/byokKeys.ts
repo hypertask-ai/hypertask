@@ -2,6 +2,8 @@ import { wrapLanguageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7634-openai-only-default";
+import { HTPR_8100_NO_PAID_FALLBACK_FLAG } from "@/lib/flags/definitions/htpr-8100-no-paid-fallback";
+import { fallbackRunsOnOurOwnGatewayKey } from "@/lib/ai/modelFundingGuard";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -532,6 +534,15 @@ async function openAiOnlyDefaultFlagEnabled(userId: number | null | undefined) {
   }
 }
 
+async function paidModelFallbackRefused(userId: number | null | undefined) {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_8100_NO_PAID_FALLBACK_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
 const OPENAI_ONLY_DEFAULT_OFF = { openaiOnlyDefaultEnabled: false, hasDirectOpenAiKey: false, hasClaudeRoute: false } as const;
 
 export async function getOpenAiOnlyDefaultContext(lookup: ByokLookupContext, plan?: AiDefaultModelContext["plan"], suppliedFlags?: ByokProviderFlag[] | null) {
@@ -610,6 +621,10 @@ export function resolveAutomaticAiModel(
           const fallbackCredential = await resolveAiFallbackCredential(
             () => getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup), error,
           );
+          if (fallbackRunsOnOurOwnGatewayKey(fallbackCredential) && await paidModelFallbackRefused(context.lookup.userId)) {
+            console.warn(`[ai-model-fallback] ${modelId} failed; ${option.model} would run on our own gateway key, so the error stands`);
+            throw error;
+          }
           const fallback = resolveAiModel("openai", option.model, fallbackCredential, option);
           inheritAiModelUsage(fallback, wrapped);
           configureAiModelUsage(fallback, { provider: aiUsageProviderForCredential("openai", fallbackCredential, option) });
