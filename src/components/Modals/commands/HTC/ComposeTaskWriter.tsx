@@ -572,10 +572,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                   boardChip.current?.focus();
                   return;
                 }
-                const sendKey = ctrlEnterSends
-                  ? event.key === "Enter" && (event.ctrlKey || event.metaKey)
-                  : event.key === "Enter" && !event.shiftKey;
-                if (sendKey && !event.nativeEvent.isComposing) {
+                const cmdEnter = event.key === "Enter" && (event.ctrlKey || event.metaKey);
+                const plainEnter = event.key === "Enter" && !event.shiftKey;
+                if ((ctrlEnterSends ? cmdEnter : plainEnter) && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.stopPropagation();
                   if (holdEnterUntilTextRenders && typedTextNotRendered.current !== null && typedTextNotRendered.current !== text) {
