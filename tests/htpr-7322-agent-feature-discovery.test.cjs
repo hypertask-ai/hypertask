@@ -303,6 +303,7 @@ function pageEndpoint(agentId, warningModule = catalog({ [decisionsKey]: true })
       parsePositiveInteger: (value) => Number.isInteger(value) && value > 0 ? value : null,
     },
     '@/utils/controllers/pages/pageService': { createPage: async ({ title = '' }) => { creates++; return { publicId: 'fixture-page', id: 3, title, version: 1 } } },
+    '@/utils/controllers/pages/standaloneContent': { storedPageContentType: async ({ contentType }) => contentType },
   }
   const { POST } = load('src/lib/mcp/operations/pages/create/operation.ts', mocks)
   return {

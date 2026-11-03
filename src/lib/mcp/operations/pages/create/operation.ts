@@ -5,6 +5,7 @@ import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { getFeaturePageWarnings } from '@/lib/mcp/featureCatalog'
+import { storedPageContentType } from '@/utils/controllers/pages/standaloneContent'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { requireRole } from '@/lib/mcp/agents/scopes'
@@ -241,7 +242,11 @@ export async function POST(request: NextRequest) {
           taskId: task.id,
           title: body.title as string | undefined,
           content: body.content as string,
-          contentType: contentType as PageContentType,
+          contentType: await storedPageContentType({
+            content: body.content as string,
+            contentType: contentType as PageContentType,
+            userId: ctx.user.id,
+          }),
           parentPageId,
           userId: ctx.user.id,
           agentId: ctx.agentId, teamScope: ctx.teamScope,

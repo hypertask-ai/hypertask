@@ -7,6 +7,7 @@ import { buildFieldError } from '@/lib/mcp/fieldError'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { requireRole } from '@/lib/mcp/agents/scopes'
 import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
+import { storedPageContentType } from '@/utils/controllers/pages/standaloneContent'
 import {
   getPage,
   PageConflictError,
@@ -187,7 +188,13 @@ export async function POST(request: NextRequest) {
         id: existingPage.id,
         title: typeof body.title === 'string' ? body.title.trim() : undefined,
         content: body.content as string | undefined,
-        contentType: hasContent ? contentType as PageContentType : undefined,
+        contentType: hasContent
+          ? await storedPageContentType({
+              content: body.content as string,
+              contentType: contentType as PageContentType,
+              userId: ctx.user.id,
+            })
+          : undefined,
         mode: mode as PageUpdateMode,
         ifVersion,
         note: body.note as string | undefined,

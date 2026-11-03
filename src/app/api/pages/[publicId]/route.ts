@@ -8,6 +8,7 @@ import { isValidUser } from '@/utils/edgeHelpers'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { parsePositiveInt } from '@/lib/parsePositiveInt'
 import { loadCurrentUser } from '@/lib/auth/currentUser'
+import { storedPageContentType } from '@/utils/controllers/pages/standaloneContent'
 import {
   getPage,
   PageConflictError,
@@ -181,7 +182,11 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         page = await updatePage({
           id: existingPage.id,
           content: body.content as string,
-          contentType: contentType as PageContentType,
+          contentType: await storedPageContentType({
+            content: body.content as string,
+            contentType: contentType as PageContentType,
+            userId,
+          }),
           mode: mode as PageUpdateMode,
           ifVersion,
           note: body.note as string | undefined,
