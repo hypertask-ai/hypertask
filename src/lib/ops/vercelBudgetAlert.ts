@@ -17,9 +17,9 @@ function money(amount: number) {
   return `$${amount.toFixed(2)}`;
 }
 
-function readAmount(value: unknown, max: number) {
+function readAmount(value: unknown) {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
-  return value > max ? null : Math.round(value * 100) / 100;
+  return value > 100_000_000 ? null : Math.round(value * 100) / 100;
 }
 
 export function verifyVercelSignature(
@@ -40,8 +40,8 @@ export function verifyVercelSignature(
 export function parseVercelBudgetAlert(payload: unknown): VercelBudgetAlert | null {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as Record<string, unknown>;
-  const budgetAmount = readAmount(record.budgetAmount, 100_000_000);
-  const currentSpend = readAmount(record.currentSpend, 100_000_000);
+  const budgetAmount = readAmount(record.budgetAmount);
+  const currentSpend = readAmount(record.currentSpend);
   const thresholdPercent = record.thresholdPercent;
   const teamId = record.teamId;
   const scope = record.budgetScope ?? record.scope;
@@ -67,7 +67,7 @@ export function parseVercelBudgetAlert(payload: unknown): VercelBudgetAlert | nu
 }
 
 export function budgetAlertMarker(alert: VercelBudgetAlert) {
-  return `vercel-budget-alert:${alert.teamId}:${alert.budgetAmount}:${alert.thresholdPercent}`;
+  return `vercel-budget-alert:team:${alert.teamId}:budget:${alert.budgetAmount}:threshold:${alert.thresholdPercent}`;
 }
 
 export function budgetAlertTitle(alert: VercelBudgetAlert) {
@@ -76,7 +76,7 @@ export function budgetAlertTitle(alert: VercelBudgetAlert) {
 
 export function budgetAlertDescription(alert: VercelBudgetAlert) {
   const remaining = Math.max(0, Math.round((alert.budgetAmount - alert.currentSpend) * 100) / 100);
-  const lines = [
+  return [
     `<p><strong>Vercel sent a budget alert.</strong></p>`,
     `<p>Limit: ${escapeHtml(alert.budgetScope)} reached ${alert.thresholdPercent}%.</p>`,
     `<p>Spent so far: ${money(alert.currentSpend)} of ${money(alert.budgetAmount)}.</p>`,
@@ -84,8 +84,11 @@ export function budgetAlertDescription(alert: VercelBudgetAlert) {
     `<p>Vercel team: ${escapeHtml(alert.teamId)}.</p>`,
     `<p>Budgets: <a href="https://vercel.com/dashboard">https://vercel.com/dashboard</a></p>`,
     `<p>${budgetAlertMarker(alert)}</p>`,
-  ];
-  return lines.join("");
+  ].join("");
+}
+
+export function budgetAlertMarkerHtml(alert: VercelBudgetAlert) {
+  return `<p>${budgetAlertMarker(alert)}</p>`;
 }
 
 export function budgetAlertSubject(alert: VercelBudgetAlert) {

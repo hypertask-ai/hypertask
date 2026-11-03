@@ -5,7 +5,7 @@ import { createProvisionedTaskCore } from "@/utils/controllers/tasks/createTaskC
 import { escapeHtml } from "@/utils/htmlEscape";
 import {
   budgetAlertDescription,
-  budgetAlertMarker,
+  budgetAlertMarkerHtml,
   budgetAlertSubject,
   budgetAlertTitle,
   type VercelBudgetAlert,
@@ -16,8 +16,11 @@ const BOARD_SECTION_TITLE = "Bugs";
 const BOARD_LABEL_VALUE = "Infra";
 const OPS_USER_ID = 332;
 const OWNER_EMAIL = "valentin.yeo@gmail.com";
-const EMAIL_CLAIM_TTL_SECONDS = 20 * 60 * 60;
+const CLAIM_TTL_SECONDS = 20 * 60 * 60;
+const RESERVATION_TTL_SECONDS = 60;
 const FULL_THRESHOLD_PERCENT = 100;
+const DUPLICATE_RECHECKS = 3;
+const DUPLICATE_RECHECK_DELAY_MS = 250;
 
 export interface FiledVercelBudgetAlert {
   taskId: number;
@@ -25,11 +28,84 @@ export interface FiledVercelBudgetAlert {
   emailed: boolean;
 }
 
+export interface BudgetAlertStore {
+  findTicket(marker: string): Promise<number | null>;
+  createTicket(alert: VercelBudgetAlert): Promise<number>;
+  addComment(taskId: number, alert: VercelBudgetAlert): Promise<void>;
+  reserve(marker: string): Promise<boolean>;
+  claimEmail(marker: string): Promise<boolean>;
+  releaseEmail(marker: string): Promise<void>;
+  email(taskId: number, alert: VercelBudgetAlert): Promise<void>;
+}
+
+export class BudgetAlertRaceError extends Error {
+  constructor() {
+    super("Another delivery is filing this Vercel budget alert");
+  }
+}
+
+function sleep(delayMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function waitForExistingTicket(store: BudgetAlertStore, marker: string) {
+  for (let attempt = 0; attempt < DUPLICATE_RECHECKS; attempt++) {
+    await sleep(DUPLICATE_RECHECK_DELAY_MS);
+    const taskId = await store.findTicket(marker);
+    if (taskId) return taskId;
+  }
+  return null;
+}
+
+export async function fileBudgetAlert(
+  alert: VercelBudgetAlert,
+  store: BudgetAlertStore,
+): Promise<FiledVercelBudgetAlert> {
+  const marker = budgetAlertMarkerHtml(alert);
+  let taskId = await store.findTicket(marker);
+  let created = false;
+
+  if (!taskId) {
+    if (!(await store.reserve(marker))) {
+      const raced = await waitForExistingTicket(store, marker);
+      if (!raced) throw new BudgetAlertRaceError();
+      taskId = raced;
+    } else {
+      taskId = await store.createTicket(alert);
+      created = true;
+    }
+  } else {
+    await store.addComment(taskId, alert);
+  }
+
+  const emailed = await deliverOwnerEmail(taskId, alert, marker, store);
+  return { taskId, created, emailed };
+}
+
+async function deliverOwnerEmail(
+  taskId: number,
+  alert: VercelBudgetAlert,
+  marker: string,
+  store: BudgetAlertStore,
+) {
+  if (alert.thresholdPercent < FULL_THRESHOLD_PERCENT) return false;
+  if (!(await store.claimEmail(marker))) return false;
+  try {
+    await store.email(taskId, alert);
+    return true;
+  } catch (error) {
+    console.error("[vercel-budget-alert] owner email failed", error);
+    await store.releaseEmail(marker);
+    return false;
+  }
+}
+
 async function findBudgetTicket(marker: string) {
-  return prisma.task.findFirst({
+  const existing = await prisma.task.findFirst({
     where: { projectId: BOARD_PROJECT_ID, description_: { is: { content: { contains: marker } } } },
     select: { id: true },
   });
+  return existing ? existing.id : null;
 }
 
 async function createBudgetTicket(alert: VercelBudgetAlert) {
@@ -77,43 +153,46 @@ async function addBudgetAlertComment(taskId: number, alert: VercelBudgetAlert) {
   });
 }
 
-async function claimOwnerEmail(marker: string) {
-  try {
+export const prismaBudgetAlertStore: BudgetAlertStore = {
+  findTicket: findBudgetTicket,
+  createTicket: createBudgetTicket,
+  addComment: addBudgetAlertComment,
+  async reserve(marker) {
     const redis = await getRedis();
-    return (await redis.set(`vercel:budget-alert:email:${marker}`, "1", "EX", EMAIL_CLAIM_TTL_SECONDS, "NX")) === "OK";
-  } catch (error) {
-    console.error("[vercel-budget-alert] email claim failed", error);
-    return false;
-  }
-}
-
-async function emailOwner(alert: VercelBudgetAlert, taskId: number, marker: string) {
-  if (alert.thresholdPercent < FULL_THRESHOLD_PERCENT) return false;
-  if (!(await claimOwnerEmail(marker))) return false;
-  try {
+    return (await redis.set(`vercel:budget-alert:reserve:${marker}`, "1", "EX", RESERVATION_TTL_SECONDS, "NX")) === "OK";
+  },
+  async claimEmail(marker) {
+    try {
+      const redis = await getRedis();
+      return (await redis.set(`vercel:budget-alert:email:${marker}`, "1", "EX", CLAIM_TTL_SECONDS, "NX")) === "OK";
+    } catch (error) {
+      console.error("[vercel-budget-alert] email claim failed", error);
+      return false;
+    }
+  },
+  async releaseEmail(marker) {
+    try {
+      const redis = await getRedis();
+      await redis.del(`vercel:budget-alert:email:${marker}`);
+    } catch (error) {
+      console.error("[vercel-budget-alert] email release failed", error);
+    }
+  },
+  async email(taskId, alert) {
     await sendEmail({
       to: OWNER_EMAIL,
       from: "Hypertask <notifications@hypertask.ai>",
       subject: budgetAlertSubject(alert),
       text: [
-        `Vercel sent a budget alert.`,
+        "Vercel sent a budget alert.",
         `Limit: ${alert.budgetScope} reached ${alert.thresholdPercent}%.`,
         `Spent so far: $${alert.currentSpend.toFixed(2)} of $${alert.budgetAmount.toFixed(2)}.`,
         `Ticket: https://app.hypertask.ai/detail/project-${BOARD_PROJECT_ID}/${taskId}`,
       ].join("\n"),
     });
-    return true;
-  } catch (error) {
-    console.error("[vercel-budget-alert] owner email failed", error);
-    return false;
-  }
-}
+  },
+};
 
-export async function fileVercelBudgetTicket(alert: VercelBudgetAlert): Promise<FiledVercelBudgetAlert> {
-  const marker = budgetAlertMarker(alert);
-  const existing = await findBudgetTicket(marker);
-  const taskId = existing ? existing.id : await createBudgetTicket(alert);
-  if (existing) await addBudgetAlertComment(taskId, alert);
-  const emailed = await emailOwner(alert, taskId, marker);
-  return { taskId, created: !existing, emailed };
+export function fileVercelBudgetTicket(alert: VercelBudgetAlert) {
+  return fileBudgetAlert(alert, prismaBudgetAlertStore);
 }

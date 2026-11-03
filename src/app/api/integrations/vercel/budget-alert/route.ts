@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { fileVercelBudgetTicket } from "@/lib/ops/fileVercelBudgetTicket";
+import { HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { BudgetAlertRaceError, fileVercelBudgetTicket } from "@/lib/ops/fileVercelBudgetTicket";
 import { parseVercelBudgetAlert, verifyVercelSignature } from "@/lib/ops/vercelBudgetAlert";
 
 export const runtime = "nodejs";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const MAX_BODY_BYTES = 8 * 1024;
+const RELEASE_OWNER_USER_ID = 6;
 
 export async function POST(request: Request) {
   const contentLength = Number(request.headers.get("content-length") || 0);
@@ -42,7 +44,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const filed = await fileVercelBudgetTicket(alert);
+  if (!(await isFeatureEnabled(HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG, RELEASE_OWNER_USER_ID))) {
+    return NextResponse.json({ error: "Webhook is off" }, { status: 503 });
+  }
+
+  let filed: Awaited<ReturnType<typeof fileVercelBudgetTicket>>;
+  try {
+    filed = await fileVercelBudgetTicket(alert);
+  } catch (error) {
+    if (!(error instanceof BudgetAlertRaceError)) throw error;
+    return NextResponse.json({ error: "Alert is still processing" }, { status: 503 });
+  }
   return NextResponse.json({
     taskId: filed.taskId,
     created: filed.created,

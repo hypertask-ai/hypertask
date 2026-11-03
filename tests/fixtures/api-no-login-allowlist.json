@@ -86,6 +86,11 @@
       "reason": "PostHog exception webhook. Authorized by the Svix webhook signature, not a user session."
     },
     {
+      "path": "/api/integrations/vercel/budget-alert",
+      "match": "exact",
+      "reason": "Vercel spend-management webhook. Authorized by the x-vercel-signature HMAC, not a user session."
+    },
+    {
       "path": "/api/cli/token-exchange",
       "match": "exact",
       "reason": "CLI login finishes here. The one-time code in the body is read and deleted from redis before a token is minted."
