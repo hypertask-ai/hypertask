@@ -44,6 +44,7 @@ function setup(failure) {
     },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (_request, error) => crashReports.push(error) },
     '@/lib/mcp/tasks/mappers': {},
+    '@/lib/pullRequests/taskPullRequests': { refreshTaskPullRequests: async (_taskId, pullRequests) => pullRequests },
     '@/lib/mcp/agents': {},
     '@/lib/agents/publicAgent': {},
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },

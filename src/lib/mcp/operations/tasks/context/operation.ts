@@ -12,6 +12,7 @@ import {
   type PullRequestCheckState,
   type PullRequestLifecycle,
 } from '@/lib/pullRequests/githubPullRequests';
+import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests';
 import {
   mapTaskToMcpGetResponse,
   taskMcpGetInclude,
@@ -257,11 +258,22 @@ export async function GET(request: NextRequest) {
         direction: outgoing ? 'outgoing' : 'incoming',
       };
     });
-    const pullRequests = task.pullRequests.map((pullRequest) => {
+    const pullRequests = (
+      await refreshTaskPullRequests(task.id, task.pullRequests)
+    ).map((pullRequest) => {
       const lifecycle = pullRequest.lifecycle as PullRequestLifecycle;
       const checkState = pullRequest.checkState as PullRequestCheckState;
       return {
-        ...pullRequest,
+        id: pullRequest.id,
+        repositoryOwner: pullRequest.repositoryOwner,
+        repositoryName: pullRequest.repositoryName,
+        number: pullRequest.number,
+        url: pullRequest.url,
+        title: pullRequest.title,
+        lifecycle,
+        checkState,
+        headSha: pullRequest.headSha,
+        updatedAt: pullRequest.updatedAt,
         displayState: derivePullRequestDisplayState(lifecycle, checkState),
       };
     });

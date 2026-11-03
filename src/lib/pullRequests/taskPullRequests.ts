@@ -8,6 +8,7 @@ import {
   cancelAgentMutationLeaseForHumanOverride,
 } from "@/lib/mcp/tasks/agentMutationFence";
 import {
+  checkStateFromSuites,
   derivePullRequestDisplayState,
   parseGithubPullRequestUrl,
   type ParsedGithubPullRequestUrl,
@@ -32,7 +33,21 @@ interface GithubPullRequestMetadata {
   title: string;
   lifecycle: PullRequestLifecycle;
   headSha: string;
+  checkState: PullRequestCheckState | null;
   sourceUpdatedAt: Date;
+}
+
+export interface RefreshableTaskPullRequest {
+  id: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  number: number;
+  url: string;
+  title: string;
+  lifecycle: string;
+  checkState: string;
+  headSha: string | null;
+  updatedAt: Date;
 }
 
 export interface PublicTaskPullRequest {
@@ -110,6 +125,37 @@ function githubId(value: unknown): string | null {
     return null;
   }
   return String(value);
+}
+
+async function fetchGithubCheckState(
+  parsed: ParsedGithubPullRequestUrl,
+  headSha: string,
+): Promise<PullRequestCheckState | null> {
+  try {
+    const response = await fetch(
+      `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`,
+      {
+        headers: githubHeaders(),
+        cache: "no-store",
+        signal: AbortSignal.timeout(3_000),
+      },
+    );
+    if (!response.ok) return null;
+    const value = await response.json();
+    if (!isRecord(value) || !Array.isArray(value.check_runs)) return null;
+    if (
+      typeof value.total_count === "number" &&
+      value.total_count > value.check_runs.length
+    ) return null;
+    return checkStateFromSuites(
+      value.check_runs.filter(isRecord).map((run) => ({
+        status: typeof run.status === "string" ? run.status : "",
+        conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
+      })),
+    );
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchGithubPullRequest(
@@ -192,21 +238,20 @@ export async function fetchGithubPullRequest(
     title: value.title,
     lifecycle,
     headSha: head.sha,
+    checkState: await fetchGithubCheckState(parsed, head.sha),
     sourceUpdatedAt: updatedAt,
   };
 }
 
 export async function refreshTaskPullRequests(
   taskId: number,
-  pullRequests: Prisma.TaskPullRequestGetPayload<{
-    select: typeof pullRequestSelect;
-  }>[],
+  pullRequests: RefreshableTaskPullRequest[],
   {
     db = prisma,
     fetchMetadata = fetchGithubPullRequest,
     now = new Date(),
   }: Pick<LinkTaskPullRequestInput, "db" | "fetchMetadata"> & { now?: Date } = {},
-) {
+): Promise<RefreshableTaskPullRequest[]> {
   return Promise.all(pullRequests.map(async (pullRequest) => {
     if (
       pullRequest.lifecycle === "merged" ||
@@ -223,15 +268,17 @@ export async function refreshTaskPullRequests(
 
     try {
       const metadata = await fetchMetadata(parsed);
+      const checkState = metadata.checkState
+        ?? (pullRequest.headSha === metadata.headSha
+          ? pullRequest.checkState
+          : "pending");
       const data = {
         githubRepositoryId: metadata.repositoryId,
         githubPullRequestId: metadata.pullRequestId,
         title: metadata.title,
         lifecycle: metadata.lifecycle,
         headSha: metadata.headSha,
-        checkState: pullRequest.headSha === metadata.headSha
-          ? pullRequest.checkState
-          : "pending",
+        checkState,
         sourceUpdatedAt: metadata.sourceUpdatedAt,
         updatedAt: now,
       };
@@ -399,7 +446,7 @@ export async function linkTaskPullRequest({
           url: parsed.url,
           title: metadata.title,
           lifecycle: metadata.lifecycle,
-          checkState: "pending",
+          checkState: metadata.checkState ?? "pending",
           headSha: metadata.headSha,
           sourceUpdatedAt: metadata.sourceUpdatedAt,
         },
@@ -420,7 +467,7 @@ export async function linkTaskPullRequest({
             repository: `${created.repositoryOwner}/${created.repositoryName}`,
             displayState: derivePullRequestDisplayState(
               metadata.lifecycle,
-              "pending",
+              metadata.checkState ?? "pending",
             ),
           },
         },
