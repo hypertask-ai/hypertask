@@ -727,10 +727,11 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-`mcp-cli-api-contract` is a separately reported, fail-closed summary of a contract executed inside
-`browser-smoke-desktop` (HYCI-32). It is not in the ruleset itself: it blocks merges because the
-contract step runs inside that half, so a failing contract fails the half and the required
-`browser-smoke` summary over it. It uses the disposable server before any layout flag reseed. The owner,
+The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
+separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
+because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
+that half and the required `browser-smoke` summary over it, and the assertion step proves the
+contract reported `passed`. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;
@@ -1231,8 +1232,8 @@ the only publisher of `app-build`, so the visual comparison adds no third build.
 The required ruleset context stays `browser-smoke`. That name is now a summary
 job with `needs: [browser-smoke-desktop, browser-smoke-mobile]`; it is green only
 when both halves are green, and a cancelled, failed or missing half never reads
-as a pass. It passes `contract` and `docs_only` through from the desktop half, so
-`mcp-cli-api-contract` and `visual-compare` keep their existing wiring.
+as a pass. `visual-compare` reads the one build's scope answer, so it keeps its
+existing wiring; HYCI-108 later moved the contract assertion inside this summary.
 
 The budget cost is two jobs per push. HYCI-42 took the pool to six lanes and
 HYCI-45 added a second serial lane before this merged, so the merged count is 22
@@ -1368,9 +1369,9 @@ outlasts the 71 s of idle the split removes.
 The required ruleset context stays `browser-smoke`, a summary job with
 `needs: [browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix,
 browser-smoke-flags]`. It is green only when all four shards are green, and a
-cancelled, failed or missing shard never reads as a pass. `contract` and
-`docs_only` still pass through from the desktop shard, so `mcp-cli-api-contract`
-keeps its wiring; `visual-compare` needs only the one build, so HYCI-77
+cancelled, failed or missing shard never reads as a pass. The contract assertion
+reads the desktop shard's `contract` and `docs_only` outputs directly (HYCI-108);
+`visual-compare` needs only the one build, so HYCI-77
 starts it beside the shards instead of after their summary. `tests/browser-smoke-workflow.test.cjs`
 still proves every spec/project pair runs exactly once and that no shard was left
 without work.

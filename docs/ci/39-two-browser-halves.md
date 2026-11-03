@@ -36,8 +36,8 @@ the only publisher of `app-build`, so the visual comparison adds no third build.
 The required ruleset context stays `browser-smoke`. That name is now a summary
 job with `needs: [browser-smoke-desktop, browser-smoke-mobile]`; it is green only
 when both halves are green, and a cancelled, failed or missing half never reads
-as a pass. It passes `contract` and `docs_only` through from the desktop half, so
-`mcp-cli-api-contract` and `visual-compare` keep their existing wiring.
+as a pass. `visual-compare` reads the one build's scope answer, so it keeps its
+existing wiring; HYCI-108 later moved the contract assertion inside this summary.
 
 The budget cost is two jobs per push. HYCI-42 took the pool to six lanes and
 HYCI-45 added a second serial lane before this merged, so the merged count is 22

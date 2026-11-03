@@ -2155,12 +2155,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
-    outputs:
-      # visual-compare and mcp-cli-api-contract read these two off this job, and
-      # both live in the desktop half: the contract runs there, and the docs-only
-      # scope answer is the same in either half.
-      contract: ${{ needs.browser-smoke-desktop.outputs.contract }}
-      docs_only: ${{ needs.browser-smoke-desktop.outputs.docs_only }}
     steps:
       - name: Require every browser shard
         env:
@@ -2176,6 +2170,18 @@ jobs:
           test "$MOBILE" = success
           test "$MATRIX" = success
           test "$FLAGS" = success
+
+      # HYCI-108: this assertion used to be its own `mcp-cli-api-contract` job, and
+      # because it needed this summary it cost a whole queue turn for twelve
+      # seconds of work. It reads only the desktop shard's outputs, so it runs
+      # here: same fail-closed answer, one machine instead of two.
+      - name: Require the MCP CLI API contract
+        env:
+          CONTRACT_RESULT: ${{ needs.browser-smoke-desktop.outputs.contract }}
+          DOCS_ONLY: ${{ needs.browser-smoke-desktop.outputs.docs_only }}
+        run: |
+          set -euo pipefail
+          test "$CONTRACT_RESULT" = passed || test "${DOCS_ONLY:-false}" = true
 
   visual-compare:
     name: visual-compare
@@ -2420,22 +2426,6 @@ jobs:
             test-results/**/trace.zip
           if-no-files-found: ignore
           retention-days: 7
-
-  mcp-cli-api-contract:
-    name: mcp-cli-api-contract
-    needs: browser-smoke
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    permissions: {}
-    steps:
-      - name: Require a successful producer and explicit contract pass
-        env:
-          SMOKE_RESULT: ${{ needs.browser-smoke.result }}
-          CONTRACT_RESULT: ${{ needs.browser-smoke.outputs.contract }}
-          DOCS_ONLY: ${{ needs.browser-smoke.outputs.docs_only }}
-        run: |
-          test "$SMOKE_RESULT" = success && { test "$CONTRACT_RESULT" = passed || test "${DOCS_ONLY:-false}" = true; }
 
   production-test-warning:
     name: production-test-warning

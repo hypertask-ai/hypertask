@@ -94,7 +94,7 @@ test('heavy scope skips docs/skills/unit tests but never src, CI, dependencies, 
     assert.equal(browser.outputs.docs_only, "${{ steps.scope.outputs.heavy_needed == 'false' }}");
     assert.match(browser.steps.find(step => step.id === 'smoke').if, /heavy_needed == 'true'/);
   }
-  assert.equal(workflow('ci-tests').jobs['browser-smoke'].outputs.docs_only, "${{ needs.browser-smoke-desktop.outputs.docs_only }}");
+  assert.equal(workflow('ci-tests').jobs['browser-smoke'].outputs, undefined);
   assert.equal(workflow('ci-tests').on.pull_request['paths-ignore'], undefined);
   assert.equal(workflow('visual-regression').on.pull_request, undefined);
   assert.match(readFileSync('.github/scripts/visual-change-scope.cjs', 'utf8'), /EXCLUDES = \['src\/app\/api\/\*\*', '\*\*\/\*\.md'\]/);
