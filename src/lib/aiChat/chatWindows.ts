@@ -15,6 +15,7 @@ export type ChatWindowState = ChatWindowRect & {
 
 export type ChatWindowControls = {
   enabled: boolean;
+  atCapacity: boolean;
   openSessionWindow: (sessionId: string) => boolean;
   focusOpenSessionWindow: (sessionId: string) => boolean;
   openNewChatWindow: () => Promise<boolean>;
@@ -46,10 +47,12 @@ export function clampChatWindowRect(
   rect: ChatWindowRect,
   viewport: ChatWindowViewport,
 ): ChatWindowRect {
-  const maxWidth = Math.max(CHAT_WINDOW_MIN_WIDTH, viewport.width - CHAT_WINDOW_EDGE * 2);
-  const maxHeight = Math.max(CHAT_WINDOW_MIN_HEIGHT, viewport.height - CHAT_WINDOW_EDGE * 2);
-  const width = clamp(rect.width, CHAT_WINDOW_MIN_WIDTH, maxWidth);
-  const height = clamp(rect.height, CHAT_WINDOW_MIN_HEIGHT, maxHeight);
+  const roomWidth = Math.max(0, viewport.width - CHAT_WINDOW_EDGE * 2);
+  const roomHeight = Math.max(0, viewport.height - CHAT_WINDOW_EDGE * 2);
+  const minWidth = Math.min(CHAT_WINDOW_MIN_WIDTH, roomWidth);
+  const minHeight = Math.min(CHAT_WINDOW_MIN_HEIGHT, roomHeight);
+  const width = clamp(rect.width, minWidth, roomWidth);
+  const height = clamp(rect.height, minHeight, roomHeight);
   const x = clamp(rect.x, 0, viewport.width - width - CHAT_WINDOW_EDGE);
   const y = clamp(rect.y, 0, viewport.height - height - CHAT_WINDOW_EDGE);
   return { x, y, width, height };

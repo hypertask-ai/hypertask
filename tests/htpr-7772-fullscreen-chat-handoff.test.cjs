@@ -51,5 +51,5 @@ test("a ticket link in the full-screen chat opens the side panel before the app 
 test("docked tickets keep the manual chat contract", () => {
   const state = read("src/hooks/MultiPages/AIChat/useAiChatState.ts");
   assert.match(state, /if \(manualChat\) historyTaskId = undefined;/);
-  assert.match(state, /useSessionAndChatHistory\(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat \|\| parallelChatsEnabled, manualDockedChat, modelTeamId\)/);
+  assert.match(state, /useSessionAndChatHistory\(historyTaskId, shouldLoadChatHistory, isDetailPage, manualDockedChat \|\| parallelChatsEnabled \|\| multiChatWindowsEnabled, manualDockedChat, modelTeamId, pinnedSessionId, windowSecondary\)/);
 });

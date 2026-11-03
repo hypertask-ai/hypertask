@@ -261,7 +261,7 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   } = useSessionAndChatHistory(
     historyTaskId,
     shouldLoadChatHistory,
-    windowSecondary || isDetailPage,
+    isDetailPage,
     manualDockedChat || parallelChatsEnabled || multiChatWindowsEnabled,
     manualDockedChat,
     modelTeamId,

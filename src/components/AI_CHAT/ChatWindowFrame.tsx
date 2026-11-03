@@ -93,7 +93,7 @@ export function ChatWindowFrame({
       role="dialog"
       aria-label="AI chat window"
       onPointerDownCapture={onFocus}
-      className="fixed z-popup flex flex-col overflow-hidden rounded border border-border-light-gray-thin bg-ai-chat text-meta shadow-customshadow-4"
+      className="fixed z-popup flex flex-col overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-ai-chat text-meta shadow-customshadow-4"
       style={{
         left: state.x,
         top: state.y,

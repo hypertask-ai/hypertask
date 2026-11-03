@@ -155,6 +155,7 @@ export const ChatRuntime = memo(function ChatRuntime({
     if (!windowController.enabled) return undefined;
     return {
       enabled: true,
+      atCapacity: windowController.atCapacity,
       openSessionWindow: windowController.open,
       focusOpenSessionWindow: windowController.focusOpenSession,
       openNewChatWindow: async () => {

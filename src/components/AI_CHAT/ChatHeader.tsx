@@ -272,9 +272,15 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
               if (agent && sidebarChats?.onSelectAgentSession) sidebarChats.onSelectAgentSession(agent, chat.id);
               else {
                 sidebarChats?.onSelect({ kind: "ai" });
-                if (!isFullScreenChat && chat.id !== resolvedSessionId) {
-                  const focused = windowDrag ? chatWindowControls?.focusOpenSessionWindow(chat.id) : chatWindowControls?.openSessionWindow(chat.id);
-                  if (focused) return;
+                if (!isFullScreenChat && chat.id !== resolvedSessionId && chatWindowControls) {
+                  if (chatWindowControls.focusOpenSessionWindow(chat.id)) return;
+                  if (!windowDrag) {
+                    if (chatWindowControls.atCapacity) {
+                      toast("Close a chat window to open another chat.");
+                      return;
+                    }
+                    if (chatWindowControls.openSessionWindow(chat.id)) return;
+                  }
                 }
                 selectSession(chat.id);
               }

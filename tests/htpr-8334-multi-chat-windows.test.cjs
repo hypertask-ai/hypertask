@@ -163,3 +163,23 @@ test("multi chat windows: new windows step away from the one before", () => {
   assert.ok(second.x < first.x);
   assert.ok(second.y <= first.y);
 });
+
+test("multi chat windows: a short screen keeps the whole window reachable", () => {
+  const short = { width: 1280, height: 220 };
+  const rect = clampChatWindowRect({ x: 40, y: 40, width: 420, height: 700 }, short);
+  assert.ok(rect.y >= 0);
+  assert.ok(rect.y + rect.height <= short.height);
+  assert.ok(rect.height <= short.height);
+  const tiny = clampChatWindowRect({ x: 0, y: 0, width: 420, height: 700 }, { width: 200, height: 100 });
+  assert.ok(tiny.width <= 200);
+  assert.ok(tiny.height <= 100);
+});
+
+test("multi chat windows: choosing a chat at the cap leaves the current conversation alone", () => {
+  const header = read("src/components/AI_CHAT/ChatHeader.tsx");
+  const guard = header.slice(header.indexOf("atCapacity"));
+  assert.ok(header.indexOf("atCapacity") > 0);
+  assert.match(guard, /toast\("Close a chat window to open another chat\."\);\n\s*return;/);
+  assert.ok(header.indexOf("atCapacity") < header.lastIndexOf("selectSession(chat.id);"));
+  assert.doesNotMatch(header, /chatWindowControls\?\.openSessionWindow\(chat\.id\)/);
+});
