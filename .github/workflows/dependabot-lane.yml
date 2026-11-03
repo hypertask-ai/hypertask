@@ -32,10 +32,13 @@ on:
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
-# Ticket creation must not be cancelled halfway, so a newer event queues instead
-# of replacing the run that is filing one. Per pull request, and one sweep group.
+# One line for the whole lane, sweep runs included, so a sweep and a PR event can
+# never read the same pull request at once and file two tickets for it. Nothing
+# is cancelled: a run that is midway through filing a ticket must finish, so a
+# newer event waits in the queue instead of replacing it.
 concurrency:
-  group: dependabot-lane-${{ github.event.pull_request.number || 'sweep' }}
+  group: dependabot-lane
+  queue: max
   cancel-in-progress: false
 
 # Labels, comments and reading the pull request only. Arming a small bump's

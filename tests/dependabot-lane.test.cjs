@@ -8,7 +8,6 @@ const lane = require("../.github/scripts/dependabot-lane.cjs");
 const root = join(__dirname, "..");
 const read = file => readFileSync(join(root, file), "utf8");
 
-// The two pull requests of HYCI-107, as GitHub reports them.
 const SEROVAL = {
   number: 2460,
   title: "Bump seroval from 1.6.9 to 1.6.12",
@@ -19,7 +18,8 @@ const SEROVAL = {
   draft: false,
   node_id: "PR_kw2460",
   auto_merge: null,
-  mergeable: "MERGEABLE",
+  mergeable: true,
+  mergeable_state: "clean",
   html_url: "https://github.com/hypertask-ai/hypertask/pull/2460",
   labels: [{ name: "dependencies" }, { name: "javascript" }],
 };
@@ -33,14 +33,16 @@ const HONO = {
   draft: false,
   node_id: "PR_kw2462",
   auto_merge: { enabled_by: "someone" },
-  mergeable: "MERGEABLE",
+  mergeable: true,
+  mergeable_state: "clean",
   html_url: "https://github.com/hypertask-ai/hypertask/pull/2462",
   labels: [{ name: "dependencies" }, { name: "stack-minor" }],
 };
 
 function harness({ pulls, comments = {}, failLabel = false, armFails = false, disarmFails = false,
-  failGet = [], search, create, searchFails = false, createFails = false, commentFails = false,
-  pat = true, token = "mcp-token", event = "pull_request_target", autoMergeSetting = true } = {}) {
+  failGet = [], failReadbackAt = 0, search, create, searchFails = false, createFails = false,
+  commentFails = false, pat = true, token = "mcp-token", event = "pull_request_target",
+  autoMergeSetting = true } = {}) {
   const state = {
     pulls: pulls.map(pull => ({ ...pull, labels: [...pull.labels] })),
     comments,
@@ -64,10 +66,11 @@ function harness({ pulls, comments = {}, failLabel = false, armFails = false, di
         },
       },
       pulls: {
-        get: async ({ number }) => {
-          if (failGet.includes(number)) throw new Error("pull request api 502");
-          state.read.push(number);
-          return { data: JSON.parse(JSON.stringify(find(number))) };
+        get: async ({ pull_number }) => {
+          if (failGet.includes(pull_number)) throw new Error("pull request api 502");
+          state.read.push(pull_number);
+          if (state.read.length === failReadbackAt) throw new Error("pull request readback 502");
+          return { data: JSON.parse(JSON.stringify(find(pull_number))) };
         },
         list: async () => {
           state.listCalls++;
@@ -240,6 +243,43 @@ test("the ticket is filed even when the label cannot be written", async () => {
   assert.match(state.failures[0], /#2462/);
 });
 
+test("a failed disarm readback still files the major's ticket", async () => {
+  const { state, run } = harness({ pulls: [HONO], failReadbackAt: 2 });
+  await run();
+  assert.equal(state.created.length, 1, "an owner is filed even when the disarm cannot be confirmed");
+  assert.equal(state.pulls[0].auto_merge, null, "the disarm mutation still ran");
+  assert.match(state.failures[0], /auto-merge may still be armed/);
+});
+
+test("a failed label readback still files the major's ticket", async () => {
+  const { state, run } = harness({ pulls: [HONO], failReadbackAt: 3 });
+  await run();
+  assert.equal(state.created.length, 1, "a label that cannot be read back never stops the ticket");
+  assert.ok(state.added.length, "the label write still ran");
+  assert.match(state.failures[0], /reading its labels back failed/);
+});
+
+test("a hold label leaves a major's labels alone but still disarms and tickets it", async () => {
+  const { state, run } = harness({ pulls: [{ ...HONO, labels: [{ name: "hold" }, { name: "stack-minor" }] }] });
+  await run();
+  assert.deepEqual(state.added, [], "a held pull request keeps its labels");
+  assert.equal(state.pulls[0].auto_merge, null, "a held major is still disarmed");
+  assert.equal(state.created.length, 1, "and it still gets an owner");
+  assert.deepEqual(state.failures, []);
+});
+
+test("an arming failure on a clean pull request is reported", async () => {
+  const { state, run } = harness({ pulls: [SEROVAL], armFails: true });
+  await run();
+  assert.match(state.failures[0], /auto-merge could not be armed/);
+});
+
+test("an arming failure while the pull request is still settling is only logged", async () => {
+  const { state, run } = harness({ pulls: [{ ...SEROVAL, mergeable_state: "unknown" }], armFails: true });
+  await run();
+  assert.deepEqual(state.failures, []);
+});
+
 test("a missing MCP token is reported instead of passing quietly", async () => {
   const { state, run } = harness({ pulls: [HONO], token: "" });
   await run();
@@ -316,6 +356,8 @@ test("the workflow is one event-driven run with a best-effort sweep", () => {
   assert.match(workflow, /schedule:/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /cancel-in-progress: false/, "a run that files a ticket must not be cancelled halfway");
+  assert.match(workflow, /concurrency:\n  group: dependabot-lane\n  queue: max\n  cancel-in-progress: false/, 
+    "the sweep and the PR events share one queue, so two runs cannot file a ticket each");
   assert.match(workflow, /timeout-minutes: \d+/);
   assert.match(workflow, /permissions:\n  contents: read\n  pull-requests: write/);
   assert.match(workflow, /require\('\.\/\.github\/scripts\/dependabot-lane\.cjs'\)/);
@@ -331,6 +373,5 @@ test("the CI contract names the workflow that replaced the chain", () => {
   for (const file of ["docs/ci.md", "docs/ci-policy.yml", "docs/ci/04-release-contract.md", ".github/dependabot.yml"]) {
     assert.match(read(file), /dependabot-lane/, `${file} must name the new workflow`);
   }
-  // The machine-readable contract must not keep a deleted workflow in its lists.
   assert.doesNotMatch(read("docs/ci-policy.yml"), /dependabot-stack|dependabot-major-ticket/);
 });

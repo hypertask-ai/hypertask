@@ -182,7 +182,7 @@ module.exports = async function dependabotLane({
   };
 
   const getPull = async number => {
-    const { data } = await github.rest.pulls.get({ owner, repo, number, mediaType: { format: "full" } });
+    const { data } = await github.rest.pulls.get({ owner, repo, pull_number: number, mediaType: { format: "full" } });
     return data;
   };
 
@@ -252,7 +252,13 @@ module.exports = async function dependabotLane({
     } catch (error) {
       log(`#${pull.number}: disabling auto-merge reported "${error.message}"; verifying it anyway`);
     }
-    const fresh = await getPull(pull.number);
+    let fresh;
+    try {
+      fresh = await getPull(pull.number);
+    } catch (error) {
+      problem(pull, `auto-merge may still be armed: reading it back failed (${error.message})`);
+      return;
+    }
     if (fresh.auto_merge) problem(pull, "auto-merge is still armed on a major upgrade");
   }
 
@@ -279,10 +285,11 @@ module.exports = async function dependabotLane({
         { id: pull.node_id },
       );
     } catch (error) {
-      // A conflicting or still-being-computed PR cannot be armed yet; the next
-      // event or sweep picks it up. Anything else is this incident repeating.
-      if (pull.mergeable === "MERGEABLE") problem(pull, `auto-merge could not be armed: ${error.message}`);
-      else log(`#${pull.number}: not armable yet (${pull.mergeable}): ${error.message}`);
+      // REST reports `mergeable` as a boolean and the reason in `mergeable_state`,
+      // so only a clean pull request should have been armable at all. Anything
+      // else is the PR still settling and the next event or sweep picks it up.
+      if (pull.mergeable_state === "clean") problem(pull, `auto-merge could not be armed: ${error.message}`);
+      else log(`#${pull.number}: not armable yet (${pull.mergeable_state}): ${error.message}`);
     }
   }
 
@@ -300,8 +307,11 @@ module.exports = async function dependabotLane({
     }
     // The label is the thing that went missing for five days, so it is read
     // back rather than assumed.
-    const fresh = await getPull(pull.number);
-    if (!labelNames(fresh).includes(wanted)) problem(pull, `it still carries no "${wanted}" label`);
+    const fresh = await getPull(pull.number).catch(error => {
+      problem(pull, `reading its labels back failed (${error.message}), so the "${wanted}" label is unconfirmed`);
+      return null;
+    });
+    if (fresh && !labelNames(fresh).includes(wanted)) problem(pull, `it still carries no "${wanted}" label`);
   }
 
   async function mcp(path, init = {}) {
@@ -381,19 +391,28 @@ module.exports = async function dependabotLane({
       log(`#${pull.number}: not a Dependabot pull request`);
       return;
     }
-    if (labelNames(pull).some(label => HOLD.has(label))) {
+    const { major, reason } = laneOf(pull);
+    log(`#${pull.number}: ${major ? MAJOR : SMALL} because ${reason}`);
+    const held = labelNames(pull).some(label => HOLD.has(label));
+    if (major) {
+      // Safety and ownership before bookkeeping: an armed major is disarmed and
+      // an owner exists whatever happens to its labels, and a hold label is a
+      // reason to leave the labels alone, never a reason to skip either.
+      await disarmAutoMerge(pull);
+      await fileTicket(pull);
+      if (held) {
+        log(`#${pull.number}: a hold label is present, so its lane labels are left alone`);
+        return;
+      }
+      await applyLane(pull, MAJOR);
+      return;
+    }
+    if (held) {
       log(`#${pull.number}: a hold label is present, so the lane is left alone`);
       return;
     }
-    const { major, reason } = laneOf(pull);
-    log(`#${pull.number}: ${major ? MAJOR : SMALL} because ${reason}`);
-    await applyLane(pull, major ? MAJOR : SMALL);
-    if (major) {
-      await disarmAutoMerge(pull);
-      await fileTicket(pull);
-    } else {
-      await armAutoMerge(pull);
-    }
+    await applyLane(pull, SMALL);
+    await armAutoMerge(pull);
   }
 
   const pulls = await targets();
