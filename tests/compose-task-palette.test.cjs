@@ -160,7 +160,7 @@ test('New Task desktop leaves action tooltips unclipped and scrolls only attachm
   }
 });
 
-test('both flags enable stage labels in the existing live status and retries reset progress', async (t) => {
+test('the New Task window shows stage labels in the existing live status and retries reset progress', async (t) => {
   for (const mobile of [false, true]) {
     await withPalette(t, { newWindow: true, mobile, tab: 'compose' }, async ({ type, press, requests, fail, input }) => {
       await type('Write this ticket');
@@ -199,14 +199,6 @@ test('new-window flag off preserves the legacy loading label and omits progress'
       assert.equal(requests.length, 0);
     });
   }
-});
-
-test('task-writing progress needs its own flag', async (t) => {
-  await withPalette(t, { newWindow: true, progress: false, tab: 'compose' }, async ({ type, press, requests }) => {
-    await type('Write this ticket');
-    await press('Enter', { code: 'Enter' });
-    assert.equal(requests[0].body.onProgress, undefined);
-  });
 });
 
 test('progress steps keep the New Task window height', async (t) => {
