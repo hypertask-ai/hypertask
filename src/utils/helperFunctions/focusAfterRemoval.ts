@@ -1,6 +1,33 @@
 
 type FocusSection = { items: { id: number }[] };
 
+export function focusCandidates(
+  items: { id: number }[] | undefined,
+  removedIndex: number,
+): number[] {
+  const list = items ?? [];
+  const last = list.length - 1;
+  const from = removedIndex >= 0 && removedIndex <= last ? removedIndex : last;
+  const below = list.slice(from + 1).map((item) => item.id);
+  const above = list.slice(0, Math.max(from, 0)).reverse().map((item) => item.id);
+  return [...below, ...above];
+}
+
+export function focusFirstRenderedCard(
+  candidateIds: number[],
+  column: () => HTMLElement | null,
+): number | null {
+  for (const id of candidateIds) {
+    const card = globalThis.document?.getElementById(`task-${id}`);
+    if (card && card.getClientRects().length > 0) {
+      card.focus({ preventScroll: true });
+      return id;
+    }
+  }
+  column()?.focus({ preventScroll: true });
+  return null;
+}
+
 export function nextFocusAfterRemoval(
   sections: FocusSection[],
   sectionIndex: number,

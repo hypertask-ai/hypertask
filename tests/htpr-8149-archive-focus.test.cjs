@@ -9,7 +9,7 @@ const os = require('node:os');
 const { loadModule } = require('./helpers/loadModule.cjs');
 const { JSDOM } = require('jsdom');
 const jiti = require('jiti')(__filename);
-const { nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
+const { focusCandidates, focusFirstRenderedCard, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
 
 function source(file) {
   return ts.createSourceFile(file, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -40,7 +40,7 @@ function load(names, file, env) {
   return compile(declarations.join('\n'), env, `{${names.join(',')}}`);
 }
 
-function fixture(enabled = true, visibleIds = [1, 3, 5]) {
+function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
   const dom = new JSDOM('<div class="section-container" tabindex="-1"><div id="droppable-section-container-11"></div></div>');
   const document = dom.window.document;
   globalThis.document = document;
@@ -55,15 +55,15 @@ function fixture(enabled = true, visibleIds = [1, 3, 5]) {
   const render = () => {
     for (const element of [...list.children]) if (!display()[0].items.some(t => element.id === `task-${t.id}`)) element.remove();
     for (const task of display()[0].items) {
-      if (!document.getElementById(`task-${task.id}`)) {
-        const card = document.createElement('div'); card.id = `task-${task.id}`; card.tabIndex = 0; list.append(card);
+      if (!unrenderedIds.includes(task.id) && !document.getElementById(`task-${task.id}`)) {
+        const card = document.createElement('div'); card.id = `task-${task.id}`; card.tabIndex = 0; card.getClientRects = () => [{ width: 100, height: 40 }]; list.append(card);
       }
     }
     document.getElementById(`task-${active}`)?.focus();
   };
   render();
   const env = {
-    archiveColumnBoundary: true, nextFocusAfterRemoval, document,
+    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCandidates, focusFirstRenderedCard, document,
     updateActiveItemAndItemInView: id => { active = id; },
     _currentProject: { id: 7049 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [{ sections, filteredSections: sections, tasks: sections.flatMap(s => s.items) }] }, projectToUpdateIndex: 0 }),
@@ -113,6 +113,32 @@ test('fourteen archives retain visible order and finish on the column', async ()
   assert.deepEqual(f.archived, ids);
   assert.equal(f.document.activeElement, f.column);
   assert.deepEqual(f.sections()[1].items.map(t => t.id), [99]);
+});
+
+test('a candidate without a layout box is skipped, then the column takes focus', () => {
+  const dom = new JSDOM('<div id="task-9" tabindex="0"></div><div id="task-4" tabindex="0"></div>');
+  const document = dom.window.document;
+  document.getElementById('task-9').getClientRects = () => [];
+  document.getElementById('task-4').getClientRects = () => [{ width: 10, height: 10 }];
+  const column = { focused: 0, focus() { this.focused += 1; } };
+  assert.equal(focusFirstRenderedCard([9, 4], () => column), 4);
+  assert.equal(document.activeElement.id, 'task-4');
+  assert.equal(focusFirstRenderedCard([9], () => column), null);
+  assert.equal(column.focused, 1);
+});
+
+test('focus candidates run down the column first, then up', () => {
+  const items = [{ id: 2 }, { id: 4 }, { id: 6 }];
+  assert.deepEqual(focusCandidates(items, 0), [4, 6]);
+  assert.deepEqual(focusCandidates(items, 1), [6, 2]);
+  assert.deepEqual(focusCandidates(items, 2), [4, 2]);
+  assert.deepEqual(focusCandidates([], 0), []);
+});
+
+test('filtered view skips a card that has no rendered element', async () => {
+  const f = fixture(true, [1, 3, 5], [3]); f.focus(5); await f.press();
+  assert.equal(f.active(), 1);
+  assert.equal(f.document.activeElement, f.document.getElementById('task-1'));
 });
 
 test('archiving the last visible card selects the one immediately above', async () => {
