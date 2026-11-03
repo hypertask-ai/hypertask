@@ -253,6 +253,7 @@ function sectionMutationHarness({ role = 'write', human = false, scopeEnforced =
     '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (request, error) => { throw error; } },
     '@/lib/realtime/server': { broadcastBoardChange: record('broadcast') },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
   };
   mocks['@/lib/mcp/routeWrapper'] = loadRouteWrapper(mocks);
   const collection = f.load('src/lib/mcp/operations/projects/[projectId]/sections/operation.ts', mocks);
