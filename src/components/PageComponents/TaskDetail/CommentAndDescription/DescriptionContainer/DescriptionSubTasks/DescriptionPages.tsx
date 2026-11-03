@@ -4,13 +4,21 @@ import { formatDistanceToNow } from "date-fns";
 import { FileText, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import toast from "react-hot-toast";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
+import { HTPR_8241_PAGES_INTENT_HOLD_FLAG } from "@/lib/flags/definitions/htpr-8241-pages-intent-hold";
 import { listBrowserPages, changePageLink, type BrowserPage } from "@/lib/pages/browser";
+import {
+  claimPagesIntent,
+  forgetPagesIntent,
+  holdPagesIntent,
+  PAGES_INTENT_EVENTS,
+  taskSurface,
+} from "@/lib/pages/intents";
 
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -24,25 +32,58 @@ const DescriptionPages = () => {
   const { pages, loading, hasPages, createAndOpenPage, refetch } = useTaskPages();
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalone = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
+  const holdIntent = useFlag(HTPR_8241_PAGES_INTENT_HOLD_FLAG);
   const [pageOptions, setPageOptions] = useState<BrowserPage[] | null>(null);
+  const mounted = useRef(true);
+  const pendingRun = useRef(0);
+  const linkRun = useRef(0);
+  const surface = currentTask ? taskSurface(currentTask) : null;
+  const surfaceRef = useRef(surface);
+  useEffect(() => {
+    surfaceRef.current = surface;
+  }, [surface]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (pendingRun.current === 0) return;
+      pendingRun.current = 0;
+      const pending = surfaceRef.current;
+      if (holdIntent && pending) holdPagesIntent("link", pending);
+    };
+  }, [holdIntent]);
   const openLinkPicker = useCallback(async () => {
+    const run = linkRun.current + 1;
+    linkRun.current = run;
+    pendingRun.current = run;
     try {
-      setPageOptions(await listBrowserPages());
+      const list = await listBrowserPages();
+      if (pendingRun.current === run) pendingRun.current = 0;
+      if (mounted.current) setPageOptions(list);
     } catch {
-      toast.error("Could not load pages");
+      if (pendingRun.current === run) pendingRun.current = 0;
+      if (mounted.current) toast.error("Could not load pages");
     }
   }, []);
+  const linkFromEvent = useCallback(() => {
+    forgetPagesIntent("link");
+    void openLinkPicker();
+  }, [openLinkPicker]);
+  const createPage = useCallback(() => {
+    forgetPagesIntent("new");
+    void createAndOpenPage();
+  }, [createAndOpenPage]);
   useEffect(() => {
     if (!pagesEnabled || !standalone) return;
-    const link = () => { void openLinkPicker(); };
-    const create = () => { void createAndOpenPage(); };
-    window.addEventListener("pages-link-page", link);
-    window.addEventListener("pages-new-page", create);
+    window.addEventListener(PAGES_INTENT_EVENTS.link, linkFromEvent);
+    window.addEventListener(PAGES_INTENT_EVENTS.new, createPage);
+    if (holdIntent && claimPagesIntent("link", surface)) void openLinkPicker();
+    if (holdIntent && claimPagesIntent("new", surface)) void createAndOpenPage();
     return () => {
-      window.removeEventListener("pages-link-page", link);
-      window.removeEventListener("pages-new-page", create);
+      window.removeEventListener(PAGES_INTENT_EVENTS.link, linkFromEvent);
+      window.removeEventListener(PAGES_INTENT_EVENTS.new, createPage);
     };
-  }, [createAndOpenPage, openLinkPicker, pagesEnabled, standalone]);
+  }, [createAndOpenPage, createPage, holdIntent, linkFromEvent, pagesEnabled, standalone, surface]);
   const linkPage = async (publicId: string) => {
     if (!currentTask) return;
     setPageOptions(null);

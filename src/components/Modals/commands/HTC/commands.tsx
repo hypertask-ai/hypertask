@@ -21,10 +21,12 @@ import {
   showCommandsAtom,
 } from "@/store";
 import { pageCommandGroups, pageCreationTarget } from "@/lib/pages/commands";
+import { requestPagesIntent, ticketSurface } from "@/lib/pages/intents";
 import { currentPageActionsAtom } from "@/store/currentPageActions";
 import { usePathname, useRouter } from "next/navigation";
 import { HTPR_7309_PAGES_SCREENS_FLAG } from "@/lib/flags/definitions/htpr-7309-pages-screens";
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
+import { HTPR_8241_PAGES_INTENT_HOLD_FLAG } from "@/lib/flags/definitions/htpr-8241-pages-intent-hold";
 import { Search, Sparkles } from "lucide-react";
 import { ModalBody } from "reactstrap";
 import styles from "@/styles/linksModal.module.scss";
@@ -171,6 +173,7 @@ const Commands = (props: Props) => {
   const amoledModeOutline = useFlag(HTPR_8015_AMOLED_MODE_OUTLINE_FLAG);
   const pagesEnabled = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
+  const pagesIntentHold = useFlag(HTPR_8241_PAGES_INTENT_HOLD_FLAG);
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
@@ -640,11 +643,11 @@ const Commands = (props: Props) => {
             break;
           case "newPage":
             const target = pageCreationTarget({ pathname, projectId: currentProject?.id });
-            if (target.kind === "current-surface") window.dispatchEvent(new Event("pages-new-page"));
-            else void navigate(target.href);
+            if (target.kind !== "current-surface") void navigate(target.href);
+            else if (!pagesIntentHold || !requestPagesIntent("new", ticketSurface(pathname))) window.dispatchEvent(new Event("pages-new-page"));
             break;
           case "linkPage":
-            window.dispatchEvent(new Event("pages-link-page"));
+            if (!pagesIntentHold || !requestPagesIntent("link", ticketSurface(pathname))) window.dispatchEvent(new Event("pages-link-page"));
             break;
           case "linkPageTicket":
             window.dispatchEvent(new Event("pages-link-ticket"));
