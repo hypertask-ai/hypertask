@@ -126,6 +126,8 @@ export function AI_Tiptap_Container({
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  let hideMicrophonePicker = fullScreenCleanup;
+  if (chatCleanupEnabled) hideMicrophonePicker = true;
   const isMbl = useContext(MobileViewContext);
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
@@ -503,7 +505,7 @@ export function AI_Tiptap_Container({
                 editor={editor}
                 id={audioButtonId}
                 active={active}
-                hideDevicePicker={fullScreenCleanup || chatCleanupEnabled}
+                hideDevicePicker={hideMicrophonePicker}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}
