@@ -757,7 +757,7 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
   });
 });
 
-test('edit-mode and empty writer events retain inline writer with 6937 off but redirect with both flags on', async (t) => {
+test('an empty description writer event opens New Task only with both writer flags on; inline drafts keep the description writer', async (t) => {
   for (const enabled of [false, true]) for (const newWindow of [false, true]) {
     await withPalette(t, { enabled, newWindow, open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
@@ -769,12 +769,13 @@ test('edit-mode and empty writer events retain inline writer with 6937 off but r
         setShouldShowAITaskWriter: (value) => openings.push(value), setAiTriggerData() {}, divIds: {}, currentTask: {}, handleFocus() {} };
       function Probe() { useTaskDetailEditorEvents(context); return null; }
       await mountProbe(() => React.createElement(Probe));
-      assert.equal(openings.at(-1), !(enabled && newWindow));
+      assert.equal(openings.at(-1), true, 'inline description drafts keep the description writer open');
       await React.act(async () => window.dispatchEvent(new dom.window.CustomEvent('test-open-writer', { detail: { targetId: 'description', prompt: '' } })));
+      assert.equal(openings.at(-1), true);
       if (enabled && newWindow) {
-        assert.equal(openings.at(-1), false);
+        assert.equal(values.get('showCommandsAtom').show, true);
         assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
-      } else assert.equal(openings.at(-1), true);
+      } else assert.equal(values.get('showCommandsAtom').show, false);
     });
   }
 });
@@ -821,7 +822,7 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
       }
       await mountProbe(() => React.createElement(Probe));
       const isDescription = mode === 'read-edit-description';
-      assert.equal(Boolean(document.querySelector('[data-existing-writer]')), !isDescription, 'comment edit-mode trigger is not suppressed');
+      assert.equal(Boolean(document.querySelector('[data-existing-writer]')), true, 'the inline writer owns comment and description modes');
       if (!isDescription) {
         await React.act(async () => document.getElementById('test-hidden-writer').click());
         assert.equal(state.shouldShowAiTaskWriter, false);
@@ -837,7 +838,7 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
       global.CustomEvent = dom.window.CustomEvent;
       try {
         await React.act(async () => triggerAITaskWriter('another-editor', 'Ignore this'));
-        assert.equal(Boolean(document.querySelector('[data-existing-writer]')), !isDescription);
+        assert.equal(Boolean(document.querySelector('[data-existing-writer]')), true);
         if (!isDescription) {
           await React.act(async () => triggerAITaskWriter('description', ''));
           assert.equal(state.shouldShowAiTaskWriter, true, 'empty comment/reply events retain the inline writer');
