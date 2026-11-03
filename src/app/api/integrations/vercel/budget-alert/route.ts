@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { HTPR_8101_VERCEL_BUDGET_ALERTS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { BudgetAlertRaceError } from "@/lib/ops/budgetAlertFiling";
-import { fileVercelBudgetTicket } from "@/lib/ops/fileVercelBudgetTicket";
+import { BudgetAlertPendingError, BudgetAlertRaceError, fileVercelBudgetTicket } from "@/lib/ops/fileVercelBudgetTicket";
 import { parseVercelBudgetAlert, verifyVercelSignature } from "@/lib/ops/vercelBudgetAlert";
 
 export const runtime = "nodejs";
@@ -53,8 +52,10 @@ export async function POST(request: Request) {
   try {
     filed = await fileVercelBudgetTicket(alert);
   } catch (error) {
-    if (!(error instanceof BudgetAlertRaceError)) throw error;
-    return NextResponse.json({ error: "Alert is still processing" }, { status: 503 });
+    if (error instanceof BudgetAlertRaceError || error instanceof BudgetAlertPendingError) {
+      return NextResponse.json({ error: "Alert is still processing" }, { status: 503 });
+    }
+    throw error;
   }
   if (filed.email === "failed") {
     return NextResponse.json({ error: "Owner email failed" }, { status: 503 });

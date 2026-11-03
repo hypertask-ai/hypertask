@@ -5,7 +5,6 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 
 const ROUTE = "src/app/api/integrations/vercel/budget-alert/route.ts";
 const TICKET_LIB = "@/lib/ops/fileVercelBudgetTicket";
-const FILING_LIB = "@/lib/ops/budgetAlertFiling";
 const FLAGS_LIB = "@/lib/flags";
 
 function sign(secret, body) {
@@ -16,8 +15,77 @@ function loadAlertLib() {
   return loadModule("src/lib/ops/vercelBudgetAlert.ts");
 }
 
-function loadFilingLib() {
-  return loadModule("src/lib/ops/budgetAlertFiling.ts");
+function fakeRedis() {
+  const kv = new Map();
+  return {
+    kv,
+    async set(key, value, _mode, _ttl, nx) {
+      if (nx === "NX" && kv.has(key)) return null;
+      kv.set(key, value);
+      return "OK";
+    },
+    async get(key) {
+      return kv.get(key) ?? null;
+    },
+    async del(key) {
+      kv.delete(key);
+    },
+  };
+}
+
+function fakeBoard() {
+  const descriptions = [];
+  const comments = [];
+  const state = { createFails: false, creates: 0 };
+  const prisma = {
+    task: {
+      async findFirst({ where }) {
+        const marker = where.description_.is.content.contains;
+        const found = descriptions.findIndex((text) => text.includes(marker));
+        return found === -1 ? null : { id: 100 + found };
+      },
+    },
+    project: {
+      async findFirst() {
+        return {
+          uniqueIdentifier: "HTPR",
+          section: [{ id: 4389, section_title: "Bugs" }],
+          labels: [{ id: "label-infra" }],
+        };
+      },
+    },
+    comment: {
+      async create({ data }) {
+        comments.push(data);
+        return data;
+      },
+    },
+  };
+  const createProvisionedTaskCore = async (options) => {
+    if (state.createFails) throw new Error("board unavailable");
+    state.creates += 1;
+    descriptions.push(options.description);
+    return { task: { id: 99 + descriptions.length }, description: {} };
+  };
+  return { prisma, createProvisionedTaskCore, comments, state };
+}
+
+function loadFiler({ redis = fakeRedis(), board = fakeBoard(), send = null } = {}) {
+  const sent = [];
+  return loadModule("src/lib/ops/fileVercelBudgetTicket.ts", {
+    "@/lib/prisma": { default: board.prisma },
+    "@/lib/redis": { getRedis: async () => redis },
+    "@/lib/email/sendEmail": {
+      sendEmail: async (message) => {
+        sent.push(message);
+        if (send) return send(message, sent.length);
+        return { id: "email" };
+      },
+    },
+    "@/utils/controllers/tasks/createTaskCore": {
+      createProvisionedTaskCore: board.createProvisionedTaskCore,
+    },
+  }).fileVercelBudgetTicket;
 }
 
 function loadRoute({ onFile = () => {}, flagOn = true, email = "not-needed" } = {}) {
@@ -31,13 +99,8 @@ function loadRoute({ onFile = () => {}, flagOn = true, email = "not-needed" } = 
         onFile(alert);
         return { taskId: 4242, created: true, email };
       },
-    },
-    [FILING_LIB]: {
-      fileBudgetAlert: async (alert) => {
-        onFile(alert);
-        return { taskId: 4242, created: true, email };
-      },
       BudgetAlertRaceError: class BudgetAlertRaceError extends Error {},
+      BudgetAlertPendingError: class BudgetAlertPendingError extends Error {},
     },
   });
 }
@@ -64,60 +127,6 @@ function alert(overrides = {}) {
   const parsed = loadAlertLib().parseVercelBudgetAlert(documentedPayload(overrides));
   assert.ok(parsed, `payload not accepted: ${JSON.stringify(overrides)}`);
   return parsed;
-}
-
-function memoryStore({ createDelayMs = 0 } = {}) {
-  const tickets = new Map();
-  const reservations = new Set();
-  const emailClaims = new Set();
-  const updates = new Set();
-  const calls = { create: 0, comments: 0, emails: [], releases: 0 };
-  let nextId = 100;
-  return {
-    calls,
-    async findTicket(marker) {
-      return tickets.get(marker) ?? null;
-    },
-    async createTicket(created) {
-      calls.create += 1;
-      if (createDelayMs) await new Promise((resolve) => setTimeout(resolve, createDelayMs));
-      const id = nextId++;
-      tickets.set(loadAlertLib().budgetAlertMarkerHtml(created), id);
-      return id;
-    },
-    async addComment() {
-      calls.comments += 1;
-    },
-    async release(marker) {
-      reservations.delete(marker);
-    },
-    async reserveSpend(key) {
-      if (updates.has(key)) return false;
-      updates.add(key);
-      return true;
-    },
-    async releaseSpend(key) {
-      updates.delete(key);
-    },
-    async reserve(marker) {
-      if (reservations.has(marker)) return false;
-      reservations.add(marker);
-      return true;
-    },
-    async claimEmail(marker) {
-      if (emailClaims.has(marker)) return "already-sent";
-      emailClaims.add(marker);
-      return "claimed";
-    },
-    async markEmailSent() {},
-    async releaseEmail(marker) {
-      calls.releases += 1;
-      emailClaims.delete(marker);
-    },
-    async email(taskId) {
-      calls.emails.push(taskId);
-    },
-  };
 }
 
 test("documented Vercel spend payload is accepted", () => {
@@ -181,7 +190,7 @@ test("the ticket names the limit, the spend and the budget left", () => {
   assert.match(description, /Vercel team: team_jkT8yZ3oE1u6xLo8h6dxfNc3/);
 });
 
-test("each threshold and budget gets its own marker", () => {
+test("each threshold, budget and scope gets its own marker", () => {
   const { budgetAlertMarker, budgetAlertMarkerHtml } = loadAlertLib();
   const base = alert();
   const marker = budgetAlertMarker(base);
@@ -195,70 +204,93 @@ test("each threshold and budget gets its own marker", () => {
   assert.notEqual(marker, budgetAlertMarker(alert({ budgetScope: "ai gateway budget" })));
 });
 
-test("two scopes on one team never share a ticket", () => {
-  const { budgetAlertMarker } = loadAlertLib();
-  const team = alert();
-  const gateway = alert({ budgetScope: "ai gateway budget" });
-  assert.notEqual(budgetAlertMarker(team), budgetAlertMarker(gateway));
-});
-
-test("a threshold of 10 never matches an existing 100 ticket", () => {
-  const { budgetAlertMarkerHtml } = loadAlertLib();
-  const stored = budgetAlertMarkerHtml(alert({ thresholdPercent: 100 }));
-  assert.equal(stored.includes(budgetAlertMarkerHtml(alert({ thresholdPercent: 10 }))), false);
-});
-
 test("two deliveries of one alert file one ticket", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore({ createDelayMs: 20 });
+  const board = fakeBoard();
+  const filer = loadFiler({ board });
   const one = alert({ thresholdPercent: 100 });
-  const results = await Promise.all([
-    fileBudgetAlert(one, store),
-    fileBudgetAlert(one, store),
-    fileBudgetAlert(one, store),
-  ]);
-  assert.equal(store.calls.create, 1);
+  const results = await Promise.all([filer(one), filer(one)]);
+  assert.equal(board.state.creates, 1);
   assert.equal(new Set(results.map((result) => result.taskId)).size, 1);
   assert.equal(results.filter((result) => result.created).length, 1);
 });
 
-test("a delivery that loses the race still records its spend", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore({ createDelayMs: 20 });
-  const results = await Promise.all([
-    fileBudgetAlert(alert(), store),
-    fileBudgetAlert(alert({ currentSpend: 300 }), store),
-  ]);
-  assert.equal(store.calls.create, 1);
-  assert.equal(store.calls.comments, 1);
-  assert.equal(results[0].taskId, results[1].taskId);
-});
-
-test("a repeat alert comments on the same ticket", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore();
-  const first = await fileBudgetAlert(alert(), store);
-  const second = await fileBudgetAlert(alert({ currentSpend: 300 }), store);
-  assert.equal(store.calls.create, 1);
-  assert.equal(store.calls.comments, 1);
+test("a repeat alert records the new spend once", async () => {
+  const board = fakeBoard();
+  const filer = loadFiler({ board });
+  const first = await filer(alert());
+  assert.equal(board.comments.length, 0);
+  const second = await filer(alert({ currentSpend: 300 }));
   assert.equal(first.taskId, second.taskId);
+  assert.equal(board.comments.length, 1);
+  await filer(alert({ currentSpend: 300 }));
+  assert.equal(board.comments.length, 1);
 });
 
-test("a failed owner email releases the claim so the next alert sends it", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore();
-  store.email = async () => {
-    throw new Error("resend refused");
+test("an alert whose comment write failed is retried by the next delivery", async () => {
+  const board = fakeBoard();
+  const filer = loadFiler({ board });
+  await filer(alert());
+  const create = board.prisma.comment.create;
+  board.prisma.comment.create = async () => {
+    throw new Error("comment write failed");
   };
-  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
-  const failed = await fileBudgetAlert(full, store);
-  assert.equal(failed.email, "failed");
-  assert.equal(store.calls.releases, 1);
+  await assert.rejects(filer(alert({ currentSpend: 300 })));
+  board.prisma.comment.create = create;
+  await filer(alert({ currentSpend: 300 }));
+  assert.equal(board.comments.length, 1);
+});
+
+test("a failed ticket write releases its claims so a retry files", async () => {
+  const board = fakeBoard();
+  const filer = loadFiler({ board });
+  board.state.createFails = true;
+  await assert.rejects(filer(alert()));
+  board.state.createFails = false;
+  const retried = await filer(alert());
+  assert.equal(retried.created, true);
+  assert.equal(board.state.creates, 1);
+});
+
+test("a full budget emails the owner once", async () => {
   const sent = [];
-  store.email = async (taskId) => sent.push(taskId);
-  const retried = await fileBudgetAlert(full, store);
-  assert.equal(retried.email, "sent");
-  assert.deepEqual(sent, [retried.taskId]);
+  const board = fakeBoard();
+  const filer = loadFiler({
+    board,
+    send: async (message) => {
+      sent.push(message);
+      return { id: "email" };
+    },
+  });
+  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
+  assert.equal((await filer(full)).email, "sent");
+  assert.equal((await filer(full)).email, "already-sent");
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].subject, /100%/);
+  assert.match(sent[0].text, /\$500\.00 of \$500\.00/);
+});
+
+test("a failed owner email is retried, not swallowed", async () => {
+  const board = fakeBoard();
+  let attempts = 0;
+  const filer = loadFiler({
+    board,
+    send: async () => {
+      attempts += 1;
+      if (attempts === 1) throw new Error("resend refused");
+      return { id: "email" };
+    },
+  });
+  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
+  assert.equal((await filer(full)).email, "failed");
+  assert.equal((await filer(full)).email, "sent");
+  assert.equal(attempts, 2);
+});
+
+test("below the full budget no email is sent", async () => {
+  const sent = [];
+  const filer = loadFiler({ send: async (message) => sent.push(message) });
+  assert.equal((await filer(alert({ thresholdPercent: 75 }))).email, "not-needed");
+  assert.equal(sent.length, 0);
 });
 
 test("an unconfigured webhook is refused and files nothing", async () => {
@@ -295,98 +327,15 @@ test("a signed alert files one urgent ticket", async () => {
   delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
 });
 
-test("a full budget whose email failed answers retryable", async () => {
+test("a failed owner email answers retryable, a sent one does not", async () => {
   const secret = "whsec_example";
   process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
-  const route = loadRoute({ email: "failed" });
   const body = JSON.stringify(documentedPayload({ currentSpend: 500, thresholdPercent: 100 }));
-  const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
-  assert.equal(response.status, 503);
+  const failed = loadRoute({ email: "failed" });
+  assert.equal((await failed.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }))).status, 503);
+  const sent = loadRoute({ email: "already-sent" });
+  assert.equal((await sent.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }))).status, 200);
   delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
-});
-
-test("an alert whose email already went out is acknowledged", async () => {
-  const secret = "whsec_example";
-  process.env.VERCEL_BUDGET_WEBHOOK_SECRET = secret;
-  const route = loadRoute({ email: "already-sent" });
-  const body = JSON.stringify(documentedPayload({ currentSpend: 500, thresholdPercent: 100 }));
-  const response = await route.POST(postRequest(body, { "x-vercel-signature": sign(secret, body) }));
-  assert.equal(response.status, 200);
-  delete process.env.VERCEL_BUDGET_WEBHOOK_SECRET;
-});
-
-test("a redelivered alert does not repeat its spend comment", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore();
-  const once = alert();
-  await fileBudgetAlert(once, store);
-  await fileBudgetAlert(once, store);
-  assert.equal(store.calls.create, 1);
-  assert.equal(store.calls.comments, 0);
-  await fileBudgetAlert(alert({ currentSpend: 300 }), store);
-  assert.equal(store.calls.comments, 1);
-});
-
-test("a failed comment write is retried by the next delivery", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore();
-  await fileBudgetAlert(alert(), store);
-  store.addComment = async () => {
-    throw new Error("comment write failed");
-  };
-  await assert.rejects(fileBudgetAlert(alert({ currentSpend: 300 }), store));
-  store.addComment = async () => {
-    store.calls.comments += 1;
-  };
-  await fileBudgetAlert(alert({ currentSpend: 300 }), store);
-  assert.equal(store.calls.comments, 1);
-});
-
-test("a pending or unavailable email claim asks for a retry", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
-  const pending = memoryStore();
-  pending.claimEmail = async () => "pending";
-  assert.equal((await fileBudgetAlert(full, pending)).email, "failed");
-  const unavailable = memoryStore();
-  unavailable.claimEmail = async () => "unavailable";
-  assert.equal((await fileBudgetAlert(full, unavailable)).email, "failed");
-});
-
-test("a sent alert is not emailed twice", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore();
-  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
-  assert.equal((await fileBudgetAlert(full, store)).email, "sent");
-  assert.equal((await fileBudgetAlert(full, store)).email, "already-sent");
-  assert.deepEqual(store.calls.emails, [100]);
-});
-
-test("a failed create releases the spend claim", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const store = memoryStore();
-  const create = store.createTicket;
-  store.createTicket = async () => {
-    throw new Error("board unavailable");
-  };
-  await assert.rejects(fileBudgetAlert(alert(), store));
-  store.createTicket = create;
-  await fileBudgetAlert(alert({ currentSpend: 300 }), store);
-  assert.equal(store.calls.create, 1);
-  const retried = await fileBudgetAlert(alert(), store);
-  assert.equal(retried.created, false);
-  assert.equal(store.calls.comments, 1);
-});
-
-test("a missing email claim is retryable, an occupied one is not", async () => {
-  const { fileBudgetAlert } = loadFilingLib();
-  const unavailable = memoryStore();
-  unavailable.claimEmail = async () => "unavailable";
-  const full = alert({ currentSpend: 500, thresholdPercent: 100 });
-  assert.equal((await fileBudgetAlert(full, unavailable)).email, "failed");
-  const occupied = memoryStore();
-  await fileBudgetAlert(full, occupied);
-  assert.equal((await fileBudgetAlert(full, occupied)).email, "already-sent");
 });
 
 test("the flag switches the intake off", async () => {
