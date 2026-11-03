@@ -100,3 +100,26 @@ The 4 GB cap above bounds the V8 heap of the webpack builder. Turbopack compiles
 The build script now names `--webpack` again. `next.config.js` keeps both the `webpack` hook and the `turbopack` resolveAlias block, so the Turbopack move is one flag away once it fits the machine. Two checks keep this honest: `tests/build-memory-config.test.cjs` fails when the build script stops naming a builder (an implicit builder is one Next default flip away from the same OOM), and `scripts/visual-regression-ci.mjs` mirrors the production builder from `package.json`, so the visual base build follows automatically.
 
 CI keeps building with Turbopack in the browser-smoke shards, so the whole app still compiles under Turbopack on every pull request; only the deployment that has to fit an 8 GB container is pinned. Returning production to Turbopack needs a memory answer for the Rust side, which is a new ticket, not a flag flip.
+
+## Webpack parallelism 4 (2026-11-03, HTPR-8342)
+
+Ticket: https://app.hypertask.ai/detail/project-15/8342
+
+Three production deployments died with `errorCode: out_of_memory`: cbc040ab5 (dpl_8CpuFJWk2xShpJKcvEhft83Yob56), 8946d1d84 (dpl_7CvromTmUM13WyKfnAgLmuz5QBZF) and b422a7f6a (dpl_9egRM7GKVkK3pvRFyJZTUBEdmzgR). The last green build was 6e7e854ff (dpl_HqfHnxtxWdbWXJSDD81VaovYSrFL); one retry of 8946d1d84 (dpl_CXDHvMBxjpdkB5KQDZDBf3XfVDxZ) was READY, so the build sits on the ceiling rather than over it.
+
+The failing log names the phase and rules out the heap cap:
+
+```
+✓ Running next.config.js took 1310ms
+  Creating an optimized production build ...
+Next.js build worker exited with code: null and signal: SIGKILL
+• At least one "Out of Memory" ("OOM") event was detected during the build.
+```
+
+The kill lands 140 seconds into the first client compile, before any compiler output, with the 4096 MB cap from the YPER4-957 note still in place and no "Reached heap limit" anywhere. So the container filled while the compiler heap was still inside its cap: the missing term is native memory, and the build script left it unbounded.
+
+Webpack limits concurrent module builds with `parallelism`, default 100. Next only overrides it from `NEXT_WEBPACK_PARALLELISM` (`getParallelism` in `next/dist/build/webpack-config`), so the production build ran up to 100 module builds at once. Each in-flight module is an SWC transform whose AST lives in Rust memory, outside the V8 heap that `--max-old-space-size` bounds, and `experimental.cpus` does not reach it.
+
+The build script now sets `NEXT_WEBPACK_PARALLELISM=4`, one concurrent module build per core of Vercel's standard 4 vCPU / 8 GB build machine, so the native side of the compile scales with the cores that actually run it instead of with a queue depth of 100. `tests/build-memory-config.test.cjs` fails if the cap is dropped or raised above the core count.
+
+If the next production build still reports `out_of_memory`, the parallelism is not the binding term: the fallback is 2, then 1, and after that the compiler genuinely needs more than an 8 GB machine, which makes the paid Enhanced Build Machine Valentin's decision.
