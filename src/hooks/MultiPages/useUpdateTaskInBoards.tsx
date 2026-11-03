@@ -406,9 +406,11 @@ const UpdateKanban = () => {
       archiveColumnBoundary || keepColumnFocus ? scope : "board",
     );
     updateActiveItemAndItemInView(nextId, projectId, sectionId);
-    if (keepColumnFocus && nextId === null) {
-      document.getElementById(`droppable-section-container-${sectionId}`)
-        ?.closest<HTMLElement>(".section-container")?.focus({ preventScroll: true });
+    if (nextId === null && (keepColumnFocus || (archiveColumnBoundary && scope === "column"))) {
+      globalThis.document
+        ?.getElementById(`droppable-section-container-${sectionId}`)
+        ?.closest<HTMLElement>(".section-container")
+        ?.focus({ preventScroll: true });
     }
   }
   async function removeFromListWithStatus(
