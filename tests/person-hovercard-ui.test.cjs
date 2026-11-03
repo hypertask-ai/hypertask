@@ -13,6 +13,7 @@ test("person hovercard is interactive, keyboard reachable, and viewport safe", (
   assert.match(source, /useFocus/);
   assert.match(source, /useDismiss/);
   assert.match(source, /onFloatingFocusEnter/);
+  assert.match(source, /matches\?\.\(":focus-visible"\)/);
   assert.match(source, /aria-expanded/);
   assert.match(source, /flip\(\{ padding: 12 \}\)/);
   assert.match(source, /shift\(\{ padding: 12 \}\)/);
@@ -37,7 +38,7 @@ test("rich text hovercards accept only canonical person mention labels", () => {
   assert.match(source, /identityChanged/);
   assert.match(source, /mention\.removeAttribute\("tabindex"\)/);
   assert.match(source, /onFloatingFocusEnter=\{cancelClose\}/);
-  assert.match(source, /matches\?\.\(":focus-visible"\)/);
+  assert.match(source, /matches\(":focus-visible"\)/);
 });
 
 test("task people and persisted mentions share the hovercard", () => {
