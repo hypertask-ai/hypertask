@@ -1,42 +1,36 @@
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const test = require('node:test');
 const React = require('react');
 const { loader, mount } = require('./helpers/htpr-7260-ui.cjs');
-const root = path.resolve(__dirname, '..');
-const flag = 'htpr-6891-phone-task-writer-sheet';
 const { withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
+const config = { newWindow: true, boardChip: true, tab: 'compose', url: '/inbox', previousBoard: 'project-7' };
+
 for (const mobile of [false, true]) {
-  test(`phone writer flag preserves ${mobile ? 'legacy phone output and fills only compose when enabled' : 'desktop output byte-for-byte'}`, async (t) => {
-    await withPalette(t, { mobile, newWindow: true, boardChip: true, tab: 'compose', url: '/inbox', previousBoard: 'project-7' }, async ({ flags, rerender, input, type, shells, dom, baseline }) => {
+  test(`phone writer fills the compose sheet above the keyboard${mobile ? '' : ' and leaves desktop output unchanged'}`, async (t) => {
+    await withPalette(t, { ...config, mobile }, async ({ input, type, shells, dom, baseline }) => {
       const clickTab = async (label) => React.act(async () => [...document.querySelectorAll('[role="tab"]')].find((button) => button.textContent.startsWith(label)).click());
-      const markup = () => document.getElementById('root').innerHTML;
       const writer = () => document.querySelector('[data-compose-task-writer]');
       const searchMarkup = () => {
         const search = document.getElementById('root').cloneNode(true);
         search.querySelector('[data-compose-task-writer]').remove();
         return search.innerHTML;
       };
-      const original = markup();
       const searchOriginal = await (async () => {
         await clickTab('Search');
         const html = searchMarkup();
         await clickTab('New Task');
         return html;
       })();
-      assert.equal(writer().className, mobile ? 'max-h-[65dvh] overflow-y-auto' : '');
-      assert.ok(input().classList.contains('max-h-52'));
-      assert.equal(input().style.height, '64px');
-      assert.match(writer().textContent, /Enter Send/);
-      flags[flag] = true;
-      await rerender();
-      if (!mobile) assert.equal(markup(), original);
-      else {
+      assert.equal(writer().className, mobile ? 'flex min-h-0 flex-1 flex-col' : '');
+      if (!mobile) {
+        assert.ok(input().classList.contains('max-h-52'));
+        assert.equal(input().style.height, '64px');
+        assert.match(writer().textContent, /Enter Send/);
+      } else {
         assert.equal(shells.at(-1).fullHeight, true);
         assert.equal(shells.at(-1).keyboardAware, true);
         assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
-        assert.equal(writer().className, 'flex min-h-0 flex-1 flex-col');
         assert.equal(input().classList.contains('max-h-52'), false);
         assert.ok(input().classList.contains('flex-1'));
         assert.equal(input().style.height, '');
@@ -62,12 +56,7 @@ for (const mobile of [false, true]) {
       await clickTab('Search');
       assert.ok(writer().hidden, 'the flex writer must stay hidden on Search');
       assert.equal(writer().className, mobile ? 'max-h-[65dvh] overflow-y-auto' : '');
-      assert.equal(searchMarkup(), searchOriginal, 'flag does not change the Search tab');
-      await clickTab('New Task');
-      flags[flag] = false;
-      await rerender();
-      assert.equal(markup(), original, 'switching the flag off restores exact legacy output');
-      if (mobile) assert.equal(shells.at(-1).fullHeight, false);
+      assert.equal(searchMarkup(), searchOriginal, 'the phone sheet does not change the Search tab');
       if (process.env.COMPOSE_BASELINE_DIR) await baseline(process.env.COMPOSE_BASELINE_DIR);
     });
   });
@@ -101,16 +90,4 @@ test('full-height MobileBottomSheet uses visible keyboard height and keeps its e
     assert.equal(sheet.containerStyle.height, `${844 * 0.82}px`);
     assert.equal(sheet.containerStyle.bottom, 0);
   } finally { ui.close(); }
-});
-
-test('phone writer flag registers exactly the requested feature metadata', () => {
-  const load = loader();
-  const definition = load(`src/lib/flags/definitions/${flag}.ts`);
-  assert.equal(definition.HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, flag);
-  assert.equal(definition.default.key, flag);
-  assert.equal(definition.default.kind, 'feature');
-  assert.equal(definition.default.shippedOn, '2026-10-18');
-  assert.equal(definition.default.releaseRisk.risk, 'new');
-  assert.ok(definition.default.releaseRisk.reason);
-  assert.equal(definition.default.defaultMode, undefined);
 });

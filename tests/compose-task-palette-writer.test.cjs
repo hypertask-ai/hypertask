@@ -215,7 +215,8 @@ test('phone Commands entry has the same switch, composer and existing keyboard-a
     assert.equal(shells.at(-1).fullHeight, true);
     assert.equal(shells.at(-1).keyboardAware, true);
     await clickTab('Compose');
-    assert.equal(shells.at(-1).fullHeight, false);
+    assert.equal(shells.at(-1).fullHeight, true);
+    assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
     assert.equal(shells.at(-1).bottomSlot, undefined);
     assert.ok(shells.at(-1).aboveSlot);
     assert.match(document.querySelector('[aria-label="Send message"]').className, /h-11 w-11.*bg-shadcn-primary/);
@@ -401,7 +402,7 @@ test('New Task label, purple sparkle, dictation, tooltips and Tab require both f
       } else await clickTab('Compose');
       assert.equal(Boolean(document.querySelector('[aria-label="Start dictation"]')), both);
       assert.equal(input().rows, mobile ? 3 : 2);
-      assert.equal(input().className.includes("max-h-52"), both);
+      assert.equal(input().className.includes("max-h-52"), both && !mobile);
       await type('Typed');
       if (both) {
         await React.act(async () => document.querySelector('[aria-label="Start dictation"]').click());

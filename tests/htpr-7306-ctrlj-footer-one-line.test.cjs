@@ -27,19 +27,15 @@ for (const apple of [false, true]) {
   });
 }
 
-for (const phoneSheet of [false, true]) {
-  test(`phone layout is byte-identical with the phone sheet ${phoneSheet ? "on" : "off"}`, async (t) => {
-    await withPalette(t, { mobile: true, newWindow: true, boardChip: true, tab: "compose" }, async ({ flags, rerender }) => {
-      flags["htpr-6891-phone-task-writer-sheet"] = phoneSheet;
-      await rerender();
-      const original = document.getElementById("root").innerHTML;
-      assert.equal(writer().textContent.includes("Esc Close"), !phoneSheet);
-      flags[flag] = true;
-      await rerender();
-      assert.equal(document.getElementById("root").innerHTML, original);
-    });
+test("phone New Task sheet hides the footer and the one-line flag does not change it", async (t) => {
+  await withPalette(t, { mobile: true, newWindow: true, boardChip: true, tab: "compose" }, async ({ flags, rerender }) => {
+    const original = document.getElementById("root").innerHTML;
+    assert.equal(writer().textContent.includes("Esc Close"), false);
+    flags[flag] = true;
+    await rerender();
+    assert.equal(document.getElementById("root").innerHTML, original);
   });
-}
+});
 
 test("legacy Compose keeps its Esc Close hint and markup", async (t) => {
   await withPalette(t, { tab: "compose", newWindow: false }, async ({ flags, rerender }) => {
