@@ -43,7 +43,7 @@ for (const enabled of [false, true]) {
       if (enabled) {
         assert.equal(panel.style.boxShadow, "");
       } else {
-        assert.match(panel.style.boxShadow, /75px 45px rgb\(0 0 0 \/ 0\.5\)/);
+        assert.equal(panel.style.boxShadow, "var(--shadow-floating-previous)");
       }
     } finally { view.close(); }
   });

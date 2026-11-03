@@ -84,7 +84,7 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
         boxShadow:
           isMbl || windowFramed || floatingElevation
             ? undefined
-            : "0 0px 75px 45px rgb(0 0 0 / 0.5), var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow)",
+            : "var(--shadow-floating-previous)",
       }}
     >
       {shortcuts.modal}
