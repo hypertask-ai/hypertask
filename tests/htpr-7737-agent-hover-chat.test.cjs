@@ -120,3 +120,53 @@ for (const deepLink of [null, "agent-other"]) for (const sessions of [false, tru
     if (sessions) assert.deepEqual(opened.at(-1), { projectId: 7049, agentId: agent.id, sessionId: "agent-session" });
   } finally { view.close(); global.fetch = originalFetch; }
 });
+
+test("a tap keeps the person card open; a mouse hover still closes on leave", async () => {
+  const view = mount();
+  const pass = ({ children }) => children;
+  const floating = {
+    useFloating: () => ({ refs: { setFloating: noop, setReference: noop, domReference: { current: null } }, context: {}, floatingStyles: {} }),
+    useInteractions: () => ({ getReferenceProps: value => value, getFloatingProps: value => value }),
+    FloatingFocusManager: pass, FloatingPortal: pass,
+  };
+  for (const key of ["autoUpdate", "flip", "offset", "safePolygon", "shift", "useDismiss", "useFocus", "useHover", "useRole"]) floating[key] = noop;
+  const source = loader({
+    "@/components/Common/UserAvatar": { default: () => null },
+    "./TooltipPortal": { default: pass },
+    "@/hooks/MultiPages/usePersonHovercard": { usePersonHovercard: () => ({ data: agent }) },
+    "next/link": { default: "a" },
+    "next/navigation": { usePathname: () => "/detail/project-7049/42", useRouter: () => ({ replace: noop }) },
+    "@/hooks/useFlag": { useFlag: key => key === FLAG },
+    "@/lib/flags/keys": { HTPR_6950_TOOLTIP_TOP_LAYER_FLAG: "top-layer", HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG: SIDEBAR },
+    "@/lib/state": { useSetRecoilState: () => noop },
+    "@/store": { isAiChatSidebarModeAtom: "sidebar", aiChatAutoOpenSuppressedAtom: "suppressed", aiChatExplicitOpenAtAtom: "explicit", showAIChatInterfaceAtom: "open" },
+    "@floating-ui/react": floating,
+  });
+  const { ParentPersonHovercard } = source("src/components/Common/PersonHovercard.tsx");
+  const Harness = () => React.createElement("div", { id: "row" }, React.createElement("span", null, "Runner"), React.createElement(ParentPersonHovercard, { projectId: 7049, subject: { kind: "agent", id: "agent-one" } }));
+  const pointer = (type, pointerType) => {
+    const event = new window.Event(type, { bubbles: true });
+    Object.defineProperty(event, "pointerType", { value: pointerType });
+    return event;
+  };
+  const row = () => view.container.querySelector("#row");
+  const expanded = () => row().getAttribute("aria-expanded");
+  const fire = async (type, pointerType, wait = 0) => React.act(async () => {
+    row().dispatchEvent(pointer(type, pointerType));
+    if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+  });
+  try {
+    await view.render(React.createElement(Harness));
+    assert.equal(expanded(), "false");
+    await fire("pointerenter", "mouse");
+    assert.equal(expanded(), "true");
+    await fire("pointerleave", "mouse", 150);
+    assert.equal(expanded(), "false", "a mouse hover still closes on leave");
+    await fire("pointerup", "touch");
+    assert.equal(expanded(), "true");
+    await fire("pointerleave", "touch", 200);
+    assert.equal(expanded(), "true", "the pointerleave after a tap must not close the card");
+    await fire("focusin", "touch");
+    assert.equal(expanded(), "true", "keyboard focus still opens the card");
+  } finally { view.close(); }
+});

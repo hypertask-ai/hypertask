@@ -101,13 +101,26 @@ const RichTextPersonHovercards = ({
       attributeFilter: ["data-label"],
     });
 
-    const onPointerOver = (event: PointerEvent) => activate(event.target);
+    const fromMouse = (event: PointerEvent) => event.pointerType === "mouse";
+    const onPointerOver = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      activate(event.target);
+    };
     const onPointerOut = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
       const mention = mentionFromTarget(event.target);
       const next = event.relatedTarget;
       if (mention && (!(next instanceof Node) || !mention.element.contains(next))) {
         scheduleClose();
       }
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      if (fromMouse(event)) return;
+      const mention = mentionFromTarget(event.target);
+      if (!mention) return;
+      cancelClose();
+      setActive(mention);
+      setOpen(true);
     };
     const onFocusIn = (event: FocusEvent) => activate(event.target);
     const onFocusOut = (event: FocusEvent) => {
@@ -120,12 +133,14 @@ const RichTextPersonHovercards = ({
 
     root.addEventListener("pointerover", onPointerOver);
     root.addEventListener("pointerout", onPointerOut);
+    root.addEventListener("pointerup", onPointerUp);
     root.addEventListener("focusin", onFocusIn);
     root.addEventListener("focusout", onFocusOut);
     return () => {
       observer.disconnect();
       root.removeEventListener("pointerover", onPointerOver);
       root.removeEventListener("pointerout", onPointerOut);
+      root.removeEventListener("pointerup", onPointerUp);
       root.removeEventListener("focusin", onFocusIn);
       root.removeEventListener("focusout", onFocusOut);
     };

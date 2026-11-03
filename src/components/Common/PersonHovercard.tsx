@@ -293,23 +293,38 @@ const ParentPersonHovercard = ({
     parent.tabIndex = parent.tabIndex >= 0 ? parent.tabIndex : 0;
     parent.setAttribute("aria-haspopup", "dialog");
 
+    const fromMouse = (event: PointerEvent) => event.pointerType === "mouse";
     const show = () => {
       cancelClose();
       setOpen(true);
+    };
+    const showOnHover = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      show();
+    };
+    const hideOnLeave = (event: PointerEvent) => {
+      if (!fromMouse(event)) return;
+      scheduleClose();
+    };
+    const showOnTap = (event: PointerEvent) => {
+      if (fromMouse(event)) return;
+      show();
     };
     const dismissOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
     };
 
-    parent.addEventListener("pointerenter", show);
-    parent.addEventListener("pointerleave", scheduleClose);
+    parent.addEventListener("pointerenter", showOnHover);
+    parent.addEventListener("pointerleave", hideOnLeave);
+    parent.addEventListener("pointerup", showOnTap);
     parent.addEventListener("focusin", show);
     parent.addEventListener("focusout", scheduleClose);
     parent.addEventListener("keydown", dismissOnEscape);
     return () => {
       cancelClose();
-      parent.removeEventListener("pointerenter", show);
-      parent.removeEventListener("pointerleave", scheduleClose);
+      parent.removeEventListener("pointerenter", showOnHover);
+      parent.removeEventListener("pointerleave", hideOnLeave);
+      parent.removeEventListener("pointerup", showOnTap);
       parent.removeEventListener("focusin", show);
       parent.removeEventListener("focusout", scheduleClose);
       parent.removeEventListener("keydown", dismissOnEscape);
