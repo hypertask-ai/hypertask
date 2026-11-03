@@ -19,6 +19,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
+import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
@@ -347,7 +348,15 @@ export async function GET(request: NextRequest) {
         }
 
         const mapTask = async (task: (typeof tasks)[number]) => {
-          const detail = mapTaskToMcpGetResponse(task, user.id, ctx.agentId, ctx.teamScope)
+          const pullRequests = task.pullRequests?.length
+            ? await refreshTaskPullRequests(task.id, task.pullRequests)
+            : task.pullRequests
+          const detail = mapTaskToMcpGetResponse(
+            { ...task, pullRequests },
+            user.id,
+            ctx.agentId,
+            ctx.teamScope,
+          )
           const mapped = {
             ...detail,
             skill_context: await getMcpSkillContext(ctx, task.projectId, [
