@@ -25,13 +25,16 @@ export function keepBoardFocus(attempt = 0): void {
     const doc = globalThis.document;
     const active = doc?.activeElement as HTMLElement | null;
     const focusLost = !active || active === doc?.body || active.id === "body-layout";
-    if (!focusLost) return;
+    if (!focusLost) {
+      if (attempt < 12) keepBoardFocus(attempt + 1);
+      return;
+    }
     const container = doc?.getElementById("sectionsContainer");
     if (!container) return;
     container.setAttribute("tabindex", "-1");
     container.focus({ preventScroll: true });
-    if (doc?.activeElement !== container && attempt < 10) keepBoardFocus(attempt + 1);
-  }, 50);
+    if (doc?.activeElement !== container && attempt < 12) keepBoardFocus(attempt + 1);
+  }, 100);
 }
 
 export function nextFocusAfterRemoval(
