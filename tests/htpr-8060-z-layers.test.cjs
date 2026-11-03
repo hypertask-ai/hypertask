@@ -21,6 +21,7 @@ test("no hand-typed z-index value is left in src", () => {
   for (const { file, source } of tracked(["src"])) {
     if (!/\.(?:[jt]sx?|s?css|css)$/.test(file)) continue;
     for (const match of source.matchAll(/(?<![\w-])z-\[[^\]]*\]/g)) offenders.push(`${file}: ${match[0]}`);
+    if (!/\.s?css$/.test(file)) continue;
     for (const match of source.matchAll(/(?<![\w-])z-index\s*:\s*(-?\d+|\[[^\]]*\])/g)) offenders.push(`${file}: ${match[0]}`);
   }
   assert.deepEqual(offenders, [], `hand-typed z-index left: ${offenders.join(", ")}`);

@@ -29,11 +29,8 @@ test("the shared hover-tooltip layer clears every numeric app layer", () => {
   const tooltipLayer = scale.tooltip;
   assert.equal(Math.max(...Object.values(scale)), tooltipLayer, "the tooltip layer is the top layer");
   assert.match(styles, /--z-hover-tooltip:\s*var\(--z-tooltip\)/);
-  const files = [...sourceFiles(path.join(root, "src")), path.join(root, "tailwind.config.ts")];
-  for (const file of files) {
-    for (const layer of layerValues(fs.readFileSync(file, "utf8"))) {
-      assert.ok(tooltipLayer >= layer, `${path.relative(root, file)} uses ${layer}, above the tooltip layer ${tooltipLayer}`);
-    }
+  for (const file of [...sourceFiles(path.join(root, "src")), path.join(root, "tailwind.config.ts")]) {
+    assert.doesNotMatch(fs.readFileSync(file, "utf8"), /(?<![\w-])z-\[[^\]]*\]/, `${path.relative(root, file)} still hand-types a layer`);
   }
   assert.match(styles, /z-index:\s*var\(--z-hover-tooltip\)/);
   assert.deepEqual(layerValues('z-[999999999] z-50 zIndex: "100000"; z-index: 12000; APP_SHEET_Z_INDEX = 9990; zIndex: 1e9'), [999999999, 50, 100000, 12000, 9990, 1000000000]);

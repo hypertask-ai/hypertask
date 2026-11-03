@@ -50,7 +50,7 @@ test("string-only hover hints ignore mouse input in legacy inline, legacy portal
           text: "Select all", keyCombination: ["CTRL", "SHIFT", "A"], bottom: 0, left: 48, portal,
         }))));
         await React.act(async () => container.firstElementChild.dispatchEvent(new window.MouseEvent("mouseenter")));
-        const surface = document.querySelector(enabled ? "[data-hover-tooltip-portal]" : ".z-\\[9999\\]");
+        const surface = document.querySelector(enabled ? "[data-hover-tooltip-portal]" : ".z-tooltip");
         assert.ok(surface, `enabled=${enabled}, portal=${portal}: hint opens`);
         assert.equal(window.getComputedStyle(surface).pointerEvents, "none", `enabled=${enabled}, portal=${portal}: hint cannot intercept the checkbox click`);
         assert.equal(surface.textContent, "Select allCTRLSHIFTA");

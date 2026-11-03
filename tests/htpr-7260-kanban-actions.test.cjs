@@ -64,7 +64,7 @@ for (const enabled of [false, true]) for (const mobile of [false, true]) {
           assert.equal(bar.className, "fixed bottom-5 left-1/2 z-menu flex -translate-x-1/2 items-center gap-3 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4");
         } else if (mobile) {
           assert.equal(bar.style.bottom, "calc(var(--mobile-dock-h, 0px) + 16px + env(safe-area-inset-bottom))");
-          assert.match(bar.className, /inset-x-2 z-\[210\]/);
+          assert.match(bar.className, /inset-x-2 z-menu/);
         } else {
           assert.equal(bar.style.bottom, "var(--quick-tips-clearance, 20px)");
           assert.match(bar.className, /bottom-5/);

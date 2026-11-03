@@ -104,7 +104,7 @@ test("the shared floating action is an accessible icon-only circle", () => {
   assert.match(floatingButton, /justify-center/);
   assert.match(floatingButton, /rounded-full/);
   assert.match(floatingButton, /right-4/);
-  assert.match(floatingButton, /z-\[200\]/);
+  assert.match(floatingButton, /z-menu/);
   assert.match(floatingButton, /bg-modalBackground/);
   assert.match(floatingButton, /shadow-customshadow-2/);
 });

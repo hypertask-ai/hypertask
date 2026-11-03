@@ -16,7 +16,7 @@ html[data-ticket-sidebar="overlay"] [data-ai-chat-slot] {
   position: fixed !important;
   top: 0;
   right: 0;
-  z-index: 51;
+  z-index: var(--z-sticky);
 }
 `;
 
