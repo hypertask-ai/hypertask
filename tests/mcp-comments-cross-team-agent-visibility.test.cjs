@@ -101,6 +101,7 @@ function loadRoute(comments) {
 
     },
     "@/lib/mcp/listQuery": {
+      ...require('./task-route-loader.cjs').load('src/lib/mcp/listQuery.ts', {}),
       parseNumericCursor: () => null,
       parseUpdatedSince: () => null,
       projectRows: (rows) => rows,

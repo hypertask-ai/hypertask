@@ -59,7 +59,7 @@ function setup(findTask) {
     '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async () => new Map() },
     '@/lib/agents/publicAgent': {},
     '@/lib/flags': { isFeatureEnabled: async () => false },
-    '@/lib/mcp/listQuery': {},
+    '@/lib/mcp/listQuery': load('src/lib/mcp/listQuery.ts', {}),
     '@/lib/mcp/readListQuery': { readListQuery: () => ({ listQuery: null }) },
     '@/lib/agentRuns/service': {},
   }

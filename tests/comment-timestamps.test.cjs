@@ -347,7 +347,7 @@ function commentsRouteFixture(editorId, refetch = true) {
     '@/lib/agents/publicAgent': { overlayDurableAgentDisplayName: (mapped) => mapped },
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/lib/flags/keys': {},
-    '@/lib/mcp/listQuery': {},
+    '@/lib/mcp/listQuery': require('./task-route-loader.cjs').load('src/lib/mcp/listQuery.ts', {}),
     '@/lib/mcp/readListQuery': { readListQuery: () => ({ listQuery: null }) },
   })
   return { ...route, lookups }

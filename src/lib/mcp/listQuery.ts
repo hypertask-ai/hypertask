@@ -373,6 +373,25 @@ export function projectedListEnvelope<T>(
   }
 }
 
+export function unknownProjectionFields(
+  fields: string[],
+  allowed: readonly string[],
+): string[] {
+  const roots = new Set(allowed)
+  return fields.filter((field) => !roots.has(field.split('.')[0]))
+}
+
+export function assertKnownProjectionFields(
+  fields: string[],
+  allowed: readonly string[],
+  hint?: string,
+): void {
+  const unknown = unknownProjectionFields(fields, allowed)
+  if (unknown.length === 0) return
+  const message = `fields must be a comma-separated subset of: ${allowed.join(', ')} (not known: ${unknown.join(', ')})`
+  throw new ListQueryParseError(hint ? `${message}. ${hint}` : message)
+}
+
 export function projectRows<T extends Record<string, unknown>>(
   rows: T[],
   fields: string[],
