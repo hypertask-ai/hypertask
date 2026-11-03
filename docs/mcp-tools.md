@@ -86,7 +86,7 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 
 An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
 
-Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread.
+Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread. A log receipt answers `202 Accepted`, not `201 Created`: no comment was created, so a caller that waits for `201` fails loudly instead of losing the text.
 
 ### Blocker comment
 
