@@ -8,10 +8,13 @@ import prisma from '@/lib/prisma'
 import { createSection } from '@/lib/mcp/sections/services'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8354_SECTION_NAME_FLAG } from '@/lib/flags/definitions/htpr-8354-section-name'
 
 export interface SectionListItem {
   id: number
   section_title: string
+  name?: string
   projectId: number
   visibility: boolean
   deleted: boolean
@@ -57,6 +60,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       if (roleError) return roleError
     }
     const user = ctx.user;
+    const named = await isFeatureEnabled(HTPR_8354_SECTION_NAME_FLAG, user.id)
     const projectId = parseInt(params.projectId)
 
     if (isNaN(projectId) || projectId <= 0) {
@@ -165,6 +169,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
         section: {
           id: section.id,
           section_title: section.section_title,
+          ...(named ? { name: section.section_title } : {}),
           projectId: section.projectId,
           visibility: section.visibility,
           deleted: section.deleted,
@@ -211,6 +216,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       )
     }
     const user = ctx.user;
+    const named = await isFeatureEnabled(HTPR_8354_SECTION_NAME_FLAG, user.id)
     const projectId = parseInt(params.projectId)
 
     if (isNaN(projectId)) {
@@ -291,6 +297,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
         return {
           id: section.id,
           section_title: section.section_title,
+          ...(named ? { name: section.section_title } : {}),
           projectId: section.projectId,
           visibility: section.visibility,
           deleted: section.deleted,

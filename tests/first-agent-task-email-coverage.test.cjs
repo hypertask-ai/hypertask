@@ -279,6 +279,8 @@ test("MCP section-delete endpoint reaches completion email with the verified age
     "@/lib/mcp/sections/services": { deleteSection: f.deleteSection },
     "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/lib/realtime/server": { broadcastBoardChange: async () => {} },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
+    "@/lib/flags/definitions/htpr-8354-section-name": { HTPR_8354_SECTION_NAME_FLAG: "htpr-8354-section-name" },
   });
   const response = await DELETE(new Request("https://example.invalid/api/mcp/projects/15/sections/1", { method: "DELETE" }), {
     params: Promise.resolve({ projectId: "15", sectionId: "1" }),
