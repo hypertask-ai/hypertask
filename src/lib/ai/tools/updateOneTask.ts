@@ -21,7 +21,9 @@ import { buildActivityUser, applyPriorityUpdate, applyEstimateUpdate, sanitizeFo
 import type { ToolContext } from "./context";
 import { updateTaskSchema } from "./updateTaskSchema";
 
-export function createTaskUpdater(context: ToolContext, input: z.infer<typeof updateTaskSchema>, expected?: Pick<NonNullable<Parameters<typeof updateTaskSingle>[3]>, "expectedTitle" | "expectedDescription" | "expectedProjectId" | "expectedStatus">) {
+type TaskWriteGuards = Pick<NonNullable<Parameters<typeof updateTaskSingle>[3]>, "expectedTitle" | "expectedDescription" | "expectedProjectId" | "expectedStatus">;
+
+export function createTaskUpdater(context: ToolContext, input: z.infer<typeof updateTaskSchema>, expected?: TaskWriteGuards) {
   const { user, actingAgentId, body } = context;
   return async (
     identifier: ToolTaskIdentifierInput,
@@ -52,6 +54,11 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
     if (!task) {
       return { success: false, error: "Task not found or access denied" };
     }
+
+    const provisional = expected ? undefined : context.provisionalTickets?.get(task.id);
+    const guards: TaskWriteGuards | undefined = expected ?? (provisional
+      ? { expectedTitle: provisional.title, expectedDescription: provisional.description, expectedProjectId: provisional.projectId, expectedStatus: "Normal" }
+      : undefined);
 
     let sectionTarget: { id: number; section_title: string } | null = null;
     let sectionWarning: string | undefined;
@@ -133,7 +140,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         activityUser,
         actingAgentId,
         {
-          ...expected,
+          ...guards,
           ...(sectionTarget ? {
             taskMovedActivity: {
               sendNotification: () =>
@@ -151,9 +158,10 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
       if (result.status !== 200) {
         return {
           success: false,
-          error:
-            (result.json as { message?: string })?.message ||
-            "Failed to update task",
+          error: provisional
+            ? "The user edited this ticket while the chat was still writing it, so nothing was changed. Their edit stays. Do not retry this write; tell the user the ticket keeps their edit."
+            : (result.json as { message?: string })?.message ||
+              "Failed to update task",
         };
       }
     }
@@ -211,7 +219,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         input.priority,
         user.id,
         activityUser,
-        { onlyIfUnchangedDefault: expected !== undefined },
+        { onlyIfUnchangedDefault: guards !== undefined },
       );
       if (priorityResult.error) {
         return { success: false, error: priorityResult.error };
@@ -224,7 +232,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
         input.estimate,
         user.id,
         activityUser,
-        { onlyIfUnchangedDefault: expected !== undefined },
+        { onlyIfUnchangedDefault: guards !== undefined },
       );
       if (estimateResult.error) {
         return { success: false, error: estimateResult.error };
@@ -244,7 +252,7 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
       await mutateTaskLabels(
         task.id,
         task.projectId,
-        { add: input.add_labels, remove: input.remove_labels, ...(expected ? { onlyIfUnedited: true } : {}) },
+        { add: input.add_labels, remove: input.remove_labels, ...(guards ? { onlyIfUnedited: true } : {}) },
         labelActor
       );
     }
@@ -259,6 +267,14 @@ export function createTaskUpdater(context: ToolContext, input: z.infer<typeof up
 
     void broadcastBoardChange(finalTask.projectId, { originUserId: user.id });
     void broadcastTaskChange(finalTask.id, { originUserId: user.id });
+
+    if (context.provisionalTickets?.has(task.id)) {
+      context.provisionalTickets.set(task.id, {
+        title: finalTask.title,
+        description: finalTask.description_?.content ?? "",
+        projectId: finalTask.projectId,
+      });
+    }
 
     return sanitizeForJson({
       success: true,
