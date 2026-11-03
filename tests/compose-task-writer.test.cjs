@@ -5,7 +5,6 @@ const { createJiti } = require('jiti');
 const { JSDOM } = require('jsdom');
 const { loadSharedRoute } = require('./helpers/groupb-route.cjs');
 const root = path.resolve(__dirname, '..');
-const flag = 'htpr-6929-compose-task-writer';
 
 async function withWriter(config, check) {
   const cached = new Map(Object.entries(require.cache));
@@ -251,29 +250,25 @@ test('missing first column and failed uploads cannot create an incomplete task',
   }
 });
 
-test('shared server writer gates compose before accessing a board; legacy writer retains its authorization path', async () => {
+test('shared server writer sends Compose through the same board access check as the legacy writer', async () => {
   const cached = new Map(Object.entries(require.cache));
   const source = (file, exports) => {
     const filename = path.join(root, file);
     require.cache[filename] = { id: filename, filename, loaded: true, exports };
   };
-  let enabled = false, accesses = 0;
+  let accesses = 0;
   try {
-    source('src/lib/flags.ts', { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, isFeatureEnabled: async (key) => key === flag && enabled });
+    source('src/lib/flags.ts', { isFeatureEnabled: async () => { throw new Error('the writer must not read a switch for compose'); } });
     source('src/lib/prisma.ts', { default: { project: { findFirst: async () => { accesses++; return null; } } } });
     for (const file of ['src/app/api/ai/_lib/editorAi.ts', 'src/app/api/ai/_lib/currentTaskContext.ts', 'src/app/api/ai/_lib/providerGate.ts', 'src/app/api/ai/_lib/skills.ts', 'src/utils/controllers/turbopuffer/turbopufferHelper.ts']) source(file, {});
     source('src/utils/controllers/projects/getAllIncludes.ts', { projectContentAccessWhere: () => ({}) });
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
-    const { prepareTaskWriterRun, taskWriterRequestSchema, AiFeatureDisabledError, ProjectAccessError } = jiti(path.join(root, 'src/app/api/ai/_lib/taskWriterRun.ts'));
+    const { prepareTaskWriterRun, taskWriterRequestSchema, ProjectAccessError } = jiti(path.join(root, 'src/app/api/ai/_lib/taskWriterRun.ts'));
     const body = taskWriterRequestSchema.parse({ projectId: 7, PROMPT: 'note', requestKind: 'compose-task' });
-    await assert.rejects(prepareTaskWriterRun(body, 985), AiFeatureDisabledError);
-    assert.equal(accesses, 0, 'flag off must short-circuit before retrieval or AI work');
-    enabled = true;
     await assert.rejects(prepareTaskWriterRun(body, 985), ProjectAccessError);
-    assert.equal(accesses, 1, 'flag on still enforces board membership');
-    enabled = false;
+    assert.equal(accesses, 1, 'compose enforces board membership before retrieval or AI work');
     await assert.rejects(prepareTaskWriterRun({ ...body, requestKind: 'manual' }, 985), ProjectAccessError);
-    assert.equal(accesses, 2, 'flag off does not change legacy writer behavior');
+    assert.equal(accesses, 2, 'the legacy writer takes the same path');
   } finally {
     for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
     for (const [key, value] of cached) require.cache[key] = value;
@@ -299,8 +294,8 @@ function loadCreateGlobal(stubs) {
   return mod.exports;
 }
 
-test('actual create endpoint rejects disabled Compose before database work and preserves legacy/auth checks', async () => {
-  let enabled = false, session = { userId: 985 }, flagReads = 0, userReads = 0, boardReads = 0;
+test('actual create endpoint authorizes Compose by board access, not a switch, and preserves auth checks', async () => {
+  let session = { userId: 985 }, userReads = 0, boardReads = 0;
   const sharedRoute = loadSharedRoute(async () => session);
   const stubs = {
     './route': sharedRoute,
@@ -308,9 +303,7 @@ test('actual create endpoint rejects disabled Compose before database work and p
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
-    '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, isFeatureEnabled: async (key, userId) => {
-      assert.equal(key, flag); assert.equal(userId, 985); flagReads++; return enabled;
-    } },
+    '@/lib/flags': { isFeatureEnabled: async (key) => { throw new Error(`create read the ${key} switch before board access`); } },
     '@/lib/prisma': { __esModule: true, default: {
       user: { findUnique: async () => { userReads++; return { id: 985 }; } },
       project: { findFirst: async () => { boardReads++; return null; } },
@@ -333,25 +326,19 @@ test('actual create endpoint rejects disabled Compose before database work and p
   };
   let result = await post({ requestKind: 'compose-task' });
   assert.equal(result.code, 403);
-  assert.equal(result.body.message, 'Compose task writer is turned off');
-  assert.equal(userReads, 0); assert.equal(boardReads, 0);
+  assert.equal(result.body.message, 'Forbidden', 'compose requires board access');
+  assert.equal(userReads, 1); assert.equal(boardReads, 1);
   result = await post({});
   assert.equal(result.code, 403);
   assert.equal(result.body.message, 'Forbidden');
-  assert.equal(flagReads, 1, 'legacy create never reads the new flag');
-  assert.equal(boardReads, 1);
-  enabled = true;
-  result = await post({ requestKind: 'compose-task' });
-  assert.equal(result.code, 403);
-  assert.equal(result.body.message, 'Forbidden', 'flag on still requires board access');
-  assert.equal(boardReads, 2);
+  assert.equal(userReads, 2); assert.equal(boardReads, 2);
   result = await post({ requestKind: 'compose-task', userId: 1 });
   assert.equal(result.code, 403);
-  assert.equal(flagReads, 2, 'user mismatch is rejected before flag evaluation');
+  assert.equal(userReads, 2, 'user mismatch is rejected before any database read');
   session = null;
   result = await post({ requestKind: 'compose-task' });
   assert.equal(result.code, 401);
-  assert.equal(flagReads, 2, 'unauthenticated requests cannot read the flag');
+  assert.equal(boardReads, 2, 'unauthenticated requests never reach board access');
 });
 
 test('standalone dictation improvement never prefixes undefined and disabled mics leave Search keys alone', async () => {
@@ -420,9 +407,9 @@ test('document attachments stay links rather than broken images and are still bo
   });
 });
 
-test('save existing target enforces the compose flag, edit permissions, board match and empty state before normal update controller', async () => {
+test('save existing target enforces edit permissions, board match and empty state before normal update controller', async () => {
   const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
-  let compose = true, authorized = true, target = null;
+  let authorized = true, target = null;
   const taskReads = [], updates = [], broadcasts = [], flags = [];
   const sharedRoute = loadSharedRoute(async () => ({ userId: 985 }));
   const stubs = {
@@ -431,8 +418,7 @@ test('save existing target enforces the compose flag, edit permissions, board ma
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
-    '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag,
-      isFeatureEnabled: async (key) => { flags.push(key); return compose; } },
+    '@/lib/flags': { isFeatureEnabled: async (key) => { throw new Error(`save read the ${key} switch`); } },
     '@/lib/prisma': { __esModule: true, default: {
       user: { findUnique: async () => ({ id: 985 }) },
       project: { findFirst: async () => authorized ? { id: 7 } : null },
@@ -457,11 +443,7 @@ test('save existing target enforces the compose flag, edit permissions, board ma
     } }, res);
     return res;
   };
-  compose = false;
-  assert.equal((await post()).code, 403);
-  assert.deepEqual(flags, [flag]);
-  assert.equal(taskReads.length, 0);
-  compose = true; authorized = false;
+  authorized = false;
   assert.equal((await post()).code, 403);
   assert.equal(taskReads.length, 0);
   authorized = true;
@@ -481,17 +463,16 @@ test('save existing target enforces the compose flag, edit permissions, board ma
   assert.equal(broadcasts.length, 2);
 });
 
-test('writer existing-task requests gate the compose flag and task edit scope before any AI or board retrieval', async () => {
+test('writer existing-task requests gate task edit scope before any AI or board retrieval', async () => {
   const cached = new Map(Object.entries(require.cache));
-  let compose = true, target = null;
+  let target = null;
   const taskQueries = []; let boardReads = 0;
   const source = (file, exports) => {
     const filename = path.join(root, file);
     require.cache[filename] = { id: filename, filename, loaded: true, exports };
   };
   try {
-    source('src/lib/flags.ts', { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag,
-      isFeatureEnabled: async () => compose });
+    source('src/lib/flags.ts', { isFeatureEnabled: async (key) => { throw new Error(`writer read the ${key} switch`); } });
     source('src/lib/prisma.ts', { default: {
       task: { findFirst: async (query) => { taskQueries.push(query); return target; } },
       project: { findFirst: async () => { boardReads++; return null; } },
@@ -501,11 +482,6 @@ test('writer existing-task requests gate the compose flag and task edit scope be
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
     const { prepareTaskWriterRun, taskWriterRequestSchema, AiFeatureDisabledError, ProjectAccessError } = jiti(path.join(root, 'src/app/api/ai/_lib/taskWriterRun.ts'));
     const body = taskWriterRequestSchema.parse({ projectId: 7, PROMPT: 'note', requestKind: 'compose-task', existingTaskId: 52 });
-    compose = false;
-    await assert.rejects(prepareTaskWriterRun(body, 985), AiFeatureDisabledError);
-    assert.equal(taskQueries.length, 0);
-    assert.equal(boardReads, 0);
-    compose = true;
     await assert.rejects(prepareTaskWriterRun(body, 985), ProjectAccessError);
     assert.deepEqual(taskQueries[0].where, { id: 52, projectId: 7, status: 'Normal', project: { writer: 985, agentId: undefined } });
     assert.equal(boardReads, 0);

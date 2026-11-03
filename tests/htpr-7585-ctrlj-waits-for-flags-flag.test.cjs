@@ -21,7 +21,6 @@ test("Ctrl+J loading bugfix defaults to Everyone and is discovered by the flag r
   assert.equal(definition.kind, "bugfix");
   assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.shippedOn, "2026-10-22");
-  assert.deepEqual(definition.related, ["htpr-6929-compose-task-writer"]);
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason.trim());
   assert.equal(keys.HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG, flagKey);

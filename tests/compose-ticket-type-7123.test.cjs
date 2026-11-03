@@ -4,7 +4,6 @@ const path = require('node:path');
 const { createJiti } = require('jiti');
 const { JSDOM } = require('jsdom');
 const root = path.resolve(__dirname, '..');
-const flag = 'htpr-6929-compose-task-writer';
 
 async function withWriter(config, check) {
   const cached = new Map(Object.entries(require.cache));

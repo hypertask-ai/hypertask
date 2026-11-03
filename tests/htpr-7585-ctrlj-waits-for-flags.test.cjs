@@ -8,7 +8,6 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const fixFlag = "htpr-7585-ctrlj-waits-for-flags";
-const composeFlag = "htpr-6929-compose-task-writer";
 
 function load(relativePath, mocks) {
   const compiled = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), "utf8"), {
@@ -40,7 +39,7 @@ async function withBoard({ apple = false, flags = {}, commandCenter = false }, c
       useFlagLoaded: (key) => Object.hasOwn(flags, key),
       useFlagReady: () => true,
     },
-    "@/lib/flags/keys": { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag, HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG: fixFlag },
+    "@/lib/flags/keys": { HTPR_7585_CTRLJ_WAITS_FOR_FLAGS_FLAG: fixFlag },
     "@/lib/state": {
       useRecoilState: () => React.useState(null),
       useSetRecoilState: (atom) => atom === showCommandsAtom ? (value) => paletteCalls.push(value) : () => {},
@@ -102,43 +101,39 @@ const legacyArgs = [
 for (const apple of [false, true]) {
   const chord = apple ? "Cmd+J" : "Ctrl+J";
 
-  test(`${chord} ignores unknown compose, including a pending fix flag, then allows known Off without remounting`, async () => {
+  test(`${chord} blocks the legacy page until the wait fix is known Off`, async () => {
     for (const initial of [{}, { [fixFlag]: true }]) {
-      await withBoard({ apple, flags: { ...initial } }, async ({ press, createCalls, paletteCalls, updateFlags }) => {
+      await withBoard({ apple, flags: { ...initial } }, async ({ press, createCalls, paletteCalls }) => {
         for (let attempt = 0; attempt < 2; attempt++) {
           assert.equal((await press()).defaultPrevented, true, "unknown flags must not open browser downloads, even when ready reports fallback");
           assert.deepEqual(createCalls, []);
           assert.deepEqual(paletteCalls, []);
         }
-        await updateFlags({ [fixFlag]: true, [composeFlag]: false });
-        assert.equal((await press()).defaultPrevented, true);
-        assert.deepEqual(createCalls, [legacyArgs], "known Off still opens the existing AI editor with the original section and focus");
       });
     }
+    await withBoard({ apple, flags: { [fixFlag]: false } }, async ({ press, createCalls }) => {
+      assert.equal((await press()).defaultPrevented, true);
+      assert.deepEqual(createCalls, [legacyArgs], "known Off opens the existing AI editor with the original section and focus");
+    });
   });
 
   test(`${chord} leaves known On to the real capture hook and never opens the legacy page`, async () => {
-    await withBoard({ apple, flags: { [fixFlag]: true, [composeFlag]: true } }, async ({ press, createCalls }) => {
+    await withBoard({ apple, flags: { [fixFlag]: true } }, async ({ press, createCalls }) => {
       assert.equal((await press()).defaultPrevented, true);
       assert.deepEqual(createCalls, [], "the legacy handler must also be safe before the capture hook runs");
     });
-    await withBoard({ apple, commandCenter: true }, async ({ press, createCalls, paletteCalls, updateFlags }) => {
+    await withBoard({ apple, commandCenter: true }, async ({ press, createCalls, paletteCalls }) => {
       await press();
       assert.deepEqual(createCalls, []);
-      await updateFlags({ [fixFlag]: true, [composeFlag]: true });
-      assert.equal((await press()).defaultPrevented, true);
-      assert.deepEqual(createCalls, []);
-      assert.deepEqual(paletteCalls, [{ show: true, mode: 0, paletteTab: "compose" }]);
+      assert.deepEqual(paletteCalls, [{ show: true, mode: 0, paletteTab: "compose" }], "Ctrl+J opens Compose from the first press");
     });
   });
 
-  test(`${chord} with fix Off preserves legacy behavior for unknown, Off, and On compose values`, async () => {
-    for (const compose of [{}, { [composeFlag]: false }, { [composeFlag]: true }]) {
-      await withBoard({ apple, flags: { [fixFlag]: false, ...compose } }, async ({ press, createCalls }) => {
-        assert.equal((await press()).defaultPrevented, true);
-        assert.deepEqual(createCalls, [legacyArgs]);
-      });
-    }
+  test(`${chord} with the wait fix Off keeps today's legacy fallback`, async () => {
+    await withBoard({ apple, flags: { [fixFlag]: false } }, async ({ press, createCalls }) => {
+      assert.equal((await press()).defaultPrevented, true);
+      assert.deepEqual(createCalls, [legacyArgs]);
+    });
     await withBoard({ apple }, async ({ press, createCalls, updateFlags }) => {
       await press();
       assert.deepEqual(createCalls, []);

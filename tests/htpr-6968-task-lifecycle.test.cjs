@@ -108,10 +108,9 @@ function fixture(kind, scenario) {
     "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => { throw new Error("Legacy parity must not resolve writer dates"); } },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date", HTPR_7740_CREATE_RESPONSE_FLAG: "htpr-7740-create-response" },
     "@/lib/flags": {
-      HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
       isFeatureEnabled: async (key, userId) => {
         if (key === "htpr-7740-create-response") return false;
-        effects.push(["product-flag", key, userId]); return !scenario.productOff;
+        effects.push(["product-flag", key, userId]); return true;
       },
     },
     "@/utils/generateRank": { default: (...args) => { effects.push(["rank", ...clean(args)]); return scenario.noRank ? undefined : "new-rank"; } },
@@ -210,7 +209,6 @@ const scenarios = {
     ["permission denied", { denied: true, expected: error(403, "Forbidden") }],
     ["null body rejects before auth", { body: null, noAuth: true }], ["undefined body rejects before auth", { body: undefined }],
     ["auth failure rejects", { authThrows: true }],
-    ["compose flag disabled", { body: { ...defaults.global, requestKind: "compose-task" }, productOff: true, expected: error(403, "Compose task writer is turned off") }],
     ["existing task requires compose", { body: { ...defaults.global, existingTaskId: 42 }, expected: error(403, "New Task window is turned off") }],
     ["compose existing nonempty task", { body: { ...defaults.global, existingTaskId: 42, requestKind: "compose-task" }, expected: error(409, "This task is no longer empty. Your note is still here.") }],
     ["compose existing empty target updates and broadcasts", { body: { ...defaults.global, existingTaskId: 42, requestKind: "compose-task" }, emptyTarget: true }],

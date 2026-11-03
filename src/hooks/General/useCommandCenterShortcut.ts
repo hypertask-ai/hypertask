@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { isCommandCenterShortcut, isComposePaletteShortcut } from "@/lib/constants/commandCenterShortcut";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7571_INBOX_CTRLK_CLOSE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7571_INBOX_CTRLK_CLOSE_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -14,7 +14,6 @@ export function useCommandCenterShortcut(
   showEmailVerificationModal: boolean,
   toggleShowCommands: () => void,
 ) {
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const lazyClosedSearchCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const inboxCtrlKClose = useFlag(HTPR_7571_INBOX_CTRLK_CLOSE_FLAG);
   const setShowCommands = useSetRecoilState(showCommandsAtom);
@@ -22,7 +21,7 @@ export function useCommandCenterShortcut(
     const handleCommandCenterShortcut = (e: KeyboardEvent) => {
       if (authenticatedUserId === null) return;
       if (showTrialModal || showEmailVerificationModal) return;
-      if (composeEnabled && isComposePaletteShortcut(e, isApple, pathname)) {
+      if (isComposePaletteShortcut(e, isApple, pathname)) {
         e.preventDefault();
         e.stopImmediatePropagation();
         const fromPendingSearchProxy = lazyClosedSearchCommands && pathname === "/search" && e.code === "KeyK" &&
@@ -53,7 +52,6 @@ export function useCommandCenterShortcut(
     showTrialModal,
     showEmailVerificationModal,
     toggleShowCommands,
-    composeEnabled,
     lazyClosedSearchCommands,
     inboxCtrlKClose,
     setShowCommands,

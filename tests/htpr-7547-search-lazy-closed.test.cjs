@@ -10,7 +10,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7547-search-lazy-closed';
 
-async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search', importFailures = 0, shortcuts = false, compose = true, pathname = '/search' }, check) {
+async function withSearch({ enabled, layout = true, mobile = true, delayed = false, loaded = true, hydrate = false, apple = false, suspendPanel = false, tab = 'search', importFailures = 0, shortcuts = false, pathname = '/search' }, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' });
   const globals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
@@ -60,7 +60,7 @@ async function withSearch({ enabled, layout = true, mobile = true, delayed = fal
       };
     } },
     '@/utils/undoActions/helperFuncs': { cn: (...args) => args.filter((arg) => typeof arg === 'string').join(' ') },
-    '@/hooks/useFlag': { useFlag: (key) => key === flag ? loaded && enabled : key === 'HTPR_6929_COMPOSE_TASK_WRITER_FLAG' ? compose : layout, useFlagLoaded: () => loaded },
+    '@/hooks/useFlag': { useFlag: (key) => key === flag ? loaded && enabled : layout, useFlagLoaded: () => loaded },
     'next/navigation': { useRouter: () => ({ push() {} }), useSearchParams: () => new URLSearchParams() },
     '@/lib/aiChatDisplayMode': { buildFullScreenChatPath: () => '/chat' },
     '@/lib/flags/keys': new Proxy({}, { get: (_target, key) => key === 'HTPR_7547_SEARCH_LAZY_CLOSED_FLAG' ? flag : String(key) }),
@@ -281,36 +281,34 @@ test('pending cold opens preserve Escape and platform command shortcut dismissal
 
 test('HTPR-7547 global Ctrl/Cmd+K closes a cold Search palette and a third chord reopens it', async () => {
   for (const apple of [true, false]) {
-    for (const compose of [true, false]) {
-      for (const reopenBeforeRelease of [true, false]) {
-        await withSearch({ enabled: true, delayed: true, apple, compose, shortcuts: true }, async ({ pressShortcut, proxy, imports, renders, markup, resultsMarkup, release }) => {
-          const baseline = resultsMarkup();
+    for (const reopenBeforeRelease of [true, false]) {
+      await withSearch({ enabled: true, delayed: true, apple, shortcuts: true }, async ({ pressShortcut, proxy, imports, renders, markup, resultsMarkup, release }) => {
+        const baseline = resultsMarkup();
+        await pressShortcut();
+        assert.equal(imports(), 1);
+        assert.equal(renders(), 0, 'the real capture hook opens before the command chunk resolves');
+        assert.ok(proxy());
+        assert.equal(document.activeElement, proxy());
+        await pressShortcut();
+        assert.equal(proxy(), null, 'the second chord must dismiss through the global capture handler');
+        assert.equal(resultsMarkup(), baseline);
+        if (reopenBeforeRelease) {
           await pressShortcut();
-          assert.equal(imports(), 1);
-          assert.equal(renders(), 0, 'the real capture hook opens before the command chunk resolves');
-          assert.ok(proxy());
+          assert.ok(proxy(), 'the third chord opens again while the chunk is still pending');
           assert.equal(document.activeElement, proxy());
+          assert.equal(renders(), 0);
+        }
+        await release();
+        if (!reopenBeforeRelease) {
+          assert.equal(proxy(), null);
+          assert.equal(renders(), 0, 'the late import cannot mount a dismissed palette');
+          assert.doesNotMatch(markup(), /id="commands"/);
           await pressShortcut();
-          assert.equal(proxy(), null, 'the second chord must dismiss through the global capture handler');
-          assert.equal(resultsMarkup(), baseline);
-          if (reopenBeforeRelease) {
-            await pressShortcut();
-            assert.ok(proxy(), 'the third chord opens again while the chunk is still pending');
-            assert.equal(document.activeElement, proxy());
-            assert.equal(renders(), 0);
-          }
-          await release();
-          if (!reopenBeforeRelease) {
-            assert.equal(proxy(), null);
-            assert.equal(renders(), 0, 'the late import cannot mount a dismissed palette');
-            assert.doesNotMatch(markup(), /id="commands"/);
-            await pressShortcut();
-          }
-          assert.ok(document.getElementById('commands'), 'the third chord loads and displays commands');
-          assert.equal(imports(), 2, 'reopening retries the cancelled import effect');
-          assert.equal(resultsMarkup(), baseline);
-        });
-      }
+        }
+        assert.ok(document.getElementById('commands'), 'the third chord loads and displays commands');
+        assert.equal(imports(), 2, 'reopening retries the cancelled import effect');
+        assert.equal(resultsMarkup(), baseline);
+      });
     }
   }
 });

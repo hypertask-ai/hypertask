@@ -410,7 +410,7 @@ test("visual seed fixes visible identity/timestamps/avatars but retains real-tim
   const fixture = visual.writes.get("card-fixture.json").body;
   assert.equal(fixture.visualNow, "2026-10-01T12:00:00Z");
   assert.match(fixture.boardPath, /^\/project\?id=\d+&surface=board$/);
-  for (const flag of ["htpr-6752-instant-ticket-open", "htpr-6899-stable-layout", "htpr-6929-compose-task-writer"]) assert.equal(fixture.flags[flag], true);
+  for (const flag of ["htpr-6752-instant-ticket-open", "htpr-6899-stable-layout"]) assert.equal(fixture.flags[flag], true);
   const state = visual.writes.get("smoke-state.json");
   assert.equal(state.options.mode, 0o600);
   assert.ok(state.body.cookies[0].expires > Date.now() / 1000);

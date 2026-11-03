@@ -1,4 +1,4 @@
-const { assert, fs, path, React, root, jiti, test, withPalette, flag, keepClosedFlag } = require('./helpers/compose-task-palette-fixture.cjs');
+const { assert, fs, path, React, root, jiti, test, withPalette, keepClosedFlag } = require('./helpers/compose-task-palette-fixture.cjs');
 test('lazy attachment previews cannot suspend the palette or lose the Compose draft', async (t) => {
   {
     let resolvePreview;
@@ -47,12 +47,6 @@ test('real shared gallery paints image blobs, file icons and removable tiles wit
       assert.equal(document.querySelector('img[alt="image.png"]').getAttribute('src'), 'blob:compose-thumbnail');
       assert.ok(document.querySelector('.lucide-paperclip'));
       assert.ok(document.body.textContent.includes('brief.txt'));
-      flags[flag] = false;
-      await rerender();
-      assert.equal(document.querySelector('.lucide-x').getAttribute('role'), null, 'flag-off shared removal markup stays unchanged');
-      assert.equal(document.querySelector('.lucide-x').getAttribute('aria-label'), null);
-      flags[flag] = true;
-      await rerender();
       await React.act(async () => document.querySelector('[aria-label="Remove image.png"]').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true })));
       assert.equal(document.querySelector('img[alt="image.png"]'), null);
       assert.deepEqual(revoked, ['blob:compose-thumbnail']);
@@ -151,9 +145,6 @@ test('New Task desktop leaves action tooltips unclipped and scrolls only attachm
         assert.equal(previews.parentElement.contains(input()), false, 'text and actions stay outside attachment scrolling');
       }
       assert.equal(input().className.includes('max-h-52 overflow-y-auto'), !mobile);
-      flags[flag] = false;
-      await rerender();
-      assert.equal(document.querySelector('[data-compose-task-writer]'), null);
     });
   }
 });
@@ -179,16 +170,6 @@ test('the New Task window shows stage labels in the existing live status and ret
       assert.ok(document.querySelector('[role="alert"]'));
       await press('Enter', { code: 'Enter' });
       assert.equal(document.querySelector('[role="status"]').textContent, 'Writing your ticket…');
-    });
-  }
-});
-
-test('compose writer off omits the writer and its progress', async (t) => {
-  for (const mobile of [false, true]) {
-    await withPalette(t, { enabled: false, mobile }, async ({ requests }) => {
-      assert.equal(document.querySelector('[data-compose-task-writer]'), null);
-      assert.equal(document.querySelector('[role="status"]'), null);
-      assert.equal(requests.length, 0);
     });
   }
 });

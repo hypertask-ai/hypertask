@@ -10,24 +10,18 @@ import { Search } from "lucide-react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const ShortcutsSection = () => {
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
-  const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  let includeComposeTaskShortcut = false;
-  if (composeTaskWriterEnabled) includeComposeTaskShortcut = true;
-  const newTaskWindow = composeTaskWriterEnabled;
   const historyToggleLabel = "Toggle agent log";
   const shortcutGroups = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
     historyToggleLabel,
-    includeComposeTaskShortcut,
-    newTaskWindow,
+    true,
+    true,
   );
   const [searchTerm, setSearchTerm] = useState("");
 

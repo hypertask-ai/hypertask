@@ -1,21 +1,4 @@
-const { withPalette, test, root, React, assert, flag, jiti, query, fs, path } = require('./helpers/compose-task-palette-fixture.cjs');
-test('flag off leaves desktop and phone palettes unchanged and Ctrl+J belongs to its legacy handler', async (t) => {
-  for (const mobile of [false, true]) {
-    await withPalette(t, { enabled: false, mobile }, async ({ press, legacyJ, values, capture, baseline }) => {
-      assert.equal(document.querySelector('[role="tablist"]'), null);
-      assert.equal(document.querySelector('[data-compose-task-writer]'), null);
-      assert.ok(document.querySelector('[data-search-commands]'));
-      const event = await press('j', { ctrlKey: true });
-      assert.equal(event.defaultPrevented, false);
-      assert.equal(legacyJ(), 1);
-      assert.equal(values.get('showCommandsAtom').show, true);
-      capture(`off-${mobile ? 'phone' : 'desktop'}`);
-      if (process.env.COMPOSE_BASELINE_DIR) await baseline(process.env.COMPOSE_BASELINE_DIR);
-      await press('k', { ctrlKey: true });
-      assert.equal(values.get('showCommandsAtom').show, false, 'legacy Ctrl+K still toggles closed');
-    });
-  }
-});
+const { withPalette, test, root, React, assert, jiti, query, fs, path } = require('./helpers/compose-task-palette-fixture.cjs');
 
 test('Ctrl+J globally opens Compose from every signed-in surface and prevents browser/legacy task creation', async (t) => {
   for (const url of ['/project?id=7', '/settings/profile', '/search', '/inbox', '/detail/project-7/4', '/chat', '/new']) {
@@ -107,21 +90,6 @@ test('late creation success or failure cannot override navigation after Compose 
       assert.equal(values.get('showAIChatInterfaceAtom'), undefined);
     });
   }
-});
-
-test('turning the flag off during creation restores Search commands once creation settles', async (t) => {
-  await withPalette(t, { tab: 'compose', dismissCommand: true }, async ({ type, press, flags, rerender, finish, values, navigations }) => {
-    await type('Do not open this task after disabling Compose');
-    await press('Enter', { code: 'Enter' });
-    flags[flag] = false;
-    await rerender();
-    assert.equal(document.querySelector('[data-compose-task-writer]'), null);
-    await finish();
-    assert.deepEqual(navigations, []);
-    const command = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
-    await React.act(async () => command.click());
-    assert.equal(values.get('showCommandsAtom').show, false);
-  });
 });
 
 test('Enter sends the current board and opens its detail with regular task-scoped chat and exact no-model greeting', async (t) => {
@@ -265,7 +233,6 @@ test('real task chat hook persists the Compose greeting once, scoped to the crea
     { name: 'existing task session in StrictMode', existing: true },
     { name: 'wrong task', existing: true, taskId: 92, blocked: true },
     { name: 'global chat', existing: true, scoped: false, blocked: true },
-    { name: 'flag off', existing: true, enabled: false, blocked: true },
   ]) {
     await withPalette(t, { tab: 'compose', strict: true }, async ({ type, press, finish, values, flags, source, stub, jiti, mountProbe, rerender, set, capture }) => {
       await type('Fix login button spacing');
@@ -297,7 +264,6 @@ test('real task chat hook persists the Compose greeting once, scoped to the crea
         createSessionNext: async (taskId) => { sessionsCreated.push(taskId); return { data: { success: true, session: taskSession } }; },
         addMessage: async (sessionId, message) => { persisted.push({ sessionId, message }); return { data: { message } }; },
       } });
-      flags[flag] = scenario.enabled ?? true;
       source('src/lib/aiChat/chatNavigationState.ts', { ...require('./task-route-loader.cjs').load('src/lib/aiChat/chatNavigationState.ts', {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} });
       source('src/hooks/MultiPages/AIChat/useChatSessionSelection.ts', require('./task-route-loader.cjs').load('src/hooks/MultiPages/AIChat/useChatSessionSelection.ts', { "@/lib/aiChat/chatNavigationState": { ...require("./task-route-loader.cjs").load("src/lib/aiChat/chatNavigationState.ts", {}), chatNavigationKey: () => null, readChatNavigationState: () => ({}), writeChatNavigationState() {} }, }));
       const { useSessionAndChatHistory } = jiti(path.join(root, 'src/hooks/MultiPages/AIChat/useSessionAndChatHistory.ts'));
@@ -356,8 +322,8 @@ test('pending image preprocessing prevents Enter or send from dropping an attach
   });
 });
 
-test('actual phone sheet reserves visible space for Compose tabs only while the flag is on', async (t) => {
-  await withPalette(t, { open: false }, async ({ source, jiti, mountProbe, flags, rerender }) => {
+test('actual phone sheet reserves visible space for Compose tabs', async (t) => {
+  await withPalette(t, { open: false }, async ({ source, jiti, mountProbe }) => {
     source('src/hooks/General/useMobileVisualViewport.ts', { useMobileVisualViewport: () => ({ visibleHeight: 280, layoutHeight: 800, bottomInset: 500 }) });
     let sheet;
     source('src/components/Modals/Sheets/AppSheet.tsx', {
@@ -370,24 +336,14 @@ test('actual phone sheet reserves visible space for Compose tabs only while the 
     assert.equal(sheet.containerStyle.bottom, 500);
     assert.ok(sheet.aboveSlot);
     assert.match(sheet.panelClassName, /!overflow-visible/);
-    flags[flag] = false;
-    await rerender();
-    assert.equal(sheet.containerStyle.maxHeight, '280px');
-    assert.equal(sheet.containerStyle.height, '280px');
-    assert.equal(sheet.aboveSlot, undefined);
-    assert.doesNotMatch(sheet.panelClassName, /!overflow-visible/);
   });
 });
 
-test('New Task label, purple sparkle, dictation, tooltips and Tab require both flags on desktop and phone', async (t) => {
-  for (const enabled of [false, true]) for (const mobile of [false, true]) {
-    await withPalette(t, { enabled, mobile, apple: true }, async ({ press, clickTab, input, type, values }) => {
-      const both = enabled;
+test('New Task label, purple sparkle, dictation, tooltips and Tab hold on desktop and phone', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { mobile, apple: true }, async ({ press, input, type, values }) => {
+      const both = true;
       assert.equal(Boolean(document.querySelector('[data-tooltip="Search"]')), both);
-      if (!enabled) {
-        assert.equal(document.querySelector('[role="tablist"]'), null);
-        return;
-      }
       const tab = [...document.querySelectorAll('[role="tab"]')].find((node) => node.textContent.startsWith(both ? 'New Task' : 'Compose'));
       assert.ok(tab);
       if (both) {
@@ -398,7 +354,7 @@ test('New Task label, purple sparkle, dictation, tooltips and Tab require both f
         const search = document.querySelector('input[type="search"]');
         const switched = await press('Tab', {}, search);
         assert.equal(switched.defaultPrevented, true);
-      } else await clickTab('Compose');
+      }
       assert.equal(Boolean(document.querySelector('[aria-label="Start dictation"]')), both);
       assert.equal(input().rows, mobile ? 3 : 2);
       assert.equal(input().className.includes("max-h-52"), both && !mobile);
@@ -483,12 +439,6 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     assert.equal(input().value, 'Keep my typed note Spoken text');
     assert.equal(input().disabled, false);
     await React.act(async () => audioProps.toggleRecording(true));
-    flags[flag] = false;
-    await rerender();
-    assert.equal(document.querySelector('[data-compose-task-writer]'), null, 'Compose off leaves no writer holding the input lock');
-    flags[flag] = true;
-    await rerender();
-    assert.equal(input().disabled, false, 're-enabling Compose must not resurrect stale recording state');
     assert.equal(input().value, '');
     await type('Fresh note after re-enabling');
     await press('Enter', { code: 'Enter' });
@@ -612,10 +562,10 @@ test('same-task fill preserves an assignee selected while the writer response is
   });
 });
 
-test('board quick-add same-task fill updates the mounted header, description editor and properties, with either flag off unchanged', async (t) => {
+test('board quick-add same-task fill updates the mounted header, description editor and properties', async (t) => {
   const targetTask = { id: 52, projectId: 7, sectionId: 12, uniqueIndex: 4, title: 'Enter task title here', description: '' };
-  for (const enabled of [true]) {
-    await withPalette(t, { enabled, headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
+  {
+    await withPalette(t, { headerTask: targetTask, targetTask, open: false, previousBoard: 'project-7|&|view', url: '/detail/project-7/4', inView: { taskId: 52 } }, async ({ source, jiti, mountProbe, press, type, finish, headerState, queryClient, cacheAdds, cacheUpdates, requests }) => {
       source('src/utils/api/Task Detail/index.ts', { updateTask: () => assert.fail('a fill must not save the placeholder title') });
       source('src/hooks/MultiPages/Route/useHypertasksNavigate.ts', { default: () => ({ navigate() {} }) });
       source('src/components/Modals/Common Modals/ConfirmActionModal.tsx', { default: () => null });
@@ -668,12 +618,6 @@ test('board quick-add same-task fill updates the mounted header, description edi
       const header = document.getElementById('title-input');
       assert.equal(header.value, targetTask.title);
       await press('j', { ctrlKey: true }, document.body);
-      if (!enabled) {
-        assert.equal(document.querySelector('[data-compose-task-writer]'), null);
-        assert.equal(header.value, targetTask.title);
-        assert.equal(requests.length, 0);
-        return;
-      }
       await type('Write the empty board task');
       await press('Enter');
       const saved = { ...targetTask, title: 'Release checklist', description_: { content: '<p>Tests and rollout</p>', attachments: [] }, priority: { id: 2 }, estimate: { id: 3 }, taskLabels: [{ id: 9 }], assignees: [{ userId: 985 }], dueDate: '2026-10-10', startDate: '2026-10-09', acceptanceCriteria: 'All checks pass' };
@@ -760,8 +704,8 @@ test('file drop works under Compose alone; New Task also accepts document tiles 
 });
 
 test('an empty description writer event keeps the inline description writer without New Task or auto generation', async (t) => {
-  for (const enabled of [false, true]) {
-    await withPalette(t, { enabled, open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
+  {
+    await withPalette(t, { open: false, inlineDrafts: true }, async ({ source, jiti, mountProbe, dom, values }) => {
       source('src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx', { AI_TASK_WRITER_EVENT: 'test-open-writer' });
       source('src/components/RTE/Components/EmojiGifPicker.tsx', { OPEN_EMOJI_GIF_PICKER_EVENT: 'test-emoji' });
       source('src/lib/flags/definitions/htpr-7800-skill-runs-in-sidebar.ts', { HTPR_7800_SKILL_RUNS_IN_SIDEBAR_FLAG: 'htpr-7800-skill-runs-in-sidebar' });

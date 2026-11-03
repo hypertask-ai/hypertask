@@ -34,7 +34,7 @@ import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } 
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
+import { HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
@@ -73,10 +73,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const skillMenuFlag = useFlag(HTPR_7656_CTRLJ_SKILL_MENU_FLAG);
   let skillMenuEnabled = false;
   if (skillMenuFlag && invokeSkills) skillMenuEnabled = true;
-  const enabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const ticketQuestionsEnabled = useFlag(HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG);
   const actionChipsEnabled = useFlag(HTPR_7979_ACTION_CHIPS_FLAG);
-  const newTaskWindow = enabled;
+  const newTaskWindow = true;
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const inlineAgentImages = useFlag(HTPR_7514_INLINE_AGENT_IMAGES_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
@@ -153,7 +152,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const { data: boards = [], isFetching: loadingBoards, isSuccess: boardsLoaded } = useQuery<IProject[]>({
     queryKey: ["projectsAllMinimal", user?.id],
     queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
-    enabled: enabled && active && Boolean(user?.id),
+    enabled: active && Boolean(user?.id),
   });
   const waitingForBoards = boardFromTextEnabled && loadingBoards && !boards.length;
   const textBoardId = boardFromTextEnabled && selectedBoardId === undefined ? matchComposeTaskBoard(text, boards) : undefined;
@@ -235,7 +234,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     return () => { cancelled = true; };
   }, [active, writing, mobile, dictating, boardPickerOpen, focusProxy]);
   useEffect(() => {
-    if (!enabled || !active || writing) return;
+    if (!active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
       if (boardPickerOpen) return;
       const cmdControl = (isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey);
@@ -274,7 +273,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
+  }, [active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -296,11 +295,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   };
 
   const send = async () => {
-    if (queueEnterWhileBoardsLoad && waitingForBoards && enabled && !sending.current && !dictating && text.trim()) {
+    if (queueEnterWhileBoardsLoad && waitingForBoards && !sending.current && !dictating && text.trim()) {
       textHeldUntilBoardsLoad.current = text;
       return;
     }
-    if (!enabled || sending.current || pendingImages.current > 0 || waitingForBoards || dictating || !text.trim()) return;
+    if (sending.current || pendingImages.current > 0 || waitingForBoards || dictating || !text.trim()) return;
     sending.current = true;
     setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
     setWriting(true);
@@ -495,7 +494,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     ctrlEnterSends,
   });
 
-  return enabled ? (
+  return (
     <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={active && boardPickerOpen ? "" : undefined} data-compose-skill-menu-open={skillMenuEnabled && skillMenu.menu ? "" : undefined} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col" : newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
@@ -638,5 +637,5 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         }}
       />}
     </div>
-  ) : null;
+  );
 }

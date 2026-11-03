@@ -284,7 +284,6 @@ test('layout lock: phone New Task title has a real height and accepts a tap', as
 test('layout lock: desktop New Task window stays narrow and inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'Desktop', 'desktop window invariant')
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
-  test.skip(!fixture.flags['htpr-6929-compose-task-writer'], 'New Task window is unavailable in this live-like flag mode')
   const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }

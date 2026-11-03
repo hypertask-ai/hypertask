@@ -1,6 +1,6 @@
 import { PlanLimitRefusal } from "@/lib/planLimitsClient";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG } from "@/lib/flags/keys";
 import { HTPR_8028_MOBILE_WRITER_SAVE_FLAG } from "@/lib/flags/definitions/htpr-8028-mobile-writer-save";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
@@ -183,14 +183,12 @@ const TiptapCreateTaskModal = () => {
     uploadingStateCreateTaskModalAtom
   );
   const { continueTourInModal, isTourActive, endTour } = useTourContext();
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const mobileWriterSaveFlag = useFlag(HTPR_8028_MOBILE_WRITER_SAVE_FLAG);
   const mobileWriterSave = Boolean(isMbl && mobileWriterSaveFlag);
   const ctrlJSidebarOnNewTask = useFlag(HTPR_7544_CTRLJ_SIDEBAR_ON_NEW_TASK_FLAG);
   let composeShortcutCapture = true;
   if (ctrlJSidebarOnNewTask) composeShortcutCapture = false;
-  let newTaskWindow = false;
-  if (composeEnabled && !mobileWriterSave) newTaskWindow = true;
+  const newTaskWindow = !mobileWriterSave;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const [writerOpen, setShouldShowAITaskWriter] = useState(

@@ -4,7 +4,6 @@ import KBDElement from "@/components/Common/kbd";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { HTPR_7549_FIRST_TASK_POINTER_FLAG } from "@/lib/flags/keys";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { getShortcutDisplay } from "@/lib/utils/keyboardShortcuts";
 import { CommandMode } from "@/models/enums";
@@ -24,13 +23,12 @@ type PointerState = { eligible: boolean; starterTaskId?: number; sectionId?: num
 
 export default function FirstTaskPointer({ projectId, sectionId, sectionIndex, taskIds, ready, writable, filtered }: Props) {
   const enabled = useFlag(HTPR_7549_FIRST_TASK_POINTER_FLAG);
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const isApple = useDeviceContext();
   const setShowCommands = useSetRecoilState(showCommandsAtom);
   const setActiveSection = useSetRecoilState(activeSectionAtom);
   const setActiveSectionId = useSetRecoilState(activeSectionIdAtom);
   const queryClient = useQueryClient();
-  const canShow = enabled && composeEnabled && ready && writable && !filtered;
+  const canShow = enabled && ready && writable && !filtered;
   const canQuery = canShow && taskIds !== null && taskIds.length <= 1;
   const { data, isPending } = useQuery<PointerState>({
     queryKey: ["first-task-pointer", projectId],

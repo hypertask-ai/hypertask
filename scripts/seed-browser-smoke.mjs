@@ -7,7 +7,7 @@ import { QA_ACCOUNT_STATE, localFlagModes, readPlainQaFlags } from "./premerge-l
 
 const visual = process.argv.includes("--visual");
 const VISUAL_NOW = "2026-10-01T12:00:00Z";
-const visualFlags = ["htpr-6752-instant-ticket-open", "htpr-6899-stable-layout", "htpr-6929-compose-task-writer"];
+const visualFlags = ["htpr-6752-instant-ticket-open", "htpr-6899-stable-layout"];
 
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE;
 if (!stateFile) throw new Error("BROWSER_SMOKE_STATE_FILE is required");

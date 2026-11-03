@@ -7,10 +7,9 @@ export default {
   kind: "bugfix",
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-22",
-  description: "Stops Ctrl+J and Cmd+J on a board from opening the legacy New Task page before the compose task writer flag has loaded.",
-  related: ["htpr-6929-compose-task-writer"],
+  description: "Stops Ctrl+J and Cmd+J on a board from opening the legacy New Task page before the compose task writer is ready.",
   releaseRisk: {
     risk: "small",
-    reason: "Only holds the legacy board task shortcut until the compose flag is known. Off restores the existing shortcut behavior.",
+    reason: "Only holds the legacy board task shortcut until the compose writer is ready. Off restores the existing shortcut behavior.",
   },
 } as const satisfies FeatureFlagDefinition;

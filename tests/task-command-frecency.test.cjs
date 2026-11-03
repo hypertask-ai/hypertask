@@ -262,6 +262,10 @@ test("task comment commands remember usage without changing their pinned order",
       setMock(modulePath("src/components/Modals/Sheets/index.ts"), {
         MobileBottomSheet: ({ children }) => React.createElement("div", null, children),
       }),
+      setMock(
+        modulePath("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx"),
+        { __esModule: true, default: () => null },
+      ),
     );
 
     const jiti = createJiti(__filename, {

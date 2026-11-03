@@ -311,7 +311,6 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss();
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
-  const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
   const myTasksSingleCommandCenter = useFlag(HTPR_7569_MY_TASKS_SINGLE_COMMAND_CENTER_FLAG);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
@@ -1347,7 +1346,7 @@ export default function GlobalProvider({
         showCommands.show &&
         shouldRenderGlobalCommandMenu(pathname, myTasksSingleCommandCenter) && <HypertasksCommands />}
 
-      {composeTaskWriterEnabled && authenticatedUserId !== null && showCommands.show && pathname === "/new" && <HypertasksCommands />}
+      {authenticatedUserId !== null && showCommands.show && pathname === "/new" && <HypertasksCommands />}
 
       <BoardStartupContext.Provider
         value={{

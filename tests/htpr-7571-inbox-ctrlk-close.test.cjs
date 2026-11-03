@@ -10,7 +10,6 @@ const ts = require('typescript');
 
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-7571-inbox-ctrlk-close';
-const composeFlag = 'htpr-6929-compose-task-writer';
 const searchFlag = 'htpr-7547-search-lazy-closed';
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 
@@ -62,7 +61,7 @@ function load(relative, dependencies = {}, source = read(relative)) {
   return mod.exports;
 }
 
-async function withInbox({ enabled = true, apple = false, compose = true, pathname = '/inbox', search = true } = {}, check) {
+async function withInbox({ enabled = true, apple = false, pathname = '/inbox', search = true } = {}, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${pathname}` });
   const globals = ['window', 'document', 'IS_REACT_ACT_ENVIRONMENT'].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]);
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
@@ -76,14 +75,13 @@ async function withInbox({ enabled = true, apple = false, compose = true, pathna
   let renders = 0;
   let release;
   const wait = new Promise((resolve) => { release = resolve; });
-  const flags = { [flag]: enabled, [composeFlag]: compose, [searchFlag]: search };
+  const flags = { [flag]: enabled, [searchFlag]: search };
   const dependencies = {
     '@/hooks/useFlag': { useFlag: (key) => {
       assert.ok(Object.hasOwn(flags, key), `Unexpected flag ${key}`);
       return flags[key];
     } },
     '@/lib/flags/keys': {
-      HTPR_6929_COMPOSE_TASK_WRITER_FLAG: composeFlag,
       HTPR_7547_SEARCH_LAZY_CLOSED_FLAG: searchFlag,
       HTPR_7571_INBOX_CTRLK_CLOSE_FLAG: flag,
     },
@@ -234,14 +232,6 @@ test('Ctrl/Cmd+J and K from Compose switch tabs instead of closing, and Compose 
       assert.deepEqual(state(), { show: true, mode: 0, paletteTab: 'search' });
       await press();
       assert.equal(state().show, false);
-    });
-    await withInbox({ apple, compose: false }, async ({ press, state, release }) => {
-      await press();
-      assert.equal(state().show, true);
-      await press();
-      assert.equal(state().show, false);
-      await release();
-      assert.equal(document.getElementById('commands'), null);
     });
   }
 });
