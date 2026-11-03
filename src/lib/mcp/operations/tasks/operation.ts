@@ -24,7 +24,7 @@ import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tas
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG } from '@/lib/flags/keys'
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -545,7 +545,11 @@ export async function GET(request: NextRequest) {
         if (findIdParamOutOfRange({ assigned_to: assignee.userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
         where.assignees = { some: { userId: { in: assignee.userIds }, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
       } else if (assignee.kind === 'me') {
-        where.assignees = { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
+        const agentMe = ctx.agentId &&
+          await isFeatureEnabled(HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, user.id).catch(() => false)
+        where.assignees = agentMe
+          ? { some: { agentId: ctx.agentId } }
+          : { some: { userId: user.id, ...(assigneeFixEnabled ? { agentId: null } : {}) } }
       } else {
         where.assignees = { none: {} }
       }
