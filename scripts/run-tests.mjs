@@ -10,7 +10,7 @@ import {
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 import { findPassingTodos, todoRemovalMessages } from "./todo-passing.mjs";
-import { LANE_BATCH, batchLaneFiles, chainBatches, classifySuite, partitionSafeFiles, positiveInt } from "./test-lanes.mjs";
+import { LANE_BATCH, batchLaneFiles, chainBatches, chainBudgets, classifySuite, partitionSafeFiles, positiveInt } from "./test-lanes.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
@@ -272,11 +272,12 @@ if (cjsTests.length > 0) {
       maxBytes: TEST_LANE_BYTE_CAP,
       weightOf,
     });
-    return chainBatches(batches, TEST_LANE_CONCURRENCY, workOf).map((chain) => ({ batches, chain }));
+    const chains = chainBatches(batches, TEST_LANE_CONCURRENCY, workOf);
+    const budgets = chainBudgets(chains, TEST_LANE_CONCURRENCY, workOf);
+    return chains.map((chain, index) => ({ batches, chain, workers: budgets[index] }));
   }).flat();
   console.log(`Shared lane chains: ${laneChainPlans.length} beside each other, ${TEST_LANE_CONCURRENCY} workers across one lane.`);
   for (const [slot, plan] of laneChainPlans.entries()) {
-    const perBatch = Math.max(1, Math.ceil(TEST_LANE_CONCURRENCY / plan.chain.length));
     jobs.push((async () => {
       let failed = 0;
       for (const batch of plan.chain) {
@@ -286,9 +287,9 @@ if (cjsTests.length > 0) {
         const label = `Shared Node lane ${slot + 1}/${laneChainPlans.length}${stepping} (${batch.length} files)`;
         const result = await run(
           process.execPath,
-          ["--test", FILE_TIMEOUT, `--test-concurrency=${perBatch}`, TEST_ISOLATION, ...batch],
+          ["--test", FILE_TIMEOUT, `--test-concurrency=${plan.workers}`, TEST_ISOLATION, ...batch],
           label,
-          { concurrency: perBatch, lane: slot + 1, deferred: true },
+          { concurrency: plan.workers, lane: slot + 1, deferred: true },
         );
         if (result.lost?.length) {
           if (result.reportedFailure) failed ||= result.failed;

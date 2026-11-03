@@ -134,6 +134,21 @@ export function chainBatches(batches, chains, weightOf = () => 1) {
     .filter((chain) => chain.length > 0);
 }
 
+export function chainBudgets(chains, workers, weightOf = () => 1) {
+  const total = positiveInt(workers, "workers");
+  const budgets = chains.map(() => 1);
+  const weight = (chain) => chain.flat().reduce((sum, file) => sum + Math.max(1, weightOf(file)), 0);
+  const ordered = chains
+    .map((chain, index) => ({ index, work: weight(chain) }))
+    .sort((a, b) => b.work - a.work || a.index - b.index);
+  let spare = Math.max(0, total - budgets.length);
+  for (let step = 0; spare > 0; step += 1) {
+    budgets[ordered[step % ordered.length].index] += 1;
+    spare -= 1;
+  }
+  return budgets;
+}
+
 export function partitionSafeFiles(files, lanes, weightOf = () => 1) {
   const count = Math.max(1, Math.min(lanes, files.length || 1));
   const buckets = Array.from({ length: count }, () => ({ files: [], weight: 0 }));

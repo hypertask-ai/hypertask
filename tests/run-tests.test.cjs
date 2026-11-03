@@ -453,3 +453,25 @@ test("shared lanes are chosen by measured time, so slow sharing files get lanes"
   assert.equal(onBytes.status, 0, onBytes.stderr);
   assert.match(onBytes.stdout, /Shared lanes: 1 for 5 safe files; own-process files: 1 at pool width 3\./);
 });
+
+test("a lane's batch chains run every batch once and stay inside the lane worker budget", async () => {
+  const { batchLaneFiles, chainBatches, chainBudgets } = await import(pathToFileURL(path.join(root, "scripts/test-lanes.mjs")).href);
+  const work = (file) => Number(file.replace(/\D/g, "")) + 1;
+  const files = Array.from({ length: 24 }, (_, index) => `tests/shared-${index}.test.cjs`);
+  const batches = batchLaneFiles([...files].reverse(), { maxFiles: 4, maxBytes: Infinity, weightOf: () => 1 });
+  assert.equal(batches.length, 6, "the batch caps decide how many processes a lane had before");
+  const heaviest = Math.max(...batches.map((batch) => batch.reduce((total, file) => total + work(file), 0)));
+  for (const workers of [1, 2, 3]) {
+    const chains = chainBatches(batches, workers, work);
+    const flat = chains.flat();
+    assert.deepEqual([...flat].sort(), [...files].sort(), `every batch file of a lane runs exactly once at ${workers} workers`);
+    assert.equal(chains.length, Math.min(workers, batches.length), "one chain per worker while batches remain");
+    const loads = chains.map((chain) => chain.flat().reduce((total, file) => total + work(file), 0));
+    assert.ok(Math.max(...loads) - Math.min(...loads) <= heaviest, `chains ${loads} balance within one batch`);
+    const budgets = chainBudgets(chains, workers, work);
+    assert.equal(budgets.reduce((total, budget) => total + budget, 0), workers, `chain budgets ${budgets} use the lane budget exactly`);
+    assert.ok(budgets.every((budget) => budget >= 1), `chain budgets ${budgets} all get a worker`);
+    assert.equal(budgets[loads.indexOf(Math.max(...loads))], Math.max(...budgets), "a spare worker goes to the heaviest chain");
+  }
+  assert.deepEqual(chainBudgets([["tests/only.test.cjs"]], 2, work), [2], "a single batch keeps the whole lane budget");
+});
