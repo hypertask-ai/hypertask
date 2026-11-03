@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { mkdirSync, mkdtempSync, readFileSync, writeFileSync } = require("node:fs");
+const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { execFileSync } = require("node:child_process");
 const os = require("node:os");
 const path = require("node:path");
@@ -151,8 +151,10 @@ test("baseline caches key on the base render source and every successful capture
   assert.match(restore.uses, /^actions\/cache\/restore@[a-f0-9]{40}$/);
   assert.equal(restore.with.path, "${{ runner.temp }}/visual-expected");
   assert.equal(restore.with["restore-keys"], undefined);
-  assert.ok(restore.with.key.startsWith("visual-base-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.baseline.outputs.image }}-${{ steps.baseline.outputs.render }}-"));
+  assert.ok(restore.with.key.startsWith("visual-base-v3-${{ runner.os }}-${{ runner.arch }}-${{ steps.fonts.outputs.fonts }}-${{ steps.baseline.outputs.render }}-"));
   assert.ok(!restore.with.key.includes("steps.baseline.outputs.sha"));
+  assert.ok(!restore.with.key.includes("steps.baseline.outputs.image"));
+  assert.ok(!identify.run.includes("ImageVersion"));
   for (const input of ["head/e2e/visual/**", "head/scripts/seed-browser-smoke.mjs", "head/scripts/premerge-local-search.mjs", "head/scripts/visual-regression-ci.mjs", "head/.github/workflows/visual-regression.yml"]) assert.ok(restore.with.key.includes(input), input);
   const save = steps.find(step => step.name === "Save successful visual baseline");
   assert.equal(save.if, "success() && steps.baseline-cache.outputs.cache-hit != 'true'");
@@ -161,7 +163,9 @@ test("baseline caches key on the base render source and every successful capture
   assert.equal(save.with.key, "${{ steps.baseline-cache.outputs.cache-primary-key }}");
   assert.ok(steps.indexOf(save) > steps.findIndex(step => step.name === "Build and capture base, then compare head"));
   const publish = steps.find(step => step.name === "Publish the validated baseline");
+  assert.ok(publish.with.name.includes("${{ steps.fonts.outputs.fonts }}"));
   assert.ok(publish.with.name.includes("${{ steps.baseline.outputs.render }}"));
+  assert.ok(!publish.with.name.includes("${{ steps.baseline.outputs.image }}"));
   assert.ok(!publish.with.name.includes("${{ steps.baseline.outputs.sha }}"));
 });
 
@@ -200,7 +204,7 @@ function renderFingerprint(workspace) {
   const output = path.join(workspace, "github-output");
   writeFileSync(output, "");
   const script = yaml.load(source(".github/workflows/visual-regression.yml")).jobs["visual-regression"].steps.find(step => step.id === "baseline").run;
-  execFileSync("bash", ["-c", script], { cwd: workspace, env: { ...process.env, GITHUB_OUTPUT: output, ImageVersion: "" }, encoding: "utf8" });
+  execFileSync("bash", ["-c", script], { cwd: workspace, env: { ...process.env, GITHUB_OUTPUT: output }, encoding: "utf8" });
   const lines = readFileSync(output, "utf8").trim().split("\n");
   return Object.fromEntries(lines.map(line => [line.slice(0, line.indexOf("=")), line.slice(line.indexOf("=") + 1)]));
 }
@@ -227,6 +231,82 @@ test("an empty render source fails the job instead of keying every screen to one
   git(base, ["rm", "-rq", "src", "package.json"]);
   git(base, ["commit", "-qm", "no app source"]);
   assert.throws(() => renderFingerprint(workspace), /exit status 1|Command failed/);
+});
+
+function fontStep(workflow) {
+  return workflow.jobs["visual-regression"].steps.find(step => step.id === "fonts");
+}
+
+function fingerprintFonts(script, directories) {
+  const workspace = mkdtempSync(path.join(os.tmpdir(), "visual-fonts-"));
+  const output = path.join(workspace, "github-output");
+  writeFileSync(output, "");
+  try {
+    execFileSync("bash", ["-eo", "pipefail", "-c", script], {
+      env: { ...process.env, VISUAL_FONT_DIRS: directories.join(" "), GITHUB_OUTPUT: output },
+      encoding: "utf8",
+    });
+    return readFileSync(output, "utf8").trim().replace(/^fonts=/, "");
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
+}
+
+function fontTree(workspace) {
+  const stage = path.join(workspace, "stage");
+  mkdirSync(path.join(stage, "fonts", "truetype"), { recursive: true });
+  mkdirSync(path.join(stage, "config", "conf.d"), { recursive: true });
+  writeFileSync(path.join(stage, "fonts", "truetype", "LiberationSans.ttf"), "font-a");
+  writeFileSync(path.join(stage, "config", "conf.d", "50-user.conf"), "<fontconfig/>");
+  return stage;
+}
+
+test("saved screens are reused across runner images by the fonts that rendered them, not by the image version", () => {
+  const visualWorkflow = yaml.load(source(".github/workflows/visual-regression.yml"));
+  const testsWorkflow = yaml.load(source(".github/workflows/ci-tests.yml"));
+  const producer = visualWorkflow.jobs["visual-regression"].steps;
+  const consumer = testsWorkflow.jobs["visual-compare"].steps;
+  for (const steps of [producer, consumer]) {
+    const install = steps.findIndex(step => step.name === "Install pinned Chromium and fonts once");
+    const fonts = steps.findIndex(step => step.id === "fonts");
+    const restore = steps.findIndex(step => step.id === "baseline-cache");
+    assert.ok(install !== -1 && fonts !== -1 && restore !== -1);
+    assert.ok(install < fonts, "the pinned fonts must be installed before they are fingerprinted");
+    assert.ok(fonts < restore, "the fonts must be known before the saved screens are restored");
+    assert.match(steps[install].run, /apt-get install -y fonts-liberation fonts-noto-core fonts-noto-color-emoji/);
+    assert.ok(!JSON.stringify(steps).includes("ImageVersion"), "the runner image version must not identify a baseline");
+  }
+  assert.equal(fontStep(visualWorkflow).run, fontStep(testsWorkflow).run, "producer and consumer must fingerprint the fonts the same way");
+  assert.ok(producer.find(step => step.id === "baseline-cache").with.key.includes("${{ steps.fonts.outputs.fonts }}"));
+  assert.ok(consumer.find(step => step.id === "baseline-cache").with.key.includes("${{ steps.fonts.outputs.fonts }}"));
+  assert.ok(consumer.find(step => step.id === "baseline-artifact").env.BASELINE_NAME.includes("${{ steps.fonts.outputs.fonts }}"));
+});
+
+test("the font fingerprint is stable for one font tree, moves when a font or its config moves, and fails closed when empty", () => {
+  const script = fontStep(yaml.load(source(".github/workflows/visual-regression.yml"))).run;
+  const workspace = mkdtempSync(path.join(os.tmpdir(), "visual-fonts-tree-"));
+  try {
+    const stage = fontTree(workspace);
+    const first = fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]);
+    assert.match(first, /^[0-9a-f]{16}$/);
+    assert.equal(fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]), first, "the same fonts must key the same screens");
+    writeFileSync(path.join(stage, "config", "conf.d", "50-user.conf"), "<fontconfig><!--changed--></fontconfig>");
+    const configChanged = fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]);
+    assert.notEqual(configChanged, first, "a fontconfig change must miss the saved screens");
+    writeFileSync(path.join(stage, "config", "conf.d", "50-user.conf"), "<fontconfig/>");
+    writeFileSync(path.join(stage, "fonts", "truetype", "LiberationSans.ttf"), "font-b");
+    assert.notEqual(fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]), first, "a changed font file must miss the saved screens");
+    rmSync(path.join(stage, "fonts"), { recursive: true, force: true });
+    rmSync(path.join(stage, "config"), { recursive: true, force: true });
+    mkdirSync(path.join(stage, "fonts"), { recursive: true });
+    assert.throws(
+      () => fingerprintFonts(script, [path.join(stage, "fonts")]),
+      /no saved screen can be proven/,
+      "an image with no fonts must fail closed instead of keying every image alike",
+    );
+  } finally {
+    rmSync(workspace, { recursive: true, force: true });
+  }
 });
 
 test("paired lifecycle resets each schema, seeds both from the same harness, builds sequentially and never updates head snapshots", async () => {
