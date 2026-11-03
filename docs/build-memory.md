@@ -165,17 +165,18 @@ The 2 cap (HYCI-98, merged in `319f94d7a5` at 06:07:13 UTC) held for most of the
 
 | Fact | Value |
 | --- | --- |
-| Production deployments created after the 2 cap landed | 57 |
-| Of those green | 52 |
-| Of those failed | 5 (`77c07358e1` 07:21, `f79e9a2f6d` 07:28, `c85a55ac24` 07:30, `58a2d31036` 18:50, `9e5741caf7` 18:51) |
+| Production deployments created after the 2 cap landed (to 21:36 UTC) | 64 |
+| Of those green | 56 |
+| Of those failed | 8 (`77c07358e1` 07:21, `f79e9a2f6d` 07:28, `c85a55ac24` 07:30, `58a2d31036` 18:50, `9e5741caf7` 18:51, `add252af48` 19:14, `1ad77dab18` 19:15, `6d7f0f149d` 20:27) |
 | Confirmed `out_of_memory` from the build log | `58a2d31036` (`dpl_ASKr2CGug9kgdCsZjNHKMoc7KMz2`) and `9e5741caf7` (`dpl_4QPHMwemMHgrsuQdkBZpBg4nTTvo`) |
 | Kill point in `dpl_4QPHMwemMHgrsuQdkBZpBg4nTTvo` | 117 s into "Creating an optimized production build", no module output yet |
-| Live build served by the app at 19:03 UTC | `dc91c23a26` (last green, 18:36), two merges behind |
+| Green build wall-clock, 20:23 and 20:36 UTC | 17 min 42 s and 11 min 40 s, against the 45 minute build timeout |
+| Live build served by the app | `dc91c23a26` at 19:03 UTC (the 18:36 green, two merges behind), `084cde6df8` at 21:36 UTC (caught up) |
 
-Both confirmed kills are the same signature as the 4 cap: `SIGKILL` with no "Reached heap limit", so the V8 heap stayed inside its 4096 MB cap and the container filled from the native side. The three 07:21 to 07:30 failures are not confirmed from this host (no Vercel token, `api.vercel.com` unreachable); they cluster at the same ceiling and the next deployment at 07:48 was green.
+Both confirmed kills are the same signature as the 4 cap: `SIGKILL` with no "Reached heap limit", so the V8 heap stayed inside its 4096 MB cap and the container filled from the native side. The six failures not confirmed from the build log are not readable from this host (no Vercel token, `api.vercel.com` unreachable); they cluster at the same ceiling and each was followed by a green deployment, so the app caught up on its own rather than needing a rebuild.
 
 `e0209bbe59` (HTPR-8377) has no deployment record at all. Its build was superseded by the two later pushes on `production` before it started, so nothing was skipped by `scripts/vercel-ignore-build.cjs`; the merge is contained in the newer commits, so it needs no rebuild of its own.
 
-The build script now sets `NEXT_WEBPACK_PARALLELISM=1`: one module build at a time, so the native side of the compile no longer adds a second SWC transform's AST on top of the first. `tests/build-memory-config.test.cjs` fails if the cap goes above 1 or is dropped. The expected cost is build wall-clock only, inside the 45 minute build timeout.
+The build script now sets `NEXT_WEBPACK_PARALLELISM=1`: one module build at a time, so the native side of the compile no longer adds a second SWC transform's AST on top of the first. `tests/build-memory-config.test.cjs` fails if the cap goes above 1 or is dropped. The expected cost is build wall-clock only. The margin is real but not unlimited: green builds measured 11 min 40 s to 17 min 42 s at the 2 cap, and if serialising the compile roughly doubles its share the build lands in the low thirties, still inside the 45 minute timeout. A build that does time out fails differently from these (a cancelled or timed-out deployment, not `SIGKILL` 117 s in), so the two are told apart from the deployment status.
 
 If one module build at a time still reports `out_of_memory`, the same ceiling is being reached from a single module and the remaining lever without money is the heap cap below. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
