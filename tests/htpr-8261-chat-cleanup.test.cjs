@@ -48,5 +48,7 @@ test("no sparkle or purple is left in the chat surfaces", () => {
   const welcome = read("src/components/AI_CHAT/WelcomeScreen.tsx");
   assert.match(welcome, /\{!chatCleanupEnabled && \(\s*<Sparkles/);
   const message = read("src/components/AI_CHAT/MessageItem.tsx");
-  assert.match(message, /if \(chatCleanupEnabled\) \{[\s\S]*?text-white-black">\{agentStatus\}/);
+  assert.match(message, /const chatCleanupEnabled = useFlag\(HTPR_8261_CHAT_CLEANUP_FLAG\)/);
+  assert.match(message, /chatCleanupEnabled \? "font-bold text-white-black" : "invisible font-bold"/);
+  assert.match(message, /\{!chatCleanupEnabled && \(\s*<span className="absolute inset-0 bg-gradient-to-r/);
 });
