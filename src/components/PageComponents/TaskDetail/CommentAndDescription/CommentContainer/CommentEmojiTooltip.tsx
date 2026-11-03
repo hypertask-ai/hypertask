@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import TooltipPortal from '@/components/Common/TooltipPortal'
 
 const ShortcutTooltip = ({ text, shortcut, topLayer = false }: { text: string; shortcut: string; topLayer?: boolean }) => (
-    <div className={`hidden sm:flex items-center ${topLayer ? "" : "z-[9999]"} font-semibold border-light-black-border-1 border-[1px] bg-labelComponent gap-2 py-[6px] px-2 whitespace-nowrap text-dense xl:text-content rounded-[4px]`}>
+    <div className={`hidden sm:flex items-center ${topLayer ? "" : "z-tooltip"} font-semibold border-light-black-border-1 border-[1px] bg-labelComponent gap-2 py-[6px] px-2 whitespace-nowrap text-dense xl:text-content rounded-[4px]`}>
         <span className="text-black">{text}</span>
         <kbd className="px-1 pt-[2px] mx-[1.5px] rounded-[2px] pb-0 bg-[var(--bg-keycap)] border-[var(--border-keycap)]">
             {shortcut}
@@ -48,7 +48,7 @@ const LegacyCommentEmojiTooltip = ({ anchorElement = null }: { anchorElement?: H
 
     if (anchorElement && typeof document !== 'undefined') {
         return createPortal(
-            <div ref={portalRef} className="fixed z-[9999] flex flex-col gap-[5px]" style={position}>
+            <div ref={portalRef} className="fixed z-tooltip flex flex-col gap-[5px]" style={position}>
                 <ShortcutTooltip text="Add Reaction" shortcut="R" />
                 <ShortcutTooltip text="Fast Like" shortcut="L" />
             </div>,

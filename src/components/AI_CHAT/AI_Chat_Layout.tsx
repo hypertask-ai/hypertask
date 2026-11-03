@@ -120,7 +120,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
           disabled={openerDisabled}
           aria-busy={openerDisabled || undefined}
           aria-label="Open AI chat"
-          className="group fixed right-1 top-2 z-[60] flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black disabled:cursor-wait"
+          className="group fixed right-1 top-2 z-sticky flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black disabled:cursor-wait"
         >
           <ChevronLeft size={16} strokeWidth={1.75} />
           <Tooltip left={-120} bottom={-8} text="AI chat" keyCombination={["5"]} />
@@ -149,7 +149,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
           ) : (
             <div
               className={cn(
-                "fixed right-[0.5rem] z-[400]",
+                "fixed right-[0.5rem] z-floating",
                 showQuickTips ? "bottom-10" : "bottom-5"
               )}
             >

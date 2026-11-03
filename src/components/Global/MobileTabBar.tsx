@@ -117,7 +117,7 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
     <nav
       ref={dockRef}
       aria-label="Primary navigation"
-      className="fixed inset-x-0 bottom-0 z-[300] border-t border-border-light-gray-thin bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-floating border-t border-border-light-gray-thin bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <div className="flex h-16 items-stretch">
         <button

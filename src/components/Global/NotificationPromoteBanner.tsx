@@ -236,7 +236,7 @@ const NotificationPromoteBanner = () => {
       role="region"
       aria-label="Enable notifications"
       style={{ left: appShellRailOn ? "var(--app-shell-rail-w, 48px)" : 0 }}
-      className="fixed right-0 bottom-0 z-[299] border-t border-[#232a39] bg-[#10131a] pb-[env(safe-area-inset-bottom)] text-content text-[#e9edf1]"
+      className="fixed right-0 bottom-0 z-menu border-t border-light-black-border-1 bg-containerBackground pb-[env(safe-area-inset-bottom)] text-content text-white-black"
     >
       <div className="flex w-full flex-wrap items-center justify-center gap-x-3 gap-y-1.5 px-3 py-2">
         <div className="flex min-w-0 basis-full flex-1 items-center justify-center gap-3 sm:basis-auto sm:justify-start">
@@ -260,7 +260,7 @@ const NotificationPromoteBanner = () => {
           {!pushDenied && (
             <button
               type="button"
-              className="text-meta text-[#aeb6c6] underline-offset-2 hover:text-[#ffffff] hover:underline focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"
+              className="text-meta text-text-light-gray underline-offset-2 hover:text-white-black hover:underline focus-visible:outline-none disabled:cursor-wait disabled:opacity-50"
               disabled={pendingAction !== null}
               onClick={enableEmail}
             >
@@ -270,7 +270,7 @@ const NotificationPromoteBanner = () => {
           {preference.stage === 2 && (
             <button
               type="button"
-              className="text-meta text-[#aeb6c6] underline-offset-2 hover:text-[#ffffff] hover:underline focus-visible:outline-none"
+              className="text-meta text-text-light-gray underline-offset-2 hover:text-white-black hover:underline focus-visible:outline-none"
               onClick={dismiss}
             >
               I&apos;ll do it later
@@ -279,7 +279,7 @@ const NotificationPromoteBanner = () => {
           <button
             type="button"
             aria-label="Dismiss notification banner"
-            className="text-[#8790a3] hover:text-[#ffffff] focus-visible:outline-none"
+            className="text-text-light-gray hover:text-white-black focus-visible:outline-none"
             onClick={dismiss}
           >
             <X aria-hidden size={18} strokeWidth={1.75} />

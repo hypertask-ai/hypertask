@@ -95,8 +95,8 @@ export default function AIChatClosedLayout({
         data-ai-chat-slot
         className={sidebarWidthPx > 0 && !isMobile
           ? sidebarOverlays
-            ? "fixed right-0 top-0 z-[51]"
-            : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
+            ? "fixed right-0 top-0 z-sticky"
+            : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-sticky"
           : "contents"}
         style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
       >
@@ -109,7 +109,7 @@ export default function AIChatClosedLayout({
           disabled={openerDisabled}
           aria-busy={openerDisabled || undefined}
           aria-label="Open AI chat"
-          className="group fixed right-1 top-2 z-[60] flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black disabled:cursor-wait"
+          className="group fixed right-1 top-2 z-sticky flex h-[20px] items-center justify-center text-text-light-gray hover:text-white-black disabled:cursor-wait"
         >
           <ChevronLeft size={16} strokeWidth={1.75} />
           <Tooltip left={-120} bottom={-8} text="AI chat" keyCombination={["5"]} />

@@ -112,7 +112,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
                 className={`pointer-events-none sm:flex
                     hidden
                     items-center
-                    z-[9999]
+                    z-tooltip
                     font-semibold
                     border-light-black-border-1 border-[1px]
                     bg-labelComponent gap-2 max-w-[calc(100vw-16px)]
@@ -158,7 +158,7 @@ const LegacyTooltip = ({keyCombination,bottom, text,left, groupHoverId="",should
                 className={`pointer-events-none sm:flex
                     hidden
                     items-center
-                    z-[9999]
+                    z-tooltip
                     font-semibold
                     border-light-black-border-1 border-[1px]
                     bg-labelComponent gap-2

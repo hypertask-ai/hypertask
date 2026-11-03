@@ -147,7 +147,7 @@ const Starred = (props: IProp) => {
       {appShellRailOn ? <div className="pl-[var(--app-shell-rail-w,48px)]">{content}</div> : content}
       <div
         onClick={() => router.back()}
-        className="bg-back-button hidden md:flex fixed z-[100] top-10 w-10 h-10 rounded-full items-center justify-center cursor-pointer"
+        className="bg-back-button hidden md:flex fixed z-menu top-10 w-10 h-10 rounded-full items-center justify-center cursor-pointer"
         style={{ left: appShellRailOn ? APP_SHELL_RAIL_OFFSET : 40 }}
       >
         <svg
@@ -166,7 +166,7 @@ const Starred = (props: IProp) => {
       </div>
       <div
         onClick={() => router.back()}
-        className="fixed z-[101] bottom-[110px] right-4 rounded-[20px] justify-center md:hidden cursor-pointer shadow-customshadow-2 flex w-fit px-3 py-[2px] h-fit gap-2 items-center bg-modalBackground text-[#8E9093]"
+        className="fixed z-menu bottom-[110px] right-4 rounded-[20px] justify-center md:hidden cursor-pointer shadow-customshadow-2 flex w-fit px-3 py-[2px] h-fit gap-2 items-center bg-modalBackground text-text-light-gray"
       >
         <Image src={Goback} alt="icon" width={28} height={28} />
         <span>Back</span>

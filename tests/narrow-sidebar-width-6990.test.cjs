@@ -77,7 +77,7 @@ test("narrow desktop reserves no chat width even before viewport hydration, whil
 test("desktop slots protect narrow viewports while mobile closed tickets omit the slot", () => {
   const desktop = new JSDOM(renderToString(workspace(frame()))).window.document;
   const slot = desktop.querySelector("[data-ai-chat-slot]");
-  assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]");
+  assert.equal(slot.className, "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-sticky");
   assert.equal(slot.style.width, "420px");
   const mobile = new JSDOM(renderToString(workspace(frame(true)))).window.document;
   assert.equal(mobile.querySelector("[data-ai-chat-slot]"), null);

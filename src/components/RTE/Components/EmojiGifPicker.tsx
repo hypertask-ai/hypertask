@@ -283,7 +283,7 @@ const EmojiGifPicker = ({
       ref={popoverRef}
       role="dialog"
       aria-label="Insert emoji or GIF"
-      className="fixed z-[10000] flex h-[430px] max-h-[calc(100vh-16px)] w-[360px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-md bg-modalBackground text-white-black shadow-xl"
+      className="fixed z-toast flex h-[430px] max-h-[calc(100vh-16px)] w-[360px] max-w-[calc(100vw-16px)] flex-col overflow-hidden rounded-md bg-modalBackground text-white-black shadow-xl"
       style={position}
     >
       <div

@@ -879,7 +879,7 @@ const AITaskWriterContainer: React.FC<
                 Turn off <ChevronDown size={15} strokeWidth={1.75} />
               </button>
               {showTurnOffMenu ? (
-                <div className="absolute right-0 top-full z-[6000] mt-1 w-60 rounded-[4px] bg-modalBackground p-1 shadow-lg">
+                <div className="absolute right-0 top-full z-popup mt-1 w-60 rounded-[4px] bg-modalBackground p-1 shadow-lg">
                   <button
                     type="button"
                     onClick={onTurnOffTask}
@@ -980,7 +980,7 @@ const AITaskWriterContainer: React.FC<
           }}
           detent={isMobileCreateFlow ? "content" : "default"}
           customScroller={!isMobileCreateFlow}
-          sheetClassName="!z-[12000]"
+          sheetClassName="!z-toast"
           containerStyle={
             writerViewport
               ? {
@@ -1057,7 +1057,7 @@ const AITaskWriterContainer: React.FC<
             onConfirm={onConfirmDiscard}
             onCancel={onCancelDiscard}
             onTaskPage={true}
-            customClassName="sm:min-w-[500px] xs:max-h-[600px] z-[90000000] relative"
+            customClassName="sm:min-w-[500px] xs:max-h-[600px] z-popup relative"
             compact="my-[-15px]"
           />
         )}
@@ -1094,7 +1094,7 @@ const AITaskWriterContainer: React.FC<
             handleEscape();
           }
         }}
-        className={`text-white-black z-[5000] absolute w-full ${currentDisplayResponse ? "top-0" : "bottom-0"}`}
+        className={`text-white-black z-popup absolute w-full ${currentDisplayResponse ? "top-0" : "bottom-0"}`}
       >
         <div className="min-h-full">
           <div
@@ -1122,7 +1122,7 @@ const AITaskWriterContainer: React.FC<
           onConfirm={onConfirmDiscard}
           onCancel={onCancelDiscard}
           onTaskPage={true}
-          customClassName="sm:min-w-[500px] xs:max-h-[600px] z-[90000000] relative"
+          customClassName="sm:min-w-[500px] xs:max-h-[600px] z-popup relative"
           compact="my-[-15px]"
         />
       )}

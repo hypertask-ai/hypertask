@@ -429,7 +429,7 @@ const AIModelDropDownList = ({
             role="menu"
             aria-label="AI model"
             className={cn(
-              "absolute bottom-[calc(100%+8px)] z-[1200] min-w-[210px] rounded-[5px] bg-modalBackground p-1.5 text-dense text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
+              "absolute bottom-[calc(100%+8px)] z-popup min-w-[210px] rounded-[5px] bg-modalBackground p-1.5 text-dense text-white-black shadow-[0_8px_30px_rgba(0,0,0,0.45)]",
               menuAlign === "right" ? "right-0" : "left-0",
             )}
             onKeyDown={(event) => {

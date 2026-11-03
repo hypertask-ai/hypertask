@@ -39,6 +39,6 @@ test("legacy tooltip keeps centered content and its stacking class after interpo
     const tooltip = view.container.firstElementChild;
     assert.equal(tooltip.textContent, "Tooltip content");
     assert.equal(tooltip.classList.contains("items-center"), true);
-    assert.equal(tooltip.classList.contains("z-[9999]"), true);
+    assert.equal(tooltip.classList.contains("z-tooltip"), true);
   } finally { view.close(); }
 });

@@ -87,7 +87,7 @@ export default function ShortcutArchiveNudge() {
     setNudge((current) => clearArchiveShortcutNudge(current, accountId));
 
   return (
-    <div className="pointer-events-none fixed left-1/2 top-0 z-[120] -translate-x-1/2">
+    <div className="pointer-events-none fixed left-1/2 top-0 z-menu -translate-x-1/2">
       <div
         className="shortcut-archive-nudge pointer-events-auto flex max-w-[calc(100vw-1rem)] flex-wrap items-center justify-center gap-2 rounded-b-[5px] bg-modalBackground px-4 py-2 text-dense text-white-black shadow-md sm:max-w-none sm:flex-nowrap sm:justify-start"
         role="region"

@@ -89,7 +89,7 @@ const MobileInboxSplitDock = ({
     <nav
       ref={dockRef}
       aria-label="Inbox splits"
-      className="fixed inset-x-0 bottom-0 z-[300] border-t border-border-light-gray-thin bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-floating border-t border-border-light-gray-thin bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <div className="flex items-center">
       <div

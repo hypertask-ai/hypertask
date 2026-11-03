@@ -362,7 +362,7 @@ export const AI_Chat_Sidebar = ({
         inOffcanvas
           ? "h-full min-h-0 w-full flex-col"
           : [
-              "h-SVH-full z-[51] max-md:fixed max-md:inset-0 max-md:z-[9991] max-md:w-full",
+              "h-SVH-full z-sticky max-md:fixed max-md:inset-0 max-md:z-toast max-md:w-full",
               "flex-col md:flex-row md:shrink-0",
             ]
       )}

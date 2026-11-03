@@ -63,7 +63,7 @@ const AnnouncementBanner: React.FC<IProps> = ({
   };
 
   return (
-    <aside className="fixed bottom-[56px] left-[12px] right-[12px] z-[100] w-auto rounded-[4px] bg-modalBackground p-[14px] text-white-black shadow-lg sm:left-auto sm:right-[20px] sm:w-[330px]">
+    <aside className="fixed bottom-[56px] left-[12px] right-[12px] z-menu w-auto rounded-[4px] bg-modalBackground p-[14px] text-white-black shadow-lg sm:left-auto sm:right-[20px] sm:w-[330px]">
       <div className="mb-3 flex items-center justify-between">
         <span className="flex items-center gap-2">
           <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#51A4F1]" />

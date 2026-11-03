@@ -41,7 +41,7 @@ const LegacyTutorialTooltip = ({
       ref={tooltipRef}
       style={{ top: top, left: left }}
       className={cn(
-        "flex items-center z-[9990] font-normal border-light-black-border-1 border-[1px] bg-labelComponent gap-2  py-[6px] px-2 whitespace-nowrap text-meta xl:text-meta absolute   rounded-[4px]",
+        "flex items-center z-toast font-normal border-light-black-border-1 border-[1px] bg-labelComponent gap-2  py-[6px] px-2 whitespace-nowrap text-meta xl:text-meta absolute   rounded-[4px]",
         className
       )}
     >

@@ -54,7 +54,7 @@ export const InteractiveTutorialMobileBlocking: React.FC<InteractiveTutorialMobi
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[9999]",
+        "fixed inset-0 z-toast",
         "bg-gradient-dark",
         "flex items-center justify-center",
       )}

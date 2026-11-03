@@ -113,7 +113,7 @@ export function renderMobileAttachmentEdit(context: Context) {
               <div
                 role="menu"
                 aria-label="More edit actions"
-                className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-[1100] w-[240px] overflow-hidden rounded-[4px] bg-modalBackground p-1.5 text-content text-white-black shadow-md"
+                className="absolute bottom-[calc(100%_+_0.5rem)] left-0 z-popup w-[240px] overflow-hidden rounded-[4px] bg-modalBackground p-1.5 text-content text-white-black shadow-md"
                 onClickCapture={closeMobileCommentActions}
               >
                 <button

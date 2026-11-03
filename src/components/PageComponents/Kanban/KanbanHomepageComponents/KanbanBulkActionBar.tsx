@@ -11,9 +11,9 @@ const ghostIconButtonClass =
   "rounded-[4px] p-1.5 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black disabled:cursor-not-allowed disabled:opacity-40";
 
 const desktopBarClass =
-  "fixed bottom-5 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-3 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4";
+  "fixed bottom-5 left-1/2 z-menu flex -translate-x-1/2 items-center gap-3 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4";
 const phoneBarClass =
-  "fixed inset-x-2 z-[210] flex flex-wrap items-center justify-center gap-2 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4";
+  "fixed inset-x-2 z-menu flex flex-wrap items-center justify-center gap-2 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4";
 const desktopFlaggedBarStyle = { bottom: "var(--quick-tips-clearance, 20px)" };
 const phoneBarStyle = { bottom: "calc(var(--mobile-dock-h, 0px) + 16px + env(safe-area-inset-bottom))" };
 

@@ -59,7 +59,7 @@ const Announcements: React.FC<IPosts> = ({
     >
       <div
         id="announcements-component-container"
-        className={`fixed bg-sidebar text-white-black top-0 flex flex-col h-SVH-full z-[100] xs:w-[80vw] sm:w-[450px] transform transition-transform duration-[225ms] ease-out will-change-transform ${
+        className={`fixed bg-sidebar text-white-black top-0 flex flex-col h-SVH-full z-menu xs:w-[80vw] sm:w-[450px] transform transition-transform duration-[225ms] ease-out will-change-transform ${
           placement === "left" ? "left-[var(--app-shell-rail-w,48px)]" : "right-0"
         } ${
           isVisible

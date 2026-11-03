@@ -123,7 +123,7 @@ export function StaticDescriptionFrame({
         isMbl ? taskDetailSpacing.mobile.descriptionContainer : "",
       )}
     >
-      <div id="popover-wrapper-description" className="w-full absolute z-[1000] hidden h-0" />
+      <div id="popover-wrapper-description" className="w-full absolute z-popup hidden h-0" />
       <StaticDescriptionBody html={html} isMbl={isMbl} />
       <button className="hidden" id="popover-button-description" />
     </div>

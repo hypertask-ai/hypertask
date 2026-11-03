@@ -124,7 +124,7 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
 
           <div
             id={divIds.popoverContainer}
-            className={`w-full absolute z-[1000] ${
+            className={`w-full absolute z-popup ${
               shouldShowFullAiTaskWriter
                 ? "block h-full"
                 : "hidden h-0"
@@ -154,7 +154,7 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
               <div
                 data-mobile-existing-content-editor
                 hidden={sidebarEditWithAi && chatHandoffOpen && showAiChatInterface}
-                className="fixed inset-x-0 z-[1200] bg-modalBackground"
+                className="fixed inset-x-0 z-popup bg-modalBackground"
                 style={{
                   bottom: mobileEditViewport?.bottomInset ?? 0,
                   height: mobileEditHeight,
