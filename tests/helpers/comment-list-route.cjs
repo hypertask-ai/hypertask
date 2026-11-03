@@ -15,6 +15,7 @@ function loadRoute(comments) {
 
   let commentFindManyQuery;
   const prisma = {
+    agentRunActivity: { findMany: async () => [] },
     comment: {
       count: async () => comments.length,
       findMany: async (query) => {
@@ -104,6 +105,10 @@ function loadRoute(comments) {
   stubs['@/lib/agents/writing'] = require('../task-route-loader.cjs').load('src/lib/agents/writing.ts', {})
   stubs['@/lib/agents/writingEnforcement'] = require('./stub-map.cjs').enforcementFor(stubs['@/lib/agents/writing'])
   stubs['./agentChatterRouting'] = require('../task-route-loader.cjs').load('src/lib/mcp/operations/comments/agentChatterRouting.ts', {})
+  stubs['@/lib/agentRuns/taskAgentLog'] = require('../task-route-loader.cjs').load('src/lib/agentRuns/taskAgentLog.ts', {
+    '@/lib/prisma': { __esModule: true, default: prisma },
+    '@/utils/controllers/projects/getAllIncludes': {},
+  })
   loaded.require = (request) => request === "@/lib/mcp/routeWrapper"
       ? require("./mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
       : stubs[request] ?? require(request);

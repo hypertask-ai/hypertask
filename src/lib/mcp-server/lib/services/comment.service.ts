@@ -89,7 +89,18 @@ export interface GetCommentsResponse {
   offset: number;
   has_more: boolean;
   next_offset?: number;
+  agent_activity?: AgentLogEntry[];
 }
+
+export type AgentLogEntry = {
+  id: string;
+  agentId: string;
+  agentName: string;
+  runId: string;
+  type: string;
+  text: string;
+  createdAt: string;
+};
 
 export interface DeleteCommentResponse {
   success: boolean;
