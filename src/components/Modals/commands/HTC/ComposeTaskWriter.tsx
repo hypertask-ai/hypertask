@@ -35,7 +35,7 @@ import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLA
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7313_CTRLJ_ALWAYS_BOARD_CHIP_FLAG, HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG } from "@/lib/flags/keys";
-import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
+import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
 import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
@@ -87,6 +87,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const clickableFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const queueEnterWhileBoardsLoad = useFlag(HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG);
   const holdEnterUntilTextRenders = useFlag(HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG);
+  const ctrlEnterSends = useFlag(HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
@@ -104,6 +105,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const taskContextRef = useRef(taskContext);
   taskContextRef.current = taskContext;
   const isApple = useDeviceContext();
+  const commandKey = isApple ? "Cmd" : "Ctrl";
+  const sendHint = ctrlEnterSends ? `${commandKey} Enter` : "Enter";
   const inView = useRecoilValue(inViewObjectAtom);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
@@ -502,9 +505,10 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const footerKeys = composeWriterFooterKeys({
     recording,
     transcribing,
-    commandKey: isApple ? "Cmd" : "Ctrl",
+    commandKey,
     board: Boolean(boardChipEnabled && showBoardChip),
     dictate: Boolean(dictationShortcutEnabled),
+    ctrlEnterSends,
   });
 
   return enabled ? (
@@ -568,7 +572,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                   boardChip.current?.focus();
                   return;
                 }
-                if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                const cmdEnter = event.key === "Enter" && (event.ctrlKey || event.metaKey);
+                const plainEnter = event.key === "Enter" && !event.shiftKey;
+                if ((ctrlEnterSends ? cmdEnter : plainEnter) && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.stopPropagation();
                   if (holdEnterUntilTextRenders && typedTextNotRendered.current !== null && typedTextNotRendered.current !== text) {
@@ -632,7 +638,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           {footerKeys.right.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>
       </div> : <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
-        {clickableFooter ? <button type="button" aria-label="Send" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating || !text.trim()} onClick={() => void send()}><HintKey>Enter</HintKey> Send</button> : <span><HintKey>Enter</HintKey> Send</span>}
+        {clickableFooter ? <button type="button" aria-label="Send" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating || !text.trim()} onClick={() => void send()}><HintKey>{sendHint}</HintKey> Send</button> : <span><HintKey>{sendHint}</HintKey> Send</span>}
         {clickableFooter ? <button type="button" aria-label={newTaskWindow ? "Attach files" : "Add images"} className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || addingImages || dictating} onClick={handleAttachmentClick}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>}
         {clickableFooter ? <button type="button" aria-label="Search" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} onClick={onSearch}><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</button> : <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>}
         {boardChipEnabled && (clickableFooter ? <button type="button" aria-label="Board" className={footerButtonClassName} onMouseDown={(event) => event.preventDefault()} disabled={writing || dictating} onClick={openBoardPicker}><HintKey>{boardShortcut}</HintKey> Board</button> : <span><HintKey>{boardShortcut}</HintKey> Board</span>)}

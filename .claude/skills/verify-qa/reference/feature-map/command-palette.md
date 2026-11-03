@@ -30,6 +30,19 @@ AMOLED, Graphite, Porcelain and Dia. Compare computed outlines and bounding
 boxes against the pre-release captures. Flag Off keeps the old appearance.
 No tasks need creating for this styling check.
 
+## New Task send shortcut
+
+With `htpr-8253-ctrlj-ctrl-enter-send` on (default Everyone), Ctrl+Enter opens
+in the New Task composer, type a two-paragraph note, and press Enter: a line
+break must appear and no ticket may be created. The footer below the box reads
+`CTRL+ENTER Send` (`CMD+ENTER` on Apple). Press Ctrl+Enter (Cmd+Enter on a Mac):
+exactly one ticket is created with the whole note, the composer closes and the
+new ticket opens. Repeat at 1440x900 and 390x844 in Porcelain, Graphite, AMOLED
+and Dia, and capture the footer hint in each. With the flag Off, Enter creates
+the task again and the hint reads `Enter Send`. The phone New Task sheet hides
+the footer and keeps its Send button, so record that path as the closest check
+for the phone footer.
+
 ## What usually breaks
 
 - A palette label drifting from the key that actually works: the palette
