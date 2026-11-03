@@ -118,7 +118,7 @@ export const getKeyboardShortcuts = (
         ...(composeTaskWriter ? [] : [{ shortTitle: "Add task with AI Task Writer", pressKey: [cmdControl, "J"] }]),
         { shortTitle: "Add sub-task", pressKey: [cmdControl, "SHIFT", "+"] },
         { shortTitle: "Add task at top", pressKey: [cmdControl, "SHIFT", "C"] },
-        { shortTitle: "Add task at bottom", pressKey: ["SHIFT", "C"] },
+        { shortTitle: "Quick add task", pressKey: ["N"] },
         { shortTitle: "Open task", pressKey: ["ENTER"] },
         ...(appShellRailOn
           ? []

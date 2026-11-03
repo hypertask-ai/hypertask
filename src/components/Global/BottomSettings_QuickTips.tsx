@@ -40,6 +40,8 @@ import AIWriterButton from "../Common/AIWriterButton";
 import { useGlobalUIState } from "../ProviderGlobal/useGlobalUIState";
 import { useSettingsNavigation } from "../Modals/Settings/settingsNavigation";
 import { tooltipConfig } from "@/lib/configs/tooltip.config";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
 import { CLASS_NAME_CONSTANTS } from "@/lib/configs/general.config";
 
 const cn = (...classes: (string | boolean | undefined)[]) =>
@@ -122,6 +124,7 @@ const BottomSettings_QuickTips = ({
 }: {
   announcements: any;
 }) => {
+  const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
   const boardTips = KanbanTipsConstants.flatMap(tip => tip.hint === "add task"
     ? [tip, { key: ["N"], hint: "quick add" }]
     : [tip]);
@@ -238,7 +241,7 @@ const BottomSettings_QuickTips = ({
         </div>
       )}
 
-      {!mbl && <QuickTips boardTips={boardTips.map(tip => tip.hint === "quick add" ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
+      {!mbl && <QuickTips boardTips={boardTips.map(tip => tip.hint === "quick add" && !quickAddShortcutsEnabled ? { ...tip, key: ["N / Shift+C"] } : tip)} />}
     </>
   );
 };

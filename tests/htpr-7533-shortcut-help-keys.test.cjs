@@ -129,7 +129,7 @@ contract("Board", "Add task", "C", "section", "e.keyCode === KeyCodes.C", "!(e.a
 contract("Board", "Add task with AI Task Writer", "MOD|J", "section", "e.keyCode === KeyCodes.J", "((isApple && e.metaKey) || (!isApple && e.ctrlKey))", 'defaultEditMode: "Description-ai"');
 ambiguous("Board", "Add sub-task", "MOD|SHIFT|+", "Mod+Shift+= links subtasks in task detail, but no board-level handler exists; creating versus linking also needs clarification.");
 contract("Board", "Add task at top", "MOD|SHIFT|C", "section", "e.keyCode === KeyCodes.C", "e.shiftKey && (e.ctrlKey || e.metaKey)", 'createTaskAt("top"');
-ambiguous("Board", "Add task at bottom", "SHIFT|C", "Legacy Shift+C creates at bottom; quick-add flags intercept it and open a modal instead.");
+contract("Board", "Quick add task", "N", "board", 'e.key.toLowerCase() === "n" && !e.shiftKey', "OPEN_QUICK_ENTRY");
 contract("Board", "Open task", "ENTER", "row", 'taskShortcutAction === "open"', "navigateToTask(task.projectId");
 contract("Board", "Next view", "]", "views", "event.key === '[' || event.key === ']'", "event.key === ']' ? 1 : -1");
 contract("Board", "Previous view", "[", "views", "event.key === '[' || event.key === ']'", "event.key === ']' ? 1 : -1");

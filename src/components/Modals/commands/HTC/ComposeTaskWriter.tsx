@@ -43,6 +43,8 @@ import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
 import { X } from "lucide-react";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
+import { TaskWriterModelPicker, useTaskWriterModel } from "@/components/Global/ModelSelectorDropdown";
+import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
@@ -95,6 +97,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const cancelDictationButtonId = "compose-task-cancel-dictation";
   const createAfterDictation = useRef(false);
   const dictationDelivered = useRef(false);
+  const writerModelPicker = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
+  const writerModel = useTaskWriterModel();
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
@@ -344,6 +348,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles, skills } = await createComposedTask({
         text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(inlineAgentImages ? { inlineAgentImages } : {}), ...(invokeSkills ? { invokeSkills } : {}), ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
+        ...(writerModelPicker && writerModel ? { writerModel } : {}),
         ...(currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
@@ -590,6 +595,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
+                {writerModelPicker && <TaskWriterModelPicker mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}

@@ -50,11 +50,15 @@ async function fixture(run) {
   }
 }
 
+let quickAddShortcutsEnabled = false;
+
 function commonMocks(calls) {
   return {
     "@/lib/flags/definitions/htpr-7865-agent-creator-filter": load("src/lib/flags/definitions/htpr-7865-agent-creator-filter.ts"),
+    "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model": { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG: "htpr-8265-task-shortcuts-writer-model" },
     "@/hooks/useFlag": { useFlag: (key) => {
       if (key === "htpr-6175-quick-entry-cards") throw new Error("Removed flag must not be read");
+      if (key === "htpr-8265-task-shortcuts-writer-model") return quickAddShortcutsEnabled;
       return false;
     }, useFlagLoaded: () => true },
     "@/lib/flags/keys": { HTPR_7047_SHARP_PLUS_SIGNS_FLAG: "htpr-7047-sharp-plus-signs" },
@@ -310,7 +314,8 @@ test("mobile classic form: N stays inline", async () => fixture(async ({ dom, re
   assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
 }));
 
-test("bottom shortcut hint shows N / Shift+C; top hint and clicks stay unchanged", async () => fixture(async ({ reactRoot }) => {
+test("bottom shortcut hint shows N; top hint and clicks stay unchanged", async () => fixture(async ({ reactRoot }) => {
+  quickAddShortcutsEnabled = true;
   const calls = [];
   const Button = load("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx", {
     ...commonMocks(calls),
@@ -321,7 +326,7 @@ test("bottom shortcut hint shows N / Shift+C; top hint and clicks stay unchanged
     await React.act(async () => reactRoot.render(React.createElement(Button, {
       buttonPosition: position, sectionPayload: payload, createTaskAt: (...args) => calls.push(args),
     })));
-    assert.equal(document.querySelector("[data-keys]").dataset.keys, position === "bottom" ? "N / Shift+C" : "C");
+    assert.equal(document.querySelector("[data-keys]").dataset.keys, "N");
     await React.act(async () => document.querySelector("#root > div").click());
     assert.deepEqual(calls.pop(), [position, payload, undefined, true]);
   }
@@ -331,7 +336,7 @@ test("retired definition is absent, reused hints and existing full-editor scope 
   assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions", path.basename(__filename, ".test.cjs") + ".ts")), false);
   assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /boardTips=\{boardTips\.map[\s\S]*key: \["N \/ Shift\+C"\]/);
-  assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /keyCombination=\{\["N \/ Shift\+C"\]\}/);
+  assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /quickAddShortcutsEnabled \? \["N"\] : \["N \/ Shift\+C"\]/);
   assert.match(source(sectionPath), /useEffect\(\(\) => \{[\s\S]*?addEventListener\("OPEN_QUICK_ENTRY"/);
   assert.match(source(boardPath), /if \(returnIfModalOrInputActive\(\)\) return/);
   assert.match(source(`${tablePath}useTableKeyboard.ts`), /returnIfModalOrInputActive\(\)/);
@@ -354,7 +359,81 @@ test("global quick-add hints always include N / Shift+C", () => {
   }
   visit(ast);
   assert.ok(initializer && prop);
-  const hints = new Function("KanbanTipsConstants", `const boardTips = ${initializer}; return ${prop};`);
+  const hints = new Function("KanbanTipsConstants", "quickAddShortcutsEnabled", `const boardTips = ${initializer}; return ${prop};`);
   const original = { key: ["C"], hint: "add task" };
-  assert.deepEqual(hints([original]), [original, { key: ["N / Shift+C"], hint: "quick add" }]);
+  assert.deepEqual(hints([original], false), [original, { key: ["N / Shift+C"], hint: "quick add" }]);
+  assert.deepEqual(hints([original], true), [original, { key: ["N"], hint: "quick add" }]);
 });
+
+test("flag on: N opens the hovered column, Shift+C is cut, hints read N", async () => fixture(async ({ dom, reactRoot, press }) => {
+  quickAddShortcutsEnabled = true;
+  const calls = [];
+  const mocks = commonMocks(calls);
+  let activeItem = null;
+  let activeColumn = 0;
+  const currentProject = { id: 15 };
+  const atoms = { activeItemAtom: {}, activeSectionAtom: {}, currentProjectAtom: {}, showCommandsAtom: {}, showBoardManagerAtom: {} };
+  Object.assign(mocks, {
+    "@/store": atoms,
+    "@/lib/state": {
+      useRecoilState: (atom) => React.useState(atom === atoms.currentProjectAtom ? currentProject : atom === atoms.showCommandsAtom ? { show: false } : false),
+      useRecoilValue: (atom) => atom === atoms.currentProjectAtom ? currentProject : {},
+      useSetRecoilState: () => () => {},
+    },
+    "jotai": { useStore: () => ({ get: (atom) => atom === atoms.activeItemAtom ? activeItem : null }) },
+    "next/navigation": { useRouter: () => ({ refresh: () => {} }) },
+    "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
+    "@/models/CreateTaskModalModels/model": {},
+    "../General/useUndo": { useUndoContext: () => ({ undoData: [] }) },
+    "../MultiPages/useUpdateTaskInBoards": { default: () => ({ updateActiveItemAndItemInView: () => {} }) },
+    "@tanstack/react-query": { useQueryClient: () => ({}) },
+    "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext": { useKanbanModalStatesContext: () => ({}) },
+    "@/utils/api/global": {},
+    "../../utils/helperFunctions/Views/FilterHelperFunctions": {},
+    "../RecoilRoot/useHypertasksRecoilStates": { default: () => ({ resetShowCommands: () => {}, toggleCreateTaskGlobally: (...args) => calls.push(args) }) },
+    "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveSortingModeFromProject: () => "Manual" },
+    "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": {},
+    "../useUniversalMovement": { useUniversalMovement: () => ({ refocus: () => {} }) },
+    "@/models/enums": { CommandMode: {} },
+    "@/hooks/Task Detail/useTimeTracking": {},
+    "@/lib/constants/builtinViews": {},
+    "./useShowArchivedOnBoard": { useToggleShowArchivedOnBoard: () => () => {} },
+    "@/hooks/Homepage/Views/useKanbanViews": { default: () => ({}) },
+    "@/utils/generateRank": {},
+  });
+  const useBoard = load(boardPath, mocks).default;
+  const useSections = load(sectionPath, mocks).default;
+  const Column = ({ section, index }) => {
+    const state = useSections({ items: section.items, active: index === activeColumn, index, title: section.section_title, sectionId: section.sectionId, projectId: 15 });
+    return React.createElement("div", { ref: state.sectionRef, className: "section-container", tabIndex: 0, "data-column": section.sectionId },
+      React.createElement("div", { id: `task-${section.items[0].id}`, tabIndex: 0 }, "Task"),
+      state.showAddItem && React.createElement("input", { "data-quick": section.sectionId, ref: state.bottomInputRef, "data-position": state.position }),
+    );
+  };
+  const Harness = () => {
+    useBoard({ initialSections: sections, filteredSections: sections });
+    return React.createElement("div", { id: "sectionsContainer" }, sections.map((section, index) => React.createElement(Column, { key: section.sectionId, section, index })));
+  };
+  await React.act(async () => reactRoot.render(React.createElement(Harness)));
+  for (const key of ["C", "c"]) {
+    await press(key, { shiftKey: true });
+    assert.equal(document.querySelector("[data-quick]"), null, "Shift+C must not open quick add");
+    assert.equal(calls.length, 0);
+  }
+  await press("n");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "no focus or hover keeps the first column");
+  await React.act(async () => reactRoot.render(null));
+  await React.act(async () => reactRoot.render(React.createElement(Harness)));
+  const secondColumn = document.querySelector('[data-column="20"]');
+  await React.act(async () => secondColumn.dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
+  await press("n");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "20", "the hovered column wins when nothing is focused");
+  await React.act(async () => reactRoot.render(null));
+  await React.act(async () => reactRoot.render(React.createElement(Harness)));
+  document.querySelector('[data-column="10"]').focus();
+  await React.act(async () => document.querySelector('[data-column="20"]').dispatchEvent(new dom.window.MouseEvent("mouseover", { bubbles: true })));
+  await press("n");
+  assert.equal(document.querySelector("[data-quick]").dataset.quick, "10", "a focused column still wins over hover");
+  quickAddShortcutsEnabled = false;
+}));

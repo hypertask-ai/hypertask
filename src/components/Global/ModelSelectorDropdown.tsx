@@ -36,6 +36,8 @@ import {
 } from "@/store";
 import { getSettingsPath } from "@/components/Modals/Settings/settingsNavigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useAiModelPreference } from "@/hooks/General/useAiModelPreference";
+import { aiOptions } from "@/lib/constants/constants";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -867,6 +869,34 @@ const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
     ? gatedModelOptions.filter((option) => isAiModelOptionVisible(option, true, true, true))
     : gatedModelOptions.filter((option) => isAiModelOptionVisible(option, false, true, true));
   return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} />;
+};
+
+export function useTaskWriterModel() {
+  const { currentAiOption } = useAiModelPreference("taskWriter");
+  return currentAiOption
+    ? { id: currentAiOption.id, source: currentAiOption.source }
+    : undefined;
+}
+
+export const TaskWriterModelPicker = ({
+  className,
+}: {
+  className?: ClassNameValue;
+}) => {
+  const { currentAiOption, setAiOption } = useAiModelPreference("taskWriter");
+  const currentProject = useRecoilValue(currentProjectAtom);
+  const billing = useCurrentBoardBilling();
+  return (
+    <AIModelDropDownButton
+      optionCallback={setAiOption}
+      aiSelected={currentAiOption}
+      currentOptions={aiOptions}
+      modelTeamId={currentProject?.teamId ?? null}
+      modelBilling={billing}
+      stackSubmenus
+      className={className}
+    />
+  );
 };
 
 export default AIModelDropDownButton;

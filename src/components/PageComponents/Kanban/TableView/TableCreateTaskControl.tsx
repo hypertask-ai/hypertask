@@ -10,6 +10,8 @@ import {
 } from "./tableCreateTask";
 import { TableCreateTaskButton } from "./TableCreateTaskButton";
 import NewTask from "../../../Common/newTask";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
 
 export type QuickCreateTask = (
   title: string,
@@ -70,6 +72,7 @@ export const TableCreateTaskControl = ({
     sections,
   );
   const labels = getTableCreateTaskButtonLabelsForSelection(selectedRow, sections);
+  const quickAddShortcutsEnabled = useFlag(HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG);
   const quickEntry = Boolean(quickCreateTask && projectId);
   const activeTarget = openTarget?.projectId === projectId ? openTarget : null;
 
@@ -130,7 +133,7 @@ export const TableCreateTaskControl = ({
       hasCurrentProject={hasCurrentProject}
       disabled={!selectedSectionPayload}
       labels={quickEntry
-        ? { ...labels, title: labels.title.replace("(C)", "(N / Shift+C)") }
+        ? { ...labels, title: labels.title.replace("(C)", quickAddShortcutsEnabled ? "(N)" : "(N / Shift+C)") }
         : labels}
       onCreate={onCreate}
     />
