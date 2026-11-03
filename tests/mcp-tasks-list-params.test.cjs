@@ -49,7 +49,6 @@ test('ids inside the database integer range pass', () => {
   assert.equal(findIdParamOutOfRange({ task_id: [64140], cursor: 2147483647, created_by: null, section_id: undefined, assigned_to: [] }), null)
 })
 
-// HTPR-8460: section=4389 was read as a column name, so an id filter answered zero tasks.
 test('a numeric section filter is a column id, not a column name', () => {
   assert.deepEqual(parseSectionFilter('4389'), { sectionId: 4389 })
   assert.deepEqual(parseSectionFilter(' 4389 '), { sectionId: 4389 })

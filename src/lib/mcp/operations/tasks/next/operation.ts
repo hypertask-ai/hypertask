@@ -129,7 +129,7 @@ export async function GET(request: NextRequest) {
     )
     const projectDoneTitles = doneTitlesByProject.get(projectId)
 
-    const sectionWhere: ClaimableTaskWhereInput =
+    const sectionWhere: Prisma.TaskWhereInput =
       sectionFilter.sectionId !== undefined
         ? { sectionId: sectionFilter.sectionId }
         : section
