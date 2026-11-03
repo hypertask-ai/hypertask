@@ -3,6 +3,8 @@ import React from "react";
 
 import { ITask } from "@/models/model";
 import type { DraggableProvided } from "@hello-pangea/dnd";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 
 type ProgressiveTaskPlaceholderProps = {
   task: ITask;
@@ -30,13 +32,17 @@ const ProgressiveTaskPlaceholder = ({
   onReveal,
   onOpen,
   keyboardAccessible = false,
-}: ProgressiveTaskPlaceholderProps) => (
+}: ProgressiveTaskPlaceholderProps) => {
+  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  return (
   <div
     ref={provided.innerRef}
     id={`task-${task.id}`}
     data-progressive-task-id={task.id}
     aria-label={task.title}
-    className="block rounded-[5px] border-thin border-transparent bg-cardBackground px-2 py-2 text-dense text-white-black"
+    className={`block border-thin border-transparent bg-cardBackground py-2 text-dense text-white-black ${
+      cleanup ? "rounded-md pl-3 pr-2" : "rounded-[5px] px-2"
+    }`}
     {...provided.draggableProps}
     {...provided.dragHandleProps}
     style={{
@@ -75,6 +81,7 @@ const ProgressiveTaskPlaceholder = ({
       {task.title}
     </Link>
   </div>
-);
+  );
+};
 
 export default React.memo(ProgressiveTaskPlaceholder);

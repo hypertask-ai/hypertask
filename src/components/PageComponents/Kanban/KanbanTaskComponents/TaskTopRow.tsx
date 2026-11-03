@@ -13,6 +13,8 @@ import SubtaskCount from "./SubtaskCount";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
 import HTCButton from "../../TaskDetail/TaskOptions/HTCButton";
 import { IAgent, ITask, IUser } from "@/models/model";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 
 interface ITaskTopRow {
   task: ITask;
@@ -60,6 +62,8 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
   const [_, _setCurrentUser] = useRecoilState(currentUserAtom);
 
   const isMbl = useContext(MobileViewContext);
+  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const avatarSize = isMbl ? 18 : cleanup ? 20 : 22;
 
   const htcButtonCallback = () => updateTaskFocus(task);
 
@@ -80,7 +84,11 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
           ) : (
             <></>
           )}
-          <p className="task-ticket-id font-medium text-content sm:text-meta text-text-light-gray uppercase text-left">{`${ticketNumber}`}</p>
+          <p
+            className={`task-ticket-id font-medium text-content sm:text-meta uppercase text-left ${
+              cleanup ? "text-[#8e9093]" : "text-text-light-gray"
+            }`}
+          >{`${ticketNumber}`}</p>
         </span>
 
         {isMbl ? (
@@ -156,7 +164,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
                     }`}
                     name={assignee.displayName}
                     photoURL={assignee.photoURL}
-                    size={isMbl ? 18 : 22}
+                    size={avatarSize}
                     title={assignee.displayName}
                   />
                 )
@@ -171,7 +179,7 @@ const TaskTopRow: React.FC<ITaskTopRow> = ({
                 }`}
                 name={agent.displayName}
                 photoURL={agent.photoURL}
-                size={isMbl ? 18 : 22}
+                size={avatarSize}
                 title={agent.displayName}
               />
             ))}

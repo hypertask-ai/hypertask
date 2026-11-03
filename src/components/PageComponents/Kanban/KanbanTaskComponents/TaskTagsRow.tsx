@@ -18,6 +18,7 @@ import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 import { useBoardCardData } from './BoardCardData';
 import { HTPR_7677_BOARD_CARD_DATA_ONCE_FLAG } from '@/lib/flags/definitions/htpr-7677-board-card-data-once';
+import { HTPR_8255_KANBAN_CLEANUP_FLAG } from '@/lib/flags/definitions/htpr-8255-kanban-cleanup';
 
 interface ITaskTopRow {
     task:ITask;
@@ -80,6 +81,8 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
     dueDate,priority, estimate, taskLabels, hasDraft = false, blockingUser, agents = [],
     showTimeTotals, runningTimer, timeTotal}) => {
 
+      const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG)
+      const agentIconColor = cleanup ? "text-[#8e9093]" : "text-icon-dark-gray"
       const agentMinute = useMinuteClock(Boolean(task.agentStatus))
       const agentStatusLine = task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
         ? agentStatusText(
@@ -112,7 +115,7 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
     <div className={`basis-full flex gap-1 flex-wrap`}>
     {agentStatusLine && (
       <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
-        <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
+        <FaRobot className={`h-3 w-3 shrink-0 ${agentIconColor}`} />
         <span className="min-w-0 truncate">{agentStatusLine}</span>
       </LabelWrapper>
     )}
@@ -219,7 +222,9 @@ const TaskTagsRowContent:React.FC<ITaskTopRow & TaskTimeOnCard>  = ({
 type TCustomField = { id: string; name: string; type: CustomFieldType };
 type CustomFieldValue = { fieldId: string; value: string; numericValue: number | null };
 
-const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) => (
+const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) => {
+  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG)
+  return (
   <LabelWrapper
     onClick={(e) => {
       e.preventDefault();
@@ -228,10 +233,11 @@ const AgentChip = ({ agent, onClick }: { agent: IAgent; onClick: () => void }) =
     }}
     className="cursor-pointer"
   >
-    <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
+    <FaRobot className={`h-3 w-3 shrink-0 ${cleanup ? "text-[#8e9093]" : "text-icon-dark-gray"}`} />
     <span className="truncate">{agent.displayName}</span>
   </LabelWrapper>
-);
+  )
+};
 
 const CustomFieldChips = ({ projectId, values }: { projectId: number; values?: CustomFieldValue[] }) => {
   const { data: customFields = [] } = useQuery<TCustomField[]>({

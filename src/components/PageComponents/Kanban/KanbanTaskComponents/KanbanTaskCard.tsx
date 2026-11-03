@@ -1,4 +1,5 @@
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
+import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React, { useContext } from "react";
@@ -105,12 +106,15 @@ const KanbanTaskCard = ({
   phoneHoldSelect = false,
 }: KanbanTaskCardProps) => {
   const isMobile = useContext(MobileViewContext);
+  const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
   return (
   <div
     ref={cardRef}
     tabIndex={0}
     id={`task-${task.id}`}
-    className="outline-none rounded-[5px] xs:border-[1px] md:border-none xs:border-light-black-border-1"
+    className={`outline-none xs:border-[1px] md:border-none xs:border-light-black-border-1 ${
+      cleanup ? "rounded-md" : "rounded-[5px]"
+    }`}
     onFocusCapture={onFocusCapture}
     onBlurCapture={onBlurCapture}
     onMouseEnter={onMouseEnter}
