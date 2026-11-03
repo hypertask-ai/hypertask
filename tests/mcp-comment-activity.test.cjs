@@ -48,8 +48,9 @@ test('include_activity=true drops the DbNull filter and passes through the MCP c
   )
   assert.match(
     routeSource,
-    /includeActivity \? 'asc' : \(sortOrder as 'asc' \| 'desc'\)/
+    /listQuery\?\.sortOrder \?\? \(sortOrder as 'asc' \| 'desc'\)/
   )
+  assert.doesNotMatch(routeSource, /includeActivity \? 'asc'/)
   assert.equal(
     GetCommentsInputSchema.parse({
       task_id: 42,

@@ -437,8 +437,7 @@ export async function GET(request: NextRequest) {
     const sortField = listQuery?.sortBy === 'id' ? 'id' : 'createdAt'
     const effectiveSortOrder = requestedSortOrder
       ? (requestedSortOrder as 'asc' | 'desc')
-      : listQuery?.sortOrder ??
-        (includeActivity ? 'asc' : (sortOrder as 'asc' | 'desc'))
+      : listQuery?.sortOrder ?? (sortOrder as 'asc' | 'desc')
     const pageLimit = listQuery?.limit ?? limit
     const comments = await prisma.comment.findMany({
       where: commentWhere,
