@@ -22,13 +22,6 @@ function harness({ userId = 42 } = {}) {
             (where?.projectId === undefined || section.projectId === where.projectId);
         });
       } },
-      task: { findFirst: async (query) => {
-        calls.push(["task", query]);
-        const projectId = query.where.id;
-        if (!projects.some(({ id }) => id === projectId)) return null;
-        if (query.where.project && !accessible(projectId, query.where.project)) return null;
-        return { id: projectId, projectId };
-      } },
     } },
     "@/lib/auth/getSessionUser": { getSessionUser: async (headers) => {
       assert.ok(headers instanceof Headers);
@@ -56,17 +49,15 @@ function harness({ userId = 42 } = {}) {
   return { request, calls };
 }
 
-for (const route of ["getAll", "getByTaskId"]) {
-  test(`${route}: rejects logged-out requests before validation or data reads`, async () => {
-    for (const body of [{}, { userId: 99, taskId: 17 }]) {
-      const h = harness({ userId: null });
-      const res = await h.request(route, body);
-      assert.equal(res.statusCode, 401);
-      assert.deepEqual(res.body, { message: "Unauthorized" });
-      assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"));
-    }
-  });
-}
+test("getAll: rejects logged-out requests before validation or data reads", async () => {
+  for (const body of [{}, { userId: 99, taskId: 17 }]) {
+    const h = harness({ userId: null });
+    const res = await h.request("getAll", body);
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(res.body, { message: "Unauthorized" });
+    assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"));
+  }
+});
 
 test("getAll: session scopes results to owned and human-member boards, ignoring body userId", async () => {
   for (const body of [{}, { userId: 99 }, { userId: 99, projectId: 17, teamId: 2 }]) {
@@ -78,32 +69,4 @@ test("getAll: session scopes results to owned and human-member boards, ignoring 
       OR: [{ ownerId: 42 }, { members: { some: { userId: 42, agentId: null } } }],
     });
   }
-});
-
-for (const taskId of [15, 16]) {
-  test(`getByTaskId: readable task ${taskId} preserves section JSON and ordering`, async () => {
-    const h = harness();
-    const res = await h.request("getByTaskId", { taskId, userId: 99 });
-    assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body, [sections.find(({ projectId }) => projectId === taskId)]);
-    assert.deepEqual(h.calls.at(-1)[1], { where: { projectId: taskId, deleted: false }, orderBy: { ranking: "asc" } });
-  });
-}
-
-for (const taskId of [17, 18, 999]) {
-  test(`getByTaskId: inaccessible or missing task ${taskId} returns 404 without section reads`, async () => {
-    const h = harness();
-    const res = await h.request("getByTaskId", { taskId, userId: 99, teamId: 2 });
-    assert.equal(res.statusCode, 404);
-    assert.deepEqual(res.body, { message: "Task not found" });
-    assert.ok(!h.calls.some(([kind]) => kind === "sections"));
-  });
-}
-
-test("getByTaskId: signed-in callers still need a taskId", async () => {
-  const h = harness();
-  const res = await h.request("getByTaskId");
-  assert.equal(res.statusCode, 400);
-  assert.deepEqual(res.body, { message: "Missing TaskId" });
-  assert.deepEqual(h.calls.map(([kind]) => kind), ["session"]);
 });

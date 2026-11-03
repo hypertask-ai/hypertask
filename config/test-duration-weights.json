@@ -715,7 +715,6 @@
   "tests/htpr-7324-demo-caps.test.cjs": 1081,
   "tests/htpr-7324-plan-ai-caps.test.cjs": 1603,
   "tests/htpr-7326-slim-mcp-inbox.test.cjs": 742,
-  "tests/htpr-7327-legacy-route-hit.test.cjs": 161,
   "tests/htpr-7332-standalone-back.test.cjs": 1066,
   "tests/htpr-7334-mcp-crash-report.test.cjs": 522,
   "tests/htpr-7337-edit-with-ai.test.cjs": 541,

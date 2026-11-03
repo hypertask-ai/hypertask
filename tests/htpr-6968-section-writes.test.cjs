@@ -6,7 +6,7 @@ const { load } = require("./task-route-loader.cjs");
 const { savedViewBoardAccessWhere, matches } = require("./helpers/htpr-7166-fixture.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-section-writes");
-const GROUPS = ["create","update","rename","resetRanks","getAll","getByTaskId","getProjectSections"];
+const GROUPS = ["create","update","rename","resetRanks","getAll","getProjectSections"];
 const groupOf = key => key.split(/[ :]+/).find(token => GROUPS.includes(token)) ?? key;
 const pin = (key, value) => rawPin(groupOf(key), key, value);
 const sectionRoutes = {
@@ -15,7 +15,6 @@ const sectionRoutes = {
   rename: { module: "rename" },
   resetRanks: { module: "reset-ranks" },
   getAll: { module: "get-all" },
-  getByTaskId: { module: "get-by-task" },
   getProjectSections: { module: "get-project-sections" },
 };
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
@@ -27,7 +26,6 @@ const endpoints = {
   rename: { body: { sectionId: 91, newSection: { section_title: "Renamed" }, userId: 6 }, result: view },
   resetRanks: { body: { taskIds: [42, 43, 44], agentId: "owned-agent", userId: 6 } },
   getAll: { body: { userId: 6 }, result: [section] },
-  getByTaskId: { body: { taskId: 42 }, result: [section] },
   getProjectSections: { body: { projectId: 15, userId: 6 }, result: [section] },
 };
 function fixture(name, scenario = {}, controllerFactory) {
@@ -72,7 +70,6 @@ function fixture(name, scenario = {}, controllerFactory) {
     update: ["@/utils/controllers/section/update", "default"],
     rename: ["@/utils/controllers/section/rename", "default"],
     getAll: ["@/utils/controllers/section/getAll", "default"],
-    getByTaskId: ["@/utils/controllers/section/getByTask", "default"],
     getProjectSections: ["@/utils/controllers/section/getProjectSections", "default"],
   };
   if (controllers[name]) {
@@ -274,7 +271,7 @@ for (const [name, label, scenario, options] of [
   }
 });
 
-for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name}: real read controller retains selection and rank order`, async () => {
+for (const name of ["getAll", "getProjectSections"]) test(`${name}: real read controller retains selection and rank order`, async () => {
   const factory = effects => {
     const record = (label, value) => async (...args) => { effects.push([label, ...structuredClone(args)]); return value; };
     const mocks = {
@@ -286,7 +283,7 @@ for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name
       "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getViewFromProject: () => undefined },
       "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     };
-    return load(`src/utils/controllers/section/${name === "getByTaskId" ? "getByTask" : name}.ts`, mocks).default;
+    return load(`src/utils/controllers/section/${name}.ts`, mocks).default;
   };
   const { fx: old, expected } = await run(`read ${name}`, name, {}, factory);
   assert.equal(expected.status, 200); assert.deepEqual(expected.body.map(row => row.ranking), ["A0100", "A0200"]);
@@ -294,13 +291,10 @@ for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name
   assert.deepEqual(select.slice(1), name === "getAll"
     ? [{ where: { project: { ownerId: 985 } } }]
     : [{ where: { projectId: 15, deleted: false }, orderBy: { ranking: "asc" } }]);
-  if (name === "getByTaskId") assert.deepEqual(old.effects.find(([label]) => label === "read-task")[1], {
-    where: { id: 42, project: { ownerId: 985 } }, include: { project: true, user: true },
-  });
   if (name === "getProjectSections") assert.deepEqual(old.effects.find(([label]) => label === "read-project")[1].include.project_view.include.user_project_views.where, { userId: 985 });
 });
 
-for (const name of ["getAll", "getByTaskId"]) {
+for (const name of ["getAll"]) {
   test(`${name}: HTPR-6982 rejects anonymous reads before body validation on every path`, async () => {
     for (const body of [{}, { userId: 99, taskId: 17 }, null, undefined]) {
       const scenario = { noAuth: true, body };
@@ -312,10 +306,10 @@ for (const name of ["getAll", "getByTaskId"]) {
     }
   });
 
-  for (const [label, scenario] of name === "getAll" ? [
+  for (const [label, scenario] of [
     ["no body actor", { body: {} }], ["spoofed actor", { body: { userId: 99, projectId: 17, teamId: 2 } }],
     ["null body", { body: null }],
-  ] : [15, 16, 19, 17, 18, 999].map(taskId => [String(taskId), { body: { taskId, userId: 99, teamId: 2 } }])) {
+  ]) {
     test(`${name}: HTPR-6982 real content-access policy ${label} matches pinned response and Web handler`, async () => {
       const projects = [
         { id: 15, teamId: 1, ownerId: 985, members: [] },
@@ -332,7 +326,7 @@ for (const name of ["getAll", "getByTaskId"]) {
           return project && (!where || where.OR.some(branch => branch.ownerId === project.ownerId ||
             (branch.members && project.members.some(member => member.userId === branch.members.some.userId && member.agentId === branch.members.some.agentId))));
         };
-        return load(`src/utils/controllers/section/${name === "getByTaskId" ? "getByTask" : name}.ts`, {
+        return load(`src/utils/controllers/section/${name}.ts`, {
           "@/lib/prisma": { default: {
             task: { findFirst: async query => {
               effects.push(["read-task", structuredClone(query)]);
@@ -353,15 +347,9 @@ for (const name of ["getAll", "getByTaskId"]) {
       };
       const { fx: old, expected } = await run(`policy ${name} ${label}`, name, scenario, factory);
       const allowed = [15, 16, 19];
-      if (name === "getByTaskId" && !allowed.includes(scenario.body.taskId)) {
-        assert.deepEqual(expected, { status: 404, body: { message: "Task not found" }, headers: {} });
-        assert.ok(!old.effects.some(([label]) => label === "read-sections"));
-      } else {
-        assert.equal(expected.status, 200);
-        assert.deepEqual(expected.body, name === "getAll" ? sections.filter(row => allowed.includes(row.projectId))
-          : sections.filter(row => row.projectId === scenario.body.taskId && !row.deleted).sort((a, b) => a.ranking.localeCompare(b.ranking)));
-      }
-      const accessRead = old.effects.find(([label]) => label === (name === "getAll" ? "read-sections" : "read-task"));
+      assert.equal(expected.status, 200);
+      assert.deepEqual(expected.body, sections.filter(row => allowed.includes(row.projectId)));
+      const accessRead = old.effects.find(([label]) => label === "read-sections");
       assert.deepEqual(accessRead[1].where.project, {
         OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }],
       });
