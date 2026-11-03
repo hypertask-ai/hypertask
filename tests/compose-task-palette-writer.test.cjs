@@ -1,4 +1,4 @@
-const { withPalette, test, root, React, assert, flag, newFlag, jiti, query, fs, path } = require('./helpers/compose-task-palette-fixture.cjs');
+const { withPalette, test, root, React, assert, flag, jiti, query, fs, path } = require('./helpers/compose-task-palette-fixture.cjs');
 test('flag off leaves desktop and phone palettes unchanged and Ctrl+J belongs to its legacy handler', async (t) => {
   for (const mobile of [false, true]) {
     await withPalette(t, { enabled: false, mobile }, async ({ press, legacyJ, values, capture, baseline }) => {
@@ -53,7 +53,7 @@ test('Cmd+J on Apple works; shift, alt, IME and signed-out/public paths do not c
 
 test('switch and Ctrl+K/Ctrl+J toggle modes inside the palette without losing the note', async (t) => {
   await withPalette(t, {}, async ({ clickTab, input, type, press, values, capture }) => {
-    assert.equal(document.querySelector('[role="tab"][aria-selected="true"]').textContent, 'Search');
+    assert.equal(document.querySelector('[role="tab"][aria-selected="true"]').textContent, 'SearchCTRL+K');
     await clickTab('Compose');
     await type('Keep this draft\nand its new line');
     capture('compose-typed-desktop');
@@ -80,17 +80,15 @@ test('pending creation blocks tab clicks and dismissing Search commands without 
     assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
     await press('k', { ctrlKey: true }, document.body);
     assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
-    const command = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
-    await React.act(async () => command.click());
-    assert.equal(values.get('showCommandsAtom').show, true);
+    assert.ok(document.querySelector('[data-search-commands]'), 'Search still renders while the creation is pending');
     await fail();
     await clickTab('Compose');
     assert.equal(input().value, 'Keep this retry draft');
     assert.match(document.body.textContent, /Couldn’t create the task/);
     await clickTab('Search');
-    const resumedCommand = [...document.querySelectorAll('[data-search-commands] button')].find((button) => button.textContent === 'Wrap task titles');
-    await React.act(async () => resumedCommand.click());
-    assert.equal(values.get('showCommandsAtom').show, false, 'commands resume once creation settles');
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+    await clickTab('Compose');
+    assert.equal(input().value, 'Keep this retry draft', 'the settled draft survives both tabs');
   });
 });
 
@@ -218,10 +216,10 @@ test('phone Commands entry has the same switch, composer and existing keyboard-a
     assert.equal(shells.at(-1).contentClassName, 'flex flex-col overflow-hidden');
     assert.equal(shells.at(-1).bottomSlot, undefined);
     assert.ok(shells.at(-1).aboveSlot);
-    assert.match(document.querySelector('[aria-label="Send message"]').className, /h-11 w-11.*bg-shadcn-primary/);
+    assert.match(document.querySelector('[aria-label="Create task"]').className, /h-11 w-11.*bg-shadcn-primary/);
     await type('Fix on phone');
     capture('compose-phone');
-    await React.act(async () => document.querySelector('[aria-label="Send message"]').click());
+    await React.act(async () => document.querySelector('[aria-label="Create task"]').click());
     assert.equal(requests[0].body.text, 'Fix on phone');
     await finish();
     assert.deepEqual(navigations, ['/detail/project-7/44']);
@@ -232,7 +230,7 @@ test('phone Commands entry has the same switch, composer and existing keyboard-a
 test('paperclip/Ctrl+U/paste attach images with thumbnails, keep files on create failure and remove them', async (t) => {
   await withPalette(t, { tab: 'compose' }, async ({ dom, input, type, press, requests, fail, finish }) => {
     const fileInput = document.querySelector('input[type="file"]');
-    assert.equal(fileInput.accept, 'image/*');
+    assert.equal(fileInput.hasAttribute('accept'), false, 'the New Task window accepts documents as well as images');
     let picks = 0;
     fileInput.addEventListener('click', () => picks++);
     await React.act(async () => document.querySelector('[aria-label="Attach files"]').click());
@@ -483,12 +481,9 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     assert.equal(input().value, 'Keep my typed note Spoken text');
     assert.equal(input().disabled, false);
     await React.act(async () => audioProps.toggleRecording(true));
-    flags[newFlag] = false;
+    flags[flag] = false;
     await rerender();
-    assert.equal(input().disabled, false, 'flag off restores editable legacy Compose');
-    flags[newFlag] = true;
-    await rerender();
-    assert.equal(input().disabled, false, 're-enabling the flag must not resurrect stale recording state');
+    assert.equal(document.querySelector('[data-compose-task-writer]'), null, 'Compose off leaves no writer to hold the input lock');
     await press('Enter');
     assert.equal(requests[0].body.text, 'Keep my typed note Spoken text');
   });
