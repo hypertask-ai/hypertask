@@ -18,6 +18,8 @@ import { convertToPlain } from "@/utils/helperFunctions/helperFunctions";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import Tooltip from "../Common/Tooltip";
 import { useNotificationContext } from "@/lib/contexts/NotificationContext";
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
+import { buildInboxRowFillParts, clipInboxPreview, type InboxRowFillPartKind } from "@/lib/inbox/inboxRowFill";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import TaskRowContainer from "../Common/TaskRowComponents/TaskRowContainer";
 import TitleContainer, { TaskMetaChips } from "../Common/TaskRowComponents/TaskTitle";
@@ -45,7 +47,8 @@ interface Props {
 const NotificationRow = (props: Props) => {
     const { handleMouseEnter, selected, handleMouseLeave, openTask, taskRef, index, eHandler, disableButtons = false, appShellRail = false } = props
     const { notification, isIbxSlctd, selectedIds } = useNotificationContext();
-    const flipMentionHierarchy = notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
+    const flipMentionHierarchy = !rowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const handleClick = () => {
         openTask("view", notification)
@@ -61,11 +64,13 @@ const NotificationRow = (props: Props) => {
             handleMouseEnter={handleMouseEnter}
             handleMouseLeave={handleMouseLeave}
             openTask={handleClick}
-            className={`relative flex cursor-pointer  md:space-x-8  py-[8px]   px-[20px] md:px-0 rounded-md
-                justify-between w-full flex-col md:flex-row`}
+            className={cn(
+                "relative flex cursor-pointer  py-[8px]   px-[20px] md:px-0 rounded-md justify-between w-full flex-col md:flex-row",
+                rowFill ? "md:space-x-4" : "md:space-x-8"
+            )}
         >
 
-            <div className='flex md:space-x-6 md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0'>
+            <div className={cn('flex md:space-x-6', rowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>
 
                 <div className='flex justify-between w-100 md:min-w-0'>
                     <NotificationUserName />
@@ -73,7 +78,7 @@ const NotificationRow = (props: Props) => {
                 </div>
             </div>
 
-            <div className="flex flex-grow xs:mt-2 sm:mt-0 gap-2 items-baseline md:items-center md:w-[40%] md:min-w-0 md:overflow-hidden flex-col md:flex-row">
+            <div className={cn("flex flex-grow xs:mt-2 sm:mt-0 gap-2 items-baseline md:items-center md:min-w-0 md:overflow-hidden flex-col md:flex-row", rowFill ? "md:flex-1" : "md:w-[40%]")}>
 
                 {flipMentionHierarchy && <NotificationContent />}
 
@@ -187,11 +192,120 @@ export const NotificationContent = () => {
     return snapshot ? <SeededNotificationContent /> : <NotificationContentBody />;
 }
 
+type NotificationReasonContext = {
+    notification: INotification;
+    projection?: typeof CommentProjection;
+    plain: (html: string) => string;
+    formattedDueDate: string | null;
+    flipMentionHierarchy: boolean;
+};
+
+function notificationReason({ notification, projection, plain, formattedDueDate, flipMentionHierarchy }: NotificationReasonContext): React.ReactNode {
+    const canRenderHtml = Boolean(projection) || typeof window !== "undefined";
+    if (!canRenderHtml && (notification.type === "Comment" || notification.type === "Mentioned")) return "";
+    if (notification.type === "Comment") {
+        return projection ? projection.projectCommentPreview(notification.comment?.text ?? "").text : renderCommentPreview(notification.comment?.text ?? "");
+    }
+    if (notification.type === "Assigned") return "Assigned to you";
+    if (notification.type === "TaskArchived") return notification.task.status === "Archive" ? "Archived this task" : "Unarchived this task";
+    if (notification.type === "TaskMoved") return `Moved to ${notification.task.section}`;
+    if (notification.type === "AddedToFollowerInTask") return "Added you to followers and mentioned you";
+    if (notification.type === "Mentioned") {
+        if (!notification.commentId) return "Mentioned in";
+        const mention = renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, projection);
+        return flipMentionHierarchy ? mention : <>Mentioned in:&nbsp;{mention}</>;
+    }
+    if (notification.type === "Invited") return "Click or press ENTER to accept invitation";
+    if (notification.type === "TaskDueDate") return formattedDueDate ? `Due date changed to ${formattedDueDate}` : "Due date reset";
+    if (notification.type === "TaskReminder") return notification.staleNudgeDays === undefined ? "Task Reminder" : `No activity for ${notification.staleNudgeDays} days`;
+    if (notification.type === "TaskMovedToInbox") return "Task moved to inbox";
+    if (notification.type === "TaskOverdue") return "";
+    if (notification.type === "TaskUpdateDescription") return "Description updated";
+    if (notification.type === "AgentMessage") return plain(decodeAgentMessage(notification.message));
+    if (notification.type === "Reacted" && !notification.commentId) return `Reacted with ${notification.reaction?.emoji} on description`;
+    return `Reacted with ${notification.reaction?.emoji} on ${plain(notification.comment?.text ?? "")} `;
+}
+
+function notificationReasonText(context: NotificationReasonContext): string {
+    const reason = notificationReason({ ...context, flipMentionHierarchy: false });
+    return typeof reason === "string" ? reason.trim() : "";
+}
+
+export type InboxRowFillDecor = { kind: InboxRowFillPartKind; node: React.ReactNode };
+
+export function inboxRowFillDecor({
+    notification,
+    projection,
+    plain,
+    formattedDueDate,
+    highlightComment,
+}: {
+    notification: INotification;
+    projection?: typeof CommentProjection;
+    plain: (html: string) => string;
+    formattedDueDate: string | null;
+    highlightComment: boolean;
+}): InboxRowFillDecor[] {
+    const toPlain = (html: string) => plain(html.slice(0, 1200)) ?? "";
+    const commentText = notification.comment?.text ?? "";
+    const latestHumanComment = notification.task?.comments?.[0];
+    const parts = buildInboxRowFillParts({
+        commentText: toPlain(commentText),
+        commentAuthor: notification.fromUser?.displayName ?? notification.fromAgent?.displayName ?? "",
+        commentId: notification.commentId ?? null,
+        latestCommentText: toPlain(latestHumanComment?.text ?? ""),
+        latestCommentAuthor: latestHumanComment?.creator?.displayName ?? "",
+        descriptionText: toPlain(notification.task?.description_?.content ?? ""),
+        title: notification.task?.title ?? "",
+        reason: notificationReasonText({ notification, projection, plain, formattedDueDate, flipMentionHierarchy: false }),
+    });
+
+    return parts.map((part) => {
+        if (highlightComment && part.kind === "comment" && notification.commentId != null && part.text === toPlain(commentText)) {
+            const body = notification.type === "Comment"
+                ? renderCommentPreview(commentText)
+                : renderCommentMentionSimple(commentText, notification.userId, projection);
+            return { kind: part.kind, node: part.author ? <>{part.author}: {body}</> : body };
+        }
+        const text = part.author ? `${part.author}: ${clipInboxPreview(part.text)}` : clipInboxPreview(part.text);
+        return { kind: part.kind, node: text };
+    });
+}
+
+const RowFillParts = ({ projection }: { projection?: typeof CommentProjection }) => {
+    const { notification } = useNotificationContext();
+    const snapshot = useFirstScreenSurface(notification.userId);
+    const plain = snapshot && projection ? projection.projectPlainText : convertToPlain;
+    const dueDate = notification.task?.dueDate ? new Date(notification.task.dueDate) : null;
+    const formattedDueDate = dueDate
+        ? snapshot ? projectDisplayDate(dueDate, snapshot, "changed") : format(dueDate, dueDate.getFullYear() === new Date().getFullYear() ? "dd MMM" : "dd MMM yyyy")
+        : null;
+    const parts = inboxRowFillDecor({
+        notification,
+        projection,
+        plain,
+        formattedDueDate,
+        highlightComment: Boolean(projection) || typeof window !== "undefined",
+    });
+
+    return (
+        <>
+            {parts.map((part, partIndex) => (
+                <React.Fragment key={partIndex}>
+                    {partIndex > 0 && <span className="opacity-60">{" \u00b7 "}</span>}
+                    {part.node}
+                </React.Fragment>
+            ))}
+        </>
+    );
+}
+
 export const NotificationContentBody = ({ projection }: { projection?: typeof CommentProjection }) => {
     const { notification, isIbxSlctd } = useNotificationContext();
     const snapshot = useFirstScreenSurface(notification.userId);
+    const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
     const plain = snapshot && projection ? projection.projectPlainText : convertToPlain;
-    const flipMentionHierarchy = notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const flipMentionHierarchy = !rowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
     const dueDate = notification.task?.dueDate ? new Date(notification.task.dueDate) : null;
     const formattedDueDate = dueDate
         ? snapshot ? projectDisplayDate(dueDate, snapshot, "changed") : format(dueDate, dueDate.getFullYear() === new Date().getFullYear() ? "dd MMM" : "dd MMM yyyy")
@@ -202,9 +316,11 @@ export const NotificationContentBody = ({ projection }: { projection?: typeof Co
             suppressHydrationWarning={!snapshot}
             className={cn(
                 inboxConfig.bulkSelectionStyling.content(isIbxSlctd),
-                flipMentionHierarchy
-                    ? "truncate flex-column md:flex-1 md:basis-0 md:min-w-0"
-                    : "flex-1 truncate flex-column md:min-w-[90px]",
+                rowFill
+                    ? "flex-1 min-w-0 truncate flex-column"
+                    : flipMentionHierarchy
+                        ? "truncate flex-column md:flex-1 md:basis-0 md:min-w-0"
+                        : "flex-1 truncate flex-column md:min-w-[90px]",
                 flipMentionHierarchy && !isIbxSlctd && "font-medium text-white-black"
             )}
         >
@@ -214,55 +330,13 @@ export const NotificationContentBody = ({ projection }: { projection?: typeof Co
                 style={{
                     fontSize: 13 }}
             >
-                {(snapshot || typeof window !== "undefined") &&
-                    notification.type === "Comment"
-                    ? snapshot && projection ? projection.projectCommentPreview(notification.comment?.text ?? "").text : renderCommentPreview(notification.comment?.text ?? "")
-                    : notification.type === "Assigned"
-                        ? "Assigned to you"
-                        : notification.type === "TaskArchived"
-                            ? notification.task.status === "Archive" ? "Archived this task" : "Unarchived this task"
-                            : notification.type === "TaskMoved"
-                                ? `Moved to ${notification.task.section}`
-                                : notification.type === "AddedToFollowerInTask"
-                                    ? `Added you to followers and mentioned you`
-                                    : notification.type === "Mentioned"
-                                        ? notification.commentId ?
-                                            flipMentionHierarchy
-                                                ? renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, snapshot ? projection : undefined)
-                                                : <>
-
-                                                    Mentioned in:&nbsp;
-                                                    {renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, snapshot ? projection : undefined)}
-                                                </>
-                                            :
-                                            `Mentioned in`
-                                        : notification.type === "Invited"
-                                            ? `Click or press ENTER to accept invitation`
-                                        : notification.type === "TaskDueDate" ?
-                                                formattedDueDate ?
-                                                    `Due date changed to ${formattedDueDate}` : "Due date reset"
-                                                : notification.type === "TaskReminder"
-                                                    ? notification.staleNudgeDays === undefined
-                                                        ? "Task Reminder"
-                                                        : `No activity for ${notification.staleNudgeDays} days`
-                                                    : notification.type === "TaskMovedToInbox"
-                                                        ? "Task moved to inbox"
-                                                        : notification.type === "TaskOverdue"
-                                                            ? ""
-                                                            : notification.type === "TaskUpdateDescription"
-                                                                ? "Description updated"
-                                                                : notification.type === "AgentMessage"
-                                                                    ? plain(decodeAgentMessage(notification.message))
-                                                                    : notification.type === "Reacted" && !notification.commentId
-                                                                    ? `Reacted with ${notification.reaction?.emoji
-                                                                    } on description`
-                                                                    : `Reacted with ${notification.reaction?.emoji
-                                                                    } on ${plain(
-                                                                        notification.comment?.text ?? ""
-                                                                    )} `
-
-                }
-
+                {rowFill ? (
+                    <RowFillParts projection={snapshot ? projection : undefined} />
+                ) : (snapshot || typeof window !== "undefined") && notification.type === "Comment" ? (
+                    snapshot && projection ? projection.projectCommentPreview(notification.comment?.text ?? "").text : renderCommentPreview(notification.comment?.text ?? "")
+                ) : (
+                    notificationReason({ notification, projection: snapshot ? projection : undefined, plain, formattedDueDate, flipMentionHierarchy })
+                )}
             </span>
         </div>
     )

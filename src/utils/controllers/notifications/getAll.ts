@@ -59,7 +59,10 @@ export function inboxTaskSelect(userId: number, includeCachedDescription = false
       where: { agentId: null, creatorId: { not: null } },
       orderBy: { createdAt: "desc" as const },
       take: 1,
-      select: { createdAt: true },
+      select: {
+        createdAt: true,
+        ...(includeCachedDescription ? { text: true, creator: { select: { displayName: true } } } : {}),
+      },
     },
     taskLabels: { include: { label: true }, orderBy: { id: "asc" } },
     ticketNumber: true,

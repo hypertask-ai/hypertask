@@ -152,7 +152,8 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
     const isBlockedByMe =
         task.waitingOnUserId != null &&
         task.waitingOnUserId === notification?.userId;
-    const flipMentionHierarchy = notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
+    const flipMentionHierarchy = !rowFill && notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
 
