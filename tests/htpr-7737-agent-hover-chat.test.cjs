@@ -162,7 +162,7 @@ test("a tap keeps the person card open; a mouse hover still closes on leave", as
     assert.equal(expanded(), "true");
     await fire("pointerleave", "mouse", 150);
     assert.equal(expanded(), "false", "a mouse hover still closes on leave");
-    await fire("pointerup", "touch");
+    await fire("click", "touch");
     assert.equal(expanded(), "true");
     await fire("pointerleave", "touch", 200);
     assert.equal(expanded(), "true", "the pointerleave after a tap must not close the card");
