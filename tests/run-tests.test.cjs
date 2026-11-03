@@ -430,3 +430,26 @@ test("shared lanes pack on measured time, not on source length", async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("shared lanes are chosen by measured time, so slow sharing files get lanes", (t) => {
+  const sources = {
+    "env-writer.test.cjs": `process.env.FIXTURE_FLAG = 'set'; require('node:test')('env writer', () => {}); // ${"x".repeat(200_000)}`,
+    ...Object.fromEntries(Array.from({ length: 5 }, (_, index) => [
+      `clean-${index}.test.cjs`, `require('node:test')('clean ${index}', () => {});`,
+    ])),
+  };
+  const directory = fixture(t, sources);
+  const minutes = 20 * 60 * 1000;
+  writeFileSync(path.join(directory, "config/test-duration-weights.json"), JSON.stringify({
+    defaultWorkMs: 1,
+    files: { ...Object.fromEntries(Array.from({ length: 5 }, (_, index) => [`tests/clean-${index}.test.cjs`, minutes])), "tests/env-writer.test.cjs": 1 },
+  }));
+  const onTime = run(directory, [], { TEST_CONCURRENCY: "4" });
+  assert.equal(onTime.status, 0, onTime.stderr);
+  assert.match(onTime.stdout, /Shared lanes: 3 for 5 safe files; own-process files: 1 at pool width 1\./);
+
+  rmSync(path.join(directory, "config/test-duration-weights.json"));
+  const onBytes = run(directory, [], { TEST_CONCURRENCY: "4" });
+  assert.equal(onBytes.status, 0, onBytes.stderr);
+  assert.match(onBytes.stdout, /Shared lanes: 1 for 5 safe files; own-process files: 1 at pool width 3\./);
+});

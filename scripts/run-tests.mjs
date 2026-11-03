@@ -242,11 +242,11 @@ if (cjsTests.length > 0) {
   const width = Math.max(1, Number(TEST_CONCURRENCY));
   let poolFiles = safe.length > 1 ? pool : [...pool, ...safe];
   let sharedFiles = safe.length > 1 ? safe : [];
-  const weightOfClass = (files) => files.reduce((total, file) => total + weightOf(file), 0);
+  const workOfClass = (files) => files.reduce((total, file) => total + workOf(file), 0);
   const laneBudget = poolFiles.length === 0 ? width : width - 1;
   const pickLanes = () => {
-    const poolWeight = weightOfClass(poolFiles);
-    const safeWeight = weightOfClass(sharedFiles);
+    const poolWeight = workOfClass(poolFiles);
+    const safeWeight = workOfClass(sharedFiles);
     return Math.min(laneBudget, Math.max(1, Math.round(width * safeWeight / Math.max(1, safeWeight + poolWeight))));
   };
   let lanes = sharedFiles.length === 0 || laneBudget < 1 ? 0 : pickLanes();
