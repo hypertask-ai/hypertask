@@ -10,6 +10,8 @@ on:
       - '.claude/skills/scriptify/scripts/**'
       - '.claude/skills/maintain-verification-skill/scripts/**'
       - '.claude/systemd/**'
+      - '.claude/hooks/runner-inbox-stop.sh'
+      - '.claude/skills/drain-board/scripts/drain-board'
       - 'scripts/daily-stats*'
       - 'scripts/proc-watchdog*'
       - 'scripts/premerge-local.sh'
