@@ -41,7 +41,7 @@ function load(names, file, env) {
 }
 
 function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
-  const dom = new JSDOM('<div class="section-container" tabindex="-1"><div id="droppable-section-container-11"></div></div>');
+  const dom = new JSDOM('<div id="sectionsContainer"><div class="section-container" tabindex="-1"><div id="droppable-section-container-11"></div></div></div>');
   const document = dom.window.document;
   globalThis.document = document;
   const column = document.querySelector('.section-container');
@@ -64,6 +64,7 @@ function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
   render();
   const env = {
     archiveColumnBoundary: true, nextFocusAfterRemoval, focusCardNextTo, document,
+    requestAnimationFrame: callback => callback(),
     updateActiveItemAndItemInView: id => { active = id; },
     _currentProject: { id: 7049 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [{ sections, filteredSections: sections, tasks: sections.flatMap(s => s.items) }] }, projectToUpdateIndex: 0 }),
@@ -150,6 +151,16 @@ test('the last rendered card sends focus to the card above, and an emptying colu
   } finally {
     globalThis.document = previousDocument;
   }
+});
+
+test('a column that cannot hold focus hands it to the board container', async () => {
+  const f = fixture(true, [1]);
+  f.column.focus = () => {};
+  f.focus(1);
+  await f.press();
+  assert.equal(f.active(), null);
+  assert.equal(f.document.activeElement.id, 'sectionsContainer');
+  assert.equal(f.document.getElementById('sectionsContainer').getAttribute('tabindex'), '-1');
 });
 
 test('filtered view skips a card that has no rendered element', async () => {
