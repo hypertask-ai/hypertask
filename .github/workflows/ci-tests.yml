@@ -2257,29 +2257,15 @@ jobs:
         if: steps.scope.outputs.visual_needed != 'false'
         run: |
           npm exec --yes --package=@playwright/test@1.64.0 -- playwright install --with-deps chromium
-          sudo apt-get install -y fonts-liberation fonts-noto-core fonts-noto-color-emoji
-      # HYCI-106: the saved screens belong to the fonts that rendered them, not to the
-      # GitHub runner image version, which rolls without warning and stranded two sets
-      # of baselines an hour apart on 2026-11-03.
-      - name: Fingerprint the installed fonts
+          sudo apt-get install -y fontconfig fonts-liberation fonts-noto-core fonts-noto-color-emoji
+      # HYCI-106: a saved screen belongs to the fonts Chromium resolved for the
+      # screens, not to the runner image that rolls without warning and not to every
+      # font the image happens to ship.
+      - name: Fingerprint the fonts that draw the screens
         id: fonts
         if: steps.scope.outputs.visual_needed != 'false'
         shell: bash
-        run: |
-          set -eo pipefail
-          dirs="${VISUAL_FONT_DIRS:-/usr/share/fonts /usr/local/share/fonts /etc/fonts}"
-          files=""
-          for dir in $dirs; do
-            if [ -d "$dir" ]; then
-              files="$files$(find "$dir" -type f)"$'\n'
-            fi
-          done
-          if [ -z "${files//[$'\n']/}" ]; then
-            echo "::error::No installed font files to fingerprint, so no saved screen can be proven to match this image"
-            exit 1
-          fi
-          fingerprint=$(printf '%s' "$files" | LC_ALL=C sort | tr '\n' '\0' | xargs -0 sha256sum | sha256sum | cut -c1-16)
-          echo "fonts=$fingerprint" >> "$GITHUB_OUTPUT"
+        run: node head/scripts/visual-font-fingerprint.mjs >> "$GITHUB_OUTPUT"
       - name: Identify exact baseline
         id: baseline
         shell: bash

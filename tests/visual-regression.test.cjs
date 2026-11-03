@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL, fileURLToPath } = require("node:url");
@@ -233,32 +233,29 @@ test("an empty render source fails the job instead of keying every screen to one
   assert.throws(() => renderFingerprint(workspace), /exit status 1|Command failed/);
 });
 
-function fontStep(workflow) {
-  return workflow.jobs["visual-regression"].steps.find(step => step.id === "fonts");
+function fontsStep(workflow, job) {
+  return workflow.jobs[job].steps.find(step => step.id === "fonts");
 }
 
-function fingerprintFonts(script, directories) {
-  const workspace = mkdtempSync(path.join(os.tmpdir(), "visual-fonts-"));
-  const output = path.join(workspace, "github-output");
-  writeFileSync(output, "");
-  try {
-    execFileSync("bash", ["-eo", "pipefail", "-c", script], {
-      env: { ...process.env, VISUAL_FONT_DIRS: directories.join(" "), GITHUB_OUTPUT: output },
-      encoding: "utf8",
-    });
-    return readFileSync(output, "utf8").trim().replace(/^fonts=/, "");
-  } finally {
-    rmSync(workspace, { recursive: true, force: true });
-  }
+function fontStage() {
+  const root = mkdtempSync(path.join(os.tmpdir(), "visual-fonts-"));
+  const fonts = path.join(root, "fonts");
+  const config = path.join(root, "config");
+  const bin = path.join(root, "bin");
+  for (const directory of [fonts, path.join(config, "conf.d"), bin]) mkdirSync(directory, { recursive: true });
+  writeFileSync(path.join(fonts, "resolved.ttf"), "font-a");
+  writeFileSync(path.join(config, "conf.d", "50-visual.conf"), "<fontconfig/>");
+  writeFileSync(path.join(bin, "fc-match"), '#!/usr/bin/env bash\nif [ -n "$VISUAL_FC_EMPTY" ]; then exit 0; fi\nprintf \'%s\\n\' "$VISUAL_STAGE_FONTS/resolved.ttf"\n', { mode: 0o755 });
+  return { root, fonts, config, bin };
 }
 
-function fontTree(workspace) {
-  const stage = path.join(workspace, "stage");
-  mkdirSync(path.join(stage, "fonts", "truetype"), { recursive: true });
-  mkdirSync(path.join(stage, "config", "conf.d"), { recursive: true });
-  writeFileSync(path.join(stage, "fonts", "truetype", "LiberationSans.ttf"), "font-a");
-  writeFileSync(path.join(stage, "config", "conf.d", "50-user.conf"), "<fontconfig/>");
-  return stage;
+function fingerprintFonts(stage, env = {}) {
+  const result = spawnSync(process.execPath, [path.join(__dirname, "..", "scripts", "visual-font-fingerprint.mjs")], {
+    env: { ...process.env, ...env, PATH: `${stage.bin}${path.delimiter}${process.env.PATH}`, VISUAL_STAGE_FONTS: stage.fonts, VISUAL_FONTCONFIG_DIRS: stage.config },
+    encoding: "utf8",
+  });
+  if (result.status !== 0) throw new Error(result.stderr || `exit ${result.status}`);
+  return result.stdout.trim();
 }
 
 test("saved screens are reused across runner images by the fonts that rendered them, not by the image version", () => {
@@ -273,39 +270,42 @@ test("saved screens are reused across runner images by the fonts that rendered t
     assert.ok(install !== -1 && fonts !== -1 && restore !== -1);
     assert.ok(install < fonts, "the pinned fonts must be installed before they are fingerprinted");
     assert.ok(fonts < restore, "the fonts must be known before the saved screens are restored");
-    assert.match(steps[install].run, /apt-get install -y fonts-liberation fonts-noto-core fonts-noto-color-emoji/);
+    assert.match(steps[install].run, /apt-get install -y fontconfig fonts-liberation fonts-noto-core fonts-noto-color-emoji/);
     assert.ok(!JSON.stringify(steps).includes("ImageVersion"), "the runner image version must not identify a baseline");
   }
-  assert.equal(fontStep(visualWorkflow).run, fontStep(testsWorkflow).run, "producer and consumer must fingerprint the fonts the same way");
+  assert.equal(fontsStep(visualWorkflow, "visual-regression").run, fontsStep(testsWorkflow, "visual-compare").run, "producer and consumer must fingerprint the fonts the same way");
+  assert.match(fontsStep(testsWorkflow, "visual-compare").run, /^node head\/scripts\/visual-font-fingerprint\.mjs >> "\$GITHUB_OUTPUT"$/);
   assert.ok(producer.find(step => step.id === "baseline-cache").with.key.includes("${{ steps.fonts.outputs.fonts }}"));
   assert.ok(consumer.find(step => step.id === "baseline-cache").with.key.includes("${{ steps.fonts.outputs.fonts }}"));
   assert.ok(consumer.find(step => step.id === "baseline-artifact").env.BASELINE_NAME.includes("${{ steps.fonts.outputs.fonts }}"));
 });
 
-test("the font fingerprint is stable for one font tree, moves when a font or its config moves, and fails closed when empty", () => {
-  const script = fontStep(yaml.load(source(".github/workflows/visual-regression.yml"))).run;
-  const workspace = mkdtempSync(path.join(os.tmpdir(), "visual-fonts-tree-"));
+test("saved screens follow the fonts Chromium resolves, so another runner image reuses them", () => {
+  const stage = fontStage();
   try {
-    const stage = fontTree(workspace);
-    const first = fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]);
-    assert.match(first, /^[0-9a-f]{16}$/);
-    assert.equal(fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]), first, "the same fonts must key the same screens");
-    writeFileSync(path.join(stage, "config", "conf.d", "50-user.conf"), "<fontconfig><!--changed--></fontconfig>");
-    const configChanged = fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]);
-    assert.notEqual(configChanged, first, "a fontconfig change must miss the saved screens");
-    writeFileSync(path.join(stage, "config", "conf.d", "50-user.conf"), "<fontconfig/>");
-    writeFileSync(path.join(stage, "fonts", "truetype", "LiberationSans.ttf"), "font-b");
-    assert.notEqual(fingerprintFonts(script, [path.join(stage, "fonts"), path.join(stage, "config")]), first, "a changed font file must miss the saved screens");
-    rmSync(path.join(stage, "fonts"), { recursive: true, force: true });
-    rmSync(path.join(stage, "config"), { recursive: true, force: true });
-    mkdirSync(path.join(stage, "fonts"), { recursive: true });
-    assert.throws(
-      () => fingerprintFonts(script, [path.join(stage, "fonts")]),
-      /no saved screen can be proven/,
-      "an image with no fonts must fail closed instead of keying every image alike",
-    );
+    const first = fingerprintFonts(stage);
+    assert.match(first, /^fonts=[0-9a-f]{16}$/);
+    assert.equal(fingerprintFonts(stage), first, "the same resolved fonts must key the same screens");
+    writeFileSync(path.join(stage.fonts, "Extra-Unused.ttf"), "a font the screens never render with");
+    assert.equal(fingerprintFonts(stage), first, "a font the new image ships but the screens never use must not force a rebuild");
+    writeFileSync(path.join(stage.config, "conf.d", "50-visual.conf"), "<fontconfig><!--changed--></fontconfig>");
+    assert.notEqual(fingerprintFonts(stage), first, "a fontconfig change must miss the saved screens");
+    writeFileSync(path.join(stage.config, "conf.d", "50-visual.conf"), "<fontconfig/>");
+    writeFileSync(path.join(stage.fonts, "resolved.ttf"), "font-b");
+    assert.notEqual(fingerprintFonts(stage), first, "a changed font file must miss the saved screens");
   } finally {
-    rmSync(workspace, { recursive: true, force: true });
+    rmSync(stage.root, { recursive: true, force: true });
+  }
+});
+
+test("a fontconfig that resolves nothing fails the job instead of keying every image alike", () => {
+  const stage = fontStage();
+  try {
+    assert.throws(() => fingerprintFonts(stage, { VISUAL_FC_EMPTY: "1" }), /resolved no font file/);
+    rmSync(path.join(stage.fonts, "resolved.ttf"));
+    assert.throws(() => fingerprintFonts(stage), /not readable/);
+  } finally {
+    rmSync(stage.root, { recursive: true, force: true });
   }
 });
 

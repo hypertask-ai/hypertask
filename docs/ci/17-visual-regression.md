@@ -27,15 +27,19 @@ dimensions, skips the base lifecycle, and still seeds and compares the head. A m
 retains the existing paired lifecycle. Missing or malformed cached screenshots fail
 closed.
 HYCI-106 replaces the runner image version with a fingerprint of the fonts that drew
-the screens: a SHA-256 over every file under `/usr/share/fonts`, `/usr/local/share/fonts`
-and `/etc/fonts`, taken after the pinned Chromium and the three pinned font packages are
-installed, so that step now runs before the baseline is restored. GitHub rolled
-`ubuntu-latest` twice inside one hour on 2026-11-03 and each image missed the other's
-saved screens: `visual-compare` rebuilt the base app for 316-325 s of build and 94-97 s
-of capture, against 90-107 s of head work alone when the screens are reused. Fonts are
-the render input a new image moves; an empty font tree fails the job instead of keying
-every image alike. A freetype or libfontconfig change inside a rolled image is not
-fingerprinted, so that would surface as a screen diff rather than a silent reuse.
+the screens: `scripts/visual-font-fingerprint.mjs` asks fontconfig which file backs each
+family the render can reach (`IBM Plex Sans`, `ui-sans-serif`, `system-ui`, `sans-serif`,
+`serif`, `monospace`, `emoji`), hashes those files and every file under `/etc/fonts`, and
+prints sixteen hex characters. It runs after the pinned Chromium and the three pinned
+font packages are installed, so that step now runs before the baseline is restored.
+GitHub rolled `ubuntu-latest` twice inside one hour on 2026-11-03 and each image missed
+the other's saved screens: `visual-compare` rebuilt the base app for 316-325 s of build
+and 94-97 s of capture, against 90-107 s of head work alone when the screens are reused.
+Only fonts the render can reach are keyed, so an image that ships extra fonts it never
+renders with still reuses the saved set, and a fontconfig that resolves nothing fails the
+job instead of keying every image alike. A freetype or libfontconfig change inside a
+rolled image, or a fallback glyph taken from an unkeyed font, is not fingerprinted and
+surfaces as a screen diff rather than a silent reuse.
 Phase timings mark skipped base work as `not reached`; summaries name cache reuse.
 Only PNGs are cached, never databases, auth state or browser traces.
 
