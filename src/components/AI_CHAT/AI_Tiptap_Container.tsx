@@ -537,7 +537,7 @@ export function AI_Tiptap_Container({
                 isByokBlocked={isByokBlocked}
                 queueMode={isTyping}
                 mobile={Boolean(isMbl)}
-                label={fullScreenCleanup ? "Send" : undefined}
+                label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
                 onClick={() => handleSendMessage()}
               />
             ) : null
