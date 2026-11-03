@@ -165,3 +165,122 @@ export function injectMentionSpans(
     ? mapOutsideMentionSpans(text, injectInto)
     : injectInto(text);
 }
+
+export interface MentionProblem {
+  input: string;
+  reason: "unknown" | "ambiguous";
+  closeMatches: string[];
+}
+
+export interface ResolvedMention {
+  userId: number;
+  displayName: string;
+}
+
+const CLOSE_MATCH_LIMIT = 3;
+const CLOSE_PREFIX_LENGTH = 4;
+
+function sharesNamePrefix(a: string, b: string): boolean {
+  const width = Math.min(a.length, b.length, CLOSE_PREFIX_LENGTH);
+  return width > 0 && a.slice(0, width) === b.slice(0, width);
+}
+
+export function closeMentionMatches(
+  input: string,
+  members: ResolvableMember[],
+): string[] {
+  const needle = input.trim().toLowerCase();
+  if (!needle) return [];
+  const scored = members
+    .filter((member) => typeof member.id === "number" && member.displayName)
+    .map((member) => {
+      const name = member.displayName;
+      const lower = name.toLowerCase();
+      let score = 0;
+      if (lower.startsWith(needle)) score = 3;
+      else if (lower.includes(needle) || needle.includes(lower)) score = 2;
+      else if (sharesNamePrefix(needle, lower)) score = 1;
+      return { name, score };
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || a.name.length - b.name.length);
+  return [...new Set(scored.map((candidate) => candidate.name))].slice(
+    0,
+    CLOSE_MATCH_LIMIT,
+  );
+}
+
+export function resolveMentionEntries(
+  entries: string[],
+  members: ResolvableMember[],
+): { resolved: ResolvedMention[]; problems: MentionProblem[] } {
+  const resolved: ResolvedMention[] = [];
+  const problems: MentionProblem[] = [];
+  const people = members.filter(
+    (member) => typeof member.id === "number" && member.displayName,
+  );
+
+  for (const raw of entries) {
+    const input = String(raw ?? "").trim().replace(/^@+/, "").trim();
+    if (!input) {
+      problems.push({ input: String(raw ?? ""), reason: "unknown", closeMatches: [] });
+      continue;
+    }
+
+    if (/^\d+$/.test(input)) {
+      const byId = people.find((member) => Number(member.id) === Number(input));
+      if (byId) {
+        resolved.push({ userId: Number(byId.id), displayName: byId.displayName });
+        continue;
+      }
+    }
+
+    const exactMatches = people.filter(
+      (member) => member.displayName.toLowerCase() === input.toLowerCase(),
+    );
+
+    if (exactMatches.length === 1) {
+      resolved.push({
+        userId: Number(exactMatches[0].id),
+        displayName: exactMatches[0].displayName,
+      });
+      continue;
+    }
+
+    if (exactMatches.length > 1) {
+      problems.push({
+        input,
+        reason: "ambiguous",
+        closeMatches: exactMatches
+          .slice(0, CLOSE_MATCH_LIMIT)
+          .map((member) => member.displayName),
+      });
+      continue;
+    }
+
+    const prefixMatches = people.filter((member) =>
+      member.displayName.toLowerCase().startsWith(input.toLowerCase()),
+    );
+
+    if (prefixMatches.length === 1) {
+      resolved.push({
+        userId: Number(prefixMatches[0].id),
+        displayName: prefixMatches[0].displayName,
+      });
+      continue;
+    }
+
+    problems.push({
+      input,
+      reason: prefixMatches.length > 1 ? "ambiguous" : "unknown",
+      closeMatches:
+        prefixMatches.length > 1
+          ? prefixMatches
+              .slice(0, CLOSE_MATCH_LIMIT)
+              .map((member) => member.displayName)
+          : closeMentionMatches(input, people),
+    });
+  }
+
+  return { resolved, problems };
+}

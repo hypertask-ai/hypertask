@@ -15,7 +15,7 @@ const json = (body, init = {}) => ({ body: JSON.parse(JSON.stringify(body)), sta
 
 function load(relativePath, modules = {}) {
   modules = withStubs({ "@/lib/agents/writing": require("./task-route-loader.cjs").load("src/lib/agents/writing.ts", {}) }, modules)
-  modules = withStubs({ '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope, '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null } }, modules)
+  modules = withStubs({ '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope, '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, '@/lib/mcp/agents/readRoleGuard': { requireAgentWriteRole: async () => null }, '@/lib/flags': { isFeatureEnabled: async () => true }, '@/lib/flags/keys': { HTPR_8268_MENTION_BY_NAME_FLAG: 'htpr-8268-mention-by-name' } }, modules)
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
