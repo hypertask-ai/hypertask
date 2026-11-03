@@ -1,4 +1,5 @@
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
+import { waitUntil } from '@vercel/functions';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from '@/lib/prisma';
@@ -647,6 +648,21 @@ export async function createTask(data: {
         imageUrls,
         { userId, agentId, teamScope: data.teamScope }
     );
+
+    waitUntil((async () => {
+        try {
+            const { announceFeedbackTicket } = await import('@/lib/aiFeedback/slackLine');
+            await announceFeedbackTicket({
+                projectId,
+                labelIds: labelIds?.map(String),
+                uniqueIndex: taskWithDescription.uniqueIndex,
+                title: taskWithDescription.title,
+                userId,
+            });
+        } catch (error) {
+            console.error('[mcp-task-create] feedback Slack line failed', { taskId: taskWithDescription.id, error });
+        }
+    })());
 
     return taskWithDescription;
 }

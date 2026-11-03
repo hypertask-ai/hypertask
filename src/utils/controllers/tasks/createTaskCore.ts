@@ -320,6 +320,21 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
         }
     }
 
+    waitUntil((async () => {
+        try {
+            const { announceFeedbackTicket } = await import('@/lib/aiFeedback/slackLine');
+            await announceFeedbackTicket({
+                projectId,
+                labelIds,
+                uniqueIndex: newTask.uniqueIndex,
+                title: newTask.title,
+                userId,
+            });
+        } catch (error) {
+            console.error('[task-create-core] feedback Slack line failed', { taskId: newTask.id, error });
+        }
+    })());
+
     return {
         task: newTask,
         description: description_
