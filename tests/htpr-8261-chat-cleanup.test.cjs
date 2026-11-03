@@ -21,7 +21,7 @@ test("listening replaces the microphone with a Dictation pill", () => {
   const audio = read("src/components/RTE/Components/AudioButton.tsx");
   assert.match(audio, /compactListeningPill\?: boolean/);
   assert.match(audio, /recording && !compactListeningPill && "w-full"/);
-  assert.match(audio, /\}\) : compactListeningPill \? \(/);
+  assert.match(audio, /\) : compactListeningPill \? \(/);
   assert.match(audio, /data-ai-chat-dictation-pill/);
   assert.match(audio, />Dictation<\/span>/);
   assert.match(audio, /data-ai-chat-recording-submit=\{isAiChat \|\| undefined\}/);
