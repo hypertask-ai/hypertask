@@ -77,7 +77,7 @@ function setup(options = {}) {
           (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true)
       },
     },
-    '@/lib/mcp/listQuery': {},
+    '@/lib/mcp/listQuery': load('src/lib/mcp/listQuery.ts', {}),
     '@/lib/mcp/readListQuery': {},
     '@/lib/agentRuns/service': {
       runtimeAgentRunsEnabledFor: async () => options.runtime !== false,

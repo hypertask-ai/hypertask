@@ -251,6 +251,7 @@ function loadCommentsRoute({
 
     },
     '@/lib/mcp/listQuery': {
+      ...jiti(path.join(root, 'src/lib/mcp/listQuery.ts')),
       parseNumericCursor: () => null,
       parseUpdatedSince: () => null,
       projectRows: (rows) => rows,
