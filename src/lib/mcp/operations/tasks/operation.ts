@@ -39,7 +39,7 @@ import {
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
-import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSortOrderParam } from '@/lib/mcp/listParams'
+import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSectionFilter, parseSortOrderParam } from '@/lib/mcp/listParams'
 
 export interface ParentTaskSummary {
   id: number
@@ -396,7 +396,8 @@ export async function GET(request: NextRequest) {
     const listQuery = parsedListQuery.listQuery
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
     if (!sectionIdParam.ok) return sectionIdParam.response
-    let section = searchParams.get('section') || undefined
+    const sectionFilter = parseSectionFilter(searchParams.get('section'))
+    let section = sectionFilter.section
     let assignedTo = searchParams.get('assigned_to') || undefined
     const priorityFilter = parsePriorityFilter(searchParams.getAll('priority'))
     if (!priorityFilter) {
@@ -424,15 +425,13 @@ export async function GET(request: NextRequest) {
     const sortOrderParam = parseSortOrderParam(searchParams.get('sort_order'), 'desc')
     if (!sortOrderParam) return validationError('sort_order must be asc or desc')
     let sortOrder = sortOrderParam
-    let sectionId = sectionIdParam.value
+    let sectionId = sectionIdParam.value ?? sectionFilter.sectionId ?? undefined
     if (listQuery) {
       if (listQuery.query) search = listQuery.query
       if (listQuery.filter.section) {
-        if (/^\d+$/.test(listQuery.filter.section)) {
-          sectionId = Number(listQuery.filter.section)
-        } else {
-          section = listQuery.filter.section
-        }
+        const filterSection = parseSectionFilter(listQuery.filter.section)
+        sectionId = filterSection.sectionId ?? sectionIdParam.value ?? undefined
+        section = filterSection.section
       }
       if (listQuery.filter.assignee !== undefined) {
         const assignee = parseAssigneeFilter(listQuery.filter.assignee)
@@ -479,7 +478,7 @@ export async function GET(request: NextRequest) {
       return validationError(`${invalidDateParam} must be a valid date or datetime, e.g. 2026-10-14 or 2026-10-14T03:00:00Z`)
     }
 
-    const filterIdOutOfRange = findIdParamOutOfRange({ section_id: sectionId, created_by: createdBy })
+    const filterIdOutOfRange = findIdParamOutOfRange({ section_id: sectionId, section: sectionFilter.sectionId, created_by: createdBy })
     if (filterIdOutOfRange) return validationError(idOutOfRangeMessage(filterIdOutOfRange))
 
     const TASK_SORT_FIELDS = ['createdAt', 'updatedAt', 'dueDate', 'priority', 'title', 'id'] as const
@@ -530,7 +529,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (sectionId) {
+    if (sectionId !== undefined) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section

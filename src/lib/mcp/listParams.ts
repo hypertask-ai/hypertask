@@ -6,6 +6,15 @@ export function parseSortOrderParam(raw: string | null, defaultValue: SortOrder)
   return value === 'asc' || value === 'desc' ? value : null
 }
 
+export type SectionFilter = { sectionId?: number; section?: string }
+
+export function parseSectionFilter(raw: string | null | undefined): SectionFilter {
+  const value = raw?.trim()
+  if (!value) return {}
+  if (/^\d+$/.test(value)) return { sectionId: Number(value) }
+  return { section: value }
+}
+
 export function findParamWithNulByte(searchParams: URLSearchParams): string | null {
   for (const [key, value] of searchParams) {
     if (key.includes('\0') || value.includes('\0')) return key.replaceAll('\0', '')
