@@ -117,6 +117,23 @@ export function batchLaneFiles(files, { maxFiles = Infinity, maxBytes = Infinity
   return batches;
 }
 
+export function chainBatches(batches, chains, weightOf = () => 1) {
+  const count = Math.max(1, Math.min(positiveInt(chains, "chains"), batches.length || 1));
+  const weight = (batch) => batch.reduce((total, file) => total + Math.max(1, weightOf(file)), 0);
+  const ordered = batches
+    .map((batch, index) => ({ batch, index, work: weight(batch) }))
+    .sort((a, b) => b.work - a.work || a.index - b.index);
+  const slots = Array.from({ length: count }, () => ({ batches: [], work: 0 }));
+  for (const item of ordered) {
+    const target = slots.reduce((lightest, slot) => (slot.work < lightest.work ? slot : lightest));
+    target.batches.push(item);
+    target.work += item.work;
+  }
+  return slots
+    .map((slot) => slot.batches.sort((a, b) => a.index - b.index).map((item) => item.batch))
+    .filter((chain) => chain.length > 0);
+}
+
 export function partitionSafeFiles(files, lanes, weightOf = () => 1) {
   const count = Math.max(1, Math.min(lanes, files.length || 1));
   const buckets = Array.from({ length: count }, () => ({ files: [], weight: 0 }));

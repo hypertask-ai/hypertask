@@ -10,7 +10,7 @@ import {
 import { checkOutcome, createTapParser, loadQuarantine } from "./test-quarantine.mjs";
 import { combineCounters, createExecutionCounter, executionFailure } from "./test-execution-count.mjs";
 import { findPassingTodos, todoRemovalMessages } from "./todo-passing.mjs";
-import { LANE_BATCH, batchLaneFiles, classifySuite, partitionSafeFiles, positiveInt } from "./test-lanes.mjs";
+import { LANE_BATCH, batchLaneFiles, chainBatches, classifySuite, partitionSafeFiles, positiveInt } from "./test-lanes.mjs";
 
 const startedAt = performance.now();
 const root = process.cwd();
@@ -266,19 +266,29 @@ if (cjsTests.length > 0) {
     ));
   }
   const laneGroups = partitionSafeFiles(sharedFiles, lanes, workOf);
-  for (const [index, files] of laneGroups.entries()) {
-    const batches = batchLaneFiles(files, { maxFiles: TEST_LANE_FILE_CAP, maxBytes: TEST_LANE_BYTE_CAP, weightOf });
+  const laneChainPlans = laneGroups.map((files) => {
+    const batches = batchLaneFiles(files, {
+      maxFiles: TEST_LANE_FILE_CAP,
+      maxBytes: TEST_LANE_BYTE_CAP,
+      weightOf,
+    });
+    return chainBatches(batches, TEST_LANE_CONCURRENCY, workOf).map((chain) => ({ batches, chain }));
+  }).flat();
+  console.log(`Shared lane chains: ${laneChainPlans.length} beside each other, ${TEST_LANE_CONCURRENCY} workers across one lane.`);
+  for (const [slot, plan] of laneChainPlans.entries()) {
+    const perBatch = Math.max(1, Math.ceil(TEST_LANE_CONCURRENCY / plan.chain.length));
     jobs.push((async () => {
       let failed = 0;
-      for (const [batchIndex, batch] of batches.entries()) {
-        const label = batches.length === 1
-          ? `Shared Node lane ${index + 1}/${laneGroups.length} (${batch.length} files)`
-          : `Shared Node lane ${index + 1}/${laneGroups.length}, batch ${batchIndex + 1}/${batches.length} (${batch.length} files)`;
+      for (const batch of plan.chain) {
+        const stepping = plan.batches.length === 1
+          ? ""
+          : `, batch ${plan.batches.indexOf(batch) + 1}/${plan.batches.length}`;
+        const label = `Shared Node lane ${slot + 1}/${laneChainPlans.length}${stepping} (${batch.length} files)`;
         const result = await run(
           process.execPath,
-          ["--test", FILE_TIMEOUT, `--test-concurrency=${TEST_LANE_CONCURRENCY}`, TEST_ISOLATION, ...batch],
+          ["--test", FILE_TIMEOUT, `--test-concurrency=${perBatch}`, TEST_ISOLATION, ...batch],
           label,
-          { concurrency: laneGroups.length, lane: index + 1, deferred: true },
+          { concurrency: perBatch, lane: slot + 1, deferred: true },
         );
         if (result.lost?.length) {
           if (result.reportedFailure) failed ||= result.failed;
