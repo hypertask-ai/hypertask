@@ -1,6 +1,6 @@
 export type FeedbackRefusal = { code?: string; field?: string; options?: readonly unknown[] };
 
-const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big"]);
+const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big", "not_found", "missing_field", "invalid_date", "invalid_range", "invalid_element", "max_length_exceeded", "unsupported_value"]);
 
 export function callerCanFix(refusal: FeedbackRefusal): boolean {
   if (!refusal.code) return false;

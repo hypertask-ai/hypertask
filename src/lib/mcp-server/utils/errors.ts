@@ -117,6 +117,23 @@ export class ApiError extends McpError {
   }
 }
 
+function refusalDetails(responseBody: unknown): Record<string, unknown> | undefined {
+  if (!responseBody || typeof responseBody !== 'object') return undefined;
+  const body = responseBody as Record<string, unknown>;
+  const details = body.details;
+  if (details && typeof details === 'object' && typeof (details as Record<string, unknown>).code === 'string') {
+    return details as Record<string, unknown>;
+  }
+  const code = typeof body.code === 'string' ? body.code : undefined;
+  const field = typeof body.field === 'string' ? body.field : undefined;
+  if (!code && !field) return undefined;
+  return {
+    ...(code ? { code } : {}),
+    ...(field ? { field } : {}),
+    ...(Array.isArray(body.allowed_values) ? { allowed_values: body.allowed_values } : {}),
+  };
+}
+
 export function mapHttpErrorToMcpError(
   status: number,
   message: string,
@@ -135,7 +152,7 @@ export function mapHttpErrorToMcpError(
     case 404:
       return new NotFoundError(message || 'Resource not found', correlationId);
     case 400:
-      return new ValidationError(message || 'Invalid request', undefined, correlationId);
+      return new ValidationError(message || 'Invalid request', refusalDetails(responseBody), correlationId);
     case 429:
       return new ApiError(message || 'Rate limit exceeded', status, responseBody, correlationId);
     default:
