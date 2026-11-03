@@ -58,7 +58,8 @@ test('the full-screen placeholder loses the shortcut text and the focus hint bec
   const tiptap = read('src/hooks/MultiPages/AIChat/useAiTiptap.ts');
   assert.match(tiptap, new RegExp(`useFlag\\(${FLAG}\\)`));
   assert.match(tiptap, /if \(fullScreenChatRef\.current\) return `Ask anything, @ for context`;/);
-  assert.match(tiptap, /const fullScreenChat = chatCleanup && \(usePathname\(\) \?\? ""\)\.startsWith\("\/chat"\);/);
+  assert.match(tiptap, /const pathname = usePathname\(\);\n  const chatCleanup = useFlag/);
+  assert.match(tiptap, /const fullScreenChat = chatCleanup && \(pathname \?\? ""\)\.startsWith\("\/chat"\);/);
   assert.match(tiptap, /return `Focus with CTRL \+ Q, @ for context`;/, 'the docked chat keeps its placeholder');
   const composer = read('src/components/AI_CHAT/AI_Tiptap_Container.tsx');
   assert.match(composer, /`Focus · \$\{chatShortcutHint\("focus"\)\}`/);

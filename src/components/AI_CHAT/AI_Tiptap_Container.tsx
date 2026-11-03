@@ -709,9 +709,10 @@ function ContextList({
   onClick: (index: number) => void;
   mobile?: boolean;
 }) {
+  const pathname = usePathname();
   const cleanup =
     useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG) &&
-    (usePathname()?.startsWith("/chat") ?? false);
+    (pathname?.startsWith("/chat") ?? false);
 
   if (mobile) {
     return (

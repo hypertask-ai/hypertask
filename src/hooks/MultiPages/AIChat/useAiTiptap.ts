@@ -52,8 +52,9 @@ const useTiptapForAI = ({
   else autocapUndoRef.current = false;
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
+  const pathname = usePathname();
   const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-  const fullScreenChat = chatCleanup && (usePathname() ?? "").startsWith("/chat");
+  const fullScreenChat = chatCleanup && (pathname ?? "").startsWith("/chat");
   const fullScreenChatRef = useRef(false);
   fullScreenChatRef.current = fullScreenChat;
 
