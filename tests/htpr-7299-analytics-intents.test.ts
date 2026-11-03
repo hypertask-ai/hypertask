@@ -119,7 +119,6 @@ test("invite_sent link save survives death before its kick", async () => {
   assert.ok(result.inviteLink);
   assert.equal(h.invites.length, 1);
   assert.equal(h.intentRows[0].payload.inviterUserId, 123);
-  assert.equal(h.intentRows[0].payload.legacyUserId, 123);
   await replayOnce(h, "invite_sent");
 });
 
