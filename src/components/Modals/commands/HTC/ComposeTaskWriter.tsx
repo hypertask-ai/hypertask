@@ -600,7 +600,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                     <button type="button" aria-label="Cancel dictation" disabled={transcribing}
                       onClick={() => document.getElementById(cancelDictationButtonId)?.click()}
                       className="ml-1 flex h-6 w-6 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black disabled:cursor-wait disabled:opacity-60 max-sm:h-11 max-sm:w-11">
-                      <X size={12} strokeWidth={2} aria-hidden />
+                      <X size={14} strokeWidth={1.75} aria-hidden />
                     </button>
                   </div>
                 )}
