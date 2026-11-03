@@ -9,7 +9,7 @@ const os = require('node:os');
 const { loadModule } = require('./helpers/loadModule.cjs');
 const { JSDOM } = require('jsdom');
 const jiti = require('jiti')(__filename);
-const { focusCandidates, focusRenderedCandidate, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
+const { focusCardNextTo, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
 
 function source(file) {
   return ts.createSourceFile(file, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -63,7 +63,7 @@ function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
   };
   render();
   const env = {
-    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCandidates, focusRenderedCandidate, document,
+    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCardNextTo, document,
     updateActiveItemAndItemInView: id => { active = id; },
     _currentProject: { id: 7049 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [{ sections, filteredSections: sections, tasks: sections.flatMap(s => s.items) }] }, projectToUpdateIndex: 0 }),
@@ -115,28 +115,41 @@ test('fourteen archives retain visible order and finish on the column', async ()
   assert.deepEqual(f.sections()[1].items.map(t => t.id), [99]);
 });
 
-test('a candidate without a layout box is never focused', () => {
-  const dom = new JSDOM('<div id="task-9" tabindex="0"></div><div id="task-4" tabindex="0"></div>');
+test('focus goes to the next rendered card, skipping cards with no layout box', () => {
+  const dom = new JSDOM('<div class="section-container" tabindex="-1">'
+    + '<div id="task-4" tabindex="0"></div><div id="task-7" tabindex="0"></div><div id="task-9" tabindex="0"></div></div>');
   const document = dom.window.document;
-  document.getElementById('task-9').getClientRects = () => [];
-  document.getElementById('task-4').getClientRects = () => [{ width: 10, height: 10 }];
+  const column = document.querySelector('.section-container');
+  const boxed = element => { element.getClientRects = () => [{ width: 10, height: 10 }]; };
+  ['task-4', 'task-9'].forEach(id => boxed(document.getElementById(id)));
+  document.getElementById('task-7').getClientRects = () => [];
   const previousDocument = globalThis.document;
   globalThis.document = document;
   try {
-    assert.equal(focusRenderedCandidate([9, 4]), 4);
-    assert.equal(document.activeElement.id, 'task-4');
-    assert.equal(focusRenderedCandidate([9]), null);
+    assert.equal(focusCardNextTo(column, 4), 9);
+    assert.equal(document.activeElement.id, 'task-9');
   } finally {
     globalThis.document = previousDocument;
   }
 });
 
-test('focus candidates run down the column first, then up', () => {
-  const items = [{ id: 2 }, { id: 4 }, { id: 6 }];
-  assert.deepEqual(focusCandidates(items, 0), [4, 6]);
-  assert.deepEqual(focusCandidates(items, 1), [6, 2]);
-  assert.deepEqual(focusCandidates(items, 2), [4, 2]);
-  assert.deepEqual(focusCandidates([], 0), []);
+test('the last rendered card sends focus to the card above, and an emptying column takes focus', () => {
+  const dom = new JSDOM('<div class="section-container" tabindex="-1">'
+    + '<div id="task-4" tabindex="0"></div><div id="task-9" tabindex="0"></div></div>');
+  const document = dom.window.document;
+  const column = document.querySelector('.section-container');
+  for (const id of ['task-4', 'task-9']) document.getElementById(id).getClientRects = () => [{ width: 10, height: 10 }];
+  const previousDocument = globalThis.document;
+  globalThis.document = document;
+  try {
+    assert.equal(focusCardNextTo(column, 9), 4);
+    document.getElementById('task-4').remove();
+    assert.equal(focusCardNextTo(column, 9), null);
+    assert.equal(document.activeElement, column);
+    assert.equal(focusCardNextTo(null, 9), null);
+  } finally {
+    globalThis.document = previousDocument;
+  }
 });
 
 test('filtered view skips a card that has no rendered element', async () => {

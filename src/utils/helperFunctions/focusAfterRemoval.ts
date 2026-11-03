@@ -1,27 +1,23 @@
 
 type FocusSection = { items: { id: number }[] };
 
-export function focusCandidates(
-  items: { id: number }[] | undefined,
-  removedIndex: number,
-): number[] {
-  const list = items ?? [];
-  const last = list.length - 1;
-  const from = removedIndex >= 0 && removedIndex <= last ? removedIndex : last;
-  const below = list.slice(from + 1).map((item) => item.id);
-  const above = list.slice(0, Math.max(from, 0)).reverse().map((item) => item.id);
-  return [...below, ...above];
-}
-
-export function focusRenderedCandidate(candidateIds: number[]): number | null {
-  for (const id of candidateIds) {
-    const card = globalThis.document?.getElementById(`task-${id}`);
-    if (card && card.getClientRects().length > 0) {
-      card.focus({ preventScroll: true });
-      return id;
-    }
+export function focusCardNextTo(column: HTMLElement | null, removedId: number): number | null {
+  if (!column) return null;
+  const cards = Array.from(column.querySelectorAll<HTMLElement>('[id^="task-"]')).filter(
+    (card) => /^task-\d+$/.test(card.id) && card.getClientRects().length > 0,
+  );
+  const removedIndex = cards.findIndex((card) => card.id === `task-${removedId}`);
+  const order =
+    removedIndex >= 0
+      ? [...cards.slice(removedIndex + 1), ...cards.slice(0, removedIndex).reverse()]
+      : cards;
+  const target = order[0];
+  if (!target) {
+    column.focus({ preventScroll: true });
+    return null;
   }
-  return null;
+  target.focus({ preventScroll: true });
+  return Number(target.id.slice("task-".length));
 }
 
 export function nextFocusAfterRemoval(

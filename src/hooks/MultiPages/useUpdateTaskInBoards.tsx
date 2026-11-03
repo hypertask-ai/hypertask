@@ -19,7 +19,7 @@ import { useUndoContext } from "../General/useUndo";
 import useGlobalFocusHandler from "../Inbox/useGlobalFocusHandler";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
-import { focusCandidates, focusRenderedCandidate, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
+import { focusCardNextTo, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
 import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/appendCreatedSection";
 import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
@@ -389,6 +389,7 @@ const UpdateKanban = () => {
       itemIndex,
       scope = "board",
       keepColumnFocus = false,
+      removedId,
     }: {
       sections: ISection[],
       sectionIndex: number,
@@ -397,13 +398,21 @@ const UpdateKanban = () => {
       sectionId: number,
       scope?: "board" | "column",
       keepColumnFocus?: boolean,
+      removedId?: number,
     }
   ) => {
+    if (keepColumnFocus && removedId != null) {
+      const column =
+        globalThis.document
+          ?.getElementById(`droppable-section-container-${sectionId}`)
+          ?.closest<HTMLElement>(".section-container") ?? null;
+      updateActiveItemAndItemInView(focusCardNextTo(column, removedId), projectId, sectionId);
+      return;
+    }
     if (keepColumnFocus) {
-      const columnNextId = nextFocusAfterRemoval(sections, sectionIndex, itemIndex, scope);
-      const focusedId = columnNextId === null ? null : focusRenderedCandidate(focusCandidates(sections?.[sectionIndex]?.items, itemIndex));
-      updateActiveItemAndItemInView(focusedId ?? columnNextId, projectId, sectionId);
-      if (columnNextId === null) {
+      const nextId = nextFocusAfterRemoval(sections, sectionIndex, itemIndex, scope);
+      updateActiveItemAndItemInView(nextId, projectId, sectionId);
+      if (nextId === null) {
         globalThis.document
           ?.getElementById(`droppable-section-container-${sectionId}`)
           ?.closest<HTMLElement>(".section-container")
@@ -493,6 +502,7 @@ const UpdateKanban = () => {
         projectId,
         scope: status === "Archive" ? "column" : "board",
         keepColumnFocus: status === "Archive" && options.focusSections !== undefined,
+        removedId: taskId,
       });
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);
