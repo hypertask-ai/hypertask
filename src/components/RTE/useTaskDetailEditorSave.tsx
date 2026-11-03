@@ -198,7 +198,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
       void editTicketWithAi(currentTask.id);
       return;
     }
-    if (mode === "read-edit-description" && !descriptionInlineDrafts && composeEnabled) {
+    if (mode === "read-edit-description" && !descriptionInlineDrafts) {
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
     }

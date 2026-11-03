@@ -113,7 +113,7 @@ test("the palette memoizes the registry and keeps selection and theme arguments 
   assert.equal(command.name, "Show agent log");
 });
 
-test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", () => {
+test("both shortcut-help surfaces advertise the one Ctrl/Cmd+J action", () => {
   for (const [file, dataName] of [
     ["src/components/Modals/Settings/ShortcutsSection.tsx", "shortcutGroups"],
     ["src/components/sidebars/keyboardShortcuts.tsx", "mainData"],
@@ -121,12 +121,12 @@ test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", 
     for (const isApple of [false, true]) {
       const shortcuts = evaluate(initializer(file, dataName).text, {
         getKeyboardShortcuts, isApple, appShellRailOn: false,
-        historyToggleLabel: "Toggle history events", newTaskWindow: false,
+        historyToggleLabel: "Toggle history events",
       });
       const titles = shortcuts.flatMap((group) => group.sub)
         .filter((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} J`)
         .map((item) => item.shortTitle);
-      assert.deepEqual(titles, ["Compose task"]);
+      assert.deepEqual(titles, ["New Task"]);
     }
   }
 });

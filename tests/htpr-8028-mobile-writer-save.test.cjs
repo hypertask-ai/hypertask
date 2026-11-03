@@ -26,16 +26,14 @@ function declaration(ast, name) {
   return node.initializer.getText(ast);
 }
 
-test('phone Save with writer uses the existing draft; desktop and flag-off retain command routing', () => {
+test('phone Save with writer uses the existing draft; desktop keeps command routing', () => {
   const ast = tree(modalPath);
-  const condition = find(ast, n => ts.isIfStatement(n) && ts.isExpressionStatement(n.thenStatement) && ts.isBinaryExpression(n.thenStatement.expression) && n.thenStatement.expression.left.getText(ast) === 'newTaskWindow');
-  assert.ok(condition);
   for (const mobile of [false, true]) for (const enabled of [false, true]) {
     const commands = [];
     let writerOpen = false;
     const chain = { selectAll() { return this; }, setHighlight() { return this; }, run() {} };
     const context = {
-      composeEnabled: true, newTaskWindowFlag: true, isMbl: mobile,
+      isMbl: mobile,
       HTPR_8028_MOBILE_WRITER_SAVE_FLAG: 'mobile-writer-save', useFlag: key => key === 'mobile-writer-save' ? enabled : true,
       setCommands: value => commands.push(value), CommandMode: { Command: 'command' },
       formValues: { currentProject: { id: 7049 } }, _currentProject: null, closeComposedTaskForm() {},
@@ -43,7 +41,7 @@ test('phone Save with writer uses the existing draft; desktop and flag-off retai
       shouldShowAiTaskWriter: false, aiPromptRef: {}, setHasOpenedClassicForm() {}, editMode: 'Description', setEditMode() {},
       setShouldShowAITaskWriter: update => { writerOpen = update(writerOpen); },
     };
-    run(`const mobileWriterSaveFlag = ${declaration(ast, 'mobileWriterSaveFlag')}; const mobileWriterSave = ${declaration(ast, 'mobileWriterSave')}; let newTaskWindow = false; ${condition.getText(ast)}; const toggleAiTaskWriterVisibility = ${declaration(ast, 'toggleAiTaskWriterVisibility')}; const toggleAiTaskWriter = ${declaration(ast, 'toggleAiTaskWriter')}; toggleAiTaskWriter();`, context);
+    run(`const mobileWriterSaveFlag = ${declaration(ast, 'mobileWriterSaveFlag')}; const mobileWriterSave = ${declaration(ast, 'mobileWriterSave')}; const newTaskWindow = ${declaration(ast, 'newTaskWindow')}; const toggleAiTaskWriterVisibility = ${declaration(ast, 'toggleAiTaskWriterVisibility')}; const toggleAiTaskWriter = ${declaration(ast, 'toggleAiTaskWriter')}; toggleAiTaskWriter();`, context);
     assert.equal(writerOpen, mobile && enabled);
     assert.equal(commands.length, mobile && enabled ? 0 : 1);
   }

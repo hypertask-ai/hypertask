@@ -418,7 +418,7 @@ test('New Task tab tooltips appear on keyboard focus and Tab leaves unrelated ta
   });
 });
 
-test('dictation stays mounted across Search switches and disabling New Task releases the input lock', async (t) => {
+test('dictation stays mounted across Search switches and its draft survives', async (t) => {
   let audioProps, mounts = 0, unmounts = 0;
   function AudioButton(props) {
     audioProps = props;
@@ -438,11 +438,9 @@ test('dictation stays mounted across Search switches and disabling New Task rele
     await React.act(async () => { audioProps.toggleRecording(false); audioProps.callbackHandler('<p>Spoken text</p>', true); });
     assert.equal(input().value, 'Keep my typed note Spoken text');
     assert.equal(input().disabled, false);
-    await React.act(async () => audioProps.toggleRecording(true));
-    assert.equal(input().value, '');
-    await type('Fresh note after re-enabling');
+    await type(' and more');
     await press('Enter', { code: 'Enter' });
-    assert.equal(requests[0].body.text, 'Fresh note after re-enabling');
+    assert.equal(requests[0].body.text, 'Keep my typed note Spoken text and more');
   });
 });
 
