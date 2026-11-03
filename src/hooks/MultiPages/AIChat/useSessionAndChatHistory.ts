@@ -98,16 +98,10 @@ export const useSessionAndChatHistory = (
   const explicitSelectionKey = hasExplicitTask ? `${selectionScope}:explicit:${explicitTaskRef.current.generation}` : selectionScope;
   const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, taskScopedHistory, nameBoardRef, { key: explicitSelectionKey, restoreSelection: !hasExplicitTask, initialTaskId: followsTaskNavigation && !hasExplicitTask ? undefined : taskId }, navigationKey, scopedBoardId, pinnedSessionId);
   const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
-  const pagedActiveSession = pagedHistory.activeSession;
-  const setPagedActiveSession = pagedHistory.setActiveSession;
   useEffect(() => {
     if (!pinnedSessionId || activeSession) return;
     setActiveSession(pinnedSessionId);
   }, [pinnedSessionId, activeSession]);
-  useEffect(() => {
-    if (!pinnedSessionId || !paged || pagedActiveSession) return;
-    setPagedActiveSession(pinnedSessionId);
-  }, [pinnedSessionId, paged, pagedActiveSession, setPagedActiveSession]);
 
   const {
     data: sessionsData,
