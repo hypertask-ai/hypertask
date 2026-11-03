@@ -91,7 +91,8 @@ for (const input of [unauthorized, { ...serverError, tool: 'tasks', errorCode: '
     assert.equal(f.created[0].title, `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`)
     assert.equal(f.created[0].description, legacyDescription(input, fingerprint))
     assert.deepEqual(result, { success: true, ticketNumber: 'HTPR-8001', url: 'https://app.hypertask.ai/detail/project-15/8001', deduped: false, count: 1 })
-    assert.deepEqual(f.lookups, [{ flag: key, userId: 42 }])
+    const noteLookups = input.note === undefined ? [] : [{ flag: 'htpr-8275-agent-feedback-note', userId: 42 }]
+    assert.deepEqual(f.lookups, [{ flag: key, userId: 42 }, ...noteLookups])
   })
 }
 
@@ -113,7 +114,7 @@ test('flag On renders the four plain sections followed by unchanged engineer fie
   assert.equal(f.created[0].title, "An agent's API call to tasks failed because Hypertask returned a server error (21 Oct)")
   assert.equal(f.created[0].description, expected)
   assert.equal(expected.includes('customer secret'), false)
-  assert.deepEqual(f.userQueries[0].select, { displayName: true })
+  assert.deepEqual(f.userQueries.map(query => query.select), [{ id: true, email: true }, { displayName: true }])
 })
 
 for (const [agentName, ownerName, expected] of [
