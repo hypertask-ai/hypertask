@@ -727,13 +727,11 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-The MCP, CLI and API contract is asserted by a step of the required `browser-smoke` summary
-(HYCI-108; it used to be a separate `mcp-cli-api-contract` job). That job existed only to read two
-outputs of the summary it already waited for, so it cost a whole runner queue turn for twelve
-seconds of work on every push. It is not in the ruleset and never was: it blocks merges because the
-contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails that half and
-the required summary over it, and the assertion step re-reads the same two outputs to prove the
-contract really passed. It uses the disposable server before any layout flag reseed. The owner,
+The contract is asserted by a step of the required `browser-smoke` summary (HYCI-108; it was a
+separate `mcp-cli-api-contract` job until then). It is not in the ruleset itself: it blocks merges
+because the contract step runs inside `browser-smoke-desktop` (HYCI-32), so a failing contract fails
+that half and the required `browser-smoke` summary over it, and the assertion step proves the
+contract reported `passed`. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;
@@ -1234,8 +1232,8 @@ the only publisher of `app-build`, so the visual comparison adds no third build.
 The required ruleset context stays `browser-smoke`. That name is now a summary
 job with `needs: [browser-smoke-desktop, browser-smoke-mobile]`; it is green only
 when both halves are green, and a cancelled, failed or missing half never reads
-as a pass. `visual-compare` reads the one build's scope answer, so it keeps its existing wiring;
-HYCI-108 then moved the contract assertion into this summary, so nothing waits behind it.
+as a pass. `visual-compare` reads the one build's scope answer, so it keeps its
+existing wiring; HYCI-108 later moved the contract assertion inside this summary.
 
 The budget cost is two jobs per push. HYCI-42 took the pool to six lanes and
 HYCI-45 added a second serial lane before this merged, so the merged count is 22
@@ -1371,8 +1369,9 @@ outlasts the 71 s of idle the split removes.
 The required ruleset context stays `browser-smoke`, a summary job with
 `needs: [browser-smoke-desktop, browser-smoke-mobile, browser-smoke-matrix,
 browser-smoke-flags]`. It is green only when all four shards are green, and a
-cancelled, failed or missing shard never reads as a pass. The contract assertion reads the desktop shard's `contract` and
-`docs_only` outputs directly (HYCI-108); `visual-compare` needs only the one build, so HYCI-77
+cancelled, failed or missing shard never reads as a pass. The contract assertion
+reads the desktop shard's `contract` and `docs_only` outputs directly (HYCI-108);
+`visual-compare` needs only the one build, so HYCI-77
 starts it beside the shards instead of after their summary. `tests/browser-smoke-workflow.test.cjs`
 still proves every spec/project pair runs exactly once and that no shard was left
 without work.
@@ -1394,27 +1393,6 @@ would report an hour of waiting that never happened. Push 41286623269 is the
 opposite case, with six parts (`browser-smoke-desktop`, `browser-smoke-mobile`,
 `browser-smoke-flags`, `test-shard (1)`, `(2)`, `(4)`) closing 60m01s to 60m04s
 after their last step, which is the 68 minute push.
-
-## Tiny last checks that waited in line (HYCI-108)
-
-Three checks used to report after the real work of a push had finished, and each paid a full
-runner queue turn for a few seconds of work. On production push `768f05e` (run
-[41670170995](https://github.com/hypertask-ai/hypertask/actions/runs/41670170995)) the last real job
-ended at 16:10:52Z and the run only closed at 16:14:34Z: `ci-tests` and `browser-smoke` waited 1.9
-minutes each in parallel, then `mcp-cli-api-contract` waited another 1.6 minutes because it needed
-`browser-smoke`. That is 3.7 minutes of tail on a busy push; the other production pushes of the same
-ten-push window carried 0.3-3.8 minutes of the same tail, so the cost is the queue, not the checks.
-The tail is now exactly one queue turn, which is what this ticket asks for.
-
-`mcp-cli-api-contract` is gone. Its four-line assertion now runs as the last step of the required
-`browser-smoke` summary, which already waits for the desktop shard whose outputs it reads, so the
-same fail-closed answer costs no machine. The required contexts (`ci-tests`, `browser-smoke` and the
-rest of the ruleset) are unchanged, and the contract still blocks a merge through `browser-smoke`.
-
-`tests/browser-smoke-workflow.test.cjs` locks the shape: the contract assertion must sit inside the
-summary, and no pull-request job may `needs:` a required summary. Only the push-only
-`production-test-warning` reads `ci-tests`, so a new tail check cannot quietly reappear.
-`node scripts/ci-hold-report.mjs` still measures any part that waits after its own last step.
 
 ## The source-text gate judges the branch start (HYCI-47)
 
