@@ -29,11 +29,7 @@ import {
   directReplyTypesByTask,
 } from "@/utils/controllers/notifications/agentImportantPermission";
 
-export function inboxTaskSelect(
-  userId: number,
-  includeCachedDescription = false,
-  withLatestHumanComment = false,
-): Prisma.TaskSelect {
+export function inboxTaskSelect(userId: number, includeCachedDescription = false): Prisma.TaskSelect {
   return {
     _count: {
       select: {
@@ -64,10 +60,7 @@ export function inboxTaskSelect(
       where: { agentId: null, creatorId: { not: null } },
       orderBy: { createdAt: "desc" as const },
       take: 1,
-      select: {
-        createdAt: true,
-        ...(withLatestHumanComment ? { text: true, creator: { select: { displayName: true } } } : {}),
-      },
+      select: { createdAt: true },
     },
     taskLabels: { include: { label: true }, orderBy: { id: "asc" } },
     ticketNumber: true,
@@ -82,8 +75,7 @@ export function inboxTaskSelect(
 
 export function notificationInboxInclude(
   userId: number,
-  includeCachedDescription = false,
-  withLatestHumanComment = false,
+  includeCachedDescription = false
 ): Prisma.NotificationInclude {
   return {
     comment: { select: { id: true, text: true } },
@@ -93,7 +85,7 @@ export function notificationInboxInclude(
       select: { id: true, title: true, name: true, teamId: true, stalenessEnabled: true },
     },
     task: {
-      select: inboxTaskSelect(userId, includeCachedDescription, withLatestHumanComment),
+      select: inboxTaskSelect(userId, includeCachedDescription),
     },
     fromUser: { select: { displayName: true, photoURL: true } },
     fromAgent: { select: { displayName: true, photoURL: true } },
@@ -156,13 +148,10 @@ export async function getInboxNotifications(
   agentId?: string | null,
   teamScope?: AgentTokenTeamScope | null,
 ) {
-  const withLatestHumanComment =
-    withCachedDescription &&
-    await isFeatureEnabled(HTPR_8264_INBOX_ROW_FILL_FLAG, userId).catch(() => false);
   if ((teamScope != null || (agentId && agentScopeEnforced()))) {
     return client.notification.findMany({
       where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId, teamScope)] },
-      include: notificationInboxInclude(userId, withCachedDescription, withLatestHumanComment),
+      include: notificationInboxInclude(userId, withCachedDescription),
       distinct: ["taskId", "notification_inviteId"],
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     });
@@ -187,8 +176,8 @@ export async function getInboxNotifications(
 
   if (!selectedRows.length) return [];
 
-  return client.notification.findMany({
-    include: notificationInboxInclude(userId, withCachedDescription, withLatestHumanComment),
+  const rows = await client.notification.findMany({
+    include: notificationInboxInclude(userId, withCachedDescription),
     where: {
       AND: [
         { id: { in: selectedRows.map(({ id }) => id) } },
@@ -197,6 +186,33 @@ export async function getInboxNotifications(
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     relationLoadStrategy: "join",
+  });
+  if (
+    withCachedDescription &&
+    await isFeatureEnabled(HTPR_8264_INBOX_ROW_FILL_FLAG, userId).catch(() => false)
+  ) {
+    return withLatestHumanComments(rows, client);
+  }
+  return rows;
+}
+
+async function withLatestHumanComments<T extends { taskId: number | null; task?: unknown }>(
+  rows: T[],
+  client: typeof prisma,
+): Promise<T[]> {
+  const taskIds = rows.flatMap((row) => (row.taskId == null ? [] : [row.taskId]));
+  if (taskIds.length === 0) return rows;
+  const comments = await client.comment.findMany({
+    where: { taskId: { in: taskIds }, agentId: null, creatorId: { not: null } },
+    orderBy: [{ taskId: "asc" }, { createdAt: "desc" }],
+    distinct: ["taskId"],
+    select: { taskId: true, text: true, creator: { select: { displayName: true } } },
+  });
+  const latestByTask = new Map(comments.map((comment) => [comment.taskId, comment]));
+  return rows.map((row) => {
+    const latest = row.taskId == null ? undefined : latestByTask.get(row.taskId);
+    if (!latest || row.task == null || typeof row.task !== "object") return row;
+    return { ...row, task: { ...(row.task as object), comments: [latest] } };
   });
 }
 
