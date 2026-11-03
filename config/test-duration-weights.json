@@ -724,7 +724,6 @@
   "tests/htpr-7334-mcp-crash-report.test.cjs": 522,
   "tests/htpr-7337-edit-with-ai.test.cjs": 541,
   "tests/htpr-7338-ai-writer-stays-visible.test.cjs": 342,
-  "tests/htpr-7342-web-writing-task-writer.test.cjs": 1118,
   "tests/htpr-7343-ctrlj-writer-properties.test.cjs": 1822,
   "tests/htpr-7349-title-clear-of-nav.test.cjs": 112,
   "tests/htpr-7350-card-title-wrap.test.ts": 1244,

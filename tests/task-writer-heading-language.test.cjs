@@ -88,7 +88,7 @@ async function prepare({ prompt, enabled = true, aiMode = "AiTaskWriter" }) {
   test(`flag off preserves today's full prompt`, async () => {
     const prompt = "Behebe den Fehler beim Speichern. Bitte auf Deutsch schreiben";
     const { run } = await prepare({ prompt, enabled: false });
-    const expected = taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_RULES}`);
+    const expected = taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`);
     assert.equal(run.instructions, `${expected}\n\nUse the board structure.`);
   });
 }
@@ -98,7 +98,7 @@ test("Write with AI has its own comment template and stays unchanged", async () 
   const on = await prepare({ prompt, aiMode: "WriteWithAI" });
   const off = await prepare({ prompt, aiMode: "WriteWithAI", enabled: false });
   assert.equal(on.run.instructions, off.run.instructions);
-  assert.equal(on.run.instructions, `${editorPrompts.createKanbanSystemPrompt("write_with_ai")}\n\nUse the board structure.`);
+  assert.equal(on.run.instructions, `${editorPrompts.createKanbanSystemPrompt("write_with_ai", editorPrompts.TASK_AUTHORING_WEB_STYLE)}\n\nUse the board structure.`);
   assert.ok(!on.checks.some(([key]) => key === flag));
   assert.doesNotMatch(on.run.instructions, /sections covering: problem, affected screen, acceptance criteria, out of scope/);
 });

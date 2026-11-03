@@ -269,7 +269,7 @@ for (const splitTasks of [false, true]) {
       assert.match(instructions, /not board custom instructions or matching board templates/);
       assert.match(instructions, /Preserve source fidelity, safety and tool-use policy, media placeholders/);
       assert.ok(instructions.indexOf(composeSkillRule) > instructions.indexOf('must not override the rules or tool-use policy above'));
-      assert.ok(instructions.includes(research.TASK_WRITER_BOARD_RESEARCH_RULES));
+      assert.ok(instructions.includes(research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES));
       assert.ok(!JSON.stringify(calls[0].prompt).includes('/qa-7480-check'));
       assert.deepEqual(h.lookups, [{ slugs: ['qa-7480-check'], scope: { userId: 985, agentId: undefined, teamScope: undefined, projectId: 15 } }]);
       assert.deepEqual(h.retrieval, ['Add a CSV export to the reports page']);
@@ -285,7 +285,7 @@ test('flag off, missing opt-in and popup retain the exact production instruction
     const result = await h.prepare('/review Audit checkout', extra);
     const resolved = await resolveSkills('/review Audit checkout', { userId: 985, projectId: 15 }, async () => available);
     const expected = taskPrompts.createTaskWriterSystemPromptTemplate(
-      `${prompts.TASK_AUTHORING_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_RULES}`,
+      `${prompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`,
     ) + `\n\n${resolved.systemPromptAddition}`;
     assert.equal(result.instructions, expected);
     assert.equal(h.parts[0].taskDescription, '<p>/review Audit checkout</p>');

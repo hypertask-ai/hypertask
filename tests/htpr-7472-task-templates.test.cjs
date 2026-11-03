@@ -73,7 +73,6 @@ function writerHarness(options = {}) {
       if (key === keys.HTPR_7500_WRITER_OLD_STRUCTURE_FLAG) return Boolean(options.oldStructure);
       if (key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG) return true;
       if (key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG) return options.boardFormat !== false;
-      if (key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG) return options.web !== false;
       return key === keys.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG && Boolean(options.split);
     } },
     "@/lib/ai/prompts/registry": load("src/lib/ai/prompts/registry.ts"),
@@ -284,17 +283,17 @@ test("PATCH flag off, missing session and malformed updates never write", async 
   }
   assert.deepEqual(h.updates, []);
 });
-for (const oldStructure of [false, true]) for (const boardFormat of [false, true]) for (const web of [true, false]) {
-  test(`flag on injects explicit ideation precedence, board context and matched title pattern (oldStructure=${oldStructure}, boardFormat=${boardFormat}, web=${web})`, async () => {
-    const h = writerHarness({ oldStructure, boardFormat, web });
+for (const oldStructure of [false, true]) for (const boardFormat of [false, true]) {
+  test(`flag on injects explicit ideation precedence, board context and matched title pattern (oldStructure=${oldStructure}, boardFormat=${boardFormat})`, async () => {
+    const h = writerHarness({ oldStructure, boardFormat });
     const result = await h.draft();
     assert.equal(result.success, true);
     assert.equal(h.calls.length, 1);
     const prompt = promptText(h.calls[0]);
     for (const text of ["FINISHED IDEAS AND TEMPLATE TITLES", "exact number of finished items", "overrides SOURCE FIDELITY", "invented page copy", "180-240 visible-word budget", "one-sentence-per-section limit", "only as needed", "Without an explicit ideation/copy request", "Impact, Confidence and Ease", "BOARD_TICKET_CONTEXT", "BOARD_MEMORY", "INSTRUCTION_FILE", "BOARD_DOC_CONTEXT", "BOARD_INSTRUCTIONS", "[TAG] {idea} ICE {score}/30", "When the brief matches a board template by name or intent"]) assert.ok(prompt.includes(text), text);
-    assert.equal(prompt.includes("Restore the board's complete ticket structure"), web && oldStructure);
+    assert.equal(prompt.includes("Restore the board's complete ticket structure"), oldStructure);
     assert.equal(prompt.includes("When the board's example tickets share a recurring section skeleton"), boardFormat);
-    if (web && oldStructure) assert.match(prompt, /BOARD RESEARCH \(structure and source fidelity outrank brevity\)/);
+    if (oldStructure) assert.match(prompt, /BOARD RESEARCH \(structure and source fidelity outrank brevity\)/);
     assert.equal((result.html.match(/<li>/g) ?? []).length, 5);
     assert.equal(result.title, "[TAG] Welcome ICE 21/30");
     assert.ok(h.checks.some(([key, id]) => key === flag && id === 985));
@@ -324,28 +323,23 @@ test("flag off retains the already-released board-format rule without adding ide
   assert.doesNotMatch(prompt, /FINISHED IDEAS AND TEMPLATE TITLES/);
 });
 const productionPromptHashes = {
-  "false/false/false": "d6c7f5dbf6f0d5e3f2803c541eaf791975bc881770d58832e2a983b6483863a6",
-  "false/false/true": "7258852b9c4974bc530eafff29c85b164f2dda6b18abc8499ac45db1623b3794",
-  "false/true/false": "4df0baca1d375e6554a4ae62a4160612ba1007905dec572619461e0113b3e258",
-  "false/true/true": "31d97f39ea4f08ac3053f7e99aedc4cbaa1431b08a8fd64d10a3358d38f63a0b",
-  "true/false/false": "d6c7f5dbf6f0d5e3f2803c541eaf791975bc881770d58832e2a983b6483863a6",
-  "true/false/true": "7258852b9c4974bc530eafff29c85b164f2dda6b18abc8499ac45db1623b3794",
-  "true/true/false": "a36bbc7434b72d12df26a35e7116b4a7a17f380bfcd26d7efcc13a698c9350eb",
-  "true/true/true": "8326ea1356969091d7c5ff0a8199da18d1d9eff7dffa1e300c2341b01a919b37"
+  "false/false": "4df0baca1d375e6554a4ae62a4160612ba1007905dec572619461e0113b3e258",
+  "false/true": "31d97f39ea4f08ac3053f7e99aedc4cbaa1431b08a8fd64d10a3358d38f63a0b",
+  "true/false": "a36bbc7434b72d12df26a35e7116b4a7a17f380bfcd26d7efcc13a698c9350eb",
+  "true/true": "8326ea1356969091d7c5ff0a8199da18d1d9eff7dffa1e300c2341b01a919b37"
 };
-for (const oldStructure of [false, true]) for (const web of [false, true]) for (const boardFormat of [false, true]) {
-  test(`flag off preserves production prompts and one model call (oldStructure=${oldStructure}, web=${web}, boardFormat=${boardFormat})`, async () => {
-    const options = { enabled: false, oldStructure, web, boardFormat, outputs: ["<p>TBD</p>"] };
+for (const oldStructure of [false, true]) for (const boardFormat of [false, true]) {
+  test(`flag off preserves production prompts and one model call (oldStructure=${oldStructure}, boardFormat=${boardFormat})`, async () => {
+    const options = { enabled: false, oldStructure, boardFormat, outputs: ["<p>TBD</p>"] };
     const h = writerHarness(options);
     assert.equal((await h.draft()).html, "<p>TBD</p>");
     assert.equal(h.calls.length, 1);
     const prompt = promptText(h.calls[0]);
     assert.doesNotMatch(prompt, /FINISHED IDEAS AND TEMPLATE TITLES|Rewrite the complete draft once/);
     const styles = load("src/app/api/ai/_lib/editorAiPrompts.ts");
-    assert.equal(styles.createTaskAuthoringStyle(true, false, false, false), styles.TASK_AUTHORING_WEB_STYLE);
-    assert.equal(styles.createTaskAuthoringStyle(false, false, false, false), styles.TASK_AUTHORING_STYLE);
+    assert.equal(styles.createTaskAuthoringStyle(false, false, false), styles.TASK_AUTHORING_WEB_STYLE);
     const digest = crypto.createHash("sha256").update(prompt).digest("hex");
-    assert.equal(digest, productionPromptHashes[`${oldStructure}/${web}/${boardFormat}`]);
+    assert.equal(digest, productionPromptHashes[`${oldStructure}/${boardFormat}`]);
     assert.ok(h.checks.some(([key, id]) => key === keys.HTPR_7500_WRITER_OLD_STRUCTURE_FLAG && id === 985));
     const stream = writerHarness(options);
     assert.equal(await (await stream.web()).text(), "<p>TBD</p>");

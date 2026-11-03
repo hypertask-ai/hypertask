@@ -56,7 +56,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", TASK_WRITER_RESEARCH_REQUEST_RULE: "", createTaskWriterSystemPromptTemplate: () => "Return one HTML title and body." },
     "@/app/api/ai/_lib/taskWriterBoardResearch": {
-      TASK_WRITER_BOARD_RESEARCH_RULES: "", buildTaskWriterRetrievalQuery: ({ prompt }) => prompt,
+      TASK_WRITER_BOARD_RESEARCH_WEB_RULES: "", buildTaskWriterRetrievalQuery: ({ prompt }) => prompt,
       formatRelatedTicketCandidates: () => "", formatBoardVocabulary: () => "",
     },
     "@/app/api/ai/_lib/skills": { resolveSkills: async text => ({ cleanedText: text, skills: [] }) },

@@ -11,16 +11,14 @@ export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP
 
 export const TASK_AUTHORING_WEB_STYLE = renderPrompt("task-authoring-web-style", (WEB_WRITING_SKILL), (UNSLOP_SKILL), "");
 
-export function createTaskAuthoringStyle(webWriting: boolean, boardFormat: boolean, oldStructure = false, taskTemplates = false) {
+export function createTaskAuthoringStyle(boardFormat: boolean, oldStructure = false, taskTemplates = false) {
   const rule = [
     boardFormat ? renderPrompt("task-writer-board-format-rule") : "",
     taskTemplates ? renderPrompt("task-writer-template-ideation-rule") : "",
   ].filter(Boolean).join("\n\n");
-  return webWriting
-    ? oldStructure
-      ? renderPrompt("task-authoring-web-old-structure-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
-      : renderPrompt("task-authoring-web-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
-    : renderPrompt("task-authoring-style", UNSLOP_SKILL, I_HAVE_ADHD_SKILL, rule);
+  return oldStructure
+    ? renderPrompt("task-authoring-web-old-structure-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
+    : renderPrompt("task-authoring-web-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule);
 }
 
 export function createPromptForTiptapForwardSlash(

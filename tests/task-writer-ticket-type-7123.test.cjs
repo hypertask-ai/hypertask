@@ -64,7 +64,7 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
     "@/app/api/ai/_lib/skills": { resolveSkills: async (text) => ({ cleanedText: text, systemPromptAddition: "Fixture skill", skills: [] }) },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterBoardResearch": {
-      TASK_WRITER_BOARD_RESEARCH_RULES: "Fixture board research",
+      TASK_WRITER_BOARD_RESEARCH_WEB_RULES: "Fixture board research",
       buildTaskWriterRetrievalQuery: ({ prompt }) => prompt,
       formatRelatedTicketCandidates: () => "", formatBoardVocabulary: () => "",
     },

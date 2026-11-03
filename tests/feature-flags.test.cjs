@@ -343,6 +343,16 @@ test("phone board cold-start is permanent and no longer registered", async () =>
   assert.equal(Object.hasOwn(snapshot.modes, "htpr-7016-phone-board-cold-start"), false);
 });
 
+test("web-writing task writer style is permanent and no longer registered", async () => {
+  const key = ["htpr", "7342", "web", "writing", "task", "writer"].join("-");
+  const identifier = ["HTPR", "7342", "WEB", "WRITING", "TASK", "WRITER", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 test("demo login own-board bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG;
   assert.equal(key, "htpr-7035-demo-login-own-board");

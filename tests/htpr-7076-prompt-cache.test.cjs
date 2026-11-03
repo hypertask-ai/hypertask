@@ -149,7 +149,7 @@ async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", spli
     },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", createTaskWriterSystemPromptTemplate: () => LONG },
-    "@/app/api/ai/_lib/taskWriterBoardResearch": { buildTaskWriterRetrievalQuery: ({ prompt }) => prompt, formatRelatedTicketCandidates: () => "", formatStyleExamples: () => "", formatBoardVocabulary: () => "", TASK_WRITER_BOARD_RESEARCH_RULES: "", TASK_WRITER_RELATED_CANDIDATE_LIMIT: 8, TASK_WRITER_STYLE_EXAMPLE_LIMIT: 3 },
+    "@/app/api/ai/_lib/taskWriterBoardResearch": { buildTaskWriterRetrievalQuery: ({ prompt }) => prompt, formatRelatedTicketCandidates: () => "", formatStyleExamples: () => "", formatBoardVocabulary: () => "", TASK_WRITER_BOARD_RESEARCH_WEB_RULES: "", TASK_WRITER_RELATED_CANDIDATE_LIMIT: 8, TASK_WRITER_STYLE_EXAMPLE_LIMIT: 3 },
     "@/app/api/ai/_lib/skills": { resolveSkills: async (text) => ({ cleanedText: text, skills: [], systemPromptAddition: skill }) },
     "@/app/api/ai/_lib/providerGate": { getProjectTeamProviderContext: async () => ({ settings: {} }) },
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true },

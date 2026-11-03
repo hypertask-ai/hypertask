@@ -17,7 +17,7 @@ const registry = load(path.join(root, "src/lib/ai/prompts/registry.ts"));
 const flag = "htpr-7500-writer-old-structure";
 const digest = (value) => require("node:crypto").createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
-async function prepare({ enabled, aiMode = "AiTaskWriter", web = true, boardFormat = false }) {
+async function prepare({ enabled, aiMode = "AiTaskWriter", boardFormat = false }) {
   const filename = path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -26,7 +26,7 @@ async function prepare({ enabled, aiMode = "AiTaskWriter", web = true, boardForm
   const stubs = {
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === flag ? enabled : key === keys.HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG ? web : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? boardFormat : false;
+      return key === flag ? enabled : key === keys.HTPR_7471_WRITER_BOARD_FORMAT_FLAG ? boardFormat : false;
     } },
     "@/lib/ai/prompts/registry": registry,
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, { fixed, suffix }) => fixed + suffix },
@@ -74,40 +74,36 @@ test("production and HTPR-7500 prompt parts preserve their exact original bytes"
 
 for (const aiMode of ["AiTaskWriter", "WriteWithAI"]) {
   for (const boardFormat of [false, true]) {
-    for (const web of [false, true]) {
-      test(`${aiMode}, board format=${boardFormat}, web=${web}: flag off preserves production, flag on selects the branch prompts server-side`, async () => {
-        const format = aiMode === "AiTaskWriter" && boardFormat;
-        const off = await prepare({ enabled: false, aiMode, boardFormat, web });
-        const on = await prepare({ enabled: true, aiMode, boardFormat, web });
-        const productionStyle = editorPrompts.createTaskAuthoringStyle(web, format);
-        const oldStructureStyle = editorPrompts.createTaskAuthoringStyle(web, format, true);
-        const expected = (style, rules) => aiMode === "AiTaskWriter"
-          ? taskPrompts.createTaskWriterSystemPromptTemplate(`${style}\n\n${rules}`)
-          : editorPrompts.createKanbanSystemPrompt("write_with_ai", style);
-        const productionRules = web ? research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES : research.TASK_WRITER_BOARD_RESEARCH_RULES;
-        const oldStructureRules = web ? registry.renderPrompt("task-writer-board-research-web-old-structure-rules") : research.TASK_WRITER_BOARD_RESEARCH_RULES;
-        assert.equal(off.run.instructions, expected(productionStyle, productionRules));
-        assert.equal(on.run.instructions, expected(oldStructureStyle, oldStructureRules));
-        for (const result of [off, on]) assert.ok(result.checks.some(([key, userId]) => key === flag && userId === 985));
-        if (web) {
-          assert.notEqual(on.run.instructions, off.run.instructions);
-          assert.match(off.run.instructions, /State every fact in exactly one place/);
-          assert.doesNotMatch(off.run.instructions, /Restore the board's complete ticket structure/);
-          assert.match(on.run.instructions, /Restore the board's complete ticket structure/);
-          assert.match(on.run.instructions, /Brevity shortens sections; it never removes them/);
-          assert.match(on.run.instructions, /Aim for half the words/);
-          assert.match(on.run.instructions, /Impact, Confidence and Ease each a 1-10 score AND one short, specific reason/);
-          assert.match(on.run.instructions, /Quote its real copy literally/);
-          assert.match(on.run.instructions, /explicitly asks for ideas or finished copy variations/);
-          if (aiMode === "AiTaskWriter") {
-            assert.match(on.run.instructions, /id="ai-generated-task-priority"/);
-            assert.match(on.run.instructions, /An earlier variation is not automatically today's baseline/);
-            assert.match(on.run.instructions, /do not invent an experiment/);
-            assert.match(on.run.instructions, /Total x\/30/);
-          }
-        } else assert.equal(on.run.instructions, off.run.instructions);
-      });
-    }
+    test(`${aiMode}, board format=${boardFormat}: flag off preserves production, flag on selects the branch prompts server-side`, async () => {
+      const format = aiMode === "AiTaskWriter" && boardFormat;
+      const off = await prepare({ enabled: false, aiMode, boardFormat });
+      const on = await prepare({ enabled: true, aiMode, boardFormat });
+      const productionStyle = editorPrompts.createTaskAuthoringStyle(format);
+      const oldStructureStyle = editorPrompts.createTaskAuthoringStyle(format, true);
+      const expected = (style, rules) => aiMode === "AiTaskWriter"
+        ? taskPrompts.createTaskWriterSystemPromptTemplate(`${style}\n\n${rules}`)
+        : editorPrompts.createKanbanSystemPrompt("write_with_ai", style);
+      const productionRules = research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES;
+      const oldStructureRules = registry.renderPrompt("task-writer-board-research-web-old-structure-rules");
+      assert.equal(off.run.instructions, expected(productionStyle, productionRules));
+      assert.equal(on.run.instructions, expected(oldStructureStyle, oldStructureRules));
+      for (const result of [off, on]) assert.ok(result.checks.some(([key, userId]) => key === flag && userId === 985));
+      assert.notEqual(on.run.instructions, off.run.instructions);
+      assert.match(off.run.instructions, /State every fact in exactly one place/);
+      assert.doesNotMatch(off.run.instructions, /Restore the board's complete ticket structure/);
+      assert.match(on.run.instructions, /Restore the board's complete ticket structure/);
+      assert.match(on.run.instructions, /Brevity shortens sections; it never removes them/);
+      assert.match(on.run.instructions, /Aim for half the words/);
+      assert.match(on.run.instructions, /Impact, Confidence and Ease each a 1-10 score AND one short, specific reason/);
+      assert.match(on.run.instructions, /Quote its real copy literally/);
+      assert.match(on.run.instructions, /explicitly asks for ideas or finished copy variations/);
+      if (aiMode === "AiTaskWriter") {
+        assert.match(on.run.instructions, /id="ai-generated-task-priority"/);
+        assert.match(on.run.instructions, /An earlier variation is not automatically today's baseline/);
+        assert.match(on.run.instructions, /do not invent an experiment/);
+        assert.match(on.run.instructions, /Total x\/30/);
+      }
+    });
   }
 }
 

@@ -172,7 +172,7 @@
     "id": "task-authoring-style",
     "version": "1",
     "partsHash": "af602708199f489cc75edad6fb755ccfaffd7ddf13270df89bb91db1e2c40dc6",
-    "expressionsHash": "9149898cd2eb8237d41a97af75e7d451677d166a936630b5e18ee3dce529d9a6"
+    "expressionsHash": "50ed094c7e691b89c2ad44d06250da8d9da9b503bfa581b1aae4640d1686ec58"
   },
   {
     "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
