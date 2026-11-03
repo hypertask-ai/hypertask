@@ -111,7 +111,10 @@ test("the fill flag off restores the primary pair on the same button", () => {
     assert.ok(classes(off).includes("bg-shadcn-primary"));
     assert.ok(classes(off).includes("text-primary-foreground"));
     assert.ok(!classes(off).includes("bg-white-black"));
-    assert.equal(button(on).props.onClick, button(off).props.onClick);
+    button(on).props.onClick();
+    button(off).props.onClick();
+    assert.deepEqual(on.updates, off.updates);
+    assert.deepEqual(on.navigation, off.navigation);
     assert.match(off.html, /CTRL\+J/);
   }
 });
