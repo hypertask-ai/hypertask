@@ -9,7 +9,7 @@ import { blockerStillOpen } from '@/lib/mcp/tasks/blockerStillOpen'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
-import { parseSectionFilter } from '@/lib/mcp/listParams'
+import { findIdParamOutOfRange, idOutOfRangeMessage, parseSectionFilter } from '@/lib/mcp/listParams'
 
 const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -128,6 +128,9 @@ export async function GET(request: NextRequest) {
       mcpDoneNameFallback
     )
     const projectDoneTitles = doneTitlesByProject.get(projectId)
+
+    const sectionIdOutOfRange = findIdParamOutOfRange({ section: sectionFilter.sectionId })
+    if (sectionIdOutOfRange) return validationError(idOutOfRangeMessage(sectionIdOutOfRange))
 
     const sectionWhere: Prisma.TaskWhereInput =
       sectionFilter.sectionId !== undefined

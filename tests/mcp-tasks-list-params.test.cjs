@@ -54,6 +54,10 @@ test('a numeric section filter is a column id, not a column name', () => {
   assert.deepEqual(parseSectionFilter(' 4389 '), { sectionId: 4389 })
 })
 
+test('a zero section filter is a column id, not an absent filter', () => {
+  assert.deepEqual(parseSectionFilter('0'), { sectionId: 0 })
+})
+
 test('a named section filter stays a column name', () => {
   assert.deepEqual(parseSectionFilter('AI Review'), { section: 'AI Review' })
   assert.deepEqual(parseSectionFilter(' UX needed '), { section: 'UX needed' })

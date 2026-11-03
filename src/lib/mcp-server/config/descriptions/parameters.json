@@ -65,7 +65,7 @@
   "role": "Managed agent role on its assigned boards.",
   "running": "Restrict the time report to currently running entries when true.",
   "search": "Text filter for the existing task or project list.",
-  "section": "Workflow column title to match, or its numeric column id; not the ticket storage status.",
+  "section": "Workflow column title to match, or its numeric column id; an all-digit value is always read as a column id. Not the ticket storage status.",
   "section_id": "Numeric workflow column id; discover it with projects manifest.",
   "set_as_default": "Make the saved view the user's default board view.",
   "slug": "Stable report or skill slug used to locate the document.",

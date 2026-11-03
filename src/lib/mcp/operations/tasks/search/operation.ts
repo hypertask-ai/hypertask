@@ -26,7 +26,7 @@ import {
   withTaskPresentation,
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
-import { parseSectionFilter } from '@/lib/mcp/listParams'
+import { findIdParamOutOfRange, idOutOfRangeMessage, parseSectionFilter } from '@/lib/mcp/listParams'
 
 const SEARCH_SORT_FIELDS = ['id', 'createdAt', 'updatedAt', 'title', 'dueDate', 'ticketNumber'] as const
 type SearchSortField = (typeof SEARCH_SORT_FIELDS)[number]
@@ -207,6 +207,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const sectionIdOutOfRange = findIdParamOutOfRange({ section: sectionId })
+    if (sectionIdOutOfRange) return validationError(idOutOfRangeMessage(sectionIdOutOfRange))
+
     if (sectionId !== undefined) {
       where.sectionId = sectionId
     } else if (section) {
@@ -286,6 +289,7 @@ export async function GET(request: NextRequest) {
 
     const extraFilters = Boolean(
       section ||
+        sectionId !== undefined ||
         labelsParam.length > 0 ||
         updatedSince ||
         listQuery?.filter.has_pr ||
