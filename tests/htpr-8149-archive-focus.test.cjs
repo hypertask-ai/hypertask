@@ -121,10 +121,16 @@ test('a candidate without a layout box is skipped, then the column takes focus',
   document.getElementById('task-9').getClientRects = () => [];
   document.getElementById('task-4').getClientRects = () => [{ width: 10, height: 10 }];
   const column = { focused: 0, focus() { this.focused += 1; } };
-  assert.equal(focusFirstRenderedCard([9, 4], () => column), 4);
-  assert.equal(document.activeElement.id, 'task-4');
-  assert.equal(focusFirstRenderedCard([9], () => column), null);
-  assert.equal(column.focused, 1);
+  const previousDocument = globalThis.document;
+  globalThis.document = document;
+  try {
+    assert.equal(focusFirstRenderedCard([9, 4], () => column), 4);
+    assert.equal(document.activeElement.id, 'task-4');
+    assert.equal(focusFirstRenderedCard([9], () => column), null);
+    assert.equal(column.focused, 1);
+  } finally {
+    globalThis.document = previousDocument;
+  }
 });
 
 test('focus candidates run down the column first, then up', () => {
