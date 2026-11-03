@@ -222,6 +222,13 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null, teamS
     };
 }
 
+export function mapTaskWaitingOn(task: { waitingOnUserId?: number | null; waitingOnSetAt?: Date | string | null }) {
+    return {
+        waitingOnUserId: task.waitingOnUserId ?? null,
+        waitingOnSetAt: task.waitingOnSetAt ? new Date(task.waitingOnSetAt).toISOString() : null,
+    };
+}
+
 export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null, teamScope?: AgentTokenTeamScope | null) {
     recordAgentBoardScopeMiss(task.projectId);
     task = stripForeignTaskRelations(task);
@@ -250,8 +257,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
         section: task.section,
         sectionId: task.sectionId || undefined,
         blockerCommentId: task.blockerCommentId ?? null,
-        waitingOnUserId: task.waitingOnUserId ?? null,
-        waitingOnSetAt: task.waitingOnSetAt ? new Date(task.waitingOnSetAt).toISOString() : null,
+        ...mapTaskWaitingOn(task),
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
@@ -363,8 +369,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
         section: task.section,
         sectionId: task.sectionId || 0,
         blockerCommentId: task.blockerCommentId ?? null,
-        waitingOnUserId: task.waitingOnUserId ?? null,
-        waitingOnSetAt: task.waitingOnSetAt ? new Date(task.waitingOnSetAt).toISOString() : null,
+        ...mapTaskWaitingOn(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         projectId: task.projectId,

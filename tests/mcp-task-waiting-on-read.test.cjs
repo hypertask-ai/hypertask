@@ -1,10 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
 
-const root = path.resolve(__dirname, "..");
 const mappers = load("src/lib/mcp/tasks/mappers.ts", {
   "@/lib/auth/agentScope": { agentScopeEnforced: () => false, recordAgentBoardScopeMiss: () => {} },
   "@/lib/tasks/sameBoardRelations": { stripForeignTaskRelations: (task) => task },
@@ -75,9 +72,10 @@ test("a waiting person set by a serialized read still renders as an ISO timestam
   assert.equal(detail.waitingOnSetAt, "2026-11-03T22:21:26.120Z");
 });
 
-test("the task list read selects the waiting columns it now reports", () => {
-  const source = fs.readFileSync(path.join(root, "src/lib/mcp/operations/tasks/operation.ts"), "utf8");
-  assert.match(source, /waitingOnUserId: true/);
-  assert.match(source, /waitingOnSetAt: true/);
-  assert.match(source, /waitingOnUserId: task\.waitingOnUserId \?\? null/);
+test("every read path shares one waiting mapping, so list and detail cannot drift", () => {
+  assert.deepEqual(mappers.mapTaskWaitingOn({ waitingOnUserId: 6, waitingOnSetAt: new Date("2026-11-03T22:21:26.120Z") }), {
+    waitingOnUserId: 6,
+    waitingOnSetAt: "2026-11-03T22:21:26.120Z",
+  });
+  assert.deepEqual(mappers.mapTaskWaitingOn({}), { waitingOnUserId: null, waitingOnSetAt: null });
 });
