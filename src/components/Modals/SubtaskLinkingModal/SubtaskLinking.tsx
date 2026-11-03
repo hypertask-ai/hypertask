@@ -6,6 +6,8 @@ import {
   ModalRowElementContainer,
 } from "@/components/Common/CommonModalComponents";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8250_NEW_SUBTASK_BUTTON_FLAG } from "@/lib/flags/definitions/htpr-8250-new-subtask-button";
 import useDebounce from "@/hooks/General/useDebounce";
 import useHandleKeydownBasic from "@/hooks/General/useHandleKeydownBasic";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
@@ -42,35 +44,37 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
     useHandleMouseGlobal({ setSelectedIndex });
   const [filteredOptions, setFilteredOptions] = useState<ITask[]>([]);
   const [defaultTasks, setDefaultTasks] = useState<ITask[]>([]);
+  const createRowAlwaysOn = useFlag(HTPR_8250_NEW_SUBTASK_BUTTON_FLAG);
+
+  const offset = createRowAlwaysOn ? 1 : 0;
 
   async function enterHandler(index: number) {
-    if (filteredOptions.length === 0) return toggleCreateSubTask();
-    else {
-      toast.promise(
-        fetch(globalConstants.addParentTaskRoute, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orphanId: filteredOptions[index].id,
-            parentId: id,
-            searchQuery: keyword.length > 0 ? keyword : undefined,
-          }),
+    const option = index - offset >= 0 ? filteredOptions[index - offset] : undefined;
+    if (!option) return toggleCreateSubTask();
+    toast.promise(
+      fetch(globalConstants.addParentTaskRoute, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orphanId: option.id,
+          parentId: id,
+          searchQuery: keyword.length > 0 ? keyword : undefined,
         }),
-        {
-          loading: "Adding sub-task",
-          success: () => {
-            closeHandler(true, filteredOptions[index]);
-            if (callbackHandler) callbackHandler(filteredOptions[index]);
-            return `Sub-task has been added`;
-          },
-          error: (error) => {
-            console.log("🚀 ~ toast.promise ~ error:", error);
-            closeHandler();
-            return "Error adding sub-task";
-          },
-        }
-      );
-    }
+      }),
+      {
+        loading: "Adding sub-task",
+        success: () => {
+          closeHandler(true, option);
+          if (callbackHandler) callbackHandler(option);
+          return `Sub-task has been added`;
+        },
+        error: (error) => {
+          console.log("🚀 ~ toast.promise ~ error:", error);
+          closeHandler();
+          return "Error adding sub-task";
+        },
+      }
+    );
   }
 
   const debounceSearch = useDebounce(() => {
@@ -137,15 +141,10 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
 
   useEffect(() => {
     const keydown = (e: any) =>
-      handleKeydown(
-        e,
-        filteredOptions?.length ? filteredOptions?.length : 0,
-        prefixId,
-        closeHandler
-      );
+      handleKeydown(e, filteredOptions.length + offset, prefixId, closeHandler);
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [filteredOptions?.length, handleKeydown]);
+  }, [filteredOptions?.length, offset, handleKeydown]);
 
   return (
     <ModalContainerCustom
@@ -174,24 +173,9 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
           id="subtask-linking-modal-list-container"
           className="max-h-[230px]"
         >
-          {filteredOptions.length > 0 ? (
-            filteredOptions?.map((item: ITask, index: number) => (
-              <ModalRowElementContainer
-                key={`el-${index}`}
-                onMouseEnter={() => handleMouseEnter(index)}
-                handleMouseLeave={handleMouseLeave}
-                onClick={() => enterHandler(index)}
-                id={`${prefixId}${index}`}
-                index={index}
-                commandRef={elRef}
-                isSelected={selectedIndex === index}
-              >
-                <TaskRow task={item} />
-              </ModalRowElementContainer>
-            ))
-          ) : (
+          {createRowAlwaysOn && (
             <ModalRowElementContainer
-              key={`el-${0}`}
+              key="el-create"
               onMouseEnter={() => handleMouseEnter(0)}
               handleMouseLeave={handleMouseLeave}
               onClick={() => enterHandler(0)}
@@ -200,9 +184,42 @@ const SubtaskLinkingModal: React.FC<ISubtaskLinking> = ({
               commandRef={elRef}
               isSelected={selectedIndex === 0}
             >
-              <span>Create sub-task &quot;{keyword}&quot;</span>
+              <span>
+                {keyword.length > 0
+                  ? `Create sub-task "${keyword}"`
+                  : "+ Create new sub-task"}
+              </span>
             </ModalRowElementContainer>
           )}
+          {filteredOptions.length > 0
+            ? filteredOptions?.map((item: ITask, index: number) => (
+                <ModalRowElementContainer
+                  key={`el-${index}`}
+                  onMouseEnter={() => handleMouseEnter(index + offset)}
+                  handleMouseLeave={handleMouseLeave}
+                  onClick={() => enterHandler(index + offset)}
+                  id={`${prefixId}${index + offset}`}
+                  index={index + offset}
+                  commandRef={elRef}
+                  isSelected={selectedIndex === index + offset}
+                >
+                  <TaskRow task={item} />
+                </ModalRowElementContainer>
+              ))
+            : !createRowAlwaysOn && (
+                <ModalRowElementContainer
+                  key={`el-${0}`}
+                  onMouseEnter={() => handleMouseEnter(0)}
+                  handleMouseLeave={handleMouseLeave}
+                  onClick={() => enterHandler(0)}
+                  id={`${prefixId}${0}`}
+                  index={0}
+                  commandRef={elRef}
+                  isSelected={selectedIndex === 0}
+                >
+                  <span>Create sub-task &quot;{keyword}&quot;</span>
+                </ModalRowElementContainer>
+              )}
         </ModalListContainer>
       </ModalBody>
     </ModalContainerCustom>
