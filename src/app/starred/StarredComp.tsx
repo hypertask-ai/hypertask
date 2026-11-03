@@ -23,6 +23,9 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import { APP_SHELL_RAIL_OFFSET } from "@/lib/constants/appShellRail";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
 
 const tabs = [
   {
@@ -59,9 +62,12 @@ const Starred = (props: IProp) => {
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
+  const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
 
   const handleKeyDown = async (e: KeyboardEvent) => {
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
+
+    if (agentChatKeys && isChatSurfaceTarget(e.target)) return;
 
     if (e.keyCode === KeyCodes.ESCAPE) router.back();
 
@@ -84,7 +90,7 @@ const Starred = (props: IProp) => {
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedScreen]);
+  }, [agentChatKeys, selectedScreen]);
 
   const content = (
       <div className="flex items-center justify-center flex-col w-full min-h-screen bg-pageBackground scrollbar-w-[0]">

@@ -23,6 +23,9 @@ import globalConstants from '@/lib/constants';
 import useHypertasksNavigate from '@/hooks/MultiPages/Route/useHypertasksNavigate';
 import { useGetUserPreferences } from '@/hooks/General/useGetUserPreferences';
 import { useArchiveInfiniteScroll } from './useArchiveInfiniteScroll';
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
+import { isChatSurfaceTarget } from "@/lib/keyboard/chatSurfaceFocus";
 
 const ArchivedNotificationsContainer = ({
     _currentUser,
@@ -68,6 +71,7 @@ const ArchivedNotificationsContainer = ({
     const [_activeItem, setActiveItem] = useRecoilState(activeItemAtom);
     const [__, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
     const [showCommands] = useRecoilState(showCommandsAtom);
+    const agentChatKeys = useFlag(HTPR_8093_AGENT_CHAT_KEYS_FLAG);
     const [notifications, setNotifications] = useState<INotification[]>(data);
     const [selectedIndex, setSelectedIndex] = useState<number>(0);
     const [osName,setOsName] = useState<string>("Unknown");
@@ -76,6 +80,8 @@ const ArchivedNotificationsContainer = ({
     const handleKeyDown = async(e: KeyboardEvent) => {
         var cmdControl = osName === "MacOS"&&e.metaKey || osName !== "MacOS"&&e.ctrlKey;
         const classNamesToReturnFrom = ["modal-open","ProseMirror ProseMirror-focused",undefined]
+
+        if (agentChatKeys && isChatSurfaceTarget(e.target)) return;
 
         if (showCommands.show||
             document?.activeElement?.role==="dialog"||
@@ -258,7 +264,7 @@ const ArchivedNotificationsContainer = ({
       useEffect(() => {
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [lastgClick.current, notifications, notifications[selectedIndex], showCommands.show]);
+    }, [agentChatKeys, lastgClick.current, notifications, notifications[selectedIndex], showCommands.show]);
 
     useEffect(()=>{
         setInViewObject({taskId:notifications[selectedIndex]?.task.id??null, taskProjectId:notifications[selectedIndex]?.task.projectId??null})
