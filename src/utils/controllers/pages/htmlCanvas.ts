@@ -27,7 +27,8 @@ export function decodeHtmlCanvas(contentHtml: string): string | null {
   if (elements.length === 0) return null;
 
   const payloads: string[] = [];
-  for (const el of elements) {
+  for (const node of elements) {
+    const el: any = node;
     if (String(el.rawTagName ?? "").toLowerCase() !== "div") return null;
     if (el.getAttribute(TAG_ATTR) == null) return null;
 
