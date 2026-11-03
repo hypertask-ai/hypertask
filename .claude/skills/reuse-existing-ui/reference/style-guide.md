@@ -27,6 +27,7 @@ Sources:
 | Keyboard badges and very small inset marks | 2px | `rounded-[2px]` |
 | Compact controls, menu rows, chips | 4px | `rounded-sm` or `rounded-[4px]` |
 | Cards, panels, modals, sheets | 5px | `rounded-[5px]` |
+| Kanban cards, skeletons and columns (HTPR-8255) | 6px | `rounded-md` |
 | Mobile comment input well only | 8px | `rounded-lg` |
 | Avatars, status dots, and established circular icon actions | 50% | `rounded-full` |
 
@@ -39,7 +40,7 @@ Dia is an intentional exception. Its kanban cards and posted comments use 10px c
 - A normal separator or card edge is a 1px hairline using `border-thin`, `border-border-light-gray-thin`, or the component's semantic border token.
 - Inputs, dropdowns, and popovers are borderless unless an existing component specifically owns a hairline. Use surface contrast and the established overlay shadow instead.
 - Never add white box borders, `focus:border-white-black`, or a white focus ring to an input, popover, dropdown, badge, or chip. Kanban section containers are the narrow keyboard-focus exception.
-- Use `shadow-md` for ordinary raised cards. Use `customshadow-1`, `customshadow-2`, or `customshadow-4` only where an existing modal or overlay pattern already does.
+- Use `shadow-md` for ordinary raised cards. Kanban cards use the `shadow-card` token (HTPR-8255), which carries the same two drop layers as `shadow-md` so a card has one shadow in every state. Use `customshadow-1`, `customshadow-2`, or `customshadow-4` only where an existing modal or overlay pattern already does.
 - Do not add gradients.
 
 ## Color tokens

@@ -54,8 +54,8 @@ Other named: `icon-dark-gray #999a9d`, `icon-hover-gray #95999e`, `header-text #
 
 ## Shape
 
-- **Radius:** no custom scale. Codebase uses `rounded-[4px]` (containers/rail), `rounded-[5px]` (labels), `rounded-[2px]` (kbd badges), `rounded-full` (avatars), `rounded-sm`. Shadcn `--radius: 0.75rem` exists but is **not** wired to a tailwind token — don't use big radii.
-- **Shadow:** `shadow-md` (Tailwind default) on the task info column. Custom heavy shadows exist (`customshadow-1/2/4`) but are for modals/overlays, e.g. `customshadow-2: 2px 2px 20px rgba(0,0,0,.35)`.
+- **Radius:** no custom scale. Codebase uses `rounded-[4px]` (containers/rail), `rounded-[5px]` (labels), `rounded-[2px]` (kbd badges), `rounded-full` (avatars), `rounded-sm`, and `rounded-md` on kanban cards, skeletons and columns (HTPR-8255). Shadcn `--radius: 0.75rem` exists but is **not** wired to a tailwind token — don't use big radii.
+- **Shadow:** `shadow-md` (Tailwind default) on the task info column. Kanban cards use the `shadow-card` token, the same two drop layers, so one card has one shadow in every state. Custom heavy shadows exist (`customshadow-1/2/4`) but are for modals/overlays, e.g. `customshadow-2: 2px 2px 20px rgba(0,0,0,.35)`.
 - **Fonts:** AMOLED, Graphite, and Porcelain use IBM Plex Sans through `--font-plex`. Dia uses italic Newsreader through `--font-newsreader` for board, column, modal, and `h1`–`h3` headings. Inter remains the `font-sans` default for surfaces without a core-theme override. Base body text is `text-[14px]`; the custom `modalSmall` size is 16px.
 - **Heights:** `labelComponent: 22px`, `SVH-full: 100svh`.
 
