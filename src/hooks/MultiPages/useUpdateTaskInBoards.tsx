@@ -19,7 +19,7 @@ import { useUndoContext } from "../General/useUndo";
 import useGlobalFocusHandler from "../Inbox/useGlobalFocusHandler";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
-import { focusCardNextTo, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
+import { focusCardNextTo, keepBoardFocus, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
 import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/appendCreatedSection";
 import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
@@ -406,17 +406,8 @@ const UpdateKanban = () => {
         globalThis.document
           ?.getElementById(`droppable-section-container-${sectionId}`)
           ?.closest<HTMLElement>(".section-container") ?? null;
-      const focusedId = focusCardNextTo(column, removedId);
-      updateActiveItemAndItemInView(focusedId, projectId, sectionId);
-      if (focusedId === null && column) {
-        requestAnimationFrame(() => {
-          if (globalThis.document?.activeElement === column) return;
-          const container = globalThis.document?.getElementById("sectionsContainer");
-          if (!container) return;
-          container.setAttribute("tabindex", "-1");
-          container.focus({ preventScroll: true });
-        });
-      }
+      updateActiveItemAndItemInView(focusCardNextTo(column, removedId), projectId, sectionId);
+      keepBoardFocus();
       return;
     }
     if (keepColumnFocus) {
