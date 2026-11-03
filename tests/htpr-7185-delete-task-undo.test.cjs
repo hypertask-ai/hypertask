@@ -143,7 +143,6 @@ async function fixture(t, flagOn, failDelete = false) {
     "@/lib/configs/taskDetail.config": { default: taskConfig },
     "@/lib/keyboard/archiveShortcutGuard": {},
     "@/lib/taskDetailArchiveNavigation": {},
-    "@/lib/notifications/archiveShortcutNudge": {},
     "@/models/enums": load("src/models/enums.ts", {}),
     "@/lib/constants/keyboard-handler": { KeyCodes: { THREE: 51 } },
   }).taskDetailNavigationKeymap;

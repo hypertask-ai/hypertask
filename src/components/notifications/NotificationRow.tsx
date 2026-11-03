@@ -28,7 +28,6 @@ import { format } from "date-fns";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { decodeAgentMessage } from "@/lib/nativeAgent/agentMessageEnvelope";
-import type { ArchiveShortcutSource } from "@/lib/notifications/archiveShortcutNudge";
 
 interface Props {
     markAsDone: (notification: INotification, index: number, mode: TRemoveFromInboxMode) => Promise<boolean | void>,
@@ -38,7 +37,7 @@ interface Props {
     selected: boolean,
     taskRef: React.RefObject<HTMLDivElement | null>,
     index: number,
-    eHandler: (mode: boolean, specificIndex: number | undefined, source: ArchiveShortcutSource) => void,
+    eHandler: (mode: boolean, specificIndex: number | undefined, source: "keyboard" | "mouse" | "swipe") => void,
     disableButtons?: boolean,
     appShellRail?: boolean,
 

@@ -173,7 +173,6 @@ function makeFlow(t, {
       searchParams: new URLSearchParams(inboxFlow ? { inboxFlow } : {}),
       resetShowCommands: () => {},
       setShowDropdown: () => {},
-      setArchiveNudge: () => {},
     });
   }
   function pressE(handler = keyboard().handleKeyDown) {
@@ -753,7 +752,7 @@ test("Inbox list E archives a blocked-by-me row and removes it", async t => {
     selectedIdsArray: [], lastgClick: { current: null },
     selectedKeyboardRow: { item: { kind: "notification", notification: blockedNotification } },
     currentUser: { id: 2343 }, shortcutNudgesEnabled: false, tipsEnabled: false, noPhoneNudges: false,
-    setArchiveNudge: () => {}, index: 0,
+    index: 0,
     markAsDone: (notification, _index, mode) => { archive = flow.archiveNotification(notification, mode, null); return archive; },
   };
   const eHandler = sourceCallback("src/components/notifications/inboxSplit/index.tsx", env, "eHandler");

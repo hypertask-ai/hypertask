@@ -30,7 +30,6 @@ const { taskDetailNavigationKeymap } = load("src/app/detail/[...slug]/taskDetail
   "@/lib/configs/taskDetail.config": { default: {} },
   "@/lib/keyboard/archiveShortcutGuard": {},
   "@/lib/taskDetailArchiveNavigation": {},
-  "@/lib/notifications/archiveShortcutNudge": {},
   "@/models/enums": { CommandMode: { Command: "command" } },
   "@/lib/constants/keyboard-handler": { KeyCodes: { J: 74 } },
 });

@@ -38,7 +38,6 @@ function selectionFixture(enabled = true, count = 2) {
     '@/hooks/General/useProjectQuery': { useProjectQuery: () => ({}) },
     '@/hooks/Inbox/useUpdateInView': { default: () => ({}) },
     '@tanstack/react-query': { useQueryClient: () => ({}) },
-    '@/hooks/useShortcutTipsSetting': { useShortcutTipsSetting: () => ({}) },
     '@/hooks/MultiPages/Route/useHypertasksNavigate': { default: () => ({}) },
     '@/hooks/General/useCurrentUserCheckFromCookies': { default: () => ({ id: 985 }) },
     '@/hooks/General/useGetUserPreferences': { useGetUserPreferences: () => ({}) },

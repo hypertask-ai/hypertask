@@ -9,11 +9,7 @@ import { HTPR_8083_INBOX_BOUNDARIES_FLAG } from "@/lib/flags/definitions/htpr-80
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 
-import {
-  HTPR_7311_DECISION_COMMENT_LINK_FLAG,
-  SHORTCUT_NUDGES_FLAG,
-} from "@/lib/flags/keys";
-import { HTPR_5906_NO_PHONE_NUDGES_FLAG } from "@/lib/flags/definitions/htpr-5906-no-phone-nudges";
+import { HTPR_7311_DECISION_COMMENT_LINK_FLAG } from "@/lib/flags/keys";
 
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { groupInboxItemsByDate } from "@/lib/inbox/inboxDateGroups";
@@ -31,18 +27,11 @@ import {
 } from "react";
 import { useRecoilState } from "@/lib/state";
 import {
-  archiveShortcutNudgeAtom,
   showCommandsAtom,
   tasksPlayListAtom,
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
-import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
-import {
-  clearArchiveShortcutNudge,
-  recordArchiveShortcutAction,
-  type ArchiveShortcutSource,
-} from "@/lib/notifications/archiveShortcutNudge";
 import { markAsUnseen, markNotificationSeen } from "@/utils/api/Inbox";
 import Link from "next/link";
 import { NotificationProvider } from "@/lib/contexts/NotificationContext";
@@ -201,8 +190,6 @@ const InboxSplit = ({
   const [showCommands, ____] = useRecoilState(showCommandsAtom);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
-  const { tipsEnabled } = useShortcutTipsSetting();
-  const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
   const boardAccessDecisions = useFlag(HTPR_7582_AGENT_ACCESS_REQUEST_FLAG);
   const boardAccessDecisionCard = boardAccessDecisions ? <AgentBoardAccessDecision /> : null;
   const inboxKeyboardFocus = useFlag(HTPR_8142_INBOX_KEYBOARD_FOCUS_FLAG);
@@ -211,8 +198,6 @@ const InboxSplit = ({
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
   const blockedInboxArchive = useFlag(HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG);
   const bulkBlockedInbox = bulkBlockedInboxFlag && blockedInboxArchive;
-  const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
-  const noPhoneNudges = useFlag(HTPR_5906_NO_PHONE_NUDGES_FLAG) && isMbl;
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
   const currentUser = useCurrentUser() ?? inboxDocument?.data.user;
@@ -704,7 +689,7 @@ const InboxSplit = ({
   const eHandler = async (
     cmdControl: boolean,
     specificIndex: number | undefined,
-    source: ArchiveShortcutSource,
+    source: "keyboard" | "mouse" | "swipe",
   ) => {
     if (selectedIdsArray.length > 0) return;
     if (lastgClick.current !== null) {
@@ -716,34 +701,15 @@ const InboxSplit = ({
         targetNotification = selectedKeyboardRow.item.notification;
       }
       if (targetNotification) {
-        const accountId = currentUser?.id;
-        const enabled = shortcutNudgesEnabled && tipsEnabled && !noPhoneNudges;
-        if (source === "keyboard" && typeof accountId === "number") {
-          setArchiveNudge((current) =>
-            clearArchiveShortcutNudge(current, accountId),
-          );
-        }
-        let succeeded = false;
         try {
-          const result = await markAsDone(
+          await markAsDone(
             targetNotification,
             index,
             cmdControl && targetNotification.task ? "Task" : "Notification",
           );
-          succeeded = result !== false;
         } catch (error) {
           console.error("Inbox archive failed", error);
           toast.error("Could not archive this notification");
-        }
-        if (source === "mouse" && typeof accountId === "number") {
-          setArchiveNudge((current) =>
-            recordArchiveShortcutAction(current, {
-              accountId,
-              source,
-              succeeded,
-              enabled,
-            }),
-          );
         }
       }
     }

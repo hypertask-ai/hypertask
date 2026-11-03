@@ -14,10 +14,6 @@ import { IAnnouncement } from "@/models/Announcements/model";
 import { AI_CHAT_SIDEBAR_DEFAULT_PX } from "@/lib/configs/style.config";
 import type { StorePlanKind, StripeBillingInterval } from "@/lib/planFromStripePriceId";
 import {
-    EMPTY_ARCHIVE_SHORTCUT_NUDGE,
-    type ArchiveShortcutNudgeState,
-} from "@/lib/notifications/archiveShortcutNudge";
-import {
     DEFAULT_CALENDAR_SETTINGS,
     DEFAULT_CALENDAR_TASK_FILTERS,
     type CalendarSettings,
@@ -155,15 +151,6 @@ export const showQuickTipsAtom = atom<boolean>({
     default: true,
     effects_UNSTABLE: [persistAtom],
 
-});
-export const shortcutTipsEnabledAtom = atom<boolean>({
-    key: "shortcutTipsEnabled",
-    default: true,
-    effects_UNSTABLE: [persistAtom],
-});
-export const archiveShortcutNudgeAtom = atom<ArchiveShortcutNudgeState>({
-    key: "archiveShortcutNudge",
-    default: EMPTY_ARCHIVE_SHORTCUT_NUDGE,
 });
 export const notifPromoteBannerVisibleAtom = atom<boolean>({
     key: "notifPromoteBannerVisible",
