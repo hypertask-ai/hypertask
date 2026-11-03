@@ -7,7 +7,6 @@ const { assertAgentWriting } = load('src/lib/agents/writing.ts', {})
 
 function harness() {
   const calls = { transactions: 0, descriptions: [], joinedTransaction: [] }
-  const transaction = { scope: 'task-create-transaction' }
   const createdRow = {
     id: 42,
     ticketNumber: 'QA-1',
@@ -20,6 +19,10 @@ function harness() {
     section: 'Todo',
     priority: null,
     project: { teamId: null, firstTaskPointerTaskId: null },
+  }
+  const transaction = {
+    scope: 'task-create-transaction',
+    task: { create: async ({ data }) => ({ ...createdRow, ...data }) },
   }
   const writeTask = async (db, actor, createTask) => {
     calls.transactions += 1
