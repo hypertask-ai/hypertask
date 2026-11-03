@@ -82,6 +82,8 @@ function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled
     "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
     "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan },
     "@/app/api/ai/chat/stream/modelFallback": {},
+    "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" },
+    "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false },
   });
   return { api, calls };
 }
