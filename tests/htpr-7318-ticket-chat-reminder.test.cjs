@@ -126,6 +126,7 @@ async function withReminder(options, check) {
     "@/utils/generateTime": { default: value => value },
     "./taskSummaryAction": { taskSummaryActionFor: () => null },
     "@/lib/flags/keys": {},
+    "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
   };
   const welcome = load("src/components/AI_CHAT/WelcomeScreen.tsx", mocks);

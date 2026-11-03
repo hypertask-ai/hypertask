@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import Tooltip from "@/components/Common/Tooltip";
-import { Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Mic, Square, X } from "lucide-react";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -49,6 +49,7 @@ interface IProp {
   hoverTooltip?: { text: string; keyCombination: string[] };
   stopButtonId?: string;
   cancelButtonId?: string;
+  compactListeningPill?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -84,6 +85,7 @@ export const AudioButton = ({
   hoverTooltip,
   stopButtonId,
   cancelButtonId,
+  compactListeningPill = false,
 }: IProp) => {
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -630,7 +632,7 @@ export const AudioButton = ({
   }
 
   return (
-    <div className={cn("audio-recorder", recording && "w-full", wrapperClassName)}>
+    <div className={cn("audio-recorder", recording && !compactListeningPill && "w-full", wrapperClassName)}>
       {!recording ? (
         <div
           ref={menuWrapRef}
@@ -707,7 +709,7 @@ export const AudioButton = ({
                       className={cn(
                         "animate-spin",
                         "keep-stroke",
-                        isDesktopAiMic || mobilePrimaryTone === "ai"
+                        (isDesktopAiMic || mobilePrimaryTone === "ai") && !compactListeningPill
                           ? "text-hypertasks-ai-purple"
                           : "text-icon-dark-gray",
                       )}
@@ -825,7 +827,10 @@ export const AudioButton = ({
                     {selected && (
                       <Check
                         size={19}
-                        className="ml-auto shrink-0 text-hypertasks-ai-purple keep-stroke"
+                        className={cn(
+                          "ml-auto shrink-0 keep-stroke",
+                          compactListeningPill ? "text-white-black" : "text-hypertasks-ai-purple",
+                        )}
                         strokeWidth={2.5}
                       />
                     )}
@@ -834,6 +839,52 @@ export const AudioButton = ({
               })}
             </div>
           )}
+        </div>
+      ) : compactListeningPill ? (
+        <div
+          data-ai-chat-dictation-pill
+          className={cn(
+            "flex h-7 items-center gap-1.5 rounded bg-hover-active pl-2 pr-1",
+            visualizerClassName,
+          )}
+        >
+          <canvas
+            ref={waveCanvasRef}
+            className="block h-3 w-7 text-icon-dark-gray"
+            aria-hidden="true"
+          />
+          <span className="text-dense text-white-black">Dictation</span>
+          <span
+            data-ai-chat-recording-elapsed
+            className="shrink-0 text-dense tabular-nums text-icon-dark-gray"
+          >
+            {String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:
+            {String(elapsedSeconds % 60).padStart(2, "0")}
+          </span>
+          <button
+            type="button"
+            data-ai-chat-recording-cancel={isAiChat || undefined}
+            onClick={closeHandler}
+            aria-label="Cancel dictation"
+            className="flex h-5 w-5 items-center justify-center rounded text-icon-dark-gray hover:text-white-black"
+          >
+            <X size={14} strokeWidth={1.75} />
+          </button>
+          <button
+            type="button"
+            data-ai-chat-recording-submit={isAiChat || undefined}
+            onClick={() => stopRecording(true)}
+            aria-label="Stop dictation"
+            className="group relative flex h-5 w-5 items-center justify-center rounded text-icon-dark-gray hover:text-white-black"
+          >
+            <Square size={14} strokeWidth={2.2} />
+            <Tooltip
+              left={0}
+              bottom={-45}
+              keyCombination={["ENTER"]}
+              text={"Stop dictation"}
+            />
+          </button>
         </div>
       ) : (
         <div

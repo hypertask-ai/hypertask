@@ -12,6 +12,7 @@ import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
 import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
+import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup"
 import { useFlag } from "@/hooks/useFlag"
 import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
@@ -123,6 +124,7 @@ export const WelcomeScreen = () => {
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
+  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
   let isEditMode = false;
   if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
@@ -317,15 +319,19 @@ export const WelcomeScreen = () => {
           {!isEditMode && taskSummaryAction && (
             <button
               type="button"
-              className="flex w-full items-center gap-2 rounded border-thin border-hypertasks-ai-purple/70 bg-hypertasks-ai-purple/10 p-2 text-left text-xs text-white-black hover:bg-hypertasks-ai-purple/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-ai-purple"
+              className={chatCleanupEnabled
+                ? "flex w-full items-center gap-2 rounded-[4px] border-thin border-border-light-gray-thin bg-kanban-active-cardbg p-2 text-left text-xs text-white-black hover:bg-hover-active focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-icon-dark-gray"
+                : "flex w-full items-center gap-2 rounded border-thin border-hypertasks-ai-purple/70 bg-hypertasks-ai-purple/10 p-2 text-left text-xs text-white-black hover:bg-hypertasks-ai-purple/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-ai-purple"}
               onClick={() => clickChip(taskSummaryAction.prompt, -1, "summary-action", taskSummaryAction.label)}
             >
-              <Sparkles
-                aria-hidden="true"
-                className="shrink-0 text-hypertasks-ai-purple"
-                size={14}
-                strokeWidth={1.75}
-              />
+              {!chatCleanupEnabled && (
+                <Sparkles
+                  aria-hidden="true"
+                  className="shrink-0 text-hypertasks-ai-purple"
+                  size={14}
+                  strokeWidth={1.75}
+                />
+              )}
               <span>{taskSummaryAction.label}</span>
             </button>
           )}
