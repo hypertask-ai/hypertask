@@ -13,10 +13,7 @@ export function focusCandidates(
   return [...below, ...above];
 }
 
-export function focusFirstRenderedCard(
-  candidateIds: number[],
-  column: () => HTMLElement | null,
-): number | null {
+export function focusRenderedCandidate(candidateIds: number[]): number | null {
   for (const id of candidateIds) {
     const card = globalThis.document?.getElementById(`task-${id}`);
     if (card && card.getClientRects().length > 0) {
@@ -24,7 +21,6 @@ export function focusFirstRenderedCard(
       return id;
     }
   }
-  column()?.focus({ preventScroll: true });
   return null;
 }
 

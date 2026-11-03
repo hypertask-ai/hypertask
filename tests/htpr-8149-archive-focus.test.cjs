@@ -9,7 +9,7 @@ const os = require('node:os');
 const { loadModule } = require('./helpers/loadModule.cjs');
 const { JSDOM } = require('jsdom');
 const jiti = require('jiti')(__filename);
-const { focusCandidates, focusFirstRenderedCard, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
+const { focusCandidates, focusRenderedCandidate, nextFocusAfterRemoval } = jiti('../src/utils/helperFunctions/focusAfterRemoval.ts');
 
 function source(file) {
   return ts.createSourceFile(file, fs.readFileSync(path.join(__dirname, '..', file), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -63,7 +63,7 @@ function fixture(enabled = true, visibleIds = [1, 3, 5], unrenderedIds = []) {
   };
   render();
   const env = {
-    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCandidates, focusFirstRenderedCard, document,
+    archiveColumnBoundary: true, nextFocusAfterRemoval, focusCandidates, focusRenderedCandidate, document,
     updateActiveItemAndItemInView: id => { active = id; },
     _currentProject: { id: 7049 }, _currentUser: { id: 985 }, refreshTaskDetailReadAfterWrite,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [{ sections, filteredSections: sections, tasks: sections.flatMap(s => s.items) }] }, projectToUpdateIndex: 0 }),
@@ -115,19 +115,17 @@ test('fourteen archives retain visible order and finish on the column', async ()
   assert.deepEqual(f.sections()[1].items.map(t => t.id), [99]);
 });
 
-test('a candidate without a layout box is skipped, then the column takes focus', () => {
+test('a candidate without a layout box is never focused', () => {
   const dom = new JSDOM('<div id="task-9" tabindex="0"></div><div id="task-4" tabindex="0"></div>');
   const document = dom.window.document;
   document.getElementById('task-9').getClientRects = () => [];
   document.getElementById('task-4').getClientRects = () => [{ width: 10, height: 10 }];
-  const column = { focused: 0, focus() { this.focused += 1; } };
   const previousDocument = globalThis.document;
   globalThis.document = document;
   try {
-    assert.equal(focusFirstRenderedCard([9, 4], () => column), 4);
+    assert.equal(focusRenderedCandidate([9, 4]), 4);
     assert.equal(document.activeElement.id, 'task-4');
-    assert.equal(focusFirstRenderedCard([9], () => column), null);
-    assert.equal(column.focused, 1);
+    assert.equal(focusRenderedCandidate([9]), null);
   } finally {
     globalThis.document = previousDocument;
   }

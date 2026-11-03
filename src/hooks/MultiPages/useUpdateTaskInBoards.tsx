@@ -19,7 +19,7 @@ import { useUndoContext } from "../General/useUndo";
 import useGlobalFocusHandler from "../Inbox/useGlobalFocusHandler";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { getAppliedSearchedTasks } from "@/utils/helperFunctions/Views/SearchFilterHelperFunction";
-import { focusCandidates, focusFirstRenderedCard, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
+import { focusCandidates, focusRenderedCandidate, nextFocusAfterRemoval } from "@/utils/helperFunctions/focusAfterRemoval";
 import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/appendCreatedSection";
 import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
@@ -400,14 +400,15 @@ const UpdateKanban = () => {
     }
   ) => {
     if (keepColumnFocus) {
-      const focusedId = focusFirstRenderedCard(
-        focusCandidates(sections?.[sectionIndex]?.items, itemIndex),
-        () =>
-          globalThis.document
-            ?.getElementById(`droppable-section-container-${sectionId}`)
-            ?.closest<HTMLElement>(".section-container") ?? null,
-      );
-      updateActiveItemAndItemInView(focusedId, projectId, sectionId);
+      const columnNextId = nextFocusAfterRemoval(sections, sectionIndex, itemIndex, scope);
+      const focusedId = columnNextId === null ? null : focusRenderedCandidate(focusCandidates(sections?.[sectionIndex]?.items, itemIndex));
+      updateActiveItemAndItemInView(focusedId ?? columnNextId, projectId, sectionId);
+      if (columnNextId === null) {
+        globalThis.document
+          ?.getElementById(`droppable-section-container-${sectionId}`)
+          ?.closest<HTMLElement>(".section-container")
+          ?.focus({ preventScroll: true });
+      }
       return;
     }
     const nextId = nextFocusAfterRemoval(
