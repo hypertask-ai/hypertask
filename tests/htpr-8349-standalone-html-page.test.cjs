@@ -49,6 +49,13 @@ test("a plain HTML snippet keeps the page's current appearance", async () => {
   assert.deepEqual(calls, []);
 });
 
+test("a lazy-loading snippet whose data-src holds the image stays plain", async () => {
+  const { isSelfContainedDocument, storedPageContentType } = loadStandalone();
+  const lazy = '<p>photo</p><img data-src="data:image/png;base64,iVBORw0KGgo=" src="/photo.png" alt="px">';
+  assert.equal(isSelfContainedDocument(lazy), false);
+  assert.equal(await storedPageContentType({ content: lazy, contentType: "html", userId: 7 }), "html");
+});
+
 test("markdown and explicit canvas content are left alone", async () => {
   const { storedPageContentType } = loadStandalone();
   assert.equal(

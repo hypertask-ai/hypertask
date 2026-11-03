@@ -3,7 +3,7 @@ import { isFeatureEnabled } from '@/lib/flags'
 import type { PageContentType } from './pageService'
 
 const SELF_CONTAINED_DOCUMENT = /<!doctype[\s>]|<(?:style|html|head|body)[\s>]/i
-const INLINE_DATA_IMAGE = /<img[^>]+src\s*=\s*["']?data:/i
+const INLINE_DATA_IMAGE = /<img\b[^>]*\ssrc\s*=\s*["']?data:/i
 
 export function isSelfContainedDocument(content: string) {
   return SELF_CONTAINED_DOCUMENT.test(content) || INLINE_DATA_IMAGE.test(content)

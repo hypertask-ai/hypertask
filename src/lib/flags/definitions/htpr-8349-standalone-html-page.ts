@@ -10,6 +10,6 @@ export default {
   description: "An HTML page whose content brings its own styling or inline images is saved as an isolated document, so its style block and data images survive. Plain HTML snippets keep today's appearance.",
   releaseRisk: {
     risk: "small",
-    reason: "Only changes how self-contained HTML documents are stored and rendered; their styling and inline images used to be dropped. Off restores the previous flattened rendering.",
+    reason: "Only changes how self-contained HTML documents are stored and rendered; their styling and inline images used to be dropped. Off flattens pages written from then on; pages already saved as isolated documents stay that way.",
   },
 } as const satisfies FeatureFlagDefinition;
