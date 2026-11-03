@@ -183,3 +183,10 @@ test("multi chat windows: choosing a chat at the cap leaves the current conversa
   assert.ok(header.indexOf("atCapacity") < header.lastIndexOf("selectSession(chat.id);"));
   assert.doesNotMatch(header, /chatWindowControls\?\.openSessionWindow\(chat\.id\)/);
 });
+
+test("multi chat windows: a new chat adds a window instead of replacing the open one", () => {
+  const header = read("src/components/AI_CHAT/ChatHeader.tsx");
+  assert.match(header, /if \(!windowDrag && chatWindowControls\) \{\n      const opened = await chatWindowControls\.openNewChatWindow\(\);/);
+  const shortcuts = read("src/hooks/MultiPages/AIChat/useChatShortcuts.tsx");
+  assert.match(shortcuts, /const startNewChat = chat\.chatWindows\?\.enabled \? chat\.chatWindows\.openNewChatWindow : options\.onNewChat \?\? chat\.startNewSession;/);
+});

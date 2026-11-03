@@ -230,6 +230,11 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
 
   const handleStartNewSession = async () => {
     if (isStartingNewSessionRef.current) return;
+    if (!windowDrag && chatWindowControls) {
+      const opened = await chatWindowControls.openNewChatWindow();
+      if (!opened && chatWindowControls.atCapacity) toast("Close a chat window to open another chat.");
+      return;
+    }
     isStartingNewSessionRef.current = true;
     setIsStartingNewSession(true);
     try {

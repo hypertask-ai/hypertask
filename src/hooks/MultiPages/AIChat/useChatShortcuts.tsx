@@ -64,7 +64,8 @@ export function useChatShortcuts(options: {
         starting.current = true;
         chat.restoreChat();
         focusComposer();
-        void Promise.resolve().then(() => (options.onNewChat ?? chat.startNewSession)()).catch(() => {
+        const startNewChat = chat.chatWindows?.enabled ? chat.chatWindows.openNewChatWindow : options.onNewChat ?? chat.startNewSession;
+        void Promise.resolve().then(() => startNewChat()).catch(() => {
           toast.error("Couldn’t start a new chat. Try again.");
         }).finally(() => {
           starting.current = false;
