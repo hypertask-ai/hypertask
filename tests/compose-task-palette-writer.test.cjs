@@ -848,12 +848,12 @@ test('description prompts and comment AI toggle, mode trigger, hidden trigger an
         if (saved) global.CustomEvent = saved;
         else delete global.CustomEvent;
       }
-      assert.deepEqual(state.aiTriggerData, { autoTrigger: true, initialPrompt: 'Summarize the existing task' });
+      assert.deepEqual(state.aiTriggerData, { autoTrigger: !isDescription, initialPrompt: 'Summarize the existing task' });
       assert.equal(state.shouldShowAiTaskWriter, true);
       const writer = document.querySelector('[data-existing-writer="52"]');
       assert.ok(writer);
       assert.equal(writer.textContent, 'Summarize the existing task');
-      assert.equal(writer.dataset.autoTrigger, 'true');
+      assert.equal(writer.dataset.autoTrigger, String(!isDescription));
       assert.equal(values.get('showCommandsAtom').show, false);
     });
   }
