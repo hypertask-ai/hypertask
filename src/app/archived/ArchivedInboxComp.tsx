@@ -264,7 +264,7 @@ const ArchivedNotificationsContainer = ({
       useEffect(() => {
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [lastgClick.current, notifications, notifications[selectedIndex], showCommands.show]);
+    }, [agentChatKeys, lastgClick.current, notifications, notifications[selectedIndex], showCommands.show]);
 
     useEffect(()=>{
         setInViewObject({taskId:notifications[selectedIndex]?.task.id??null, taskProjectId:notifications[selectedIndex]?.task.projectId??null})

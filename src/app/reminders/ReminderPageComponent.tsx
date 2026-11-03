@@ -265,7 +265,7 @@ const ReminderPageComponent = ({
       useEffect(() => {
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [lastgClick.current,  _selectedReminder, showCommands.show,_reminders]);
+    }, [agentChatKeys, lastgClick.current,  _selectedReminder, showCommands.show,_reminders]);
 
     useEffect(()=>{
         setInViewObject({taskId:_selectedReminder?.id??null, taskProjectId:_selectedReminder?.projectId??null})

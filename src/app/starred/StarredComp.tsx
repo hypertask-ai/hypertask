@@ -90,7 +90,7 @@ const Starred = (props: IProp) => {
   useEffect(() => {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [selectedScreen]);
+  }, [agentChatKeys, selectedScreen]);
 
   const content = (
       <div className="flex items-center justify-center flex-col w-full min-h-screen bg-pageBackground scrollbar-w-[0]">

@@ -228,6 +228,7 @@ const AgentInbox = ({
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [
+    agentChatKeys,
     lastgClick.current,
     ,
     _selectedInbox,

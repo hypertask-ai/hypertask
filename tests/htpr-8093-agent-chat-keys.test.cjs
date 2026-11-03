@@ -122,6 +122,17 @@ for (const file of guardedPages) {
   });
 }
 
+for (const file of guardedPages) {
+  test(`${path.basename(file)} reinstalls its keyboard listener when the flag changes`, () => {
+    const source = fs.readFileSync(path.join(root, file), "utf8");
+    assert.match(
+      source,
+      /\[\s*agentChatKeys\s*,/,
+      `${file} must keep agentChatKeys in its listener dependencies so a flag switch takes effect`,
+    );
+  });
+}
+
 test("the shared helper is the only place that names the chat surfaces", () => {
   const helper = fs.readFileSync(path.join(root, "src/lib/keyboard/chatSurfaceFocus.ts"), "utf8");
   for (const selector of ["#ai-chat-tiptap-editor", "#agent-chat-composer-editor", ".chatwindow", "[data-ai-chat-panel]"]) {

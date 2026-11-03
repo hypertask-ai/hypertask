@@ -261,7 +261,7 @@ const ArchivedTasksContainer = ({
       useEffect(() => {
         document.addEventListener('keydown', handleKeyDown);
         return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [lastgClick.current, _tasks, tasksFromQuery[selectedIndex], showCommands]);
+    }, [agentChatKeys, lastgClick.current, _tasks, tasksFromQuery[selectedIndex], showCommands]);
 
     useEffect(()=>{
         setInViewObject({taskId:tasksFromQuery[selectedIndex]?.id??null, taskProjectId:tasksFromQuery[selectedIndex]?.projectId??null})
