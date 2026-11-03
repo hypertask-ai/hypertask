@@ -58,21 +58,6 @@ export function SendMessageButton({
     buttonClassName += " text-button-arrow hover:opacity-80";
   }
 
-  if (label && !mobile) {
-    return (
-      <button
-        type="button"
-        className="relative group cursor-pointer whitespace-nowrap rounded-sm bg-shadcn-primary px-2.5 py-1 text-content font-semibold text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-        onClick={onClick}
-        disabled={disabled}
-        aria-label={queueMode ? "Queue message" : "Send message"}
-      >
-        <Tooltip {...tooltipProps} />
-        {label}
-      </button>
-    );
-  }
-
   return (
     <button
       type="button"

@@ -10,7 +10,6 @@ type AiChatComposerActionRowProps = {
   mobile: boolean;
   mobileDictating: boolean;
   hasText: boolean;
-  micBeforeSend: boolean;
   leadingControls: ReactNode;
   mobileModelControl: ReactNode;
   attachmentControl: ReactNode;
@@ -25,7 +24,6 @@ export function AiChatComposerActionRow({
   mobile,
   mobileDictating,
   hasText,
-  micBeforeSend,
   leadingControls,
   mobileModelControl,
   attachmentControl,
@@ -159,9 +157,8 @@ export function AiChatComposerActionRow({
         ) : (
           <>
             {attachmentControl}
-            {!micBeforeSend && recorder}
+            {recorder}
             {contextControl}
-            {micBeforeSend && recorder}
             {streamControl}
             {sendControl}
           </>

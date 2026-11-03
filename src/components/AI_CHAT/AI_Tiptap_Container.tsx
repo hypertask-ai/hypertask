@@ -58,11 +58,8 @@ import { AiComposerTextarea } from "./AiComposerTextarea";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
-<<<<<<< HEAD
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
-=======
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
->>>>>>> db9f0b1699 (HTPR-8261 [IMPROVE] Chat composer: mic left of a word Send, Dictation pill, no sparkle)
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
@@ -119,11 +116,8 @@ export function AI_Tiptap_Container({
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
-<<<<<<< HEAD
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-=======
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
->>>>>>> db9f0b1699 (HTPR-8261 [IMPROVE] Chat composer: mic left of a word Send, Dictation pill, no sparkle)
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
@@ -410,7 +404,6 @@ export function AI_Tiptap_Container({
           mobile={Boolean(isMbl)}
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
-          micBeforeSend={chatCleanupEnabled}
           leadingControls={
             controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} reuseChip={composeBoardChipEnabled} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
@@ -544,11 +537,7 @@ export function AI_Tiptap_Container({
                 isByokBlocked={isByokBlocked}
                 queueMode={isTyping}
                 mobile={Boolean(isMbl)}
-<<<<<<< HEAD
                 label={fullScreenCleanup ? "Send" : undefined}
-=======
-                label={chatCleanupEnabled ? "Send" : undefined}
->>>>>>> db9f0b1699 (HTPR-8261 [IMPROVE] Chat composer: mic left of a word Send, Dictation pill, no sparkle)
                 onClick={() => handleSendMessage()}
               />
             ) : null
