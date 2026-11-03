@@ -37,7 +37,7 @@ const undo = load("src/components/undoToast/index.tsx", {
 });
 const { useMobileToastAutoDismiss } = load("src/components/undoToast/useMobileToastAutoDismiss.ts");
 const globalSource = read("src/components/ProviderGlobal/GloablProviders.tsx");
-const toasterMarkup = globalSource.slice(globalSource.indexOf("      <Toaster"), globalSource.indexOf("      <ShortcutArchiveNudge"));
+const toasterMarkup = globalSource.slice(globalSource.indexOf("      <Toaster"), globalSource.indexOf("      {!shortcutTipRemoved && <ShortcutArchiveNudge"));
 const { Toasts } = load("src/components/ProviderGlobal/GloablProviders.tsx", {
   "react-hot-toast": hotToast,
   "@/components/undoToast": undo,
