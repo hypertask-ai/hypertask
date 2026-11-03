@@ -165,6 +165,25 @@ for (const mode of ["append", "prepend"]) {
   });
 }
 
+for (const mode of ["append", "prepend"]) {
+  test(`a ${mode}ed canvas page still reads back as a canvas and keeps every block`, async () => {
+    const h = harness(canvas.wrapHtmlCanvas(original));
+    assert.equal((await h.post({ content: incoming, mode })).status, 200);
+    const response = await (await h.get()).json();
+    assert.equal(response.page.content_type, "html_canvas");
+    assert.equal(response.page.content, mode === "append" ? original + incoming : incoming + original);
+    assert.equal((await h.post({ content: "<p>note</p>" })).status, 200);
+    assert.equal(canvas.decodeHtmlCanvas(h.page().contentHtml), "<p>note</p>");
+  });
+}
+
+test("a page mixing a canvas block with ordinary markup is not a canvas", async () => {
+  const h = harness(`${canvas.wrapHtmlCanvas(original)}<p>Prose</p>`);
+  assert.equal(canvas.decodeHtmlCanvas(h.page().contentHtml), null);
+  assert.equal((await h.post({ content: "<p>note</p>" })).status, 200);
+  assert.equal(h.page().contentHtml, markdownToHtml("<p>note</p>"));
+});
+
 test("title-only updates leave the canvas untouched", async () => {
   const h = harness(canvas.wrapHtmlCanvas(original));
   assert.equal((await h.post({ title: "Renamed" })).status, 200);
