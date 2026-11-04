@@ -13,7 +13,7 @@ export type ListFilterKey = (typeof LIST_FILTER_KEYS)[number]
 
 export type ListFilter = {
   section?: string
-  section_not?: string[]
+  section_not?: string | string[]
   label?: string | string[]
   assignee?: string | number
   status?: string
@@ -485,8 +485,9 @@ export function applyCollectionQuery<T extends Record<string, unknown>>(
       return String(value ?? '').toLowerCase() === section
     })
   }
-  if (listQuery.filter.section_not && listQuery.filter.section_not.length > 0) {
-    const excluded = new Set(listQuery.filter.section_not.map((name) => name.toLowerCase()))
+  const excludedSections = parseSectionNot(listQuery.filter.section_not)
+  if (excludedSections.length > 0) {
+    const excluded = new Set(excludedSections.map((name) => name.toLowerCase()))
     filtered = filtered.filter((item) => {
       const value = (item as Record<string, unknown>).section
         ?? (item as Record<string, unknown>).section_title

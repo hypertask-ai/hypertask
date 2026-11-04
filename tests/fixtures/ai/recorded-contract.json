@@ -14,15 +14,15 @@
       "hypertask_assign_user": "f483ae7d765072dfecead7eb43d037514a6138526838f6a841cbee5df532cc9c"
     },
     "mcp": {
-      "hypertask_list_projects": "47aef431fd8a8a021797a95eafdc18b5054ad4e75b771a57f5b3c2004851369d",
-      "hypertask_list_tasks": "c13818830dd569df37634618a9453200a0c769d771cccb3b4e2dd2a6ad047076",
-      "hypertask_search_tasks": "6be3ce11d84adc2e19d9b25e5830558038bdf9f93f4aa08eb34690cbd95c1763",
+      "hypertask_list_projects": "ec22dfea6317224c5570b8471b311dc5bef1521deaec1f0afe7fdd7df31e8664",
+      "hypertask_list_tasks": "2fccf6e8c3714d35f17d330f3d1c6694ceb3f8c3f4a15d7343a814fdfa9e9a12",
+      "hypertask_search_tasks": "2bb63984160802b9e302811517ae6f0f244359748a8e5c188b36bdc4965a97ab",
       "hypertask_get_tasks": "3f22a987816309ff6df831e4ded2e949c46309738276eac649377a1ffd5415d2",
       "hypertask_create_task": "d4185f3d974f3c671f53f6b22bea71adffdc4139791d482f0b551094e3855968",
       "hypertask_update_task": "04dc8468da903a93bc7d3678d11da44a2e95a57434473c9713b1e3b021d2ea5b",
-      "hypertask_get_comments_for_task": "7c15257646f673ecc87134d55c4259cdc22a351e10a40fccd80ae3f4785dd1da",
+      "hypertask_get_comments_for_task": "71697451afc630c5ac4e7dfb14e564db427ec5dae49e472f60322fb9e1abc942",
       "hypertask_add_comment_to_task": "4887e92a85d19472a3467618cf763b71fb431972f5868b065ae1e6e471a35990",
-      "hypertask_list_labels": "a6bd96057e32f9054d31196b5075b76cc579e6bdb03fb27e3ed0195e16de38c4",
+      "hypertask_list_labels": "5bb9b7d84232b2684ea44a3dcd9986a602209a7cfa67a12daaed78729a43072a",
       "hypertask_assign_user": "6579190b0325b6dd7167bdeefbf4df10b5c49e40d2cf26b2ee67371d0c8b59ce"
     }
   }

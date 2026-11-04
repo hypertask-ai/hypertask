@@ -1,4 +1,4 @@
-import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG } from '@/lib/flags/keys'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -20,6 +20,7 @@ import {
   parseTaskStatusParam,
   parseAssigneeFilter,
   parseNumericCursor,
+  parseSectionNot,
   parseUpdatedSince,
   projectRows,
   resolveListLimit,
@@ -215,12 +216,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
     if (sectionId !== undefined) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
-    } else if (listQuery?.filter.section_not && listQuery.filter.section_not.length > 0) {
-      where.section = { notIn: listQuery.filter.section_not, mode: 'insensitive' }
+    } else if (excludedSections.length > 0 &&
+      await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id).catch(() => false)) {
+      where.section = { notIn: excludedSections, mode: 'insensitive' }
     }
     if (labelsParam.length > 0) {
       where.taskLabels = {
