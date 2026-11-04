@@ -32,6 +32,9 @@ function route(id, { method = "PATCH", text = "Edited text" } = {}) {
     "@/lib/agents/writingEnforcement": { enforceAgentWriting: async () => ({ ok: true }) },
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/realtime/server": { broadcastTaskComment: async () => {} },
+    "@/utils/controllers/FCM": { sendDataNewCommentFCM: async () => {}, sendDataOnlyFcm: async () => {} },
+    "@/utils/controllers/comments/updateCommentService": { updateCommentService: async () => ({}) },
+    "@/utils/controllers/comments/deleteCommentService": { deleteCommentService: async () => ({}) },
   };
   const operation = load("src/lib/mcp/operations/comments/[comment_id]/operation.ts", stubs);
   const request = new NextRequest(`http://localhost/api/mcp/comments/${id}`, {
