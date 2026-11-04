@@ -18,7 +18,7 @@ function refusal(text, previous = {}) {
 test('a technical refusal names the offending phrase', () => {
   const error = refusal('Please put exit code here.')
   assert.equal(error.field, 'text')
-  assert.match(error.message, /^text: Technical details belong in the agent log \("exit code"\)\./)
+  assert.match(error.message, /^text: Technical details belong in the agent log: a log word \("exit code"\)\./)
 })
 
 test('a robot status refusal names the offending label', () => {
@@ -41,7 +41,7 @@ test('a named sentence is clipped so the message stays readable', () => {
 
 test('a nameable phrase still carries the plain-language advice', () => {
   const error = refusal('Please put exit code here.')
-  assert.match(error.message, /Keep people text plain and link the build or commit instead of pasting its id; put the raw value in the agent log\.$/)
+  assert.match(error.message, /Keep people text plain: say what happened and put the raw value in the agent log\.$/)
 })
 
 test('short plain agent text is accepted', () => {

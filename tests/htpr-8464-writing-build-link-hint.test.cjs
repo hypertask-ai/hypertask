@@ -15,7 +15,7 @@ function refusal(text) {
 
 test('a refused build id names the link escape and keeps the agent log path', () => {
   const error = refusal('<p>The build failed on the release commit 9e5741ca.</p>')
-  assert.match(error.message, /Technical details belong in the agent log \("9e5741ca"\)\./)
+  assert.match(error.message, /Technical details belong in the agent log: a build or commit id \("9e5741ca"\)\./)
   assert.match(error.message, /link the build or commit/)
   assert.match(error.message, /agent log\.$/)
 })
