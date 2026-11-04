@@ -32,8 +32,8 @@ function renderMessage(theme, markdown) {
   );
   return new JSDOM(`<!doctype html><html class="${theme}"><head>
     <style>${themeStyles}</style><style>${messageStyles}</style></head><body>
-    <div class="submessage-container"><div class="content-container">
-      <div class="content-html">${normalizeAssistantHtml(markdown)}</div>
+    <div class="submessage-container"><div data-chat-content-container>
+      <div data-chat-content-html>${normalizeAssistantHtml(markdown)}</div>
     </div></div></body></html>`);
 }
 
@@ -98,7 +98,7 @@ test("AI chat still preserves code content, monospace and contained horizontal s
     assert.equal(style.overflowX, "auto");
     assert.equal(style.overflowY, "hidden");
     assert.equal(style.maxWidth, "100%");
-    assert.equal(window.getComputedStyle(document.querySelector(".content-html")).overflowX, "hidden");
+    assert.equal(window.getComputedStyle(document.querySelector("[data-chat-content-html]")).overflowX, "hidden");
   } finally {
     dom.window.close();
   }

@@ -251,14 +251,14 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const pathname = usePathname();
   if (agentStatus && chatCleanupEnabled && !pathname?.startsWith("/chat")) {
-    return <div className="status-indicator font-bold text-white-black">{agentStatus}</div>;
+    return <div data-chat-status-indicator className="font-bold text-white-black">{agentStatus}</div>;
   }
   if (agentStatus) {
     return (
-      <div className="status-indicator">
+      <div data-chat-status-indicator>
         <div className="relative transition-all duration-300 ease-linear">
           <span className="invisible font-bold">{agentStatus}</span>
-          <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent bg-size-200 animate-gradient">
+          <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent animate-gradient">
             {agentStatus}
           </span>
         </div>
@@ -272,7 +272,9 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
 
   return (
     <span
-      className={`typing-cursor ${showCursor ? "inline-block" : "hidden"}`}
+      data-chat-typing-cursor
+      data-chat-cleanup={chatCleanupEnabled && !pathname?.startsWith("/chat") ? "" : undefined}
+      className={showCursor ? "inline-block" : "hidden"}
     />
   );
 };
@@ -327,9 +329,10 @@ const SubMessage = ({ message, ticketGroups }: { message: IChatMessage; ticketGr
 
   return (
     <div className={containerClass}>
-      <div className="content-container" onClick={handleClick}>
+      <div data-chat-content-container onClick={handleClick}>
         <div
-          className={`content-html ${contentClass}`}
+          data-chat-content-html
+          className={contentClass}
           dangerouslySetInnerHTML={{ __html: messageHtmlWithTableScroll }}
         />
         {settingCards.ids.map((id) => <AiSettingChangeCard key={id} id={id} />)}
