@@ -320,7 +320,7 @@ test(`AI chat ${mode} opens by button, shortcut and fullscreen exit`, { tag: [`@
       await expect(panel, `${theme} standalone chat corners`).toHaveCSS('border-radius', '4px')
     }
     await page.locator('html').evaluate((html, original) => {
-      html.className = original.className
+      html.setAttribute('class', original.className)
       if (original.theme === null) html.removeAttribute('data-theme')
       else html.setAttribute('data-theme', original.theme)
     }, originalTheme)
