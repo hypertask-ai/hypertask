@@ -130,11 +130,17 @@ for (const surface of ['list', 'search']) {
     }
   })
 
-  test(`${surface} preserves explicit section with an enabled exclusion`, async () => {
-    const f = routeFixture(surface, true)
-    const response = await f.run({ section: 'Bugs', 'filter.section_not': 'UX needed' })
-    assert.equal(response.status, 200)
-    assert.equal(f.queries[0].section, 'Bugs')
+  test(`${surface} rejects legacy section filters only when exclusion is enabled`, async () => {
+    for (const enabled of [false, true]) {
+      for (const params of [{ section: 'Bugs' }, { section: '42' }, { section_id: '42' }]) {
+        const f = routeFixture(surface, enabled)
+        const response = await f.run({ ...params, 'filter.section_not': 'UX needed' })
+        assert.equal(response.status, enabled ? 400 : 200)
+        if (enabled) assert.equal(f.queries.length, 0)
+        else if (params.section === 'Bugs') assert.equal(f.queries[0].section, 'Bugs')
+        else if (params.section || surface === 'list') assert.equal(f.queries[0].sectionId, 42)
+      }
+    }
   })
 }
 
@@ -153,14 +159,3 @@ test('enabled search applies exclusion outside the ranked window', async () => {
   assert.equal(f.queries[0].id, undefined)
   assert.ok(f.queries[0].OR)
 })
-
-for (const surface of ['list', 'search']) {
-  test(`${surface} preserves an explicit section ID`, async () => {
-    const f = routeFixture(surface, true)
-    const params = surface === 'list' ? { section_id: '42' } : { section: '42' }
-    const response = await f.run({ ...params, 'filter.section_not': 'UX needed' })
-    assert.equal(response.status, 200)
-    assert.equal(f.queries[0].sectionId, 42)
-    assert.equal(f.queries[0].section, undefined)
-  })
-}

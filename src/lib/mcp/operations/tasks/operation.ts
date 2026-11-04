@@ -406,8 +406,8 @@ export async function GET(request: NextRequest) {
     if (excludedSections.length > 0 && await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
       sectionNotEnabled = true
     }
-    if (sectionNotEnabled && listQuery?.filter.section) {
-      return validationError('filter.section_not cannot be combined with filter.section')
+    if (sectionNotEnabled && (listQuery?.filter.section || searchParams.get('section') || searchParams.get('section_id'))) {
+      return validationError('filter.section_not cannot be combined with filter.section, section, or section_id')
     }
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
     if (!sectionIdParam.ok) return sectionIdParam.response

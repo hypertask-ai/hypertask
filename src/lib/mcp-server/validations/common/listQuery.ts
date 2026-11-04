@@ -8,7 +8,7 @@ export const listFilterSchema = z
     section_not: z
       .union([z.string().min(1), z.array(z.string().min(1))])
       .optional()
-      .describe('Column titles to leave out. Comma string or array.'),
+      .describe('Task list and search: column titles to leave out. Comma string or array.'),
     label: z.union([z.string().min(1), z.array(z.string().min(1))]).optional(),
     assignee: z.union([z.string().min(1), z.number().int()]).optional(),
     status: z.string().min(1).optional(),
