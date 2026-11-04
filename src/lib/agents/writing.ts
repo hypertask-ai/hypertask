@@ -9,8 +9,34 @@ function excerpt(text: string | undefined): string {
   return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat
 }
 
+const BUILD_ID = 'a build or commit id'
+const TECHNICAL_KINDS: Array<[RegExp, string]> = [
+  [/(?:^|\s)\.{0,2}\/[\w.-]/, 'a file path'],
+  [/\b[\w-]+\.(?:py|sh|zig|ts|tsx|js|mjs|go|kt|json|ya?ml|toml|md|jsonl|log|html)\b/, 'a file name'],
+  [/\b[A-Za-z_][\w.]*\(\)/, 'a function call'],
+  [/\b[a-z]+(?:_[a-z0-9]+)+\b/, 'a code name'],
+  [/\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}\b/, BUILD_ID],
+  [/`[^`]+`/, 'a backticked value'],
+  [/\b(?:Traceback|stderr|stdout|exit code|stack trace|tmux)\b/, 'a log word'],
+  [/(?:^|\s)--[a-z][\w-]+/, 'a command flag'],
+]
+
+function technicalKind(value: string): string {
+  return TECHNICAL_KINDS.find(([pattern]) => pattern.test(value))?.[1] ?? 'a technical value'
+}
+
+function surroundingWord(text: string, index: number, length: number): string {
+  let start = index
+  let end = index + length
+  while (start < end && /\s/.test(text[start])) start += 1
+  while (start > 0 && !/\s/.test(text[start - 1])) start -= 1
+  while (end < text.length && !/\s/.test(text[end])) end += 1
+  return text.slice(start, end)
+}
+
 const PLAIN_ADVICE = 'Use short plain sentences for people; put technical details and status in the agent log.'
-const TECHNICAL_ADVICE = 'Keep people text plain and link the build or commit instead of pasting its id; put the raw value in the agent log.'
+const TECHNICAL_ADVICE = 'Keep people text plain: say what happened and put the raw value in the agent log.'
+const BUILD_LINK_ADVICE = 'Keep people text plain: link the build or commit instead of pasting its id; put the raw value in the agent log.'
 
 export class AgentWritingError extends Error {
   readonly status = 400
@@ -40,8 +66,11 @@ export function assertAgentWriting(agentId: string | null | undefined, fields: {
       if (ROBOT_STATUS.test(plain)) {
         throw new AgentWritingError(field, 'Robot status belongs in the agent log', plain.match(ROBOT_STATUS)?.[0])
       }
-      if (TECHNICAL_DETAIL.test(plain)) {
-        throw new AgentWritingError(field, 'Technical details belong in the agent log', plain.match(TECHNICAL_DETAIL)?.[0], TECHNICAL_ADVICE)
+      const detail = plain.match(TECHNICAL_DETAIL)
+      if (detail?.index !== undefined) {
+        const value = surroundingWord(plain, detail.index, detail[0].length)
+        const kind = technicalKind(value)
+        throw new AgentWritingError(field, `Technical details belong in the agent log: ${kind}`, value, kind === BUILD_ID ? BUILD_LINK_ADVICE : TECHNICAL_ADVICE)
       }
       for (const sentence of plain.replace(/"[^"]+"|“[^”]+”/g, 'LINK').split(/(?<=[.!?:;])\s+/)) {
         const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu)?.filter((word) => word !== 'LINK') ?? []
