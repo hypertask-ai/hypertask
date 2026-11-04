@@ -16,7 +16,7 @@ import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import prisma from '@/lib/prisma'
 import { convertPlainTextMentionsToHtml } from '@/utils/controllers/comments/processMentions'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_8268_MENTION_BY_NAME_FLAG } from '@/lib/flags/keys'
+import { HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG } from '@/lib/flags/keys'
 import type { RawMentionInput } from '@/utils/controllers/comments/resolveMentionInputs'
 import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
 import { deleteCommentService } from '@/utils/controllers/comments/deleteCommentService'
@@ -31,7 +31,8 @@ import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
 import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 
 export interface McpMentionInput {
-  user_id: number
+  user_id?: number
+  agent_id?: string
   display_name: string
 }
 
@@ -226,7 +227,18 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         inputs: mentionInputs,
         projectId: comment.task.projectId,
         requestingUserId: user.id,
+        allowAgents: await isFeatureEnabled(HTPR_8513_AGENT_MENTIONS_FLAG, user.id),
       })
+      if (resolution.error) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: resolution.error.message,
+            details: { field: 'mentions', code: resolution.error.status === 404 ? 'not_found' : 'invalid_field' },
+          },
+          { status: resolution.error.status }
+        )
+      }
       if (resolution.invalid) {
         return NextResponse.json(
           {
@@ -256,7 +268,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     if (mentions && mentions.length > 0) {
       const memberCheck = await validateProjectMemberIds(
         comment.task.projectId,
-        mentions.map((mention) => mention.user_id)
+        mentions
+          .map((mention) => mention.user_id)
+          .filter((id): id is number => typeof id === 'number')
       )
 
       if (memberCheck.error) {

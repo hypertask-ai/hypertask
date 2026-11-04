@@ -192,7 +192,7 @@ export function closeMentionMatches(
   const needle = input.trim().toLowerCase();
   if (!needle) return [];
   const scored = members
-    .filter((member) => typeof member.id === "number" && member.displayName)
+    .filter((member) => member.displayName)
     .map((member) => {
       const name = member.displayName;
       const lower = name.toLowerCase();
@@ -210,14 +210,68 @@ export function closeMentionMatches(
   );
 }
 
-export function resolveMentionEntries(
+export type ResolvedMentionTarget =
+  | { user_id: number; display_name: string }
+  | { agent_id: string; display_name: string };
+
+function toMentionTarget(member: ResolvableMember): ResolvedMentionTarget {
+  return typeof member.id === "number"
+    ? { user_id: member.id, display_name: member.displayName }
+    : { agent_id: String(member.id), display_name: member.displayName };
+}
+
+function matchMentionName(
+  input: string,
+  candidates: ResolvableMember[],
+): { match?: ResolvableMember; problem?: MentionProblem } {
+  const exactMatches = candidates.filter(
+    (member) => member.displayName.toLowerCase() === input.toLowerCase(),
+  );
+
+  if (exactMatches.length === 1) return { match: exactMatches[0] };
+  if (exactMatches.length > 1) {
+    return {
+      problem: {
+        input,
+        reason: "ambiguous",
+        closeMatches: exactMatches
+          .slice(0, CLOSE_MATCH_LIMIT)
+          .map((member) => member.displayName),
+      },
+    };
+  }
+
+  const prefixMatches = candidates.filter((member) =>
+    member.displayName.toLowerCase().startsWith(input.toLowerCase()),
+  );
+
+  if (prefixMatches.length === 1) return { match: prefixMatches[0] };
+  if (prefixMatches.length > 1) {
+    return {
+      problem: {
+        input,
+        reason: "ambiguous",
+        closeMatches: prefixMatches
+          .slice(0, CLOSE_MATCH_LIMIT)
+          .map((member) => member.displayName),
+      },
+    };
+  }
+
+  return {};
+}
+
+export function resolveMentionTargets(
   entries: string[],
   members: ResolvableMember[],
-): { resolved: ResolvedMention[]; problems: MentionProblem[] } {
-  const resolved: ResolvedMention[] = [];
+): { resolved: ResolvedMentionTarget[]; problems: MentionProblem[] } {
+  const resolved: ResolvedMentionTarget[] = [];
   const problems: MentionProblem[] = [];
   const people = members.filter(
     (member) => typeof member.id === "number" && member.displayName,
+  );
+  const agents = members.filter(
+    (member) => typeof member.id === "string" && member.displayName,
   );
 
   for (const raw of entries) {
@@ -230,57 +284,54 @@ export function resolveMentionEntries(
     if (/^\d+$/.test(input)) {
       const byId = people.find((member) => Number(member.id) === Number(input));
       if (byId) {
-        resolved.push({ userId: Number(byId.id), displayName: byId.displayName });
+        resolved.push(toMentionTarget(byId));
         continue;
       }
     }
 
-    const exactMatches = people.filter(
-      (member) => member.displayName.toLowerCase() === input.toLowerCase(),
-    );
-
-    if (exactMatches.length === 1) {
-      resolved.push({
-        userId: Number(exactMatches[0].id),
-        displayName: exactMatches[0].displayName,
-      });
+    const person = matchMentionName(input, people);
+    if (person.match) {
+      resolved.push(toMentionTarget(person.match));
+      continue;
+    }
+    if (person.problem) {
+      problems.push(person.problem);
       continue;
     }
 
-    if (exactMatches.length > 1) {
-      problems.push({
-        input,
-        reason: "ambiguous",
-        closeMatches: exactMatches
-          .slice(0, CLOSE_MATCH_LIMIT)
-          .map((member) => member.displayName),
-      });
+    const agent = matchMentionName(input, agents);
+    if (agent.match) {
+      resolved.push(toMentionTarget(agent.match));
       continue;
     }
-
-    const prefixMatches = people.filter((member) =>
-      member.displayName.toLowerCase().startsWith(input.toLowerCase()),
-    );
-
-    if (prefixMatches.length === 1) {
-      resolved.push({
-        userId: Number(prefixMatches[0].id),
-        displayName: prefixMatches[0].displayName,
-      });
+    if (agent.problem) {
+      problems.push(agent.problem);
       continue;
     }
 
     problems.push({
       input,
-      reason: prefixMatches.length > 1 ? "ambiguous" : "unknown",
-      closeMatches:
-        prefixMatches.length > 1
-          ? prefixMatches
-              .slice(0, CLOSE_MATCH_LIMIT)
-              .map((member) => member.displayName)
-          : closeMentionMatches(input, people),
+      reason: "unknown",
+      closeMatches: closeMentionMatches(input, [...people, ...agents]),
     });
   }
 
   return { resolved, problems };
+}
+
+export function resolveMentionEntries(
+  entries: string[],
+  members: ResolvableMember[],
+): { resolved: ResolvedMention[]; problems: MentionProblem[] } {
+  const people = members.filter(
+    (member) => typeof member.id === "number" && member.displayName,
+  );
+  const { resolved, problems } = resolveMentionTargets(entries, people);
+
+  return {
+    resolved: resolved.filter(
+      (mention): mention is { user_id: number; display_name: string } => "user_id" in mention,
+    ).map((mention) => ({ userId: mention.user_id, displayName: mention.display_name })),
+    problems,
+  };
 }
