@@ -306,6 +306,13 @@ late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
 empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
+for prefix in 'Leading text' '<div>Leading text</div>' '<p></p>Leading text'; do
+  text="$prefix$plain"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+allowed bash "$vcc" comment add X-1 --kind question --text "  <div><p></p>$plain</div>"
 printf 'ok a Question needs What this is: first, with words after it\n'
 
 for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
