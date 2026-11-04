@@ -158,3 +158,9 @@ must remain. Demo/tutorial palettes must not launch real inbox triage.
 Keep a draft in the chat composer and verify opening the command never
 sends or clears that draft. Capture the existing palette and full-screen chat at
 1440x900 and 390x844 in Porcelain, Graphite, AMOLED and Dia.
+
+## Blocker list API
+
+With `htpr-8200-blocker-list` enabled, GET `/api/mcp/inbox/blockers` with an MCP token. `user` is `me` (default) or a positive user ID. Repeat `projectId` or `project` for numeric board IDs; both names combine. Optional `state` is `waiting`, `answered`, or `no-question`. The response is `{ success: true, blockers: [...], total }`; each row has `id`, `ticketNumber`, `url`, `title`, `projectId`, `boardTitle`, `section`, `priority`, `waitingSince`, `blockerCommentId`, `question`, `recommendation`, and `state`. Missing values are null. No state filter returns all three states.
+
+On a sandbox board, mark a Question on a normal ticket waiting on the target person. Verify waiting, then have the target person comment on the ticket or react to the marked Question and verify answered. An agent acting for that person must not answer it. Remove or replace the marker with a non-question and verify no-question. Check repeated board filters and each state filter. Repeat with a human, scoped agent and scoped token; inaccessible boards must never appear, even when requested explicitly. Management tokens get 403. Invalid filters get 400; a disabled flag gets 404. Restore sandbox changes after checking.

@@ -19,6 +19,7 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/custom-fields\/value$/, params: [], methods: ["POST"], load: () => import('./custom-fields/value/operation') },
   { pattern: /^\/mcp\/admin\/connections$/, params: [], methods: ["GET"], load: () => import('./admin/connections/operation') },
   { pattern: /^\/mcp\/tasks\/attachments$/, params: [], methods: ["GET","POST"], load: () => import('./tasks/attachments/operation') },
+  { pattern: /^\/mcp\/inbox\/blockers$/, params: [], methods: ["GET"], load: () => import('./inbox/blockers/operation') },
   { pattern: /^\/mcp\/inbox\/composition$/, params: [], methods: ["GET"], load: () => import('./inbox/composition/operation') },
   { pattern: /^\/mcp\/assignees\/assign$/, params: [], methods: ["POST"], load: () => import('./assignees/assign/operation') },
   { pattern: /^\/mcp\/projects\/archive$/, params: [], methods: ["POST"], load: () => import('./projects/archive/operation') },
