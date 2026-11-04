@@ -15,12 +15,6 @@ name: AI review verdict to ticket
 # a full installation window fails with the rate limit named instead of a
 # missing verdict.
 #
-# YPER4-978: the board stopped accepting the mirror's people comment. The voice
-# guard (YPER4-910) refuses technical text in the thread people read, and the
-# findings carry paths, code and long sentences, so five real mirrors failed
-# with HTTP 400 while the skip runs stayed green. The thread now gets one short
-# plain verdict line that points at the pull request; the agent log answers this
-# token with HTTP 503, so the findings stay where they already are.
 on:
   issue_comment:
     types: [created, edited]
@@ -35,11 +29,8 @@ permissions:
   contents: read
   pull-requests: read
 
-# The author is part of the group so an ordinary comment on the same pull
-# request cannot cancel the delivery the reviewer just woke, and cancelling is
-# off so a queued round re-reads the newest verdict instead of racing it.
 concurrency:
-  group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}-${{ github.event.comment.user.login || 'dispatch' }}
+  group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}
   cancel-in-progress: false
 
 jobs:
@@ -172,20 +163,10 @@ jobs:
             const verdict = body.split('\n')[0].trim().slice(0, 300);
             const sha = /reviewed-commit:\s*([0-9a-f]{40})/.exec(body)?.[1];
 
-            const escapeHtml = value => value
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;');
-            // The board refuses technical text in a people comment: no paths, no
-            // code, no sentence over twelve words (YPER4-910). Findings are all
-            // of that, and the agent log answers this token with HTTP 503, so the
-            // ticket gets one short plain line that points at the pull request.
-            const verdictWord = /^(APPROVE|CONCERNS)\b/.exec(verdict)?.[1] ?? 'APPROVE';
-            const text = [
-              `<p><strong>AI review (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${verdictWord}.</p>`,
-              `<p>Findings are in the pull request.</p>`,
-            ].join('\n');
+            const verdictWord = /^(APPROVE|CONCERNS)\b/.exec(verdict)[1];
+            const prefix = `AI review mirror [${repository}#${prNumber}]: `;
+            const escapeHtml = value => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const text = `<p>${escapeHtml(prefix + verdictWord)}</p><p>${escapeHtml(pr.html_url)}</p>`;
 
             const appRequest = (path, init = {}) => fetch(`${APP}${path}`, {
               ...init,
@@ -198,19 +179,50 @@ jobs:
               },
             });
 
-            // `kind: qa` keeps the line in the ticket thread people read: an
-            // agent comment without a kind is filed in the hidden agent log. The
-            // per-commit key makes a re-run or an edited verdict a no-op (YPER4-925).
+            let latest;
+            for (let offset = 0; ; offset += 100) {
+              const response = await appRequest(`/api/mcp/tasks/${encodeURIComponent(ticket)}/agent-activity?limit=100&offset=${offset}`);
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok || result.success !== true || !Array.isArray(result.activities) ||
+                  result.activities.some(activity => typeof activity.text !== 'string')) {
+                core.setFailed(`Reading agent activity for ${ticket} failed: HTTP ${response.status}.`);
+                return;
+              }
+              latest = result.activities.find(activity => activity.text.startsWith(prefix));
+              if (latest || result.activities.length < 100) break;
+            }
+            if (latest?.text.split('\n')[0] === `${prefix}${verdictWord}`) {
+              core.info(`Unchanged ${verdictWord} for PR #${prNumber}; nothing to mirror.`);
+              return;
+            }
+            if (latest && (typeof latest.id !== 'string' || !latest.id)) {
+              core.setFailed(`Agent activity for ${ticket} has no entry ID.`);
+              return;
+            }
+            const { createHash } = await import('node:crypto');
+            const key = createHash('sha256')
+              .update(JSON.stringify([repository, prNumber, sha, verdictWord, review.updated_at ?? '', body, latest?.id ?? '']))
+              .digest('hex');
+            const payload = { ticket_number: ticket, text, content_type: 'html' };
+            const preflight = await appRequest('/api/mcp/comments', {
+              method: 'POST',
+              body: JSON.stringify({ ...payload, dry_run: true }),
+            });
+            const preview = await preflight.json().catch(() => ({}));
+            if (!preflight.ok || preview?.success !== true || preview?.valid !== true || preview?.would?.routedTo !== 'log') {
+              core.setFailed(`Preflight for ${ticket} failed: HTTP ${preflight.status}; log routing not confirmed.`);
+              return;
+            }
             const response = await appRequest('/api/mcp/comments', {
               method: 'POST',
-              headers: { 'Idempotency-Key': `ai-review-mirror-${prNumber}-${sha}` },
-              body: JSON.stringify({ ticket_number: ticket, kind: 'qa', text }),
+              headers: { 'Idempotency-Key': `ai-review-mirror-${key}` },
+              body: JSON.stringify(payload),
             });
             const result = await response.json().catch(() => ({}));
-            if (!response.ok || result.success !== true) {
+            if (!response.ok || result.success !== true || result.routedTo !== 'log' || result.visibleToPeople !== false) {
               core.setFailed(
                 `Posting the verdict to ${ticket} failed: HTTP ${response.status} ` +
-                `${result.error ?? result.message ?? 'no error text'}.`,
+                `${result.error ?? result.message ?? 'log routing not confirmed'}.`,
               );
               return;
             }
