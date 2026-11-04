@@ -9,6 +9,7 @@ export function SendMessageButton({
   isByokBlocked = false,
   queueMode = false,
   mobile,
+  textOnMobile = false,
   label,
   onClick,
 }: {
@@ -16,6 +17,7 @@ export function SendMessageButton({
   isByokBlocked?: boolean;
   queueMode?: boolean;
   mobile: boolean;
+  textOnMobile?: boolean;
   label?: string;
   onClick: () => void;
 }) {
@@ -45,10 +47,10 @@ export function SendMessageButton({
     "relative group disabled:text-gray-400 disabled:cursor-not-allowed rounded-sm";
   if (mobile) {
     buttonClassName =
-      "relative group flex h-11 w-11 touch-manipulation items-center justify-center rounded-sm bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+      `relative group flex h-11 ${textOnMobile && label ? "px-3" : "w-11"} touch-manipulation items-center justify-center ${textOnMobile ? "rounded-[4px]" : "rounded-sm"} bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50`;
   } else if (label) {
     buttonClassName =
-      "relative group flex h-7 items-center justify-center rounded bg-shadcn-primary px-2 text-dense text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50";
+      `relative group flex h-7 items-center justify-center ${textOnMobile ? "rounded-[4px]" : "rounded"} bg-shadcn-primary px-2 text-dense text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50`;
   } else if (!disabled && queueMode) {
     buttonClassName += " text-text-light-gray hover:text-white-black";
   } else if (!disabled) {
@@ -64,10 +66,10 @@ export function SendMessageButton({
       aria-label={queueMode ? "Queue message" : label ? label : "Send message"}
     >
       <Tooltip {...tooltipProps} />
-      {mobile ? (
-        <SendArrow size={22} />
-      ) : label ? (
+      {label && (!mobile || textOnMobile) ? (
         <span>{label}</span>
+      ) : mobile ? (
+        <SendArrow size={22} />
       ) : (
         <Send size={16} strokeWidth={1.75} />
       )}

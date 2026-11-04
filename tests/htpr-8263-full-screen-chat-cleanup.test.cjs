@@ -31,14 +31,20 @@ test('the full-screen header drops the sparkle only behind the flag', () => {
 test('desktop composer puts the mic left of Send behind the flag', () => {
   const row = read('src/components/AI_CHAT/AiChatComposerActionRow.tsx');
   assert.match(row, new RegExp(`useFlag\\(${FLAG}\\)`));
-  const cleanupBranch = row.slice(row.indexOf(') : cleanup ? ('), row.indexOf(') : (\n          <>'));
+  const cleanupStart = row.indexOf(') : cleanup ? (');
+  const previousStart = row.indexOf(') : (\n          <>', cleanupStart);
+  assert.ok(cleanupStart >= 0 && previousStart > cleanupStart, 'both branches exist');
+  const cleanupBranch = row.slice(cleanupStart, previousStart);
   const order = ['{attachmentControl}', '{contextControl}', '{recorder}', '{streamControl}', '{sendControl}']
     .map((token) => cleanupBranch.indexOf(token));
   assert.ok(order.every((index) => index >= 0), 'the cleanup branch renders every control');
   assert.deepEqual([...order].sort((a, b) => a - b), order, 'order is attach, context, mic, stream, Send');
-  const previousBranch = row.slice(row.indexOf(') : (\n          <>'));
+  const previousBranch = row.slice(previousStart);
+  const previousRecorder = previousBranch.indexOf('{recorder}');
+  const previousContext = previousBranch.indexOf('{contextControl}');
+  assert.ok(previousRecorder >= 0 && previousContext >= 0, 'the old branch renders both controls');
   assert.ok(
-    previousBranch.indexOf('{recorder}') < previousBranch.indexOf('{contextControl}'),
+    previousRecorder < previousContext,
     'the old order survives behind the flag',
   );
 });
@@ -47,11 +53,10 @@ test('the text Send button keeps the mobile arrow and an icon fallback', () => {
   const button = read('src/components/AI_CHAT/SendMessageButton.tsx');
   assert.match(button, /aria-label=\{queueMode \? "Queue message" : label \? label : "Send message"\}/);
   assert.match(button, /bg-shadcn-primary px-2 text-dense text-primary-foreground/, 'the labelled Send keeps primary action styling');
-  assert.match(button, /\) : label \? \(\s*<span>\{label\}<\/span>/, 'desktop renders the text label');
-  assert.match(button, /\{mobile \? \(\s*<SendArrow size=\{22\} \/>/, 'mobile keeps the arrow button');
+  assert.match(button, /label && \(!mobile \|\| textOnMobile\) \? \(\s*<span>\{label\}<\/span>/, 'desktop renders the text label');
+  assert.match(button, /: mobile \? \(\s*<SendArrow size=\{22\} \/>/, 'mobile keeps the arrow button');
   assert.match(button, /<Send size=\{16\} strokeWidth=\{1\.75\} \/>/, 'callers without a label keep the paper plane');
   const composer = read('src/components/AI_CHAT/AI_Tiptap_Container.tsx');
-  assert.match(composer, /label=\{fullScreenCleanup \? "Send" : undefined\}/);
   assert.match(composer, /label=\{fullScreenCleanup \|\| chatCleanupEnabled \? "Send" : undefined\}/);
   assert.match(composer, /const fullScreenCleanup = cleanupFlag && \(pathname\?\.startsWith\("\/chat"\) \?\? false\)/);
 });
@@ -59,7 +64,7 @@ test('the text Send button keeps the mobile arrow and an icon fallback', () => {
 test('the full-screen placeholder loses the shortcut text and the focus hint becomes a tooltip', () => {
   const tiptap = read('src/hooks/MultiPages/AIChat/useAiTiptap.ts');
   assert.match(tiptap, new RegExp(`useFlag\\(${FLAG}\\)`));
-  assert.match(tiptap, /if \(fullScreenChatRef\.current\) return `Ask anything, @ for context`;/);
+  assert.match(tiptap, /if \(fullScreenChatRef\.current \|\| .* return `Ask anything, @ for context`;/);
   assert.match(tiptap, /const pathname = usePathname\(\);\n  const chatCleanup = useFlag/);
   assert.match(tiptap, /const fullScreenChat = chatCleanup && \(pathname \?\? ""\)\.startsWith\("\/chat"\);/);
   assert.match(tiptap, /return `Focus with CTRL \+ Q, @ for context`;/, 'the docked chat keeps its placeholder');

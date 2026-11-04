@@ -8,6 +8,7 @@ const mobileActionClass =
 
 type AiChatComposerActionRowProps = {
   mobile: boolean;
+  chatCleanup: boolean;
   mobileDictating: boolean;
   hasText: boolean;
   leadingControls: ReactNode;
@@ -22,6 +23,7 @@ type AiChatComposerActionRowProps = {
 
 export function AiChatComposerActionRow({
   mobile,
+  chatCleanup,
   mobileDictating,
   hasText,
   leadingControls,
@@ -130,7 +132,7 @@ export function AiChatComposerActionRow({
                 {mobileModelControl}
               </div>
             ) : null}
-            {recorder}
+            {!chatCleanup && recorder}
             <div
               data-ai-chat-stream-control
               hidden={mobileDictating}
@@ -140,11 +142,20 @@ export function AiChatComposerActionRow({
             >
               {streamControl}
             </div>
+            {chatCleanup && recorder}
             {hasText && !mobileDictating ? (
               <div data-ai-chat-primary-send className="order-4">
                 {sendControl}
               </div>
             ) : null}
+          </>
+        ) : chatCleanup ? (
+          <>
+            {attachmentControl}
+            {contextControl}
+            {streamControl}
+            {recorder}
+            {sendControl}
           </>
         ) : cleanup ? (
           <>

@@ -746,7 +746,7 @@ export const AudioButton = ({
                 {!isProcessing && idleLabel && (
                   <span className="text-dense">{idleLabel}</span>
                 )}
-                {hover && !isProcessing && isAiChat && chatCleanup && (
+                {hover && !isProcessing && isAiChat && (chatCleanup || compactListeningPill) && (
                   <Tooltip
                     left={0}
                     bottom={tooltipsOpenUpward ? 45 : -45}
@@ -844,7 +844,8 @@ export const AudioButton = ({
         <div
           data-ai-chat-dictation-pill
           className={cn(
-            "flex h-7 items-center gap-1.5 rounded bg-hover-active pl-2 pr-1",
+            "flex items-center gap-1.5 rounded-[4px] bg-hover-active pl-2 pr-1",
+            isMobileView ? "h-11" : "h-7",
             visualizerClassName,
           )}
         >
@@ -866,7 +867,7 @@ export const AudioButton = ({
             data-ai-chat-recording-cancel={isAiChat || undefined}
             onClick={closeHandler}
             aria-label="Cancel dictation"
-            className="flex h-5 w-5 items-center justify-center rounded text-icon-dark-gray hover:text-white-black"
+            className={cn("flex items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black", isMobileView ? "h-11 w-11" : "h-5 w-5")}
           >
             <X size={14} strokeWidth={1.75} />
           </button>
@@ -875,7 +876,7 @@ export const AudioButton = ({
             data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Stop dictation"
-            className="group relative flex h-5 w-5 items-center justify-center rounded text-icon-dark-gray hover:text-white-black"
+            className={cn("group relative flex items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black", isMobileView ? "h-11 w-11" : "h-5 w-5")}
           >
             <Square size={14} strokeWidth={2.2} />
             <Tooltip

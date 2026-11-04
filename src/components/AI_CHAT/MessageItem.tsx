@@ -1,4 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
@@ -247,6 +248,11 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
   showCursor,
   isContentEmpty,
 }) => {
+  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  const pathname = usePathname();
+  if (agentStatus && chatCleanupEnabled && !pathname?.startsWith("/chat")) {
+    return <div className="status-indicator font-bold text-white-black">{agentStatus}</div>;
+  }
   if (agentStatus) {
     return (
       <div className="status-indicator">
