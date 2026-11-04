@@ -197,7 +197,7 @@ for (const [expected, fixtures] of [
   [true, ["so the design is a complete mess right now can you toggle off the flag for the ctrl+j change?",
     "turn the flag off for graphite too its full of bugs", "wtf just turn off the feature flags?????????",
     "switch it off", "Turn off", "disable the flag, turn it off"]],
-  [false, ["turn it on", "yes", "ship it", "do not turn it off", "don't switch it off", "turn it off later", "", "off"]],
+  [false, ["turn it on", "yes", "ship it", "do not turn it off", "don't switch it off", "turn it off later", "", "off", "shouldn't turn it off", "turn it on; currently off", "switch the theme to dark, the light is off"]],
 ]) {
   for (const fixture of fixtures) {
     test(`isOffOrder ${JSON.stringify(fixture)} is ${expected}`, () => {

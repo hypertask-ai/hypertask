@@ -25,11 +25,13 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
 }
 
 const OFF_VERB = /^(?:turn|turning|switch|toggle|flip|disable|kill)$/;
-const OFF_BLOCKER = /^(?:no|not|never|dont|don't|cant|can't|wont|won't|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until)$/;
+const OFF_BLOCKER = /^(?:no|not|never|dont|don't|cant|can't|wont|won't|shouldnt|shouldn't|mustnt|mustn't|neednt|needn't|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|on)$/;
+const OFF_REACH = 4;
 
 export function isOffOrder(text: string): boolean {
   const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
-  return words.includes("off") && words.some((word) => OFF_VERB.test(word)) && !words.some((word) => OFF_BLOCKER.test(word));
+  if (words.some((word) => OFF_BLOCKER.test(word))) return false;
+  return words.some((word, index) => OFF_VERB.test(word) && words.slice(index + 1, index + 1 + OFF_REACH).includes("off"));
 }
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;
