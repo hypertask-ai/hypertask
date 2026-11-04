@@ -382,9 +382,9 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        const singleTaskFields = parseFields(searchParams.getAll('fields'))
+        const singleTaskFields = searchParams.getAll('fields')
         const projectSingleTask = (task: Record<string, unknown>) =>
-          singleTaskFields.length ? projectRows([task], singleTaskFields)[0] : task
+          singleTaskFields.length ? projectRows([task], parseFields(singleTaskFields))[0] : task
 
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
