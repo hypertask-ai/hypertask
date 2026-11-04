@@ -50,7 +50,7 @@ function route(id, { method = "PATCH", text = "Edited text" } = {}) {
     },
   };
   const stubs = { "@/lib/prisma": prisma };
-  for (const module of modules) stubs[module] = {};
+  for (const specifier of modules) stubs[specifier] = {};
   Object.assign(stubs, {
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (fn) => fn,
