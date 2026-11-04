@@ -9,6 +9,8 @@ import { CommandMode } from "@/models/enums";
 import { MAX_SORT_LEVELS } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { toggleTaskTimer } from "@/hooks/Task Detail/useTimeTracking";
 import toast from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-8625-board-inbox-archive";
 import globalAPIHandlers from "@/utils/api/global";
 import { canDropTableRow, parseTableRowDragData } from "./tableRowDrag";
 import type { TableViewProps } from "./tableViewShared";
@@ -21,6 +23,7 @@ type Context = Pick<TableViewProps, "myTasksSort" | "onMyTasksSortChange" | "_cu
   Pick<ReturnType<typeof useTableRows>, "rows" | "focusRowElement" | "focusTo">;
 
 export function useTableActions(context: Context) {
+  const boardInboxArchive = useFlag(HTPR_8625_BOARD_INBOX_ARCHIVE_FLAG);
   const {
   customFieldBySortColumn, sortState, myTasksSort, onMyTasksSortChange, setSortState,
   _currentProject, setTableSortViewAndReturn, setSelectedIndex, updateActiveItemAndItemInView, setTasksPlayList,
@@ -226,8 +229,9 @@ export function useTableActions(context: Context) {
   const archiveNotificationFromTable = useCallback(
     async (task: ITask) => {
       if (
-        task._count?.notifications ||
-        task._count?.notifications === 0
+        boardInboxArchive
+          ? (task._count?.notifications ?? 0) <= 0
+          : task._count?.notifications || task._count?.notifications === 0
       ) {
         toast("This task is not in inbox");
         return;
@@ -243,7 +247,7 @@ export function useTableActions(context: Context) {
         toast.error("Unable to archive notifications");
       }
     },
-    [currentUser?.id, updateTaskAfterRowMutation],
+    [boardInboxArchive, currentUser?.id, updateTaskAfterRowMutation],
   );
 
   const closeAssignModal = useCallback(
