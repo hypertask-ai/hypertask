@@ -26,7 +26,8 @@ function run(env, code, cwd = root) {
     child.on('close', status => resolve({ status, stdout, stderr }));
   });
   const ready = new Promise(resolve => child.stdout.once('data', resolve));
-  return { done, ready };
+  const waiting = new Promise(resolve => child.stderr.once('data', resolve));
+  return { done, ready, waiting };
 }
 
 test('one shared slot queues a second worktree and prints exactly one wait line', async () => {
@@ -81,13 +82,17 @@ test('default is max(2, nproc/6), override is validated, and arguments stay inta
     writeFileSync(path.join(bin, 'nproc'), '#!/bin/sh\nprintf "%s\\n" "$TEST_CORES"\n', { mode: 0o755 });
     for (const [cores, expected] of [['1', 2], ['18', 3]]) {
       const configuration = { ...env, HT_HEAVY_SLOTS: '', PATH: `${bin}:${env.PATH}`, TEST_CORES: cores };
+      const release = path.join(dir, `release-${cores}`);
+      const hold = `console.log("holder");const t=setInterval(()=>{if(require("fs").existsSync(${JSON.stringify(release)}))clearInterval(t)},20)`;
       const holders = [];
       for (let i = 0; i < expected; i++) {
-        const holder = run(configuration, 'console.log("holder");setTimeout(()=>{},1200)');
+        const holder = run(configuration, hold);
         holders.push(holder.done);
         await holder.ready;
       }
       const queued = run(configuration, 'console.log("queued")');
+      await Promise.race([queued.waiting, queued.done]);
+      writeFileSync(release, '');
       const result = await queued.done;
       assert.equal(result.stderr, `waiting for a heavy-job slot, ${expected} in use\n`);
       await Promise.all(holders);
