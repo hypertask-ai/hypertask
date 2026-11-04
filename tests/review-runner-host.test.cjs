@@ -35,6 +35,59 @@ test('the shipped review schema asks for the finding kind a policy decision sett
   }
 })
 
+test('the engine decides the finding shape and the installed copy is only the fallback (HYCI-113)', async () => {
+  const fs = require('node:fs')
+  const os = require('node:os')
+  const path = require('node:path')
+  const { spawnSync } = require('node:child_process')
+  const dir = '.github/scripts/subscription-review'
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'review-request-'))
+  const helper = path.join(tmp, 'review-request.cjs')
+  fs.copyFileSync(`${dir}/review-request.cjs`, helper)
+  const engineSchema = {
+    type: 'object',
+    additionalProperties: false,
+    required: ['verdict'],
+    properties: { verdict: { type: 'string' }, engineOnlyField: { type: 'string' } },
+  }
+  const run = (request) => {
+    const requestPath = path.join(tmp, 'request.json')
+    fs.writeFileSync(requestPath, JSON.stringify(request))
+    return spawnSync('node', [helper, requestPath, tmp], { encoding: 'utf8' })
+  }
+  try {
+    const withEngineShape = run({ instructions: 'trusted', context: 'untrusted', schema: engineSchema })
+    assert.equal(withEngineShape.status, 0, withEngineShape.stderr)
+    const written = path.join(tmp, 'schema.json')
+    assert.equal(withEngineShape.stdout, written, 'the wrapper must be told where the engine shape was written')
+    assert.deepEqual(JSON.parse(fs.readFileSync(written, 'utf8')), engineSchema)
+
+    const withoutShape = run({ instructions: 'trusted', context: 'untrusted' })
+    assert.equal(withoutShape.status, 0, withoutShape.stderr)
+    assert.equal(withoutShape.stdout, '', 'without a shape the wrapper keeps the installed copy')
+
+    const brokenShape = run({ instructions: 'trusted', context: 'untrusted', schema: ['not', 'an', 'object'] })
+    assert.notEqual(brokenShape.status, 0, 'a malformed engine shape must fail closed, never fall back silently')
+    assert.match(brokenShape.stderr, /Review schema must be a JSON object/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+
+  for (const wrapper of ['codex-review', 'claude-review']) {
+    const script = await readFile(`${dir}/${wrapper}`, 'utf8')
+    assert.match(script, /node \/usr\/local\/libexec\/hypertask-review-request "\$review_tmp\/request\.json" "\$review_tmp"/,
+      `${wrapper} must read the engine's shape from the request`)
+    assert.match(script, /schema_file=\$\{request_schema:-\/etc\/hypertask-ai-review\/review-schema\.json\}/,
+      `${wrapper} must fall back to the installed copy`)
+  }
+  const codexWrapper = await readFile(`${dir}/codex-review`, 'utf8')
+  assert.match(codexWrapper, /--output-schema "\$schema_file"/)
+  const claudeWrapper = await readFile(`${dir}/claude-review`, 'utf8')
+  assert.match(claudeWrapper, /tr -d '\\n' <"\$schema_file"/)
+  const installer = await readFile(`${dir}/install-wrappers.sh`, 'utf8')
+  assert.match(installer, /-o root -g aireviewer -m 750 "\$source_dir\/review-request\.cjs" \/usr\/local\/libexec\/hypertask-review-request/)
+})
+
 test('root-installed poller is the only automatic review dispatcher', async () => {
   await assert.rejects(access('.github/workflows/claude-review.yml'), { code: 'ENOENT' })
   await assert.rejects(access('.github/workflows/ai-review.yml'), { code: 'ENOENT' })
