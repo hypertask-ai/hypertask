@@ -266,7 +266,7 @@ test(`ai chat replies`, { tag: [idTag('ai-chat')] }, async ({ page }) => {
   await page.keyboard.type(prompt)
   await page.keyboard.press('Enter')
 
-  const delivered = page.locator('.submessage-container.delivered .content-html')
+  const delivered = page.locator('.submessage-container.delivered [data-chat-content-html]')
   await expect(delivered, 'no AI reply arrived within the timeout').toHaveCount(2, { timeout: 45_000 })
   const text = (await delivered.last().innerText()).trim()
   expect(text.length, 'AI reply was empty').toBeGreaterThan(0)

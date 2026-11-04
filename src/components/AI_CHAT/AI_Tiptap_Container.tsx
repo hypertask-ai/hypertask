@@ -112,12 +112,13 @@ export function AI_Tiptap_Container({
   const ticketScopeFlag = useFlag(HTPR_7316_CHAT_SCOPE_TICKET_FLAG);
   const agentContextFlag = useFlag(HTPR_7734_AGENT_CHAT_CONTEXT_FLAG);
   const cleanupFlag = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
-  const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  const chatCleanupFlag = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
   const agentContextEnabled = !!controlledComposer?.showScope;
   let ticketScopeEnabled = false;
   if (ticketScopeFlag) ticketScopeEnabled = true;
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
+  const chatCleanupEnabled = chatCleanupFlag && !pathname?.startsWith("/chat");
   let hideMicrophonePicker = fullScreenCleanup;
   if (chatCleanupEnabled) hideMicrophonePicker = true;
   const isMbl = useContext(MobileViewContext);
@@ -223,7 +224,6 @@ export function AI_Tiptap_Container({
     };
     const interval = window.setInterval(tick, 60);
     return () => window.clearInterval(interval);
-
   }, []);
 
   useEffect(() => {
@@ -267,6 +267,10 @@ export function AI_Tiptap_Container({
       ? "order-3 ml-auto"
       : "order-4 ml-auto";
   }
+
+  let composerClassName = "!rounded-lg p-2";
+  if (isMbl) composerClassName = `${chatCleanupEnabled ? "!rounded-[4px]" : "!rounded-[5px]"} px-3 pb-2 pt-3`;
+  else if (fullScreenCleanup || chatCleanupEnabled) composerClassName = "!rounded-[4px] p-2";
 
   return (
     <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
@@ -313,7 +317,7 @@ export function AI_Tiptap_Container({
               flex flex-col
               scrollbar-none items-center bg-ai-tiptap
               ${styles.aiChatInput} outline-none border-0
-              ${isMbl ? "!rounded-[5px] px-3 pb-2 pt-3" : fullScreenCleanup ? "!rounded-[4px] p-2" : "!rounded-lg p-2"}
+              ${composerClassName}
             `}
         onKeyDown={controlledComposer ? undefined : tiptapKeydown}
         data-agent-chat-ai-composer={controlledComposer ? true : undefined}
@@ -353,7 +357,7 @@ export function AI_Tiptap_Container({
               : "ai-chat-tiptap-editor"
           }
           title={
-            fullScreenCleanup && sharedShortcuts
+            (fullScreenCleanup || chatCleanupEnabled) && sharedShortcuts
               ? `Focus · ${chatShortcutHint("focus")}`
               : undefined
           }
@@ -395,6 +399,7 @@ export function AI_Tiptap_Container({
         </div>
         <AiChatComposerActionRow
           mobile={Boolean(isMbl)}
+          chatCleanup={chatCleanupEnabled}
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
@@ -464,6 +469,8 @@ export function AI_Tiptap_Container({
                   hasText={hasComposerText}
                   onProcessingChange={controlledComposer.onProcessingChange}
                   ariaLabel="Dictate message"
+                  compactListeningPill={chatCleanupEnabled}
+                  hideDevicePicker={chatCleanupEnabled}
                   wrapperClassName={recorderWrapperClassName}
                   visualizerClassName={
                     mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
@@ -482,6 +489,8 @@ export function AI_Tiptap_Container({
                 hasText={hasComposerText}
                 onProcessingChange={controlledComposer.onProcessingChange}
                 ariaLabel="Dictate message"
+                compactListeningPill={chatCleanupEnabled}
+                hideDevicePicker={chatCleanupEnabled}
                 wrapperClassName={recorderWrapperClassName}
                 visualizerClassName={
                   mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
@@ -503,7 +512,7 @@ export function AI_Tiptap_Container({
                 onProcessingChange={setAudioProcessing}
                 ariaLabel="Start dictation"
                 wrapperClassName={recorderWrapperClassName}
-                compactListeningPill={chatCleanupEnabled && !isMbl}
+                compactListeningPill={chatCleanupEnabled}
                 visualizerClassName={
                   mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
                 }
@@ -521,7 +530,8 @@ export function AI_Tiptap_Container({
                 disabled={controlledComposer.sendDisabled}
                 queueMode={controlledComposer.queueMode}
                 mobile={Boolean(isMbl)}
-                label={fullScreenCleanup ? "Send" : undefined}
+                textOnMobile={chatCleanupEnabled}
+                label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
                 onClick={controlledComposer.onSend}
               />
             ) : !isTyping || !isEditorEmpty ? (
@@ -530,6 +540,7 @@ export function AI_Tiptap_Container({
                 isByokBlocked={isByokBlocked}
                 queueMode={isTyping}
                 mobile={Boolean(isMbl)}
+                textOnMobile={chatCleanupEnabled}
                 label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
                 onClick={() => handleSendMessage()}
               />

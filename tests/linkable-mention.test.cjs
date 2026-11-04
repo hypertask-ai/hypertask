@@ -62,7 +62,7 @@ test("page mentions render as links and person mentions remain spans", () => {
 test("rich-text links use the shared token in every theme", () => {
   const richTextStyles = [
     ["src/styles/tiptap.module.scss", "\\.editorContainer a"],
-    ["src/styles/messageItem.scss", "\\.content-container a"],
+    ["src/styles/messageItem.scss", "\\[data-chat-content-container\\] a"],
   ];
   for (const [filename, selector] of richTextStyles) {
     const file = path.join(root, filename);

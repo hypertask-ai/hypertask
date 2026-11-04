@@ -41,7 +41,7 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
         ref={shortcuts.surfaceRef} data-ai-chat-surface={shortcuts.enabled ? "floating" : undefined}
         onKeyDownCapture={sharedShortcutsEnabled ? shortcuts.onKeyDownCapture : undefined}
         onClick={restoreChat}
-        className="group flex items-center gap-2 rounded-t-lg border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)]"
+        className={cn("group flex items-center gap-2 border-x border-t border-border-light-gray-thin bg-ai-chat px-3 py-2 text-white-black shadow-[0_-8px_30px_rgba(0,0,0,0.45)]", chatCleanupEnabled ? "rounded-t-[4px]" : "rounded-t-lg")}
       >
         {!chatCleanupEnabled && (
           <Sparkles size={14} className="text-hypertasks-ai-purple" strokeWidth={1.75} />
@@ -77,7 +77,7 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
         amoledChatBorder && !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)] [--bs-border-radius:var(--radius-chat-window)]",
         isMbl || windowFramed
           ? "h-full min-h-0 w-full flex-1 rounded-none"
-          : "h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)] rounded",
+          : cn("h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)]", chatCleanupEnabled ? "rounded-[4px]" : "rounded"),
         !isMbl && !windowFramed && floatingElevation && "shadow-floating"
       )}
       style={{

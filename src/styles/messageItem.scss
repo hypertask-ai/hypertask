@@ -6,7 +6,7 @@
 }
 
 // Content display component styles
-.content-container {
+[data-chat-content-container] {
   position: relative;
   /* Block + min-width 0 so flex parents can shrink; wide tables scroll instead of clipping */
   display: block;
@@ -34,12 +34,12 @@
   h1,
 
   /* Style adjustments based on delivery status */
-  .submessage-container.delivered .status-indicator {
+  .submessage-container.delivered [data-chat-status-indicator] {
     display: none;
   }
 
   /* You can add more status-based styling here */
-  .submessage-container.typing .typing-cursor {
+  .submessage-container.typing [data-chat-typing-cursor] {
     animation: blink 1s infinite;
   }
 
@@ -52,7 +52,7 @@
       opacity: 0;
     }
   }
-  .content-html {
+  [data-chat-content-html] {
     font-size: 14px;
     /* Avoid widening the whole chat; only .message-table-scroll (and pre) scroll internally */
     overflow-x: hidden;
@@ -75,7 +75,6 @@
 
 
 
-    /* Compact scale: sizes are em of .content-html (14px / 12.5px on mobile) */
     h1 {
       margin-top: 1.5rem;
       margin-bottom: 0.25rem;
@@ -189,13 +188,17 @@
     }
   }
 
-  .typing-cursor {
+  [data-chat-typing-cursor] {
     width: 1px;
     height: 24px;
     background-color: #a83098;
     margin-left: 2px;
     vertical-align: bottom;
     animation: cursor-blink 1s step-end infinite;
+
+    &[data-chat-cleanup] {
+      background-color: currentColor;
+    }
   }
 }
 
