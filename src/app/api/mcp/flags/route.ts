@@ -19,7 +19,6 @@ import {
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
-import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
 import { HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG } from "@/lib/flags/definitions/htpr-8339-template-switch-question";
 import { authorize } from "@/lib/flags/agentAuthorization";
@@ -118,7 +117,6 @@ export async function PATCH(request: NextRequest) {
       where: { id: ctx.agentId as string },
       select: { displayName: true },
     });
-    const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
     const plainYesAllowed = await isFeatureEnabled(HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG, ctx.user.id);
     const templateQuestionAllowed = await isFeatureEnabled(HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG, ctx.user.id);
     const requiresManagerGrant = isManagerClassAgentName(agent.displayName)
@@ -224,7 +222,7 @@ export async function PATCH(request: NextRequest) {
         throw new FeatureFlagApprovalError(`Valentin said no on comment ${comment.id}; no switch`);
       }
       let switches = plainYesAllowed ? parseSwitchQuestion(words, templateQuestionAllowed)
-        : strictSwitchRequest(parse(comment.text || comment.commentText || "").text, batchAllowed, templateQuestionAllowed);
+        : strictSwitchRequest(parse(comment.text || comment.commentText || "").text, true, templateQuestionAllowed);
       let kind: "thumbs-up" | "ticket-yes" | "chat-record";
       let questionCommentIds = [comment.id];
       let approvedAt = comment.createdAt;
@@ -298,8 +296,7 @@ export async function PATCH(request: NextRequest) {
           questionCommentIds = [question.id];
         }
       }
-      if (!switches || (!batchAllowed && switches.size > 1)
-        || switches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+      if (!switches || switches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
         throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       }
       const laterComments = await tx.comment.findMany({
