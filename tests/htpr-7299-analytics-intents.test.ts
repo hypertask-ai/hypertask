@@ -9,7 +9,6 @@ const token = "private-agent-token-secret";
 
 function harness() {
   const h = activationHarness();
-  h.mocks["@/lib/flags"].HTPR_7270_SIGNUP_COMPLETED_FLAG = "htpr-7270-signup-completed";
   h.setFlagEnabled("htpr-7272-payment-login-agent-events", true);
   h.mocks["@/lib/telemetry/analyticsOutbox"] = { isAnalyticsOutboxEnabled: async () => false };
   const intents = h.load("src/lib/telemetry/analyticsIntents.ts");

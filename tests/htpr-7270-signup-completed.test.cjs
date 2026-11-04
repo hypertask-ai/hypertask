@@ -34,7 +34,7 @@ function loader(aliases = {}, transform = (_file, source) => source) {
   return load
 }
 
-function harness({ enabled = true, redisFailure = false, existing = false, completedEnabled = true } = {}) {
+function harness({ enabled = true, redisFailure = false, existing = false } = {}) {
   const values = new Map()
   const jobs = [], captures = [], attempts = [], logs = [], locks = []
   let failure = null
@@ -53,7 +53,7 @@ function harness({ enabled = true, redisFailure = false, existing = false, compl
   }
   const aliases = {
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
-    '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return key === 'htpr-7270-signup-completed' ? completedEnabled : enabled }, HTPR_7270_SIGNUP_COMPLETED_FLAG: 'htpr-7270-signup-completed', HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: 'htpr-7292-shared-account-category', FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6 },
+    '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return enabled }, HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: 'htpr-7292-shared-account-category', FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6 },
     '@/lib/prisma': {
       user: { create: async () => { accountExists = true; return user }, findFirst: async () => accountExists ? user : null, findUnique: async () => user, update: async () => user },
       googleAccount: { findFirst: async () => null },
@@ -179,34 +179,7 @@ async function quiet(work) {
   try { return await work() } finally { Object.assign(console, previous) }
 }
 
-test('flag defaults to Owner + QA', () => {
-  const flag = loader()('src/lib/flags/definitions/htpr-7270-signup-completed.ts')
-  assert.equal(flag.HTPR_7270_SIGNUP_COMPLETED_FLAG, 'htpr-7270-signup-completed')
-  assert.equal(flag.default.kind, 'feature')
-  assert.equal(flag.default.defaultMode, 'OWNER_AND_QA')
-  assert.equal(flag.default.shippedOn, '2026-10-16')
-  assert.equal(flag.default.releaseRisk.risk, 'new')
-  assert.ok(flag.default.releaseRisk.reason)
-})
-
-test('flag off still allows exactly one unchanged user_signed_up and no signup_completed', async () => {
-  const h = harness({ completedEnabled: false })
-  record(h, { decision: linked })
-  await h.drain()
-  assert.deepEqual(h.captures, [{ distinctId: '123', event: 'user_signed_up', properties: { signup_method: 'email', utm_source: 'legacy' } }])
-  assert.deepEqual(h.logs, [])
-  assert.deepEqual(h.calls.flags, [['htpr-7270-signup-completed', 123]])
-})
-
-test('flag off user_signed_up carries no source without analytics consent', async () => {
-  const h = harness({ completedEnabled: false })
-  record(h, { decision: linked, cookieHeader: null })
-  await h.drain()
-  assert.deepEqual(h.captures, [{ distinctId: '123', event: 'user_signed_up', properties: { signup_method: 'email' } }])
-  assert.deepEqual(h.calls.flags, [['htpr-7270-signup-completed', 123]])
-})
-
-test('flag on sends only signup_completed with the complete contract, consented identity and attribution', async () => {
+test('signup sends only signup_completed with the complete contract, consented identity and attribution', async () => {
   const h = harness()
   record(h, { decision: linked })
   await h.drain()
@@ -321,7 +294,7 @@ for (const [id, email, category] of [[985, 'qa@example.test', 'qa'], [6, 'owner@
     Object.assign(h.user, { id, email })
     record(h); await h.drain()
     assert.equal(h.captures[0].properties.account_category, category)
-    assert.deepEqual(h.calls.flags, [['htpr-7270-signup-completed', id], ['htpr-7292-shared-account-category', id]])
+    assert.deepEqual(h.calls.flags, [['htpr-7292-shared-account-category', id]])
   })
 }
 
@@ -418,19 +391,19 @@ for (const failure of ['capture', 'database', 'constructor', 'schedule']) {
   }))
 }
 
-test('signup response does not wait for an unresolved analytics flag lookup', async () => quiet(async () => {
+test('signup response does not wait for an unresolved analytics user lookup', async () => quiet(async () => {
   const h = harness({ enabled: false })
   let release
   let started
   const checking = new Promise((resolve) => { started = resolve })
-  const check = h.aliases['@/lib/flags'].isFeatureEnabled
-  h.aliases['@/lib/flags'].isFeatureEnabled = (key, id) => key === 'htpr-7270-signup-completed' ? new Promise((resolve) => { release = resolve; started() }) : check(key, id)
+  const findUser = h.prisma.user.findUnique
+  h.prisma.user.findUnique = (...args) => new Promise((resolve) => { release = () => resolve(findUser(...args)); started() })
   const result = await controller(h)(h.user.email, {})
   assert.equal(result.status, 200)
   assert.deepEqual(h.captures, [])
   await checking
   assert.equal(typeof release, 'function')
-  release(true)
+  release()
   await h.drain()
   assert.equal(h.captures[0].event, 'signup_completed')
 }))
