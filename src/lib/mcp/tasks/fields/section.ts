@@ -43,6 +43,14 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
         }
         await moveResponse.json().catch(() => null)
     } else if (requestBody.sectionId && sectionInfo && sectionInfo.projectId !== task.projectId) {
-        throw new Error('Section must belong to the same project. Use move endpoint for cross-board moves.')
+        throw Object.assign(
+            new Error('sectionId must be a column on the task\'s own board. Use hypertask_move_task_between_boards to move a task to another board.'),
+            { status: 400, code: 'invalid_value', field: 'sectionId' }
+        )
+    } else if (requestBody.sectionId && !sectionInfo) {
+        throw Object.assign(
+            new Error('sectionId does not match a column. Pass a column id from the task\'s own board.'),
+            { status: 400, code: 'not_found', field: 'sectionId' }
+        )
     }
 }

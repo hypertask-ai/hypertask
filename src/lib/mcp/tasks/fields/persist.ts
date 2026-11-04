@@ -20,7 +20,7 @@ import { updateTaskContract } from './contract';
 import { updateTaskPullRequest } from './pullRequest';
 import { updateTaskAssignees } from './assignees';
 
-function isCallerRefusal(error: unknown): error is Error & { status: number; code: string } {
+function isCallerRefusal(error: unknown): error is Error & { status: number; code: string; field?: string } {
     const { status, code } = (error ?? {}) as { status?: unknown; code?: unknown }
     return error instanceof Error && typeof status === 'number' && status >= 400 && status < 500 && typeof code === 'string'
 }
@@ -70,6 +70,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 return { ...refusal.body, taskId: task.id, status: refusal.status };
             }
             const codedError = error instanceof PullRequestLinkError || isCallerRefusal(error) ? error : null
+            const refusalField = (codedError as { field?: unknown } | null)?.field
             const callerMistake = codedError !== null && codedError.status < 500
             const log = callerMistake ? console.warn : console.error
             log(`[MCP Update Task] ${callerMistake ? 'Refused update of' : 'Error updating'} task ${task.id}:`, error)
@@ -78,7 +79,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
                 ...(codedError
-                    ? { status: codedError.status, code: codedError.code }
+                    ? { status: codedError.status, code: codedError.code, ...(typeof refusalField === 'string' ? { field: refusalField } : {}) }
                     : {}),
             }
         }
@@ -110,6 +111,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 tasks: [],
                 error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`,
                 ...(linkFailure?.code ? { code: linkFailure.code } : {}),
+                ...(linkFailure?.field ? { field: linkFailure.field } : {}),
             },
             linkFailure?.status ?? 500,
         )
