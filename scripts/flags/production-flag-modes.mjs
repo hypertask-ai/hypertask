@@ -123,17 +123,23 @@ export async function readLive(env = process.env, fetcher = fetch) {
   }
 }
 
-async function main(argv, root) {
+export async function main(argv, root, io = {}) {
   const file = path.join(root, SNAPSHOT_PATH);
   const read = () => JSON.parse(readFileSync(file, "utf8"));
-  const defaults = definitionDefaults(root);
-  const mode = argv.find((arg) => ["--write", "--add-defaults", "--check", "--check-live"].includes(arg));
+  const defaults = io.defaults ?? definitionDefaults(root);
+  const readModes = io.readLive ?? readLive;
+  const write = io.writeEntries ?? writeEntries;
+  const print = io.print ?? ((line) => console.log(line));
+  const printError = io.printError ?? ((line) => console.error(line));
+  const mode = argv.find((arg) => ["--write", "--print-live", "--add-defaults", "--check", "--check-live"].includes(arg));
   if (mode === "--write") {
-    writeEntries(root, buildSnapshot(defaults, await readLive()));
-    console.log(`Wrote ${SNAPSHOT_PATH} (${Object.keys(defaults).length} flags)`);
+    write(root, buildSnapshot(defaults, await readModes()));
+    print(`Wrote ${SNAPSHOT_PATH} (${Object.keys(defaults).length} flags)`);
+  } else if (mode === "--print-live") {
+    print(JSON.stringify(buildSnapshot(defaults, await readModes()), null, 2));
   } else if (mode === "--add-defaults") {
-    writeEntries(root, addMissingDefaults(JSON.parse(build(listById("flag-modes"), root)), defaults));
-    console.log(`Updated ${SNAPSHOT_PATH}`);
+    write(root, addMissingDefaults(JSON.parse(build(listById("flag-modes"), root)), defaults));
+    print(`Updated ${SNAPSHOT_PATH}`);
   } else if (mode === "--check" || mode === "--check-live") {
     const snapshot = read();
     const problems = snapshotProblems(snapshot, defaults);
@@ -141,15 +147,15 @@ async function main(argv, root) {
       problems.push(`${SNAPSHOT_PATH} does not match the per-flag files; run node scripts/shared-lists/build.mjs --write`);
     }
     const missing = missingFlags(snapshot, defaults);
-    if (missing.length) console.log(`note: not in the copy yet (readers use the registry default): ${missing.join(", ")}`);
-    if (mode === "--check-live") problems.push(...modeDifferences(snapshot, buildSnapshot(defaults, await readLive())));
+    if (missing.length) print(`note: not in the copy yet (readers use the registry default): ${missing.join(", ")}`);
+    if (mode === "--check-live") problems.push(...modeDifferences(snapshot, buildSnapshot(defaults, await readModes())));
     if (problems.length) {
-      console.error(problems.join("\n"));
+      printError(problems.join("\n"));
       process.exit(1);
     }
-    console.log(`${SNAPSHOT_PATH} is complete (${Object.keys(defaults).length} flags)`);
+    print(`${SNAPSHOT_PATH} is complete (${Object.keys(defaults).length} flags)`);
   } else {
-    console.error("usage: production-flag-modes.mjs --write | --add-defaults | --check | --check-live");
+    printError("usage: production-flag-modes.mjs --write | --print-live | --add-defaults | --check | --check-live");
     process.exit(2);
   }
 }
