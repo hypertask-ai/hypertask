@@ -85,6 +85,15 @@ async function openInbox(page: Page, top: Item) {
   await expect(page.getByText(top.title).first()).toBeVisible({ timeout: 30_000 })
 }
 
+test('inbox cycle: notification rows have 4px corners', async ({ page }) => {
+  await openInbox(page, items[0])
+  const flagsResponse = await page.request.get('/api/flags')
+  expect(flagsResponse.ok()).toBe(true)
+  const { flags } = await flagsResponse.json() as { flags: Record<string, boolean> }
+  expect(flags['htpr-8264-inbox-row-fill']).toBe(true)
+  await expect(page.locator('div[id^="inbox-"]').filter({ hasText: items[0].title })).toHaveCSS('border-radius', '4px')
+})
+
 test('inbox cycle: a full page load of an inbox ticket still knows its place in the inbox (cold click before hydration)', async ({ page }) => {
   await page.goto(withRealtime(`${items[0].detailPath}?inboxFlow=true`), { waitUntil: 'domcontentloaded' })
   await expectOpenInFlow(page, items[0], /^1 \/ 5$/)
