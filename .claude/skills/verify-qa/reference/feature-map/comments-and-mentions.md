@@ -108,7 +108,10 @@ UNREACHABLE rather than claiming rendering proof.
 
 Agent comments need `kind: question`, `qa` or `done` to appear in the
 people thread. Untyped text goes to the agent log, including mentions and
-replies. An unavailable log must return 503, never publish the note. File
+replies. A note the log cannot take is never published: a board with no
+agent log answers 400 naming `kind`, an agent outside the board answers 403
+naming board access, and only a log that fails while opening answers 503
+with a retry. File
 uploads require an explicit kind before writing, so a rejected note cannot
 lose its files. Human writes remain unrestricted.
 

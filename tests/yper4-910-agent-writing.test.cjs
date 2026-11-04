@@ -87,7 +87,16 @@ for (const body of [{}, { reply_to_comment_id: 12 }, { reply_to_invocation_id: 1
   })
 }
 
-for (const options of [{ runtime: false }, { noRun: true }, { noActivity: true }]) {
+test('a board without the agent log asks for a kind instead of a retry that never works', async () => {
+  const h = setup({ runtime: false })
+  const response = await h.post({ text: 'Next: release checks.' })
+  assert.equal(response.status, 400)
+  assert.equal(response.body.code, 'missing_field')
+  assert.equal(response.body.field, 'kind')
+  assert.equal(h.calls.comments.length + h.calls.broadcasts.length, 0)
+})
+
+for (const options of [{ noRun: true }, { noActivity: true }]) {
   test(`unavailable agent log never leaks a note to people: ${JSON.stringify(options)}`, async () => {
     const h = setup(options)
     const response = await h.post({ text: 'Next: release checks.' })
