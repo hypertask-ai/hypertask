@@ -121,7 +121,7 @@ test("collapsed chat corners follow the cleanup flag", () => {
   assert.doesNotMatch(html, /rounded-t-lg/);
 });
 
-test("floating chat frame corners follow the cleanup flag", () => {
+test("floating chat frame corners remain four pixels in both cleanup states", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
   let cleanup = false;
@@ -134,11 +134,12 @@ test("floating chat frame corners follow the cleanup flag", () => {
     viewport: { width: 1000, height: 800 },
     onFocus: () => {}, onMove: () => {}, onResize: () => {},
   }, "chat"));
-  assert.match(render(), /role="dialog"[^>]*class="[^"]*rounded-\[5px\]/);
-  cleanup = true;
-  const html = render();
-  assert.match(html, /role="dialog"[^>]*class="[^"]*rounded-\[4px\]/);
-  assert.doesNotMatch(html, /rounded-\[5px\]/);
+  for (const enabled of [false, true]) {
+    cleanup = enabled;
+    const html = render();
+    assert.match(html, /role="dialog"[^>]*class="[^"]*rounded-\[4px\]/);
+    assert.doesNotMatch(html, /rounded-\[5px\]/);
+  }
   multi = false;
   assert.equal(render(), "");
   cleanup = false;
