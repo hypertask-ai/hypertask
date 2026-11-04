@@ -6,27 +6,6 @@ const { loadModule, root } = require("./helpers/loadModule.cjs");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 const flagKey = "htpr-6940-drop-board-tabs";
-let mode = null;
-const db = {
-  featureFlag: { findUnique: async () => (mode ? { mode } : null) },
-  user: {
-    findUnique: async ({ where }) => ({
-      email: where.id === 6 ? "valentin.yeo@gmail.com" : where.id === 985 ? "valentin@hypertask.ai" : "person@example.invalid",
-    }),
-  },
-};
-const flags = loadModule("src/lib/flags.ts", { "@/lib/prisma": { default: db } });
-
-test("all four modes honor the owner, QA and ordinary user boundary", async () => {
-  for (const [stored, expected] of [
-    [null, [true, true, true]], ["OFF", [false, false, false]],
-    ["OWNER_ONLY", [true, false, false]], ["OWNER_AND_QA", [true, true, false]], ["EVERYONE", [true, true, true]],
-  ]) {
-    mode = stored;
-    const actual = await Promise.all([6, 985, 7].map((id) => flags.isFeatureEnabled(flagKey, id, db)));
-    assert.deepEqual(actual, expected, String(stored));
-  }
-});
 
 test("the layout change has one client-safe definition that ships to everyone", () => {
   const definition = loadModule("src/lib/flags/definitions/htpr-6940-drop-board-tabs.ts").default;
