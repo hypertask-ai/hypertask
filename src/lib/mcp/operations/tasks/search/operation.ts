@@ -217,12 +217,13 @@ export async function GET(request: NextRequest) {
     }
 
     const excludedSections = parseSectionNot(listQuery?.filter.section_not)
+    const sectionNotApplied = excludedSections.length > 0 &&
+      await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id).catch(() => false)
     if (sectionId !== undefined) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
-    } else if (excludedSections.length > 0 &&
-      await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id).catch(() => false)) {
+    } else if (sectionNotApplied) {
       where.section = { notIn: excludedSections, mode: 'insensitive' }
     }
     if (labelsParam.length > 0) {
