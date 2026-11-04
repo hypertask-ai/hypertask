@@ -2,34 +2,35 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { createJiti } = require("jiti");
-const root = path.resolve(__dirname, "..");
+const { loadModule, root } = require("./helpers/loadModule.cjs");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const load = createJiti(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true });
-const definitionModule = load(path.join(root, "src/lib/flags/definitions/htpr-6940-drop-board-tabs.ts"));
 
-const definition = definitionModule.default ?? definitionModule;
-let flagMode = null;
-const prismaPath = path.join(root, "src/lib/prisma.ts");
-require.cache[prismaPath] = { id: prismaPath, filename: prismaPath, loaded: true, exports: { default: {
-  featureFlag: { findUnique: async () => flagMode ? { mode: flagMode } : null },
-  user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : where.id === 6 ? "valentin.yeo@gmail.com" : "person@example.invalid" }) },
-} } };
-const flags = load(path.join(root, "src/lib/flags.ts"));
+const flagKey = "htpr-6940-drop-board-tabs";
+let mode = null;
+const db = {
+  featureFlag: { findUnique: async () => (mode ? { mode } : null) },
+  user: {
+    findUnique: async ({ where }) => ({
+      email: where.id === 6 ? "valentin.yeo@gmail.com" : where.id === 985 ? "valentin@hypertask.ai" : "person@example.invalid",
+    }),
+  },
+};
+const flags = loadModule("src/lib/flags.ts", { "@/lib/prisma": { default: db } });
 
 test("all four modes honor the owner, QA and ordinary user boundary", async () => {
-  for (const [mode, expected] of [
-    [null, [true, true, false]], ["OFF", [false, false, false]],
+  for (const [stored, expected] of [
+    [null, [true, true, true]], ["OFF", [false, false, false]],
     ["OWNER_ONLY", [true, false, false]], ["OWNER_AND_QA", [true, true, false]], ["EVERYONE", [true, true, true]],
   ]) {
-    flagMode = mode;
-    assert.deepEqual(await Promise.all([6, 985, 7].map((id) => flags.isFeatureEnabled(definition.key, id, { ...require.cache[prismaPath].exports.default }))), expected, String(mode));
+    mode = stored;
+    const actual = await Promise.all([6, 985, 7].map((id) => flags.isFeatureEnabled(flagKey, id, db)));
+    assert.deepEqual(actual, expected, String(stored));
   }
-  flagMode = null;
 });
 
 test("the layout change has one client-safe definition that ships to everyone", () => {
-  assert.equal(definition.key, "htpr-6940-drop-board-tabs");
+  const definition = loadModule("src/lib/flags/definitions/htpr-6940-drop-board-tabs.ts").default;
+  assert.equal(definition.key, flagKey);
   assert.equal(definition.kind, "improvement");
   assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.releaseRisk.risk, "small");
@@ -55,4 +56,12 @@ test("On stops board tab picking and the remembered board, Off restores both", (
   assert.match(view, /const updateSplit = useCallback\(\s*\(index: number\) => \{\s*if \(boardTabsHidden\) return;/);
   assert.match(view, /boardTabsHidden \|\|\s*event\.key !== "Tab"/);
   assert.match(view, /const restoreBoard = !boardTabsHidden && entryParams\.current\.board === null/);
+});
+
+test("each board section keeps its count and gains the overdue number", () => {
+  const view = read("src/app/my-tasks/MyTasks.tsx");
+  assert.match(view, /visibleSections\.map\(\(section\) => countMyTasksOverdue\(section\.items, new Date\(\)\)\)/);
+  assert.match(view, /myTasksSectionOverdueCounts=\{sectionOverdueCounts\}/);
+  const table = read("src/components/PageComponents/Kanban/TableView/TableView.tsx");
+  assert.match(table, /length: rawItems\.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts\?\.\[sectionIndex\] \?\? 0/);
 });
