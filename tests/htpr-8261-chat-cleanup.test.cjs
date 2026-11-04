@@ -121,6 +121,30 @@ test("collapsed chat corners follow the cleanup flag", () => {
   assert.doesNotMatch(html, /rounded-t-lg/);
 });
 
+test("floating chat frame corners follow the cleanup flag", () => {
+  const React = require("react");
+  const { renderToStaticMarkup } = require("react-dom/server");
+  let cleanup = false;
+  let multi = true;
+  const { ChatWindowFrame } = loadModule("src/components/AI_CHAT/ChatWindowFrame.tsx", {
+    "@/hooks/useFlag": { useFlag: (flag) => flag === "htpr-8261-chat-cleanup" ? cleanup : flag === "htpr-8334-multi-chat-windows" && multi },
+  });
+  const render = () => renderToStaticMarkup(React.createElement(ChatWindowFrame, {
+    state: { x: 0, y: 0, width: 400, height: 500, minimized: false },
+    viewport: { width: 1000, height: 800 },
+    onFocus: () => {}, onMove: () => {}, onResize: () => {},
+  }, "chat"));
+  assert.match(render(), /role="dialog"[^>]*class="[^"]*rounded-\[5px\]/);
+  cleanup = true;
+  const html = render();
+  assert.match(html, /role="dialog"[^>]*class="[^"]*rounded-\[4px\]/);
+  assert.doesNotMatch(html, /rounded-\[5px\]/);
+  multi = false;
+  assert.equal(render(), "");
+  cleanup = false;
+  assert.equal(render(), "");
+});
+
 test("chat microphone renders the compact listening controls", () => {
   const React = require("react");
   const { renderToStaticMarkup } = require("react-dom/server");
