@@ -91,23 +91,26 @@ const RailItem = ({
   children: ReactNode;
   label?: string;
   wide?: boolean;
-}) => (
-  <div
-    className={
-      wide
-        ?
-          "relative flex h-[34px] w-full items-center rounded-[5px] hover:bg-hover-active [&>*]:!justify-start [&>*]:!pl-[10px]"
-        : "flex h-[34px] w-[36px] items-center justify-center rounded-[5px] hover:bg-hover-active"
-    }
-  >
-    {children}
-    {wide && label && (
-      <span className="pointer-events-none absolute left-[38px] text-content text-text-light-gray">
-        {label}
-      </span>
-    )}
-  </div>
-);
+}) => {
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
+  return (
+    <div
+      className={
+        wide
+          ?
+            `relative flex h-[34px] w-full items-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} hover:bg-hover-active [&>*]:!justify-start [&>*]:!pl-[10px]`
+          : `flex h-[34px] w-[36px] items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} hover:bg-hover-active`
+      }
+    >
+      {children}
+      {wide && label && (
+        <span className="pointer-events-none absolute left-[38px] text-content text-text-light-gray">
+          {label}
+        </span>
+      )}
+    </div>
+  );
+};
 
 const AppShellRail = ({
   variant,
@@ -210,7 +213,7 @@ const AppShellRail = ({
           <button
             tabIndex={-1}
             onClick={toggleLeftSidebar}
-            className="group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black"
+            className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black`}
             aria-label="Your Kanban boards"
           >
             <IconoirSidebar size={18} strokeWidth={1.5} />
@@ -229,7 +232,7 @@ const AppShellRail = ({
         <RailItem wide={wide} label="Inbox">
           <Link
             tabIndex={-1}
-            className={`group relative flex h-full w-full cursor-pointer items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+            className={`group relative flex h-full w-full cursor-pointer items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
               onInbox ? "bg-hover-active !text-white-black" : ""
             }`}
             href="/inbox"
@@ -251,7 +254,7 @@ const AppShellRail = ({
           <button
             tabIndex={-1}
             onClick={() => navigateToBoard("board")}
-            className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+            className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
               onBoard && boardLayout === "board" ? "bg-hover-active !text-white-black" : ""
             }`}
             aria-label="Board layout"
@@ -264,7 +267,7 @@ const AppShellRail = ({
           <button
             tabIndex={-1}
             onClick={() => navigateToBoard("table")}
-            className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+            className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
               onBoard && boardLayout === "table" ? "bg-hover-active !text-white-black" : ""
             }`}
             aria-label="Table layout"
@@ -282,7 +285,7 @@ const AppShellRail = ({
                 event.preventDefault();
                 void pageActions.beforeNavigate().then(() => router.push("/pages"));
               }}
-              className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${pathname === "/pages" ? "bg-hover-active !text-white-black" : ""}`}>
+              className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${pathname === "/pages" ? "bg-hover-active !text-white-black" : ""}`}>
               <><FileText size={18} strokeWidth={1.5} className={defaultIconClass} /><IconoirPage size={18} strokeWidth={1.5} className={graphite2IconClass} /></>
               <Tooltip left={tooltipLeft} bottom={-8} text="Go to pages" keyCombination={null} />
             </Link>
@@ -292,7 +295,7 @@ const AppShellRail = ({
           <button
             tabIndex={-1}
             onClick={() => router.push("/calendar")}
-            className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+            className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
               onCalendar ? "bg-hover-active !text-white-black" : ""
             }`}
             aria-label="Go to calendar"
@@ -305,17 +308,17 @@ const AppShellRail = ({
           <button
             tabIndex={-1}
             onClick={toggleAIChatInterface}
-            className="group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black"
+            className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black`}
             aria-label="AI Chat"
           >
-            {onInbox && inboxRowFill ? <IconoirChat size={18} strokeWidth={1.5} /> : <IconoirSparks size={18} strokeWidth={1.5} />}
+            {graphite2Enabled || (onInbox && inboxRowFill) ? <IconoirChat size={18} strokeWidth={1.5} /> : <IconoirSparks size={18} strokeWidth={1.5} />}
             <Tooltip left={tooltipLeft} bottom={-8} text="AI Chat" keyCombination={["5"]} />
           </button>
         </RailItem>
         <RailItem wide={wide} label="Search">
           {boardProject ? (
             <SearchTasksHeader
-              className="h-full w-full justify-center rounded-[5px] text-text-light-gray hover:text-white-black"
+              className={`h-full w-full justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black`}
               icon={<IconoirSearch size={18} strokeWidth={1.5} />}
               tooltipPosition={{ left: tooltipLeft, bottom: -8 }}
               keyCombination={["6"]}
@@ -325,7 +328,7 @@ const AppShellRail = ({
             <button
               tabIndex={-1}
               onClick={() => router.push("/search")}
-              className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+              className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
                 onSearch ? "bg-hover-active !text-white-black" : ""
               }`}
               aria-label="Search"
@@ -340,7 +343,7 @@ const AppShellRail = ({
             <button
               tabIndex={-1}
               onClick={() => router.push(globalConstants.timersRoute)}
-              className={`group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+              className={`group relative flex h-full w-full items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
                 onTimers ? "bg-hover-active !text-white-black" : ""
               }`}
               aria-label="Running timers"
@@ -358,7 +361,7 @@ const AppShellRail = ({
             type="button"
             aria-label="New Task"
             onClick={() => setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" })}
-            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 rounded-[5px] ${
+            className={`group relative hidden h-[34px] shrink-0 items-center gap-2 ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} ${
               newTaskFill ? "bg-white-black text-white-black-inverted" : "bg-shadcn-primary text-primary-foreground"
             } hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-shadcn-primary md:flex ${
               wide ? "w-full justify-start px-[10px]" : "w-[36px] justify-center"
@@ -376,7 +379,7 @@ const AppShellRail = ({
           <Link
             tabIndex={-1}
             href="/agents"
-            className={`group relative flex h-full w-full cursor-pointer items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black ${
+            className={`group relative flex h-full w-full cursor-pointer items-center justify-center ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} text-text-light-gray hover:text-white-black ${
               onAgents ? "bg-hover-active !text-white-black" : ""
             }`}
             aria-label="Agents"
@@ -436,14 +439,14 @@ const AppShellRail = ({
               <button
                 type="button"
                 onClick={() => setShowLogin(true)}
-                className="w-full rounded-[5px] py-1 text-left pl-[10px] text-content font-medium text-text-light-gray hover:text-white-black"
+                className={`w-full ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} py-1 text-left pl-[10px] text-content font-medium text-text-light-gray hover:text-white-black`}
               >
                 Log in
               </button>
               <button
                 type="button"
                 onClick={() => setShowLogin(true)}
-                className="w-full rounded-[5px] bg-white-black py-1 !text-left pl-[10px] text-content font-medium text-white-black-inverted hover:opacity-90"
+                className={`w-full ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} bg-white-black py-1 !text-left pl-[10px] text-content font-medium text-white-black-inverted hover:opacity-90`}
               >
                 Sign up for free
               </button>
@@ -451,7 +454,7 @@ const AppShellRail = ({
                 href="https://hypertask.ai/pricing"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-full rounded-[5px] py-1 text-left pl-[10px] text-content font-medium text-text-light-gray hover:text-white-black"
+                className={`w-full ${graphite2Enabled ? "rounded-[4px]" : "rounded-[5px]"} py-1 text-left pl-[10px] text-content font-medium text-text-light-gray hover:text-white-black`}
               >
                 Pricing
               </a>
