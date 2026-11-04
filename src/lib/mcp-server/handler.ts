@@ -25,6 +25,7 @@ import { HTPR_7897_MCP_INPUT_FIELDS_FLAG } from '@/lib/flags/definitions/htpr-78
 import { HTPR_7917_MCP_INPUT_WRAPPERS_FLAG } from '@/lib/flags/definitions/htpr-7917-mcp-input-wrappers'
 import { HTPR_7914_TICKET_NUMBER_HINT_FLAG } from '@/lib/flags/definitions/htpr-7914-ticket-number-hint'
 import { HTPR_7934_NEAREST_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7934-nearest-field-hint'
+import { HTPR_8453_UNKNOWN_TOOL_HINT_FLAG } from '@/lib/flags/definitions/htpr-8453-unknown-tool-hint'
 import { HTPR_7910_RENAMED_FIELD_HINT_FLAG } from '@/lib/flags/definitions/htpr-7910-renamed-field-hint'
 import { HTPR_7894_TASK_ID_TICKET_REFERENCE_FLAG } from '@/lib/flags/definitions/htpr-7894-task-id-ticket-reference'
 import { actAsAgentAvailable } from './utils/actAsAgentCatalog'
@@ -178,6 +179,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
       handleMcpHttp(working, {
         authenticate: async () => authInfo,
         tools: portableTools,
+        unknownToolHint: await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id),
       }),
     )
   } finally {

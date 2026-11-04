@@ -15,6 +15,7 @@ export type McpHttpDeps = {
     bearerToken?: string
   ) => Promise<McpHttpAuth | null | undefined>
   tools: readonly PortableTool[]
+  unknownToolHint?: boolean
 }
 
 export async function handleMcpHttp(
@@ -35,6 +36,9 @@ export async function handleMcpHttp(
     request,
     authInfo,
     deps.tools,
-    { deferred: !deps.tools.some((tool) => tool.inputSchema) }
+    {
+      deferred: !deps.tools.some((tool) => tool.inputSchema),
+      ...(deps.unknownToolHint ? { unknownToolHint: true } : {}),
+    }
   )
 }

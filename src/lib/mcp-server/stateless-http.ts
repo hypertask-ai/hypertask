@@ -8,6 +8,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 import { listMetaTools } from './deferred-tools'
 import { executeToolResult, toolErrorResult } from './tool-response'
+import { unknownToolMessage } from './nearest-tool'
 import { SEARCH_TOOLS_NAME, DESCRIBE_TOOL_NAME } from './config/tool-summaries'
 import { getMcpRequestOrigin } from './resource-url'
 
@@ -117,6 +118,7 @@ export type StatelessMcpOptions = {
   deferred?: boolean
   sessionId?: string
   clientName?: string
+  unknownToolHint?: boolean
 }
 
 const deferredByRequest = new WeakMap<Request, true>()
@@ -255,8 +257,16 @@ async function dispatchMethod(
       const name = typeof params.name === 'string' ? params.name : ''
       const tool = tools.find((candidate) => candidate.name === name)
       if (!tool) {
-        if (tools.some((candidate) => candidate.inputSchema)) {
-          return jsonRpcResult(id, toolErrorResult(new Error(`Unknown tool ${name || '(missing)'}. Refresh tools/list and choose an advertised tool name`)))
+        const names = tools.map((candidate) => candidate.name)
+        const advertisesSchemas = tools.some((candidate) => candidate.inputSchema)
+        if (options.unknownToolHint) {
+          const message = unknownToolMessage(name, names, true)
+          return advertisesSchemas
+            ? jsonRpcResult(id, toolErrorResult(new Error(message)))
+            : jsonRpcError(id, -32602, message)
+        }
+        if (advertisesSchemas) {
+          return jsonRpcResult(id, toolErrorResult(new Error(unknownToolMessage(name, names, false))))
         }
         return jsonRpcError(id, -32602, `Unknown tool: ${name || '(missing)'}`)
       }
