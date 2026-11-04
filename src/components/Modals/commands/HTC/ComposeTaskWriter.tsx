@@ -503,7 +503,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         </div>
       ) : (
         <div ref={composer} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col p-2" : "p-2"}>
-          <div className={`flex w-full flex-col bg-ai-tiptap px-3 py-2 ${composerKeysLayout ? "rounded-[4px]" : "rounded-[5px]"} ${phoneTaskWriterSheet ? "min-h-0 flex-1" : ""}`}>
+          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : `flex w-full flex-col ${composerKeysLayout ? "rounded-[4px]" : "rounded-[5px]"} bg-ai-tiptap px-3 py-2`}>
             {(newTaskWindow || phoneTaskWriterSheet) && attachments && (phoneTaskWriterSheet ? (
               <div className="min-h-0 overflow-y-auto">{attachments}</div>
             ) : mobile ? attachments : (
