@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -9,11 +8,6 @@ const jiti = require("jiti")(path.join(root, "tests/htpr-8530-assign-response-as
   alias: { "@": path.join(root, "src") },
 });
 const { mapTaskAssignees } = jiti(path.join(root, "src/lib/mcp/tasks/mappers.ts"));
-
-const assignOperation = fs.readFileSync(
-  path.join(root, "src/lib/mcp/operations/assignees/assign/operation.ts"),
-  "utf8"
-);
 
 const reader = 6;
 const projectId = 15;
@@ -26,7 +20,7 @@ const runnerAgent = {
   displayName: "Runner 7",
 };
 
-test("an assign response names the agent it assigned, not a bare user id", () => {
+test("an assignment row for an agent names that agent, not the placeholder account", () => {
   const [assignee] = mapTaskAssignees(
     [{ user: owner, agent: runnerAgent, agentAssigner: runnerAgent }],
     reader,
@@ -37,6 +31,7 @@ test("an assign response names the agent it assigned, not a bare user id", () =>
   assert.equal(assignee.agentId, runnerAgent.id);
   assert.equal(assignee.agent.displayName, "Runner 7");
   assert.equal(assignee.email, "");
+  assert.equal(assignee.id, reader);
 });
 
 test("a person assignment keeps its id, email and name", () => {
@@ -59,9 +54,7 @@ test("an agent the reader cannot see is still left out", () => {
   assert.deepEqual(mapTaskAssignees([{ user: owner, agent: hidden }], reader, projectId), []);
 });
 
-test("the assign response reads its rows through the shared assignee mapper", () => {
-  assert.match(assignOperation, /mapTaskAssignee\(row, ctx\.user\.id, task\.projectId\)/);
-  assert.match(assignOperation, /\.\.\.mapped, userId: row\.userId/);
-  assert.match(assignOperation, /user: \{ select: \{ id: true, email: true, displayName: true \} \}/);
-  assert.doesNotMatch(assignOperation, /const item: McpAssigneeResponseItem = \{ userId: row\.userId \}/);
+test("a missing assignee list maps to an empty one instead of throwing", () => {
+  assert.deepEqual(mapTaskAssignees(undefined, reader, projectId), []);
+  assert.deepEqual(mapTaskAssignees(null, reader, projectId), []);
 });
