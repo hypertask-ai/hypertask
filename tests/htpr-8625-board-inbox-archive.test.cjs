@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const os = require("node:os");
 const ts = require("typescript");
 const { loadModule, root } = require("./helpers/loadModule.cjs");
 
@@ -23,8 +24,14 @@ function initializer(file, name) {
 }
 
 function evaluate(expression, bindings) {
-  const code = ts.transpileModule(`const value = ${expression};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
-  return new Function(...Object.keys(bindings), `${code}; return value;`)(...Object.values(bindings));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "htpr-8625-"));
+  const file = path.join(dir, "handler.tsx");
+  try {
+    fs.writeFileSync(file, `export default ({ ${Object.keys(bindings).join(", ")} }) => (${expression});`);
+    return loadModule(file).default(bindings);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 const { getTaskShortcutAction } = loadModule("src/lib/keyboard/taskShortcuts.ts");
