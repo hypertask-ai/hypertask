@@ -267,6 +267,14 @@ test(`AI chat ${mode} opens by button, shortcut and fullscreen exit`, { tag: [`@
   const mobile = testInfo.project.name === 'Mobile'
   await page.setViewportSize(mobile ? { width: 390, height: 844 } : { width: 1440, height: 900 })
   const boardPath = process.env.SMOKE_BOARD_PATH || '/my-tasks'
+  if (mode === 'floating') {
+    await page.route('**/api/flags', async route => {
+      const response = await route.fetch()
+      const body = await response.json()
+      Object.assign(body.flags, { 'htpr-8334-multi-chat-windows': false, 'htpr-8042-amoled-chat-border': true })
+      await route.fulfill({ response, json: body })
+    })
+  }
   const autoOpenOff = { aiChatOpenNewTickets: false, aiChatOpenTickets: false, aiChatOpenBoards: false }
   await page.route('**/api/app-shell/bootstrap', async route => {
     const response = await route.fetch()
@@ -301,6 +309,22 @@ test(`AI chat ${mode} opens by button, shortcut and fullscreen exit`, { tag: [`@
   await page.getByRole('button', { name: mobile ? 'AI' : 'Open AI chat', exact: true }).click()
   await expect(panel).toBeVisible()
   await expect(composer).toBeVisible()
+  if (mode === 'floating' && !mobile) {
+    const originalTheme = await page.locator('html').evaluate(html => ({ className: html.className, theme: html.getAttribute('data-theme') }))
+    for (const theme of ['porcelain', 'graphite-2', 'amoled']) {
+      await page.locator('html').evaluate((html, name) => {
+        html.classList.remove('porcelain', 'graphite-2', 'amoled')
+        html.classList.add(name)
+        html.setAttribute('data-theme', name)
+      }, theme)
+      await expect(panel, `${theme} standalone chat corners`).toHaveCSS('border-radius', '4px')
+    }
+    await page.locator('html').evaluate((html, original) => {
+      html.setAttribute('class', original.className)
+      if (original.theme === null) html.removeAttribute('data-theme')
+      else html.setAttribute('data-theme', original.theme)
+    }, originalTheme)
+  }
   await closeChat()
   await expect(panel).toBeHidden()
   await page.keyboard.press('Control+q')

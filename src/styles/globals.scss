@@ -310,6 +310,16 @@ body {
 // The palette wrapper must not double the shadow its .modal-content carries.
 #htc.paletteModalSizing {
   box-shadow: none;
+  border-radius: 4px;
+
+  .modal-content {
+    border-radius: 4px !important;
+  }
+}
+
+.chatwindow.rounded {
+  --bs-border-radius: 4px;
+  --radius-chat-window: 4px;
 }
 
 .linksModal {

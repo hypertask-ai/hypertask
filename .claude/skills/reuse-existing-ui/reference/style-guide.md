@@ -34,6 +34,8 @@ Product corners are 2px or 4px. Owner rule, 2026-11-04: any corner that is not 2
 
 `ChatWindowFrame` in multi-window chat uses a maximum 4px radius. Poteto Advisor's design QA correction: https://app.hypertask.ai/detail/project-15/8334#comment-351288
 
+The Ctrl+J palette, standalone floating chat, and outer framed chat windows use 4px corners: [QA correction](https://app.hypertask.ai/detail/project-15/8055#comment-351287).
+
 Do not use `rounded-xl`, `rounded-2xl`, or another generic large SaaS radius on product UI. Do not turn labels or counts into outlined pills.
 
 Dia is an intentional exception. Its kanban cards and posted comments use 10px corners, and its modals use 12px corners. Keep those values scoped under `.dia`; do not copy them into another theme.
