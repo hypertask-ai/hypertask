@@ -48,6 +48,7 @@ export type TableViewProps = {
   onMyTasksSortChange?: (sort: MyTasksViewConfig["sort"]) => void;
   myTasksVisibleColumns?: string[];
   onMyTasksVisibleColumnsChange?: (columns: string[]) => void;
+  myTasksSectionOverdueCounts?: number[];
   enableMyTasksBulkSelection?: boolean;
 };
 

@@ -172,18 +172,9 @@
               "selector": "[data-testid=\"my-tasks-list\"]",
               "box": {
                 "x": 48,
-                "y": 196,
+                "y": 140,
                 "width": 1392,
-                "height": 668
-              }
-            },
-            "splits": {
-              "selector": "[data-testid=\"my-tasks-splits-desktop\"]",
-              "box": {
-                "x": 48,
-                "y": 148,
-                "width": 1392,
-                "height": 32
+                "height": 724
               }
             }
           },
@@ -194,9 +185,6 @@
             [
               "title",
               "toolbar"
-            ],
-            [
-              "splits"
             ],
             [
               "list"
@@ -650,15 +638,6 @@
                 "width": 390,
                 "height": 500
               }
-            },
-            "splits": {
-              "selector": "[data-testid=\"my-tasks-splits-phone\"]",
-              "box": {
-                "x": 0,
-                "y": 760,
-                "width": 390,
-                "height": 84
-              }
             }
           },
           "order": [
@@ -671,9 +650,6 @@
             ],
             [
               "list"
-            ],
-            [
-              "splits"
             ]
           ]
         },
@@ -799,8 +775,8 @@
   "flagMode": "live-like",
   "flagSnapshotSha256": "dbe55bec498b41eea368b0b8f51e532ef208dfb6565338725bb755822439f505",
   "approvedIn": {
-    "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-4060/253",
-    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-15/8144",
+    "my-tasks/Desktop": "https://app.hypertask.ai/detail/project-15/6940",
+    "my-tasks/Mobile": "https://app.hypertask.ai/detail/project-15/6940",
     "ticket/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
     "board/Desktop": "https://app.hypertask.ai/detail/project-15/7650",
     "inbox/Desktop": "https://app.hypertask.ai/detail/project-15/7298",

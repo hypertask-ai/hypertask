@@ -13,10 +13,10 @@
     "landmarks": [
       "title",
       "toolbar",
-      "list",
-      "splits"
+      "list"
     ],
-    "reason": "The ticket asks for 'view tabs on top', above the existing My Tasks heading, controls, board splits and task list."
+    "reason": "The ticket asks for 'view tabs on top', above the existing My Tasks heading, controls, board splits and task list.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/6940"
   },
   {
     "flag": "htpr-6422-my-tasks-views",
