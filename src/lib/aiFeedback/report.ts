@@ -108,6 +108,11 @@ function shortNote(note: string): string {
   return note.length <= 64 ? note : `${note.slice(0, 61).replace(/\s\S*$/, '')}...`
 }
 
+function withCommand(note: string, command?: string): string {
+  const short = shortNote(note)
+  return !command || short.toLowerCase().includes(command.toLowerCase()) ? short : `${short} (${command})`
+}
+
 export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote) {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
@@ -139,8 +144,10 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
   const who = reporter?.agentName
     ? `${reporter.agentName}${reporter.ownerName ? `, owned by ${reporter.ownerName}` : ''}`
     : reporter?.ownerName ? `an agent owned by ${reporter.ownerName}` : 'unknown agent'
+  const command = input.tool && input.tool !== input.surface ? input.tool : undefined
+  const note = shortNote(stored?.note ?? happened)
   return {
-    title: stored?.kind ? `Agent feedback, ${stored.kind}: ${shortNote(stored.note ?? happened)}` : `${happened} (${date})`,
+    title: stored?.kind ? `Agent feedback, ${stored.kind}: ${stored.kind === 'missing' ? withCommand(note, command) : note}` : `${happened} (${date})`,
     description: `<p><strong>What happened</strong>: ${escapeHtml(happened)}.</p>` +
       `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
       `<p><strong>Is it a real bug?</strong> ${escapeHtml(reading)}</p>` +
