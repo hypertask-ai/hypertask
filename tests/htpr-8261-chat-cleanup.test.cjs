@@ -185,3 +185,44 @@ test("chat microphone renders the compact listening controls", () => {
     assert.match(html, /aria-label="Stop dictation" class="[^"]*rounded-\[4px\]/);
   }
 });
+
+test("chat header corners follow cleanup only outside full-screen chat", () => {
+  const { loader, mount, React } = require("./helpers/htpr-7260-ui.cjs");
+  const view = mount();
+  const noop = () => {};
+  let pathname = "/project";
+  let cleanup = false;
+  let mobile = false;
+  const mobileContext = React.createContext(false);
+  const source = loader({
+    "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: noop }) },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-8261-chat-cleanup" ? cleanup : key === "htpr-8048-agent-sessions" },
+    "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession: { id: "saved", title: "Chat" }, runningSessionIds: [] }) },
+    "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
+    "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
+    "@/lib/state": { useRecoilState: () => React.useState(false) },
+    "@/store": {},
+    "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
+    "../Common/Tooltip": { default: () => null },
+    "@/lib/aiModelOptions": { getMobileAiChatModelLabel: () => "GPT" },
+    "@/lib/configs/aiTaskWriter.config": { aiTaskWriterConfig: { shortcutsAndTooltips: { ai_chat: { new_chat_button: () => ({}), minimize_button: () => ({}) } } } },
+    "./AgentSidebarChatCommands": { AgentSidebarChatCommands: () => null },
+  });
+  const Header = source("src/components/AI_CHAT/ChatHeader.tsx").ChatHeader;
+  try {
+    for (mobile of [false, true]) for (pathname of ["/project", "/chat"]) for (cleanup of [false, true]) {
+      view.render(React.createElement(mobileContext.Provider, { value: mobile },
+        React.createElement(Header, { sidebarChats: { projectId: 15, target: { kind: "ai" }, agents: [], onSelect: noop } })));
+      const active = cleanup && pathname === "/project";
+      const title = view.container.querySelector('[aria-label="Switch conversation"]');
+      assert.equal(title.classList.contains("rounded-[4px]"), active);
+      if (!mobile) assert.equal(title.classList.contains("rounded"), !active);
+      if (mobile) for (const label of ["Close AI chat", "Chat history", "Agent sessions", "New chat"]) {
+        const button = view.container.querySelector(`[aria-label="${label}"]`);
+        assert.ok(button, label);
+        assert.equal(button.classList.contains("rounded-[4px]"), active, label);
+        assert.equal(button.classList.contains("rounded-full"), !active, label);
+      }
+    }
+  } finally { view.close(); }
+});

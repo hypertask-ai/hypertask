@@ -1,3 +1,4 @@
+import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8048_AGENT_SESSIONS_FLAG } from "@/lib/flags/definitions/htpr-8048-agent-sessions";
 import { AgentSidebarChatCommands } from "./AgentSidebarChatCommands";
 import type { SidebarChatContext } from "@/app/agents/chat/agentChatTypes";
@@ -132,6 +133,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
   const router = useRouter();
   const pathname = usePathname();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
+  const chatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG) && !isFullScreenChat;
   const sessionPagingEnabled = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const phoneChatDelete = useFlag(HTPR_7575_PHONE_CHAT_DELETE_FLAG);
   const chatHeaderNameEnabled = useFlag(HTPR_7773_CHAT_HEADER_NAME_FLAG);
@@ -294,7 +296,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
                 type="button"
                 aria-label="Delete chat"
                 onClick={() => handleDeleteSession(chat.id)}
-                className={cn(MOBILE_TARGET, "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
+                className={cn(MOBILE_TARGET, chatCleanup ? "rounded-[4px]" : "rounded", "p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black")}
               >
                 <Trash2 size={16} strokeWidth={1.75} />
               </button>
@@ -359,7 +361,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
       onClick={() => { if (sidebarChats) { closeConversations(); closeAgents(); setIsOverflowOpen(false); } setIsDropdownOpen((open) => !open); }}
       aria-label="Chat history" aria-controls="ai-chat-session-history" aria-expanded={isDropdownOpen}
       className={isMbl
-        ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
+        ? `flex h-11 w-11 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black`
         : "text-icon-dark-gray hover:text-white-black"}>
       <History size={isMbl ? 20 : 16} strokeWidth={1.75} />
     </button>
@@ -369,7 +371,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
     <div className="relative shrink-0">
       <button ref={agentButtonRef} type="button" aria-label="Agent sessions" aria-expanded={agentsOpen}
         aria-controls="agent-sidebar-agents" onClick={() => { closeConversations(); setIsDropdownOpen(false); setAgentsOpen((open) => !open); }}
-        className={isMbl ? "flex h-11 w-11 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black" : "text-icon-dark-gray hover:text-white-black"}>
+        className={isMbl ? `flex h-11 w-11 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black` : "text-icon-dark-gray hover:text-white-black"}>
         <Bot size={isMbl ? 20 : 16} strokeWidth={1.75} />
       </button>
     </div>
@@ -385,7 +387,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           type="button"
           onClick={togglePopover}
           aria-label="Close AI chat"
-          className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black"
+          className={`flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black`}
         >
           <ChevronDown size={22} strokeWidth={1.75} />
         </button>
@@ -394,7 +396,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             <div className="relative">
               <button ref={titleRef} type="button" aria-label="Switch conversation" aria-expanded={conversationsOpen}
                 aria-controls="agent-sidebar-conversations" onClick={() => { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }}
-                className={cn(MOBILE_TARGET, "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
+                className={cn(MOBILE_TARGET, chatCleanup && "rounded-[4px]", "max-w-full gap-1 truncate px-2 text-modalSmall font-semibold leading-5")}>
                 <span className="truncate">{sidebarTitle}</span>{runningIndicator}<ChevronDown size={18} aria-hidden />
               </button>
               {conversationsOpen && <AgentSidebarChatCommands context={sidebarChats} anchorRef={titleRef} onClose={closeConversations} />}
@@ -429,7 +431,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
           onClick={handleStartNewSession}
           disabled={isStartingNewSession}
           aria-label="New chat"
-          className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full text-icon-dark-gray hover:bg-hover-active hover:text-white-black disabled:cursor-wait disabled:opacity-50"
+          className={`flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center ${chatCleanup ? "rounded-[4px]" : "rounded-full"} text-icon-dark-gray hover:bg-hover-active hover:text-white-black disabled:cursor-wait disabled:opacity-50`}
         >
           <SquarePen size={20} strokeWidth={1.75} />
         </button>
@@ -456,7 +458,7 @@ export const ChatHeader = ({ sidebarChats, windowDrag = false }: { sidebarChats?
             if (sidebarChats) { closeAgents(); setIsDropdownOpen(false); setConversationsOpen((open) => !open); }
             else setIsDropdownOpen((prev) => !prev);
           }}
-          className="flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors rounded px-1 py-0.5"
+          className={`flex min-w-0 max-w-full items-center gap-1 hover:bg-active-modal-element transition-colors ${chatCleanup ? "rounded-[4px]" : "rounded"} px-1 py-0.5`}
         >
           <span className="min-w-0 truncate font-medium">
             {sidebarTitle ?? currentSession?.title ?? (isSessionPending && !quietTicketOpen ? "Loading..." : "AI Chat")}
