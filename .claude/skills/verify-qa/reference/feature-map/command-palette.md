@@ -28,7 +28,21 @@ The composer outline and the switch's size and position stay unchanged.
 Switch to Search and back to New Task; repeat at 1440x900 and 390x844 in
 AMOLED, Graphite, Porcelain and Dia. Compare computed outlines and bounding
 boxes against the pre-release captures. Flag Off keeps the old appearance.
-No tasks need creating for this styling check.
+No tasks need creating for this styling check. This outline recipe applies
+only to the legacy shell, not the HTPR-8260 layout below.
+
+## HTPR-8260 New Task layout
+
+With `htpr-8260-ctrlj-composer-keys` on, open Ctrl+J at 1440x900.
+Compare Light/Porcelain, AMOLED and Graphite 2 side-by-side with the approved
+Figma frame. The panel is at most 640px wide, with Search and New Task tabs
+inside the shell and 4px shell and inner corners. The footer stays on one row:
+all six hints are visible, with dictate rightmost. Board, model and attachment
+controls remain; no mic-device arrow, purple or sparkle appears.
+Capture close and reopen, Enter inserting a newline, Ctrl+Shift+B opening the
+board picker, and Ctrl+U opening attachments then canceling. At 390px, confirm
+containment and the existing phone sheet. Ctrl+K and flag-off remain unchanged.
+Do not trigger paid AI for this styling-only check.
 
 ## New Task send shortcut
 
