@@ -17,3 +17,10 @@ export function notificationActorName(
     fallback
   );
 }
+
+export function mentionAuthorAgentId(
+  fromAgentId: string | null | undefined,
+  commentAgentId: string | null | undefined,
+): string | null {
+  return fromAgentId ?? commentAgentId ?? null;
+}

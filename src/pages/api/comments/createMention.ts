@@ -10,6 +10,8 @@ import { mentionPlainPreview } from "@/utils/controllers/notifications/mentionTe
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { isFeatureEnabled, HTPR_8541_MENTION_ACTOR_FLAG } from "@/lib/flags";
+import { mentionAuthorAgentId, notificationActorName } from "@/utils/controllers/notifications/actorDisplayName";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 
@@ -66,7 +68,13 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(403).json({ message: "Forbidden" });
             }
         }
-        const commentAgentId = fromAgentId ?? commentExists?.agentId ?? null;
+        const nameTheMentionAuthor = await isFeatureEnabled(
+            HTPR_8541_MENTION_ACTOR_FLAG,
+            mentionedBy
+        );
+        const commentAgentId = nameTheMentionAuthor
+            ? mentionAuthorAgentId(fromAgentId, commentExists?.agentId)
+            : fromAgentId ?? null;
         const callerHasProjectAccess = fromAgentId
             ? task?.project.members.some(
                 member => member.agentId === fromAgentId && member.agent?.userId === mentionedBy
@@ -123,7 +131,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                         where: { id: userId },
                         select: { displayName: true }
                     }),
-                    commentAgentId
+                    commentAgentId && nameTheMentionAuthor
                         ? prisma.agent.findUnique({
                             where: { id: commentAgentId },
                             select: { displayName: true, photoURL: true }
@@ -144,10 +152,12 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     if (shouldSend && devices.length > 0) {
                         const link = `detail/project-${projectId}/${task.uniqueIndex}?commentId=comment-${commentId}`;
                         const preview = mentionPlainPreview(comment.text, 140);
-                        const actor =
-                            commentAgent?.displayName?.trim() ||
-                            mentionedUser.displayName?.trim() ||
-                            "Someone";
+                        const actor = nameTheMentionAuthor
+                            ? notificationActorName({
+                                fromAgent: commentAgent,
+                                fromUser: mentionedUser,
+                            })
+                            : mentionedUser.displayName?.trim() || "Someone";
                         const recip = recipientUser?.displayName?.trim();
                         const notificationTitle = recip
                             ? `${recip}, directly mentioned by ${actor}`
@@ -162,8 +172,12 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             comment: JSON.stringify({
                                 ...omitCommentSeen(comment),
                                 creator: {
-                                    displayName: commentAgent?.displayName ?? mentionedUser.displayName,
-                                    photoURL: commentAgent?.photoURL ?? mentionedUser.photoURL,
+                                    displayName: nameTheMentionAuthor
+                                        ? commentAgent?.displayName ?? mentionedUser.displayName
+                                        : mentionedUser.displayName,
+                                    photoURL: nameTheMentionAuthor
+                                        ? commentAgent?.photoURL ?? mentionedUser.photoURL
+                                        : mentionedUser.photoURL,
                                 },
                             }),
                             body: notificationBody,

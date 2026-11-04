@@ -12,6 +12,7 @@ import {
   type TNotification,
 } from "@/utils/controllers/notifications/emailTemplates";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
+import { isFeatureEnabled, HTPR_8541_MENTION_ACTOR_FLAG } from "@/lib/flags";
 import { notificationActorName } from "@/utils/controllers/notifications/actorDisplayName";
 import {
   dedupePerComment,
@@ -133,9 +134,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       resolveNotificationChannelPreference(setting, notification.type, "email")
     );
 
+    const nameTheMentionAuthor = await isFeatureEnabled(
+      HTPR_8541_MENTION_ACTOR_FLAG,
+      userId,
+    );
     const events: IDigestEvent[] = dedupePerComment(allowed).map(
       (notification) => {
-        const actor = notificationActorName(notification);
+        const actor = notificationActorName(
+          nameTheMentionAuthor ? notification : { ...notification, fromAgent: null },
+        );
         return {
           line: `${actor} ${verbByType[notification.type]}`,
           commentText: notification.comment?.text ?? undefined,
