@@ -9,7 +9,8 @@ const read = (relativePath) =>
 
 const guide = read(".claude/skills/reuse-existing-ui/reference/style-guide.md");
 const guideLines = guide.split(/\r?\n/);
-const themeNames = ["amoled", "graphite", "porcelain", "dia"];
+// Column order matches the guide: Light (porcelain.css), AMOLED, Graphite 2.
+const themeNames = ["porcelain", "amoled", "graphite-2"];
 const themes = Object.fromEntries(
   themeNames.map((theme) => [
     theme,
