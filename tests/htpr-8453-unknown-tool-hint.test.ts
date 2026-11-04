@@ -8,6 +8,7 @@ const listTool: PortableTool = {
   name: 'hypertask_list_tasks',
   description: 'List tasks',
   parameters: z.object({}),
+  inputSchema: { type: 'object', properties: {} },
   execute: async () => JSON.stringify({ items: [] }),
 }
 
@@ -24,7 +25,11 @@ const legacy = 'Unknown tool hypertask-ticket-view. Refresh tools/list and choos
 function call(name: string, unknownToolHint?: boolean): Request {
   return new Request('https://mcp.hypertask.ai/mcp', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer test-token' },
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      Authorization: 'Bearer test-token',
+    },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: {} } }),
   })
 }

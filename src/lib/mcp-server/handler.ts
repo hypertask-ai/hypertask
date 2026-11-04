@@ -171,11 +171,11 @@ export async function mcpHandler(request: Request): Promise<Response> {
       await isFeatureEnabled(HTPR_7910_RENAMED_FIELD_HINT_FLAG, ctx.user.id),
       await isFeatureEnabled(HTPR_7934_NEAREST_FIELD_HINT_FLAG, ctx.user.id),
     ), ctx.user.id)
+    const unknownToolHint = await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
     }
 
-    const unknownToolHint = await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id)
     return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>
       handleMcpHttp(working, {
         authenticate: async () => authInfo,
