@@ -26,9 +26,11 @@ Sources:
 |---|---:|---|
 | Keyboard badges and very small inset marks | 2px | `rounded-[2px]` |
 | Compact controls, menu rows, chips | 4px | `rounded-sm` or `rounded-[4px]` |
-| Cards, panels, modals, sheets | 5px | `rounded-[5px]` |
+| Cards, panels, modals, sheets | 4px | `rounded-sm` or `rounded-[4px]` |
 | Mobile comment input well only | 8px | `rounded-lg` |
 | Avatars, status dots, and established circular icon actions | 50% | `rounded-full` |
+
+Product corners are 2px or 4px. Owner rule, 2026-11-04: any corner that is not 2 or 4px goes back to Bugs. Existing 5px corners are legacy; a change from 5px to 4px conforms.
 
 Do not use `rounded-xl`, `rounded-2xl`, or another generic large SaaS radius on product UI. Do not turn labels or counts into outlined pills.
 
@@ -108,7 +110,7 @@ A control group has one primary action.
 
 ### Primary
 
-Use `bg-shadcn-primary text-primary-foreground` with the established 4 or 5px radius. Put the primary action at the end of the action order, normally the far right. Disabled state uses opacity and blocks interaction; it does not introduce another color.
+Use `bg-shadcn-primary text-primary-foreground` with the established 4px radius. Put the primary action at the end of the action order, normally the far right. Disabled state uses opacity and blocks interaction; it does not introduce another color.
 
 ### Secondary or ghost
 
@@ -126,7 +128,7 @@ Destructive actions use the semantic destructive token or an existing destructiv
 
 The mobile comment composer is the reference for combining shape, spacing, tokens, icons, and action hierarchy. Its production composition is:
 
-1. A bottom sheet with `bg-cardBackground`, a 5px outer radius, and `shadow-md`.
+1. A bottom sheet with `bg-cardBackground`, a 4px outer radius, and `shadow-md`.
 2. A drag handle above the field.
 3. Twelve pixels of horizontal sheet padding and 6px below the field.
 4. A borderless recessed input well using `bg-newcomment-well`, 8px corners, 12px horizontal padding, and 4px vertical padding.
