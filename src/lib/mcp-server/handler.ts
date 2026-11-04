@@ -175,11 +175,12 @@ export async function mcpHandler(request: Request): Promise<Response> {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
     }
 
+    const unknownToolHint = await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id)
     return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>
       handleMcpHttp(working, {
         authenticate: async () => authInfo,
         tools: portableTools,
-        unknownToolHint: await isFeatureEnabled(HTPR_8453_UNKNOWN_TOOL_HINT_FLAG, ctx.user.id),
+        unknownToolHint,
       }),
     )
   } finally {
