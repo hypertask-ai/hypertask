@@ -18,6 +18,15 @@ test('a refused file path is named in full and called a file path', () => {
   assert.match(error.message, /Technical details belong in the agent log: a file path \("\.\/scripts\/strix-file-tickets\.py"\)\./)
 })
 
+test('a value that ends a sentence is quoted without the full stop', () => {
+  assert.match(refusal('Blocker: the run script ./scripts/strix-file-tickets.py.').message, /: a file path \("\.\/scripts\/strix-file-tickets\.py"\)\./)
+  assert.match(refusal('The build failed on the release commit 9e5741ca.').message, /: a build or commit id \("9e5741ca"\)\./)
+})
+
+test('a home directory path is called a file path', () => {
+  assert.match(refusal('Blocker: ~/scripts/run.sh stopped early.').message, /: a file path \("~\/scripts\/run\.sh"\)\./)
+})
+
 test('a refused file name is called a file name', () => {
   assert.match(refusal('Please check writing.ts again.').message, /: a file name \("writing\.ts"\)\./)
 })

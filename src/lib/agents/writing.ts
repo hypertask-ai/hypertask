@@ -1,17 +1,9 @@
 import { parse } from 'node-html-parser'
 
 const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
-const TECHNICAL_DETAIL = /(^|\s)(~|\.{0,2})\/[\w.-]+\/|\b[\w-]+\.(?:py|sh|zig|ts|tsx|js|mjs|go|kt|json|ya?ml|toml|md|jsonl|log|html)\b|\b[A-Za-z_][\w.]*\(\)|\b[a-z]+(?:_[a-z0-9]+)+\b|\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*[0-9])[0-9a-f]{7,40}\b|`[^`]+`|\b(?:Traceback|stderr|stdout|exit code|stack trace|tmux)\b|(?:^|\s)--[a-z][\w-]+/
-
-function excerpt(text: string | undefined): string {
-  if (!text) return ''
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat
-}
-
 const BUILD_ID = 'a build or commit id'
 const TECHNICAL_KINDS: Array<[RegExp, string]> = [
-  [/(?:^|\s)\.{0,2}\/[\w.-]/, 'a file path'],
+  [/(^|\s)(~|\.{0,2})\/[\w.-]+\//, 'a file path'],
   [/\b[\w-]+\.(?:py|sh|zig|ts|tsx|js|mjs|go|kt|json|ya?ml|toml|md|jsonl|log|html)\b/, 'a file name'],
   [/\b[A-Za-z_][\w.]*\(\)/, 'a function call'],
   [/\b[a-z]+(?:_[a-z0-9]+)+\b/, 'a code name'],
@@ -20,18 +12,25 @@ const TECHNICAL_KINDS: Array<[RegExp, string]> = [
   [/\b(?:Traceback|stderr|stdout|exit code|stack trace|tmux)\b/, 'a log word'],
   [/(?:^|\s)--[a-z][\w-]+/, 'a command flag'],
 ]
+const TECHNICAL_DETAIL = new RegExp(TECHNICAL_KINDS.map(([pattern]) => pattern.source).join('|'))
 
-function technicalKind(value: string): string {
-  return TECHNICAL_KINDS.find(([pattern]) => pattern.test(value))?.[1] ?? 'a technical value'
+function excerpt(text: string | undefined): string {
+  if (!text) return ''
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > 80 ? `${flat.slice(0, 77)}...` : flat
 }
 
-function surroundingWord(text: string, index: number, length: number): string {
+function technicalKind(matched: string): string {
+  return TECHNICAL_KINDS.find(([pattern]) => pattern.test(matched))?.[1] ?? 'a technical value'
+}
+
+function refusedValue(text: string, index: number, length: number): string {
   let start = index
   let end = index + length
   while (start < end && /\s/.test(text[start])) start += 1
   while (start > 0 && !/\s/.test(text[start - 1])) start -= 1
   while (end < text.length && !/\s/.test(text[end])) end += 1
-  return text.slice(start, end)
+  return text.slice(start, end).replace(/^[("'\u201c]+/, '').replace(/[.,;:!?)"'\u201d]+$/, '')
 }
 
 const PLAIN_ADVICE = 'Use short plain sentences for people; put technical details and status in the agent log.'
@@ -68,9 +67,8 @@ export function assertAgentWriting(agentId: string | null | undefined, fields: {
       }
       const detail = plain.match(TECHNICAL_DETAIL)
       if (detail?.index !== undefined) {
-        const value = surroundingWord(plain, detail.index, detail[0].length)
-        const kind = technicalKind(value)
-        throw new AgentWritingError(field, `Technical details belong in the agent log: ${kind}`, value, kind === BUILD_ID ? BUILD_LINK_ADVICE : TECHNICAL_ADVICE)
+        const kind = technicalKind(detail[0])
+        throw new AgentWritingError(field, `Technical details belong in the agent log: ${kind}`, refusedValue(plain, detail.index, detail[0].length), kind === BUILD_ID ? BUILD_LINK_ADVICE : TECHNICAL_ADVICE)
       }
       for (const sentence of plain.replace(/"[^"]+"|“[^”]+”/g, 'LINK').split(/(?<=[.!?:;])\s+/)) {
         const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu)?.filter((word) => word !== 'LINK') ?? []
