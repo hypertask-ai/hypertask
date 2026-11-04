@@ -70,6 +70,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 return { ...refusal.body, taskId: task.id, status: refusal.status };
             }
             const codedError = error instanceof PullRequestLinkError || isCallerRefusal(error) ? error : null
+            const refusalField = (codedError as { field?: unknown } | null)?.field
             const callerMistake = codedError !== null && codedError.status < 500
             const log = callerMistake ? console.warn : console.error
             log(`[MCP Update Task] ${callerMistake ? 'Refused update of' : 'Error updating'} task ${task.id}:`, error)
@@ -78,7 +79,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
                 ...(codedError
-                    ? { status: codedError.status, code: codedError.code, ...(codedError.field ? { field: codedError.field } : {}) }
+                    ? { status: codedError.status, code: codedError.code, ...(typeof refusalField === 'string' ? { field: refusalField } : {}) }
                     : {}),
             }
         }
