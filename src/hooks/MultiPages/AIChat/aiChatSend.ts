@@ -238,7 +238,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
     let chatSurface = isFullScreenChat ? "fullscreen" : "sidebar";
     if (typeof navigator !== "undefined" && /\bHypertaskApp\b/.test(navigator.userAgent)) chatSurface = "desktop";
-    const savedTheme = parseCookies().theme;
+    const savedTheme = surface === "settings" && !session.agentId ? parseCookies().theme : undefined;
     const payload = {
       message: content,
       aiFeature: "aiChat",
