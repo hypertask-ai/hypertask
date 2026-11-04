@@ -46,6 +46,7 @@ test("smoke classification routes unrunnable checks to infra and confirmed failu
             PATH: `${bin}:${process.env.PATH}`,
             CURL_LOG: join(directory, "requests"),
             NODE_LOG: join(directory, "node-invoked"),
+            RUNNER_TEMP: directory,
             GITHUB_TOKEN: "stub-github",
             GITHUB_REPOSITORY: "hypertask-ai/hypertask",
             ROLLBACK_GITHUB_TOKEN: "stub-rollback",

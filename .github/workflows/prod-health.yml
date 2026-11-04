@@ -719,7 +719,8 @@ jobs:
           # This persistent fixture belongs to QA 985, unlike the old QA 2343 vars.
           SMOKE_BOARD_PATH: '/project?id=6121&surface=board'
           SMOKE_TASK_PATH: '/detail/project-6121/1'
-        run: npx playwright test -c playwright.config.smoke.ts --project Desktop --project Mobile
+        run: |
+          PLAYWRIGHT_JSON_OUTPUT_NAME="$RUNNER_TEMP/smoke-report.json" npx playwright test -c playwright.config.smoke.ts --project Desktop --project Mobile --reporter=list,json
 
       # Playwright traces are disabled because they include authenticated
       # network traffic. Only screenshots from the isolated smoke account are
@@ -761,8 +762,9 @@ jobs:
           fi
 
           if [ ! -f "$APPLICATION_FAILURE" ] || ! jq -e '(.view | type == "string") and (.view | length > 0)' "$APPLICATION_FAILURE" >/dev/null 2>&1; then
-            notify setup smoke-unconfirmed "⚠️ hypertasks: smoke QA for $SHA failed without a confirmed application-failure verdict. NOT rolling back — check the runner logs. https://app.hypertask.ai"
-            echo "::error::Smoke QA failed without a confirmed application-failure verdict"
+            REASON=$(node .github/scripts/smoke-diagnostic.mjs "$RUNNER_TEMP/smoke-report.json")
+            notify setup smoke-unconfirmed "⚠️ hypertasks: smoke QA for $SHA failed without a confirmed application-failure verdict. NOT rolling back. $REASON"
+            echo "::error::Smoke QA failed without a confirmed application-failure verdict: $REASON"
             exit 1
           fi
 
