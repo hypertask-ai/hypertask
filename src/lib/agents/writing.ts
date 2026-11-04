@@ -1,6 +1,7 @@
 import { parse } from 'node-html-parser'
 
 const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const FEEDBACK_TALLY_LINE = /^(?:AI feedback tally|Fingerprint): ai-fb-[0-9a-f]{12}$/
 const BUILD_ID = 'a build or commit id'
 const TECHNICAL_KINDS: Array<[RegExp, string]> = [
   [/(^|\s)(~|\.{0,2})\/[\w.-]+\//, 'a file path'],
@@ -49,7 +50,7 @@ export class AgentWritingError extends Error {
 
 function lines(text: string): string[] {
   return parse(text)
-    .structuredText.split('\n').map((line) => line.trim()).filter(Boolean)
+    .structuredText.split('\n').map((line) => line.trim()).filter((line) => line && !FEEDBACK_TALLY_LINE.test(line))
 }
 
 export function assertAgentWriting(agentId: string | null | undefined, fields: { title?: unknown; description?: unknown; text?: unknown }, previous: typeof fields = {}): void {
