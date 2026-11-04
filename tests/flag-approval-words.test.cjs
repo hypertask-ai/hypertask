@@ -4,7 +4,7 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const jiti = createJiti(__filename, { interopDefault: true });
-const { normalizeVisibleText, classifyAnswer, parseSwitchQuestion, strictSwitchRequest, FLAG_CHAT_RECORD_AGENT_ID } = jiti(path.join(__dirname, "../src/lib/flags/approvalWords.ts"));
+const { normalizeVisibleText, classifyAnswer, parseSwitchQuestion, strictSwitchRequest, isOffOrder, FLAG_CHAT_RECORD_AGENT_ID } = jiti(path.join(__dirname, "../src/lib/flags/approvalWords.ts"));
 
 for (const [expected, fixtures] of [
   ["yes", ["Yes", "yes!", "YES.", "ship it", "works, release it", "Yes, ship it", "yes, ship it", "ok go ahead", "👍", "lgtm",
@@ -192,3 +192,21 @@ for (const [name, body] of [
     assert.equal(strictSwitchRequest(text, false, true), null);
   });
 }
+
+for (const [expected, fixtures] of [
+  [true, ["so the design is a complete mess right now can you toggle off the flag for the ctrl+j change?",
+    "turn the flag off for graphite too its full of bugs", "wtf just turn off the feature flags?????????",
+    "switch it off", "Turn off", "disable the flag, turn it off"]],
+  [false, ["turn it on", "yes", "ship it", "do not turn it off", "don't switch it off", "turn it off later", "", "off"]],
+]) {
+  for (const fixture of fixtures) {
+    test(`isOffOrder ${JSON.stringify(fixture)} is ${expected}`, () => {
+      assert.equal(isOffOrder(fixture), expected);
+    });
+  }
+}
+
+test("an Off order is not a yes, so other modes still refuse it", () => {
+  assert.equal(classifyAnswer("wtf just turn off the feature flags?????????"), "unclear");
+  assert.equal(classifyAnswer("yes"), "yes");
+});

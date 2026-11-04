@@ -5,7 +5,7 @@ import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIn
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { parse } from "node-html-parser";
 import { NextRequest } from "next/server";
-import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_KEYS,
@@ -241,7 +241,7 @@ export async function PATCH(request: NextRequest) {
             || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)
             || new Date(recordDate).toISOString().slice(0, 10) !== record[1]
             || recordDate > now || recordDate < now - week
-            || (words.match(/"/g) ?? []).length !== 2 || classifyAnswer(record[2]) !== "yes") {
+            || (words.match(/"/g) ?? []).length !== 2 || (classifyAnswer(record[2]) !== "yes" && !(body.mode === "OFF" && isOffOrder(record[2])))) {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
           const lead = await tx.agent.findUnique({
