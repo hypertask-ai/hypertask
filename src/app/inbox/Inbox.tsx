@@ -4,6 +4,7 @@
 
 import { HTPR_7970_BULK_BLOCKED_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7970-bulk-blocked-inbox";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { HTPR_8093_AGENT_CHAT_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8093-agent-chat-keys";
 
 import {
@@ -114,6 +115,7 @@ const Inbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
+  const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
   const archiveSafeEnabled = useFlag(HTPR_8046_ARCHIVE_SAFE_FLAG);
   const [archiveSafeRules, setArchiveSafeRules] = useState<InboxZeroRules | null>(null);
   const bulkBlockedInboxFlag = useFlag(HTPR_7970_BULK_BLOCKED_INBOX_FLAG);
@@ -896,7 +898,7 @@ const Inbox = ({
             <div
               className={
                 appShellRailOn && !isInboxZero
-                  ? "inbox-split-panel mx-[12px] flex min-h-0 w-[calc(100%-24px)] flex-1 flex-col overflow-hidden rounded bg-containerBackground shadow-md"
+                  ? `inbox-split-panel mx-[12px] flex min-h-0 w-[calc(100%-24px)] flex-1 flex-col overflow-hidden ${rowFill ? "rounded" : "rounded-md"} bg-containerBackground shadow-md`
                   : "contents"
               }
             >

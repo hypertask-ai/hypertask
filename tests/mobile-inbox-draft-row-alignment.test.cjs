@@ -14,9 +14,11 @@ const code = ts.transpileModule(fs.readFileSync(file, "utf8"), {
   fileName: file,
   compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
 }).outputText;
+let rowFill = false;
 const component = { exports: {} };
 const realRequire = createRequire(file);
 new Function("require", "module", "exports", code)((id) => {
+  if (id === "@/hooks/useFlag") return { useFlag: () => rowFill };
   if (id === "@/lib/firstScreen/SurfaceContext") return { useFirstScreenSurface: () => null };
   if (id === "@tanstack/react-query") return { useQueryClient: () => ({}) };
   return realRequire(id);
@@ -30,13 +32,17 @@ function renderRow() {
   return new JSDOM(html).window.document;
 }
 
-test("the draft row keeps the mobile content inset and 4px rounding", () => {
-  const button = renderRow().querySelector('button[data-inbox-draft-control="true"]');
-  assert.ok(button, "open-draft button must render");
-  assert.ok(button.classList.contains("px-5"));
-  assert.ok(button.classList.contains("md:px-0"));
-  assert.ok(button.classList.contains("rounded"));
-});
+for (const enabled of [false, true]) {
+  test(`the draft row keeps its inset and flag-controlled rounding (${enabled})`, () => {
+    rowFill = enabled;
+    const button = renderRow().querySelector('button[data-inbox-draft-control="true"]');
+    assert.ok(button, "open-draft button must render");
+    assert.ok(button.classList.contains("px-5"));
+    assert.ok(button.classList.contains("md:px-0"));
+    assert.ok(button.classList.contains(enabled ? "rounded" : "rounded-md"));
+    assert.ok(!button.classList.contains(enabled ? "rounded-md" : "rounded"));
+  });
+}
 
 test("the draft row container keeps the shared inbox horizontal padding", () => {
   const container = renderRow().querySelector(".group\\/draft-row");

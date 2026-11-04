@@ -9,6 +9,10 @@
 @import "./tailwindThemes/porcelain.css";
 @import "./tailwind-entry.css";
 
+[data-inbox-rail] [class~="rounded-[5px]"] {
+  border-radius: 0.25rem;
+}
+
 /* HTPR-8060: the z-index scale. Tailwind exposes the same names as z-base,
    z-sticky, z-menu, z-floating, z-popup, z-toast and z-tooltip. CSS and SCSS use
    these variables. Never type a z-index number again: order is the contract,

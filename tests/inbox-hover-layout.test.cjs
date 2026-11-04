@@ -13,7 +13,7 @@ const { twMerge } = require("tailwind-merge");
 const root = path.resolve(__dirname, "..");
 const rowPath = "src/components/notifications/NotificationRow.tsx";
 
-function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8")) {
+function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8"), rowFill = false) {
   const cache = new Map();
   const { window } = new JSDOM("");
   const empty = () => null;
@@ -22,7 +22,7 @@ function createFixture(source = fs.readFileSync(path.join(root, rowPath), "utf8"
     "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "../Common/Tooltip": { __esModule: true, default: (props) => { tooltips.push(props); return null; } },
     "@/utils/undoActions/helperFuncs": { cn: (...args) => twMerge(clsx(args)) },
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8264-inbox-row-fill" && rowFill },
     "@/lib/nativeAgent/agentMessageEnvelope": { decodeAgentMessage: (text) => text },
     "@/utils/helperFunctions/helperFunctions": {
       convertToPlain: (html) => { const el = window.document.createElement("div"); el.innerHTML = html; return el.textContent; },
@@ -87,6 +87,15 @@ module.exports = { createFixture, rowPath };
 if (require.main === module) {
   const fixture = createFixture(process.env.INBOX_ROW_SOURCE ? fs.readFileSync(process.env.INBOX_ROW_SOURCE, "utf8") : undefined);
   const row = (options) => new JSDOM(fixture.render(options)).window.document.querySelector("#inbox-6883");
+  for (const enabled of [false, true]) {
+    test(`notification row keeps its inset and flag-controlled rounding (${enabled})`, () => {
+      const rendered = new JSDOM(createFixture(undefined, enabled).render()).window.document.querySelector("#inbox-6883");
+      assert.ok(rendered.classList.contains("px-[20px]"));
+      assert.ok(rendered.classList.contains("md:px-0"));
+      assert.ok(rendered.classList.contains(enabled ? "rounded" : "rounded-md"));
+      assert.ok(!rendered.classList.contains(enabled ? "rounded-md" : "rounded"));
+    });
+  }
   test("hover and keyboard selection keep the same three outer flex children", () => {
     const resting = row();
     const selected = row({ selected: true });
