@@ -5,6 +5,7 @@ import { browserMutationIsSameOrigin } from "@/lib/agentRuns/service";
 import { normalizeThemePreference } from "@/lib/themePreferences";
 import { actOnSettingProposal, loadSettingProposal } from "@/lib/ai/settings/proposals";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_7622_AI_SETTINGS_FLAG } from "@/lib/flags/definitions/htpr-7622-ai-settings";
 import { settingProposalCard, settingsScopeSchema, type SettingsScope } from "@/lib/ai/settings/catalog";
 
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     const input = actionSchema.safeParse(await request.json());
     if (!input.success) return NextResponse.json({ error: "Invalid setting action" }, { status: 400 });
-    const scope: SettingsScope | undefined = input.data.scope ? { ...input.data.scope, theme: normalizeThemePreference(request.cookies.get("theme")?.value, true) ?? "system" } : undefined;
+    const scope: SettingsScope | undefined = input.data.scope ? { ...input.data.scope, theme: normalizeThemePreference(request.cookies.get("theme")?.value, true, await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId)) ?? "system" } : undefined;
     const result = await actOnSettingProposal(userId, input.data.id, input.data.action, scope);
     const response = NextResponse.json(result);
     if ("theme" in result && result.theme) response.cookies.set("theme", result.theme, { maxAge: 600 * 60 * 24 * 7, path: "/", sameSite: "lax" });

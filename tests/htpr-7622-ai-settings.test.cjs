@@ -95,7 +95,7 @@ const outsiderSessionId = "00000000-0000-4000-8000-000000000099";
 const boardScope = { section: "board-members", projectId: 15 };
 const roleChange = { kind: "board-role", targetUserId: 42, value: "Admin" };
 const themeScope = { section: "appearance", theme: "porcelain" };
-const themeChange = { kind: "theme", value: "graphite" };
+const themeChange = { kind: "theme", value: "amoled" };
 function request(body, { origin = "https://app.hypertask.ai", theme = "porcelain" } = {}) {
   return new NextRequest("https://app.hypertask.ai/api/ai/settings", {
     method: "POST", headers: { origin, cookie: `theme=${theme}`, "content-type": "application/json" }, body: JSON.stringify(body),
@@ -360,11 +360,11 @@ test("notification legacy defaults and manual matrix writes still work; stale ce
 test("still allowed: theme requires a real Apply request, supports Cancel and Undo, and checks the actual cookie", async () => {
   const h = harness();
   const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
-  assert.deepEqual([card.before, card.after, card.status], ["porcelain", "graphite", "pending"]);
+  assert.deepEqual([card.before, card.after, card.status], ["porcelain", "amoled", "pending"]);
   const apply = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(apply.status, 200);
-  assert.equal(apply.cookies.get("theme").value, "graphite");
-  const undo = await h.route.POST(request({ id: card.id, action: "undo", scope: themeScope }, { theme: "graphite" }));
+  assert.equal(apply.cookies.get("theme").value, "amoled");
+  const undo = await h.route.POST(request({ id: card.id, action: "undo", scope: themeScope }, { theme: "amoled" }));
   assert.equal(undo.status, 200);
   assert.equal(undo.cookies.get("theme").value, "porcelain");
   const cancelled = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
@@ -372,7 +372,7 @@ test("still allowed: theme requires a real Apply request, supports Cancel and Un
   assert.equal((await cancel.json()).proposal.status, "cancelled");
   await assert.rejects(h.proposals.actOnSettingProposal(6, cancelled.id, "apply", themeScope), /already been handled/);
   const stale = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
-  const refused = await h.route.POST(request({ id: stale.id, action: "apply", scope: themeScope }, { theme: "dia" }));
+  const refused = await h.route.POST(request({ id: stale.id, action: "apply", scope: themeScope }, { theme: "graphite-2" }));
   assert.equal(refused.status, 409);
   assert.match((await refused.json()).error, /changed since the preview/);
 });
@@ -527,24 +527,25 @@ test("parallel Apply clicks mutate once and the saved card reloads as applied; C
 
 test("Material theme's own availability flag is respected on proposal and Undo", async () => {
   const h = harness();
+  h.state.graphite2 = false;
   h.state.rounded = false;
   await assert.rejects(h.proposals.createSettingProposal(6, sessionId, themeScope, { kind: "theme", value: "rounded" }), /not available/);
   h.state.rounded = true;
   const card = await h.proposals.createSettingProposal(6, sessionId, { ...themeScope, theme: "rounded" }, themeChange);
   const applied = await h.proposals.actOnSettingProposal(6, card.id, "apply", { ...themeScope, theme: "rounded" });
-  assert.equal(applied.theme, "graphite");
+  assert.equal(applied.theme, "amoled");
   h.state.rounded = false;
-  await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", { ...themeScope, theme: "graphite" }), /not available/);
+  await assert.rejects(h.proposals.actOnSettingProposal(6, card.id, "undo", { ...themeScope, theme: "amoled" }), /not available/);
 });
 
 test("theme: a repeat of a completed Apply re-sends the destination cookie instead of failing", async () => {
   const h = harness();
   const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
   const apply = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
-  assert.equal(apply.cookies.get("theme").value, "graphite");
+  assert.equal(apply.cookies.get("theme").value, "amoled");
   const again = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(again.status, 200);
-  assert.equal(again.cookies.get("theme").value, "graphite");
+  assert.equal(again.cookies.get("theme").value, "amoled");
   assert.equal((await again.json()).proposal.status, "applied");
 });
 
@@ -557,12 +558,13 @@ test("theme: a lost Apply response can be retried after the commit marker is los
   assert.match((await interrupted.json()).error, /Redis proposal SET failed/);
   const retried = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(retried.status, 200);
-  assert.equal(retried.cookies.get("theme").value, "graphite");
+  assert.equal(retried.cookies.get("theme").value, "amoled");
   assert.equal((await retried.json()).proposal.status, "applied");
 });
 
 test("Undo from Material restores an available theme after Material is disabled", async () => {
   const h = harness();
+  h.state.graphite2 = false;
   const card = await h.proposals.createSettingProposal(6, sessionId, themeScope, { kind: "theme", value: "rounded" });
   const applied = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(applied.status, 200);
@@ -720,8 +722,9 @@ test("Settings sends its current page, theme and selected board instead of an un
   const originalFetch = global.fetch;
   const originalLog = console.log;
   const payloads = [];
+  let savedTheme = "dark";
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
-    "nookies": { parseCookies: () => ({ theme: "dark" }) },
+    "nookies": { parseCookies: () => ({ theme: savedTheme }) },
     "react-hot-toast": { default: { error: (message) => assert.fail(message) } },
     "@/lib/agents/chatViewerState": { sidebarChatHeaders: () => ({}) },
     "@/lib/mcp/bearerAuth": { mcpAuthorizationHeaders: () => ({}) },
@@ -732,12 +735,14 @@ test("Settings sends its current page, theme and selected board instead of an un
   global.fetch = async (_url, options) => { payloads.push(JSON.parse(options.body)); return new Response("reply"); };
   console.log = () => {};
   try {
-    for (const [surface, pathname, agentId] of [
+    for (const [surface, pathname, agentId, cookie] of [
       ["settings", "/settings/appearance", null],
       ["settings", "/settings/board-members", null],
       ["board", "/project-15", null],
       ["settings", "/settings/appearance", "agent-id"],
+      ["settings", "/settings/appearance", null, "graphite-2"],
     ]) {
+      savedTheme = cookie ?? "dark";
       const sender = createAiChatSend({
         surface, pathname, currentProject: { id: 15 }, scopedProjectId: 99, boardScopeIsExplicit: true,
         currentUser: { id: 6 }, contextList: [], fileUpload: { fileItems: [], clearFiles() {} },
@@ -757,8 +762,9 @@ test("Settings sends its current page, theme and selected board instead of an un
       { section: "board-members", projectId: 15, theme: "graphite" },
       undefined,
       undefined,
+      { section: "appearance", theme: "graphite-2" },
     ]);
-    assert.deepEqual(payloads.map((payload) => payload.default_context.project_id), [15, 15, 99, 15]);
+    assert.deepEqual(payloads.map((payload) => payload.default_context.project_id), [15, 15, 99, 15, 15]);
   } finally {
     global.fetch = originalFetch;
     console.log = originalLog;
@@ -772,8 +778,8 @@ test("Graphite 2 scope applies and undoes through the settings API", async () =>
   const card = await h.proposals.createSettingProposal(6, sessionId, scope, themeChange);
   const applied = await h.route.POST(request({ id: card.id, action: "apply", scope }, { theme: "graphite-2" }));
   assert.equal(applied.status, 200);
-  assert.equal((await applied.json()).theme, "graphite");
-  const undone = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "graphite" }));
+  assert.equal((await applied.json()).theme, "amoled");
+  const undone = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "amoled" }));
   assert.equal(undone.status, 200);
   assert.equal((await undone.json()).theme, "graphite-2");
   assert.match(undone.headers.get("set-cookie"), /theme=graphite-2/);
@@ -786,19 +792,54 @@ test("Graphite 2 disabled blocks apply and undo destinations, without blocking e
   h.state.graphite2 = false;
   const page = await h.actions.readSettingsPage(6, themeScope);
   assert.equal(page.options.some((option) => option.value === "graphite-2"), false);
-  assert.equal(page.options.some((option) => option.value === "graphite"), true);
+  assert.deepEqual(page.options.map((option) => option.value), ["system", "porcelain", "graphite", "amoled", "dia", "rounded"]);
   const blocked = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(blocked.status, 409);
   assert.match((await blocked.json()).error, /Graphite 2 theme is not available/);
   const existing = await h.proposals.createSettingProposal(6, sessionId, themeScope, themeChange);
   const allowed = await h.route.POST(request({ id: existing.id, action: "apply", scope: themeScope }));
   assert.equal(allowed.status, 200);
-  assert.equal((await allowed.json()).theme, "graphite");
+  assert.equal((await allowed.json()).theme, "amoled");
   h.state.graphite2 = true;
   const fromGraphite2 = await h.proposals.createSettingProposal(6, sessionId, { ...themeScope, theme: "graphite-2" }, themeChange);
   await h.route.POST(request({ id: fromGraphite2.id, action: "apply", scope: themeScope }, { theme: "graphite-2" }));
   h.state.graphite2 = false;
-  const undo = await h.route.POST(request({ id: fromGraphite2.id, action: "undo", scope: themeScope }, { theme: "graphite" }));
+  const undo = await h.route.POST(request({ id: fromGraphite2.id, action: "undo", scope: themeScope }, { theme: "amoled" }));
   assert.equal(undo.status, 409);
   assert.match((await undo.json()).error, /Graphite 2 theme is not available/);
+});
+
+
+test("retirement rejects old destinations and canonicalizes legacy cookies", async () => {
+  const h = harness();
+  assert.deepEqual((await h.actions.readSettingsPage(6, themeScope)).options.map(x => x.value), ["porcelain", "amoled", "graphite-2"]);
+  for (const value of ["graphite", "dia", "rounded", "system"]) {
+    await assert.rejects(h.proposals.createSettingProposal(6, sessionId, themeScope, { kind: "theme", value }), /not available/);
+  }
+  for (const [cookie, before] of [["graphite", "graphite-2"], ["dark", "graphite-2"], ["dia", "porcelain"], ["rounded", "system"]]) {
+    const scope = { section: "appearance", theme: cookie === "dark" ? "graphite" : cookie };
+    const card = await h.proposals.createSettingProposal(6, sessionId, scope, { kind: "theme", value: "amoled" });
+    assert.equal(card.before, before);
+    const applied = await h.route.POST(request({ id: card.id, action: "apply", scope }, { theme: cookie }));
+    assert.equal(applied.status, 200);
+    assert.equal(applied.cookies.get("theme").value, "amoled");
+    const undone = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "amoled" }));
+    assert.equal(undone.status, 200);
+    assert.equal(undone.cookies.get("theme").value, before);
+  }
+});
+
+test("retirement disabled preserves legacy themes and Material flag", async () => {
+  const h = harness();
+  h.state.graphite2 = false;
+  assert.deepEqual((await h.actions.readSettingsPage(6, themeScope)).options.map(x => x.value), ["system", "porcelain", "graphite", "amoled", "dia", "rounded"]);
+  const card = await h.proposals.createSettingProposal(6, sessionId, { section: "appearance", theme: "graphite" }, { kind: "theme", value: "dia" });
+  const apply = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }, { theme: "dark" }));
+  assert.equal(apply.status, 200);
+  assert.equal(apply.cookies.get("theme").value, "dia");
+  const undo = await h.route.POST(request({ id: card.id, action: "undo", scope: themeScope }, { theme: "dia" }));
+  assert.equal(undo.status, 200);
+  assert.equal(undo.cookies.get("theme").value, "graphite");
+  h.state.rounded = false;
+  assert.deepEqual((await h.actions.readSettingsPage(6, themeScope)).options.map(x => x.value), ["system", "porcelain", "graphite", "amoled", "dia"]);
 });

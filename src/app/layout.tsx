@@ -120,9 +120,7 @@ export default async function RootLayout(
   const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
   const graphite2Enabled = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, analyticsSession?.id ?? -1);
   const flagReaderSubscribe = await isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1);
-  const savedTheme = normalizeThemePreference(theme.value, roundedEnabled);
-  let themeValue = savedTheme ?? "system";
-  if (!graphite2Enabled && savedTheme === "graphite-2") themeValue = "system";
+  const themeValue = normalizeThemePreference(theme.value, roundedEnabled, graphite2Enabled) ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
   const initialThemeColor = resolveInitialThemeColor(themeValue);

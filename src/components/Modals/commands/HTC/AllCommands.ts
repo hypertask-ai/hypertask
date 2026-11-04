@@ -3,9 +3,10 @@ import { getCommentCommands, getTaskCommands } from "./taskCommands";
 
 import { getNavigateCommands, getTimeCommands, getBulkTaskCommands, getAppShellCommands, getAgentChatCommands } from "./navigationCommands";
 import { CommandMode } from "@/models/enums";
+import { availableThemeOptions, themeOptions } from "@/lib/themePreferences";
 import { IAllCommands } from "@/models/model";
 import { RAIL_TOGGLE_KEY } from "@/lib/constants/railToggleKey";
-import { CommandGroup } from "./HTCTypes";
+import { CommandGroup, ICommandList } from "./HTCTypes";
 
 const mobileAppCommands: CommandGroup = {
   group: "App",
@@ -499,36 +500,6 @@ const ai: CommandGroup = {
 const appearance: CommandGroup = {
   group: "Appearance",
   commandLists: [
-    {
-      key: "systemTheme",
-      name: "Follow system",
-      commandMode: CommandMode.ToggleSystemTheme,
-      keywords: "system automatic auto os default theme appearance",
-    },
-    {
-      key: "lightTheme",
-      name: "Light · Porcelain",
-      commandMode: CommandMode.ToggleWhiteTheme,
-      keywords: "light white day bright porcelain theme appearance",
-    },
-    {
-      key: "darkTheme",
-      name: "Dark · Graphite",
-      commandMode: CommandMode.ToggleDarkTheme,
-      keywords: "dark night grey gray graphite theme appearance",
-    },
-    {
-      key: "amoledTheme",
-      name: "OLED black · AMOLED",
-      commandMode: CommandMode.ToggleAmoledTheme,
-      keywords: "oled amoled true black terminal cyan turquoise theme appearance",
-    },
-    {
-      key: "paperTheme",
-      name: "Paper · Dia",
-      commandMode: CommandMode.ToggleDiaTheme,
-      keywords: "paper editorial serif warm light elegant dia theme appearance",
-    },
     {
       key: "profilePicture",
       name: "Profile picture",
@@ -1336,11 +1307,44 @@ export const getAllCommands = (
   removeImageGeneration = false,
   graphite2Enabled = false,
 ): CommandGroup[] => {
-  const appearanceCommands = graphite2Enabled ? { ...appearance, commandLists: [
-    ...appearance.commandLists.slice(0, 3),
-    { key: "graphite2Theme", name: "Graphite 2", commandMode: CommandMode.ToggleGraphite2Theme, keywords: "dark graphite 2 iconoir theme appearance" },
-    ...appearance.commandLists.slice(3),
-  ] } : appearance;
+  const themeCommands: Record<(typeof themeOptions)[number]["value"], ICommandList> = {
+    system: {
+      key: "systemTheme",
+      name: "Follow system",
+      commandMode: CommandMode.ToggleSystemTheme,
+      keywords: "system automatic auto os default theme appearance",
+    },
+    porcelain: {
+      key: "lightTheme",
+      name: "Light · Porcelain",
+      commandMode: CommandMode.ToggleWhiteTheme,
+      keywords: "light white day bright porcelain theme appearance",
+    },
+    graphite: {
+      key: "darkTheme",
+      name: "Dark · Graphite",
+      commandMode: CommandMode.ToggleDarkTheme,
+      keywords: "dark night grey gray graphite theme appearance",
+    },
+    amoled: {
+      key: "amoledTheme",
+      name: "OLED black · AMOLED",
+      commandMode: CommandMode.ToggleAmoledTheme,
+      keywords: "oled amoled true black terminal cyan turquoise theme appearance",
+    },
+    dia: {
+      key: "paperTheme",
+      name: "Paper · Dia",
+      commandMode: CommandMode.ToggleDiaTheme,
+      keywords: "paper editorial serif warm light elegant dia theme appearance",
+    },
+    "graphite-2": { key: "graphite2Theme", name: "Graphite 2", commandMode: CommandMode.ToggleGraphite2Theme, keywords: "dark graphite 2 iconoir theme appearance" },
+    rounded: { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "material rounded theme appearance" },
+  };
+  const appearanceCommands = { ...appearance, commandLists: [
+    ...availableThemeOptions(roundedEnabled, graphite2Enabled).map(({ value, title }) => ({ ...themeCommands[value], name: title })),
+    ...appearance.commandLists,
+  ] };
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
@@ -1375,11 +1379,7 @@ export const getAllCommands = (
     teamAndBilling,
     snippets,
     ai,
-    roundedEnabled ? { ...appearanceCommands, commandLists: [
-      ...appearanceCommands.commandLists.slice(0, graphite2Enabled ? 6 : 5),
-      { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
-      ...appearanceCommands.commandLists.slice(graphite2Enabled ? 6 : 5),
-    ] } : appearanceCommands,
+    appearanceCommands,
     { ...settings, commandLists: settings.commandLists.filter((command) => !removeImageGeneration || command.key !== "settingsAiFeaturesImageGeneration").map((command) => command.key === "settingsTaskPageOpenAiChatByDefault"
       ? aiChatAutoOpenCommandName
         ? { ...command, name: aiChatAutoOpenCommandName, keywords: "settings open ai chat on newly created tickets when I open a ticket boards task page" }

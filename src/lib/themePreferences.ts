@@ -27,23 +27,33 @@ export const resolvedThemeDomMetadata: Record<
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 
-const themePreferences = new Set<ThemePreference>(
-  themeOptions.map(({ value }) => value),
-);
+export const availableThemeOptions = (roundedEnabled: boolean, graphite2Enabled: boolean) =>
+  graphite2Enabled
+    ? [
+        { title: "Light", value: "porcelain" as const },
+        { title: "AMOLED", value: "amoled" as const },
+        { title: "Graphite 2", value: "graphite-2" as const },
+      ]
+    : themeOptions.filter(({ value }) => value !== "graphite-2" && (value !== "rounded" || roundedEnabled));
+
+const themePreferences = new Set<string>(themeOptions.map(({ value }) => value));
 
 export const normalizeThemePreference = (
   theme?: string,
   roundedEnabled = false,
   graphite2Enabled = true,
 ): ThemePreference | undefined => {
-  if (theme === "rounded" && !roundedEnabled) return "system";
-  if (theme === "graphite-2" && !graphite2Enabled) return "system";
-  const normalized =
-    theme === "dark" ? "graphite" : theme === "light" ? "porcelain" : theme;
-
-  return themePreferences.has(normalized as ThemePreference)
-    ? (normalized as ThemePreference)
-    : undefined;
+  if (graphite2Enabled) {
+    if (theme === "dark" || theme === "graphite") return "graphite-2";
+    if (theme === "dia" || theme === "light") return "porcelain";
+    if (theme === "rounded") return "system";
+  } else {
+    if (theme === "rounded" && !roundedEnabled) return "system";
+    if (theme === "graphite-2") return "system";
+    if (theme === "dark") return "graphite";
+    if (theme === "light") return "porcelain";
+  }
+  return theme && themePreferences.has(theme) ? theme as ThemePreference : undefined;
 };
 
 export const themeCookieSeedValue = (

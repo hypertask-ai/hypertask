@@ -238,6 +238,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
     let chatSurface = isFullScreenChat ? "fullscreen" : "sidebar";
     if (typeof navigator !== "undefined" && /\bHypertaskApp\b/.test(navigator.userAgent)) chatSurface = "desktop";
+    const savedTheme = surface === "settings" && !session.agentId ? parseCookies().theme : undefined;
     const payload = {
       message: content,
       aiFeature: "aiChat",
@@ -247,7 +248,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       assistant_message_id: assistantMessageId,
       stream_id: streamId,
       context_list: contextList,
-      ...(surface === "settings" && !session.agentId ? { settings_context: settingsScopeFromPath(pathname, currentProject?.id, normalizeThemePreference(parseCookies().theme, true) ?? "system") } : {}),
+      ...(surface === "settings" && !session.agentId ? { settings_context: settingsScopeFromPath(pathname, currentProject?.id, savedTheme === "graphite-2" ? "graphite-2" : normalizeThemePreference(savedTheme, true, false) ?? "system") } : {}),
       ...chatModelRequestFields({ currentOption: currentAiOption, agentSessionOption: agentSessionAiOption, usesPlanDefault }, session.agentId),
       default_context: {
         project_id:

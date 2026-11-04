@@ -1,7 +1,7 @@
 @reference "../tailwind-entry.css";
 
 .graphite-2 {
-  --primary: 225 10% 49%;
+  --primary: 221.5385 12.2642% 41.5686%;
 
   --bg-pageBackground: #17181b;
   --bg-taskDetailPage: #17181b;
@@ -45,26 +45,26 @@
   --color-white-black: #ececed;
   --color-white-black-inverted: #1f2125;
   --color-text-light-gray: #9a9ca1;
-  --color-border: 231 8% 18%;
+  --color-border: 222.8571 7.6923% 17.8431%;
   --color-border-comment-description: #2a2c31;
   --bg-newcomment-well: var(--bg-pageBackground);
   --color-my-comment: #ececed;
   --color-kanban-column-scrollbar: transparent;
   --em-rgb-color: #ececed;
   --color-text-labelComponent: #9a9ca1;
-  --shadcn-primary: 225 10% 49%;
+  --shadcn-primary: 221.5385 12.2642% 41.5686%;
   --primary-foreground: 0 0% 0%;
   --secondary: 220 8% 16%;
   --secondary-foreground: 0 0% 80%;
   --muted: 220 5% 40%;
   --muted-foreground: 240 5% 64.9%;
-  --accent: 225 10% 49%;
+  --accent: 221.5385 12.2642% 41.5686%;
   --accent-foreground: 0 0% 0%;
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 85.7% 97.3%;
-  --border: 231 8% 18%;
-  --input: 231 8% 18%;
-  --ring: 225 10% 49%;
+  --border: 222.8571 7.6923% 17.8431%;
+  --input: 222.8571 7.6923% 17.8431%;
+  --ring: 221.5385 12.2642% 41.5686%;
   --button-arrow-disabled: gray;
   --button-arrow: white;
   --border-self-comment: 42, 44, 49;
@@ -76,12 +76,12 @@
   --color-pull-request-open: #4ade80;
   --color-pull-request-checks-red: #f87171;
   --color-pull-request-green: #4ade80;
-  --color-pull-request-merged: #c084fc;
+  --color-pull-request-merged: #5896f1;
 }
 
 .graphite-2 {
-  --focus-ring: #707788;
-  --border-active: #707788;
+  --focus-ring: #5d6577;
+  --border-active: #5d6577;
 }
 
 .graphite-2 {
