@@ -297,13 +297,14 @@ question_refused 'Question:' comment add X-1 --kind question --text "${plain/Kee
 printf 'ok required Question parts and shared review validation\n'
 
 label='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p>'
+shape='<strong>What this is:</strong>'
 no_label="${plain/$label/}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$no_label"
 fixture "$no_label"
 review_refused 'What this is:' task move X-1 --section 'Valentin Review'
-late_label="${plain/$label/}<strong>What this is:</strong> the setting that keeps the board tidy."
+late_label="${plain/$label/}$shape the setting that keeps the board tidy."
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
-empty_label="${plain/the setting that keeps the board tidy.\<\/strong>/}"
+empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
 question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 printf 'ok a Question needs What this is: first, with words after it\n'
