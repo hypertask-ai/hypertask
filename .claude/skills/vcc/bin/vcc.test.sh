@@ -306,7 +306,6 @@ late_label="${plain/$label/}$shape the setting that keeps the board tidy."
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
 empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
-question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 printf 'ok a Question needs What this is: first, with words after it\n'
 
 for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
@@ -356,6 +355,7 @@ My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
 printf '%s\n' "$markdown" > "$T/question.md"
+question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
 question_refused 'My recommendation:' comment add X-1 --kind question --markdown --body "${markdown/My recommendation:/Suggestion:}"
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"

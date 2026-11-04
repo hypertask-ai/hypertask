@@ -46,8 +46,9 @@ question_check() {
      else $text | visible end) as $visible |
     (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
+    (($paragraphs | map(if $md then gsub("\\*\\*"; "") else unmention | visible end) | map(select(length > 0)) | .[0]) // "") as $first |
     [
-      (if ((($plain | map(select(length > 0)) | .[0]) // "") | test("^What this is:\\s*\\S"))
+      (if ($first | test("^What this is:\\s*\\S"))
        then empty else "What this is: <what he is deciding, in his words> first (Markdown: What this is: ...)" end),
       (if any($paragraphs[];
         (if $md then . else unmention end) |
