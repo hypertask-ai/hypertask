@@ -10,6 +10,7 @@ import { mentionPlainPreview } from "@/utils/controllers/notifications/mentionTe
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { mentionAuthorAgentId, notificationActorName } from "@/utils/controllers/notifications/actorDisplayName";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 
@@ -66,6 +67,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(403).json({ message: "Forbidden" });
             }
         }
+        const commentAgentId = mentionAuthorAgentId(fromAgentId, commentExists);
         const callerHasProjectAccess = fromAgentId
             ? task?.project.members.some(
                 member => member.agentId === fromAgentId && member.agent?.userId === mentionedBy
@@ -99,13 +101,13 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 userId,
                 fromUserId: mentionedBy,
                 projectId,
-                ...(fromAgentId ? { fromAgentId } : {}),
+                ...(commentAgentId ? { fromAgentId: commentAgentId } : {}),
             }
         );
 
         if (notificationCreated && commentId) {
             try {
-                const [comment, mentionedUser, recipientUser] = await Promise.all([
+                const [comment, mentionedUser, recipientUser, commentAgent] = await Promise.all([
                     prisma.comment.findFirst({
                         where: { id: commentId, taskId },
                         include: {
@@ -121,7 +123,13 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     prisma.user.findUnique({
                         where: { id: userId },
                         select: { displayName: true }
-                    })
+                    }),
+                    commentAgentId
+                        ? prisma.agent.findUnique({
+                            where: { id: commentAgentId },
+                            select: { displayName: true, photoURL: true }
+                        })
+                        : Promise.resolve(null)
                 ]);
 
                 if (task && comment && mentionedUser) {
@@ -137,7 +145,10 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     if (shouldSend && devices.length > 0) {
                         const link = `detail/project-${projectId}/${task.uniqueIndex}?commentId=comment-${commentId}`;
                         const preview = mentionPlainPreview(comment.text, 140);
-                        const actor = mentionedUser.displayName?.trim() || "Someone";
+                        const actor = notificationActorName({
+                            fromAgent: commentAgent,
+                            fromUser: mentionedUser,
+                        });
                         const recip = recipientUser?.displayName?.trim();
                         const notificationTitle = recip
                             ? `${recip}, directly mentioned by ${actor}`
@@ -152,8 +163,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                             comment: JSON.stringify({
                                 ...omitCommentSeen(comment),
                                 creator: {
-                                    displayName: mentionedUser.displayName,
-                                    photoURL: mentionedUser.photoURL,
+                                    displayName: commentAgent?.displayName ?? mentionedUser.displayName,
+                                    photoURL: commentAgent?.photoURL ?? mentionedUser.photoURL,
                                 },
                             }),
                             body: notificationBody,

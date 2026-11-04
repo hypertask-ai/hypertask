@@ -12,6 +12,7 @@ import {
   type TNotification,
 } from "@/utils/controllers/notifications/emailTemplates";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
+import { notificationActorName } from "@/utils/controllers/notifications/actorDisplayName";
 import {
   dedupePerComment,
   verbByType,
@@ -134,10 +135,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
     const events: IDigestEvent[] = dedupePerComment(allowed).map(
       (notification) => {
-        const actor =
-          notification.fromUser?.displayName?.trim() ||
-          notification.fromAgent?.displayName?.trim() ||
-          "Someone";
+        const actor = notificationActorName(notification);
         return {
           line: `${actor} ${verbByType[notification.type]}`,
           commentText: notification.comment?.text ?? undefined,
