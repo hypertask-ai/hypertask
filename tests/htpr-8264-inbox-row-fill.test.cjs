@@ -33,11 +33,11 @@ test("inbox row fill flag is an Everyone improvement", () => {
 
 test("the row drops the fixed sender and title columns only when the flag is on", () => {
   const row = read("src/components/notifications/NotificationRow.tsx");
-  assert.match(row, /const rowFill = useFlag\(HTPR_8264_INBOX_ROW_FILL_FLAG\)/);
-  assert.match(row, /rowFill \? 'md:shrink-0 md:min-w-0 md:max-w-\[180px\]' : 'md:w-\[15%\] md:min-w-\[15%\] md:max-w-\[15%\] md:shrink-0'/);
-  assert.match(row, /rowFill \? "md:flex-1" : "md:w-\[40%\]"/);
-  assert.match(row, /rowFill \? "md:space-x-4" : "md:space-x-8"/);
-  assert.match(row, /const flipMentionHierarchy = !rowFill && notification.type === "Mentioned"/);
+  assert.match(row, /const inboxRowFill = useFlag\(HTPR_8264_INBOX_ROW_FILL_FLAG\)/);
+  assert.match(row, /inboxRowFill \? 'md:shrink-0 md:min-w-0 md:max-w-\[180px\]' : 'md:w-\[15%\] md:min-w-\[15%\] md:max-w-\[15%\] md:shrink-0'/);
+  assert.match(row, /inboxRowFill \? "md:flex-1" : "md:w-\[40%\]"/);
+  assert.match(row, /inboxRowFill \? "md:space-x-4" : "md:space-x-8"/);
+  assert.match(row, /const flipMentionHierarchy = !inboxRowFill && notification.type === "Mentioned"/);
   assert.match(row, /rowFill\s*\?\s*"flex-1 min-w-0 truncate"/);
 });
 

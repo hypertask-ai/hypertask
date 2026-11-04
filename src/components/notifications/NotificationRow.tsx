@@ -46,8 +46,8 @@ interface Props {
 const NotificationRow = (props: Props) => {
     const { handleMouseEnter, selected, handleMouseLeave, openTask, taskRef, index, eHandler, disableButtons = false, appShellRail = false } = props
     const { notification, isIbxSlctd, selectedIds } = useNotificationContext();
-    const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
-    const flipMentionHierarchy = !rowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
+    const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
+    const flipMentionHierarchy = !inboxRowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const handleClick = () => {
         openTask("view", notification)
@@ -63,11 +63,11 @@ const NotificationRow = (props: Props) => {
             handleMouseEnter={handleMouseEnter}
             handleMouseLeave={handleMouseLeave}
             openTask={handleClick}
-            className={`relative flex cursor-pointer  ${rowFill ? "md:space-x-4" : "md:space-x-8"}  py-[8px]   px-[20px] md:px-0 ${rowFill ? "rounded" : "rounded-md"}
+            className={`relative flex cursor-pointer  ${inboxRowFill ? "md:space-x-4" : "md:space-x-8"}  py-[8px]   px-[20px] md:px-0 ${inboxRowFill ? "rounded" : "rounded-md"}
                 justify-between w-full flex-col md:flex-row`}
         >
 
-            <div className={cn('flex md:space-x-6', rowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>
+            <div className={cn('flex md:space-x-6', inboxRowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>
 
                 <div className='flex justify-between w-100 md:min-w-0'>
                     <NotificationUserName />
@@ -75,7 +75,7 @@ const NotificationRow = (props: Props) => {
                 </div>
             </div>
 
-            <div className={cn("flex flex-grow xs:mt-2 sm:mt-0 gap-2 items-baseline md:items-center md:min-w-0 md:overflow-hidden flex-col md:flex-row", rowFill ? "md:flex-1" : "md:w-[40%]")}>
+            <div className={cn("flex flex-grow xs:mt-2 sm:mt-0 gap-2 items-baseline md:items-center md:min-w-0 md:overflow-hidden flex-col md:flex-row", inboxRowFill ? "md:flex-1" : "md:w-[40%]")}>
 
                 {flipMentionHierarchy && <NotificationContent />}
 
