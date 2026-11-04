@@ -32,9 +32,7 @@ Sources:
 
 Product corners are 2px or 4px. Owner rule, 2026-11-04: any corner that is not 2 or 4px goes back to Bugs. Existing 5px corners are legacy; a change from 5px to 4px conforms.
 
-Approved exception: `ChatWindowFrame` in multi-window chat uses a maximum 4px radius. Valentin Yeo approved this on 2026-11-04: https://app.hypertask.ai/detail/project-15/8334#comment-351288
-
-> Radius 4px max.
+`ChatWindowFrame` in multi-window chat uses a maximum 4px radius. Poteto Advisor's design QA correction: https://app.hypertask.ai/detail/project-15/8334#comment-351288
 
 Do not use `rounded-xl`, `rounded-2xl`, or another generic large SaaS radius on product UI. Do not turn labels or counts into outlined pills.
 
