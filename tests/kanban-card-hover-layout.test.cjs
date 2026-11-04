@@ -165,3 +165,74 @@ test("focused and selected containers do not introduce vertical borders or paddi
     }
   }
 });
+
+const { loader, mount } = require("./helpers/htpr-7260-ui.cjs");
+const hoverFlagKey = "htpr-8629-kanban-hover-layout";
+const hoverFlag = loader()(`src/lib/flags/definitions/${hoverFlagKey}.ts`);
+
+test("hover layout bugfix defaults to everyone", () => {
+  assert.equal(hoverFlag.default.key, hoverFlagKey);
+  assert.equal(hoverFlag.default.kind, "bugfix");
+  assert.equal(hoverFlag.default.defaultMode, "EVERYONE");
+  assert.equal(hoverFlag.default.releaseRisk.risk, "small");
+});
+
+function loadCard(enabled, cleanup) {
+  const cn = (...args) => twMerge(clsx(args));
+  const flags = key => key === hoverFlagKey ? enabled : key === "htpr-8255-kanban-cleanup" && cleanup;
+  const mocks = {
+    ...shared,
+    "@/hooks/useFlag": { useFlag: flags },
+    "@/lib/flags/keys": {},
+    "@/lib/flags/definitions/htpr-8629-kanban-hover-layout": hoverFlag,
+    "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
+    "@/lib/flags/definitions/htpr-7975-column-work-limits": {},
+    "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveStalenessFromProject: () => false },
+    "@/utils/undoActions/helperFuncs": { cn },
+    "next/link": { default: ({ prefetch, ...props }) => React.createElement("a", props) },
+    "./CardSubTasks": { default: empty },
+    "./TaskTagsRow": { default: empty },
+    "./TaskTopRow": { default: TaskTopRow },
+  };
+  return loader(mocks)("src/components/PageComponents/Kanban/KanbanTaskComponents/KanbanTaskCard.tsx").default;
+}
+
+for (const enabled of [false, true]) {
+  for (const cleanup of [false, true]) {
+    test(`card selection and content layout: fix ${enabled}, cleanup ${cleanup}`, () => {
+      const Card = loadCard(enabled, cleanup);
+      const app = mount();
+      const selections = [];
+      let opened = 0;
+      const props = {
+        task: { id: 42, projectId: 15, uniqueIndex: 42, ticketNumber: "HTPR-42", title: "Example card", notifications: [{ seen: false }], _count: { notifications: 1 }, parentTask: { ticketNumber: "HTPR-1", title: "Parent card" } },
+        currentSetting: "Flattened", assignedUsers: [], agentAssignees: [], active: false,
+        hover: false, hasDraft: false, openDetail: () => opened++, onSelectionClick: (id, event) => selections.push([id, event.shiftKey]),
+      };
+      try {
+        for (const state of [{}, { selected: true }, { selectionMode: true }]) {
+          app.render(React.createElement(Card, { ...props, ...state }));
+          const link = app.container.querySelector("a[href='/detail/project-15/42']");
+          const button = app.container.querySelector("button[aria-label$='item']");
+          const selecting = !!(state.selected || state.selectionMode);
+          assert.ok(link.textContent.includes("HTPR-1: Parent card"));
+          assert.ok(link.textContent.includes("HTPR-42"));
+          assert.ok(link.textContent.includes("Example card"));
+          assert.ok(link.querySelector(".task-ticket-id").parentElement.querySelector("svg"), "unread notification remains visible");
+          assert.equal(link.classList.contains("group-hover/kanban-selection:pl-7"), !enabled);
+          assert.equal(link.classList.contains("pl-7"), selecting);
+          if (!selecting) assert.ok(link.classList.contains(cleanup ? "pl-3" : "p-2"));
+          assert.equal(button.classList.contains("-left-2"), enabled && !selecting);
+          assert.equal(button.classList.contains("left-2"), !enabled || selecting);
+          assert.equal(button.style.width, "15px");
+          React.act(() => button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, shiftKey: true })));
+          assert.deepEqual(selections.at(-1), [42, true]);
+          assert.equal(opened, 0, "selection must not open the card");
+        }
+      } finally {
+        app.close();
+      }
+    });
+  }
+}

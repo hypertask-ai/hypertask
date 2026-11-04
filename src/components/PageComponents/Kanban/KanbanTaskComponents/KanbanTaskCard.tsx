@@ -1,3 +1,4 @@
+import { HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG } from "@/lib/flags/definitions/htpr-8629-kanban-hover-layout";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -107,6 +108,7 @@ const KanbanTaskCard = ({
 }: KanbanTaskCardProps) => {
   const isMobile = useContext(MobileViewContext);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const stableHoverLayout = useFlag(HTPR_8629_KANBAN_HOVER_LAYOUT_FLAG);
   return (
   <div
     ref={cardRef}
@@ -132,7 +134,8 @@ const KanbanTaskCard = ({
             alwaysVisible={selectionMode}
             groupName="kanban-selection"
             className={cn(
-              "absolute left-2 top-2 z-20 bg-cardBackground",
+              "absolute top-2 z-20 bg-cardBackground group-hover/kanban-selection:!visible",
+              stableHoverLayout && !selectionMode && !selected ? "-left-2" : "left-2",
               phoneHoldSelect && isMobile && (selectionMode || selected) && "!flex",
               selected
                 ? "!border-hypertasks-purple !bg-hypertasks-purple"
@@ -152,7 +155,7 @@ const KanbanTaskCard = ({
         (task.blockingTasks?.length ?? 0) > 0
       }
       linkClassName={cn(
-        "group-hover/kanban-selection:pl-7",
+        !stableHoverLayout && "group-hover/kanban-selection:pl-7",
         (selectionMode || selected) && "pl-7",
       )}
       parentClassName={isArchivedOnBoard ? "opacity-50" : undefined}
