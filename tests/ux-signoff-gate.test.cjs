@@ -1699,6 +1699,62 @@ test('missing secret only affects gated PRs and metadata errors leave heads unto
   assert.deepEqual(readFailure.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['pending']);
 });
 
+test('scoped reconciliation ignores unrelated failures while a full sweep reports them', async () => {
+  const { run } = await gate;
+  for (const [args, expected, failedPr] of [
+    [['--reconcile', '--pr', '1'], 0, 2],
+    [['--reconcile', '--pr', '1'], 2, 1],
+    [['--reconcile'], 2, 2],
+  ]) {
+    const fixture = apiFixture({ prs: [pr(1), pr(2)] });
+    const calls = [];
+    const output = [];
+    const github = (endpoint, options) => {
+      calls.push(endpoint);
+      if (endpoint === `repos/fixture/repo/pulls/${failedPr}`) throw new Error('GitHub API returned HTTP 500');
+      return fixture.github(endpoint, options);
+    };
+    assert.equal(await run(args, { env, github, fetchImpl: commentsFetch, log: (line) => output.push(JSON.parse(line)) }), expected);
+    if (args.includes('--pr')) {
+      assert.ok(!calls.some((endpoint) => /\/pulls\?/.test(endpoint) || endpoint.includes('/pulls/2')));
+    } else {
+      assert.ok(calls.some((endpoint) => /\/pulls\?/.test(endpoint)));
+      assert.ok(calls.includes('repos/fixture/repo/pulls/1'));
+      assert.ok(calls.includes('repos/fixture/repo/pulls/2'));
+    }
+    const posts = fixture.calls.filter((call) => call.method === 'POST');
+    if (args.includes('--pr') && failedPr === 1) assert.equal(posts.length, 0);
+    else {
+      assert.equal(posts.length, 1);
+      assert.equal(posts[0].endpoint, `repos/fixture/repo/statuses/${pr(1).head.sha}`);
+      assert.equal(posts[0].body.context, 'ux-signoff');
+      assert.equal(posts[0].body.state, 'success');
+    }
+    if (expected) assert.ok(output.some((entry) => entry.pr === failedPr && entry.reason === 'GitHub API returned HTTP 500'));
+  }
+});
+
+test('scoped reconciliation reports status publication failure', async () => {
+  const { run } = await gate;
+  const fixture = apiFixture({ prs: [pr(1), pr(2)] });
+  const github = (endpoint, options) => {
+    if (options?.method === 'POST') throw new Error('GitHub API returned HTTP 500');
+    return fixture.github(endpoint, options);
+  };
+  assert.equal(await run(['--reconcile', '--pr', '1'], { env, github, fetchImpl: commentsFetch, log: () => {} }), 2);
+});
+
+test('workflow scopes pull request events and dispatches a full sweep', () => {
+  const workflow = readFileSync(path.join(root, '.github/workflows/ux-signoff-gate.yml'), 'utf8');
+  assert.match(workflow, /pull_request_target:/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /EVENT_NAME: \$\{\{ github\.event_name \}\}/);
+  assert.match(workflow, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}/);
+  assert.match(workflow, /if \[ "\$EVENT_NAME" = pull_request_target \]; then\s+node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile --pr "\$PR_NUMBER"\s+else\s+node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s+fi/);
+  assert.match(workflow, /ref: production/);
+  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+});
+
 test('single-PR reconciliation never publishes an unvalidated head on metadata read error', async () => {
   const { run } = await gate;
   const fixture = apiFixture({ prs: [pr(1), pr(2)], prError: 1 });
