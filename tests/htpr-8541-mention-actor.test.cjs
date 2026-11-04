@@ -54,10 +54,10 @@ test("a nameless actor falls back instead of printing nothing", () => {
   );
 });
 
-test("the comment's own agent carries the attribution when the caller sends none", () => {
-  assert.equal(mentionAuthorAgentId(undefined, AGENT), AGENT);
-  assert.equal(mentionAuthorAgentId(null, AGENT), AGENT);
-  assert.equal(mentionAuthorAgentId(AGENT, "another-agent"), AGENT);
+test("stored comment authors take precedence over supplied agents", () => {
+  assert.equal(mentionAuthorAgentId("another-agent", { agentId: AGENT }), AGENT);
+  assert.equal(mentionAuthorAgentId(AGENT, { agentId: null }), null);
+  assert.equal(mentionAuthorAgentId(AGENT, null), AGENT);
+  assert.equal(mentionAuthorAgentId(undefined, { agentId: AGENT }), AGENT);
   assert.equal(mentionAuthorAgentId(undefined, null), null);
-  assert.equal(mentionAuthorAgentId(null, undefined), null);
 });

@@ -67,7 +67,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(403).json({ message: "Forbidden" });
             }
         }
-        const commentAgentId = mentionAuthorAgentId(fromAgentId, commentExists?.agentId);
+        const commentAgentId = mentionAuthorAgentId(fromAgentId, commentExists);
         const callerHasProjectAccess = fromAgentId
             ? task?.project.members.some(
                 member => member.agentId === fromAgentId && member.agent?.userId === mentionedBy

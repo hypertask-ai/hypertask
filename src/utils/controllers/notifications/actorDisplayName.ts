@@ -20,7 +20,7 @@ export function notificationActorName(
 
 export function mentionAuthorAgentId(
   fromAgentId: string | null | undefined,
-  commentAgentId: string | null | undefined,
+  comment: { agentId: string | null } | null,
 ): string | null {
-  return fromAgentId ?? commentAgentId ?? null;
+  return comment ? comment.agentId : fromAgentId ?? null;
 }
