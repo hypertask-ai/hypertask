@@ -17,6 +17,9 @@ printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
 if [ "${1:-} ${2:-}" = 'comments list' ]; then
   exec /bin/cat "${VCC_TEST_COMMENTS:-/missing-comments-fixture}"
 fi
+if [ "${1:-} ${2:-}" = 'tasks get' ] && [ -n "${VCC_TEST_TASK:-}" ]; then
+  exec /bin/cat "$VCC_TEST_TASK"
+fi
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
 STUB
 cat > "$T/bin/cat" <<'STUB'
@@ -42,6 +45,13 @@ cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
 exit 0
 STUB
 chmod +x "$HOME/.agents/skills/ship/scripts/ship-check"
+cat > "$T/bin/ticket-lint" <<'STUB'
+#!/usr/bin/env bash
+printf 'ticket-lint %s\n' "$*" >> "$VCC_TEST_TRACE"
+if /bin/cat | grep -q LINTFAIL; then printf 'ticket-lint: rejected.\n  - LINTFAIL found\n' >&2; exit 1; fi
+STUB
+chmod +x "$T/bin/ticket-lint"
+export VCC_TICKET_LINT="$T/bin/ticket-lint"
 
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -160,7 +170,9 @@ done
 allowed bash "$vcc" tasks get X-1
 printf 'ok unknown activity subcommands fail in vcc\n'
 question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
-export VCC_TEST_COMMENTS="$T/comments.json"
+export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
+task_fixture() { jq -n --arg d "$1" '{tasks:[{id:1,description:$d}]}' > "$VCC_TEST_TASK"; }
+task_fixture '<p>Problem</p><p>Fix</p><p>Done when</p><p>Risk: low.</p><p>Decision: none.</p>'
 fixture() {
   jq -n --arg text "$1" '{comments:[{id:"new",text:$text,createdAt:"2026-10-20T12:00:00Z"}]}' > "$VCC_TEST_COMMENTS"
 }
@@ -383,6 +395,32 @@ allowed bash "$vcc" comment add X-1 --kind question --text "$rewrite_7508_303933
 fixture "$rewrite_7508_303933"
 allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 printf 'ok verbatim old Question refuses and real rewrite passes comment add and newest review\n'
+lint_refused() {
+  local what=$1; shift
+  run bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "expected lint exit 5, got $status: $*"
+  [[ $(< "$T/err") == "vcc: $what refused by the house ticket rules"* ]] || fail "wrong lint refusal: $(< "$T/err")"
+  [[ $(< "$T/err") == *'LINTFAIL found'* ]] || fail 'lint reason not shown'
+  [[ $(< "$VCC_TEST_TRACE") != *'hypertask task create'* && $(< "$VCC_TEST_TRACE") != *'hypertask task move'* && $(< "$VCC_TEST_TRACE") != *'hypertask comment add'* ]] || fail 'lint refusal reached CLI'
+}
+lint_refused 'Ticket description' task create --project 4060 --title T --description '<p>LINTFAIL</p>'
+printf '<p>LINTFAIL</p>' > "$T/desc.md"
+lint_refused 'Ticket description' task create --project 4060 --title T --description-file "$T/desc.md"
+lint_refused 'Ticket description' task update YPER4-1 '--description=LINTFAIL'
+allowed bash "$vcc" task create --project 4060 --title T --description '<p>Problem</p>'
+[[ $(< "$VCC_TEST_TRACE") == *'ticket-lint --shape -'* ]] || fail 'description skipped shape lint'
+allowed bash "$vcc" task update YPER4-1 --title 'New title'
+[[ $(< "$VCC_TEST_TRACE") != *'ticket-lint'* ]] || fail 'title-only update ran description lint'
+lint_refused 'Question' comment add YPER4-1 --kind question --text "$question<p>LINTFAIL</p>"
+fixture "$question<p>LINTFAIL</p>"
+lint_refused 'Valentin Review move (YPER4-512 Question)' task move YPER4-512 --section 'Valentin Review'
+fixture "$question"
+task_fixture '<p>LINTFAIL</p>'
+lint_refused 'Valentin Review move (YPER4-512 description)' task move YPER4-512 --section 'Valentin Review'
+run env VCC_TICKET_LINT=/missing bash "$vcc" task create --project 4060 --title T --description x
+[ "$status" = 5 ] && [[ $(< "$T/err") == *'ticket-lint missing'* ]] || fail 'missing lint did not refuse'
+printf 'ok descriptions, Questions and Valentin Review moves pass the house ticket lint\n'
+unset VCC_TEST_TASK
 cat > "$HOME/.agents/skills/ship/scripts/ship-check" <<'STUB'
 #!/usr/bin/env bash
 printf 'completion %s\n' "$*" >> "$VCC_TEST_TRACE"
