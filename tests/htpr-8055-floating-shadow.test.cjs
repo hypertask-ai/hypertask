@@ -49,10 +49,34 @@ for (const enabled of [false, true]) {
   });
 }
 
+for (const enabled of [false, true]) {
+  test(`framed chat uses one outer shadow with the flag: ${enabled}`, () => {
+    const load = loader({
+      "@/hooks/useFlag": {
+        useFlag: key => key === flag ? enabled : key === "htpr-8334-multi-chat-windows",
+      },
+    });
+    const { ChatWindowFrame } = load("src/components/AI_CHAT/ChatWindowFrame.tsx");
+    const view = mount();
+    try {
+      view.render(React.createElement(ChatWindowFrame, {
+        state: { id: "window-1", sessionId: null, title: null, userId: 1, x: 0, y: 0, width: 400, height: 500, minimized: false },
+        viewport: { width: 1200, height: 800 },
+        onFocus: () => {}, onMove: () => {}, onResize: () => {},
+      }, "Chat"));
+      const frame = view.container.querySelector('[aria-label="AI chat window"]');
+      assert.ok(frame.classList.contains("rounded-[4px]"));
+      assert.equal(frame.classList.contains("shadow-floating"), enabled);
+      assert.equal(frame.classList.contains("shadow-customshadow-4"), !enabled);
+    } finally { view.close(); }
+  });
+}
+
 test("phone chat sheet keeps no shadow with the flag on", () => {
   const view = windowView({ mobile: true });
   try {
     const panel = view.container.querySelector(".chatwindow");
+    assert.ok(panel.classList.contains("rounded-none"));
     assert.equal(panel.classList.contains("shadow-floating"), false);
     assert.equal(panel.style.boxShadow, "");
   } finally { view.close(); }
@@ -62,6 +86,7 @@ test("a framed chat window keeps no shadow", () => {
   const view = windowView({ framed: true });
   try {
     const panel = view.container.querySelector(".chatwindow");
+    assert.ok(panel.classList.contains("rounded-none"));
     assert.equal(panel.classList.contains("shadow-floating"), false);
     assert.equal(panel.style.boxShadow, "");
   } finally { view.close(); }

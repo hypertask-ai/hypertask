@@ -1,6 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useRef } from "react";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
 import { CHAT_WINDOW_MIN_HEIGHT, CHAT_WINDOW_MIN_WIDTH, clampChatWindowValue, type ChatWindowRect, type ChatWindowState, type ChatWindowViewport } from "@/lib/aiChat/chatWindows";
 
@@ -20,6 +21,7 @@ export function ChatWindowFrame({
   children: React.ReactNode;
 }) {
   const multiChatWindowsEnabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
+  const floatingElevation = useFlag(HTPR_8055_FLOATING_ELEVATION_FLAG);
   const dragStart = useRef<{ pointerX: number; pointerY: number; rect: ChatWindowRect } | null>(null);
   const resizeStart = useRef<{ pointerX: number; pointerY: number; rect: ChatWindowRect } | null>(null);
   const latestRect = useRef<ChatWindowRect>({ x: state.x, y: state.y, width: state.width, height: state.height });
@@ -91,7 +93,7 @@ export function ChatWindowFrame({
       role="dialog"
       aria-label="AI chat window"
       onPointerDownCapture={onFocus}
-      className="fixed z-popup flex flex-col overflow-hidden rounded-[4px] border border-border-light-gray-thin bg-ai-chat text-meta shadow-customshadow-4"
+      className={`fixed z-popup flex flex-col overflow-hidden rounded-[4px] border border-border-light-gray-thin bg-ai-chat text-meta ${floatingElevation ? "shadow-floating" : "shadow-customshadow-4"}`}
       style={{
         left: state.x,
         top: state.y,
