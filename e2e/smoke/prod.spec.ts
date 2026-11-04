@@ -319,6 +319,28 @@ test(`AI chat ${mode} opens by button, shortcut and fullscreen exit`, { tag: [`@
 })
 }
 
+test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-corners'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR || testInfo.project.name !== 'Desktop', 'isolated desktop PR fixture only')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.route('**/api/flags', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8334-multi-chat-windows': true } } })
+  })
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
+  await page.getByRole('button', { name: 'Open AI chat', exact: true }).click()
+  const composer = page.locator('.chatwindow:visible, [data-testid="ai-sidebar"]:visible').locator('[contenteditable="true"]').first()
+  await expect(composer).toBeVisible()
+  await composer.focus()
+  await page.keyboard.press('Control+Shift+o')
+  const frame = page.getByRole('dialog', { name: 'AI chat window' })
+  await expect(frame).toBeVisible()
+  for (const corner of ['border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius']) {
+    await expect(frame).toHaveCSS(corner, '4px')
+  }
+})
+
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
   test.skip(!process.env.BROWSER_SMOKE_PR, 'isolated PR fixtures only')
   const fixture = JSON.parse(readFileSync(path.join(__dirname, '.state', 'card-fixture.json'), 'utf8')) as {
