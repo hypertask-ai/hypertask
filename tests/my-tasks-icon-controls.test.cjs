@@ -258,7 +258,7 @@ test("production restore honors explicit URLs, defaults, removed views, flag loa
   const restore = restoreEffect();
   const run = (memory, overrides = {}) => {
     const calls = [];
-    const context = { iconControlsEnabled: true, viewsFeatureEnabled: true, memoryRestored: { current: false },
+    const context = { boardTabsHidden: false, iconControlsEnabled: true, viewsFeatureEnabled: true, memoryRestored: { current: false },
       currentUser: { id: 985 }, readMyTasksViewMemory: () => memory,
       views: [{ id: 5, isDefault: true }, { id: 7, isDefault: false }],
       entryParams: { current: { view: null, board: null } }, pickedView: { current: false }, pickedBoard: { current: false },
@@ -285,6 +285,7 @@ test("production restore honors explicit URLs, defaults, removed views, flag loa
   assert.deepEqual(run({ viewId: 7, defaultViewId: 5 }, { viewsFeatureEnabled: false }).calls, []);
   assert.deepEqual(run({ viewId: 7, defaultViewId: 5 }, { pickedView: { current: true } }).calls, []);
   assert.deepEqual(run(memory, { pickedBoard: { current: true } }).calls, [{ viewId: 7 }], "new board pick is not overwritten after flags load");
+  assert.deepEqual(run(memory, { boardTabsHidden: true }).calls, [{ viewId: 7 }], "no remembered board while the board tab row is hidden");
   const source = read(tasksFile);
   assert.match(source, /const selectView[\s\S]*if \(iconControlsEnabled\) rememberMyTasksView\(currentUser.id/);
   assert.match(source, /const updateSplit[\s\S]*rememberMyTasksView\(currentUser.id, \{ boardId: sources\[nextIndex - 1\]\?\.projectId/);
