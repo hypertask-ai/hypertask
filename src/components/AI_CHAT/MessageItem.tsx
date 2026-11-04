@@ -258,7 +258,7 @@ const AssistantStreamingStatus: FC<AssistantStreamingStatusProps> = ({
       <div data-chat-status-indicator>
         <div className="relative transition-all duration-300 ease-linear">
           <span className="invisible font-bold">{agentStatus}</span>
-          <span className="absolute inset-0 bg-gradient-to-r font-bold from-blue-500 via-purple-500 to-blue-500 bg-clip-text text-transparent animate-gradient">
+          <span className="absolute inset-0 bg-gradient-to-r font-bold from-hypertasks-header-blue via-hypertasks-ai-purple to-hypertasks-header-blue bg-clip-text text-transparent animate-gradient">
             {agentStatus}
           </span>
         </div>
