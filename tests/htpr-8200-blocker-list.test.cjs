@@ -31,10 +31,7 @@ function task(id, changes = {}) {
 }
 function fixture({ ctx = { user: { id: 6 }, agentId: null, teamScope: null }, enabled = true, rows = [] } = {}) {
   const queries = []
-  const { GET } = load('src/lib/mcp/operations/inbox/blockers/operation.ts', {
-    '@/lib/mcp/routeWrapper': { wrapMcpRoute: (fn) => fn, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ctx },
-    '@/lib/mcp/auth': { createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }) },
-    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
+  const { getBlockers } = load('src/lib/mcp/operations/inbox/list/blockers.ts', {
     '@/lib/flags': { isFeatureEnabled: async () => enabled },
     '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere },
     '@/lib/prisma': { default: { task: { findMany: async (query) => { queries.push(query); return rows.filter((row) => matches(row, query.where)).map((row) => ({
@@ -43,20 +40,24 @@ function fixture({ ctx = { user: { id: 6 }, agentId: null, teamScope: null }, en
       blockerComment: row.blockerComment && { ...row.blockerComment, reactions: row.blockerComment.reactions.filter((reaction) => matches(reaction, query.select.blockerComment.select.reactions.where)) },
     })) } } } },
   })
-  return { queries, get: (query = '') => GET(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/list${query}`)) }
+  return { queries, get: (query = '') => getBlockers(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/list${query}`), ctx) }
 }
 
 
-test('inbox list entrypoint dispatches waiting_on before wrapping the legacy handler', async () => {
+test('inbox list entrypoint wraps, rate limits and authenticates before dispatch', async () => {
   const calls = []
+  const ctx = { user: { id: 6, email: 'test@example.com' }, agentId: null, teamScope: null }
+  let auth = ctx
+  let limited = null
+  let crash = false
   const { GET } = load('src/app/api/mcp/inbox/list/route.ts', {
-    '@/lib/mcp/operations/inbox/blockers/operation': { GET: async (request) => { calls.push(['blockers', request.nextUrl.searchParams.get('waiting_on')]); return Response.json({ blockers: [] }) } },
+    '@/lib/mcp/operations/inbox/list/blockers': { getBlockers: async (request, context) => { calls.push(['blockers', request.nextUrl.searchParams.get('waiting_on'), context]); if (crash) throw new Error('private'); return Response.json({ blockers: [] }) } },
     '@/lib/auth/agentScope': { recordAgentBoardScopeMiss: () => {} },
     '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     '@/lib/mcp/routeWrapper': {
       wrapMcpRoute: (handler) => { calls.push(['wrap']); return handler },
-      checkMcpRouteRateLimit: async () => { calls.push(['rate']); return null },
-      validateMcpRouteAuth: async () => { calls.push(['auth']); return null },
+      checkMcpRouteRateLimit: async () => { calls.push(['rate']); return limited },
+      validateMcpRouteAuth: async () => { calls.push(['auth']); return auth },
     },
     '@/lib/mcp/auth': { createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }) },
     '@/lib/mcp/agents': { getMcpSessionAgentSummary: () => {} },
@@ -68,13 +69,36 @@ test('inbox list entrypoint dispatches waiting_on before wrapping the legacy han
     '@/lib/configs/general.config': { generalConfig: {} },
   })
   for (const target of ['me', '42', '']) {
+    calls.length = 0
     const response = await GET(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/list?waiting_on=${target}`))
     assert.equal(response.status, 200)
+    assert.deepEqual(calls, [['wrap'], ['rate'], ['auth'], ['blockers', target, ctx]])
   }
-  assert.deepEqual(calls, [['blockers', 'me'], ['blockers', '42'], ['blockers', '']])
-  const response = await GET(new NextRequest('https://app.hypertask.ai/api/mcp/inbox/list'))
-  assert.equal(response.status, 401)
-  assert.deepEqual(calls.slice(3), [['wrap'], ['rate'], ['auth']])
+  auth = null
+  for (const query of ['?waiting_on=me', '']) {
+    calls.length = 0
+    const response = await GET(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/list${query}`))
+    assert.equal(response.status, 401)
+    assert.deepEqual(calls, [['wrap'], ['rate'], ['auth']])
+  }
+  calls.length = 0
+  limited = Response.json({ success: false }, { status: 429 })
+  assert.equal((await GET(new NextRequest('https://app.hypertask.ai/api/mcp/inbox/list?waiting_on=me'))).status, 429)
+  assert.deepEqual(calls, [['wrap'], ['rate']])
+  calls.length = 0
+  limited = null
+  auth = ctx
+  crash = true
+  const originalError = console.error
+  console.error = () => {}
+  try {
+    const response = await GET(new NextRequest('https://app.hypertask.ai/api/mcp/inbox/list?waiting_on=me'))
+    assert.equal(response.status, 500)
+    assert.deepEqual(await response.json(), { success: false, error: 'Internal server error' })
+    assert.deepEqual(calls, [['wrap'], ['rate'], ['auth'], ['blockers', 'me', ctx]])
+  } finally {
+    console.error = originalError
+  }
 })
 
 test('classifies marked questions and parses their text', async () => {
@@ -144,9 +168,8 @@ test('returns an empty envelope and filtered totals', async () => {
   assert.deepEqual(result.blockers.map((row) => row.id), [1])
 })
 
-test('rejects unauthenticated, management, disabled and invalid requests before querying', async () => {
+test('rejects management, disabled and invalid requests before querying', async () => {
   for (const [options, query, status] of [
-    [{ ctx: null }, '', 401],
     [{ ctx: { user: { id: 6 }, management: {}, agentId: null, teamScope: null } }, '', 403],
     [{ enabled: false }, '', 404],
     [{}, '?waiting_on=0', 400], [{}, '?project=1,2', 400], [{}, '?state=other', 400], [{}, '?waiting_on=me&waiting_on=6', 400], [{}, '?project=', 400], [{}, '?waiting_on=', 400], [{}, '?state=', 400], [{}, '?state=waiting&state=answered', 400], [{}, '?projectId=2147483648', 400],
