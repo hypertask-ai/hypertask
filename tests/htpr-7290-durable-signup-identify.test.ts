@@ -4,7 +4,6 @@ import { activationHarness } from "./helpers/activation-harness";
 
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const identityFlag = "htpr-7269-signup-identity-link";
 const durableFlag = "htpr-7290-durable-signup-identify";
 const cookie = "ht_cookie_consent=all";
 const anonymousId = "anon-original-visitor";
@@ -18,9 +17,7 @@ function harness() {
   const values = new Map<string, string>();
   let inTransaction = false;
   let transactionFailure = false;
-  for (const name of ["htpr-7269-signup-identity-link", "htpr-7290-durable-signup-identify"]) {
-    h.mocks[`@/lib/flags/definitions/${name}`] = h.load(`src/lib/flags/definitions/${name}.ts`);
-  }
+  h.mocks[`@/lib/flags/definitions/${durableFlag}`] = h.load(`src/lib/flags/definitions/${durableFlag}.ts`);
   h.mocks["@/lib/analytics/signupIdentity"] = h.load("src/lib/analytics/signupIdentity.ts");
   h.mocks["@/lib/redis"] = { getRedis: async () => ({
     set: async (key: string, value: string) => { values.set(key, value); return "OK"; },
@@ -156,28 +153,26 @@ test("identify delivery uses only signup flags, not payment flags", async () => 
   assert.equal(h.flagChecks.some(({ key }) => key === "htpr-7272-payment-login-agent-events"), false);
 });
 
-for (const flag of [identityFlag, durableFlag]) {
-  test(`queued identify waits when ${flag} is off and delivers when restored`, async () => {
-    const h = harness();
-    h.setFailure("capture");
-    await h.link();
-    await h.drain();
-    const row = h.rows[0];
-    row.nextAttemptAt = new Date(0);
-    h.setFailure(null);
-    h.setFlagEnabled(flag, false);
-    assert.equal(await h.outbox.isSignupIdentifyOutboxEnabled(123), false);
-    assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 1 });
-    assert.equal(row.attempts, 1);
-    assert.equal(row.deliveredAt, null);
-    assert.ok(row.nextAttemptAt.getTime() >= Date.now() + 3590000);
-    assert.equal(h.captureAttempts.length, 1);
-    h.setFlagEnabled(flag, true);
-    row.nextAttemptAt = new Date(0);
-    assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 0 });
-    assert.equal(h.captures.length, 1);
-  });
-}
+test("queued identify waits when durable flag is off and delivers when restored", async () => {
+  const h = harness();
+  h.setFailure("capture");
+  await h.link();
+  await h.drain();
+  const row = h.rows[0];
+  row.nextAttemptAt = new Date(0);
+  h.setFailure(null);
+  h.setFlagEnabled(durableFlag, false);
+  assert.equal(await h.outbox.isSignupIdentifyOutboxEnabled(123), false);
+  assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 1 });
+  assert.equal(row.attempts, 1);
+  assert.equal(row.deliveredAt, null);
+  assert.ok(row.nextAttemptAt.getTime() >= Date.now() + 3590000);
+  assert.equal(h.captureAttempts.length, 1);
+  h.setFlagEnabled(durableFlag, true);
+  row.nextAttemptAt = new Date(0);
+  assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 0 });
+  assert.equal(h.captures.length, 1);
+});
 
 for (const scenario of ["essential", "missing consent", "missing context", "withdrawn"] as const) {
   test(`${scenario} creates no identity row or capture`, async (t) => {

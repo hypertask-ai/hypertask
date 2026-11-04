@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/definitions/htpr-7269-signup-identity-link";
 import { HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG } from "@/lib/flags/definitions/htpr-7290-durable-signup-identify";
 import { decideSignupIdentityLink, strictestConsent, type SignupIdentityContext, type SignupLinkDecision } from "@/lib/analytics/signupIdentity";
 import { consumeSignupContext, warnSignupContextUnavailable } from "@/lib/auth/signupAttributionContext";
@@ -47,7 +46,7 @@ export async function recordSignupIdentityLink(
 ): Promise<SignupLinkDecision | null> {
   try {
     const context = typeof contextOrId === "string" ? await consumeSignupContext(contextOrId) : contextOrId;
-    if (!isNewUser || !await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, userId)) return null;
+    if (!isNewUser) return null;
     const decision: SignupLinkDecision = context && strictestConsent("all", cookieHeader) !== "all"
       ? { link: false, reason: "consent_withdrawn", attribution: {}, attributionStatus: "withheld" }
       : decideSignupIdentityLink(userId, context);
