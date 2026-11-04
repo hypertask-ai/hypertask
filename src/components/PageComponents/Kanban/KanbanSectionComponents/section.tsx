@@ -62,6 +62,7 @@ const TaskSkeleton = ({ provided }: { provided?: DraggableProvided }) => {
       ref={provided?.innerRef}
       {...provided?.draggableProps}
       style={provided?.draggableProps.style}
+      data-kanban-task-skeleton=""
       className="outline-none rounded-[5px]"
     >
       <div className="shadow-md border-l-4 border-transparent bg-cardBackground rounded-[5px] outline-none min-h-[100px]" />
@@ -426,6 +427,7 @@ export const Section = ({
           {...draggableProps}
           tabIndex={-1}
           onClick={handleSectionClick}
+          data-kanban-cleanup={cleanup ? "" : undefined}
           className={`
               ${hiddenBySearch ? "hidden" : ""}
               ${
