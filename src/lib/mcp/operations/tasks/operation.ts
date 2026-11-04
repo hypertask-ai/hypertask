@@ -12,7 +12,7 @@ import { accessibleAgentWhere } from '@/lib/agents/visibility'
 import type { McpTaskAssignee } from '@/lib/mcp/tasks/types'
 import {
   mapMcpTaskLabel,
-  mapTaskAssignee,
+  mapTaskAssignees,
   mapTaskDescriptionContent,
   mapTaskToMcpGetResponse,
   mcpTaskLabelSelect,
@@ -783,9 +783,7 @@ export async function GET(request: NextRequest) {
       recordAgentBoardScopeMiss(task.projectId, "read");
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
-      const assignees = task.assignees
-        .map((assignee) => mapTaskAssignee(assignee, user.id, task.projectId))
-        .filter((assignee): assignee is McpTaskAssignee => Boolean(assignee))
+      const assignees = mapTaskAssignees(task.assignees, user.id, task.projectId)
       return {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,

@@ -53,6 +53,21 @@ export function mapTaskAssignee(a: {
     return mapped;
 }
 
+export function mapTaskAssignees(
+    rows: readonly {
+        user: { id: number; email: string; displayName: string | null };
+        agent?: Parameters<typeof mapVisibleMcpAgent>[0];
+        agentAssigner?: Parameters<typeof mapVisibleMcpAgent>[0];
+    }[] | null | undefined,
+    userId: number,
+    projectId: number,
+): McpTaskAssignee[] {
+    return (rows ?? []).flatMap((row) => {
+        const mapped = mapTaskAssignee(row, userId, projectId);
+        return mapped ? [mapped] : [];
+    });
+}
+
 export function mapTaskCreatedBy(
     user: { id: number; email: string; displayName: string | null } | null | undefined,
     agent: Parameters<typeof mapVisibleMcpAgent>[0],
@@ -291,13 +306,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
         riskLevel: task.riskLevel ? (task.riskLevel.toLowerCase() as 'low' | 'medium' | 'high') : undefined,
         acceptanceCriteria: task.acceptanceCriteria || undefined,
         verifyCommand: task.verifyCommand || undefined,
-        assignees: (task.assignees ?? [])
-            .map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
-            )
-            .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
-                Boolean(assignee)
-            ),
+        assignees: mapTaskAssignees(task.assignees, userId, task.projectId),
         followers: (task.followers ?? []).map((f: { user: { id: number; email: string; displayName: string | null } }) => ({
             id: f.user.id,
             email: f.user.email,
@@ -389,13 +398,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
         riskLevel: task.riskLevel ? (task.riskLevel.toLowerCase() as 'low' | 'medium' | 'high') : undefined,
         acceptanceCriteria: task.acceptanceCriteria || undefined,
         verifyCommand: task.verifyCommand || undefined,
-        assignees: task.assignees
-            ?.map((assignee: any) =>
-                mapTaskAssignee(assignee, userId, task.projectId)
-            )
-            .filter((assignee: McpTaskAssignee | undefined): assignee is McpTaskAssignee =>
-                Boolean(assignee)
-            ) || [],
+        assignees: mapTaskAssignees(task.assignees, userId, task.projectId),
         followers: task.followers?.map((f: any) => ({
             id: f.user.id,
             email: f.user.email,
