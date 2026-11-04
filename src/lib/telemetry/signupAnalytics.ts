@@ -8,11 +8,6 @@ export type SignupAttribution = {
   utmSource?: string;
 };
 
-type SignupRecord = SignupAttribution & {
-  isNewUser: boolean;
-  userId: number;
-};
-
 export type PostHogCapture = {
   captureImmediate: (capture: {
     distinctId: string;
@@ -53,22 +48,6 @@ export function postHogClient(): PostHog | undefined {
 function cleanUtmSource(value: string | undefined): string | undefined {
   const source = value?.trim();
   return source ? source.slice(0, MAX_UTM_SOURCE_LENGTH) : undefined;
-}
-
-export function buildUserSignedUpCapture(
-  signup: Omit<SignupRecord, "isNewUser">,
-) {
-  const properties: Record<string, string> = {
-    signup_method: signup.signupMethod,
-  };
-  const utmSource = cleanUtmSource(signup.utmSource);
-  if (utmSource) properties.utm_source = utmSource;
-
-  return {
-    distinctId: String(signup.userId),
-    event: "user_signed_up",
-    properties,
-  };
 }
 
 function cookieValue(cookieHeader: string | null, name: string) {
@@ -114,15 +93,6 @@ export function signupAttributionFromHeaders(
       cleanUtmSource(referrerParams?.get("utm_source") ?? undefined) ??
       cleanUtmSource(cookieValue(cookieHeader, "utm_source")),
   };
-}
-
-export function recordUserSignedUp(
-  signup: SignupRecord,
-  dependencies: SignupAnalyticsDependencies = {},
-): void {
-  if (!signup.isNewUser) return;
-
-  recordServerCapture(buildUserSignedUpCapture(signup), dependencies);
 }
 
 export function scheduleAnalytics(work: () => Promise<unknown>): void {

@@ -3,11 +3,10 @@ import type { Prisma } from "@prisma/client";
 import { enqueueAnalyticsIntent } from "./analyticsIntents";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
-import { HTPR_7270_SIGNUP_COMPLETED_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { strictestConsent, type SignupLinkDecision } from "@/lib/analytics/signupIdentity";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import { legacyAccountCategory } from "./savedWorkAnalytics";
-import { buildUserSignedUpCapture, postHogClient, type SignupMethod } from "./signupAnalytics";
+import type { SignupMethod } from "./signupAnalytics";
 
 export type SignupCompletedPayload = {
   userId: number;
@@ -44,10 +43,6 @@ export async function enqueueSignupCompleted(db: Pick<Prisma.TransactionClient, 
 
 export async function captureSignupCompleted(payload: SignupCompletedPayload): Promise<void> {
   const { userId, signupMethod, utmSource, consentAll, anonymousId, attribution, attributionStatus } = payload;
-  if (!(await isFeatureEnabled(HTPR_7270_SIGNUP_COMPLETED_FLAG, userId))) {
-    await postHogClient()?.captureImmediate(buildUserSignedUpCapture({ userId, signupMethod, utmSource: utmSource ?? undefined }));
-    return;
-  }
   if (!Number.isSafeInteger(userId) || userId <= 0) return;
   const user = await prisma.user.findUnique({
     where: { id: userId },
