@@ -539,6 +539,8 @@ export async function GET(request: NextRequest) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
+    } else if (listQuery?.filter.section_not && listQuery.filter.section_not.length > 0) {
+      where.section = { notIn: listQuery.filter.section_not, mode: 'insensitive' }
     }
 
     if (assignedTo) {

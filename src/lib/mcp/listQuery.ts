@@ -1,6 +1,7 @@
 
 export const LIST_FILTER_KEYS = [
   'section',
+  'section_not',
   'label',
   'assignee',
   'status',
@@ -12,6 +13,7 @@ export type ListFilterKey = (typeof LIST_FILTER_KEYS)[number]
 
 export type ListFilter = {
   section?: string
+  section_not?: string[]
   label?: string | string[]
   assignee?: string | number
   status?: string
@@ -122,6 +124,10 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean)
 }
 
+export function parseSectionNot(value: unknown): string[] {
+  return [...new Set(asStringArray(value))]
+}
+
 function parseFilterValue(raw: unknown): ListFilter {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const input = raw as Record<string, unknown>
@@ -129,6 +135,8 @@ function parseFilterValue(raw: unknown): ListFilter {
   if (typeof input.section === 'string' && input.section.trim()) {
     filter.section = input.section.trim()
   }
+  const sectionNot = parseSectionNot(input.section_not)
+  if (sectionNot.length > 0) filter.section_not = sectionNot
   const labels = asStringArray(input.label)
   if (labels.length === 1) filter.label = labels[0]
   else if (labels.length > 1) filter.label = labels
@@ -210,6 +218,11 @@ export function parseNumericCursor(cursor?: string | null): number | null {
 }
 
 function assertKnownFilters(filter: ListFilter): void {
+  if (filter.section !== undefined && filter.section_not !== undefined) {
+    throw new ListQueryParseError(
+      'filter.section_not cannot be combined with filter.section',
+    )
+  }
   if (filter.assignee !== undefined) {
     const parsed = parseAssigneeFilter(filter.assignee)
     if (!parsed.ok) throw new ListQueryParseError(parsed.error)
@@ -233,6 +246,8 @@ export function parseListQueryFromSearchParams(searchParams: URLSearchParams): P
     if (dotted.length === 0) continue
     if (key === 'label') {
       filter.label = dotted.length === 1 ? dotted[0] : dotted
+    } else if (key === 'section_not') {
+      filter.section_not = parseSectionNot(dotted)
     } else if (key === 'assignee') {
       filter.assignee = dotted[dotted.length - 1]
     } else {
@@ -468,6 +483,15 @@ export function applyCollectionQuery<T extends Record<string, unknown>>(
         ?? (item as Record<string, unknown>).section_title
         ?? (item as Record<string, unknown>).title
       return String(value ?? '').toLowerCase() === section
+    })
+  }
+  if (listQuery.filter.section_not && listQuery.filter.section_not.length > 0) {
+    const excluded = new Set(listQuery.filter.section_not.map((name) => name.toLowerCase()))
+    filtered = filtered.filter((item) => {
+      const value = (item as Record<string, unknown>).section
+        ?? (item as Record<string, unknown>).section_title
+        ?? (item as Record<string, unknown>).title
+      return !excluded.has(String(value ?? '').toLowerCase())
     })
   }
   if (listQuery.filter.updated_since) {

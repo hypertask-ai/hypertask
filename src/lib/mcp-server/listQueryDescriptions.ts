@@ -1,7 +1,7 @@
 import { buildToolName } from './config/mcp-standards'
 
 export const LIST_QUERY_DESCRIPTION_SUFFIX =
-  ' Shared list params: query, filter (section, label, assignee, status, updated_since, has_pr), sort, fields, limit, and cursor. Same names on every list tool. filter.has_pr=red matches a red PR badge (failing checks or a closed PR). Example: fields=title,url.'
+  ' Shared list params: query, filter (section, section_not, label, assignee, status, updated_since, has_pr), sort, fields, limit, and cursor. Same names on every list tool. filter.section_not takes a comma-separated list of column titles to leave out. filter.has_pr=red matches a red PR badge (failing checks or a closed PR). Example: fields=title,url.'
 
 const LIST_QUERY_DESCRIPTION_TOOLS = new Set([
   buildToolName('search_tasks'),

@@ -219,6 +219,8 @@ export async function GET(request: NextRequest) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
+    } else if (listQuery?.filter.section_not && listQuery.filter.section_not.length > 0) {
+      where.section = { notIn: listQuery.filter.section_not, mode: 'insensitive' }
     }
     if (labelsParam.length > 0) {
       where.taskLabels = {
@@ -295,6 +297,7 @@ export async function GET(request: NextRequest) {
     const extraFilters = Boolean(
       section ||
         sectionId !== undefined ||
+        listQuery?.filter.section_not?.length ||
         labelsParam.length > 0 ||
         updatedSince ||
         listQuery?.filter.has_pr ||
