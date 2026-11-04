@@ -65,7 +65,10 @@ realtime service through this check.
 The seed copies `production-flag-modes.json` into the local database, including
 all released `EVERYONE` modes. This dated snapshot comes from a read of the live
 admin API. Never edit it: it is built from `flag-modes/`, one small file per
-flag, so renaming or retiring a flag touches one file. Refresh it with
+flag, so renaming or retiring a flag touches one file. To read the live modes
+without writing anything, run
+`node scripts/flags/production-flag-modes.mjs --print-live`: it prints the same
+JSON to stdout and changes no file. Refresh it with
 `node scripts/flags/production-flag-modes.mjs --write`, or add a flag that is
 new in code with `--add-defaults`, and rebuild the copy with
 `node scripts/shared-lists/build.mjs --write`. The browser asserts the app's flag response matches those modes

@@ -124,3 +124,41 @@ test("a flag missing from both live views (not deployed yet) keeps its registry 
   const modes = localFlagModes({ "htpr-1-a": "OWNER_AND_QA", "htpr-2-b": "OWNER_AND_QA" }, { "htpr-1-a": false }, [], { "htpr-1-a": false });
   assert.deepEqual(modes, { "htpr-1-a": "OFF", "htpr-2-b": "OWNER_AND_QA" });
 });
+
+test("--print-live reads the live modes and writes nothing", async () => {
+  const { mkdtempSync, readdirSync, rmSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const { main } = await load();
+  const root = mkdtempSync(path.join(tmpdir(), "flag-modes-print-"));
+  const printed = [];
+  const writes = [];
+  await main(["--print-live"], root, {
+    defaults,
+    readLive: async () => [{ key: "htpr-1-a", mode: "EVERYONE" }],
+    writeEntries: (...args) => writes.push(args),
+    print: (line) => printed.push(line),
+  });
+  assert.deepEqual(writes, []);
+  assert.deepEqual(readdirSync(root), []);
+  const snapshot = JSON.parse(printed[0]);
+  assert.equal(snapshot.view, "admin");
+  assert.deepEqual(snapshot.modes, { "htpr-1-a": "EVERYONE", "htpr-2-b": "EVERYONE", "htpr-3-c": "OWNER_ONLY" });
+  rmSync(root, { recursive: true, force: true });
+});
+
+test("--print-live needs no checkout on disk and reads the modes once", async () => {
+  const { tmpdir } = require("node:os");
+  const { main } = await load();
+  const printed = [];
+  let reads = 0;
+  await main(["--print-live"], path.join(tmpdir(), "flag-modes-no-checkout"), {
+    defaults: { "htpr-3-c": "OFF" },
+    readLive: async () => {
+      reads += 1;
+      return [{ key: "htpr-3-c", mode: "OWNER_ONLY" }];
+    },
+    print: (line) => printed.push(line),
+  });
+  assert.equal(reads, 1);
+  assert.deepEqual(JSON.parse(printed[0]).modes, { "htpr-3-c": "OWNER_ONLY" });
+});
