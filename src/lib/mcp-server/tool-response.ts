@@ -43,6 +43,8 @@ const SAFE_AUTHORIZATION_PATTERNS = [
 
 export type ErrorHints = { ticketNumberShape?: boolean; renamedField?: boolean; nearestField?: boolean; fields?: readonly string[] }
 
+const GENERIC_REFUSAL = /^(?:validation error|invalid request|invalid parameters|bad request|request is invalid)$/i
+
 export function actionableToolError(error: unknown, hints: ErrorHints = {}): string {
   if (error instanceof z.ZodError) {
     return error.issues.slice(0, 4).map((issue) => {
@@ -97,6 +99,17 @@ export function actionableToolError(error: unknown, hints: ErrorHints = {}): str
     return 'The service could not complete this action. Retry a read later; before retrying a write, check whether it already succeeded.'
   }
   const message = (detail?.message ?? '').replace(/^Error:\s*/i, '').trim()
+  const refusal = (error as { details?: { field?: unknown; code?: unknown; allowed_values?: unknown } } | null)?.details
+  const refusalField = typeof refusal?.field === 'string' && refusal.field ? refusal.field : undefined
+  if (refusalField && (!message || GENERIC_REFUSAL.test(message.replace(/[.!]$/, '')))) {
+    const reason = typeof refusal?.code === 'string' && refusal.code
+      ? refusal.code.replace(/_/g, ' ')
+      : 'the value was not accepted'
+    const allowed = Array.isArray(refusal?.allowed_values) && refusal.allowed_values.length > 0
+      ? ` Allowed values: ${refusal.allowed_values.join(', ')}.`
+      : ''
+    return `Change ${refusalField}: ${reason}.${allowed} Fix that field and retry the same call.`
+  }
   if (!message) return 'The tool could not complete this action. Check the action and its required input fields, then retry.'
   const safe = redactModelFacingMessage(message)
   if (/unique_index.*project_id|project_id.*unique_index/.test(safe)) {

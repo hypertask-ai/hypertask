@@ -122,7 +122,10 @@ function refusalDetails(responseBody: unknown): Record<string, unknown> | undefi
   const body = responseBody as Record<string, unknown>;
   const details = body.details;
   if (details && typeof details === 'object' && typeof (details as Record<string, unknown>).code === 'string') {
-    return details as Record<string, unknown>;
+    const merged = details as Record<string, unknown>;
+    return merged.allowed_values === undefined && Array.isArray(body.allowed_values)
+      ? { ...merged, allowed_values: body.allowed_values }
+      : merged;
   }
   const code = typeof body.code === 'string' ? body.code : undefined;
   const field = typeof body.field === 'string' ? body.field : undefined;
