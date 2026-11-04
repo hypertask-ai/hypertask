@@ -10,6 +10,7 @@ import prisma from '@/lib/prisma'
 import { HTPR_7326_SLIM_MCP_INBOX_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { generalConfig } from '@/lib/configs/general.config'
+import { GET as getBlockers } from '@/lib/mcp/operations/inbox/blockers/operation'
 
 function positiveInteger(value: string | null): number | null {
     if (value === null || !/^\d+$/.test(value)) return null
@@ -18,6 +19,7 @@ function positiveInteger(value: string | null): number | null {
 }
 
 export async function GET(request: NextRequest) {
+  if (request.nextUrl.searchParams.has('waiting_on')) return getBlockers(request)
   return wrapMcpRoute(async (request: NextRequest) => {
     let userObj: {id: number, email: string} | null = null
     try {

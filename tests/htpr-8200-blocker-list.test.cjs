@@ -43,8 +43,39 @@ function fixture({ ctx = { user: { id: 6 }, agentId: null, teamScope: null }, en
       blockerComment: row.blockerComment && { ...row.blockerComment, reactions: row.blockerComment.reactions.filter((reaction) => matches(reaction, query.select.blockerComment.select.reactions.where)) },
     })) } } } },
   })
-  return { queries, get: (query = '') => GET(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/blockers${query}`)) }
+  return { queries, get: (query = '') => GET(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/list${query}`)) }
 }
+
+
+test('inbox list entrypoint dispatches waiting_on before wrapping the legacy handler', async () => {
+  const calls = []
+  const { GET } = load('src/app/api/mcp/inbox/list/route.ts', {
+    '@/lib/mcp/operations/inbox/blockers/operation': { GET: async (request) => { calls.push(['blockers', request.nextUrl.searchParams.get('waiting_on')]); return Response.json({ blockers: [] }) } },
+    '@/lib/auth/agentScope': { recordAgentBoardScopeMiss: () => {} },
+    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
+    '@/lib/mcp/routeWrapper': {
+      wrapMcpRoute: (handler) => { calls.push(['wrap']); return handler },
+      checkMcpRouteRateLimit: async () => { calls.push(['rate']); return null },
+      validateMcpRouteAuth: async () => { calls.push(['auth']); return null },
+    },
+    '@/lib/mcp/auth': { createUnauthorizedResponse: () => Response.json({ success: false }, { status: 401 }) },
+    '@/lib/mcp/agents': { getMcpSessionAgentSummary: () => {} },
+    '@/utils/controllers/notifications/getAll': { default: () => {} },
+    '@/utils/controllers/notifications/getStructuredInboxForAgent': { getStructuredInboxForAgent: () => {} },
+    '@/lib/prisma': { default: {} },
+    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
+    '@/lib/configs/general.config': { generalConfig: {} },
+  })
+  for (const target of ['me', '42', '']) {
+    const response = await GET(new NextRequest(`https://app.hypertask.ai/api/mcp/inbox/list?waiting_on=${target}`))
+    assert.equal(response.status, 200)
+  }
+  assert.deepEqual(calls, [['blockers', 'me'], ['blockers', '42'], ['blockers', '']])
+  const response = await GET(new NextRequest('https://app.hypertask.ai/api/mcp/inbox/list'))
+  assert.equal(response.status, 401)
+  assert.deepEqual(calls.slice(3), [['wrap'], ['rate'], ['auth']])
+})
 
 test('classifies marked questions and parses their text', async () => {
   const f = fixture({ rows: [task(1), task(2, { comments: [{ createdAt: later, creatorId: 6, agentId: null, agentDisplayName: null, activity: null }] }), task(3, { blockerComment: null, blockerCommentId: null }), task(4, { blockerComment: { ...task(4).blockerComment, reactions: [{ createdAt: later, userId: 6, agentId: null, agentDisplayName: null, isDeleted: false }] } })] })
@@ -62,7 +93,7 @@ test('classifies marked questions and parses their text', async () => {
 
 test('queries only target human comments and reactions, excluding preserved agent identities', async () => {
   const f = fixture()
-  await f.get('?user=8&projectId=15&project=16&state=waiting')
+  await f.get('?waiting_on=8&projectId=15&project=16&state=waiting')
   const q = f.queries[0]
   assert.equal(q.where.waitingOnUserId, 8)
   assert.deepEqual(q.where.projectId, { in: [15, 16] })
@@ -118,7 +149,7 @@ test('rejects unauthenticated, management, disabled and invalid requests before 
     [{ ctx: null }, '', 401],
     [{ ctx: { user: { id: 6 }, management: {}, agentId: null, teamScope: null } }, '', 403],
     [{ enabled: false }, '', 404],
-    [{}, '?user=0', 400], [{}, '?project=1,2', 400], [{}, '?state=other', 400], [{}, '?user=me&user=6', 400], [{}, '?project=', 400], [{}, '?user=', 400], [{}, '?state=', 400], [{}, '?state=waiting&state=answered', 400], [{}, '?projectId=2147483648', 400],
+    [{}, '?waiting_on=0', 400], [{}, '?project=1,2', 400], [{}, '?state=other', 400], [{}, '?waiting_on=me&waiting_on=6', 400], [{}, '?project=', 400], [{}, '?waiting_on=', 400], [{}, '?state=', 400], [{}, '?state=waiting&state=answered', 400], [{}, '?projectId=2147483648', 400],
   ]) {
     const f = fixture(options)
     assert.equal((await f.get(query)).status, status)

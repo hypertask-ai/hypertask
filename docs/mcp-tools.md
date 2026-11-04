@@ -128,6 +128,6 @@ Matching is request-local: ticket get examines its title, description and latest
 
 ### List blockers
 
-`GET /api/mcp/inbox/blockers` lists normal tickets on accessible boards waiting on a person. `user=me` is the default; `user=<positive user ID>` selects another person. Repeat `projectId=<board ID>` or `project=<board ID>` to combine board filters. `state=waiting|answered|no-question` filters the result. Omit `state` for all states.
+`GET /api/mcp/inbox/list?waiting_on=me` lists normal tickets on accessible boards waiting on the authenticated person. Use `waiting_on=<positive user ID>` to select another person. Repeat `projectId=<board ID>` or `project=<board ID>` to combine board filters. `state=waiting|answered|no-question` filters the result. Omit `state` for all states.
 
 The response is `{ "success": true, "blockers": [...], "total": 1 }`. Each row has `id`, `ticketNumber`, `url`, `title`, `projectId`, `boardTitle`, `section`, `priority`, `waitingSince`, `blockerCommentId`, `question`, `recommendation`, and `state`. `total` is the number of returned rows after filtering. Missing values are null. `answered` requires a later task comment or non-deleted reaction to the marked Question, by the target person rather than an agent; `no-question` means the marked comment is missing or not a Question. Invalid filters return 400; management tokens return 403; the disabled feature returns 404. Results never include boards outside the caller's access.

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       }
 
       const params = request.nextUrl.searchParams
-      const users = params.getAll('user')
+      const users = params.getAll('waiting_on')
       const states = params.getAll('state')
       const rawProjects = [...params.getAll('projectId'), ...params.getAll('project')]
       const projects = rawProjects.map(positiveId)
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
       if (users.length > 1 || target === null || states.length > 1 ||
           (states.length && !['waiting', 'answered', 'no-question'].includes(states[0])) ||
           projects.some((id) => id === null)) {
-        return NextResponse.json({ success: false, error: 'Invalid user, projectId, project, or state.' }, { status: 400 })
+        return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
       }
       const projectIds = projects.filter((id): id is number => id !== null)
       const tasks = await prisma.task.findMany({
