@@ -601,6 +601,54 @@ test("PATCH refuses the lead in-chat record naming its own switch when the quote
   await assertRefused(approvalRequired, "OFF");
 });
 
+for (const order of [
+  "so the design is a complete mess right now can you toggle off the flag for the ctrl+j change?",
+  "turn the flag off for graphite too its full of bugs",
+  "wtf just turn off the feature flags?????????",
+]) {
+  test(`PATCH accepts the lead in-chat record of the order ${JSON.stringify(order)} to switch Off`, async () => {
+    chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "${order}". Switch ${key} to Off`);
+    ticketComments = [];
+    await assertAllowed("chat-record", key, "OFF", [123]);
+  });
+}
+
+test("PATCH accepts a lead in-chat record of a plain order for another mode", async () => {
+  chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "put the calendar live for everybody". Switch ${key} to Everyone`);
+  ticketComments = [];
+  await assertAllowed("chat-record", key, "EVERYONE", [123]);
+});
+
+test("PATCH refuses the lead in-chat record of a keep-it answer or a hedge", async () => {
+  for (const quote of ["no, keep it", "wait, hold on", "turn it off if the tests fail"]) {
+    chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "${quote}". Switch ${key} to Off`);
+    ticketComments = [];
+    await assertRefused(approvalRequired, "OFF");
+  }
+});
+
+test("PATCH refuses an order record posted by any other agent", async () => {
+  chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "turn the flag off for graphite". Switch ${key} to Off`);
+  approvalComment.agentId = "impostor";
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
+test("PATCH accepts his own fresh ticket order naming the flag without a switch question", async () => {
+  ticketYes(`please turn off ${key} it is full of bugs`);
+  ticketComments = [];
+  await assertAllowed("ticket-order", key, "OFF", [123]);
+});
+
+test("PATCH refuses his own ticket order that does not name the flag or says no", async () => {
+  ticketYes("please turn off the flag it is full of bugs");
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+  ticketYes(`no, do not turn off ${key}`);
+  ticketComments = [];
+  await assertRefused("Valentin said no on comment 123; no switch", "OFF");
+});
+
 for (const kind of ["ticket-yes", "chat-record", "thumbs-up"]) {
   test(`PATCH with plain-yes flag off ${kind === "thumbs-up" ? "accepts" : "refuses"} ${kind}`, async () => {
     plainYesFlagOn = false;

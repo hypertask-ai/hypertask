@@ -4,7 +4,7 @@ const test = require("node:test");
 const { createJiti } = require("jiti");
 
 const jiti = createJiti(__filename, { interopDefault: true });
-const { normalizeVisibleText, classifyAnswer, parseSwitchQuestion, strictSwitchRequest, isOffOrder, FLAG_CHAT_RECORD_AGENT_ID } = jiti(path.join(__dirname, "../src/lib/flags/approvalWords.ts"));
+const { normalizeVisibleText, classifyAnswer, parseSwitchQuestion, strictSwitchRequest, isOffOrder, isDirective, FLAG_CHAT_RECORD_AGENT_ID } = jiti(path.join(__dirname, "../src/lib/flags/approvalWords.ts"));
 
 for (const [expected, fixtures] of [
   ["yes", ["Yes", "yes!", "YES.", "ship it", "works, release it", "Yes, ship it", "yes, ship it", "ok go ahead", "👍", "lgtm",
@@ -210,3 +210,14 @@ test("an Off order is not a yes, so other modes still refuse it", () => {
   assert.equal(classifyAnswer("wtf just turn off the feature flags?????????"), "unclear");
   assert.equal(classifyAnswer("yes"), "yes");
 });
+
+for (const [expected, fixtures] of [
+  [true, ["yes, ship it", "wtf just turn off the feature flags?????????", "turn the flag off for graphite too its full of bugs", "put it live for everybody"]],
+  [false, ["", "no, keep it", "wait, hold on", "turn it off if the tests fail", "👎", "not yet"]],
+]) {
+  for (const fixture of fixtures) {
+    test(`isDirective ${JSON.stringify(fixture)} is ${expected}`, () => {
+      assert.equal(isDirective(fixture), expected);
+    });
+  }
+}

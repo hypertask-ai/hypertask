@@ -71,7 +71,7 @@ independent='Checked independently'
     '.method == "POST" and .url == "https://app.hypertask.ai/api/mcp/flags/reviews" and .body == {key:$key,mode:"EVERYONE",aiReviewUrl:$ai,independentReview:$text,liveQaUrl:$qa,inboxCycle:"passed"}' >/dev/null
 "$script" set "$key" everyone --review 42 --dry-run | jq -e '.method == "PATCH" and .body.review == 42 and .body.mode == "EVERYONE" and (.body | has("reason") | not)' >/dev/null
 "$script" set "$key" owner-qa --failure "$live_qa" --dry-run | jq -e --arg qa "$live_qa" '.body.failure == $qa and .body.mode == "OWNER_AND_QA"' >/dev/null
-reject set "$key" off --failure "$live_qa"
+"$script" set "$key" off --failure "$live_qa" --dry-run | jq -e --arg qa "$live_qa" '.body.failure == $qa and .body.mode == "OFF"' >/dev/null
 reject set "$key" off --review 42
 reject set "$key" everyone --failure "$live_qa"
 reject set "$key" everyone --review 0
