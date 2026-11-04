@@ -2,6 +2,7 @@ import { useThemeVisibility } from "@/hooks/useThemeVisibility";
 import { HTPR_7859_REMOVE_IMAGE_GENERATION_FLAG } from "@/lib/flags/definitions/htpr-7859-remove-image-generation";
 import { HTPR_7907_COLUMN_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7907-column-archive";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
 import { HTPR_8055_FLOATING_ELEVATION_FLAG } from "@/lib/flags/definitions/htpr-8055-floating-elevation";
 import {
   useCallback,
@@ -138,6 +139,7 @@ const Commands = (props: Props) => {
   if (ctrlJSkillMenuFlag) skillMenuOwnsKeys = true;
   const isApple = useDeviceContext();
   const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
+  const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const composeEnabled = !props.isDemo && !props.isInteractive;
   const newTaskWindow = composeEnabled;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
@@ -745,19 +747,20 @@ const Commands = (props: Props) => {
     return () => document.removeEventListener("keydown", switchTab, true);
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
+  const unifiedPanel = composerKeysEnabled && isCompose && !isMobile;
   const modeSwitch = !isDemo && !isInteractive ? (
-    <div className="absolute -top-12 left-0 flex w-full justify-center">
+    <div className={unifiedPanel ? "flex w-full border-b border-light-black-border-1 px-2 py-1" : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
         tabs={newTaskWindow ? [
           { id: "search", label: <>Search<Tooltip portal left={0} bottom={-45} text="Search" keyCombination={getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple)} /></> },
-          { id: "compose", className: "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2"><Sparkles size={18} strokeWidth={1.75} aria-hidden />New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
+          { id: "compose", className: unifiedPanel ? undefined : "text-hypertasks-ai-purple hover:text-hypertasks-ai-purple", label: <><span className="flex items-center gap-2">{!unifiedPanel && <Sparkles size={18} strokeWidth={1.75} aria-hidden />}New Task</span><Tooltip portal left={0} bottom={-45} text="New Task" keyCombination={getShortcutDisplay({ key: 74, modifiers: ["ctrl"], description: "New Task" }, isApple)} /></> },
         ] : [{ id: "search", label: "Search" }, { id: "compose", label: "Compose" }]}
         activeId={isCompose ? "compose" : "search"}
         onSelect={(paletteTab) => setShowCommands((previous) => ({ ...previous, paletteTab: paletteTab as "search" | "compose" }))}
         ariaLabel="Commands mode"
         disabled={writing}
         buttonClassName="rounded-[4px]"
-        className={`flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
+        className={unifiedPanel ? "p-1" : `flex-none rounded-[5px] bg-modalBackground p-1 ${amoledModeOutline ? "[outline:var(--outline-floating-panel)]" : ""}`}
       />
     </div>
   ) : null;
@@ -840,11 +843,11 @@ const Commands = (props: Props) => {
         autoFocus={false}
         backdrop={isInteractive?false:true}
         keyboard={false}
-        className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
+        className={`paletteModalSizing sm:top-[24%] sm:max-h-fit ${unifiedPanel ? "sm:min-w-0 sm:w-[min(640px,calc(100vw-32px))] sm:max-w-none" : "sm:min-w-[560px]"} ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
         contentClassName={cn(
           floatingElevation && "shadow-floating",
-          !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden",
+          unifiedPanel ? "!rounded-[4px] overflow-visible" : !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden",
         )}
       >
         {isInteractive && (

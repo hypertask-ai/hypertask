@@ -449,7 +449,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           if (on) dictationDelivered.current = false;
           setRecording(on);
         }} onProcessingChange={setTranscribing}
-        disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact"
+        disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact" hideDevicePicker={composerKeysLayout}
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
@@ -503,7 +503,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         </div>
       ) : (
         <div ref={composer} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col p-2" : "p-2"}>
-          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : "flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2"}>
+          <div className={`flex w-full flex-col bg-ai-tiptap px-3 py-2 ${composerKeysLayout ? "rounded-[4px]" : "rounded-[5px]"} ${phoneTaskWriterSheet ? "min-h-0 flex-1" : ""}`}>
             {(newTaskWindow || phoneTaskWriterSheet) && attachments && (phoneTaskWriterSheet ? (
               <div className="min-h-0 overflow-y-auto">{attachments}</div>
             ) : mobile ? attachments : (
@@ -532,7 +532,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
+              className={`${phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content" : "min-h-16 text-content"} ${!composerKeysLayout && (phoneTaskWriterSheet || newTaskWindow) ? "caret-hypertasks-ai-purple" : ""}`}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
@@ -609,11 +609,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           {error && <p role="alert" className="px-2 pt-2 text-meta text-text-light-gray">{error}</p>}
         </div>
       )}
-      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className="flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
-        <div className="flex min-w-0 flex-wrap items-center gap-4">
+      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className="flex items-center justify-between gap-2 overflow-x-auto border-t border-light-black-border-1 px-3 py-2 text-micro text-text-light-gray">
+        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
           {footerKeys.left.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>
-        <div className="flex shrink-0 items-center gap-4">
+        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
           {footerKeys.right.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>
       </div> : <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
