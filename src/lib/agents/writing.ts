@@ -49,7 +49,7 @@ export class AgentWritingError extends Error {
 }
 
 function lines(text: string): string[] {
-  return parse(text)
+  return parse(text.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n'))
     .structuredText.split('\n').map((line) => line.trim()).filter((line) => line && !FEEDBACK_TALLY_LINE.test(line))
 }
 
