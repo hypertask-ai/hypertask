@@ -1,25 +1,9 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
-
-function load(file, mocks = {}) {
-  const mod = { exports: {} };
-  const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-  }).outputText;
-  new Function("require", "module", "exports", compiled)((name) => {
-    if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
-    if (name.startsWith("@/") || name.startsWith("./") || name.startsWith("../")) throw new Error(`Unstubbed dependency: ${name}`);
-    return require(name);
-  }, mod, mod.exports);
-  return mod.exports;
-}
+const { loadModule: load } = require("./helpers/loadModule.cjs");
 
 const flag = "htpr-8054-graphite-2";
 const inboxFlag = "htpr-8264-inbox-row-fill";
@@ -75,7 +59,6 @@ function renderRail({ enabled, wide, pathname, inboxRowFill, board = false }) {
     "@/lib/constants": { default: { timersRoute: "/time" } },
     "@/components/ProviderGlobal/useGlobalUIState": { useGlobalUIState: () => ({ toggleLeftSidebar: () => {}, toggleAIChatInterface: () => {} }) },
     "@/components/Common/Tooltip": { default: tooltip },
-    "./SearchFilterIcon": { default: ({ className }) => React.createElement("button", { className, "aria-label": "Project search" }) },
     "@/store": { appShellRailExpandedAtom: "expanded", boardLayoutAtom: "layout", showCommandsAtom: "commands", showGuestLoginAtom: "login" },
     "@/lib/state": { useRecoilState: (atom) => [atom === "expanded" ? wide : "board", () => {}], useRecoilValue: () => null, useSetRecoilState: () => () => {} },
     "@/models/enums": { CommandMode },
@@ -95,6 +78,13 @@ function renderRail({ enabled, wide, pathname, inboxRowFill, board = false }) {
     "@/lib/flags/definitions/htpr-8264-inbox-row-fill": { HTPR_8264_INBOX_ROW_FILL_FLAG: inboxFlag },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
   };
+  const HeaderIconWrapper = load("src/components/PageComponents/Kanban/HeaderComponents/HeaderIconWrapper.tsx", mocks).default;
+  mocks["./SearchFilterIcon"] = { default: load("src/components/PageComponents/Kanban/HeaderComponents/SearchFilterIcon.tsx", {
+    ...mocks,
+    "lucide-react": { Search: icon },
+    "@/lib/searchArchive": { buildSearchUrl: () => "/search" },
+    "./HeaderIconWrapper": { default: HeaderIconWrapper },
+  }).default };
   const Rail = load("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", mocks).default;
   return documentFor(React.createElement(Rail, { variant: board ? "board" : "global", currentUser: { id: 985 }, currentProject: board ? { id: 1, timeTrackingEnabled: true } : null }), "");
 }
@@ -118,17 +108,19 @@ test("rail controls and their RailItem wrappers use flag-controlled corners", ()
     const doc = renderRail({ enabled, wide, board, pathname: "/my-tasks", inboxRowFill: false });
     const expected = enabled ? "rounded-[4px]" : "rounded-[5px]";
     const opposite = enabled ? "rounded-[5px]" : "rounded-[4px]";
-    const labels = ["Your Kanban boards", "Go to inbox", "Board layout", "Table layout", "Go to calendar", "AI Chat", board ? "Project search" : "Search", "Agents"];
+    const labels = ["Your Kanban boards", "Go to inbox", "Board layout", "Table layout", "Go to calendar", "AI Chat", "Agents"];
     if (board) labels.push("Running timers");
-    for (const label of labels) {
-      const control = doc.querySelector(`[aria-label="${label}"]`);
+    const selectors = labels.map((label) => `[aria-label="${label}"]`);
+    selectors.push(board ? ".board-header-icon" : '[aria-label="Search"]');
+    for (const label of selectors) {
+      const control = doc.querySelector(label);
       assert.ok(control, label);
       for (const element of [control, control.parentElement]) {
         assert.ok(element.classList.contains(expected), label);
         assert.ok(!element.classList.contains(opposite), label);
       }
     }
-    for (const control of [doc.querySelector('[aria-label="New Task"]'), doc.querySelector('a[href="/pages"]')]) {
+    for (const control of [doc.querySelector('[aria-label="New Task"]'), doc.querySelector('[aria-label="Go to pages"]')]) {
       assert.ok(control);
       assert.ok(control.classList.contains(expected));
       assert.ok(!control.classList.contains(opposite));
@@ -141,8 +133,8 @@ test("AI Chat glyph preserves inbox row fill behavior when the ticket flag is of
     const doc = renderRail({ enabled, wide, pathname, inboxRowFill });
     const chat = doc.querySelector('[aria-label="AI Chat"]');
     const expected = enabled || (pathname === "/inbox" && inboxRowFill) ? iconoir.IconoirChat : iconoir.IconoirSparks;
-    const glyph = renderToStaticMarkup(React.createElement(expected, { size: 18, strokeWidth: 1.5 }));
-    assert.equal(chat.querySelector("svg").outerHTML, glyph);
+    const glyph = documentFor(React.createElement(expected, { size: 18, strokeWidth: 1.5 }), "");
+    assert.equal(chat.querySelector("svg").outerHTML, glyph.querySelector("svg").outerHTML);
     assert.equal(doc.querySelector("aside").hasAttribute("data-inbox-rail"), pathname === "/inbox" && inboxRowFill);
   }
 });
