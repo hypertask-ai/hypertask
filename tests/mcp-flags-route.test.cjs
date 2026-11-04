@@ -29,7 +29,6 @@ let previousMode;
 let approvalComment;
 let approvalQueries;
 let lockQueries;
-let batchFlagOn;
 let plainYesFlagOn;
 let templateQuestionFlagOn;
 let commentLockLost;
@@ -62,7 +61,6 @@ stubModule("src/lib/flags.ts", {
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
   isFeatureEnabled: async (flagKey, userId) => {
     assert.equal(userId, 6);
-    if (flagKey === "htpr-7364-batch-flag-approval") return batchFlagOn;
     if (flagKey === "htpr-8339-template-switch-question") return templateQuestionFlagOn;
     assert.equal(flagKey, "htpr-7727-plain-yes-flag-approval");
     return plainYesFlagOn;
@@ -218,7 +216,7 @@ test.beforeEach((t) => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3", agentRole: "write" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
-  approvalQueries = []; lockQueries = []; batchFlagOn = false; plainYesFlagOn = true; commentLockLost = false;
+  approvalQueries = []; lockQueries = []; plainYesFlagOn = true; commentLockLost = false;
   templateQuestionFlagOn = false;
   approvalComment = {
     id: 123, taskId: 900, creatorId: 6, agentId: "runner-3", agentDisplayName: null,
@@ -452,16 +450,7 @@ test("PATCH locks the comment and task, then reactions before reading approval a
 
 const batchHtml = `<p>@Valentin Yeo Question: Switch other-flag to Everyone?</p><p>Switch ${key} to Owner + QA?</p><p>Switch third-flag to Off?</p>`;
 
-for (const flagOn of [false, true]) {
-  test(`PATCH still allows the one-comment thumbs up with the batch flag ${flagOn ? "on" : "off"}`, async () => {
-    batchFlagOn = flagOn;
-    assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
-    assert.equal(writes.length, 1);
-  });
-}
-
-test("PATCH still allows a batch thumbs up for each listed flag when the batch flag is on", async () => {
-  batchFlagOn = true;
+test("PATCH still allows a batch thumbs up for each listed flag", async () => {
   approvalComment.commentText = "";
   approvalComment.text = batchHtml;
   const response = await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", reason })));
@@ -470,14 +459,12 @@ test("PATCH still allows a batch thumbs up for each listed flag when the batch f
 });
 
 test("PATCH accepts a batch comment with any other text", async () => {
-  batchFlagOn = true;
   approvalComment.commentText = "";
   approvalComment.text = `${batchHtml}<p>and also make it faster</p>`;
   await assertAllowed("thumbs-up", key, "OWNER_AND_QA", [123]);
 });
 
 for (const [name, setup, body] of [
-  ["a batch comment while the batch flag is off", () => { batchFlagOn = false; }, { key, mode: "OWNER_AND_QA", reason }],
   ["a mode the batch comment does not list for that flag", () => {}, { key, mode: "EVERYONE", reason }],
   ["a flag the batch comment does not list", () => {}, { key: "htpr-1-unlisted", mode: "OFF", reason }],
   ["a batch comment naming the flag twice", () => {
@@ -489,7 +476,6 @@ for (const [name, setup, body] of [
   }, { key, mode: "OWNER_AND_QA", reason }],
 ]) {
   test(`PATCH refuses ${name}`, async () => {
-    batchFlagOn = true;
     approvalComment.commentText = "";
     approvalComment.text = batchHtml;
     setup();
@@ -604,7 +590,6 @@ test("PATCH accepts the lead in-chat record naming its own switch without an ear
 
 test("PATCH accepts a lead in-chat record followed only by punctuation-separated batch switch clauses", async () => {
   chatRecord(`Valentin said in chat (${new Date().toISOString().slice(0, 10)}): "yes, ship it". Switch ${key} to Only me?; Switch other-flag to Owner + QA!`);
-  batchFlagOn = true;
   ticketComments = [];
   await assertAllowed("chat-record", key, "OWNER_ONLY", [123]);
   await assertAllowed("chat-record", "other-flag", "OWNER_AND_QA", [123]);
@@ -640,19 +625,14 @@ for (const [name, text] of [
   });
 }
 
-for (const batchOn of [false, true]) {
-  test(`PATCH with plain-yes flag off ${batchOn ? "accepts" : "refuses"} strict batch thumbs-up with batch flag ${batchOn ? "on" : "off"}`, async () => {
-    plainYesFlagOn = false;
-    batchFlagOn = batchOn;
-    approvalComment.text = `<p>@Valentin Yeo Question: Switch ${key} to Everyone?</p>\n<p>Switch other-flag to Off?</p>`;
-    if (batchOn) await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
-    else await assertRefused();
-  });
-}
+test("PATCH with plain-yes flag off accepts strict batch thumbs-up", async () => {
+  plainYesFlagOn = false;
+  approvalComment.text = `<p>@Valentin Yeo Question: Switch ${key} to Everyone?</p>\n<p>Switch other-flag to Off?</p>`;
+  await assertAllowed("thumbs-up", key, "EVERYONE", [123]);
+});
 
 test("PATCH accepts both batch keys after one question comment and one human yes", async () => {
   ticketYes();
-  batchFlagOn = true;
   ticketComments[0].text += "\nSwitch other-flag to Off?";
   await assertAllowed("ticket-yes");
   await assertAllowed("ticket-yes", "other-flag", "OFF");
@@ -818,12 +798,6 @@ for (const field of ["editedAt", "editedByUserId", "editedByAgentId"]) {
     await assertRefused();
   });
 }
-
-test("PATCH refuses a batch question plus yes with the batch flag off", async () => {
-  ticketYes();
-  ticketComments[0].text += "\nSwitch other-flag to Off?";
-  await assertRefused();
-});
 
 test("PATCH re-reads a candidate after locking and refuses an edit during the lock", async () => {
   ticketYes();
