@@ -307,9 +307,13 @@ test('layout lock: desktop New Task window stays narrow and inside the viewport'
     await expect(window.getByRole('button', { name: 'Choose microphone' })).toHaveCount(0)
     expect(await footer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     const hints = footer.locator(':scope > div > span')
+    await expect(hints).toHaveCount(6)
     const firstHint = await hints.first().boundingBox()
-    const lastHint = await hints.last().boundingBox()
-    expect(firstHint!.y).toBe(lastHint!.y)
+    expect(firstHint).not.toBeNull()
+    for (let i = 0; i < 6; i++) {
+      await expect(hints.nth(i)).toBeVisible()
+      expect((await hints.nth(i).boundingBox())!.y).toBe(firstHint!.y)
+    }
   }
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.y).toBeGreaterThanOrEqual(0)
