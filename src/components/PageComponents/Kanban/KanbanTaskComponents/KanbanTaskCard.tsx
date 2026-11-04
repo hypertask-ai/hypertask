@@ -134,7 +134,7 @@ const KanbanTaskCard = ({
             alwaysVisible={selectionMode}
             groupName="kanban-selection"
             className={cn(
-              "absolute top-2 z-20 bg-cardBackground",
+              "absolute top-2 z-20 bg-cardBackground group-hover/kanban-selection:!visible",
               stableHoverLayout && !selectionMode && !selected ? "-left-2" : "left-2",
               phoneHoldSelect && isMobile && (selectionMode || selected) && "!flex",
               selected
