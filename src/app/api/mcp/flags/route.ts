@@ -5,7 +5,7 @@ import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIn
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { parse } from "node-html-parser";
 import { NextRequest } from "next/server";
-import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isDirective, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_KEYS,
@@ -97,8 +97,8 @@ export async function PATCH(request: NextRequest) {
       if (typeof body.failure !== "string" || !body.failure.trim() || body.failure.length > 300) {
         return noStore({ error: "Failure must be a nonblank reason or URL (max 300 characters)" }, 400);
       }
-      if (body.mode !== "OWNER_AND_QA" && body.mode !== "OFF") {
-        throw new FeatureFlagApprovalError("A failure record can only hold a flag at Owner + QA or Off");
+      if (body.mode !== "OWNER_AND_QA") {
+        throw new FeatureFlagApprovalError("A failure record can only hold a flag at Owner + QA");
       }
       const role = ctx.agentRole ?? await getAgentRole(ctx);
       if (!roleMeets(role, "write")) {
@@ -129,7 +129,7 @@ export async function PATCH(request: NextRequest) {
       reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `live-qa-failed:${body.failure}` : body.reason as string,
       source: "api",
     }, async (tx) => {
-      if (requiresManagerGrant || (usesFailure && body.mode === "OFF")) {
+      if (requiresManagerGrant) {
         await requireCurrentManagerGrant(tx, { agentId: ctx.agentId as string, grant: managerGrant });
       }
       if (usesFailure) {
@@ -139,7 +139,7 @@ export async function PATCH(request: NextRequest) {
         if (current === body.mode) {
           throw new FeatureFlagApprovalError("Flag is already in that mode");
         }
-        if (body.mode === "OWNER_AND_QA" && current !== "EVERYONE") {
+        if (current !== "EVERYONE") {
           throw new FeatureFlagApprovalError("A failure hold only narrows a flag that is on for everyone");
         }
         return;
@@ -223,7 +223,7 @@ export async function PATCH(request: NextRequest) {
       }
       let switches = plainYesAllowed ? parseSwitchQuestion(words, templateQuestionAllowed)
         : strictSwitchRequest(parse(comment.text || comment.commentText || "").text, true, templateQuestionAllowed);
-      let kind: "thumbs-up" | "ticket-yes" | "ticket-order" | "chat-record";
+      let kind: "thumbs-up" | "ticket-yes" | "chat-record";
       let questionCommentIds = [comment.id];
       let approvedAt = comment.createdAt;
       if (unedited && comment.reactions.length && switches) {
@@ -232,14 +232,8 @@ export async function PATCH(request: NextRequest) {
       } else {
         if (!plainYesAllowed) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         const fresh = comment.createdAt.getTime() >= now - week;
-        const modeWords = MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode];
-        const namedOrder = human && fresh && words.includes(body.key as string) && isDirective(words)
-          && (body.mode === "OFF" ? isOffOrder(words) : parseSwitchQuestion(words, templateQuestionAllowed)?.get(body.key as string) === modeWords);
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
-        } else if (namedOrder) {
-          kind = "ticket-order";
-          switches = new Map([[body.key as string, modeWords]]);
         } else {
           const record = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"(?:(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))+[\s\p{P}]*|\.)?$/u.exec(words);
           const recordDate = record ? Date.parse(`${record[1]}T00:00:00.000Z`) : NaN;
@@ -247,7 +241,7 @@ export async function PATCH(request: NextRequest) {
             || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)
             || new Date(recordDate).toISOString().slice(0, 10) !== record[1]
             || recordDate > now || recordDate < now - week
-            || (words.match(/"/g) ?? []).length !== 2 || !isDirective(record[2])) {
+            || (words.match(/"/g) ?? []).length !== 2 || (classifyAnswer(record[2]) !== "yes" && !(body.mode === "OFF" && isOffOrder(record[2])))) {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
           const lead = await tx.agent.findUnique({
@@ -258,9 +252,8 @@ export async function PATCH(request: NextRequest) {
           }
           kind = "chat-record";
           approvedAt = new Date(recordDate);
-          switches = parseSwitchQuestion(words.replace(/"[^"]*"/, '""'), templateQuestionAllowed);
         }
-        if (kind !== "ticket-order" && (kind !== "chat-record" || !switches)) {
+        if (kind !== "chat-record" || !switches) {
           const beforeApproval = { OR: [
             { createdAt: { lt: comment.createdAt } },
             { createdAt: comment.createdAt, id: { lt: comment.id } },

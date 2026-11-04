@@ -34,7 +34,6 @@ function fakeTx() {
       findFirst: async () => null,
       findMany: async () => [],
     },
-    featureFlag: { findUnique: async () => ({ mode: "EVERYONE" }) },
     managerLeaseGrant: {
       findUnique: async ({ where }) => {
         if (registryBroken) throw new Error("registry unavailable");
@@ -258,35 +257,4 @@ test("registry refuses non managers and malformed requests", async () => {
   assert.equal((await post({ action: "renew" })).status, 400);
   assert.equal((await post({ action: "nope" })).status, 400);
   assert.equal(NextResponse.json({}).status, 200);
-});
-
-function failurePatch(mode, headers = {}) {
-  return PATCH(new NextRequest("https://app.hypertask.ai/api/mcp/flags", {
-    method: "PATCH",
-    headers: { "content-type": "application/json", ...headers },
-    body: JSON.stringify({ key, mode, failure: "live QA failed on the ctrl+j change" }),
-  }));
-}
-
-test("Off with a failure reason and the current lease succeeds without any approval comment", async () => {
-  ctx.agentRole = "write";
-  const response = await failurePatch("OFF", { [MANAGER_GRANT_HEADER]: token });
-  assert.equal(response.status, 200);
-  assert.deepEqual(setCalls.map(([switchedKey, mode, audit]) => [switchedKey, mode, audit.reason]), [[key, "OFF", "live-qa-failed:live QA failed on the ctrl+j change"]]);
-});
-
-test("Off with a failure reason is refused without the lease, even for a runner", async () => {
-  ctx.agentRole = "write";
-  assert.match(await refusalText(await failurePatch("OFF")), /no grant sent/);
-  agentName = "Runner 2";
-  grants = [];
-  assert.match(await refusalText(await failurePatch("OFF")), /no grant sent/);
-  assert.deepEqual(setCalls, []);
-});
-
-test("Everyone with a failure reason is still refused and the Owner + QA hold is unchanged", async () => {
-  ctx.agentRole = "write";
-  assert.match(await refusalText(await failurePatch("EVERYONE", { [MANAGER_GRANT_HEADER]: token })), /only hold a flag at Owner \+ QA or Off/);
-  assert.equal((await failurePatch("OWNER_AND_QA", { [MANAGER_GRANT_HEADER]: token })).status, 200);
-  assert.deepEqual(setCalls.map(([, mode]) => mode), ["OWNER_AND_QA"]);
 });

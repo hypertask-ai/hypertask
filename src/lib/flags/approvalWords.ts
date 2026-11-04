@@ -25,20 +25,11 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
 }
 
 const OFF_VERB = /^(?:turn|turning|switch|toggle|flip|disable|kill)$/;
-const ORDER_BLOCKER = /^(?:no|not|never|dont|don't|cant|can't|wont|won't|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|but)$/;
-
-function orderWords(text: string): string[] {
-  return text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
-}
-
-export function isDirective(text: string): boolean {
-  const words = orderWords(text);
-  return words.length > 0 && classifyAnswer(text) !== "no" && !words.some((word) => ORDER_BLOCKER.test(word));
-}
+const OFF_BLOCKER = /^(?:no|not|never|dont|don't|cant|can't|wont|won't|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until)$/;
 
 export function isOffOrder(text: string): boolean {
-  const words = orderWords(text);
-  return isDirective(text) && words.includes("off") && words.some((word) => OFF_VERB.test(word));
+  const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  return words.includes("off") && words.some((word) => OFF_VERB.test(word)) && !words.some((word) => OFF_BLOCKER.test(word));
 }
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;
