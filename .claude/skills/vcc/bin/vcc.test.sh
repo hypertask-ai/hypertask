@@ -302,7 +302,7 @@ no_label="${plain/$label/}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$no_label"
 fixture "$no_label"
 review_refused 'What this is:' task move X-1 --section 'Valentin Review'
-late_label="${plain/$label/}$shape the setting that keeps the board tidy."
+late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>"
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
 empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
