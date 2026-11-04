@@ -40,6 +40,11 @@ import {
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
 import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSectionFilter, parseSortOrderParam } from '@/lib/mcp/listParams'
+import { isDoneColumn } from '@/lib/doneColumns'
+import { columnRole } from '@/lib/mcp/boards/columnRole'
+import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
+
+const mcpDoneNameFallback = (title: string) => columnRole(title) === 'done'
 
 export interface ParentTaskSummary {
   id: number
@@ -56,6 +61,7 @@ export interface TaskListItem {
   description: string
   section: string
   sectionId?: number
+  sectionIsDone: boolean
   boardId: number
   boardTitle: string
   parent_id?: number
@@ -770,6 +776,7 @@ export async function GET(request: NextRequest) {
     })
 
     const uniqueProjects = new Set(tasks.map(t => t.projectId))
+    const doneTitlesByProject = await loadDoneTitlesByProject(uniqueProjects, mcpDoneNameFallback)
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
     const taskList: TaskListItem[] = tasks.map(task => {
@@ -788,6 +795,7 @@ export async function GET(request: NextRequest) {
         description: mapTaskDescriptionContent(task),
         section: task.section,
         sectionId: task.sectionId || undefined,
+        sectionIsDone: isDoneColumn(task.section, doneTitlesByProject.get(task.projectId), mcpDoneNameFallback),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         parent_id: (ctx.teamScope != null || (ctx.agentId && agentScopeEnforced())) && !task.parentTask ? undefined : task.parentTaskId || undefined,
