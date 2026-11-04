@@ -1,4 +1,6 @@
 import { useCallback, useEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8639_CALENDAR_PICKER_SHORTCUT_FLAG } from "@/lib/flags/keys";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { keyboard_shortcuts as ks, matchesShortcut } from "@/lib/utils/keyboardShortcuts";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
@@ -79,6 +81,7 @@ export function useCalendarKeyboard({
   "moveTaskHorizontally"
   | "moveTaskVertically"
 >) {
+  const preventPickerShortcutInput = useFlag(HTPR_8639_CALENDAR_PICKER_SHORTCUT_FLAG);
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (showDueDateModal?.show || createTaskModal.show || showFilterModal) return;
     if (returnIfModalOrInputActive()) return;
@@ -110,8 +113,10 @@ export function useCalendarKeyboard({
     else if (matchesShortcut(event, ks.universal_shift.down))
       moveTaskVertically("down");
 
-    if (matchesShortcut(event, ks.dueDateModal.default) && currentTask >= 0)
+    if (matchesShortcut(event, ks.dueDateModal.default) && currentTask >= 0) {
+      if (preventPickerShortcutInput) event.preventDefault();
       toggleDueDateModal("Update");
+    }
 
     if (event.keyCode === KeyCodes.ENTER) {
       event.preventDefault();
@@ -254,6 +259,7 @@ export function useCalendarKeyboard({
       return;
     }
   }, [
+    preventPickerShortcutInput,
     showDueDateModal,
     currentTask,
     currentDay,
