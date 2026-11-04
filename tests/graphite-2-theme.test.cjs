@@ -35,16 +35,26 @@ test("Graphite 2 restores before first paint, while rollback preserves its saved
   }
 });
 
-test("the new flag does not change any old theme's first-paint result", () => {
-  for (const theme of ["system", "porcelain", "graphite", "amoled", "dia"]) for (const dark of [false, true]) {
-    const on = boot(theme, true, dark);
-    const off = boot(theme, false, dark);
-    assert.equal(on.documentElement.outerHTML, off.documentElement.outerHTML);
+test("legacy cookies migrate identically before and after hydration", () => {
+  for (const enabled of [false, true]) for (const dark of [false, true]) {
+    for (const theme of ["light", "dark", "graphite", "dia", "rounded", "system", "unknown", "toString"]) {
+      const preference = preferences.normalizeThemePreference(theme, true, enabled);
+      const expected = preferences.resolveThemePreference(preference, dark ? "dark" : "light");
+      const document = boot(theme, enabled, dark);
+      assert.equal(document.documentElement.dataset.theme, expected, `${theme} ${enabled} ${dark}`);
+      assert.equal(document.cookie, `theme=${theme}`);
+    }
   }
 });
 
 test("Appearance picker shows Graphite 2 only when enabled and selects the saved choice", () => {
-  for (const enabled of [false, true]) {
+  for (const enabled of [false, true]) for (const [currentTheme, effectiveTheme, selected] of [
+    ["graphite-2", undefined, enabled ? "Graphite 2" : undefined],
+    ["system", "dark", "AMOLED"],
+    ["system", "light", "Light"],
+    [undefined, "dark", "AMOLED"],
+    [undefined, "light", "Light"],
+  ]) {
     const writes = [];
     const { default: Appearance } = load("src/components/Modals/Settings/AppearanceSection.tsx", {
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: flag },
@@ -52,7 +62,7 @@ test("Appearance picker shows Graphite 2 only when enabled and selects the saved
       "@/lib/flags/keys": {},
       "@/lib/contexts/mobileContext": { useMobileView: () => false },
       "lucide-react": { Check: "check" },
-      "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme: "graphite-2", switchToTheme: value => writes.push(value) }) },
+      "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme, effectiveTheme, switchToTheme: value => writes.push(value) }) },
       "@/lib/themePreferences": preferences,
       "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
       "./SettingsCard": { default: "section" },
@@ -62,9 +72,9 @@ test("Appearance picker shows Graphite 2 only when enabled and selects the saved
     const rows = picker.type(picker.props).props.children;
     const row = rows.find(row => row.props.children[0].props.children === "Graphite 2");
     assert.equal(Boolean(row), enabled);
-    assert.deepEqual(rows.filter(row => row.props.children[0].props.children !== "Graphite 2").map(row => row.props.children[0].props.children), ["Follow system", "Light · Porcelain", "Dark · Graphite", "OLED black · AMOLED", "Paper · Dia"]);
+    assert.deepEqual(rows.filter(row => row.props.children[0].props.children !== "Graphite 2").map(row => row.props.children[0].props.children), ["Light", "AMOLED"]);
+    assert.deepEqual(rows.filter(row => row.props.className.includes("bg-active-modal-element")).map(row => row.props.children[0].props.children), selected ? [selected] : []);
     if (enabled) {
-      assert.ok(row.props.className.includes("bg-active-modal-element"));
       row.props.onClick();
       assert.deepEqual(writes, ["graphite-2"]);
     }
@@ -100,7 +110,7 @@ test("Ctrl+K adds one command beside Graphite, dispatches it, and keeps old comm
   const off = commands(false);
   const command = on.find(command => command.key === "graphite2Theme");
   assert.equal(command.name, "Graphite 2");
-  assert.equal(on[on.findIndex(item => item.key === "darkTheme") + 1], command);
+  assert.deepEqual(on.filter(item => item.key.endsWith("Theme")).map(item => item.name), ["Light", "AMOLED", "Graphite 2"]);
   assert.deepEqual(on.filter(item => item !== command), off);
   const writes = [];
   let closed = 0;
@@ -203,7 +213,13 @@ test("server document gates Graphite 2 without changing other saved themes", asy
     "@/components/ErrorBoundary/ClientErrorReporter", "@/lib/ai/AiChipEventRecorder", "@/components/System/DeploySkewGuard",
     "@/components/FilesImageFallback", "@/lib/ticketSidebarBoot",
   ];
-  for (const enabled of [false, true]) for (const theme of ["graphite-2", "graphite", "porcelain", "amoled", "dia"]) {
+  for (const [theme, off, on] of [
+    ["graphite-2", "system", "graphite-2"],
+    ["graphite", "amoled", "graphite-2"],
+    ["porcelain", "porcelain", "porcelain"],
+    ["amoled", "amoled", "amoled"],
+    ["dia", "porcelain", "porcelain"],
+  ]) for (const [enabled, expected] of [[false, off], [true, on]]) {
     const { default: RootLayout } = load("src/app/layout.tsx", {
       ...Object.fromEntries(unused.map(name => [name, {}])),
       "next/headers": { cookies: async () => ({ get: name => name === "theme" ? { value: theme } : undefined }) },
@@ -223,9 +239,8 @@ test("server document gates Graphite 2 without changing other saved themes", asy
       "@/lib/firstScreen/serverTicketShell": { getServerTicketShell: async () => null },
     });
     const document = await RootLayout({ children: "Existing page" });
-    const expected = theme === "graphite-2" && !enabled ? "system" : theme;
     assert.equal(document.props["data-theme"], expected);
-    assert.equal(document.props.className.split(" ")[0], expected === "system" ? "system" : ["porcelain", "dia"].includes(theme) ? "light" : "dark");
+    assert.equal(document.props.className.split(" ")[0], expected === "system" ? "system" : ["porcelain", "dia"].includes(expected) ? "light" : "dark");
   }
 });
 

@@ -48,27 +48,17 @@ function boot(cookie, dark, enabled, width = 768) {
   return { classes: [...classes], theme: attributes["data-theme"], color };
 }
 
-test("Rounded follows device light and dark with exact DOM metadata and no first-paint flash", () => {
-  assert.deepEqual(themeOptions.at(-1), { title: "Material (follows device)", value: "rounded" });
-  for (const scheme of ["light", "dark"]) {
-    const theme = `rounded-${scheme}`;
-    assert.equal(resolveThemePreference("rounded", scheme), theme);
-    assert.equal(normalizeThemePreference("rounded", true), "rounded");
-    const metadata = { classes: [scheme, "rounded", theme], themeColor: scheme === "light" ? "#fcfcfc" : "#000000" };
-    assert.deepEqual(resolvedThemeDomMetadata[theme], metadata);
-    assert.deepEqual(boot("rounded", scheme === "dark", true), { classes: metadata.classes, theme, color: metadata.themeColor });
-  }
-});
-
-test("saved Material resolves as system below 768px and as Material from 768px without changing the cookie", () => {
+test("saved Material migrates to system at every width without changing the cookie", () => {
+  assert.equal(themeOptions.some(option => option.value === "rounded"), false);
   for (const width of [390, 767, 768, 1440]) for (const dark of [false, true]) {
-    const theme = width < 768 ? (dark ? "amoled" : "porcelain") : (dark ? "rounded-dark" : "rounded-light");
+    const theme = dark ? "amoled" : "porcelain";
     const metadata = resolvedThemeDomMetadata[theme];
+    assert.equal(normalizeThemePreference("rounded", true), "system");
     assert.deepEqual(boot("rounded", dark, true, width), { classes: metadata.classes, theme, color: metadata.themeColor });
   }
 });
 
-test("flag-off renders a saved Material choice as system and keeps the cookie for when the flag returns", () => {
+test("flag-off renders a saved Material choice as system and keeps the cookie", () => {
   assert.equal(normalizeThemePreference("rounded"), "system");
   assert.equal(normalizeThemePreference("rounded", false), "system");
   assert.equal(themeCookieSeedValue("rounded"), undefined);
@@ -81,28 +71,21 @@ test("flag-off renders a saved Material choice as system and keeps the cookie fo
   }
 });
 
-test("all four old themes preserve resolution and boot output regardless of flag and device", () => {
-  const expected = {
-    porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" },
-    graphite: { classes: ["dark", "graphite"], themeColor: "#232326" },
-    amoled: { classes: ["dark", "amoled"], themeColor: "#000000" },
-    dia: { classes: ["light", "dia"], themeColor: "#f6f4ef" },
-  };
-  for (const [theme, metadata] of Object.entries(expected)) {
-    assert.deepEqual(resolvedThemeDomMetadata[theme], metadata);
+test("legacy themes resolve consistently on each device", () => {
+  for (const theme of ["porcelain", "graphite", "amoled", "dia"]) {
     for (const enabled of [false, true]) for (const width of [390, 767, 768, 1440]) for (const scheme of ["light", "dark"]) {
-      assert.equal(normalizeThemePreference(theme, enabled), theme);
-      assert.equal(resolveThemePreference(theme, scheme), theme);
+      const resolved = resolveThemePreference(normalizeThemePreference(theme, enabled), scheme);
+      const metadata = resolvedThemeDomMetadata[resolved];
       assert.equal(themeCookieSeedValue(theme), undefined);
-      assert.deepEqual(boot(theme, scheme === "dark", enabled, width), { classes: metadata.classes, theme, color: metadata.themeColor });
+      assert.deepEqual(boot(theme, scheme === "dark", enabled, width), { classes: metadata.classes, theme: resolved, color: metadata.themeColor });
     }
   }
 });
 
-test("both theme pickers and the live listener use the ticket flag; server render gates the cookie", () => {
+test("Material stays hidden in the command picker", () => {
   for (const enabled of [false, true]) {
     const commands = getAllCommands({ context: "Others" }, false, enabled).flatMap(group => group.commandLists);
-    assert.equal(commands.some(command => command.key === "roundedTheme"), enabled);
+    assert.equal(commands.some(command => command.key === "roundedTheme"), false);
   }
 });
 
@@ -139,7 +122,7 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
       "./SettingsSectionShell": { default: "section" },
     });
     const picker = appearance().props.children.props.children;
-    assert.deepEqual(picker.props.options, themeOptions.filter(({ value }) => value !== "rounded" || (enabled && !isMobile)));
+    assert.deepEqual(picker.props.options, themeOptions);
     const source = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/commands.tsx"), "utf8");
     const parsed = ts.createSourceFile("commands.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const names = new Set(["getCommands", "getThemeCommands", "getLegacyCommands"]);
@@ -204,8 +187,8 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
   }
 });
 
-test("listener reapplies Material or system on width and device scheme changes without rewriting saved preferences", () => {
-  for (const enabled of [false, true]) for (const stored of themeOptions.map(option => option.value)) {
+test("listener migrates saved themes on width and device scheme changes without rewriting cookies", () => {
+  for (const enabled of [false, true]) for (const stored of ["rounded", ...themeOptions.map(option => option.value)]) {
     let cleanup;
     let observerCallback;
     let disconnected = false;

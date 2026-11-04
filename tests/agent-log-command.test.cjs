@@ -100,7 +100,8 @@ test("the palette memoizes the registry and keeps selection and theme arguments 
       for (const kanbanSelectAllEnabled of [false, true]) {
         const commandGroups = groups(false, roundedEnabled, isMobile, kanbanSelectAllEnabled);
         const commands = commandGroups.flatMap((group) => group.commandLists);
-        assert.equal(commands.some((command) => command.key === "roundedTheme"), roundedEnabled && !isMobile);
+        assert.ok(commands.some((command) => command.key === "lightTheme"));
+        assert.ok(commands.some((command) => command.key === "amoledTheme"));
         assert.deepEqual(commandGroups, getAllCommands(
           { context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory: false, isKanban: false } },
           kanbanSelectAllEnabled,

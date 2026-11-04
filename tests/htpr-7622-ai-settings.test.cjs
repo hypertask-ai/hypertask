@@ -786,7 +786,7 @@ test("Graphite 2 disabled blocks apply and undo destinations, without blocking e
   h.state.graphite2 = false;
   const page = await h.actions.readSettingsPage(6, themeScope);
   assert.equal(page.options.some((option) => option.value === "graphite-2"), false);
-  assert.equal(page.options.some((option) => option.value === "graphite"), true);
+  assert.deepEqual(page.options.map((option) => option.value), ["porcelain", "amoled"]);
   const blocked = await h.route.POST(request({ id: card.id, action: "apply", scope: themeScope }));
   assert.equal(blocked.status, 409);
   assert.match((await blocked.json()).error, /Graphite 2 theme is not available/);

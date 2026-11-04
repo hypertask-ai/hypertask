@@ -33,15 +33,13 @@ const { getAllCommands } = jiti(
 );
 
 const expectedThemes = [
-  { title: "Follow system", value: "system" },
-  { title: "Light · Porcelain", value: "porcelain" },
-  { title: "Dark · Graphite", value: "graphite" },
-  { title: "OLED black · AMOLED", value: "amoled" },
-  { title: "Paper · Dia", value: "dia" },
+  { title: "Light", value: "porcelain" },
+  { title: "AMOLED", value: "amoled" },
+  { title: "Graphite 2", value: "graphite-2" },
 ];
 
 test("theme preferences use one clear label and order", () => {
-  assert.deepEqual(themeOptions.filter(({ value }) => value !== "rounded" && value !== "graphite-2"), expectedThemes);
+  assert.deepEqual(themeOptions, expectedThemes);
 });
 
 test("system mode follows the standard light and dark palettes", () => {
@@ -61,8 +59,8 @@ test("new sessions use the system preference", () => {
 
 test("legacy cookies remain compatible and invalid cookies fall back safely", () => {
   assert.equal(normalizeThemePreference("light"), "porcelain");
-  assert.equal(normalizeThemePreference("dark"), "graphite");
-  assert.equal(normalizeThemePreference("dia"), "dia");
+  assert.equal(normalizeThemePreference("dark"), "graphite-2");
+  assert.equal(normalizeThemePreference("dia"), "porcelain");
   assert.equal(normalizeThemePreference("unknown"), undefined);
 });
 
@@ -150,8 +148,8 @@ test("initial documents use a dark fallback for unresolved system themes", () =>
 test("theme boot synchronizes the Android status bar before first paint", () => {
   const cases = [
     { cookie: "theme=porcelain", systemDark: true, expected: "#ffffff" },
-    { cookie: "theme=dia", systemDark: true, expected: "#f6f4ef" },
-    { cookie: "theme=graphite", systemDark: false, expected: "#232326" },
+    { cookie: "theme=dia", systemDark: true, expected: "#ffffff" },
+    { cookie: "theme=graphite", systemDark: false, expected: "#17181b" },
     { cookie: "theme=amoled", systemDark: false, expected: "#000000" },
     { cookie: "theme=system", systemDark: false, expected: "#ffffff" },
     { cookie: "theme=system", systemDark: true, expected: "#000000" },
@@ -183,8 +181,8 @@ test("theme boot synchronizes the Android status bar before first paint", () => 
   }
 });
 
-test("Ctrl+K exposes five direct theme choices without duplicate routes", () => {
-  const groups = getAllCommands({ context: "Others" });
+test("Ctrl+K exposes three direct theme choices without duplicate routes", () => {
+  const groups = getAllCommands({ context: "Others" }, false, false, "", "", false, false, false, true);
   const appearance = groups.find((group) => group.group === "Appearance");
   const settings = groups.find((group) => group.group === "Settings");
   const themeCommands = appearance.commandLists.slice(0, expectedThemes.length);
@@ -192,14 +190,14 @@ test("Ctrl+K exposes five direct theme choices without duplicate routes", () => 
   assert.deepEqual(
     themeCommands.map(({ key, name }) => ({ key, name })),
     [
-      { key: "systemTheme", name: "Follow system" },
-      { key: "lightTheme", name: "Light · Porcelain" },
-      { key: "darkTheme", name: "Dark · Graphite" },
-      { key: "amoledTheme", name: "OLED black · AMOLED" },
-      { key: "paperTheme", name: "Paper · Dia" },
+      { key: "lightTheme", name: "Light" },
+      { key: "amoledTheme", name: "AMOLED" },
+      { key: "graphite2Theme", name: "Graphite 2" },
     ],
   );
   assert.ok(themeCommands.every(({ keywords }) => keywords.includes("theme")));
+  assert.ok(themeCommands[0].keywords.split(" ").includes("white"));
+  for (const keyword of ["black", "oled"]) assert.ok(themeCommands[1].keywords.split(" ").includes(keyword));
   assert.ok(!appearance.commandLists.some(({ key }) => key === "setTheme"));
   assert.ok(
     !appearance.commandLists.some(({ key }) => key === "toggleDarkMode"),

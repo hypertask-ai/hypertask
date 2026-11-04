@@ -1,14 +1,10 @@
 export const themeOptions = [
-  { title: "Follow system", value: "system" },
-  { title: "Light · Porcelain", value: "porcelain" },
-  { title: "Dark · Graphite", value: "graphite" },
+  { title: "Light", value: "porcelain" },
+  { title: "AMOLED", value: "amoled" },
   { title: "Graphite 2", value: "graphite-2" },
-  { title: "OLED black · AMOLED", value: "amoled" },
-  { title: "Paper · Dia", value: "dia" },
-  { title: "Material (follows device)", value: "rounded" },
 ] as const;
 
-export type ThemePreference = (typeof themeOptions)[number]["value"];
+export type ThemePreference = (typeof themeOptions)[number]["value"] | "system" | "graphite" | "dia" | "rounded";
 export type ResolvedTheme = Exclude<ThemePreference, "system" | "rounded"> | "rounded-light" | "rounded-dark";
 export type SystemColorScheme = "light" | "dark";
 
@@ -27,23 +23,25 @@ export const resolvedThemeDomMetadata: Record<
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 
-const themePreferences = new Set<ThemePreference>(
-  themeOptions.map(({ value }) => value),
-);
+export const legacyThemePreferences: Record<string, ThemePreference> = {
+  light: "porcelain",
+  dark: "graphite-2",
+  graphite: "graphite-2",
+  dia: "porcelain",
+  rounded: "system",
+};
+
+const themePreferences = new Set<string>(["system", ...themeOptions.map(({ value }) => value)]);
 
 export const normalizeThemePreference = (
   theme?: string,
-  roundedEnabled = false,
+  _roundedEnabled = false,
   graphite2Enabled = true,
 ): ThemePreference | undefined => {
-  if (theme === "rounded" && !roundedEnabled) return "system";
-  if (theme === "graphite-2" && !graphite2Enabled) return "system";
-  const normalized =
-    theme === "dark" ? "graphite" : theme === "light" ? "porcelain" : theme;
-
-  return themePreferences.has(normalized as ThemePreference)
-    ? (normalized as ThemePreference)
-    : undefined;
+  if (!theme) return undefined;
+  const normalized = Object.hasOwn(legacyThemePreferences, theme) ? legacyThemePreferences[theme] : theme;
+  if (normalized === "graphite-2" && !graphite2Enabled) return theme === "graphite-2" ? "system" : "amoled";
+  return themePreferences.has(normalized) ? normalized as ThemePreference : undefined;
 };
 
 export const themeCookieSeedValue = (

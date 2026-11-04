@@ -12,9 +12,8 @@ export class SettingChangeRejectedError extends Error {}
 
 export async function readSettingsPage(userId: number, scope: SettingsScope) {
   if (scope.section === "appearance") {
-    const rounded = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId);
     const graphite2 = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId);
-    return { theme: scope.theme ?? "system", options: themeOptions.filter((option) => (rounded || option.value !== "rounded") && (graphite2 || option.value !== "graphite-2")) };
+    return { theme: scope.theme ?? "system", options: themeOptions.filter((option) => graphite2 || option.value !== "graphite-2") };
   }
   if (scope.section === "notifications") {
     const settings = await prisma.userSetting.findUnique({
