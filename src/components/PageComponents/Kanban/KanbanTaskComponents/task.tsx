@@ -234,6 +234,7 @@ const TaskContent = ({
     taskRef,
     toggleDeleteModal,
     markAsDone,
+    boardInboxArchive,
     eHandler,
     setShowAssignModal,
     setShowCommands,
@@ -270,6 +271,7 @@ const TaskContent = ({
     taskRef,
     toggleDeleteModal,
     markAsDone,
+    boardInboxArchive,
     eHandler,
     setShowAssignModal,
     setShowCommands,
@@ -308,6 +310,7 @@ const TaskContent = ({
       taskRef,
       toggleDeleteModal,
       markAsDone,
+      boardInboxArchive,
       eHandler,
       setShowAssignModal,
       setShowCommands,
@@ -403,7 +406,13 @@ const TaskContent = ({
       });
     }
 
-    if (taskShortcutAction === "edit") eHandler();
+    if (taskShortcutAction === "edit") {
+      if (boardInboxArchive) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      eHandler();
+    }
 
     if (taskShortcutAction === "assignee" && !lastgPress.current) {
       const now = new Date().getTime();

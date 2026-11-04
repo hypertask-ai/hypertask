@@ -35,7 +35,7 @@ function evaluate(expression, bindings) {
 }
 
 const { getTaskShortcutAction } = loadModule("src/lib/keyboard/taskShortcuts.ts");
-const event = () => ({ keyCode: 69, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, repeat: false, preventDefault() {} });
+const event = () => ({ keyCode: 69, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, repeat: false, defaultPrevented: false, cancelBubble: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.cancelBubble = true; } });
 
 function board(enabled, task) {
   const calls = [];
@@ -47,13 +47,13 @@ function board(enabled, task) {
   const element = { contains: () => true };
   const keydown = evaluate(initializer(boardFile, "handleKeyDown"), {
     useCallback: fn => fn, task, handleBulkKeyDown: () => false,
-    latestRef: { current: { task, isActive: true, isApple: false, taskRef: { current: element }, showCommands: {}, eHandler: handler } },
+    latestRef: { current: { task, isActive: true, isApple: false, taskRef: { current: element }, showCommands: {}, boardInboxArchive: enabled, eHandler: handler } },
     document: { activeElement: element, body: {} },
     getTaskShortcutAction, returnIfModalOrInputActive: () => false,
     KeyCodes: loadModule("src/lib/constants/keyboard-handler.ts").KeyCodes,
     lastgPress: { current: null }, lastgClick: { current: null }, lastM_APress: { current: null },
   });
-  return { calls, press: () => keydown(event()) };
+  return { calls, press: (e = event()) => keydown(e) };
 }
 
 function table(enabled, task) {
@@ -111,6 +111,27 @@ for (const [name, fixture] of [["board", board], ["table", table]]) {
     assert.equal(fx.calls.some(call => call[1] === "This task is not in inbox"), count !== undefined);
   });
 }
+
+for (const count of [0, 1]) test(`board E consumes the event before focus moves to another task with ${count} notifications`, async () => {
+  const first = board(true, { id: 42, _count: { notifications: 1 } });
+  const next = board(true, { id: 43, _count: { notifications: count } });
+  const key = event();
+  await first.press(key);
+  await next.press(key);
+  assert.equal(key.defaultPrevented, true);
+  assert.equal(key.cancelBubble, true);
+  assert.deepEqual(first.calls, [["archive", 7, 42]]);
+  assert.deepEqual(next.calls, []);
+});
+
+test("board E leaves the event unconsumed with flag off", async () => {
+  const fx = board(false, { id: 42, _count: { notifications: 1 } });
+  const key = event();
+  await fx.press(key);
+  assert.equal(key.defaultPrevented, false);
+  assert.equal(key.cancelBubble, false);
+  assert.deepEqual(fx.calls, [["toast", "This task is not in inbox"]]);
+});
 
 test("board archive clears cached badge and notifications", async () => {
   const task = { id: 42, totalComments: 2, notifications: [{ id: 3, taskId: 42 }] };
