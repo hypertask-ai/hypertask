@@ -37,6 +37,11 @@ and that archiving/undo works.
 
 ## What proof to collect
 
+For Inbox visual changes, an independent reviewer must compare the live Inbox
+against its Figma frame in Light, AMOLED and Graphite 2. Capture three
+side-by-side screenshot pairs, one per theme, and record pass or fail for
+each brief item. Return mismatches to Bugs.
+
 Screenshot the inbox with the new item present, then after archiving it, then
 after undo, showing it restored. Reload between each step, not just after the
 last one, since undo bugs tend to be about state surviving a reload.

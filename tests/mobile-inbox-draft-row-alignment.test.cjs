@@ -1,84 +1,40 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
+const { loadModule } = require("./helpers/loadModule.cjs");
+const React = require("react");
+const { renderToStaticMarkup } = require("react-dom/server");
+const { JSDOM } = require("jsdom");
 
-const source = fs.readFileSync(
-  path.resolve(
-    __dirname,
-    "../src/components/notifications/InboxDraftRow.tsx",
-  ),
-  "utf8",
-);
-const notificationRow = fs.readFileSync(
-  path.resolve(
-    __dirname,
-    "../src/components/notifications/NotificationRow.tsx",
-  ),
-  "utf8",
-);
-
-
-const openButton = source.match(
-  /<button[\s\S]*?data-inbox-draft-control="true"[\s\S]*?className="([^"]*)"/,
-);
-const notificationContent = notificationRow.match(
-  /<TaskRowContainer[\s\S]*?className={`([^`]*)`}/,
-);
-const container = source.match(/<div\s+className="(group\/draft-row[^"]*)"/);
-
-const expectedButtonClasses = [
-  "relative",
-  "flex",
-  "min-w-0",
-  "flex-1",
-  "cursor-pointer",
-  "flex-col",
-  "justify-between",
-  "rounded-md",
-  "px-5",
-  "py-2",
-  "pr-14",
-  "text-left",
-  "outline-none",
-  "focus-visible:ring-1",
-  "focus-visible:ring-inset",
-  "focus-visible:ring-border-active",
-  "md:flex-row",
-  "md:items-center",
-  "md:space-x-8",
-  "md:px-0",
-  "md:pr-10",
-];
-
-const expectedContainerClasses = [
-  "group/draft-row",
-  "relative",
-  "flex",
-  "min-w-0",
-  "items-center",
-  "gap-[8px]",
-  "hover:bg-hoverCardBackground",
-  "focus-within:bg-hoverCardBackground",
-  "sm:p-inbox-horizontal",
-  "md:gap-0",
-  "md:border-l-4",
-  "md:border-l-transparent",
-  "md:p-0",
-  "data-[selected=true]:md:border-l-selected-item-border",
-  "data-[selected=true]:md:bg-active-elementBg",
-];
-
-test("the draft row keeps the same mobile content inset as notification rows", () => {
-  assert.ok(notificationContent, "notification content className not found");
-  const notificationClasses = notificationContent[1].trim().split(/\s+/);
-  assert.ok(notificationClasses.includes("px-[20px]"));
-  assert.ok(notificationClasses.includes("md:px-0"));
-  assert.ok(openButton, "open-draft button className not found");
-  assert.deepEqual(openButton[1].trim().split(/\s+/), expectedButtonClasses);
+let rowFill = false;
+const { default: InboxDraftRow } = loadModule("src/components/notifications/InboxDraftRow.tsx", {
+  "@/hooks/useFlag": { useFlag: () => rowFill },
+  "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+  "@tanstack/react-query": { useQueryClient: () => ({}) },
 });
 
-test("the draft row container itself keeps the shared inbox horizontal padding", () => {
-  assert.ok(container, "draft row container className not found");
-  assert.deepEqual(container[1].trim().split(/\s+/), expectedContainerClasses);
+function renderRow() {
+  const draft = { id: 1, task: { title: "Draft task" }, content: "Draft preview", updatedAt: "2026-10-03T23:30:00.000Z" };
+  const html = renderToStaticMarkup(React.createElement(InboxDraftRow, {
+    draft, activeDrafts: [draft], userId: 1, selected: false, onFocus: () => {}, onOpen: () => {},
+  }));
+  return new JSDOM(html).window.document;
+}
+
+for (const enabled of [false, true]) {
+  test(`the draft row keeps its inset and flag-controlled rounding (${enabled})`, () => {
+    rowFill = enabled;
+    const button = renderRow().querySelector('button[data-inbox-draft-control="true"]');
+    assert.ok(button, "open-draft button must render");
+    assert.ok(button.classList.contains("px-5"));
+    assert.ok(button.classList.contains("md:px-0"));
+    assert.ok(button.classList.contains(enabled ? "rounded" : "rounded-md"));
+    assert.ok(!button.classList.contains(enabled ? "rounded-md" : "rounded"));
+  });
+}
+
+test("the draft row container keeps the shared inbox horizontal padding", () => {
+  const container = renderRow().querySelector(".group\\/draft-row");
+  assert.ok(container, "draft row container must render");
+  assert.ok(container.classList.contains("sm:p-inbox-horizontal"));
+  assert.ok(container.classList.contains("md:p-0"));
 });

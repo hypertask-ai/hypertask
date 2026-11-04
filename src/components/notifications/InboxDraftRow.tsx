@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { projectDisplayDate } from "@/lib/firstScreen/display";
 import axios from "axios";
@@ -32,6 +34,7 @@ const InboxDraftRow = ({
   onFocus,
   onOpen,
 }: InboxDraftRowProps) => {
+  const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
   const snapshot = useFirstScreenSurface(userId);
   const queryClient = useQueryClient();
   const [isArchiving, setIsArchiving] = useState(false);
@@ -84,7 +87,7 @@ const InboxDraftRow = ({
         type="button"
         data-inbox-draft-control="true"
         aria-current={selected ? "true" : undefined}
-        className="relative flex min-w-0 flex-1 cursor-pointer flex-col justify-between rounded-md px-5 py-2 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-active md:flex-row md:items-center md:space-x-8 md:px-0 md:pr-10"
+        className={`relative flex min-w-0 flex-1 cursor-pointer flex-col justify-between ${rowFill ? "rounded" : "rounded-md"} px-5 py-2 pr-14 text-left outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border-active md:flex-row md:items-center md:space-x-8 md:px-0 md:pr-10`}
         onClick={() => onOpen(draft)}
         onKeyDown={(event) => {
           if (event.key.toLowerCase() !== "e") return;

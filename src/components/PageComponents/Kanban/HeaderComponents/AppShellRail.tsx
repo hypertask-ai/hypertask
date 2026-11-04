@@ -1,6 +1,7 @@
 "use client";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_8035_NEW_TASK_FILL_FLAG } from "@/lib/flags/definitions/htpr-8035-new-task-fill";
+import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
 
 import Link from "next/link";
 import dynamic from "next/dynamic";
@@ -125,6 +126,7 @@ const AppShellRail = ({
   const settingsAccessibleName = useFlag(HTPR_8146_SETTINGS_NAME_FLAG);
   const sidebarNewTask = useFlag(HTPR_8035_SIDEBAR_NEW_TASK_FLAG);
   const newTaskFill = useFlag(HTPR_8035_NEW_TASK_FILL_FLAG);
+  const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
   const pagesScreen = useFlag(HTPR_7309_PAGES_SCREENS_FLAG);
   const standalonePages = useFlag(HTPR_7298_STANDALONE_PAGES_FLAG);
   const pathname = usePathname();
@@ -182,6 +184,7 @@ const AppShellRail = ({
   return (
     <>
     <aside
+      data-inbox-rail={onInbox && inboxRowFill ? "" : undefined}
       className={`app-shell-rail fixed left-0 top-0 z-sticky flex h-[100svh] flex-col border-r-[1.3px] border-light-black-border-1 bg-containerBackground py-2 [@media(max-height:540px)]:overflow-y-auto scrollbar-none ${
         wide ? "w-[130px] items-stretch px-1.5" : "w-[48px] items-center"
       }`}
@@ -305,7 +308,7 @@ const AppShellRail = ({
             className="group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black"
             aria-label="AI Chat"
           >
-            <IconoirSparks size={18} strokeWidth={1.5} />
+            {onInbox && inboxRowFill ? <IconoirChat size={18} strokeWidth={1.5} /> : <IconoirSparks size={18} strokeWidth={1.5} />}
             <Tooltip left={tooltipLeft} bottom={-8} text="AI Chat" keyCombination={["5"]} />
           </button>
         </RailItem>
