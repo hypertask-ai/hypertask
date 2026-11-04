@@ -14,10 +14,13 @@ install -d -o reviewdispatch -g reviewdispatch -m 700 \
   /var/lib/hypertask-ai-review/locks \
   /var/lib/hypertask-ai-review/dispatched \
   /var/lib/hypertask-ai-review/completed
-# The shipped review-schema.json requires confidence/evidence as nullable fields so strict
-# JSON-schema mode is satisfied. Reviewer hosts keep the OLD /etc copy until this script
-# re-runs; old-schema wrapper output simply omits confidence/evidence, which normalizeReview
-# treats exactly like null/omitted. Do not break on either schema version.
+# The shipped review-schema.json is the only thing that constrains the model when the wrappers
+# run, so every field the engine reads must be declared here or the model never returns it.
+# Reviewer hosts keep the OLD /etc copy until this script re-runs: an older copy omits the new
+# fields, and an omitted field is dropped silently rather than rejected (an absent
+# confidence/evidence pair is read like null, and an absent kind makes every finding a code
+# defect, so a recorded policy decision can never settle one). Re-run this script on the review
+# host whenever the finding shape changes.
 install -m 644 "$source_dir/review-schema.json" /etc/hypertask-ai-review/review-schema.json
 install -o root -g aireviewer -m 750 "$source_dir/codex-review" /usr/local/libexec/hypertask-codex-subscription-review
 install -o root -g aireviewer -m 750 "$source_dir/claude-review" /usr/local/libexec/hypertask-claude-subscription-review

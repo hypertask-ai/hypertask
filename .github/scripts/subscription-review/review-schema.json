@@ -11,9 +11,10 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["severity", "file", "line", "title", "details", "suggestion", "confidence", "evidence"],
+        "required": ["severity", "kind", "file", "line", "title", "details", "suggestion", "confidence", "evidence"],
         "properties": {
           "severity": { "type": "string", "enum": ["blocker", "major", "minor"] },
+          "kind": { "type": "string", "enum": ["code", "policy"] },
           "file": { "type": "string" },
           "line": { "anyOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
           "title": { "type": "string" },

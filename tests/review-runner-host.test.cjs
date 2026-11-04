@@ -21,6 +21,20 @@ test('subscription CLIs receive trusted policy through authoritative channels', 
   assert.match(claudeWrapper, /\.cache\/hypertask-review/)
 })
 
+test('the shipped review schema asks for the finding kind a policy decision settles', async () => {
+  const dir = '.github/scripts/subscription-review'
+  const schema = JSON.parse(await readFile(`${dir}/review-schema.json`, 'utf8'))
+  const finding = schema.properties.findings.items
+  assert.equal(finding.additionalProperties, false)
+  assert.ok(finding.required.includes('kind'), 'kind must be required, or the model never returns it')
+  assert.deepEqual(finding.properties.kind, { type: 'string', enum: ['code', 'policy'] })
+  for (const wrapper of ['codex-review', 'claude-review']) {
+    const script = await readFile(`${dir}/${wrapper}`, 'utf8')
+    assert.match(script, /\/etc\/hypertask-ai-review\/review-schema\.json/,
+      `${wrapper} must constrain the model with the schema installed on the review host`)
+  }
+})
+
 test('root-installed poller is the only automatic review dispatcher', async () => {
   await assert.rejects(access('.github/workflows/claude-review.yml'), { code: 'ENOENT' })
   await assert.rejects(access('.github/workflows/ai-review.yml'), { code: 'ENOENT' })
