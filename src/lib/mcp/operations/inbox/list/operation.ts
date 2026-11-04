@@ -10,6 +10,7 @@ import prisma from '@/lib/prisma'
 import { HTPR_7326_SLIM_MCP_INBOX_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { generalConfig } from '@/lib/configs/general.config'
+import { getBlockers } from '@/lib/mcp/operations/inbox/list/blockers'
 
 function positiveInteger(value: string | null): number | null {
     if (value === null || !/^\d+$/.test(value)) return null
@@ -33,6 +34,7 @@ export async function GET(request: NextRequest) {
         }
         const user = ctx.user;
         userObj = user
+        if (request.nextUrl.searchParams.has('waiting_on')) return await getBlockers(request, ctx)
 
         if (request.nextUrl.searchParams.get('agent_invocations') === 'true') {
             if (!ctx.agentId) {
