@@ -62,7 +62,6 @@ function landmarks(screen: string, phone: boolean): Targets {
       title: target('[data-testid="my-tasks-title"]'),
       toolbar: target('[data-testid="my-tasks-toolbar"]'),
       list: target('[data-testid="my-tasks-list"]'),
-      splits: target(phone ? '[data-testid="my-tasks-splits-phone"]' : '[data-testid="my-tasks-splits-desktop"]'),
     }
     case 'new-task': return {
       window: target('#createTaskModal .modal-content'),
