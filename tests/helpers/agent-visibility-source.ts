@@ -115,9 +115,9 @@ export async function assertAgentVisibilitySources() {
   );
   assert.match(
     assignRoute,
-    /mapVisibleMcpAgent\([\s\S]*?row\.agentAssigner,[\s\S]*?ctx\.user\.id,[\s\S]*?task\.projectId/,
+    /mapTaskAssignee\(row, ctx\.user\.id, task\.projectId\)/,
   );
-  assert.match(assignRoute, /if \(row\.agent && !agent\) return \[\]/);
+  assert.match(assignRoute, /mapped \? \[\{ \.\.\.mapped, userId: row\.userId \}\] : \[\]/);
   for (const ownerSurface of [
     agentRoute,
     activityRoute,
