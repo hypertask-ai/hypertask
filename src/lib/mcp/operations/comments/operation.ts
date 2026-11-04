@@ -6,7 +6,7 @@ import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
-import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -108,7 +108,8 @@ export interface ListCommentsResponse {
 }
 
 export interface McpMentionInput {
-  user_id: number
+  user_id?: number
+  agent_id?: string
   display_name: string
 }
 
@@ -833,7 +834,21 @@ export async function POST(request: NextRequest) {
         inputs: mentionInputs,
         projectId: taskWithOwner.projectId,
         requestingUserId: user.id,
+        allowAgents: await isFeatureEnabled(HTPR_8513_AGENT_MENTIONS_FLAG, user.id),
       })
+      if (resolution.error) {
+        return NextResponse.json(
+          {
+            ...buildFieldError(
+              resolution.error.status === 404 ? 'not_found' : 'invalid_field',
+              'mentions',
+              resolution.error.message
+            ),
+            ...(dryRun && { valid: false })
+          },
+          { status: resolution.error.status }
+        )
+      }
       if (resolution.invalid) {
         return NextResponse.json(
           {
@@ -867,7 +882,9 @@ export async function POST(request: NextRequest) {
     if (mentions && mentions.length > 0) {
       const memberCheck = await validateProjectMemberIds(
         taskWithOwner.projectId,
-        mentions.map((mention) => mention.user_id)
+        mentions
+          .map((mention) => mention.user_id)
+          .filter((id): id is number => typeof id === 'number')
       )
 
       if (memberCheck.error) {
@@ -1002,7 +1019,8 @@ export async function POST(request: NextRequest) {
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
-      mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
+      mentionsPerson: textMentionIds.length > 0 ||
+        (mentions ?? []).some((mention) => typeof mention.user_id === 'number'),
       hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText) || hasImageAttachments ||
         (has_attachments === true && await isFeatureEnabled(HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, user.id)),
     }

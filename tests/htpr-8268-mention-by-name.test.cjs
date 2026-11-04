@@ -63,7 +63,7 @@ test('an unknown name is refused with close matches, never guessed', () => {
 
 test('no close match still names the lookup tool', () => {
   const message = mentionProblemMessage({ input: 'Nobody', reason: 'unknown', closeMatches: [] })
-  assert.match(message, /is not a person on this board/)
+  assert.match(message, /is not a person or agent on this board/)
   assert.match(message, /list_project_members/)
 })
 
@@ -72,9 +72,10 @@ test('the refusal message offers the close matches', () => {
   assert.match(message, /Did you mean "Valentin Yeo"\?/)
 })
 
-test('close matches stay short and ignore non-people', () => {
+test('close matches stay short and include the members it is given', () => {
   const withAgent = [...members, { id: 'agent-1', displayName: 'Valentin Bot' }]
-  assert.deepEqual(closeMentionMatches('Valentin', withAgent), ['Valentin Yeo'])
+  assert.deepEqual(closeMentionMatches('Valentin', withAgent), ['Valentin Yeo', 'Valentin Bot'])
+  assert.deepEqual(closeMentionMatches('Valentin', members), ['Valentin Yeo'])
 })
 
 test('names and object entries both resolve for a project', async () => {

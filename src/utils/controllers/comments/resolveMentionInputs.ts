@@ -1,6 +1,6 @@
 import { getProjectMembers } from "@/utils/controllers/projects/getProjectMembers";
 import {
-  resolveMentionEntries,
+  resolveMentionTargets,
   type MentionProblem,
   type ResolvableMember,
 } from "./resolveMentions";
@@ -14,7 +14,8 @@ export interface MentionObjectInput {
 export type RawMentionInput = string | MentionObjectInput;
 
 export interface ResolvedMentionInput {
-  user_id: number;
+  user_id?: number;
+  agent_id?: string;
   display_name: string;
 }
 
@@ -22,6 +23,7 @@ export interface MentionInputResolution {
   mentions: ResolvedMentionInput[];
   problems: MentionProblem[];
   invalid: boolean;
+  error: { status: number; message: string } | null;
 }
 
 function isMentionObject(input: RawMentionInput): input is MentionObjectInput {
@@ -42,8 +44,9 @@ export async function resolveMentionInputs(params: {
   inputs: RawMentionInput[];
   projectId: number;
   requestingUserId: number;
+  allowAgents?: boolean;
 }): Promise<MentionInputResolution> {
-  const { inputs, projectId, requestingUserId } = params;
+  const { inputs, projectId, requestingUserId, allowAgents = false } = params;
   const mentions: ResolvedMentionInput[] = [];
   const problems: MentionProblem[] = [];
   let invalid = false;
@@ -65,37 +68,43 @@ export async function resolveMentionInputs(params: {
   }
 
   if (names.length > 0) {
-    const { members, error } = await getProjectMembers(
+    const { members, error: membersError } = await getProjectMembers(
       projectId,
       undefined,
       requestingUserId,
     );
-    if (error || !members) {
+    if (membersError || !members) {
       return {
         mentions,
-        problems: names.map((name) => ({
-          input: name,
-          reason: "unknown" as const,
-          closeMatches: [],
-        })),
+        problems,
         invalid,
+        error: membersError ?? {
+          status: 500,
+          message: "Could not read the members of this board.",
+        },
       };
     }
-    const resolvable: ResolvableMember[] = members.map((member) => ({
-      id: member.id,
-      displayName: member.displayName,
-    }));
-    const { resolved, problems: nameProblems } = resolveMentionEntries(
+    const resolvable: ResolvableMember[] = members
+      .filter((member) => allowAgents || typeof member.id === "number")
+      .map((member) => ({
+        id: member.id,
+        displayName: member.displayName,
+      }));
+    const { resolved, problems: nameProblems } = resolveMentionTargets(
       names,
       resolvable,
     );
     for (const mention of resolved) {
-      mentions.push({ user_id: mention.userId, display_name: mention.displayName });
+      mentions.push(
+        "user_id" in mention
+          ? { user_id: mention.user_id, display_name: mention.display_name }
+          : { agent_id: mention.agent_id, display_name: mention.display_name },
+      );
     }
     problems.push(...nameProblems);
   }
 
-  return { mentions, problems, invalid };
+  return { mentions, problems, invalid, error: null };
 }
 
 export function mentionProblemMessage(problem: MentionProblem): string {
@@ -103,6 +112,6 @@ export function mentionProblemMessage(problem: MentionProblem): string {
     ? ` Did you mean ${problem.closeMatches.map((name) => `"${name}"`).join(" or ")}?`
     : " No board member matches that name; list them with list_project_members.";
   return problem.reason === "ambiguous"
-    ? `@${problem.input} matches more than one person on this board.${close}`
-    : `@${problem.input} is not a person on this board.${close}`;
+    ? `@${problem.input} matches more than one member of this board.${close}`
+    : `@${problem.input} is not a person or agent on this board.${close}`;
 }
