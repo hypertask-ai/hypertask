@@ -21,6 +21,7 @@ function setup(options = {}) {
       task: { findUnique: async () => ({ userId: 6, projectId: 15, uniqueIndex: 7341 }) },
       user: { findUnique: async () => user },
       comment: { findUnique: async () => null },
+      member: { findFirst: async () => (options.notMember ? null : { id: 1 }) },
     } },
     '@/lib/mcp/agents': { getMcpSessionAgentSummary: async () => null, mcpVisibleAgentSelect: () => ({}) },
     '@/utils/controllers/urls/extractUrlsFromContent': {

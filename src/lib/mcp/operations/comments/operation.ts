@@ -176,6 +176,8 @@ type AgentLogPrincipal = { userId: number; agentId: string; teamScope: AgentToke
 
 class AgentLogUnavailableError extends Error {}
 
+class AgentLogBoardMemberError extends Error {}
+
 async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
   const { runtimeAgentRunsEnabledFor } = await import('@/lib/agentRuns/service')
   if (!(await runtimeAgentRunsEnabledFor(principal))) return null
@@ -1032,7 +1034,17 @@ export async function POST(request: NextRequest) {
       ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)
       : null
     if (writingPolicy && ctx.agentId && kind === undefined && !agentLogEntry) {
-      return NextResponse.json({ success: false, error: 'Agent log unavailable. Retry later or use kind (question|qa|done) for a people comment.' }, { status: 503 })
+      return NextResponse.json(
+        {
+          ...buildFieldError(
+            'missing_field',
+            'kind',
+            'Choose kind (question|qa|done) to post for people: the agent log cannot take this post, so nothing was posted.'
+          ),
+          ...(dryRun && { valid: false })
+        },
+        { status: 400 }
+      )
     }
     const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
     const logStatusFlagOn = routedTo === 'log'
@@ -1089,7 +1101,18 @@ export async function POST(request: NextRequest) {
               activity: { id, runId, type, text, createdAt },
             }
           }
-          if (writingPolicy) throw new AgentLogUnavailableError('Agent log unavailable. Retry later; no comment was published.')
+          if (writingPolicy) {
+            const boardMember = await prisma.member.findFirst({
+              where: { projectId: taskWithOwner.projectId, agentId: ctx.agentId, status: 'Accepted' },
+              select: { id: true },
+            })
+            if (!boardMember) {
+              throw new AgentLogBoardMemberError(
+                `This agent is not a member of this board, so nothing was posted. Request access with the hypertask_request_board_access tool (project_id ${taskWithOwner.projectId}); the agent's owner approves it in Inbox → Decisions.`
+              )
+            }
+            throw new AgentLogUnavailableError('Agent log unavailable. Retry later; no comment was published.')
+          }
         }
 
         const comment = await createCommentService({
@@ -1186,6 +1209,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ...mcpResponse, skill_context: skillContext }, { status: createdStatus })
   } catch (error) {
     if (error instanceof AgentLogUnavailableError) return NextResponse.json({ success: false, error: error.message }, { status: 503 })
+    if (error instanceof AgentLogBoardMemberError) {
+      return NextResponse.json({ success: false, error: error.message, code: 'forbidden' }, { status: 403 })
+    }
     if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
     if (isPlanLimitReachedError(error)) {
       const response = planLimitResponse(error);

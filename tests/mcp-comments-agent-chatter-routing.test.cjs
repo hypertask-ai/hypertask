@@ -91,7 +91,7 @@ for (const kind of ['chatter', null, '', 1]) {
   })
 }
 
-for (const options of [{ noRun: true }, { runtime: false }, { noActivity: true }]) {
+for (const options of [{ noRun: true }, { noActivity: true }]) {
   test(`unavailable log refuses publication: ${JSON.stringify(options)}`, async () => {
     const { post, calls } = setup(options)
     const response = await post()
@@ -100,6 +100,15 @@ for (const options of [{ noRun: true }, { runtime: false }, { noActivity: true }
     assert.equal(calls.comments.length, 0)
   })
 }
+
+test('a board without the agent log asks for a kind, not a retry', async () => {
+  const { post, calls } = setup({ runtime: false })
+  const response = await post()
+  assert.equal(response.status, 400)
+  assert.equal(response.body.field, 'kind')
+  assert.equal(response.body.code, 'missing_field')
+  assert.equal(calls.comments.length, 0)
+})
 
 test('dry run reports routing without run, activity or comment writes', async () => {
   for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'log'], [{}, { kind: 'question' }, 'comments']]) {

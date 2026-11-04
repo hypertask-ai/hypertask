@@ -90,6 +90,8 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 
 An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
 
+Nothing is published when the log cannot take the note. When the board's owner has no agent log at all, the answer is `400` naming `kind`, so the caller learns to send a people kind instead of retrying forever. When the agent is not an accepted member of the board, the answer is `403` naming its board access, with the `hypertask_request_board_access` route. Only a log that fails while opening keeps `503` with a retry.
+
 Comment-create receipts retain `routedTo`, `url` and either `activity` or `comment`. They also return `visibleToPeople: false` plus a resend `notice` for the log, or `visibleToPeople: true` for the comment thread. A log receipt answers `202 Accepted`, not `201 Created`: no comment was created, so a caller that waits for `201` fails loudly instead of losing the text.
 
 ### Blocker comment
