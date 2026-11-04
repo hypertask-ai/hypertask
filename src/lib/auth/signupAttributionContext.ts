@@ -1,8 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/definitions/htpr-7269-signup-identity-link";
 import { normalizeSignupContext, strictestConsent, type SignupIdentityContext } from "@/lib/analytics/signupIdentity";
 
 export const SIGNUP_CONTEXT_COOKIE = "ht_signup_ctx";
@@ -90,7 +88,6 @@ export async function bindSignupCodeContext(email: string, code: string, id: str
 
 export async function takeSignupCodeContext(email: string, code: string): Promise<string | null> {
   try {
-    if (!await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)) return null;
     const key = await codeAttemptKey(email, code, true);
     return key ? await (await getRedis()).getdel(key) : null;
   } catch {

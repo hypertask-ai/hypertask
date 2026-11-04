@@ -52,9 +52,8 @@ function harness({ enabled = true, redisFailure = false, existing = false, compl
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
-    '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
-    '@/lib/flags': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link', isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return key === 'htpr-7270-signup-completed' ? completedEnabled : enabled }, HTPR_7270_SIGNUP_COMPLETED_FLAG: 'htpr-7270-signup-completed', HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: 'htpr-7292-shared-account-category', FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6 },
+    '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return key === 'htpr-7270-signup-completed' ? completedEnabled : enabled }, HTPR_7270_SIGNUP_COMPLETED_FLAG: 'htpr-7270-signup-completed', HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: 'htpr-7292-shared-account-category', FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6 },
     '@/lib/prisma': {
       user: { create: async () => { accountExists = true; return user }, findFirst: async () => accountExists ? user : null, findUnique: async () => user, update: async () => user },
       googleAccount: { findFirst: async () => null },

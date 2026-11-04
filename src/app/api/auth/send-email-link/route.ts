@@ -9,7 +9,6 @@ import { sendEmail } from '@/lib/email/sendEmail'
 import prisma from '@/lib/prisma'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
-  HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
 
@@ -191,8 +190,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const signupIdentityLinkEnabled = await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)
-    const signupContextId = signupIdentityLinkEnabled ? await createSignupContext(signupContext, 1800, request.headers.get("cookie")) : null
+    const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
     const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
     

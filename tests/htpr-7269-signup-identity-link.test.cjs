@@ -33,7 +33,7 @@ function loader(aliases = {}, transform = (_file, source) => source) {
   return load
 }
 
-function harness({ enabled = true, redisFailure = false, existing = false } = {}) {
+function harness({ redisFailure = false, existing = false } = {}) {
   const values = new Map()
   const calls = { flags: [], captures: [], events: [], warnings: [], provision: [], redis: [], code: null, jwt: null }
   const user = { id: 123, uid: 'email_test', email: 'new@example.test', displayName: 'New' }
@@ -48,9 +48,8 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
-    '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
-    '@/lib/flags': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link', isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return enabled } },
+    '@/lib/flags': { isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return true } },
     '@/lib/prisma': {
       user: { create: async () => { accountExists = true; return user }, findFirst: async () => accountExists ? user : null, findUnique: async () => user, update: async () => user },
       googleAccount: { findFirst: async () => null },
@@ -145,7 +144,6 @@ test('consented anonymous signup links once; retries reuse a deterministic UUID'
   assert.equal(h.calls.captures[0].uuid, h.calls.captures[1].uuid)
   assert.match(h.calls.captures[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   assert.notEqual(h.identity.signupIdentityUuid(124), h.identity.signupIdentityUuid(123))
-  assert.deepEqual(h.calls.flags.map(([, id]) => id), [123, 123])
 })
 
 test('essential consent strips identity and attribution, and never identifies', async () => quiet(async () => {
@@ -230,7 +228,7 @@ test('replayed, expired and malformed contexts cannot identify and have unknown 
   assert.deepEqual(h.calls.captures, [])
 }))
 
-test('existing login discards its context; feature off creates nothing and preserves signup event', async () => {
+test('existing login discards its context', async () => {
   const h = harness({ existing: true })
   const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   const result = await h.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', { displayName: 'New' }, false, false, true, { signupMethod: 'email' }, id)
@@ -238,12 +236,6 @@ test('existing login discards its context; feature off creates nothing and prese
   assert.equal(await h.context.consumeSignupContext(id), null)
   assert.equal(h.calls.captures.length, 0)
   assert.equal(h.calls.events.length, 0)
-  const off = harness({ enabled: false })
-  await off.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', {}, false, false, true)
-  assert.equal(off.calls.redis.length, 0)
-  assert.equal(off.calls.captures.length, 0)
-  assert.equal(off.calls.events.length, 1)
-  assert.equal(off.calls.events[0].signupMethod, 'email')
 })
 
 test('Redis failure is non-fatal at account insert and reports only context_unavailable', async () => quiet(async (warnings) => {
@@ -339,9 +331,6 @@ test('Google cookie route stores only opaque id with 10 minute secure HttpOnly o
     assert.deepEqual(clears, [['ht_signup_ctx', '', { httpOnly: true, secure: true, sameSite: 'lax', path: '/', maxAge: 0 }]])
     assert.equal(await h.context.consumeSignupContext(cookie.value), null)
     assert.equal((await POST(request('/api/auth/signup-context', input, { origin: 'https://evil.test' }))).status, 403)
-    const off = harness({ enabled: false })
-    assert.equal((await off.load('src/app/api/auth/signup-context/route.ts').POST(request('/api/auth/signup-context', input))).cookies.get('ht_signup_ctx').value, '')
-    assert.equal(off.calls.redis.length, 0)
   } finally { process.env.NODE_ENV = previous }
 })
 
@@ -444,22 +433,8 @@ test('missing SDK and persisted identity report their reasons without a server i
   }
 }))
 
-test('commit-time flag still refuses linking after an enabled auth start', async () => {
+test('unsupported consent creates no context', async () => {
   const h = harness()
-  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
-  h.aliases['@/lib/flags'].isFeatureEnabled = async (_key, id) => { assert.equal(id, 123); return false }
-  assert.equal(await h.identity.recordSignupIdentityLink(123, true, id, allowedCookie), null)
-  assert.equal(await h.context.consumeSignupContext(id), null)
-  assert.equal(h.calls.captures.length, 0)
-})
-
-test('registry defaults remain Owner + QA and unsupported consent creates no context', async () => {
-  const h = harness()
-  const definition = h.load('src/lib/flags/definitions/htpr-7269-signup-identity-link.ts').default
-  assert.equal(definition.kind, 'feature')
-  assert.equal(definition.defaultMode, 'OWNER_AND_QA')
-  assert.equal(definition.shippedOn, '2026-10-16')
-  assert.ok(definition.releaseRisk.risk && definition.releaseRisk.reason)
   for (const invalid of [null, {}, { consent: 'invalid', anonymousId: input.anonymousId }]) assert.equal(await h.context.createSignupContext(invalid), null)
   assert.equal(h.calls.redis.length, 0)
 })
@@ -782,61 +757,44 @@ test('magic-link request hook prepares the cookie context with that email and ne
 })
 
 for (const route of ['signup-context', 'send-email-link', 'instant-signup']) {
-  for (const enabled of [false, true]) {
-    test(`${route}: still allowed with signup linking ${enabled ? 'on creates one context' : 'off creates no context'}`, async () => {
-      const h = harness({ enabled })
-      const created = []
-      h.aliases['@/lib/auth/signupAttributionContext'] = {
-        ...h.context,
-        createSignupContext: async (...args) => { created.push(args); return h.context.createSignupContext(...args) },
-      }
-      const body = { email: h.user.email, signupContext: input, ...input, method: 'google' }
-      const response = await h.load(`src/app/api/auth/${route}/route.ts`).POST(request(`/api/auth/${route}`, body))
-      assert.equal(response.status, 200)
-      assert.equal(created.length, enabled ? 1 : 0)
-      assert.ok(h.calls.flags.some(([key, id]) => key === 'htpr-7269-signup-identity-link' && id === 0))
-      assert.equal(h.calls.redis.filter(([op, key]) => op === 'set' && key.startsWith('auth:signup-context:')).length, enabled ? 1 : 0)
-      const result = await response.json()
-      if (route === 'signup-context') {
-        if (enabled) assert.match(result.signupContextId, /^[0-9a-f-]{36}$/)
-        else assert.deepEqual(result, { signupContextId: null })
-        assert.equal(response.headers.get('set-cookie'), null)
-      } else if (route === 'send-email-link') {
-        assert.deepEqual(result, { success: true, message: 'Sign-in email sent with both link and code!' })
-        assert.ok(h.calls.code)
-        if (enabled) assert.match(h.calls.jwt.signupContextId, /^[0-9a-f-]{36}$/)
-        else assert.deepEqual(h.calls.jwt, { sub: h.user.email })
-      } else {
-        assert.deepEqual(result, { success: true, message: 'Account created successfully! Please check your email to verify your account.' })
-        assert.equal(h.calls.provision.length, 1)
-        assert.equal(h.calls.events.length, 1)
-        assert.equal(h.calls.captures.length, enabled ? 1 : 0)
-      }
-    })
-  }
+  test(`${route}: creates one signup context`, async () => {
+    const h = harness()
+    const created = []
+    h.aliases['@/lib/auth/signupAttributionContext'] = {
+      ...h.context,
+      createSignupContext: async (...args) => { created.push(args); return h.context.createSignupContext(...args) },
+    }
+    const body = { email: h.user.email, signupContext: input, ...input, method: 'google' }
+    const response = await h.load(`src/app/api/auth/${route}/route.ts`).POST(request(`/api/auth/${route}`, body))
+    assert.equal(response.status, 200)
+    assert.equal(created.length, 1)
+    assert.equal(h.calls.redis.filter(([op, key]) => op === 'set' && key.startsWith('auth:signup-context:')).length, 1)
+    const result = await response.json()
+    if (route === 'signup-context') {
+      assert.match(result.signupContextId, /^[0-9a-f-]{36}$/)
+      assert.equal(response.headers.get('set-cookie'), null)
+    } else if (route === 'send-email-link') {
+      assert.deepEqual(result, { success: true, message: 'Sign-in email sent with both link and code!' })
+      assert.ok(h.calls.code)
+      assert.match(h.calls.jwt.signupContextId, /^[0-9a-f-]{36}$/)
+    } else {
+      assert.deepEqual(result, { success: true, message: 'Account created successfully! Please check your email to verify your account.' })
+      assert.equal(h.calls.provision.length, 1)
+      assert.equal(h.calls.events.length, 1)
+      assert.equal(h.calls.captures.length, 1)
+    }
+  })
 }
 
-test('magic-link context route still succeeds with the flag off and clears any previous cookie', async () => {
-  const h = harness({ enabled: false })
-  const response = await h.load('src/app/api/auth/signup-context/route.ts').POST(request('/api/auth/signup-context', { ...input, method: 'magic_link', email: h.user.email }))
-  assert.equal(response.status, 204)
-  assert.equal(await response.text(), '')
-  assert.equal(response.cookies.get('ht_signup_ctx').value, '')
-  assert.match(response.headers.get('set-cookie'), /Max-Age=0/)
-  assert.equal(h.calls.redis.length, 0)
-})
-
-test('email code context consumption retains its own feature flag check', async () => {
+test('email code context consumption remains single-use', async () => {
   const h = harness()
   const attempt = { code: '123456', createdAt: new Date(), used: false }
   h.setAttempt(attempt)
   const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   await h.context.bindSignupCodeContext(h.user.email, attempt.code, id)
   h.setAttempt({ ...attempt, used: true })
-  h.aliases['@/lib/flags'].isFeatureEnabled = async (key, userId) => { assert.equal(key, 'htpr-7269-signup-identity-link'); assert.equal(userId, 0); return false }
-  assert.equal(await h.context.takeSignupCodeContext(h.user.email, attempt.code), null)
-  h.aliases['@/lib/flags'].isFeatureEnabled = async () => true
   assert.equal(await h.context.takeSignupCodeContext(h.user.email, attempt.code), id)
+  assert.equal(await h.context.takeSignupCodeContext(h.user.email, attempt.code), null)
 })
 
 test('logged-out account recovery always includes awaited signup context in instant signup', async () => {

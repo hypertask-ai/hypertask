@@ -1,5 +1,3 @@
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { NextRequest, NextResponse } from 'next/server'
 import { createSignupContext, consumeSignupContext } from '@/lib/auth/signupAttributionContext'
 import updateUsers from '@/utils/controllers/users/update_or_create_user'
@@ -135,8 +133,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const signupIdentityLinkEnabled = await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)
-    const signupContextId = signupIdentityLinkEnabled ? await createSignupContext(signupContext, 1800, request.headers.get("cookie")) : null
+    const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
     const existingUser = await findUserByEmail(normalizedEmail)
 
     if (existingUser) {
