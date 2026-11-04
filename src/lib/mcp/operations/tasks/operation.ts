@@ -24,7 +24,7 @@ import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tas
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG } from '@/lib/flags/keys'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -32,6 +32,7 @@ import {
   parseTaskStatusParam,
   parseAssigneeFilter,
   parseNumericCursor,
+  parseSectionNot,
   parseUpdatedSince,
   projectRows,
   resolveListLimit,
@@ -400,6 +401,14 @@ export async function GET(request: NextRequest) {
     const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
+    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
+    let sectionNotEnabled = false
+    if (excludedSections.length > 0 && await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
+      sectionNotEnabled = true
+    }
+    if (sectionNotEnabled && (listQuery?.filter.section || searchParams.get('section') || searchParams.get('section_id'))) {
+      return validationError('filter.section_not cannot be combined with filter.section, section, or section_id')
+    }
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
     if (!sectionIdParam.ok) return sectionIdParam.response
     const sectionFilter = parseSectionFilter(searchParams.get('section'))
@@ -539,6 +548,8 @@ export async function GET(request: NextRequest) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
+    } else if (sectionNotEnabled) {
+      where.section = { notIn: excludedSections, mode: 'insensitive' }
     }
 
     if (assignedTo) {

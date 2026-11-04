@@ -1,6 +1,7 @@
 
 export const LIST_FILTER_KEYS = [
   'section',
+  'section_not',
   'label',
   'assignee',
   'status',
@@ -12,6 +13,7 @@ export type ListFilterKey = (typeof LIST_FILTER_KEYS)[number]
 
 export type ListFilter = {
   section?: string
+  section_not?: string | string[]
   label?: string | string[]
   assignee?: string | number
   status?: string
@@ -122,6 +124,10 @@ function asStringArray(value: unknown): string[] {
     .filter(Boolean)
 }
 
+export function parseSectionNot(value: unknown): string[] {
+  return [...new Set(asStringArray(value))]
+}
+
 function parseFilterValue(raw: unknown): ListFilter {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
   const input = raw as Record<string, unknown>
@@ -129,6 +135,8 @@ function parseFilterValue(raw: unknown): ListFilter {
   if (typeof input.section === 'string' && input.section.trim()) {
     filter.section = input.section.trim()
   }
+  const sectionNot = parseSectionNot(input.section_not)
+  if (sectionNot.length > 0) filter.section_not = sectionNot
   const labels = asStringArray(input.label)
   if (labels.length === 1) filter.label = labels[0]
   else if (labels.length > 1) filter.label = labels
@@ -233,6 +241,8 @@ export function parseListQueryFromSearchParams(searchParams: URLSearchParams): P
     if (dotted.length === 0) continue
     if (key === 'label') {
       filter.label = dotted.length === 1 ? dotted[0] : dotted
+    } else if (key === 'section_not') {
+      filter.section_not = parseSectionNot(dotted.flatMap((value) => parseSectionNot(value)))
     } else if (key === 'assignee') {
       filter.assignee = dotted[dotted.length - 1]
     } else {

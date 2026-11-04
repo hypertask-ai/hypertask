@@ -110,5 +110,5 @@ test('board discovery explains supported sorts without changing other list help'
   assert.match(boards, /sort \(title or createdAt/);
   assert.match(boards, /updatedAt sorting and filter.updated_since are unsupported/);
   assert.equal(withListQueryDescription('hypertask_list_projects', boards), boards);
-  assert.match(withListQueryDescription('hypertask_search_tasks', 'Search tickets.'), /filter \(section, label, assignee, status, updated_since, has_pr\)/);
+  assert.match(withListQueryDescription('hypertask_search_tasks', 'Search tickets.'), /filter \(section, section_not, label, assignee, status, updated_since, has_pr\)/);
 });

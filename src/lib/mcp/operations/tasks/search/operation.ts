@@ -1,4 +1,4 @@
-import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG } from '@/lib/flags/keys'
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -20,6 +20,7 @@ import {
   parseTaskStatusParam,
   parseAssigneeFilter,
   parseNumericCursor,
+  parseSectionNot,
   parseUpdatedSince,
   projectRows,
   resolveListLimit,
@@ -85,6 +86,17 @@ export async function GET(request: NextRequest) {
     const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
+    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
+    let sectionNotEnabled = false
+    if (excludedSections.length > 0 && await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
+      sectionNotEnabled = true
+    }
+    if (sectionNotEnabled && (listQuery?.filter.section || searchParams.get('section') || searchParams.get('section_id'))) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'filter.section_not cannot be combined with filter.section, section, or section_id' },
+        { status: 400 },
+      )
+    }
     const query = searchParams.get('q') ?? searchParams.get('query') ?? listQuery?.query
     const boardId = searchParams.get('board_id') ? parseInt(searchParams.get('board_id')!) : null
     const projectId = searchParams.get('project_id') ? parseInt(searchParams.get('project_id')!) : null
@@ -219,6 +231,8 @@ export async function GET(request: NextRequest) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
+    } else if (sectionNotEnabled) {
+      where.section = { notIn: excludedSections, mode: 'insensitive' }
     }
     if (labelsParam.length > 0) {
       where.taskLabels = {
@@ -295,6 +309,7 @@ export async function GET(request: NextRequest) {
     const extraFilters = Boolean(
       section ||
         sectionId !== undefined ||
+        sectionNotEnabled ||
         labelsParam.length > 0 ||
         updatedSince ||
         listQuery?.filter.has_pr ||

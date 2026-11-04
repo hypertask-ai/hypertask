@@ -5,6 +5,10 @@ import { HAS_PR_VALUES, type HasPrValue } from '@/lib/mcp/listQuery'
 export const listFilterSchema = z
   .object({
     section: z.string().min(1).optional(),
+    section_not: z
+      .union([z.string().min(1), z.array(z.string().min(1))])
+      .optional()
+      .describe('Task list and search: column titles to leave out. Comma string or array.'),
     label: z.union([z.string().min(1), z.array(z.string().min(1))]).optional(),
     assignee: z.union([z.string().min(1), z.number().int()]).optional(),
     status: z.string().min(1).optional(),
@@ -29,7 +33,7 @@ export const listQueryToolSchema = z.object({
     .optional()
     .describe('Free-text search over the list. Same name on every list tool.'),
   filter: listFilterSchema.describe(
-    'Structured filters. Keys: section, label, assignee, status, updated_since, has_pr.',
+    'Structured filters. Keys: section, section_not, label, assignee, status, updated_since, has_pr.',
   ),
   sort: z
     .string()
