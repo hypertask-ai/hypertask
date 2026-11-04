@@ -37,4 +37,7 @@ regexes = [
   '''^(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG$''',
   # QA login unit-test fixture, never a live secret.
   '''correct-horse-battery-staple-32b''',
+  # HTPR-8276: a sha256 call digest in .github/paid-api-cost-notes.json whose source path
+  # names Slack, so the generic rule reads the digest as a key.
+  '''358f54578c5f4b9f87252011a8fcb3513c6b94b60e70fa98c555a6aeaa09567c''',
 ]

@@ -65,6 +65,7 @@ export async function postSlackMessage(
   channelId: string,
   blocks: Record<string, unknown>[],
   threadTs?: string,
+  fallbackText = "Hypertask response",
 ): Promise<void> {
   const response = await fetch("https://slack.com/api/chat.postMessage", {
     method: "POST",
@@ -76,7 +77,7 @@ export async function postSlackMessage(
     body: JSON.stringify({
       channel: channelId,
       blocks,
-      text: "Hypertask response",
+      text: fallbackText,
       unfurl_links: false,
       unfurl_media: false,
       ...(threadTs ? { thread_ts: threadTs } : {}),

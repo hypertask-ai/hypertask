@@ -45,7 +45,12 @@ export async function announceFeedbackTicket(input: {
     select: { encryptedBotToken: true },
   })
   if (!install) return
-  await postSlackMessage(decryptSecret(install.encryptedBotToken), channelId, [
-    { type: 'section', text: { type: 'mrkdwn', text: feedbackLine(input.title, feedbackTicketUrl(input.uniqueIndex)) } },
-  ])
+  const line = feedbackLine(input.title, feedbackTicketUrl(input.uniqueIndex))
+  await postSlackMessage(
+    decryptSecret(install.encryptedBotToken),
+    channelId,
+    [{ type: 'section', text: { type: 'mrkdwn', text: line } }],
+    undefined,
+    line,
+  )
 }

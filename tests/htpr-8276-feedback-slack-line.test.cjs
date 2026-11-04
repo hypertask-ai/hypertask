@@ -68,10 +68,12 @@ test('a new feedback ticket on board 15 posts exactly one line with the workspac
   await announceFeedbackTicket(feedbackTicket)
   assert.equal(posts.length, 1)
   assert.deepEqual(flagChecks, [['htpr-8276-feedback-slack-line', 404]])
-  const [botToken, channelId, blocks] = posts[0]
+  const [botToken, channelId, blocks, threadTs, fallbackText] = posts[0]
   assert.equal(botToken, 'plain:cipher')
   assert.equal(channelId, 'C-FEEDBACK')
   assert.equal(blocks.length, 1)
+  assert.equal(threadTs, undefined)
+  assert.equal(fallbackText, blocks[0].text.text)
   assert.equal(blocks[0].text.text, '*bug* · An agent list call returns nothing · https://app.hypertask.ai/detail/project-15/8487')
 })
 
