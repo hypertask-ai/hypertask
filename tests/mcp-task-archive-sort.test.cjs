@@ -20,6 +20,9 @@ function loadRoute(tasks = []) {
     project: {
       findMany: async () => [{ id: 15 }],
     },
+    section: {
+      findMany: async () => [],
+    },
     task: {
       count: async () => 2,
       findMany: async (query) => {
@@ -103,6 +106,11 @@ function loadRoute(tasks = []) {
       parsePriorityFilter: () => [],
     },
     "@/lib/mcp/listParams": require("./task-route-loader.cjs").load("src/lib/mcp/listParams.ts", {}),
+    "@/lib/doneColumns": require("./task-route-loader.cjs").load("src/lib/doneColumns.ts", {}),
+    "@/lib/mcp/boards/columnRole": require("./task-route-loader.cjs").load("src/lib/mcp/boards/columnRole.ts", {}),
+    "@/utils/controllers/notifications/inboxZero": {
+      loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])),
+    },
   };
   const routeModule = { exports: {} };
 

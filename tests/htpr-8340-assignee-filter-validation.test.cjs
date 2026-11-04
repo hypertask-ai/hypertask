@@ -8,6 +8,7 @@ function loadRoute() {
   const taskQueries = [];
   const prisma = {
     project: { findMany: async () => [{ id: 15 }] },
+    section: { findMany: async () => [] },
     task: {
       count: async () => 0,
       findMany: async (query) => {
@@ -65,6 +66,7 @@ function loadSearch() {
   const taskQueries = [];
   const prisma = {
     project: { findMany: async () => [{ id: 15 }] },
+    section: { findMany: async () => [] },
     task: {
       count: async () => 0,
       findMany: async (query) => {

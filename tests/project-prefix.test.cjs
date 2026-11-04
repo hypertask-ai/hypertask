@@ -33,6 +33,11 @@ function load(file, stubs = {}) {
     if (request === "@/lib/auth/agentCookieBridgeRoutes") return load("src/lib/auth/agentCookieBridgeRoutes.ts");
     if (request === "@/lib/telemetry/signupAnalytics") return { recordServerCapture: () => {} };
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
+    if (request === "@/lib/doneColumns") return load("src/lib/doneColumns.ts", {});
+    if (request === "@/lib/mcp/boards/columnRole") return load("src/lib/mcp/boards/columnRole.ts", {});
+    if (request === "@/utils/controllers/notifications/inboxZero") {
+      return { loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])) };
+    }
     if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
   };
@@ -78,6 +83,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
   let committed = false;
   let transactions = 0;
   const prisma = {
+    section: { findMany: async () => [] },
     project: {
       findFirst: async ({ where }) => rows.find(row => matches(row, where)) ?? null,
       findUnique: async args => { reads.push(args); return board; },
@@ -249,6 +255,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   const flagCalls = [];
   const taskQueries = [];
   const prisma = {
+    section: { findMany: async () => [] },
     task: {
       findFirst: async ({ where }) => { taskQueries.push(where); return tasks.find(row => matches(row, where)) ?? null; },
       findMany: async ({ where, take }) => { taskQueries.push(where); return tasks.filter(row => matches(row, where)).slice(0, take ?? tasks.length); },
@@ -352,6 +359,7 @@ test("detail lookup is wired before numeric parsing and canonicalizes ticket URL
 function creation({ enabled = true, clash = false, boards = [] } = {}) {
   let created = null;
   const prisma = {
+    section: { findMany: async () => [] },
     user: { findUnique: async () => ({ id: 6 }) },
     team: { findFirst: async () => ({ googleAccountId: "account-1" }) },
     project: {

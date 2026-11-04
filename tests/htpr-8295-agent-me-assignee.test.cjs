@@ -16,6 +16,7 @@ function fixture(surface, { personFilter = true, agentFilter = true, agentId = c
   }
   const prisma = {
     project: { findMany: async () => [{ id: 15 }] },
+    section: { findMany: async () => [] },
     task: {
       count: async ({ where }) => { queries.push(where); return 0; },
       findMany: async ({ where }) => { queries.push(where); return []; },
