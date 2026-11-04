@@ -1,32 +1,20 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
-const { createRequire } = require("node:module");
-const ts = require("typescript");
-require("tsx/cjs");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
 
-const file = path.resolve(__dirname, "../src/components/notifications/InboxDraftRow.tsx");
-const code = ts.transpileModule(fs.readFileSync(file, "utf8"), {
-  fileName: file,
-  compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
-}).outputText;
 let rowFill = false;
-const component = { exports: {} };
-const realRequire = createRequire(file);
-new Function("require", "module", "exports", code)((id) => {
-  if (id === "@/hooks/useFlag") return { useFlag: () => rowFill };
-  if (id === "@/lib/firstScreen/SurfaceContext") return { useFirstScreenSurface: () => null };
-  if (id === "@tanstack/react-query") return { useQueryClient: () => ({}) };
-  return realRequire(id);
-}, component, component.exports);
+const { default: InboxDraftRow } = loadModule("src/components/notifications/InboxDraftRow.tsx", {
+  "@/hooks/useFlag": { useFlag: () => rowFill },
+  "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
+  "@tanstack/react-query": { useQueryClient: () => ({}) },
+});
 
 function renderRow() {
   const draft = { id: 1, task: { title: "Draft task" }, content: "Draft preview", updatedAt: "2026-10-03T23:30:00.000Z" };
-  const html = renderToStaticMarkup(React.createElement(component.exports.default, {
+  const html = renderToStaticMarkup(React.createElement(InboxDraftRow, {
     draft, activeDrafts: [draft], userId: 1, selected: false, onFocus: () => {}, onOpen: () => {},
   }));
   return new JSDOM(html).window.document;
