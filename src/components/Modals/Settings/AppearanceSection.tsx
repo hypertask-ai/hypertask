@@ -1,18 +1,20 @@
 "use client";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 
+import { useMobileView } from "@/lib/contexts/mobileContext";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { Check } from "lucide-react";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
-import { themeOptions } from "@/lib/themePreferences";
+import { availableThemeOptions } from "@/lib/themePreferences";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 
-const AppearanceThemePicker = ({ options }: { options: readonly (typeof themeOptions)[number][] }) => {
+const AppearanceThemePicker = ({ options }: { options: ReturnType<typeof availableThemeOptions> }) => {
   const { currentTheme, effectiveTheme, switchToTheme } = useDarkMode();
-  let activeTheme = currentTheme;
-  if (!activeTheme || activeTheme === "system") {
+  let activeTheme = currentTheme ?? "system";
+  if (options.every((option) => option.value !== "system") && (!activeTheme || activeTheme === "system")) {
     activeTheme = effectiveTheme === "dark" ? "amoled" : "porcelain";
   }
 
@@ -41,9 +43,9 @@ const AppearanceThemePicker = ({ options }: { options: readonly (typeof themeOpt
 
 const AppearanceSection = () => {
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
-  const availableThemes = graphite2Enabled
-    ? themeOptions
-    : themeOptions.filter(({ value }) => value !== "graphite-2");
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const isMobile = useMobileView();
+  const availableThemes = availableThemeOptions(roundedEnabled && !isMobile, graphite2Enabled);
 
   return (
     <SettingsSectionShell title="Appearance">

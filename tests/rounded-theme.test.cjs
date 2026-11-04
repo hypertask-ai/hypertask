@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const { NextRequest, NextResponse } = require("next/server");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") } });
-const { normalizeThemePreference, resolveThemePreference, resolvedThemeDomMetadata, themeCookieSeedValue, themeOptions } = jiti("../src/lib/themePreferences.ts");
+const { normalizeThemePreference, resolveThemePreference, resolvedThemeDomMetadata, themeCookieSeedValue, themeOptions, availableThemeOptions } = jiti("../src/lib/themePreferences.ts");
 const { buildThemeBootScript } = jiti("../src/lib/themeBootScript.ts");
 const { seedResponseThemeCookie } = jiti("../src/lib/auth/themeCookie.ts");
 const { getAllCommands } = jiti("../src/components/Modals/commands/HTC/AllCommands.ts");
@@ -49,13 +49,29 @@ function boot(cookie, dark, enabled, width = 768) {
 }
 
 test("saved Material migrates to system at every width without changing the cookie", () => {
-  assert.equal(themeOptions.some(option => option.value === "rounded"), false);
+  assert.equal(availableThemeOptions(true, true).some(option => option.value === "rounded"), false);
   for (const width of [390, 767, 768, 1440]) for (const dark of [false, true]) {
     const theme = dark ? "amoled" : "porcelain";
     const metadata = resolvedThemeDomMetadata[theme];
     assert.equal(normalizeThemePreference("rounded", true), "system");
     assert.deepEqual(boot("rounded", dark, true, width), { classes: metadata.classes, theme, color: metadata.themeColor });
   }
+});
+
+test("retirement off restores Material only when its own flag permits it", () => {
+  for (const rounded of [false, true]) {
+    assert.equal(normalizeThemePreference("rounded", rounded, false), rounded ? "rounded" : "system");
+    const commands = getAllCommands({ context: "Others" }, false, rounded, "", "", false, false, false, false).flatMap(group => group.commandLists);
+    assert.equal(commands.some(command => command.key === "roundedTheme"), rounded);
+  }
+  const classes = new Set();
+  const attributes = {};
+  vm.runInNewContext(buildThemeBootScript("theme", "porcelain", "amoled", true, false), {
+    document: { cookie: "theme=rounded", documentElement: { classList: { add: (...xs) => xs.forEach(x => classes.add(x)), remove: (...xs) => xs.forEach(x => classes.delete(x)) }, setAttribute: (key, value) => { attributes[key] = value; } } },
+    window: { matchMedia: () => ({ matches: true }) },
+  });
+  assert.equal(attributes["data-theme"], "rounded-dark");
+  assert.deepEqual([...classes], ["dark", "rounded", "rounded-dark"]);
 });
 
 test("flag-off renders a saved Material choice as system and keeps the cookie", () => {
@@ -84,7 +100,7 @@ test("legacy themes resolve consistently on each device", () => {
 
 test("Material stays hidden in the command picker", () => {
   for (const enabled of [false, true]) {
-    const commands = getAllCommands({ context: "Others" }, false, enabled).flatMap(group => group.commandLists);
+    const commands = getAllCommands({ context: "Others" }, false, enabled, "", "", false, false, false, true).flatMap(group => group.commandLists);
     assert.equal(commands.some(command => command.key === "roundedTheme"), false);
   }
 });
@@ -116,13 +132,13 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
       "lucide-react": { Check: () => null },
       "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme: "system" }) },
-      "@/lib/themePreferences": { themeOptions },
+      "@/lib/themePreferences": { themeOptions, availableThemeOptions },
       "@/utils/undoActions/helperFuncs": { cn: () => "" },
       "./SettingsCard": { default: "section" },
       "./SettingsSectionShell": { default: "section" },
     });
     const picker = appearance().props.children.props.children;
-    assert.deepEqual(picker.props.options, themeOptions);
+    assert.deepEqual(picker.props.options.map(option => option.value), ["porcelain", "amoled", "graphite-2"]);
     const source = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/commands.tsx"), "utf8");
     const parsed = ts.createSourceFile("commands.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const names = new Set(["getCommands", "getThemeCommands", "getLegacyCommands"]);

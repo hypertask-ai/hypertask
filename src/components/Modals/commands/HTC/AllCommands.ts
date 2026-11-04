@@ -3,7 +3,7 @@ import { getCommentCommands, getTaskCommands } from "./taskCommands";
 
 import { getNavigateCommands, getTimeCommands, getBulkTaskCommands, getAppShellCommands, getAgentChatCommands } from "./navigationCommands";
 import { CommandMode } from "@/models/enums";
-import { themeOptions } from "@/lib/themePreferences";
+import { availableThemeOptions, themeOptions } from "@/lib/themePreferences";
 import { IAllCommands } from "@/models/model";
 import { RAIL_TOGGLE_KEY } from "@/lib/constants/railToggleKey";
 import { CommandGroup, ICommandList } from "./HTCTypes";
@@ -1299,7 +1299,7 @@ const help: CommandGroup = {
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
   kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
-  _roundedEnabled = false,
+  roundedEnabled = false,
   keepAiChatClosedKeywords = "",
   aiChatAutoOpenCommandName = "",
   blockerCommentEnabled = false,
@@ -1308,12 +1308,41 @@ export const getAllCommands = (
   graphite2Enabled = false,
 ): CommandGroup[] => {
   const themeCommands: Record<(typeof themeOptions)[number]["value"], ICommandList> = {
-    porcelain: { key: "lightTheme", name: "Light", commandMode: CommandMode.ToggleWhiteTheme, keywords: "light white day bright porcelain theme appearance" },
-    amoled: { key: "amoledTheme", name: "AMOLED", commandMode: CommandMode.ToggleAmoledTheme, keywords: "oled amoled true black theme appearance" },
+    system: {
+      key: "systemTheme",
+      name: "Follow system",
+      commandMode: CommandMode.ToggleSystemTheme,
+      keywords: "system automatic auto os default theme appearance",
+    },
+    porcelain: {
+      key: "lightTheme",
+      name: "Light · Porcelain",
+      commandMode: CommandMode.ToggleWhiteTheme,
+      keywords: "light white day bright porcelain theme appearance",
+    },
+    graphite: {
+      key: "darkTheme",
+      name: "Dark · Graphite",
+      commandMode: CommandMode.ToggleDarkTheme,
+      keywords: "dark night grey gray graphite theme appearance",
+    },
+    amoled: {
+      key: "amoledTheme",
+      name: "OLED black · AMOLED",
+      commandMode: CommandMode.ToggleAmoledTheme,
+      keywords: "oled amoled true black terminal cyan turquoise theme appearance",
+    },
+    dia: {
+      key: "paperTheme",
+      name: "Paper · Dia",
+      commandMode: CommandMode.ToggleDiaTheme,
+      keywords: "paper editorial serif warm light elegant dia theme appearance",
+    },
     "graphite-2": { key: "graphite2Theme", name: "Graphite 2", commandMode: CommandMode.ToggleGraphite2Theme, keywords: "dark graphite 2 iconoir theme appearance" },
+    rounded: { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "material rounded theme appearance" },
   };
   const appearanceCommands = { ...appearance, commandLists: [
-    ...themeOptions.filter(({ value }) => value !== "graphite-2" || graphite2Enabled).map(({ value }) => themeCommands[value]),
+    ...availableThemeOptions(roundedEnabled, graphite2Enabled).map(({ value, title }) => ({ ...themeCommands[value], name: title })),
     ...appearance.commandLists,
   ] };
   const navigate = getNavigateCommands(commandOptions);

@@ -16,9 +16,9 @@ const flag = "htpr-8054-graphite-2";
 function boot(theme, enabled, dark) {
   const dom = new JSDOM('<html class="dark graphite"><head><meta name="theme-color" content="#232326"></head></html>', { url: "https://app.hypertask.ai" });
   dom.window.document.cookie = `theme=${theme}`;
-  vm.runInNewContext(buildThemeBootScript("theme", "porcelain", "amoled", false, enabled), {
+  vm.runInNewContext(buildThemeBootScript("theme", "porcelain", "amoled", true, enabled), {
     document: dom.window.document,
-    window: { matchMedia: () => ({ matches: dark }) },
+    window: { matchMedia: query => ({ matches: query === "(min-width: 768px)" ? true : dark }) },
   });
   return dom.window.document;
 }
@@ -50,10 +50,10 @@ test("legacy cookies migrate identically before and after hydration", () => {
 test("Appearance picker shows Graphite 2 only when enabled and selects the saved choice", () => {
   for (const enabled of [false, true]) for (const [currentTheme, effectiveTheme, selected] of [
     ["graphite-2", undefined, enabled ? "Graphite 2" : undefined],
-    ["system", "dark", "AMOLED"],
-    ["system", "light", "Light"],
-    [undefined, "dark", "AMOLED"],
-    [undefined, "light", "Light"],
+    ["system", "dark", enabled ? "AMOLED" : "Follow system"],
+    ["system", "light", enabled ? "Light" : "Follow system"],
+    [undefined, "dark", enabled ? "AMOLED" : "Follow system"],
+    [undefined, "light", enabled ? "Light" : "Follow system"],
   ]) {
     const writes = [];
     const { default: Appearance } = load("src/components/Modals/Settings/AppearanceSection.tsx", {
@@ -72,7 +72,7 @@ test("Appearance picker shows Graphite 2 only when enabled and selects the saved
     const rows = picker.type(picker.props).props.children;
     const row = rows.find(row => row.props.children[0].props.children === "Graphite 2");
     assert.equal(Boolean(row), enabled);
-    assert.deepEqual(rows.filter(row => row.props.children[0].props.children !== "Graphite 2").map(row => row.props.children[0].props.children), ["Light", "AMOLED"]);
+    assert.deepEqual(rows.map(row => row.props.children[0].props.children), enabled ? ["Light", "AMOLED", "Graphite 2"] : ["Follow system", "Light · Porcelain", "Dark · Graphite", "OLED black · AMOLED", "Paper · Dia"]);
     assert.deepEqual(rows.filter(row => row.props.className.includes("bg-active-modal-element")).map(row => row.props.children[0].props.children), selected ? [selected] : []);
     if (enabled) {
       row.props.onClick();
@@ -111,7 +111,7 @@ test("Ctrl+K adds one command beside Graphite, dispatches it, and keeps old comm
   const command = on.find(command => command.key === "graphite2Theme");
   assert.equal(command.name, "Graphite 2");
   assert.deepEqual(on.filter(item => item.key.endsWith("Theme")).map(item => item.name), ["Light", "AMOLED", "Graphite 2"]);
-  assert.deepEqual(on.filter(item => item !== command), off);
+  assert.deepEqual(off.filter(item => item.key.endsWith("Theme")).map(item => item.name), ["Follow system", "Light · Porcelain", "Dark · Graphite", "OLED black · AMOLED", "Paper · Dia"]);
   const writes = [];
   let closed = 0;
   const { createCommandDispatcher } = load("src/components/commandDispatcher.ts", {
@@ -215,10 +215,10 @@ test("server document gates Graphite 2 without changing other saved themes", asy
   ];
   for (const [theme, off, on] of [
     ["graphite-2", "system", "graphite-2"],
-    ["graphite", "amoled", "graphite-2"],
+    ["graphite", "graphite", "graphite-2"],
     ["porcelain", "porcelain", "porcelain"],
     ["amoled", "amoled", "amoled"],
-    ["dia", "porcelain", "porcelain"],
+    ["dia", "dia", "porcelain"],
   ]) for (const [enabled, expected] of [[false, off], [true, on]]) {
     const { default: RootLayout } = load("src/app/layout.tsx", {
       ...Object.fromEntries(unused.map(name => [name, {}])),

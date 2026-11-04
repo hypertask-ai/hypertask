@@ -19,7 +19,7 @@ const {
   resolveInitialThemeColor,
   resolveThemePreference,
   themeCookieSeedValue,
-  themeOptions,
+  availableThemeOptions,
 } = jiti(path.join(root, "src/lib/themePreferences.ts"));
 const authConfig = jiti(path.join(root, "src/lib/configs/auth.config.ts"));
 const { seedResponseThemeCookie } = jiti(
@@ -39,7 +39,9 @@ const expectedThemes = [
 ];
 
 test("theme preferences use one clear label and order", () => {
-  assert.deepEqual(themeOptions, expectedThemes);
+  assert.deepEqual(availableThemeOptions(true, true), expectedThemes);
+  assert.deepEqual(availableThemeOptions(true, false).map(({ value }) => value), ["system", "porcelain", "graphite", "amoled", "dia", "rounded"]);
+  assert.deepEqual(availableThemeOptions(false, false).map(({ value }) => value), ["system", "porcelain", "graphite", "amoled", "dia"]);
 });
 
 test("system mode follows the standard light and dark palettes", () => {
@@ -62,6 +64,11 @@ test("legacy cookies remain compatible and invalid cookies fall back safely", ()
   assert.equal(normalizeThemePreference("dark"), "graphite-2");
   assert.equal(normalizeThemePreference("dia"), "porcelain");
   assert.equal(normalizeThemePreference("unknown"), undefined);
+  assert.equal(normalizeThemePreference("dark", true, false), "graphite");
+  assert.equal(normalizeThemePreference("dia", true, false), "dia");
+  assert.equal(normalizeThemePreference("rounded", true, false), "rounded");
+  assert.equal(normalizeThemePreference("rounded", false, false), "system");
+  assert.equal(normalizeThemePreference("graphite-2", true, false), "system");
 });
 
 test("auth cookie seeding preserves explicit preferences and defaults invalid values", () => {

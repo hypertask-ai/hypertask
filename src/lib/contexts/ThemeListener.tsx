@@ -26,7 +26,7 @@ const ThemeListener = () => {
           ?.split("=")[1] || "system";
 
       if (stored === "rounded" && !roundedLoaded) return;
-      if (["graphite-2", "graphite", "dark"].includes(stored) && !graphite2Loaded) return;
+      if (["graphite-2", "graphite", "dark", "dia", "rounded"].includes(stored) && !graphite2Loaded) return;
       const theme = normalizeThemePreference(stored, roundedEnabled, graphite2Enabled);
       const resolved = resolveThemePreference(
         theme === "rounded" && !desktop.matches ? "system" : theme,

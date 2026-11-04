@@ -2,7 +2,7 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
-import { themeOptions } from "@/lib/themePreferences";
+import { availableThemeOptions, normalizeThemePreference } from "@/lib/themePreferences";
 import setMemberRole from "@/utils/controllers/projects/setMemberRole";
 import { notificationCategories, notificationCellValue, updateNotificationMatrix } from "@/utils/controllers/notifications/updateNotificationMatrix";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -13,7 +13,8 @@ export class SettingChangeRejectedError extends Error {}
 export async function readSettingsPage(userId: number, scope: SettingsScope) {
   if (scope.section === "appearance") {
     const graphite2 = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId);
-    return { theme: scope.theme ?? "system", options: themeOptions.filter((option) => graphite2 || option.value !== "graphite-2") };
+    const rounded = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId);
+    return { theme: normalizeThemePreference(scope.theme, true, graphite2) ?? "system", options: availableThemeOptions(rounded, graphite2) };
   }
   if (scope.section === "notifications") {
     const settings = await prisma.userSetting.findUnique({
@@ -55,13 +56,17 @@ export async function readSettingsPage(userId: number, scope: SettingsScope) {
 export async function readSettingChange(userId: number, scope: SettingsScope, change: SettingChange, destination: SettingValue = change.value) {
   assertSettingPage(scope, change);
   if (change.kind === "theme") {
+    const graphite2 = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId);
+    if (graphite2 && (["graphite", "dia", "rounded"].includes(String(destination)) || (destination === "system" && change.value === "system"))) {
+      throw new Error("Theme is not available for your account.");
+    }
     if (destination === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId))) {
       throw new Error("Material theme is not available for your account.");
     }
-    if (destination === "graphite-2" && !(await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId))) {
+    if (destination === "graphite-2" && !graphite2) {
       throw new Error("Graphite 2 theme is not available for your account.");
     }
-    return { label: "Theme", value: scope.theme ?? "system" };
+    return { label: "Theme", value: normalizeThemePreference(scope.theme, true, graphite2) ?? "system" };
   }
   if (change.kind === "notification") {
     const settings = await prisma.userSetting.findUnique({
