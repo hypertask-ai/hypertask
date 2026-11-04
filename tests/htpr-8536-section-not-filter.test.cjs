@@ -35,41 +35,27 @@ test('the JSON filter object keeps its own order and drops repeats', () => {
 
 test('a repeated dotted param also collects into one list', () => {
   const params = new URLSearchParams()
-  params.append('filter.section_not', 'Valentin Review')
-  params.append('filter.section_not', 'UX needed')
+  params.append('filter.section_not', 'Valentin Review, UX needed')
+  params.append('filter.section_not', 'UX needed, Bugs')
   assert.deepEqual(listQuery.parseListQueryFromSearchParams(params).filter.section_not, [
     'Valentin Review',
     'UX needed',
+    'Bugs',
   ])
 })
 
-test('naming one column and leaving it out at the same time is refused', () => {
-  assert.throws(
-    () => listQuery.parseListQueryFromSearchParams(new URLSearchParams({
-      'filter.section': 'Bugs',
-      'filter.section_not': 'UX needed',
-    })),
-    listQuery.ListQueryParseError,
-  )
-  assert.throws(
-    () => listQuery.parseListQueryFromArgs({
-      filter: { section: 'Bugs', section_not: 'UX needed' },
-    }),
-    listQuery.ListQueryParseError,
-  )
+test('parsing conflicting filters does not reject unauthorized exclusions', () => {
+  const query = listQuery.parseListQueryFromSearchParams(new URLSearchParams({
+    'filter.section': 'Bugs', 'filter.section_not': 'UX needed',
+  }))
+  assert.equal(query.filter.section, 'Bugs')
+  assert.deepEqual(listQuery.applyCollectionQuery(rows, query).items.map((item) => item.id), ['a'])
 })
 
-test('a collection leaves out every named column and keeps the rest', () => {
+test('shared collections ignore exclusions without authorization', () => {
   const query = listQuery.parseListQueryFromArgs({ filter: { section_not: PARKED } })
-  const result = listQuery.applyCollectionQuery(rows, query)
-  assert.deepEqual(result.items.map((item) => item.id), ['a', 'e'])
-  assert.equal(result.total, 2)
-})
-
-test('a column title matches whatever its case', () => {
-  const query = listQuery.parseListQueryFromArgs({ filter: { section_not: 'valentin REVIEW' } })
-  const result = listQuery.applyCollectionQuery(rows, query)
-  assert.deepEqual(result.items.map((item) => item.id), ['a', 'c', 'd', 'e'])
+  assert.deepEqual(listQuery.applyCollectionQuery(rows, query).items.map((item) => item.id),
+    ['a', 'b', 'c', 'd', 'e'])
 })
 
 test('the exclusion survives the round trip back into query params', () => {
@@ -81,3 +67,100 @@ test('the exclusion survives the round trip back into query params', () => {
 test('the dotted param name is declared, or the read would ignore it', () => {
   assert.ok(listQuery.LIST_FILTER_KEYS.includes('section_not'))
 })
+
+function routeFixture(surface, enabled) {
+  const { z } = require('zod')
+  const queries = []
+  class NextResponse {
+    static json(body, init = {}) { return Object.assign(new NextResponse(), { body, status: init.status ?? 200 }) }
+  }
+  const mocks = {
+    ai: { tool: (definition) => definition },
+    'next/server': { NextResponse },
+    '@/lib/mcp/routeWrapper': {
+      wrapMcpRoute: (handler) => handler,
+      validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null }),
+      checkMcpRouteRateLimit: async () => null,
+    },
+    '@/lib/auth/agentScope': { agentScopeEnforced: () => false, recordAgentBoardScopeMiss: () => {} },
+    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: (request, error) => { throw error } },
+    '@/lib/prisma': { default: {
+      project: { findMany: async () => [{ id: 15 }] },
+      task: {
+        count: async ({ where }) => { queries.push(structuredClone(where)); return 0 },
+        findMany: async ({ where }) => { queries.push(structuredClone(where)); return [] },
+      },
+    } },
+    '@/lib/flags/keys': { HTPR_8536_SECTION_NOT_FILTER_FLAG: 'section-not' },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'section-not' && enabled },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: () => ({}) },
+    '@/lib/mcp/agents': { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => undefined },
+    '@/lib/agents/visibility': { accessibleAgentWhere: () => ({}) },
+    '@/lib/mcp/tasks/mappers': { mcpTaskUserCommentCount: true, mcpTaskLabelSelect: {} },
+    '@/lib/mcp/tasks/resolveTask': { taskIdentifierErrorResponse: () => null },
+    '@/lib/pullRequests/taskPullRequests': { refreshTaskPullRequests: async () => [] },
+    '@/lib/mcp/pagination/cursor': { encodeCursor: () => null },
+    '@/lib/mcp/priorityFilter': { parsePriorityFilter: () => [] },
+    '@/lib/ai/chatStream/request': { statusSchema: z.string(), sortOrderSchema: z.string() },
+    '@/utils/controllers/notifications/inboxZero': { loadDoneTitlesByProject: async () => new Map() },
+    '@/utils/controllers/search/document': { turbopufferSearchTaskIds: async () => [9, 3] },
+    '@/lib/search/serverOperators': { parseSearchWithChipNames: async (query) => ({ text: query, filters: {} }) },
+    '@/lib/search/rankedWhere': {},
+  }
+  const file = surface === 'search' ? 'src/lib/mcp/operations/tasks/search/operation.ts' : 'src/lib/mcp/operations/tasks/operation.ts'
+  const route = load(file, mocks)
+  return {
+    queries,
+    run: (params) => route.GET({ nextUrl: { searchParams: new URLSearchParams({ q: 'needle', ...params }) } }),
+  }
+}
+
+for (const surface of ['list', 'search']) {
+  test(`${surface} gates exclusion and conflicting filter validation`, async () => {
+    for (const enabled of [false, true]) {
+      const f = routeFixture(surface, enabled)
+      const response = await f.run({ 'filter.section_not': 'UX needed, Valentin Review' })
+      assert.equal(response.status, 200)
+      assert.deepEqual(f.queries[0].section, enabled
+        ? { notIn: ['UX needed', 'Valentin Review'], mode: 'insensitive' }
+        : undefined)
+      const conflict = await f.run({ 'filter.section': 'Bugs', 'filter.section_not': 'UX needed' })
+      assert.equal(conflict.status, enabled ? 400 : 200)
+      if (!enabled) assert.equal(f.queries.at(-1).section, 'Bugs')
+    }
+  })
+
+  test(`${surface} preserves explicit section with an enabled exclusion`, async () => {
+    const f = routeFixture(surface, true)
+    const response = await f.run({ section: 'Bugs', 'filter.section_not': 'UX needed' })
+    assert.equal(response.status, 200)
+    assert.equal(f.queries[0].section, 'Bugs')
+  })
+}
+
+test('flag-off search keeps the ranked window', async () => {
+  const f = routeFixture('search', false)
+  const response = await f.run({ 'filter.section_not': 'UX needed' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(f.queries[0].id, { in: [9, 3] })
+  assert.equal(f.queries[0].OR, undefined)
+})
+
+test('enabled search applies exclusion outside the ranked window', async () => {
+  const f = routeFixture('search', true)
+  const response = await f.run({ 'filter.section_not': 'UX needed' })
+  assert.equal(response.status, 200)
+  assert.equal(f.queries[0].id, undefined)
+  assert.ok(f.queries[0].OR)
+})
+
+for (const surface of ['list', 'search']) {
+  test(`${surface} preserves an explicit section ID`, async () => {
+    const f = routeFixture(surface, true)
+    const params = surface === 'list' ? { section_id: '42' } : { section: '42' }
+    const response = await f.run({ ...params, 'filter.section_not': 'UX needed' })
+    assert.equal(response.status, 200)
+    assert.equal(f.queries[0].sectionId, 42)
+    assert.equal(f.queries[0].section, undefined)
+  })
+}

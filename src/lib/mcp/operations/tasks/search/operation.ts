@@ -86,6 +86,17 @@ export async function GET(request: NextRequest) {
     const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
+    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
+    let sectionNotEnabled = false
+    if (excludedSections.length > 0 && await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
+      sectionNotEnabled = true
+    }
+    if (sectionNotEnabled && listQuery?.filter.section) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'filter.section_not cannot be combined with filter.section' },
+        { status: 400 },
+      )
+    }
     const query = searchParams.get('q') ?? searchParams.get('query') ?? listQuery?.query
     const boardId = searchParams.get('board_id') ? parseInt(searchParams.get('board_id')!) : null
     const projectId = searchParams.get('project_id') ? parseInt(searchParams.get('project_id')!) : null
@@ -216,13 +227,11 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
     if (sectionId !== undefined) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
-    } else if (excludedSections.length > 0 &&
-      await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
+    } else if (sectionNotEnabled) {
       where.section = { notIn: excludedSections, mode: 'insensitive' }
     }
     if (labelsParam.length > 0) {
@@ -300,7 +309,7 @@ export async function GET(request: NextRequest) {
     const extraFilters = Boolean(
       section ||
         sectionId !== undefined ||
-        listQuery?.filter.section_not?.length ||
+        sectionNotEnabled ||
         labelsParam.length > 0 ||
         updatedSince ||
         listQuery?.filter.has_pr ||

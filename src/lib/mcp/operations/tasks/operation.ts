@@ -401,6 +401,14 @@ export async function GET(request: NextRequest) {
     const parsedListQuery = readListQuery(searchParams)
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
+    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
+    let sectionNotEnabled = false
+    if (excludedSections.length > 0 && await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
+      sectionNotEnabled = true
+    }
+    if (sectionNotEnabled && listQuery?.filter.section) {
+      return validationError('filter.section_not cannot be combined with filter.section')
+    }
     const sectionIdParam = parsePositiveIntegerParam(searchParams, 'section_id')
     if (!sectionIdParam.ok) return sectionIdParam.response
     const sectionFilter = parseSectionFilter(searchParams.get('section'))
@@ -536,13 +544,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const excludedSections = parseSectionNot(listQuery?.filter.section_not)
     if (sectionId !== undefined) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
-    } else if (excludedSections.length > 0 &&
-      await isFeatureEnabled(HTPR_8536_SECTION_NOT_FILTER_FLAG, user.id)) {
+    } else if (sectionNotEnabled) {
       where.section = { notIn: excludedSections, mode: 'insensitive' }
     }
 

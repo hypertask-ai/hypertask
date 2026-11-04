@@ -125,7 +125,8 @@ function asStringArray(value: unknown): string[] {
 }
 
 export function parseSectionNot(value: unknown): string[] {
-  return [...new Set(asStringArray(value))]
+  return [...new Set((Array.isArray(value) ? value : [value])
+    .flatMap((item) => asStringArray(item)))]
 }
 
 function parseFilterValue(raw: unknown): ListFilter {
@@ -218,11 +219,6 @@ export function parseNumericCursor(cursor?: string | null): number | null {
 }
 
 function assertKnownFilters(filter: ListFilter): void {
-  if (filter.section !== undefined && filter.section_not !== undefined) {
-    throw new ListQueryParseError(
-      'filter.section_not cannot be combined with filter.section',
-    )
-  }
   if (filter.assignee !== undefined) {
     const parsed = parseAssigneeFilter(filter.assignee)
     if (!parsed.ok) throw new ListQueryParseError(parsed.error)
@@ -483,16 +479,6 @@ export function applyCollectionQuery<T extends Record<string, unknown>>(
         ?? (item as Record<string, unknown>).section_title
         ?? (item as Record<string, unknown>).title
       return String(value ?? '').toLowerCase() === section
-    })
-  }
-  const excludedSections = parseSectionNot(listQuery.filter.section_not)
-  if (excludedSections.length > 0) {
-    const excluded = new Set(excludedSections.map((name) => name.toLowerCase()))
-    filtered = filtered.filter((item) => {
-      const value = (item as Record<string, unknown>).section
-        ?? (item as Record<string, unknown>).section_title
-        ?? (item as Record<string, unknown>).title
-      return !excluded.has(String(value ?? '').toLowerCase())
     })
   }
   if (listQuery.filter.updated_since) {
