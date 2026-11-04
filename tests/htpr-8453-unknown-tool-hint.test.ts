@@ -3,6 +3,7 @@ import test from 'node:test'
 import { z } from 'zod'
 import { handleStatelessMcpRequest, type PortableTool } from '../src/lib/mcp-server/stateless-http'
 import { nearestToolName, unknownToolMessage } from '../src/lib/mcp-server/nearest-tool'
+import { actionableToolError } from '../src/lib/mcp-server/tool-response'
 
 const listTool: PortableTool = {
   name: 'hypertask_list_tasks',
@@ -46,7 +47,7 @@ async function refusal(name: string, unknownToolHint?: boolean) {
 
 test('flag off keeps the sentence and the shape byte for byte', async () => {
   const off = await refusal('hypertask-ticket-view', false)
-  assert.equal(off.result.content[0].text, legacy)
+  assert.equal(off.result.content[0].text, actionableToolError(new Error(legacy)))
   assert.equal(off.result.isError, true)
   assert.deepEqual(await refusal('hypertask-ticket-view'), off)
 })
