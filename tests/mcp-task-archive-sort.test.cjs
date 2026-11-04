@@ -93,6 +93,7 @@ function loadRoute(tasks = []) {
       normalizeTaskStatus: (status) => status,
       parseTaskStatusParam: (status) => status || "Normal",
       parseAssigneeFilter: require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}).parseAssigneeFilter,
+      parseSectionNot: require("./task-route-loader.cjs").load("src/lib/mcp/listQuery.ts", {}).parseSectionNot,
       ASSIGNED_TO_FILTER_MESSAGE: "assigned_to must be me, unassigned, or a comma-separated list of user ids",
       parseNumericCursor: () => null,
       projectRows: (rows) => rows,
