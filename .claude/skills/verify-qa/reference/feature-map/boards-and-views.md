@@ -233,3 +233,7 @@ the throttle. Do not change flags or stop another agent's run for this check.
 If the QA board has no active run, record the positive chip as unreachable;
 use the null-status payload, empty chip rendering and CI's real component
 and controller tests as the closest checks.
+
+## Card hover layout
+
+https://app.hypertask.ai/detail/project-15/8629 uses `htpr-8629-kanban-hover-layout` (bugfix, Everyone). In porcelain, AMOLED and graphite-2, compare card ID, title, parent row and notification positions before and during hover; none should move. Check plain, active and blocked cards, including column edges: the hover checkbox must not cover content or clip. Click it, use X on a focused card, and check selected and selection-mode cards retain their inset checkbox. With the flag off, confirm the former hover inset returns. Capture each theme and both flag states on an isolated fixture.

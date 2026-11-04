@@ -553,3 +553,44 @@ test('Board hygiene leaves Manage Tags unchanged', async ({ page }, testInfo) =>
   await expect(modal.getByText('Report only. Nothing changed.', { exact: true })).toBeAttached()
   expect(await modal.locator('.modal-content').boundingBox()).toEqual(before)
 })
+
+test('layout lock: board card hover keeps content and selection usable', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name === 'Mobile', 'hover is a desktop interaction')
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string }
+  const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  const { flags } = await (await response).json() as { flags: Record<string, boolean> }
+  const enabled = flags['htpr-8629-kanban-hover-layout'] === true
+  const card = page.locator(`#task-${fixture.taskId}`)
+  const link = card.locator(`a[href="${fixture.detailPath}"]`)
+  const id = link.locator('.task-ticket-id')
+  const checkbox = card.getByRole('button', { name: 'Select item', includeHidden: true })
+  await expect(id).toBeVisible({ timeout: boardCardSignalTimeout })
+  await page.mouse.move(0, 0)
+  const before = await id.boundingBox()
+  await link.hover()
+  await expect(checkbox).toBeVisible()
+  const after = await id.boundingBox()
+  expect(before).not.toBeNull()
+  expect(after).not.toBeNull()
+  if (enabled) {
+    expect(after!.x).toBeCloseTo(before!.x, 1)
+    const box = await checkbox.boundingBox()
+    expect(box).not.toBeNull()
+    expect(box!.x + box!.width).toBeLessThanOrEqual(after!.x)
+    const columnBox = await card.locator('xpath=ancestor::div[starts-with(@id, "droppable-section-container-")]').boundingBox()
+    expect(columnBox).not.toBeNull()
+    expect(box!.x).toBeGreaterThanOrEqual(columnBox!.x)
+  } else {
+    expect(after!.x).toBeGreaterThan(before!.x)
+  }
+  await checkbox.click()
+  await expect(card.getByRole('button', { name: 'Deselect item' })).toBeVisible()
+  await expect(page).not.toHaveURL(url => url.pathname === fixture.detailPath)
+  await page.keyboard.press('Escape')
+  await expect(card.getByRole('button', { name: 'Deselect item' })).toHaveCount(0)
+  await card.focus()
+  await page.keyboard.press('x')
+  await expect(card.getByRole('button', { name: 'Deselect item' })).toBeVisible()
+  await page.keyboard.press('Escape')
+})
