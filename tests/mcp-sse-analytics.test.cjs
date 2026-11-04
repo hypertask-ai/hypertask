@@ -135,6 +135,7 @@ test('transport analytics evaluates remaining schema flags through an isolated f
       { key: 'htpr-7894-task-id-ticket-reference', userId: 2343 },
       { key: 'htpr-7910-renamed-field-hint', userId: 2343 },
       { key: 'htpr-7934-nearest-field-hint', userId: 2343 },
+      { key: 'htpr-8453-unknown-tool-hint', userId: 2343 },
     ])
   }
   authenticated = false
