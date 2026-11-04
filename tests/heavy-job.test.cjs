@@ -26,16 +26,23 @@ function run(env, code, cwd = root) {
     child.on('close', status => resolve({ status, stdout, stderr }));
   });
   const ready = new Promise(resolve => child.stdout.once('data', resolve));
-  return { done, ready };
+  const waiting = new Promise(resolve => child.stderr.once('data', resolve));
+  return { done, ready, waiting };
+}
+function hold(release, after = '') {
+  return `console.log("holder");const t=setInterval(()=>{if(require("fs").existsSync(${JSON.stringify(release)})){clearInterval(t);${after}}},20)`;
 }
 
 test('one shared slot queues a second worktree and prints exactly one wait line', async () => {
   const { dir, env } = fixture();
   try {
     mkdirSync(path.join(dir, 'other-worktree'));
-    const first = run(env, 'console.log("holder");setTimeout(()=>console.log("released "+Date.now()),700)');
+    const release = path.join(dir, 'release');
+    const first = run(env, hold(release, 'console.log("released "+Date.now())'));
     await first.ready;
     const second = run(env, 'console.log("second "+Date.now())', path.join(dir, 'other-worktree'));
+    await Promise.race([second.waiting, second.done]);
+    writeFileSync(release, '');
     const [a, b] = await Promise.all([first.done, second.done]);
     assert.equal(a.status, 0);
     assert.equal(b.status, 0);
@@ -47,7 +54,8 @@ test('one shared slot queues a second worktree and prints exactly one wait line'
 test('CI=true and GITHUB_ACTIONS set bypass an occupied slot without waiting', async () => {
   const { dir, env } = fixture();
   try {
-    const holder = run(env, 'console.log("holder");setTimeout(()=>{},900)');
+    const release = path.join(dir, 'release');
+    const holder = run(env, hold(release));
     await holder.ready;
     let finished = false;
     holder.done.then(() => { finished = true; });
@@ -58,6 +66,7 @@ test('CI=true and GITHUB_ACTIONS set bypass an occupied slot without waiting', a
       assert.equal(result.stdout, 'CI\n');
       assert.equal(finished, false, 'CI ran before the holder released');
     }
+    writeFileSync(release, '');
     await holder.done;
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -81,13 +90,16 @@ test('default is max(2, nproc/6), override is validated, and arguments stay inta
     writeFileSync(path.join(bin, 'nproc'), '#!/bin/sh\nprintf "%s\\n" "$TEST_CORES"\n', { mode: 0o755 });
     for (const [cores, expected] of [['1', 2], ['18', 3]]) {
       const configuration = { ...env, HT_HEAVY_SLOTS: '', PATH: `${bin}:${env.PATH}`, TEST_CORES: cores };
+      const release = path.join(dir, `release-${cores}`);
       const holders = [];
       for (let i = 0; i < expected; i++) {
-        const holder = run(configuration, 'console.log("holder");setTimeout(()=>{},1200)');
+        const holder = run(configuration, hold(release));
         holders.push(holder.done);
         await holder.ready;
       }
       const queued = run(configuration, 'console.log("queued")');
+      await Promise.race([queued.waiting, queued.done]);
+      writeFileSync(release, '');
       const result = await queued.done;
       assert.equal(result.stderr, `waiting for a heavy-job slot, ${expected} in use\n`);
       await Promise.all(holders);
@@ -220,7 +232,8 @@ test('stale disk flag allows a job and CI bypasses a fresh flag', async () => {
 test('a queued job refuses to start if disk becomes critical while waiting', async () => {
   const { dir, env } = fixture();
   try {
-    const holder = run(env, 'console.log("holder");setTimeout(()=>{},1000)');
+    const release = path.join(dir, 'release');
+    const holder = run(env, hold(release));
     await holder.ready;
     const queued = run(env, 'console.log("must not run")');
     const state = path.join(dir, '.local/state/disk-guard');
@@ -230,6 +243,7 @@ test('a queued job refuses to start if disk becomes critical while waiting', asy
     assert.equal(result.status, 75);
     assert.equal(result.stdout, '');
     assert.match(result.stderr, /Disk guard:/);
+    writeFileSync(release, '');
     await holder.done;
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -244,14 +258,18 @@ test('--exclusive lets only one full run or build go at a time, even with free s
       child.stdout.on('data', chunk => { stdout += chunk; });
       child.stderr.on('data', chunk => { stderr += chunk; });
       const ready = new Promise(resolve => child.stdout.once('data', resolve));
+      const waiting = new Promise(resolve => child.stderr.once('data', resolve));
       const done = new Promise(resolve => child.on('close', status => resolve({ status, stdout, stderr })));
-      return { ready, done };
+      return { ready, waiting, done };
     };
-    const first = exclusive('console.log("holder");setTimeout(()=>console.log("released "+Date.now()),700)');
+    const release = path.join(dir, 'release');
+    const first = exclusive(hold(release, 'console.log("released "+Date.now())'));
     await first.ready;
     const shared = await run(wide, 'console.log("shared")').done;
     assert.equal(shared.stderr, '', 'a targeted run does not wait for the exclusive holder');
     const second = exclusive('console.log("second "+Date.now())');
+    await Promise.race([second.waiting, second.done]);
+    writeFileSync(release, '');
     const [a, b] = await Promise.all([first.done, second.done]);
     assert.equal(b.status, 0);
     assert.ok(Number(b.stdout.trim().split(' ')[1]) >= Number(a.stdout.trim().split('released ')[1]), 'second full run starts only after the first');
