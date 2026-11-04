@@ -127,7 +127,7 @@ export async function classifyTaskAgainstLabels(
     definitions,
   );
   if (matchingLabelIds === null) {
-    console.error(
+    console.warn(
       "[labelClassifier] Skipping result: model returned unparsable label output",
     );
   }
