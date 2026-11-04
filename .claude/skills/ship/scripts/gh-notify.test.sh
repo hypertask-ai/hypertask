@@ -146,6 +146,72 @@ CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaa
 roll OPEN "CI Tests:COMPLETED:CANCELLED" "Lint:COMPLETED:SUCCESS"
 out=$(CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask); eq "cancelled check is not a pass" "$?" 1
 grep -q 'CI Tests (cancelled)' <<<"$out" && ok "cancelled check is named" || bad "cancelled not named: $out"
+check_rollup() {
+  local label=$1 expected=$2 rc
+  jq -e '{data:{repository:{pullRequest:{state:.state,headRefOid:("a" * 40)},object:{oid:("a" * 40),statusCheckRollup:{contexts:{nodes:[.statusCheckRollup[] | if .workflowName then . + {checkSuite:{workflowRun:{workflow:{name:.workflowName}}}} else . end],pageInfo:{hasNextPage:false}}}}}}}' "$T/rollup" > "$T/rollup.graphql" || { bad "$label fixture"; return; }
+  mv "$T/rollup" "$T/rollup.fixture"
+  mv "$T/rollup.graphql" "$T/rollup"
+  CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 0 >/dev/null
+  rc=$?
+  mv "$T/rollup.fixture" "$T/rollup"
+  eq "$label" "$rc" "$expected"
+}
+for old in FAILURE CANCELLED SUCCESS; do
+  for order in normal reversed; do
+    for result in SUCCESS PENDING FAILURE CANCELLED; do
+      jq -n --arg old "$old" --arg result "$result" --arg order "$order" '
+        def check($time; $result): {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:$time, status:(if $result == "PENDING" then "IN_PROGRESS" else "COMPLETED" end), conclusion:(if $result == "PENDING" then "" else $result end)};
+        {state:"OPEN", statusCheckRollup:([check("2026-01-01T00:00:00Z"; $old), check("2026-01-02T00:00:00Z"; $result)] | if $order == "reversed" then reverse else . end)}' > "$T/rollup" || exit 1
+      case $result in SUCCESS) expected=0 ;; PENDING) expected=2 ;; *) expected=1 ;; esac
+      check_rollup "$old then $result ($order)" "$expected"
+    done
+  done
+done
+jq -n '{state:"OPEN", statusCheckRollup:[
+  {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:"2026-01-01T00:00:00Z", detailsUrl:"https://github.com/o/r/actions/runs/9/job/1", status:"COMPLETED", conclusion:"FAILURE"},
+  {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:"2026-01-01T00:00:00Z", detailsUrl:"https://github.com/o/r/actions/runs/10/job/2", status:"COMPLETED", conclusion:"SUCCESS"}]}' > "$T/rollup" || exit 1
+check_rollup "run ID breaks timestamp ties numerically" 0
+jq '.statusCheckRollup[0].detailsUrl = .statusCheckRollup[1].detailsUrl' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
+check_rollup "ambiguous tie retains failure" 1
+jq '.statusCheckRollup[0].workflowName = "Other"' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
+check_rollup "same name in another workflow still fails" 1
+for timestamp in null '"0001-01-01T00:00:00Z"'; do
+  jq --argjson timestamp "$timestamp" '
+    .statusCheckRollup[0] |= (.workflowName = "Tests" | .detailsUrl = "https://github.com/o/r/actions/runs/9/job/1" | .conclusion = "CANCELLED") |
+    .statusCheckRollup[1] |= (.startedAt = $timestamp | .status = "QUEUED" | .conclusion = null)
+  ' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
+  check_rollup "new queued run with $timestamp start" 2
+done
+jq '
+  .statusCheckRollup[0].startedAt = "2026-02-01T00:00:00Z" |
+  .statusCheckRollup[1] |= (.startedAt = "2026-01-01T00:00:00Z" | .status = "COMPLETED" | .conclusion = "SUCCESS")
+' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
+check_rollup "older run starts later" 0
+jq '
+  .statusCheckRollup[0] |= (.detailsUrl = "https://github.com/o/r/actions/runs/10/job/9" | .startedAt = "2026-01-01T00:00:00Z") |
+  .statusCheckRollup[1].detailsUrl = "https://github.com/o/r/actions/runs/10/job/10"
+' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
+check_rollup "same run newer job breaks start tie" 0
+for order in normal reversed; do
+  for timestamp in null '"0001-01-01T00:00:00Z"'; do
+    jq -n --argjson timestamp "$timestamp" --arg order "$order" '
+      {state:"OPEN", statusCheckRollup:([
+        {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:"2026-01-01T00:00:00Z", detailsUrl:"https://github.com/o/r/actions/runs/10/job/9", status:"COMPLETED", conclusion:"CANCELLED"},
+        {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:$timestamp, detailsUrl:"https://github.com/o/r/actions/runs/10/job/10", status:"QUEUED", conclusion:null}] | if $order == "reversed" then reverse else . end)}' > "$T/rollup" || exit 1
+    check_rollup "same run queued job with $timestamp start ($order)" 2
+  done
+  jq -n --arg order "$order" '
+    {state:"OPEN", statusCheckRollup:([
+      {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:"2026-01-02T00:00:00Z", detailsUrl:"https://github.com/o/r/actions/runs/10/job/9", status:"COMPLETED", conclusion:"SUCCESS"},
+      {__typename:"CheckRun", name:"CI", workflowName:"Tests", startedAt:"2026-01-01T00:00:00Z", detailsUrl:"https://github.com/o/r/actions/runs/10/job/10", status:"COMPLETED", conclusion:"FAILURE"}] | if $order == "reversed" then reverse else . end)}' > "$T/rollup" || exit 1
+  check_rollup "same run latest job failure ($order)" 1
+done
+jq -n '{state:"OPEN", statusCheckRollup:[
+  {__typename:"StatusContext", context:"deploy", createdAt:"2026-01-01T00:00:00Z", state:"FAILURE"},
+  {__typename:"StatusContext", context:"deploy", createdAt:"2026-01-02T00:00:00Z", state:"SUCCESS"}]}' > "$T/rollup" || exit 1
+check_rollup "new status context supersedes failure" 0
+jq '.statusCheckRollup += [{__typename:"StatusContext", context:"other", createdAt:"2026-01-01T00:00:00Z", state:"FAILURE"}]' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
+check_rollup "unrelated status failure remains" 1
 roll MERGED "CI Tests:COMPLETED:CANCELLED"
 CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask >/dev/null; eq "merged PR exits 0" "$?" 0
 roll OPEN "CI Tests:COMPLETED:SUCCESS" "Lint:QUEUED:"

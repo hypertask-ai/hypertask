@@ -55,7 +55,33 @@ verdict() {
     else .data.repository.object.statusCheckRollup.contexts as $ctx
       | if ($ctx.nodes | type) != "array" or $ctx.pageInfo.hasNextPage != false or ($ctx.nodes | length) == 0
         or any($ctx.nodes[]; if .name? != null then (.status == null or (.status == "COMPLETED" and .conclusion == null)) else (.context == null or .state == null) end) then "pending"
-        else [$ctx.nodes[] | {n: (.name // .context // "?"), s: ((.conclusion // .state // "") | ascii_upcase), st: ((.status // "COMPLETED") | ascii_upcase)}] as $c
+        else
+      def risk:
+        if .st == "COMPLETED" and (.s | IN("SUCCESS", "NEUTRAL", "SKIPPED", "PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "") | not) then 2
+        elif .st != "COMPLETED" or (.s | IN("SUCCESS", "NEUTRAL", "SKIPPED") | not) then 1
+        else 0 end;
+      [ $ctx.nodes[] |
+        {
+          n: (.name // .context // "?"),
+          s: ((.conclusion // .state // "") | ascii_upcase),
+          st: ((.status // "COMPLETED") | ascii_upcase),
+          t: (if .__typename == "StatusContext" then .createdAt else .startedAt end // ""),
+          action: ((.detailsUrl // "") |
+            (capture("/actions/runs/(?<run>[0-9]+)/job/(?<job>[0-9]+)")? |
+              {run: (.run | tonumber), job: (.job | tonumber)}) // null),
+          identity: [.__typename, (.name // .context // "?"), (.checkSuite.workflowRun.workflow.name // "")]
+        }
+      ]
+      | group_by(.identity)
+      | map(
+          (map(select(.action != null)) |
+            if length > 0 then [max_by([.action.run, .action.job, .t, risk])] else [] end)
+          + (map(select(.action == null)) |
+            map(select(.t == "" or .t == "0001-01-01T00:00:00Z"))
+            + (map(select(.t != "" and .t != "0001-01-01T00:00:00Z")) |
+              if length > 0 then [max_by([.t, risk])] else [] end))
+        )
+      | (add // []) as $c
         | ([$c[] | select(.st == "COMPLETED" and (.s | IN("SUCCESS", "NEUTRAL", "SKIPPED", "PENDING", "EXPECTED", "QUEUED", "IN_PROGRESS", "") | not)) | "\(.n) (\(.s | ascii_downcase))"]) as $f
         | if ($f | length) > 0 then "fail " + ($f | join(", "))
           elif any($c[]; .st != "COMPLETED" or (.s | IN("SUCCESS", "NEUTRAL", "SKIPPED") | not)) then "pending"
@@ -69,7 +95,7 @@ check() {
     repository(owner:$owner, name:$repo) {
       pullRequest(number:$pr) { state headRefOid }
       object(oid:$head) { ... on Commit { oid statusCheckRollup { contexts(first:100) {
-        nodes { ... on CheckRun { name status conclusion } ... on StatusContext { context state } }
+        nodes { __typename ... on CheckRun { name status conclusion startedAt detailsUrl checkSuite { workflowRun { workflow { name } } } } ... on StatusContext { context state createdAt } }
         pageInfo { hasNextPage }
       } } } }
     }
