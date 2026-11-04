@@ -196,6 +196,7 @@ test("chat header corners follow cleanup only outside full-screen chat", () => {
   const mobileContext = React.createContext(false);
   const source = loader({
     "next/navigation": { usePathname: () => pathname, useSearchParams: () => new URLSearchParams(), useRouter: () => ({ push: noop }) },
+    "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
     "@/hooks/useFlag": { useFlag: key => key === "htpr-8261-chat-cleanup" ? cleanup : key === "htpr-8048-agent-sessions" },
     "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context": { useAiChatContext: () => ({ sessions: [], currentSession: { id: "saved", title: "Chat" }, runningSessionIds: [] }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: mobileContext },
@@ -220,6 +221,8 @@ test("chat header corners follow cleanup only outside full-screen chat", () => {
       if (mobile) for (const label of ["Close AI chat", "Chat history", "Agent sessions", "New chat"]) {
         const button = view.container.querySelector(`[aria-label="${label}"]`);
         assert.ok(button, label);
+        assert.ok(button.classList.contains("h-11"), label);
+        assert.ok(button.classList.contains("w-11"), label);
         assert.equal(button.classList.contains("rounded-[4px]"), active, label);
         assert.equal(button.classList.contains("rounded-full"), !active, label);
       }
