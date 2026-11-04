@@ -47,6 +47,8 @@ question_check() {
     (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
     [
+      (if ((($plain | map(select(length > 0)) | .[0]) // "") | test("^What this is:\\s*\\S"))
+       then empty else "What this is: <what he is deciding, in his words> first (Markdown: What this is: ...)" end),
       (if any($paragraphs[];
         (if $md then . else unmention end) |
         [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
@@ -220,7 +222,7 @@ HT_TOKEN="$(cat "$TOKEN_FILE")"
 export HT_TOKEN
 completion_move "$@"
 review_refuse() {
-  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
+  printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
 }
 review_move() {

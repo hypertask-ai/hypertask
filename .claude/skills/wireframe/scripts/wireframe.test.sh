@@ -142,7 +142,8 @@ def full_publish(ticket="HTPR-255", move=True, **env):
     comment = writes[0]["args"]
     assert comment[:6] == ["comment", "add", ticket, "--kind", "question", "--text"]
     url = calls[0]["url"]
-    expected = ('<p><strong>Wireframe ready for ' + html.escape('Full <ticket> & "title"') + '.</strong></p>'
+    expected = ('<p><strong>What this is:</strong> a picture of ' + html.escape('Full <ticket> & "title"') + ', before any code is written.</p>'
+                + '<p><strong>Wireframe ready for ' + html.escape('Full <ticket> & "title"') + '.</strong></p>'
                 + f'<p><a href="{url}">{url}</a></p>'
                 + f'<p>Requested by Valentin in a Claude session, {date.today().isoformat()}.'
                 + (f' claude --resume {os.environ["CLAUDE_CODE_SESSION_ID"]}' if os.environ.get("CLAUDE_CODE_SESSION_ID") else '') + '</p>'
