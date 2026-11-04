@@ -23,6 +23,7 @@ export interface UpdateTaskErrorResponse {
     tasks: TaskDetail[];
     error: string;
     code?: string;
+    field?: string;
 }
 
 export class UpdateTaskPersistenceError extends Error {
@@ -43,6 +44,7 @@ export type TaskUpdateResult =
           error: string
           status?: number
           code?: string
+          field?: string
       }
 
 export const VALID_STATUSES = ['Normal', 'Archive', 'Deleted'] as const;

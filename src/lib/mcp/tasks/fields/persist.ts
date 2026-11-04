@@ -20,7 +20,7 @@ import { updateTaskContract } from './contract';
 import { updateTaskPullRequest } from './pullRequest';
 import { updateTaskAssignees } from './assignees';
 
-function isCallerRefusal(error: unknown): error is Error & { status: number; code: string } {
+function isCallerRefusal(error: unknown): error is Error & { status: number; code: string; field?: string } {
     const { status, code } = (error ?? {}) as { status?: unknown; code?: unknown }
     return error instanceof Error && typeof status === 'number' && status >= 400 && status < 500 && typeof code === 'string'
 }
@@ -78,7 +78,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
                 ...(codedError
-                    ? { status: codedError.status, code: codedError.code }
+                    ? { status: codedError.status, code: codedError.code, ...(codedError.field ? { field: codedError.field } : {}) }
                     : {}),
             }
         }
@@ -110,6 +110,7 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
                 tasks: [],
                 error: `Failed to update ${failedTasks.length} task(s). ${errorMessages.length > 0 ? errorMessages[0] : 'Unknown error'}`,
                 ...(linkFailure?.code ? { code: linkFailure.code } : {}),
+                ...(linkFailure?.field ? { field: linkFailure.field } : {}),
             },
             linkFailure?.status ?? 500,
         )
