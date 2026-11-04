@@ -30,6 +30,12 @@ import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
 import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
 import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 
+function parseCommentId(raw: string): number | null {
+  if (!/^\d+$/.test(raw)) return null
+  const id = Number(raw)
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
 export interface McpMentionInput {
   user_id?: number
   agent_id?: string
@@ -77,8 +83,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     const roleRefusal = await requireAgentWriteRole(ctx)
     if (roleRefusal) return roleRefusal
     const user = ctx.user;
-    const commentId = parseInt(params.comment_id)
-    if (isNaN(commentId) || commentId <= 0) {
+    const commentId = parseCommentId(params.comment_id)
+    if (commentId === null) {
       return NextResponse.json(
         {
           success: false,
@@ -447,8 +453,8 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
     const roleRefusal = await requireAgentWriteRole(ctx)
     if (roleRefusal) return roleRefusal
     const user = ctx.user;
-    const commentId = parseInt(params.comment_id)
-    if (isNaN(commentId) || commentId <= 0) {
+    const commentId = parseCommentId(params.comment_id)
+    if (commentId === null) {
       return NextResponse.json(
         {
           success: false,
