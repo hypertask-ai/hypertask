@@ -11,6 +11,8 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { SendArrow } from "@/components/Common/SendArrow";
 import type { DictationCoordinator } from "@/lib/dictationCoordinator";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 
 export interface IPropsSaveButtonMobile {
   sendOnClick: any;
@@ -323,6 +325,7 @@ export const DesktopAttachment = ({
   hideComposerDictation?: boolean;
   dictationCoordinator?: DictationCoordinator;
 }) => {
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -350,7 +353,7 @@ export const DesktopAttachment = ({
         {!isRecording && mode !== "read-edit-comments" && (
           <span className="relative group">
             <span
-              className="text-hypertasks-ai-purple ml-auto text-emphasis cursor-pointer"
+              className={`${graphite2Enabled ? "text-white-black" : "text-hypertasks-ai-purple"} ml-auto text-emphasis cursor-pointer`}
               id={mode + "-ai-writer-button"}
               onClick={() => {
                 toggleAiTaskWriter && toggleAiTaskWriter();

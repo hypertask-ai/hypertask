@@ -1,4 +1,6 @@
 import React from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import Tooltip from "./Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -27,6 +29,7 @@ const AIWriterButton: React.FC<AIWriterButtonProps> = ({
   customKeyCombination,
   tooltipPosition = { left: 0, bottom: -45 }
 }) => {
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const keyCombination = customKeyCombination || [ctrlCmd, "J"];
@@ -41,7 +44,9 @@ const AIWriterButton: React.FC<AIWriterButtonProps> = ({
     <span className="relative group">
       <span
         className={cn(
-          "text-hypertasks-ai-purple ml-auto text-emphasis cursor-pointer",
+          graphite2Enabled
+            ? "text-white-black ml-auto text-emphasis cursor-pointer"
+            : "text-hypertasks-ai-purple ml-auto text-emphasis cursor-pointer",
           "hover:opacity-80 transition-opacity duration-200",
           disabled && "opacity-50 cursor-not-allowed",
           className
