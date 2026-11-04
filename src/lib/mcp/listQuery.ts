@@ -125,8 +125,7 @@ function asStringArray(value: unknown): string[] {
 }
 
 export function parseSectionNot(value: unknown): string[] {
-  return [...new Set((Array.isArray(value) ? value : [value])
-    .flatMap((item) => asStringArray(item)))]
+  return [...new Set(asStringArray(value))]
 }
 
 function parseFilterValue(raw: unknown): ListFilter {
@@ -243,7 +242,7 @@ export function parseListQueryFromSearchParams(searchParams: URLSearchParams): P
     if (key === 'label') {
       filter.label = dotted.length === 1 ? dotted[0] : dotted
     } else if (key === 'section_not') {
-      filter.section_not = parseSectionNot(dotted)
+      filter.section_not = parseSectionNot(dotted.flatMap((value) => parseSectionNot(value)))
     } else if (key === 'assignee') {
       filter.assignee = dotted[dotted.length - 1]
     } else {

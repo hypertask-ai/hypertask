@@ -33,6 +33,14 @@ test('the JSON filter object keeps its own order and drops repeats', () => {
   assert.deepEqual(parsed.filter.section_not, ['UX needed', 'Valentin Review'])
 })
 
+test('array entries preserve commas while string input splits them', () => {
+  const titles = [' Bugs, urgent ', 'UX needed', 'Bugs, urgent']
+  const parsed = listQuery.parseListQueryFromArgs({ filter: { section_not: titles } })
+  assert.deepEqual(parsed.filter.section_not, ['Bugs, urgent', 'UX needed'])
+  assert.deepEqual(listQuery.parseSectionNot(parsed.filter.section_not), ['Bugs, urgent', 'UX needed'])
+  assert.deepEqual(listQuery.parseSectionNot('Bugs, urgent'), ['Bugs', 'urgent'])
+})
+
 test('a repeated dotted param also collects into one list', () => {
   const params = new URLSearchParams()
   params.append('filter.section_not', 'Valentin Review, UX needed')
