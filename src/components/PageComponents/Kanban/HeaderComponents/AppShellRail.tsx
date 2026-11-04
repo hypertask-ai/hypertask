@@ -184,7 +184,7 @@ const AppShellRail = ({
     <aside
       className={`app-shell-rail fixed left-0 top-0 z-sticky flex h-[100svh] flex-col border-r-[1.3px] border-light-black-border-1 bg-containerBackground py-2 [@media(max-height:540px)]:overflow-y-auto scrollbar-none ${
         wide ? "w-[130px] items-stretch px-1.5" : "w-[48px] items-center"
-      }`}
+      } ${onInbox ? "inbox-shell-rail" : ""}`}
     >
       <button
         tabIndex={-1}
@@ -305,7 +305,7 @@ const AppShellRail = ({
             className="group relative flex h-full w-full items-center justify-center rounded-[5px] text-text-light-gray hover:text-white-black"
             aria-label="AI Chat"
           >
-            <IconoirSparks size={18} strokeWidth={1.5} />
+            {onInbox ? <IconoirChat size={18} strokeWidth={1.5} /> : <IconoirSparks size={18} strokeWidth={1.5} />}
             <Tooltip left={tooltipLeft} bottom={-8} text="AI Chat" keyCombination={["5"]} />
           </button>
         </RailItem>

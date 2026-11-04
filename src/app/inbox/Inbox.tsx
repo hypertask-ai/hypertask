@@ -896,7 +896,7 @@ const Inbox = ({
             <div
               className={
                 appShellRailOn && !isInboxZero
-                  ? "inbox-split-panel mx-[12px] flex min-h-0 w-[calc(100%-24px)] flex-1 flex-col overflow-hidden rounded-md bg-containerBackground shadow-md"
+                  ? "inbox-split-panel mx-[12px] flex min-h-0 w-[calc(100%-24px)] flex-1 flex-col overflow-hidden rounded bg-containerBackground shadow-md"
                   : "contents"
               }
             >

@@ -23,6 +23,7 @@ const flagPath = "src/lib/flags/definitions/htpr-8035-sidebar-new-task.ts";
 const flag = load(flagPath, {}).default;
 const fillFlag = load("src/lib/flags/definitions/htpr-8035-new-task-fill.ts", {}).default;
 const { CommandMode } = load("src/models/enums.ts", {});
+const iconoir = load("src/components/Common/IconoirIcons.tsx", { "react/jsx-runtime": require("react/jsx-runtime") });
 
 function renderRail({ enabled = true, fill = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
   const updates = [];
@@ -35,10 +36,10 @@ function renderRail({ enabled = true, fill = true, wide = false, apple = false, 
     "next/dynamic": { __esModule: true, default: () => () => null },
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({ push: (url) => navigation.push(url) }) },
     "lucide-react": new Proxy({}, { get: () => icon }),
-    "@/components/Common/IconoirIcons": new Proxy({}, { get: () => icon }),
+    "@/components/Common/IconoirIcons": iconoir,
     "@/lib/constants": { __esModule: true, default: { timersRoute: "/time" } },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => apple },
-    "@/components/ProviderGlobal/useGlobalUIState": { useGlobalUIState: () => ({ toggleLeftSidebar: () => navigation.push("boards") }) },
+    "@/components/ProviderGlobal/useGlobalUIState": { useGlobalUIState: () => ({ toggleLeftSidebar: () => navigation.push("boards"), toggleAIChatInterface: () => navigation.push("chat") }) },
     "@/components/Common/Tooltip": { __esModule: true, default: ({ text, keyCombination }) => React.createElement("span", { "data-tooltip": text }, keyCombination.join("+")) },
     "./SearchFilterIcon": { __esModule: true, default: () => null },
     "@/store": { appShellRailExpandedAtom: "expanded", boardLayoutAtom: "layout", showCommandsAtom: "commands", showGuestLoginAtom: "login" },
@@ -76,6 +77,18 @@ function renderRail({ enabled = true, fill = true, wide = false, apple = false, 
   visit(tree);
   return { nodes, updates, navigation, html: renderToStaticMarkup(tree) };
 }
+
+test("Inbox uses the chat icon without changing the chat action or other pages", () => {
+  for (const pathname of ["/inbox", "/my-tasks"]) for (const wide of [false, true]) {
+    const rail = renderRail({ pathname, wide });
+    const button = rail.nodes.find(node => node.type === "button" && node.props["aria-label"] === "AI Chat");
+    const html = renderToStaticMarkup(button);
+    const expectedIcon = pathname === "/inbox" ? iconoir.IconoirChat : iconoir.IconoirSparks;
+    assert.ok(html.includes(renderToStaticMarkup(React.createElement(expectedIcon, { size: 18, strokeWidth: 1.5 }))));
+    button.props.onClick();
+    assert.deepEqual(rail.navigation, ["chat"]);
+  }
+});
 
 for (const wide of [false, true]) {
   test(`New Task opens the compose window without navigation (${wide ? "expanded" : "collapsed"})`, () => {

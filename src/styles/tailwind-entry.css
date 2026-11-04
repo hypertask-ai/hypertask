@@ -10,6 +10,10 @@
 @import "tailwindcss";
 @config "../../tailwind.config.ts";
 
+.inbox-shell-rail [class~="rounded-[5px]"] {
+  @apply rounded;
+}
+
 /* Replaces the removed `safelist` in tailwind.config.ts (v4's Config type dropped it).
    Forces these classes to always generate even though they're only referenced via a
    JS variable (taskDetailSpacing.mobile.descriptionContainer) the content scanner can't
