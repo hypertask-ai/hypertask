@@ -45,6 +45,7 @@ function fixture(surface, enabled, { legacy = false, ranked = false, operatorFil
   }
   const prisma = {
     project: { findMany: async () => [{ id: 15 }] },
+    section: { findMany: async () => [] },
     task: {
       count: async ({ where }) => {
         queries.push(where);
@@ -59,6 +60,9 @@ function fixture(surface, enabled, { legacy = false, ranked = false, operatorFil
   const mocks = {
     ai: { tool: (definition) => definition },
     "next/server": { NextResponse },
+    "@/utils/controllers/notifications/inboxZero": {
+      loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])),
+    },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (handler) => handler,
       validateMcpRouteAuth: async () => ({ user, agentId: "caller-agent" }),

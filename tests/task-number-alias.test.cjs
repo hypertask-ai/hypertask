@@ -30,6 +30,11 @@ function load(relativePath, stubs) {
     if (request in stubs) return stubs[request];
     if (request === "@/lib/mcp/skills/context") return require("./helpers/mcp-skill-context.cjs");
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
+    if (request === "@/lib/doneColumns") return load("src/lib/doneColumns.ts", {});
+    if (request === "@/lib/mcp/boards/columnRole") return load("src/lib/mcp/boards/columnRole.ts", {});
+    if (request === "@/utils/controllers/notifications/inboxZero") {
+      return { loadDoneTitlesByProject: async (projectIds) => new Map([...projectIds].map((id) => [id, new Set()])) };
+    }
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
   };
@@ -59,6 +64,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     });
   }
   const prisma = {
+    section: { findMany: async () => [] },
     task: {
       findMany: async ({ where, select, take }) => {
         const rows = tasks.filter(task => matches(task, where));
