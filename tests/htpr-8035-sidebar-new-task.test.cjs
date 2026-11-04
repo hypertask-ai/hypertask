@@ -25,7 +25,7 @@ const fillFlag = load("src/lib/flags/definitions/htpr-8035-new-task-fill.ts", {}
 const { CommandMode } = load("src/models/enums.ts", {});
 const iconoir = load("src/components/Common/IconoirIcons.tsx", { "react/jsx-runtime": require("react/jsx-runtime") });
 
-function renderRail({ enabled = true, fill = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, pathname = "/my-tasks" } = {}) {
+function renderRail({ enabled = true, fill = true, wide = false, apple = false, settingsNamed = true, graphite2 = false, inboxRowFill = true, pathname = "/my-tasks" } = {}) {
   const updates = [];
   const navigation = [];
   const icon = (props) => React.createElement("svg", props);
@@ -56,13 +56,14 @@ function renderRail({ enabled = true, fill = true, wide = false, apple = false, 
     "@/components/Modals/Settings/settingsNavigation": { useSettingsNavigation: () => ({ openSettings: () => navigation.push("settings") }) },
     "@tanstack/react-query": { useQueryClient: () => ({}) },
     "@/store/currentPageActions": { currentPageActionsAtom: "page-actions" },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === fillFlag.key ? fill : false },
+    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-8264-inbox-row-fill" ? inboxRowFill : key === "htpr-8054-graphite-2" ? graphite2 : key === "htpr-8146-settings-name" ? settingsNamed : key === flag.key ? enabled : key === fillFlag.key ? fill : false },
     "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "pages" },
     "@/lib/flags/definitions/htpr-7309-pages-screens": { HTPR_7309_PAGES_SCREENS_FLAG: "screens" },
     "@/lib/flags/definitions/htpr-8146-settings-name": { HTPR_8146_SETTINGS_NAME_FLAG: "htpr-8146-settings-name" },
     "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
     "@/lib/flags/definitions/htpr-8035-sidebar-new-task": { HTPR_8035_SIDEBAR_NEW_TASK_FLAG: flag.key },
     "@/lib/flags/definitions/htpr-8035-new-task-fill": { HTPR_8035_NEW_TASK_FILL_FLAG: fillFlag.key },
+    "@/lib/flags/definitions/htpr-8264-inbox-row-fill": { HTPR_8264_INBOX_ROW_FILL_FLAG: "htpr-8264-inbox-row-fill" },
     "@/hooks/Inbox/useGetNotifications": { prefetchInboxQuery: () => {} },
   };
   const Rail = load("src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", dependencies).default;
@@ -79,11 +80,12 @@ function renderRail({ enabled = true, fill = true, wide = false, apple = false, 
 }
 
 test("Inbox uses the chat icon without changing the chat action or other pages", () => {
-  for (const pathname of ["/inbox", "/my-tasks"]) for (const wide of [false, true]) {
-    const rail = renderRail({ pathname, wide });
+  for (const pathname of ["/inbox", "/my-tasks"]) for (const wide of [false, true]) for (const inboxRowFill of [false, true]) {
+    const rail = renderRail({ pathname, wide, inboxRowFill });
     const button = rail.nodes.find(node => node.type === "button" && node.props["aria-label"] === "AI Chat");
     const html = renderToStaticMarkup(button);
-    const expectedIcon = pathname === "/inbox" ? iconoir.IconoirChat : iconoir.IconoirSparks;
+    const expectedIcon = pathname === "/inbox" && inboxRowFill ? iconoir.IconoirChat : iconoir.IconoirSparks;
+    assert.equal(rail.nodes.find(node => node.type === "aside").props["data-inbox-rail"], pathname === "/inbox" && inboxRowFill ? "" : undefined);
     assert.ok(html.includes(renderToStaticMarkup(React.createElement(expectedIcon, { size: 18, strokeWidth: 1.5 }))));
     button.props.onClick();
     assert.deepEqual(rail.navigation, ["chat"]);

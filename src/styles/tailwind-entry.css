@@ -10,7 +10,7 @@
 @import "tailwindcss";
 @config "../../tailwind.config.ts";
 
-.inbox-shell-rail [class~="rounded-[5px]"] {
+[data-inbox-rail] [class~="rounded-[5px]"] {
   @apply rounded;
 }
 
