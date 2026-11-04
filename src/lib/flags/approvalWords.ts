@@ -24,6 +24,16 @@ export function classifyAnswer(text: string): "yes" | "no" | "unclear" {
   return tokens.every((token) => vocabulary.has(token)) ? "yes" : "unclear";
 }
 
+const OFF_VERB = /^(?:turn|turning|switch|toggle|flip|disable|kill)$/;
+const OFF_BLOCKER = /^(?:no|not|never|cannot|\p{L}+n't|dont|cant|wont|didnt|doesnt|isnt|wasnt|shouldnt|mustnt|neednt|couldnt|wouldnt|havent|hasnt|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|on)$/u;
+const OFF_REACH = 4;
+
+export function isOffOrder(text: string): boolean {
+  const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
+  if (words.some((word) => OFF_BLOCKER.test(word))) return false;
+  return words.some((word, index) => OFF_VERB.test(word) && words.slice(index + 1, index + 1 + OFF_REACH).includes("off"));
+}
+
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;
 const QUOTED = /"[^"]*(?:"|$)/g;
 const ADVICE_HEDGE = /\b(?:no|not|don't|dont|do not|never|wait|later|hold|stop|cancel|only|if|unless|instead|except|but)\b/i;
