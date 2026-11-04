@@ -161,6 +161,7 @@ const TableView = ({
   onMyTasksSortChange,
   myTasksVisibleColumns,
   onMyTasksVisibleColumnsChange,
+  myTasksSectionOverdueCounts,
   enableMyTasksBulkSelection = false,
 }: TableViewProps) => {
   const {
@@ -399,7 +400,7 @@ const TableView = ({
                     className={`${destinationSectionId !== null && dragOverSectionId === destinationSectionId ? "bg-hover-active" : "bg-containerBackground"} shadow-md rounded-md py-2`}
                   >
                     <div className="px-[10px] pt-1">
-                      <SplitTitle isSelected={true} onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false }} />
+                      <SplitTitle isSelected={true} onClick={() => {}} tab={{ idx: sectionIndex, project: section.section_title, length: rawItems.length, hasUnseen: false, overdueCount: myTasksSectionOverdueCounts?.[sectionIndex] ?? 0 }} />
                     </div>
                     <ul className="px-0">
                       {shown.map((task) => {

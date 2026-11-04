@@ -8,6 +8,7 @@ import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144-phone-my-tasks";
+import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-6940-drop-board-tabs";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   MY_TASKS_FILTER_PARITY_FLAG,
@@ -44,6 +45,7 @@ import {
   type MyTasksTask,
 } from "@/lib/myTasksFiltering";
 import {
+  countMyTasksOverdue,
   getMyTasksSplitIndex,
   groupMyTasksByTime,
   splitTabOverdueCounts,
@@ -148,6 +150,7 @@ const MyTasks = ({
   const router = useRouter();
   const searchParams = useSearchParams();
   const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
+  const boardTabsHidden = useFlag(HTPR_6940_DROP_BOARD_TABS_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [sections, setSections] = useState(initialSections);
   const [tabs, setTabs] = useState(initialTabs);
@@ -166,6 +169,7 @@ const MyTasks = ({
     activeSplitRef.current = split;
     setActiveSplitState(split);
   }, []);
+  const splitIndex = boardTabsHidden ? 0 : activeSplit;
 
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
@@ -479,9 +483,9 @@ const MyTasks = ({
     const now = new Date();
     if (groupBy === "time") {
       const selectedBoardId =
-        activeSplit === 0
+        splitIndex === 0
           ? null
-          : availableBoards[activeSplit - 1]?.id ?? null;
+          : availableBoards[splitIndex - 1]?.id ?? null;
       const scopedTasks =
         selectedBoardId === null
           ? allTasksForBoardTabs
@@ -513,7 +517,7 @@ const MyTasks = ({
     }));
     return sortMyTasksViewSections(next, viewConfig, now);
   }, [
-    activeSplit,
+    splitIndex,
     allTasksForBoardTabs,
     availableBoards,
     dateFilterVersion,
@@ -537,8 +541,8 @@ const MyTasks = ({
   }, [availableBoards, filteredSections, groupBy, tabs, viewsFeatureEnabled]);
   const activeBoardId = useRef<number | null>(
     groupBy === "time"
-      ? availableBoards[activeSplit - 1]?.id ?? null
-      : filteredSections[activeSplit - 1]?.projectId ?? null,
+      ? availableBoards[splitIndex - 1]?.id ?? null
+      : filteredSections[splitIndex - 1]?.projectId ?? null,
   );
 
   const totalCount = useMemo(() => {
@@ -552,10 +556,10 @@ const MyTasks = ({
   }, [allTasksForBoardTabs.length, filteredSections, groupBy]);
   const visibleSections = useMemo(() => {
     if (groupBy === "time") return filteredSections;
-    if (activeSplit === 0) return filteredSections;
-    const active = filteredSections[activeSplit - 1];
+    if (splitIndex === 0) return filteredSections;
+    const active = filteredSections[splitIndex - 1];
     return active ? [active] : [];
-  }, [activeSplit, filteredSections, groupBy]);
+  }, [filteredSections, groupBy, splitIndex]);
 
   const replaceBoardParam = useCallback(
     (boardId: number | null) => {
@@ -592,6 +596,7 @@ const MyTasks = ({
 
   const updateSplit = useCallback(
     (index: number) => {
+      if (boardTabsHidden) return;
       pickedBoard.current = true;
       if (iconControlsEnabled) {
         const sources = groupBy === "time" ? boardSplitSources : viewsFeatureEnabled ? filteredSections : sections;
@@ -619,6 +624,7 @@ const MyTasks = ({
       boardSplitSources,
       sections,
       availableBoards,
+      boardTabsHidden,
       filteredSections,
       groupBy,
       iconControlsEnabled,
@@ -672,7 +678,7 @@ const MyTasks = ({
     const restoreView = viewsFeatureEnabled && entryParams.current.view === null && !pickedView.current &&
       memory.viewId !== undefined && memory.defaultViewId === defaultViewId &&
       (memory.viewId === null || views.some((view) => view.id === memory.viewId));
-    const restoreBoard = entryParams.current.board === null && !pickedBoard.current && memory.boardId !== undefined;
+    const restoreBoard = !boardTabsHidden && entryParams.current.board === null && !pickedBoard.current && memory.boardId !== undefined;
     if (restoreView) {
       setActiveViewId(memory.viewId ?? null);
       updateViewConfig(parseMyTasksViewConfig(
@@ -687,7 +693,7 @@ const MyTasks = ({
         ...(restoreBoard ? { boardId: memory.boardId } : {}),
       });
     }
-  }, [activeViewId, currentUser.id, iconControlsEnabled, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views, viewsFeatureEnabled]);
+  }, [activeViewId, boardTabsHidden, currentUser.id, iconControlsEnabled, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views, viewsFeatureEnabled]);
 
   useEffect(() => {
     if (!viewsFeatureEnabled || observedViewParam.current === viewParam) return;
@@ -726,6 +732,7 @@ const MyTasks = ({
         return;
       }
       if (
+        boardTabsHidden ||
         event.key !== "Tab" ||
         activeTabs.length === 0 ||
         returnIfModalOrInputActive()
@@ -742,7 +749,7 @@ const MyTasks = ({
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeSplit, activeTabs.length, filterOpen, router, showCommands.show, updateSplit]);
+  }, [activeSplit, activeTabs.length, boardTabsHidden, filterOpen, router, showCommands.show, updateSplit]);
 
   const selectView = (viewId: number | null) => {
     pickedView.current = true;
@@ -988,6 +995,13 @@ const boardTabCounts = useMemo(() => {
   const tabOverdue = (index: number) =>
     overdueBadgesEnabled ? (splitOverdueCounts[index] ?? 0) : 0;
 
+  const sectionOverdueCounts = useMemo(
+    () => (boardTabsHidden && overdueBadgesEnabled
+      ? visibleSections.map((section) => countMyTasksOverdue(section.items, new Date()))
+      : undefined),
+    [boardTabsHidden, dateFilterVersion, overdueBadgesEnabled, visibleSections],
+  );
+
   const togglePriority = (priority: IPrioritiesConstants) =>
     setPrioritySelection((current) =>
       current.some((p) => p.priority_index === priority.priority_index)
@@ -998,7 +1012,7 @@ const boardTabCounts = useMemo(() => {
   const splitTitles = activeTabs.map((item, index) => (
     <SplitTitle
       key={`split-my-tasks-${index}`}
-      isSelected={activeSplit === index}
+      isSelected={splitIndex === index}
       onClick={() => updateSplit(index)}
       tab={{
         idx: index,
@@ -1135,14 +1149,16 @@ const boardTabCounts = useMemo(() => {
         )}
       </div>
 
-      <div data-testid="my-tasks-splits-desktop" className="hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-[78px] @lg:px-[73px] mt-4">
-        <div className="flex flex-wrap grow">{splitTitles}</div>
-      </div>
+      {!boardTabsHidden && (
+        <div data-testid="my-tasks-splits-desktop" className="hidden @md:block w-full overflow-x-auto scrollbar-none no-scrollbar @md:px-[78px] @lg:px-[73px] mt-4">
+          <div className="flex flex-wrap grow">{splitTitles}</div>
+        </div>
+      )}
 
       <div data-testid="my-tasks-list" className="mt-3 flex-1 min-h-0 w-full">
         <MyTasksBulkSelectionProvider
           enabled={myTasksBulkSelectionEnabled}
-          resetSelectionKey={`${activeViewId ?? "all"}:${activeSplit}:${prioritySelection
+          resetSelectionKey={`${activeViewId ?? "all"}:${splitIndex}:${prioritySelection
             .map((priority) => priority.priority_index)
             .join(",")}`}
           onAfterMutation={() => reconcileRunner.request()}
@@ -1161,15 +1177,18 @@ const boardTabCounts = useMemo(() => {
           onMyTasksVisibleColumnsChange={
             tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
           }
+          myTasksSectionOverdueCounts={sectionOverdueCounts}
           enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
         />
         {myTasksBulkSelectionEnabled ? <MyTasksBulkActionBar /> : null}
         </MyTasksBulkSelectionProvider>
       </div>
 
-      <div data-testid="my-tasks-splits-phone" className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
-        {splitTitles}
-      </div>
+      {!boardTabsHidden && (
+        <div data-testid="my-tasks-splits-phone" className="flex inbox_footer @md:hidden no-scrollbar scrollbar-none @md:gap-8 w-100 bg-hoverCardBackground h-20 @md:h-8 inbox_title">
+          {splitTitles}
+        </div>
+      )}
       {myTasksTableColumnsEnabled && tableColumnsFeatureEnabled && columnsPickerOpen ? (
         <TableColumnsPicker
           closeHandler={() => setColumnsPickerOpen(false)}
