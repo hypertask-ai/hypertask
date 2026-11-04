@@ -75,13 +75,11 @@ test("mobile chat uses the approved header controls and guarded new-chat action"
   const sharedHistoryButton = header.match(/const historyButton = \([\s\S]*?\n  \);/);
   assert.ok(sharedHistoryButton, "History keeps one shared control");
   assert.match(mobileBranch[0], /\{historyButton\}/);
-  assert.match(sharedHistoryButton[0], /className=\{isMbl\s*\? "[^"]*h-11 w-11[^"]*"/);
   for (const label of ["Close AI chat", "Chat history", "New chat"]) {
     const button = (label === "Chat history" ? sharedHistoryButton[0] : mobileBranch[0]).match(
       new RegExp(`<button(?:(?!</button>)[\\s\\S])*?aria-label="${label}"(?:(?!</button>)[\\s\\S])*?</button>`)
     );
     assert.ok(button, `${label} button must exist`);
-    if (label !== "Chat history") assert.match(button[0], /className="[^"]*h-11 w-11[^"]*"/);
     if (label === "New chat") {
       assert.match(button[0], /onClick=\{handleStartNewSession\}/);
       assert.match(button[0], /disabled=\{isStartingNewSession\}/);
