@@ -52,13 +52,16 @@ function checkoutPr(t, file, { before = [], production = [entry], head = before,
   }
   execFileSync('git', ['clone', '--no-tags', '--depth=1', '--branch', merge ? 'pr-merge' : 'pull-request', pathToFileURL(repository).href, checkout], { stdio: 'pipe' })
   const eventPath = path.join(directory, 'event.json')
+  const mockPath = path.join(directory, 'mock.cjs')
+  writeFileSync(mockPath, `global.fetch = async () => ({ ok: true, json: async () => JSON.parse(process.env.MOCK_PR) })`)
   return {
     git: (...args) => execFileSync('git', args, { cwd: checkout, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(),
-    run(body = '', base = baseSha) {
-      writeFileSync(eventPath, json({ pull_request: { body, base: { sha: base } } }))
-      return spawnSync(process.execPath, [path.join(__dirname, '../.github/scripts/agent-scope/baseline-approval.mjs')], {
+    run(body = '', base = baseSha, liveBody = body) {
+      const metadata = { number: 42, head: { sha: headSha }, base: { sha: base, repo: { full_name: 'example/repo' } } }
+      writeFileSync(eventPath, json({ number: 42, repository: { full_name: 'example/repo' }, pull_request: { ...metadata, body } }))
+      return spawnSync(process.execPath, ['--require', mockPath, path.join(__dirname, '../.github/scripts/agent-scope/baseline-approval.mjs')], {
         cwd: checkout,
-        env: { ...process.env, GITHUB_EVENT_PATH: eventPath, BASE_SHA: base },
+        env: { ...process.env, GITHUB_EVENT_PATH: eventPath, BASE_SHA: base, GITHUB_REPOSITORY: 'example/repo', GITHUB_TOKEN: 'fixture', MOCK_PR: json({ ...metadata, body: liveBody }) },
         encoding: 'utf8',
       })
     },
@@ -90,6 +93,15 @@ for (const [name, kind] of [['baseline', 'debt'], ['exceptions', 'exception']]) 
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /Agent scope approval passed/)
     assert.equal(result.stderr, '')
+  })
+
+  test(`${kind}: reruns use the live body instead of the event body`, t => {
+    const pr = checkoutPr(t, file, { head: [entry] })
+    const added = pr.run('', undefined, line)
+    assert.equal(added.status, 0, added.stderr)
+    const removed = pr.run(line, undefined, '')
+    assert.equal(removed.status, 1, removed.stderr)
+    assert.match(removed.stderr, /The PR body must contain the line/)
   })
 
   test(`${kind}: changes to an existing entry still need approval`, t => {
@@ -154,6 +166,33 @@ for (const [name, kind] of [['baseline', 'debt'], ['exceptions', 'exception']]) 
   })
 }
 
+test('live PR metadata and API failures fail closed', async () => {
+  const { currentBody } = await load()
+  const sha = 'a'.repeat(40)
+  const metadata = { number: 42, head: { sha }, base: { repo: { full_name: 'example/repo' } }, body: 'approved' }
+  const event = { number: 42, repository: { full_name: 'example/repo' }, pull_request: metadata }
+  const request = pr => async (url, options) => {
+    assert.equal(url, 'https://api.github.com/repos/example/repo/pulls/42')
+    assert.equal(options.headers.Authorization, 'Bearer fixture')
+    return { ok: true, json: async () => pr }
+  }
+  assert.equal(await currentBody(event, 'example/repo', 'fixture', request(metadata)), 'approved')
+  for (const pr of [
+    { ...metadata, number: 43 },
+    { ...metadata, base: { repo: { full_name: 'other/repo' } } },
+    { ...metadata, head: { sha: 'b'.repeat(40) } },
+    { ...metadata, body: undefined },
+    null,
+  ]) await assert.rejects(currentBody(event, 'example/repo', 'fixture', request(pr)))
+  for (const failed of [
+    async () => { throw new Error('network') },
+    async () => ({ ok: false }),
+    async () => ({ ok: true, json: async () => { throw new Error('invalid JSON') } }),
+  ]) await assert.rejects(currentBody(event, 'example/repo', 'fixture', failed))
+  await assert.rejects(currentBody(event, 'example/repo', '', request(metadata)))
+  await assert.rejects(currentBody({ ...event, number: 43 }, 'example/repo', 'fixture', request(metadata)))
+})
+
 const source = file => readFileSync(path.join(__dirname, '..', file), 'utf8')
 
 test('agent scope runs after dependency restore/install even on a cache hit, as one static gate', () => {
@@ -178,6 +217,7 @@ test('agent scope runs after dependency restore/install even on a cache hit, as 
   const approval = prepare.match(/      - name: Agent scope debt needs a recorded approval\n[\s\S]*?(?=\n      - )/)?.[0]
   assert.ok(approval)
   assert.match(approval, /if: github.event_name == 'pull_request'/)
+  assert.match(approval, /GITHUB_TOKEN: \$\{\{ github.token \}\}/)
   assert.match(approval, /BASE_SHA: \$\{\{ github.event.pull_request.base.sha \}\}/)
   assert.match(approval, /run: node .github\/scripts\/agent-scope\/baseline-approval.mjs/)
   assert.ok(prepare.indexOf('name: Determine change scope') < prepare.indexOf(approval))

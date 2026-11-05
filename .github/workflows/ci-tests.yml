@@ -212,6 +212,7 @@ jobs:
       - name: Agent scope debt needs a recorded approval
         if: github.event_name == 'pull_request'
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node .github/scripts/agent-scope/baseline-approval.mjs
 
