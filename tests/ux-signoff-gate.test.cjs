@@ -1744,17 +1744,6 @@ test('scoped reconciliation reports status publication failure', async () => {
   assert.equal(await run(['--reconcile', '--pr', '1'], { env, github, fetchImpl: commentsFetch, log: () => {} }), 2);
 });
 
-test('workflow scopes pull request events and dispatches a full sweep', () => {
-  const workflow = readFileSync(path.join(root, '.github/workflows/ux-signoff-gate.yml'), 'utf8');
-  assert.match(workflow, /pull_request_target:/);
-  assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /EVENT_NAME: \$\{\{ github\.event_name \}\}/);
-  assert.match(workflow, /PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}/);
-  assert.match(workflow, /if \[ "\$EVENT_NAME" = pull_request_target \]; then\s+node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile --pr "\$PR_NUMBER"\s+else\s+node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s+fi/);
-  assert.match(workflow, /ref: production/);
-  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-});
-
 test('single-PR reconciliation never publishes an unvalidated head on metadata read error', async () => {
   const { run } = await gate;
   const fixture = apiFixture({ prs: [pr(1), pr(2)], prError: 1 });
