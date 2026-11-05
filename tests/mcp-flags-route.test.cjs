@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const { createHash } = require("node:crypto");
 const test = require("node:test");
 const { NextRequest, NextResponse } = require("next/server");
 const { createJiti } = require("jiti");
@@ -37,6 +38,10 @@ let leadAgent;
 let candidateLocks;
 let editOnCandidateLock;
 let approvalLogs;
+let auditLogs;
+let latestChange;
+let legacyFlagReads;
+let legacyFlagsFail;
 const week = 7 * 24 * 60 * 60 * 1000;
 const approvalRequired = "Needs a clear yes from Valentin within 7 days: his thumbs up on the switch question, his own comment on the ticket after exactly one switch question, or HT Product Lead's in-chat record of his exact words. Questions name the switch: Switch <flag-key> to <mode>";
 const ambiguousQuestion = "Ambiguous or missing question: Valentin's yes must follow exactly one switch question; ask him to thumbs-up the one he means";
@@ -60,6 +65,8 @@ stubModule("src/lib/flags.ts", {
   FeatureFlagApprovalError,
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
   isFeatureEnabled: async (flagKey, userId) => {
+    legacyFlagReads++;
+    if (legacyFlagsFail) throw new Error("legacy flag unavailable");
     assert.equal(userId, 6);
     if (flagKey === "htpr-8339-template-switch-question") return templateQuestionFlagOn;
     assert.equal(flagKey, "htpr-7727-plain-yes-flag-approval");
@@ -110,6 +117,10 @@ function commentsMatching(query) {
   });
 }
 const tx = {
+  $executeRaw: async () => { calls.push("advisory-lock"); },
+  featureFlag: { findUnique: async () => ({ mode: previousMode }) },
+  featureFlagChange: { findFirst: async () => latestChange },
+  logs: { create: async ({ data }) => { auditLogs.push(JSON.parse(data.log)); } },
   $queryRaw: async (strings, commentId, taskId, projectId) => {
     const sql = strings.join("?");
     if (sql === 'SELECT id FROM "Comment" WHERE id = ? ORDER BY id FOR UPDATE') {
@@ -155,7 +166,7 @@ const tx = {
       assert.equal(query.where.id, 123);
       assert.equal(query.where.editedAt, null);
       assert.deepEqual({ ...query.where.task, project: undefined }, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" }, project: undefined });
-      assert.deepEqual(query.where.task.project, { OR: [{ members: { some: { agentId: "runner-3", status: "Accepted", agent: { userId: 6, revokedAt: null } } } }] });
+      assert.deepEqual(query.where.task.project, { OR: [{ members: { some: { agentId: ctx.agentId, status: "Accepted", agent: { userId: 6, revokedAt: null } } } }] });
       assert.deepEqual({ ...reaction, createdAt: undefined }, {
         userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
         unified: { startsWith: "1f44d" }, createdAt: undefined,
@@ -181,7 +192,7 @@ stubModule("src/lib/prisma.ts", {
   default: {
     agent: {
       findUniqueOrThrow: async (query) => {
-        assert.deepEqual(query, { where: { id: "runner-3" }, select: { displayName: true } });
+        assert.deepEqual(query, { where: { id: ctx.agentId }, select: { displayName: true } });
         calls.push("agent");
         return { displayName: "Runner 3" };
       },
@@ -209,7 +220,7 @@ async function result(response) {
   return { status: response.status, body: await response.json() };
 }
 test.beforeEach((t) => {
-  approvalLogs = [];
+  approvalLogs = []; auditLogs = []; latestChange = null; legacyFlagReads = 0; legacyFlagsFail = false;
   t.mock.method(console, "info", (...args) => approvalLogs.push(args));
   ticketComments = []; candidateLocks = []; editOnCandidateLock = null;
   leadAgent = { userId: 6, revokedAt: null };
@@ -291,7 +302,7 @@ for (const body of [null, [], { key, reason }, { key, mode: "off", reason }, { k
 test("PATCH enforces JSON, malformed JSON and the admin body limit", async () => {
   assert.equal((await result(await PATCH(request("PATCH", "{}", "", "text/plain")))).status, 415);
   assert.equal((await result(await PATCH(request("PATCH", "{")))).status, 400);
-  assert.equal((await result(await PATCH(request("PATCH", " ".repeat(1025))))).status, 413);
+  assert.equal((await result(await PATCH(request("PATCH", " ".repeat(4097))))).status, 413);
   assert.equal(writes.length, 0);
 });
 
@@ -841,4 +852,107 @@ test("PATCH refuses a shaped Question whose own question line hedges", async () 
   templateQuestionFlagOn = true;
   approvalComment.text = shapedQuestion(key, "Everyone").replace("to Everyone?", "to Everyone only if QA is green?");
   await assertRefused();
+});
+
+function ownerBody() {
+  ctx.agentId = FLAG_CHAT_RECORD_AGENT_ID;
+  approvalComment.agentId = null;
+  approvalComment.commentText = "Please release this for everyone";
+  return { key, mode: "EVERYONE", ownerRequest: { source: reason, quote: "release this", requestedAt: approvalComment.createdAt.toISOString() } };
+}
+
+test("trusted lead records owner intent without exposing its quote", async () => {
+  const body = ownerBody();
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 200);
+  assert.equal(writes[0][2].reason, reason);
+  assert.equal(auditLogs[0].source, reason);
+  assert.equal(auditLogs[0].quoteSha256, createHash("sha256").update(body.ownerRequest.quote).digest("hex"));
+  assert.equal(JSON.stringify({ auditLogs, approvalLogs, writes }).includes(body.ownerRequest.quote), false);
+  assert.ok(calls.indexOf("advisory-lock") < calls.indexOf("comment-lock"));
+});
+
+for (const scenario of ["role", "agent", "revoked", "owner-link", "source-author", "edited", "scope", "quote", "blank", "future", "source-time", "human-time", "withdrawal", "replay", "receipt"]) {
+  test(`owner request refuses ${scenario}`, async () => {
+    const body = ownerBody();
+    if (scenario === "role") ctx.agentRole = "read";
+    if (scenario === "agent") ctx.agentId = "runner-3";
+    if (scenario === "revoked") leadAgent.revokedAt = new Date();
+    if (scenario === "owner-link") leadAgent.userId = 7;
+    if (scenario === "source-author") approvalComment.creatorId = 7;
+    if (scenario === "edited") approvalComment.editedByUserId = 6;
+    if (scenario === "scope") approvalComment.task.projectId = 99;
+    if (scenario === "quote") body.ownerRequest.quote = "not present";
+    if (scenario === "blank") body.ownerRequest.quote = "   ";
+    if (scenario === "future") body.ownerRequest.requestedAt = new Date(Date.now() + 60000).toISOString();
+    if (scenario === "source-time") { approvalComment.agentId = FLAG_CHAT_RECORD_AGENT_ID; body.ownerRequest.requestedAt = new Date(approvalComment.createdAt.getTime() + 1).toISOString(); }
+    if (scenario === "human-time") body.ownerRequest.requestedAt = new Date(approvalComment.createdAt.getTime() - 1).toISOString();
+    if (scenario === "withdrawal") ticketComments.push({ ...approvalComment, id: 124, createdAt: new Date(approvalComment.createdAt.getTime() + 1), commentText: "No" });
+    if (scenario === "replay") latestChange = { newMode: "OFF" };
+    if (scenario === "receipt") { delete body.ownerRequest; body.review = 1; }
+    assert.ok([400, 403].includes((await result(await PATCH(request("PATCH", body)))).status));
+    assert.equal(writes.length, 0);
+    assert.equal(auditLogs.length, 0);
+  });
+}
+
+test("trusted lead source may record an earlier owner request", async () => {
+  const body = ownerBody();
+  approvalComment.agentId = FLAG_CHAT_RECORD_AGENT_ID;
+  body.ownerRequest.requestedAt = new Date(approvalComment.createdAt.getTime() - 60000).toISOString();
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 200);
+});
+
+for (const mode of ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"]) {
+  for (const flagKey of [key, "htpr-7982-cancelled-free", "htpr-8215-agent-archive-delete", "yper4-651-self-follow-quiet"]) {
+    test(`owner request permits ${mode} for ${flagKey} without legacy flags`, async () => {
+      const body = ownerBody();
+      body.key = flagKey;
+      body.mode = mode;
+      plainYesFlagOn = false;
+      templateQuestionFlagOn = false;
+      legacyFlagsFail = true;
+      assert.equal((await result(await PATCH(request("PATCH", body)))).status, 200);
+      assert.equal(writes[0][0], flagKey);
+      assert.equal(writes[0][1], mode);
+      assert.equal(legacyFlagReads, 0);
+    });
+  }
+}
+
+test("owner request permits a later same-mode change", async () => {
+  const body = ownerBody();
+  latestChange = { newMode: body.mode };
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 200);
+});
+
+for (const field of ["reason", "review", "failure"]) {
+  test(`owner request rejects additional ${field} evidence`, async () => {
+    const body = ownerBody();
+    body[field] = field === "reason" ? reason : "evidence";
+    assert.equal((await result(await PATCH(request("PATCH", body)))).status, 400);
+    assert.equal(writes.length, 0);
+  });
+}
+
+for (const [name, modify] of [
+  ["extra field", (e) => { e.extra = true; }],
+  ["malformed date", (e) => { e.requestedAt = "2026-02-30T00:00:00Z"; }],
+  ["invalid date", (e) => { e.requestedAt = "not a date"; }],
+  ["blank visible quote", (e) => { e.quote = "<p> </p>"; }],
+  ["oversized quote", (e) => { e.quote = "x".repeat(1001); }],
+  ["source suffix", (e) => { e.source += "?extra=1"; }],
+]) {
+  test(`owner request rejects ${name}`, async () => {
+    const body = ownerBody();
+    modify(body.ownerRequest);
+    assert.equal((await result(await PATCH(request("PATCH", body)))).status, 400);
+    assert.equal(writes.length, 0);
+  });
+}
+
+test("failure hold does not read legacy rollout flags", async () => {
+  previousMode = "EVERYONE";
+  legacyFlagsFail = true;
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", failure: "live QA failed" })))).status, 200);
+  assert.equal(legacyFlagReads, 0);
 });

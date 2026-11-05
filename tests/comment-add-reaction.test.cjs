@@ -45,7 +45,7 @@ function loadHandler({
   session = { userId: 6 },
   canAccessTask = true,
 } = {}) {
-  const calls = { created: [], deleted: [], notifications: [], broadcast: [], access: [] };
+  const calls = { created: [], deleted: [], notifications: [], broadcast: [], access: [], locks: [] };
 
   resetModules([
     "src/pages/api/comments/addReaction.ts",
@@ -102,6 +102,7 @@ function loadHandler({
           return { count: existing.length };
         },
       },
+      $executeRaw: async (_sql, _namespace, id) => { calls.locks.push(id); },
       $transaction: async (fn) => fn(db),
   };
   stubModule("src/lib/prisma.ts", { default: db });
@@ -237,4 +238,13 @@ test("rejects a non-POST method", async () => {
   const { res, captured } = response();
   await handler({ method: "GET", body: {} }, res);
   assert.equal(captured.status, 405);
+});
+
+test("creation and removal take the same comment advisory lock", async () => {
+  for (const existing of [[], [{ id: "old" }]]) {
+    const { handler, calls } = loadHandler({ existing });
+    await post(handler, VALID);
+    assert.deepEqual(calls.locks, [VALID.commentId]);
+    assert.equal(calls.created.length + calls.deleted.length, 1);
+  }
 });

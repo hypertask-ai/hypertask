@@ -1,10 +1,11 @@
 import { getAgentRole, insufficientScopeResponse, roleMeets } from "@/lib/mcp/agents/scopes";
-import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { parse } from "node-html-parser";
+import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
@@ -22,15 +23,10 @@ import {
 import { HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7727-plain-yes-flag-approval";
 import { HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG } from "@/lib/flags/definitions/htpr-8339-template-switch-question";
 import { authorize } from "@/lib/flags/agentAuthorization";
-import { YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG } from "@/lib/flags/definitions/yper4-801-manager-lease-flag-switch";
-import { isManagerClassAgentName, MANAGER_GRANT_HEADER, requireCurrentManagerGrant } from "@/lib/flags/managerLease";
-import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
-import { FEATURE_FLAG_RELEASE_RISKS } from "@/lib/flags/releaseRisk";
 import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
-const FLAG_REVIEW_POLICY_COMMENT_ID = 302454;
 const APPROVAL_REQUIRED_MESSAGE = "Needs a clear yes from Valentin within 7 days: his thumbs up on the switch question, his own comment on the ticket after exactly one switch question, or HT Product Lead's in-chat record of his exact words. Questions name the switch: Switch <flag-key> to <mode>";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
@@ -38,6 +34,11 @@ const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   EVERYONE: "Everyone",
   OFF: "Off",
 };
+const ownerRequestSchema = z.object({
+  source: z.string(),
+  quote: z.string().max(1000).refine((quote) => !!normalizeVisibleText(quote)),
+  requestedAt: z.string().datetime({ offset: true }).regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/),
+}).strict();
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -66,33 +67,34 @@ export async function PATCH(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const roleRefusal = await requireAgentWriteRole(ctx);
-    if (roleRefusal) return roleRefusal;
+    const role = ctx.agentRole ?? await getAgentRole(ctx);
+    if (!roleMeets(role, "write")) {
+      const refusal = insufficientScopeResponse(role, "write");
+      refusal.headers.set("Cache-Control", "private, no-store");
+      return refusal;
+    }
     if (!request.headers.get("content-type")?.startsWith("application/json")) {
       return noStore({ error: "Content-Type must be application/json" }, 415);
     }
     const text = await request.text();
-    if (text.length > 1024) return noStore({ error: "Request is too large" }, 413);
-    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; reason?: unknown; review?: unknown; failure?: unknown } | null;
+    if (text.length > 4096) return noStore({ error: "Request is too large" }, 413);
+    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; reason?: unknown; review?: unknown; failure?: unknown; ownerRequest?: unknown } | null;
     if (!body || Array.isArray(body) || typeof body.key !== "string"
       || typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)) {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    const evidenceKinds = ["reason", "review", "failure"].filter((field) => Object.hasOwn(body, field));
+    const evidenceKinds = ["reason", "review", "failure", "ownerRequest"].filter((field) => Object.hasOwn(body, field));
     if (evidenceKinds.length > 1) {
-      return noStore({ error: "Provide only one of reason, review or failure" }, 400);
+      return noStore({ error: "Provide only one evidence type" }, 400);
     }
     const usesReview = evidenceKinds[0] === "review";
     const usesFailure = evidenceKinds[0] === "failure";
-    if (usesReview && (!Number.isSafeInteger(body.review) || Number(body.review) <= 0)) {
-      return noStore({ error: "Review must be a positive review id" }, 400);
+    if (usesReview) throw new FeatureFlagApprovalError("Review receipts cannot authorize a flag switch");
+    const parsedAttestation = body.ownerRequest === undefined ? undefined : ownerRequestSchema.safeParse(body.ownerRequest);
+    if (parsedAttestation && !parsedAttestation.success) {
+      return noStore({ error: "Invalid ownerRequest" }, 400);
     }
-    if (usesReview && body.mode !== "EVERYONE") {
-      throw new FeatureFlagApprovalError("A review can only switch a flag to Everyone");
-    }
-    if (usesReview && FEATURE_FLAG_RELEASE_RISKS[body.key]?.highRisk) {
-      throw new FeatureFlagApprovalError("A review cannot switch a high-risk flag; use a Question with Valentin's thumbs-up");
-    }
+    const attestation = parsedAttestation?.data;
     if (usesFailure) {
       if (typeof body.failure !== "string" || !body.failure.trim() || body.failure.length > 300) {
         return noStore({ error: "Failure must be a nonblank reason or URL (max 300 characters)" }, 400);
@@ -100,15 +102,10 @@ export async function PATCH(request: NextRequest) {
       if (body.mode !== "OWNER_AND_QA") {
         throw new FeatureFlagApprovalError("A failure record can only hold a flag at Owner + QA");
       }
-      const role = ctx.agentRole ?? await getAgentRole(ctx);
-      if (!roleMeets(role, "write")) {
-        const refusal = insufficientScopeResponse(role, "write");
-        refusal.headers.set("Cache-Control", "private, no-store");
-        return refusal;
-      }
     }
-    const link = typeof body.reason === "string" && body.reason.length <= 500
-      ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(body.reason)
+    const source = attestation ? attestation.source : body.reason;
+    const link = typeof source === "string" && source.length <= 500
+      ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(source)
       : null;
     if (!usesReview && !usesFailure && !link) {
       return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>)" }, 400);
@@ -117,21 +114,13 @@ export async function PATCH(request: NextRequest) {
       where: { id: ctx.agentId as string },
       select: { displayName: true },
     });
-    const plainYesAllowed = await isFeatureEnabled(HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG, ctx.user.id);
-    const templateQuestionAllowed = await isFeatureEnabled(HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG, ctx.user.id);
-    const requiresManagerGrant = isManagerClassAgentName(agent.displayName)
-      && await isFeatureEnabled(YPER4_801_MANAGER_LEASE_FLAG_SWITCH_FLAG, ctx.user.id);
-    const managerGrant = request.headers.get(MANAGER_GRANT_HEADER);
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
       agentName: agent.displayName,
-      reason: usesReview ? `flag-review:${body.review}` : usesFailure ? `live-qa-failed:${body.failure}` : body.reason as string,
+      reason: usesFailure ? `live-qa-failed:${body.failure}` : source as string,
       source: "api",
     }, async (tx) => {
-      if (requiresManagerGrant) {
-        await requireCurrentManagerGrant(tx, { agentId: ctx.agentId as string, grant: managerGrant });
-      }
       if (usesFailure) {
         const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
         if (!stored && !(FEATURE_FLAG_KEYS as readonly string[]).includes(body.key as string)) return;
@@ -144,41 +133,6 @@ export async function PATCH(request: NextRequest) {
         }
         return;
       }
-      if (usesReview) {
-        await tx.$queryRaw`SELECT id FROM "FeatureFlagReview" WHERE id = ${body.review as number} FOR UPDATE`;
-        const review = await tx.featureFlagReview.findUnique({ where: { id: body.review as number } });
-        if (!review || review.key !== body.key || review.mode !== body.mode
-          || review.usedAt !== null || review.reviewerUserId !== ctx.user.id
-          || review.createdAt.getTime() < Date.now() - 24 * 60 * 60 * 1000) {
-          throw new FeatureFlagApprovalError("Review must be unused, less than 24 hours old, and match this user, flag and mode");
-        }
-        if (review.reviewerAgentId === ctx.agentId) {
-          throw new FeatureFlagApprovalError("The review must be recorded by a different agent");
-        }
-        const commentId = FLAG_REVIEW_POLICY_COMMENT_ID;
-        await lockCommentReactions(tx, commentId);
-        const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
-        if (!locked.length) throw new FeatureFlagApprovalError("Valentin's policy thumbs-up is required on comment 302454");
-        await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
-        const policy = await tx.comment.findFirst({
-          where: {
-            id: commentId,
-            editedAt: null,
-            task: { status: { not: "Deleted" } },
-            reactions: { some: {
-              userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
-              unified: { startsWith: "1f44d" },
-            } },
-          },
-          select: { id: true },
-        });
-        if (!policy) throw new FeatureFlagApprovalError("Valentin's policy thumbs-up is required on unedited comment 302454");
-        const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true } });
-        if ((stored?.mode ?? defaultFeatureFlagMode(body.key as string)) === body.mode) {
-          throw new FeatureFlagApprovalError("Flag is already in that mode");
-        }
-        return;
-      }
       if (!link) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       const commentId = Number(link[3]);
       const approval = await tx.comment.findFirst({
@@ -187,6 +141,7 @@ export async function PATCH(request: NextRequest) {
       });
       if (!approval) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       recordAgentBoardScopeMiss(Number(link[1]), "write");
+      await lockCommentReactions(tx, commentId);
       const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} AND t.id = ${approval.taskId} AND t."projectId" = ${Number(link[1])} FOR UPDATE`;
       if (!locked.length) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
@@ -217,6 +172,43 @@ export async function PATCH(request: NextRequest) {
       const unedited = comment.editedAt === null && comment.editedByUserId === null && comment.editedByAgentId === null;
       const human = unedited && comment.creatorId === FEATURE_FLAG_OWNER_USER_ID
         && comment.agentId === null && comment.agentDisplayName === null;
+      if (attestation) {
+        const lead = await tx.agent.findUnique({
+          where: { id: FLAG_CHAT_RECORD_AGENT_ID }, select: { userId: true, revokedAt: true },
+        });
+        const trustedSource = unedited && comment.creatorId === FEATURE_FLAG_OWNER_USER_ID
+          && comment.agentId === FLAG_CHAT_RECORD_AGENT_ID;
+        const requestedAt = new Date(attestation.requestedAt);
+        if (ctx.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !lead || lead.userId !== FEATURE_FLAG_OWNER_USER_ID
+          || lead.revokedAt !== null || (!human && !trustedSource)
+          || requestedAt.getTime() > now || requestedAt > comment.createdAt
+          || (human && requestedAt.getTime() !== comment.createdAt.getTime())
+          || !words.includes(normalizeVisibleText(attestation.quote))) {
+          throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+        }
+        const latest = await tx.featureFlagChange.findFirst({
+          where: { key: body.key as string, createdAt: { gt: requestedAt } },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }], select: { newMode: true },
+        });
+        if (latest && latest.newMode !== body.mode) {
+          throw new FeatureFlagApprovalError("A later flag change supersedes this request");
+        }
+        const laterComments = await tx.comment.findMany({
+          where: { taskId: comment.taskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null,
+            agentDisplayName: null, createdAt: { gte: requestedAt } },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: commentSelect,
+        });
+        const withdrawal = laterComments.find((later) => later.id !== comment.id
+          && classifyAnswer(normalizeVisibleText(later.text || later.commentText || "")) === "no");
+        if (withdrawal) throw new FeatureFlagApprovalError(`Valentin said no after that approval (comment ${withdrawal.id})`);
+        await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: ctx.user.id,
+          log: JSON.stringify({ event: "flag_owner_request", key: body.key, mode: body.mode,
+            agentId: ctx.agentId, source, requestedAt: requestedAt.toISOString(),
+            quoteSha256: createHash("sha256").update(attestation.quote).digest("hex") }) } });
+        return;
+      }
+      const plainYesAllowed = await isFeatureEnabled(HTPR_7727_PLAIN_YES_FLAG_APPROVAL_FLAG, ctx.user.id);
+      const templateQuestionAllowed = await isFeatureEnabled(HTPR_8339_TEMPLATE_SWITCH_QUESTION_FLAG, ctx.user.id);
       const answer = classifyAnswer(words);
       if (human && answer === "no") {
         throw new FeatureFlagApprovalError(`Valentin said no on comment ${comment.id}; no switch`);
@@ -318,12 +310,7 @@ export async function PATCH(request: NextRequest) {
         key: body.key, mode: body.mode, kind, approvalCommentId: comment.id,
         questionCommentIds, verdict: "yes", classifier: "v1",
       }));
-    }, usesReview ? async (tx, changeId) => {
-      await tx.featureFlagReview.update({
-        where: { id: body.review as number },
-        data: { usedAt: new Date(), usedByChangeId: changeId },
-      });
-    } : undefined);
+    });
     const previousMode = flag.lastChange
       ? flag.lastChange.oldMode ?? defaultFeatureFlagMode(body.key)
       : flag.mode;

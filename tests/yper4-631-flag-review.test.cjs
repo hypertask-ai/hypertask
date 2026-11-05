@@ -94,8 +94,8 @@ const prisma = {
       locks.push("flag-lock");
     } else {
       assert.equal(namespace, 1_309_542_515);
-      assert.equal(target, 302454);
-      locks.push("policy-advisory-lock");
+      assert.ok([123, 302454].includes(target));
+      locks.push(target === 123 ? "approval-advisory-lock" : "policy-advisory-lock");
     }
     return 0;
   },
@@ -236,56 +236,16 @@ test.beforeEach(() => {
   policy = { editedAt: null, status: "Normal", reactions: [{ userId: 6, agentId: null, agentDisplayName: null, isDeleted: false, unified: "1f44d", createdAt: new Date(0) }] };
 });
 
-test("agent B records immutable evidence and agent A switches, consuming the review with the change atomically", async () => {
-  process.env.VERCEL_GIT_COMMIT_SHA = "deployed-sha";
-  const recorded = await record({ ...evidence, reviewerAgentId: "forged", reviewerUserId: 7, usedAt: new Date(), inboxCyclePassed: false, deployedSha: "forged" });
-  assert.equal(recorded.status, 201);
-  const review = reviews.get(1);
-  assert.equal(review.reviewerAgentId, "agent-b");
-  assert.equal(review.reviewerUserId, 6);
-  assert.equal(review.deployedSha, "deployed-sha");
-  assert.equal(review.inboxCyclePassed, true);
-  assert.equal(review.usedAt, null);
-  assert.equal(review.independentReview, evidence.independentReview);
-  assert.equal(review.aiReviewUrl, evidence.aiReviewUrl);
-  assert.equal(review.liveQaUrl, evidence.liveQaUrl);
+test("stored review evidence cannot authorize a switch", async () => {
+  assert.equal((await record()).status, 201);
   ctx.agentId = "agent-a";
-  process.env.VERCEL_GIT_COMMIT_SHA = "another-deploy";
-  const switched = await switchFlag();
-  assert.equal(switched.status, 200);
-  assert.equal(switched.body.previousMode, "OWNER_AND_QA");
-  assert.equal(switched.body.flag.mode, "EVERYONE");
-  assert.equal(changes[0].reason, "flag-review:1");
-  assert.equal(changes[0].agentId, "agent-a");
-  assert.equal(review.usedByChangeId, changes[0].id);
-  assert.ok(review.usedAt instanceof Date);
-  assert.equal(broadcasts, 1);
-  assert.equal(wrapped, 2);
-  assert.deepEqual(locks, ["flag-lock", "review-lock", "policy-advisory-lock", "policy-comment-lock", "policy-reaction-lock", "policy-check", "change-write", "review-used", "flag-write"]);
+  assert.equal((await switchFlag()).status, 403);
+  assertNoChange();
 });
 
 test("record stores null deployed SHA when unset", async () => {
   assert.equal((await record()).status, 201);
   assert.equal(reviews.get(1).deployedSha, null);
-});
-test("same-agent switch is refused with different agent in the error", async () => {
-  await seedReview(); ctx.agentId = "agent-b";
-  const response = await switchFlag();
-  assert.equal(response.status, 403);
-  assert.match(response.body.error, /different agent/);
-  assertNoChange();
-});
-test("a used review cannot be reused even after the flag is switched back", async () => {
-  await seedReview(); assert.equal((await switchFlag()).status, 200);
-  stored.get(key).mode = "OWNER_AND_QA";
-  assert.equal((await switchFlag()).status, 403);
-  assert.equal(changes.length, 1);
-});
-test("competing switches consume a review only once", async () => {
-  await seedReview();
-  const responses = await Promise.all([switchFlag(), switchFlag()]);
-  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 403]);
-  assert.equal(changes.length, 1);
 });
 for (const [name, overrides] of [
   ["older than 24 hours", { createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 - 10000) }],
@@ -346,7 +306,7 @@ for (const pathKind of ["review", "failure"]) {
   test(`${pathKind} still allows old human policy thumbs-up with a skin tone`, async () => {
     await seedReview(); policy.reactions[0].unified = "1f44d-1f3fd";
     if (pathKind === "failure") stored.get(key).mode = "EVERYONE";
-    assert.equal((await switchFlag(pathKind === "review" ? undefined : { key, mode: "OWNER_AND_QA", failure })).status, 200);
+    assert.equal((await switchFlag(pathKind === "review" ? undefined : { key, mode: "OWNER_AND_QA", failure })).status, pathKind === "review" ? 403 : 200);
   });
 }
 
@@ -462,7 +422,6 @@ test("failure-Owner + QA rolls back the audit when the flag write fails", async 
 for (const body of [
   { key, mode: "EVERYONE" }, { key, mode: "EVERYONE", review: 1, reason: "x" },
   { key, mode: "OFF", review: 1, failure }, { key, mode: "OFF", reason: "x", failure },
-  ...[null, "1", 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1].map((review) => ({ key, mode: "EVERYONE", review })),
   ...["", " ", "\t\n", "x".repeat(301), null, 42, {}, []].map((url) => ({ key, mode: "OFF", failure: url })),
 ]) {
   test(`invalid switch evidence ${JSON.stringify(body)} is refused`, async () => {
@@ -475,7 +434,7 @@ for (const [name, setup] of [
   ["management key", () => { ctx.management = { keyId: "test" }; }],
   ["mismatched owner email", () => { ownerEmail = "other@test.invalid"; }],
   ["no auth", () => { ctx = null; }],
-  ["read role", () => { roleRefusal = NextResponse.json({ error: "write required" }, { status: 403, headers: { "cache-control": "private, no-store" } }); }],
+  ["read role", () => { ctx.agentRole = "read"; roleRefusal = NextResponse.json({ error: "write required" }, { status: 403, headers: { "cache-control": "private, no-store" } }); }],
 ]) {
   test(`record and switch refuse ${name}`, async () => {
     setup();
@@ -523,7 +482,7 @@ for (const category of ["money", "access", "data-deletion", "customer-email"]) {
     stored.set(high.key, { key: high.key, mode: "OWNER_AND_QA" });
     await seedReview({ key: high.key });
     const response = await switchFlag({ key: high.key, mode: "EVERYONE", review: 1 });
-    assert.equal(response.status, 403); assert.match(response.body.error, /high-risk/); assertNoChange();
+    assert.equal(response.status, 403); assert.match(response.body.error, /cannot authorize/); assertNoChange();
   });
 }
 test("Question plus human thumbs-up still allows a high-risk flag to switch Everyone on", async () => {
@@ -546,19 +505,6 @@ for (const flagKey of [definitions.find((flag) => flag.releaseRisk?.highRisk).ke
     const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
     assert.equal((await switchFlag({ key: flagKey, mode: "OFF", reason })).status, 200);
     assert.equal(changes[0].reason, reason);
-  });
-}
-test("review is still valid just inside the 24-hour window", async () => {
-  await seedReview({ createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 + 60000) });
-  assert.equal((await switchFlag()).status, 200);
-});
-for (const failurePoint of ["flag", "review"]) {
-  test(`${failurePoint} write failure rolls back flag, audit and review consumption`, async (t) => {
-    t.mock.method(console, "error", () => {});
-    await seedReview();
-    if (failurePoint === "flag") writeFails = true; else consumeFails = true;
-    assert.equal((await switchFlag()).status, 500);
-    assert.equal(stored.get(key).mode, "OWNER_AND_QA"); assertNoChange();
   });
 }
 test("ht-flag shell regressions and new review/failure commands pass offline", async () => {

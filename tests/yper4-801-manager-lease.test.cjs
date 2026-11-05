@@ -121,7 +121,7 @@ async function refusalText(response) {
 }
 
 test.beforeEach(() => {
-  ctx = { user: { id: 6 }, agentId: "manager-1", management: false, teamScope: undefined };
+  ctx = { user: { id: 6 }, agentId: "manager-1", agentRole: "write", management: false, teamScope: undefined };
   agentName = "HT Product Lead";
   leaseFlagOn = true;
   flagReads = [];
@@ -138,44 +138,11 @@ test("class of manager agents comes from the stored agent name", () => {
   for (const name of ["Runner 2", "CEO Runner 1", "Hax Runner 3", "Valentins Claude Code CLI", "HT Product Lead Helper", "ht product lead"]) assert.equal(isManagerClassAgentName(name), false, name);
 });
 
-test("a manager holding the current grant still reaches the existing approval checks", async () => {
-  const text = await refusalText(await patch({ [MANAGER_GRANT_HEADER]: token }));
-  assert.equal(text, approvalRequired);
-  assert.deepEqual(flagReads.includes(LEASE_FLAG), true);
-});
-
-test("a manager without a grant header is refused before any approval check", async () => {
-  assert.match(await refusalText(await patch()), /no grant sent/);
-  assert.deepEqual(setCalls, []);
-});
-
-test("a replaced, released, expired, unknown or other-agent grant is refused", async () => {
-  const cases = [
-    [liveGrant({ replacedAt: new Date() }), token, /was replaced/],
-    [liveGrant({ releasedAt: new Date() }), token, /was released/],
-    [liveGrant({ expiresAt: new Date(Date.now() - 1000) }), token, /expired/],
-    [liveGrant(), otherToken, /unknown/],
-    [liveGrant({ agentId: "someone-else" }), token, /unknown/],
-    [liveGrant(), "short", /malformed/],
-  ];
-  for (const [row, sent, expected] of cases) {
-    grants = [row];
-    assert.match(await refusalText(await patch({ [MANAGER_GRANT_HEADER]: sent })), expected);
-  }
-});
-
-test("a reused name never restores the previous grant", async () => {
-  grants = [liveGrant({ replacedAt: new Date(), session: "ht-product-lead" }),
-    liveGrant({ id: 2, tokenHash: hashManagerGrant(otherToken), session: "ht-product-lead" })];
-  assert.match(await refusalText(await patch({ [MANAGER_GRANT_HEADER]: token })), /was replaced/);
-  assert.equal(await refusalText(await patch({ [MANAGER_GRANT_HEADER]: otherToken })), approvalRequired);
-});
-
-test("an unreadable registry fails closed and changes nothing", async () => {
+test("flag switches reach approval checks without a manager lease", async () => {
+  grants = [];
   registryBroken = true;
-  const response = await patch({ [MANAGER_GRANT_HEADER]: token });
-  assert.equal(response.status, 500);
-  assert.deepEqual(setCalls, []);
+  assert.equal(await refusalText(await patch()), approvalRequired);
+  assert.equal(flagReads.includes(LEASE_FLAG), false);
 });
 
 test("runners are not asked for a grant and never read the lease flag", async () => {

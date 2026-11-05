@@ -10,6 +10,7 @@ import { publishAgentWebhookDeliveries } from "@/lib/agentWebhooks/outbox";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
+import { lockCommentReactions } from "@/lib/mcp/comments/reactionLock";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const isId = (value: any) => Number.isInteger(value) && value > 0;
@@ -46,122 +47,40 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(404).json({ message: "Comment not found" });
             }
             const reactionNames = Array.isArray(names) ? names : [];
-            const findReaction = await prisma.reaction.findMany({
-                where:{
-                    unified:unified,
-                    commentId:commentId,
-                    userId:userId,
-                    agentId:null,
-                },
-            })
-            if (findReaction.length===0 ){
-                const webhookInput = { commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true };
-                const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
-                const { reaction, deliveryIds } = await prisma.$transaction(async (tx) => {
-                    const reaction = await tx.reaction.create({
-                        data:{
-                            unified:unified,
-                            commentId:commentId,
-                            userId:userId,
-                            taskId:taskId,
-                            names:reactionNames,
-                            emoji:emoji
-                        },
-                        include:{
-                        user:true,
-                        comment:{include:{creator:true}},
-                        task:true
-                        }
-                    })
-                    const deliveryIds = preparedWebhook
-                        ? await persistCommentReactionWebhook(tx, preparedWebhook, webhookInput)
-                        : [];
-                    return { reaction, deliveryIds };
-                })
-                const afterAppDomain=`detail/project-${reaction.task.projectId}/${reaction.task.uniqueIndex}`
-
-                if (reaction.userId!==reaction.comment?.creatorId){
-                    await notifySafely(
-                        reaction,
-                        afterAppDomain,
-                        userId
-
-                     )
+            const webhookInput = { commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true };
+            const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
+            const result = await prisma.$transaction(async (tx) => {
+                await lockCommentReactions(tx, commentId);
+                const where = { unified, commentId, userId, agentId: null };
+                const existing = await tx.reaction.findMany({ where });
+                if (existing.length) {
+                    const deleted = await tx.reaction.deleteMany({ where });
+                    return { reaction: null, deleted, deliveryIds: [] as string[] };
                 }
-                await publishAgentWebhookDeliveries(deliveryIds).catch((error) => {
+                const reaction = await tx.reaction.create({
+                    data: { unified, commentId, userId, taskId, names: reactionNames, emoji },
+                    include: { user: true, comment: { include: { creator: true } }, task: true },
+                });
+                const deliveryIds = preparedWebhook
+                    ? await persistCommentReactionWebhook(tx, preparedWebhook, webhookInput)
+                    : [];
+                return { reaction, deleted: null, deliveryIds };
+            });
+            if (result.reaction) {
+                const reaction = result.reaction;
+                const afterAppDomain = `detail/project-${reaction.task.projectId}/${reaction.task.uniqueIndex}`;
+                if (reaction.userId !== reaction.comment?.creatorId) {
+                    await notifySafely(reaction, afterAppDomain, userId);
+                }
+                await publishAgentWebhookDeliveries(result.deliveryIds).catch((error) => {
                     console.error("[comment-reaction] agent webhook publish failed", error);
                 });
                 void broadcastTaskComment(taskId, { originUserId: userId });
-                return res.status(200).json({
-                    ...reaction,
-                    comment: reaction.comment
-                        ? omitCommentSeen(reaction.comment)
-                        : reaction.comment,
-                });
+                return res.status(200).json({ ...reaction,
+                    comment: reaction.comment ? omitCommentSeen(reaction.comment) : reaction.comment });
             }
-
-            else if (alreadyReacted!==undefined){
-                var reaction;
-                const deleted= await prisma.reaction.deleteMany({
-                    where:{
-                        unified:unified,
-                        commentId:commentId,
-                        userId:userId,
-                        agentId:null,
-                    }
-                })
-
-                if (!alreadyReacted && findReaction.length==0){
-                    reaction = await prisma.reaction.create({
-                       data:{
-                           unified:unified,
-                           commentId:commentId,
-                           userId:userId,
-                           taskId:taskId,
-                           names:reactionNames,
-                           emoji:emoji
-                       },
-                       include:{
-                        user:true,
-                        comment:{include:{creator:true}},
-                        task:true
-                       }
-                   })
-                   const afterAppDomain=`detail/project-${reaction.task.projectId}/${reaction.task.uniqueIndex}`
-                   if (reaction.userId!==reaction.comment?.creatorId){
-
-                       await notifySafely(
-                        reaction,
-                        afterAppDomain,
-                        userId
-
-                        )
-                   }
-
-
-                }
-                 void broadcastTaskComment(taskId, { originUserId: userId });
-                 return res.status(200).json(reaction ? {
-                    ...reaction,
-                    comment: reaction.comment
-                        ? omitCommentSeen(reaction.comment)
-                        : reaction.comment,
-                 } : reaction);
-
-            }
-            else if (findReaction.length>0){
-                const deleted= await prisma.reaction.deleteMany({
-                    where:{
-                        unified:unified,
-                        commentId:commentId,
-                        userId:userId,
-                        agentId:null,
-                    }
-                })
-                void broadcastTaskComment(taskId, { originUserId: userId });
-                return res.status(202).json(deleted);
-
-            }
+            void broadcastTaskComment(taskId, { originUserId: userId });
+            return res.status(alreadyReacted !== undefined ? 200 : 202).json(alreadyReacted !== undefined ? undefined : result.deleted);
         } catch (error) {
             console.error("POST /api/comments/addReaction failed", error);
             res.status(500).json({ message: "Internal server error" });

@@ -30,6 +30,7 @@ function harness(area, { actor = "agent", enforce = true, teamless = false, gran
     queries.comment.push(args);
     return hydrate(comments.find(row => matches(row, args.where)), args);
   } };
+  f.prisma.$executeRaw = async () => 0;
   const reactions = [];
   f.prisma.reaction = {
     findMany: async args => { queries.reaction.push(args); return reactions.filter(row => matches(row, args.where)); },
