@@ -372,9 +372,13 @@ No: remove it.
 My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
-for context in '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)'; do
+for context in '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '[*](https://example.test)' '<em>_</em>'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
+done
+for context in '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
+  text="${markdown/the setting that keeps the board tidy./"$context"}"
+  allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 done
 context='&#9;See [the setting](https://example.test)&#x20;here.'
 text="${markdown/the setting that keeps the board tidy./"$context"}"
