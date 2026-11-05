@@ -20,7 +20,8 @@ class ReadError(Exception):
 
 def gh_api(endpoint, raw=False):
     try:
-        result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
+        result = subprocess.run(['gh', 'api', endpoint] + (['--allow-escape-sequences', '--paginate'] if raw else []),
+                                capture_output=True, text=True, timeout=120)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ReadError(f'cannot read GitHub API {endpoint}: {error}') from error
     if result.returncode:
@@ -85,8 +86,8 @@ def step_sections(log, steps):
     current = executed[0]
     headers = set()
     depth = 0
-    for raw_line in log.splitlines():
-        line = re.sub(r'\x1b\[[0-9;]*m', '', raw_line)
+    log = re.sub(r'\x1b\][\s\S]*?(?:\x07|\x1b\\|\Z)|\x1b[P^_X][\s\S]*?(?:\x1b\\|\Z)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[ -/]*[0-~]?|[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', log)
+    for line in log.splitlines():
         match = re.match(r'^(\d{4}-\d\d-\d\dT\S+)\s?(.*)', line)
         moment = timestamp(match[1]) if match else None
         line = match[2] if match else line
