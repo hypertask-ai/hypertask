@@ -79,6 +79,7 @@ function boardWith({ taskLabelIds, modelMatches }) {
     "@/app/api/ai/_lib/taskContent": { convertHtmlToText: (value) => value },
     "@/lib/configs/general.config": { generalConfig: { hyperAiId: 100 } },
     "@/lib/ai/labelClassifierOutput": classifierOutput,
+    "@/lib/flags/definitions/htpr-7850-label-backfill-skip-unchanged": {},
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/lib/realtime/server": { broadcastBoardChange: async () => undefined },
     "@/lib/agentWebhooks/outbox": {

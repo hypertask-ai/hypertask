@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type AiLabelDefinition = {
   labelId: string;
   prompt: string;
@@ -70,4 +72,13 @@ export function withholdBugFromErrorLog(
 ): string[] {
   if (!taskLabelValues.some((value) => sameLabel(value, ERROR_LOG_LABEL))) return labelIdsToAdd;
   return labelIdsToAdd.filter((id) => !sameLabel(labelValueById.get(id) ?? "", BUG_LABEL));
+}
+
+export function labelClassificationInputHash(
+  task: { title: string; description: string },
+  definition: AiLabelDefinition,
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([LABEL_CLASSIFIER_INSTRUCTIONS, labelClassifierPrompt(task, [definition])]))
+    .digest("hex");
 }

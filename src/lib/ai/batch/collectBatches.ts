@@ -268,6 +268,7 @@ async function applyLabelBatch(batch: BatchRow, items: Record<string, unknown>, 
         actor,
         snapshotAt: new Date(item.snapshotAt),
         contentHash: item.contentHash,
+        classificationSnapshot: item.classificationSnapshot,
       });
       if (result === "stale") {
         await classifyLabelItemInstantly(item.taskId, item.projectId, action.definitions);

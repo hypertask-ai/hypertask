@@ -1,5 +1,6 @@
 import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7850_LABEL_BACKFILL_SKIP_UNCHANGED_FLAG } from "@/lib/flags/definitions/htpr-7850-label-backfill-skip-unchanged";
 import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
 import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
 import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
@@ -23,6 +24,7 @@ import {
   LABEL_CLASSIFIER_INSTRUCTIONS,
   LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
   labelClassifierPrompt,
+  labelClassificationInputHash,
   parseMatchingLabelIds,
   withholdBugFromErrorLog,
   type AiLabelDefinition,
@@ -152,6 +154,7 @@ export async function applyAiLabelVerdict({
   actor,
   snapshotAt,
   contentHash,
+  classificationSnapshot,
 }: {
   taskId: number;
   projectId: number;
@@ -160,6 +163,7 @@ export async function applyAiLabelVerdict({
   actor: IUser;
   snapshotAt: Date;
   contentHash?: string;
+  classificationSnapshot?: { inputHash: string; assigned: boolean };
 }) {
   const currentTask = await prisma.task.findFirst({
     where: { id: taskId, projectId, status: "Normal" },
@@ -234,6 +238,20 @@ export async function applyAiLabelVerdict({
       where: { taskId, labelId: { in: aiLabelIds } },
       include: { label: true },
     });
+    if (classificationSnapshot) {
+      const definition = activeDefinitions[0];
+      if (activeDefinitions.length !== 1 || !definition ||
+          classificationSnapshot.inputHash !== labelClassificationInputHash({
+            title: currentTask.title,
+            description: convertHtmlToText(currentTask.description_?.content || currentTask.description || ""),
+          }, definition) || existing.some(({ labelId }) => labelId === definition.labelId) !== classificationSnapshot.assigned) {
+        return { changed: false, deliveryIds: [] as string[] };
+      }
+      const lockedLabels = await tx.$queryRaw<Array<{ ai_prompt: string | null }>>`
+        SELECT "ai_prompt" FROM "Label" WHERE "id" = ${definition.labelId} FOR SHARE
+      `;
+      if (lockedLabels[0]?.ai_prompt?.trim() !== definition.prompt) return { changed: false, deliveryIds: [] as string[] };
+    }
     const labelsBefore = await tx.taskLabel.findMany({
       where: { taskId },
       include: { label: true },
@@ -283,6 +301,18 @@ export async function applyAiLabelVerdict({
       });
     }
 
+    if (classificationSnapshot) {
+      const definition = activeDefinitions[0];
+      const matches = matchingIds.has(definition.labelId);
+      const applied = (existingIds.has(definition.labelId) && !removedIds.has(definition.labelId)) || toAdd.includes(definition.labelId);
+      if (matches === applied) {
+        await tx.aiLabelClassification.upsert({
+          where: { taskId_labelId: { taskId, labelId: definition.labelId } },
+          create: { taskId, labelId: definition.labelId, inputHash: classificationSnapshot.inputHash, matches },
+          update: { inputHash: classificationSnapshot.inputHash, matches },
+        });
+      }
+    }
     if (toAdd.length === 0 && toRemove.length === 0) {
       return { changed: false, deliveryIds: [] as string[] };
     }
@@ -352,6 +382,7 @@ async function classifyTaskWithDefinitions({
   definitions,
   actor,
   snapshotAt,
+  classificationSnapshot,
 }: {
   task: {
     id: number;
@@ -366,6 +397,7 @@ async function classifyTaskWithDefinitions({
   definitions: AiLabelDefinition[];
   actor: IUser;
   snapshotAt: Date;
+  classificationSnapshot?: { inputHash: string; assigned: boolean };
 }) {
   const matchingLabelIds = await classifyTaskAgainstLabels(
     {
@@ -391,6 +423,11 @@ async function classifyTaskWithDefinitions({
     matchingLabelIds,
     actor,
     snapshotAt,
+    contentHash: classificationSnapshot ? labelTaskContentHash({
+      title: task.title,
+      description: convertHtmlToText(task.description_?.content || task.description || ""),
+    }) : undefined,
+    classificationSnapshot,
   });
 }
 
@@ -467,6 +504,7 @@ async function trySmartLabelBatch(
     updatedAt: Date | null;
     description_: { content: string } | null;
     project: { teamId: string | null };
+    classificationSnapshot?: { inputHash: string; assigned: boolean };
   }>,
 ): Promise<boolean> {
   try {
@@ -491,6 +529,7 @@ async function trySmartLabelBatch(
               title: task.title,
               description: convertHtmlToText(task.description_?.content || task.description || ""),
               updatedAt: task.updatedAt,
+              classificationSnapshot: task.classificationSnapshot,
             }]
           : [],
       ),
@@ -510,7 +549,7 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
   const prompt = label?.ai_prompt?.trim();
   if (!label?.projectId || !prompt) return;
 
-  const tasks = await prisma.task.findMany({
+  const candidates = await prisma.task.findMany({
     where: { projectId: label.projectId, status: "Normal" },
     take: BACKFILL_LIMIT,
     orderBy: { id: "asc" },
@@ -526,6 +565,26 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
       project: { select: { teamId: true } },
     },
   });
+  const enabled = await isFeatureEnabled(HTPR_7850_LABEL_BACKFILL_SKIP_UNCHANGED_FLAG, userId ?? 0).catch(() => false);
+  const definition = { labelId: label.id, prompt };
+  let tasks: Array<(typeof candidates)[number] & { classificationSnapshot?: { inputHash: string; assigned: boolean } }> = candidates;
+  if (enabled && candidates.length) {
+    const taskIds = candidates.map(({ id }) => id);
+    const [records, assignments] = await Promise.all([
+      prisma.aiLabelClassification.findMany({ where: { labelId, taskId: { in: taskIds } } }),
+      prisma.taskLabel.findMany({ where: { labelId, taskId: { in: taskIds } }, select: { taskId: true } }),
+    ]);
+    const previous = new Map(records.map((record) => [record.taskId, record]));
+    const assigned = new Set(assignments.map(({ taskId }) => taskId));
+    tasks = candidates.flatMap((task) => {
+      const inputHash = labelClassificationInputHash({ title: task.title, description: convertHtmlToText(task.description_?.content || task.description || "") }, definition);
+      const isAssigned = assigned.has(task.id);
+      const record = previous.get(task.id);
+      return record?.inputHash === inputHash && record.matches === isAssigned
+        ? []
+        : [{ ...task, classificationSnapshot: { inputHash, assigned: isAssigned } }];
+    });
+  }
   if (tasks.length === 0) return;
   if (await trySmartLabelBatch(userId, { id: label.id, prompt }, tasks)) return;
   const actor = await getAiActor();
@@ -541,6 +600,7 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
           definitions,
           actor,
           snapshotAt: task.updatedAt,
+          classificationSnapshot: task.classificationSnapshot,
         });
       } catch (error) {
         console.error(`Smart label backfill failed for task ${task.id}`, error);

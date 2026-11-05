@@ -44,6 +44,7 @@ export type SmartLabelBatchItem = {
   promptAtSubmit: string;
   contentHash: string;
   snapshotAt: string;
+  classificationSnapshot?: { inputHash: string; assigned: boolean };
 };
 
 export function labelTaskContentHash(task: { title: string; description: string }): string {

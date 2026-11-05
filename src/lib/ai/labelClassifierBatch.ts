@@ -12,6 +12,7 @@ export type SmartLabelBatchTask = {
   title: string;
   description: string;
   updatedAt: Date;
+  classificationSnapshot?: { inputHash: string; assigned: boolean };
 };
 
 export async function submitSmartLabelBatch(args: {
@@ -48,6 +49,7 @@ export async function submitSmartLabelBatch(args: {
             promptAtSubmit: args.label.prompt,
             contentHash: labelTaskContentHash(task),
             snapshotAt: task.updatedAt.toISOString(),
+            classificationSnapshot: task.classificationSnapshot,
           },
         ]),
       ),
