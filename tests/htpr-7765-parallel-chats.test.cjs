@@ -390,3 +390,68 @@ test("HTPR-7770: a delayed legacy send cannot clear identical text in another ch
     finally { f.finish("same text"); await sending; }
   });
 });
+
+test("HTPR-8812: the first send creates its missing session and uses that session's stream", async () => {
+  const f = fixture();
+  f.select("missing");
+  f.context.initializeMissingSession = true;
+  f.context.waitForChatSession = async () => {
+    if (!f.context.getDisplayedSession()) {
+      f.select("A");
+      f.queue.sessionId = undefined;
+    }
+    return f.context.getDisplayedSession();
+  };
+  await transport(f, async () => {
+    const sending = f.send("first message");
+    await flush();
+    try {
+      assert.equal(f.sent.length, 1);
+      assert.equal(f.sent[0].session_id, "A");
+      assert.equal(f.sent[0].message, "first message");
+      assert.equal(f.streams.get("A").isTyping, true);
+      assert.equal(f.getDraft(), "");
+    } finally {
+      if (f.sent.length) f.finish("first message");
+      await sending;
+    }
+    assert.equal(f.added.some(([id, message]) => id === "A" && message.content === "reply-first message"), true);
+    assert.equal(f.streams.get("A").sendInFlightRef.current, false);
+  });
+});
+
+for (const outcome of ["unavailable", "failed", "navigated", "edited"]) {
+  test(`HTPR-8812: ${outcome} setup sends nothing and preserves the draft`, async () => {
+    const f = fixture();
+    f.select("missing");
+    f.context.initializeMissingSession = true;
+    f.context.waitForChatSession = async () => {
+      if (outcome === "failed") throw new Error("offline");
+      if (outcome === "unavailable") return undefined;
+      f.select("A");
+      const session = f.context.getDisplayedSession();
+      if (outcome === "navigated") f.select("B");
+      if (outcome === "edited") f.setDraft("new unsent draft");
+      return session;
+    };
+    await transport(f, async () => {
+      assert.equal(await f.send("first message"), false);
+      assert.deepEqual(f.sent, []);
+      assert.deepEqual(f.added, []);
+      assert.equal(f.getDraft(), outcome === "edited" ? "new unsent draft" : "first message");
+      assert.equal(f.streams.get("A").sendInFlightRef.current, false);
+      assert.equal(f.streams.get("B").sendInFlightRef.current, false);
+    });
+  });
+}
+
+test("HTPR-8812: flag off keeps the missing-session refusal", async () => {
+  const f = fixture();
+  f.select("missing");
+  f.context.waitForChatSession = async () => { throw new Error("must not start setup with flag off"); };
+  await transport(f, async () => {
+    assert.equal(await f.send("first message"), false);
+    assert.deepEqual(f.sent, []);
+    assert.equal(f.getDraft(), "first message");
+  });
+});

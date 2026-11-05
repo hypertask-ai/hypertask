@@ -6,6 +6,20 @@ The AI chat panel on a board or task (native chat, `src/app/api/ai/`), and
 the mobile Agent Chat surface. Non-demo chat uses `/api/ai/chat/stream`
 without a native-chat flag; demo chat uses `/api/demo/chat/stream`.
 
+## First message in an empty chat
+
+With `htpr-8812-chat-first-message`, open AI chat from a ticket with no
+selected conversation. Type a message and press Send: the existing session
+setup must create/select a conversation before the stream starts. There must
+be one request to `/api/ai/chat/stream`, using the created session ID, rather
+than a permanent “AI chat is still loading” refusal. A failed setup, navigation
+to another conversation, or an edited draft during setup must send nothing
+and retain the current draft. Existing conversation streams, queues, and Stop
+remain independent. Flag off retains the prior missing-session refusal.
+For a cost-free dispatch check, intercept the stream request in the headless
+browser and return a marked SSE response; explicitly distinguish that check
+from a real model reply.
+
 ## Shared agent conversations
 
 Shared conversations are permanent after HTPR-8115. On `/agents/chat`, open

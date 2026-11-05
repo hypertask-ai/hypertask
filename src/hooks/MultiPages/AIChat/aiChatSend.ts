@@ -23,7 +23,7 @@ import { historyContent } from "@/lib/ai/ticketRowsHistory";
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
   Pick<ReturnType<typeof useAiChatState>, "sessionPagingEnabled" | "getDisplayedSession" | "resolveHistorySession" | "sessionsRef" | "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "settleSendRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "usesPlanDefault" | "agentSessionAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "ticketScopeSelected" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
-  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { skillDraftsEnabled: boolean; ticketRowsEnabled?: boolean; parallelStreams?: SessionStreams; progressiveChatCreateEnabled?: boolean; reloadTaskAfterChat: boolean; connectionRetry?: boolean; chipSendSignal?: typeof signalAiChip; persistentQueue?: SessionMessageQueue; stopClosesStream?: boolean; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
+  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { skillDraftsEnabled: boolean; ticketRowsEnabled?: boolean; parallelStreams?: SessionStreams; progressiveChatCreateEnabled?: boolean; reloadTaskAfterChat: boolean; connectionRetry?: boolean; chipSendSignal?: typeof signalAiChip; persistentQueue?: SessionMessageQueue; stopClosesStream?: boolean; initializeMissingSession?: boolean; navigateToTask?: (projectId: number, uniqueIndex: number) => void };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const sessionId = context.getDisplayedSession?.()?.id;
@@ -47,11 +47,27 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     options?: { htmlForAttachments?: string; preserveComposer?: boolean; queuedMessage?: QueuedAiChatMessage; sessionId?: string; onQueueBusy?: (retryAfterMs: number) => void }
   ): Promise<boolean> => {
     if (isByokBlocked) return false;
+    if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     if (parallelStreams && !runtime) {
+      if (context.initializeMissingSession && !options?.queuedMessage) {
+        const draftHtml = editor?.getHTML();
+        if (!(retryContent ?? editor?.getText() ?? "").trim()) return false;
+        try {
+          const session = await waitForChatSession();
+          if (session && getDisplayedSession()?.id === session.id &&
+              (retryContent !== undefined || editor?.getHTML() === draftHtml)) {
+            if (persistentQueue) persistentQueue.sessionId = session.id;
+            return createAiChatSend({ ...context, initializeMissingSession: false }, searchHandoff)
+              .handleSendMessage(retryContent, options);
+          }
+        } catch {
+          toast.error("Could not open AI chat. Your draft is still here.");
+          return false;
+        }
+      }
       toast.error("AI chat is still loading. Please try again.");
       return false;
     }
-    if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
 
     const queuedMessage = options?.queuedMessage;
