@@ -17,7 +17,7 @@ Judging a design by eye failed 9 of 10 tickets. This skill replaces the eye with
 - The builder never passes its own design QA. A different runner marks the checklist.
 - Every theme the brief changes needs a frame. No frame for a changed theme: stop and ask on the ticket.
 - A theme the brief does not change gets a no-change check against production before the merge.
-- Any purple, any sparkle icon, any corner other than 0, 2 or 4px is a FAIL. Round avatars and dots are allowed.
+- Any purple, any sparkle icon, any corner other than 0, 2 or 4px is a FAIL. Round elements are allowed only when a class or data-testid names them avatar or status-dot.
 - A FAIL sends the ticket back to Bugs. Never Done, never Everyone.
 
 ## Launch

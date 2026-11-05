@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { isPurple, radiusVerdict } from './design-lib.mjs';
+import { isPurple, isRoundMarker, radiusVerdict } from './design-lib.mjs';
 const repoPackage = fileURLToPath(new URL('../../../../package.json', import.meta.url));
 const repoModules = fileURLToPath(new URL('../../../../node_modules', import.meta.url));
 const require = createRequire(existsSync(repoModules) ? repoPackage : '/home/valentin/projects/hypertask/package.json');
@@ -28,8 +28,8 @@ try {
         if (resolved !== theme) throw new Error(`theme ${theme} resolved as ${resolved}; check theme cookie`);
         if (doctor === 'yes') { console.log(`theme ok: ${resolved}`); continue; }
         for (const keys of press.split(' ').filter(Boolean)) { await page.keyboard.press(keys); await page.waitForTimeout(1500); }
-        const audit = await page.evaluate(({purpleFn,radiusFn}) => {
-          const isPurple = eval(`(${purpleFn})`), radiusVerdict = eval(`(${radiusFn})`);
+        const audit = await page.evaluate(({purpleFn,radiusFn,markerFn}) => {
+          const isPurple = eval(`(${purpleFn})`), radiusVerdict = eval(`(${radiusFn})`), isRoundMarker = eval(`(${markerFn})`);
           const result = {landedUrl:location.href, corners:{count:0,findings:[]}, round:{count:0,findings:[]}, purple:{count:0,findings:[]}, sparkle:{count:0,findings:[]}};
           const add = (kind,el,value,rect) => {
             const path=[]; for(let e=el;e && path.length<3;e=e.parentElement) path.unshift(e.tagName.toLowerCase()+(e.id?'#'+e.id:'')+(typeof e.className==='string' && e.className.trim()?'.'+e.className.trim().split(/\s+/).join('.'):''));
@@ -41,8 +41,8 @@ try {
             for(const prop of ['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius']) {
               const raw=css[prop], parts=raw.split(/\s+/), px=parts[0].endsWith('%')?parseFloat(parts[0])*rect.width/100:parseFloat(parts[0]);
               const py=(parts[1]||parts[0]).endsWith('%')?parseFloat(parts[1]||parts[0])*rect.height/100:parseFloat(parts[1]||parts[0]);
-              const roundAllowed=el.tagName==='IMG' || /avatar|dot/i.test(`${typeof el.className==='string'?el.className:''} ${el.getAttribute('data-testid')||''}`) || Math.max(rect.width,rect.height)<=12;
-              const verdict=radiusVerdict(Math.max(px,py),rect.width,rect.height,roundAllowed);
+              const roundAllowed=isRoundMarker(`${typeof el.className==='string'?el.className:''} ${el.getAttribute('data-testid')||''}`);
+              const verdict=radiusVerdict(px,py,rect.width,rect.height,roundAllowed);
               if(verdict!=='ok') add(verdict==='round'?'round':'corners',el,`${prop}: ${raw}`,rect);
             }
             for(const prop of ['color','backgroundColor','fill','stroke']) if(isPurple(css[prop]) && (prop!=='stroke' || (parseFloat(css.strokeWidth)>0 && Number(css.strokeOpacity)>0))) add('purple',el,`${prop}: ${css[prop]}`,rect);
@@ -51,7 +51,7 @@ try {
             if(match) add('sparkle',el,match,rect);
           }
           return result;
-        },{purpleFn:isPurple.toString(),radiusFn:radiusVerdict.toString()});
+        },{purpleFn:isPurple.toString(),radiusFn:radiusVerdict.toString(),markerFn:isRoundMarker.toString()});
         await page.screenshot({path:`${out}/live-${theme}.png`});
         writeFileSync(`${out}/audit-${theme}.json`,JSON.stringify(audit,null,2)+'\n');
         console.log(`${theme}: ${landed}`);
