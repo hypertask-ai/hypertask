@@ -855,7 +855,7 @@ async function runGate(args, { env = process.env, fetchImpl = fetch, github, log
     return verdict.state === 'success' ? 0 : 1;
   }
 
-  const openPrs = await githubPages(github, `repos/${repo}/pulls?state=open&base=production`);
+  const openPrs = number == null ? await githubPages(github, `repos/${repo}/pulls?state=open&base=production`) : [];
   // The ux-signoff status on each head is the sweep cursor: oldest-evaluated heads (no status first) spend the read budget first.
   const statusCache = new Map();
   const lastEvaluated = async (pr) => {
@@ -869,10 +869,9 @@ async function runGate(args, { env = process.env, fetchImpl = fetch, github, log
     const time = newestStatus?.description === DEFERRED ? NaN : Date.parse(newestStatus?.updated_at);
     return Number.isNaN(time) ? -Infinity : time;
   };
-  const targets = number == null ? openPrs : openPrs.filter((pr) => pr.number === number);
   const order = [];
-  for (const pr of targets) order.push({ pr, time: await lastEvaluated(pr) });
-  const prs = order.sort((a, b) => (a.time === b.time ? 0 : a.time < b.time ? -1 : 1)).map(({ pr }) => pr);
+  for (const pr of openPrs) order.push({ pr, time: await lastEvaluated(pr) });
+  const prs = number == null ? order.sort((a, b) => (a.time === b.time ? 0 : a.time < b.time ? -1 : 1)).map(({ pr }) => pr) : [{ number }];
   let errors = false;
   for (const listed of prs) {
     try {
