@@ -860,7 +860,7 @@ const Commands = (props: Props) => {
         )}
 
         {modeSwitch}
-        <ModalBody className="  p-0 rounded-[5px]">
+        <ModalBody className={unifiedPanel ? "p-0 rounded-[4px]" : "  p-0 rounded-[5px]"}>
           {compose}
           {!isCompose && <>
           <div className="flex items-center gap-2.5 border-b border-light-black-border-1 px-4">

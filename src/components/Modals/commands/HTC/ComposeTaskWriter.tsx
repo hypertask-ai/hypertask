@@ -449,7 +449,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           if (on) dictationDelivered.current = false;
           setRecording(on);
         }} onProcessingChange={setTranscribing}
-        disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact" hideDevicePicker={composerKeysLayout}
+        disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact" hideDevicePicker={composerKeysLayout && !mobile}
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
