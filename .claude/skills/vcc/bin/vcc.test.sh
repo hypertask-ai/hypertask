@@ -380,6 +380,7 @@ context='&#9;See [the setting](https://example.test)&#x20;here.'
 text="${markdown/the setting that keeps the board tidy./"$context"}"
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
+question_refused '#123' comment add X-1 --kind question --markdown --text "$text #123"
 printf '%s\n' "$markdown" > "$T/question.md"
 question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"

@@ -64,7 +64,7 @@ question_check() {
        then empty else "Why:" end),
       ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
       ($visible | scan("\\bCI\\b")),
-      ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|#[0-9]+\\b"))
+      ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|(?<!&)#[0-9]+\\b"))
     ] | unique | join("; ")
   '
 }
