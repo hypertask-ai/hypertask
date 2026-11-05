@@ -5,6 +5,7 @@ const { tmpdir } = require('node:os');
 const { join } = require('node:path');
 const { spawnSync } = require('node:child_process');
 const yaml = require('js-yaml');
+const { loadModule } = require('./helpers/loadModule.cjs');
 
 const config = (kind = 'setup') => ({
   kind, cause: 'smoke-unrunnable', message: 'QA session expired',
@@ -53,14 +54,7 @@ test('unrunnable smoke creates one infra ticket, never Telegram, and updates it 
   assert.equal(payload.project_id, 11514);
   assert.deepEqual(payload.labels, ['ci', 'hyci']);
   assert.equal(payload.title, 'Production monitoring: smoke unrunnable');
-  const ts = require('typescript');
-  const vm = require('node:vm');
-  const module = { exports: {} };
-  const code = ts.transpileModule(readFileSync('src/lib/agents/writing.ts', 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  vm.runInNewContext(code, { module, exports: module.exports, require });
-  const { assertAgentWriting } = module.exports;
+  const { assertAgentWriting } = loadModule('src/lib/agents/writing.ts');
   assert.doesNotThrow(() => assertAgentWriting('agent', { title: payload.title, description: payload.description }));
   assert.throws(() => assertAgentWriting('agent', { description: 'Smoke failed for commit a12bc3456789.' }), /build or commit id/);
   assert.equal(payload.description, '<h2>Problem</h2><p>A production check could not finish.</p><h2>Fix</h2><p>Read the agent log for details.</p><h2>Done when</h2><p>The check finishes with a clear result.</p><h2>Risk</h2><p>A release warning could be missed.</p><h2>Decision</h2><p>None.</p>');
