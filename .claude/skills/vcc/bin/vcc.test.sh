@@ -306,7 +306,7 @@ late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
 empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
-for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;' '&#9;' '&#10;' '&#11;' '&#12;' '&#13;' '&#00009;' '&#00010;' '&#x000A;' '&#X000d;' '&#9&#xA' '&#8192;&#x200A;&#8239;&#xFEFF;' '&Tab;&NewLine;&ensp;&emsp;&thinsp;&ZeroWidthSpace;'; do
+for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;' '&#9;' '&#10;' '&#11;' '&#12;' '&#13;' '&#00009;' '&#00010;' '&#x000A;' '&#X000d;' '&#9&#xA' '&#8192;&#x200A;&#8239;&#xFEFF;' '&#8203;' '&#x200B;' '&Tab;&NewLine;&ensp;&emsp;&thinsp;&ZeroWidthSpace;'; do
   text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --text "$text"
   fixture "$text"
