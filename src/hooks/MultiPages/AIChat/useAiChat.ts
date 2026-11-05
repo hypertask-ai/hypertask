@@ -1,4 +1,5 @@
 import { HTPR_7766_CHAT_SHORTCUTS_FLAG } from "@/lib/flags/definitions/htpr-7766-chat-shortcuts";
+import { HTPR_8812_CHAT_FIRST_MESSAGE_FLAG } from "@/lib/flags/definitions/htpr-8812-chat-first-message";
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
@@ -34,6 +35,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   let skillDraftsEnabled = false;
   if (skillDraftsFlag) skillDraftsEnabled = true;
   const parallelChatsEnabled = useFlag(HTPR_7765_PARALLEL_CHATS_FLAG);
+  const firstMessageEnabled = useFlag(HTPR_8812_CHAT_FIRST_MESSAGE_FLAG);
   const chatRunningEnabled = useFlag(HTPR_7764_CHAT_RUNNING_FLAG);
   const chatOpensTask = useFlag(HTPR_7756_CHAT_OPENS_TASK_FLAG);
   const agentSidebarChatsFlag = useFlag(HTPR_7518_AGENT_SIDEBAR_CHATS_FLAG);
@@ -111,6 +113,7 @@ export function useAiChat(windowScope?: AiChatWindowScope) {
   handleSendMessage,
   } = createAiChatSend({
     skillDraftsEnabled, parallelStreams, stopClosesStream, settleSendRef,
+    ...(firstMessageEnabled ? { initializeMissingSession: true } : {}),
     sessionPagingEnabled: pagingRequested && sessionPagingEnabled, getDisplayedSession, resolveHistorySession, sessionsRef,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef, persistentQueue,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
