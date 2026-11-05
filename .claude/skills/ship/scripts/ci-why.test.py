@@ -165,7 +165,7 @@ else:
             TOKEN, '\x1b]52;c;clipboard-payload\x07\x1b[2J' + TOKEN + '\x1b[3;4H').replace(
             '##[error]Process completed with exit code 1.',
             '\x1b]8;;https://hyperlink-payload.example\x1b\\'
-            '##[error]Process completed with exit code 1.\x1b]8;;\x1b\\\x1b[2K\x1b(0')
+            '##[error]Process\x08\x07\x7f\x80\x9b\x9f completed with exit code 1.\x1b]8;;\x1b\\\x1b[2K\x1b(0')
         result = self.invoke()
         self.assert_diagnosis(result)
         self.assertIn('##[error]Process completed with exit code 1.', result.stdout.split(HEADING)[0])
@@ -179,6 +179,12 @@ else:
         for output in (result.stdout, json_result.stdout, json.dumps(data, ensure_ascii=False)):
             for unwanted in ('\x1b', '\\u001b', 'clipboard-payload', 'hyperlink-payload'):
                 self.assertNotIn(unwanted, output)
+        decoded_output = '\n'.join([finding['failures'], *finding['errors'],
+                                    *(annotation for step in finding['passing_step_annotations']
+                                      for annotation in step['annotations'])])
+        for output in (result.stdout, decoded_output):
+            self.assertFalse(any(ord(char) < 32 and char not in '\n\r\t' or 127 <= ord(char) <= 159
+                                 for char in output))
 
     def test_colored_log_requires_both_raw_flags(self):
         endpoint = f'{BASE}/actions/jobs/101/logs'
