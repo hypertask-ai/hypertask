@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import Tooltip from "@/components/Common/Tooltip";
-import { Check, ChevronDown, Loader2, Mic, Square, X } from "lucide-react";
+import { Check, ChevronDown, Loader2, Mic, X } from "lucide-react";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
