@@ -306,6 +306,17 @@ late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
 empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
+for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;'; do
+  text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+context='&#32;the&#x20;setting&#160;works'
+text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+fixture "$text"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 for prefix in 'Leading text' '<div>Leading text</div>' '<p></p>Leading text'; do
   text="$prefix$plain"
   question_refused 'What this is:' comment add X-1 --kind question --text "$text"
