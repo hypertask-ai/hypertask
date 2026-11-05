@@ -31,6 +31,38 @@ test("pull requests can read but cannot publish dependency caches", async () => 
   assert.match(workflow, /run: npm ci --prefer-offline --no-audit --no-fund/);
 });
 
+test("visual comparison restores the producer's exact dependency caches per phase", () => {
+  const workflow = yaml.load(readFileSync(workflowPath, "utf8"));
+  const producer = workflow.jobs["ci-prepare"].steps;
+  const steps = workflow.jobs["visual-compare"].steps;
+  const source = producer.find(step => step.id === "restore-node-modules");
+  const resolve = steps.find(step => step.id === "dependency-cache-version");
+  const capture = steps.find(step => step.name === "Build and capture base, then compare head");
+  assert.equal(resolve.run, producer.find(step => step.id === "dependency-cache-version").run);
+  assert.equal(resolve.if, "steps.scope.outputs.visual_needed != 'false'");
+  assert.equal(steps.some(step => step.uses?.startsWith("actions/cache/save@")), false);
+
+  for (const phase of ["base", "head"]) {
+    const restore = steps.find(step => step.id === `restore-${phase}-node-modules`);
+    const stage = steps.find(step => step.name === `Stage ${phase} node_modules`);
+    assert.equal(restore.uses, source.uses);
+    assert.equal(restore.with.path, source.with.path);
+    assert.equal(restore.with.path, "node_modules");
+    assert.equal(restore.with.key, source.with.key.replace(/'([^']+)'/g, `'${phase}/$1'`));
+    assert.equal(restore.with["restore-keys"], undefined);
+    assert.equal(restore.if, phase === "base"
+      ? "steps.scope.outputs.visual_needed != 'false' && steps.baseline-cache.outputs.cache-hit != 'true' && steps.baseline-artifact.outputs.hit != 'true'"
+      : "steps.scope.outputs.visual_needed != 'false'");
+    assert.equal(stage.if, `steps.restore-${phase}-node-modules.outputs.cache-hit == 'true'`);
+    assert.equal(stage.run, `mv node_modules ${phase}/node_modules`);
+    assert.ok(steps.indexOf(resolve) < steps.indexOf(restore));
+    assert.ok(steps.indexOf(restore) < steps.indexOf(stage));
+    assert.ok(steps.indexOf(stage) < steps.indexOf(capture));
+    assert.equal(capture.env[`VISUAL_${phase.toUpperCase()}_DEPENDENCIES_CACHED`], `\${{ steps.restore-${phase}-node-modules.outputs.cache-hit == 'true' }}`);
+  }
+  assert.ok(steps.indexOf(steps.find(step => step.name === "Stage base node_modules")) < steps.findIndex(step => step.id === "restore-head-node-modules"));
+});
+
 test("every job that installs root dependencies restores the shared node_modules cache", () => {
   const workflow = yaml.load(readFileSync(workflowPath, "utf8"));
   const installJobs = Object.entries(workflow.jobs)

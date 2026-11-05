@@ -207,7 +207,11 @@ async function main() {
         VISUAL_RESULTS_DIR: path.join(workspace, "test-results", "visual", phase),
         PLAYWRIGHT_JSON_OUTPUT_NAME: path.join(temp, `visual-${phase}.json`),
       };
-      command(root, env, ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"]);
+      if (process.env[`VISUAL_${phase.toUpperCase()}_DEPENDENCIES_CACHED`] === "true") {
+        command(root, env, ["npm", "run", "flags:generate"]);
+      } else {
+        command(root, env, ["npm", "ci", "--prefer-offline", "--no-audit", "--no-fund"]);
+      }
       const require = createRequire(path.join(root, "package.json"));
       const playwright = require("@playwright/test/package.json").version;
       const locked = lockedPlaywright(root);
