@@ -107,3 +107,29 @@ test('restored rows ship only to Owner and QA', () => {
   assert.equal(flag.default.defaultMode, 'OWNER_AND_QA');
   assert.equal(flag.default.kind, 'bugfix');
 });
+
+test('section-only optimistic moves keep rows in the new column without changing blocker data', () => {
+  const { project } = fixture();
+  const source = project.sections.find((section) => section.id === 1);
+  const destination = project.sections.find((section) => section.id === 2);
+  const moved = { ...project.tasks[0], sectionId: 2, ranking: 'zz' };
+  const sections = project.sections.map((section) => section.id === source.id
+    ? { ...section, items: section.items.filter((task) => task.id !== moved.id) }
+    : section.id === destination.id
+      ? { ...section, items: [...section.items, moved] }
+      : section);
+  const before = structuredClone(project);
+  const projected = filters.getFilteredSections(sections, project, id, context, { blockedByMeListEnabled: true });
+  assert.deepEqual(projected.find((section) => section.id === 1).items, []);
+  assert.deepEqual(sectionIds(projected), ['a']);
+  assert.equal(projected.find((section) => section.id === 2).items[0].id, 'a');
+  assert.equal(projected.find((section) => section.id === 2).items[0].ranking, 'zz');
+  assert.equal(projected.find((section) => section.id === 2).items[0].waitingOnUserId, 6);
+  assert.deepEqual(project, before);
+  project.sections = sections;
+  assert.equal(tabCount(project), 1);
+  assert.equal(landing(project, true).find((section) => section.id === 2).items[0].id, 'a');
+  project.tasks[0].waitingOnUserId = null;
+  assert.equal(tabCount(project), 0, 'stale section blocker fields cannot resurrect a cleared blocker');
+  assert.deepEqual(sectionIds(landing(project, true)), []);
+});

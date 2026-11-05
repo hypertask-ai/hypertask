@@ -339,7 +339,7 @@ export const getFilteredSections = (
   runtimeContext?: IFilterRuntimeContext,
 ) => {
   if (runtimeContext?.blockedByMeListEnabled && builtinViewId === BUILTIN_VIEW_IDS.blockedByMe) {
-    return getBlockedByMeSections(project, builtinContext).map((section) => ({
+    return getBlockedByMeSections(project, builtinContext, sections).map((section) => ({
       ...section,
       items: returnSortedItems(section.items, project),
     }));

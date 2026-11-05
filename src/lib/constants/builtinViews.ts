@@ -1,4 +1,4 @@
-import type { IProject, ITask, IView } from "@/models/model";
+import type { IProject, ISection, ITask, IView } from "@/models/model";
 import { doneColumnTitles, isDoneColumn } from "@/lib/doneColumns";
 import { resolveCycleWindow } from "@/lib/cycles";
 
@@ -67,15 +67,28 @@ export const blockedByMePredicate: BuiltinView["predicate"] = (task, context) =>
 export const getBlockedByMeSections = (
   project: IProject,
   context: BuiltinViewContext,
-) => (project.section ?? []).map((section) => ({
-  ...section,
-  sectionId: section.id ?? section.sectionId,
-  visibility: true,
-  items: (project.tasks ?? []).filter((task) =>
-    task.sectionId === (section.id ?? section.sectionId) &&
-    blockedByMePredicate(task, context),
-  ),
-}));
+  sections: ISection[] = project.sections ?? [],
+) => {
+  const placements = new Map(sections.flatMap((section) =>
+    (section.items ?? []).map((task) => [task.id, {
+      sectionId: section.sectionId ?? section.id ?? task.sectionId,
+      ranking: task.ranking,
+    }] as const),
+  ));
+  const tasks = (project.tasks ?? []).map((task) => {
+    const placement = placements.get(task.id);
+    return placement ? { ...task, ...placement } : task;
+  });
+  return (project.section ?? []).map((section) => ({
+    ...section,
+    sectionId: section.id ?? section.sectionId,
+    visibility: true,
+    items: tasks.filter((task) =>
+      task.sectionId === (section.id ?? section.sectionId) &&
+      blockedByMePredicate(task, context),
+    ),
+  }));
+};
 
 export const agentsPredicate: BuiltinView["predicate"] = (task) =>
   (task.assignees ?? []).some((assignee) => assignee.agentId != null);
