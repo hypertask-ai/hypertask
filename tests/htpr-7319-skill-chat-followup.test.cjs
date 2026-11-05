@@ -34,6 +34,7 @@ function load(file, mocks = {}, sourceRoot = root) {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
     if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
     if (id === "@/lib/themePreferences") return load("src/lib/themePreferences.ts", {}, sourceRoot);
+    if (id === "@/hooks/useThemeVisibility") return { useThemeVisibility: () => ({ restore: false, loaded: true }) };
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/flags/definitions/htpr-7736-chat-follows-task") return jiti(path.join(root, "src/lib/flags/definitions/htpr-7736-chat-follows-task.ts"));

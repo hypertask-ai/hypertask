@@ -1,4 +1,5 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
+import { useThemeVisibility } from "@/hooks/useThemeVisibility";
 import { normalizeThemePreference } from "@/lib/themePreferences";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
@@ -92,7 +93,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
-  const currentTheme = normalizeThemePreference(parseCookies().theme, roundedEnabled, graphite2Enabled);
+  const visibility = useThemeVisibility();
+  const currentTheme = normalizeThemePreference(parseCookies().theme, roundedEnabled, graphite2Enabled, visibility.restore);
   const stopDictationButtonId = "compose-task-stop-dictation";
   const cancelDictationButtonId = "compose-task-cancel-dictation";
   const createAfterDictation = useRef(false);

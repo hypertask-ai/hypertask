@@ -343,7 +343,7 @@ async function withPalette(t, config, check) {
       navigations.push(url);
       if (config.navigate) dom.window.history.pushState({}, '', url);
     } }), usePathname: () => dom.window.location.pathname });
-    stub(require.resolve('nookies'), { parseCookies: () => ({ previousBoard: config.previousBoard }) });
+    stub(require.resolve('nookies'), { parseCookies: () => ({ previousBoard: config.previousBoard, theme: config.theme }) });
     const shell = ({ children, ...props }) => {
       shells.push(props);
       return React.createElement('section', { 'data-shell': true, className: props.contentClassName }, props.aboveSlot, children, props.bottomSlot);

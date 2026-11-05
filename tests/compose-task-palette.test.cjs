@@ -599,6 +599,29 @@ test('HTPR-8260 Ctrl+J footer spells every key in words and offers a Create text
   }
 });
 
+test('HTPR-8260 follows restored themes without changing Search', async (t) => {
+  for (const [theme, restore, unified] of [
+    ['graphite', true, false], ['dark', true, false], ['graphite-2', true, true],
+    ['amoled', true, false], ['porcelain', true, false], ['dia', true, false],
+    ['graphite', false, true], ['graphite-2', false, true],
+  ]) {
+    await withPalette(t, { tab: 'compose', theme }, async ({ flags, rerender, input, type, press }) => {
+      flags['htpr-8260-ctrlj-composer-keys'] = true;
+      flags['htpr-8054-graphite-2'] = true;
+      flags['htpr-8710-restore-themes'] = restore;
+      await rerender();
+      const tabs = () => document.querySelector('[aria-label="Commands mode"]');
+      assert.equal(tabs().parentElement.className.includes('border-b'), unified, `${theme}, restore ${restore}: palette`);
+      assert.equal(input().className.includes('caret-hypertasks-ai-purple'), !unified, `${theme}, restore ${restore}: writer`);
+      await type('Keep this draft');
+      await press('k', { ctrlKey: true }, input());
+      assert.equal(tabs().parentElement.className.includes('border-b'), false, 'Search keeps its layout');
+      await press('j', { ctrlKey: true }, document.querySelector('#htc-search'));
+      assert.equal(input().value, 'Keep this draft');
+    });
+  }
+});
+
 test('HTPR-8260 microphone sits after the board picker and left of Create, with a Dictation pill while listening', async (t) => {
   const DictationAudioButton = (props) => {
     const [listening, setListening] = React.useState(false);

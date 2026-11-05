@@ -182,7 +182,7 @@ const Commands = (props: Props) => {
   const visibility = useThemeVisibility();
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
-  const currentTheme = normalizeThemePreference(parseCookies().theme, roundedEnabled, graphite2Enabled);
+  const currentTheme = normalizeThemePreference(parseCookies().theme, roundedEnabled, graphite2Enabled, visibility.restore);
   const clickableComposeFooter = useFlag(HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG);
   const aiChatOpenSwitchesEnabled = useFlag(HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG);
   let aiChatAutoOpenCommandName = "";
