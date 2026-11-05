@@ -37,6 +37,7 @@ type IProps = {
 }
 const MoveTaskGlobal = (props: IProps) => {
     const composeBoardPicker = Boolean(props.onSelectBoard);
+    const bulkMove = useRef(Boolean(props.onBulkMove)).current;
     const projects = useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, { enabled: !composeBoardPicker });
     const usageOrderEnabled = useFlag(HTPR_8014_COMPOSE_BOARD_ORDER_FLAG);
     const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
@@ -91,8 +92,8 @@ const MoveTaskGlobal = (props: IProps) => {
         try {
             console.log('Submitting...', values);
             setRedirectingToTask(true)
-            if (props.onBulkMove) {
-                await props.onBulkMove(values.projectId, values.sectionId);
+            if (bulkMove) {
+                await props.onBulkMove?.(values.projectId, values.sectionId);
                 return;
             }
             const body = {

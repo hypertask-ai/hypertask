@@ -157,3 +157,39 @@ test('board moves accept 500 selections and stop 501 before sending', async () =
     } finally { ui.close(); }
   }
 });
+
+test('an open bulk board picker never moves the focused ticket after selection disappears', async () => {
+  const { loader, mount, React } = require('./helpers/htpr-7260-ui.cjs');
+  const ui = mount();
+  const requests = [];
+  const bulkMoves = [];
+  let submit;
+  let closed = 0;
+  const boards = [];
+  const block = ({ children }) => React.createElement('div', null, children);
+  const loadUI = loader({
+    '@/components/Common/CommonModalComponents': { ModalContainerCustom: block, ModalHeaderComp: () => null, ModalInput: () => null },
+    '@/hooks/MultiPages/useGetAllProjectsMinimal': { useGetAllProjectsMinimal: () => ({ data: boards, isLoading: false }) },
+    '@/hooks/General/useHandleMouse': { default: () => ({ elRef: { current: null } }) },
+    '@/store': { inViewObjectAtom: 'inView', lastUsedBoardsAtom: 'history' },
+    '@/lib/state': { useRecoilState: () => [{ taskId: 999, taskProjectId: 10 }, () => {}], useRecoilValue: () => ({}) },
+    '@/utils/helperFunctions/multiPages': { returnActiveOrDefaultColumnSections: () => [] },
+    '@/lib/constants/APIRouteConstants': { moveTaskToDifferentBoardAPI: '/single-move' },
+    '@/hooks/useFlag': { useFlag: () => false },
+    '@/lib/flags/keys': {},
+    'next/navigation': { usePathname: () => '/', useRouter: () => ({}) },
+    formik: { useFormik: options => { submit = options.onSubmit; return { values: { projectId: 20, sectionId: 30 } }; } },
+    reactstrap: { ModalBody: block },
+    axios: { default: { post: async (...args) => { requests.push(args); } } },
+  });
+  const { default: Picker } = loadUI('src/components/Modals/MoveTaskToBoard/index.tsx');
+  const closeHTC = () => { closed++; };
+  try {
+    ui.render(React.createElement(Picker, { closeHTC, onBulkMove: async (...args) => bulkMoves.push(args), bulkSourceProjectId: 10 }));
+    ui.render(React.createElement(Picker, { closeHTC }));
+    await React.act(async () => { submit({ projectId: 20, sectionId: 30 }); });
+    assert.deepEqual(requests, []);
+    assert.deepEqual(bulkMoves, []);
+    assert.equal(closed, 1);
+  } finally { ui.close(); }
+});
