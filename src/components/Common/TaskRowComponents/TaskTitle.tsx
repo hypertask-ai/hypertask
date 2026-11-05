@@ -12,6 +12,7 @@ import { inboxConfig, systemDefinedSplits } from '@/lib/configs/inbox.config';
 import { formatWaitingOnAge } from '@/lib/waitingOn';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-row-fill';
+import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from '@/lib/flags/definitions/htpr-8264-inbox-name-column';
 
 interface ITitleContainer {
     notification?: INotification;
@@ -155,6 +156,7 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
         task.waitingOnUserId != null &&
         task.waitingOnUserId === notification?.userId;
     const rowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
+    const nameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG) && rowFill && Boolean(notification);
     const flipMentionHierarchy = !rowFill && notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
@@ -194,7 +196,7 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
                         </span>
                     )}
                     <span
-                        className={cn(inboxConfig.bulkSelectionStyling.ticketNumber(isIbxSlctd), '')}
+                        className={cn(inboxConfig.bulkSelectionStyling.ticketNumber(isIbxSlctd), nameColumn && 'md:inline-block md:w-[72px] md:shrink-0')}
                         style={{ fontSize: 11 }}
                     >
                         {
