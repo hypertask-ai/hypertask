@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+QA="$DIR/../../verify-qa/scripts"
+help() { cat <<'HELP'
+Usage:
+  design-check doctor [--state PATH]
+  design-check frames TICKET OUTDIR
+  design-check checklist TICKET
+  design-check shoot URL OUTDIR [--themes porcelain,amoled,graphite-2] [--viewport 1920x1032] [--state PATH] [--allow-redirect] [--press KEYS]
+  design-check compare FRAME.png LIVE.png SIDE.png
+  design-check run TICKET URL --frame NAME.png [--themes ...] [--viewport ...] [--state PATH] [--allow-redirect] [--press KEYS]
+  KEYS: Playwright key presses, space separated, sent after load, e.g. "Control+j" or "Shift+O"
+Examples:
+  design-check doctor
+  design-check frames HTPR-8255 ./evidence
+  design-check checklist HTPR-8255
+  design-check shoot 'https://app.hypertask.ai/project?id=7049' ./evidence
+  design-check compare ./frame.png ./live.png ./side.png
+  design-check run HTPR-8255 'https://app.hypertask.ai/project?id=7049' --frame kanban-cleanup.png
+HELP
+}
+die() { echo "ERROR: $*" >&2; exit 1; }
+fetch_task() { hypertask task get "$1" --json > "$2"; }
+frames() {
+  local ticket="$1" out="$2" temp
+  mkdir -p "$out"; temp="$(mktemp -d)"
+  if ! fetch_task "$ticket" "$temp/task" || ! hypertask comment list "$ticket" --limit 100 --json > "$temp/comments"; then rm -rf "$temp"; die 'Ticket read failed; check board access.'; fi
+  if ! python3 "$DIR/design-frames.py" "$temp/task" "$temp/comments" "$out"; then rm -rf "$temp"; die 'Frame download failed; check ticket images.'; fi
+  rm -rf "$temp"
+}
+checklist() { local temp; temp="$(mktemp)"; if ! fetch_task "$1" "$temp" || ! node "$DIR/design-data.mjs" checklist "$temp"; then rm -f "$temp"; die 'Checklist failed; check ticket access.'; fi; rm -f "$temp"; }
+compare_images() {
+  local frame="$1" live="$2" side="$3" tmp size metric theme
+  [ -f "$frame" ] && [ -f "$live" ] || die 'Missing image; provide existing frame and live PNGs.'
+  tmp="$(mktemp -d)"; size="$(identify -format '%wx%h' "$frame")"; theme="$(basename "$live" .png)"; theme="${theme#live-}"
+  convert "$live" -resize "${size}!" "$tmp/live.png"
+  metric="$(compare -metric RMSE "$frame" "$tmp/live.png" null: 2>&1 || :)"
+  convert "$frame" -background white -fill black -font DejaVu-Sans -gravity north -splice 0x40 -pointsize 22 -annotate +0+8 'Design' "$tmp/design.png"
+  convert "$tmp/live.png" -background white -fill black -font DejaVu-Sans -gravity north -splice 0x40 -pointsize 22 -annotate +0+8 "Live $theme" "$tmp/labelled.png"
+  convert "$tmp/design.png" "$tmp/labelled.png" +append "$side"; rm -rf "$tmp"
+  [[ "$metric" =~ \(([0-9.eE+-]+)\) ]] || die "Image comparison failed: $metric"
+  echo "score ${BASH_REMATCH[1]}"
+}
+cmd="${1:---help}"; shift || :
+case "$cmd" in
+ --help|-h|help) help ;;
+ frames) [ "$#" = 2 ] || die 'Usage: design-check frames TICKET OUTDIR'; frames "$@" ;;
+ checklist) [ "$#" = 1 ] || die 'Usage: design-check checklist TICKET'; checklist "$1" ;;
+ compare) [ "$#" = 3 ] || die 'Usage: design-check compare FRAME LIVE SIDE'; compare_images "$@" ;;
+ doctor|shoot|run)
+  state="$("$QA/qa-login" flags --state)"; themes='porcelain,amoled,graphite-2'; viewport='1920x1032'; allow=no; frame=''; press=''
+  if [ "$cmd" = shoot ] || [ "$cmd" = run ]; then [ "$#" -ge 2 ] || die 'Missing arguments; run --help.'; first="$1"; second="$2"; shift 2; fi
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --state|--themes|--viewport|--frame|--press) [ "$#" -ge 2 ] || die "Missing value for $1"; case "$1" in --state) state="$2";; --themes) themes="$2";; --viewport) viewport="$2";; --frame) frame="$2";; --press) press="$2";; esac; shift 2 ;;
+      --allow-redirect) allow=yes; shift ;;
+      *) die "Unknown option $1; run --help." ;;
+    esac
+  done
+  if [ "$cmd" = doctor ]; then
+    if [ -f "$state" ]; then echo 'state ok'; else die 'state failed: file missing; refresh QA login.'; fi
+    if "$QA/qa-identity" "$state" --expect 985; then echo 'identity ok'; else die 'identity failed; refresh the flags QA login.'; fi
+    temp="$(mktemp -d)"; if node "$DIR/design-shoot.mjs" 'https://app.hypertask.ai/project?id=7049' "$temp" "$state" graphite-2 1920x1032 no yes; then rm -rf "$temp"; echo 'doctor ok'; else rm -rf "$temp"; die 'browser check failed; check the error and refresh QA login if needed.'; fi
+  else
+    [[ "$viewport" =~ ^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}$ ]] || die 'Invalid viewport; use WxH.'
+    [[ "$themes" =~ ^(porcelain|amoled|graphite-2)(,(porcelain|amoled|graphite-2))*$ ]] || die 'Unknown themes; use porcelain, amoled, graphite-2.'
+    [ -f "$state" ] || die 'State file missing; refresh QA login.'
+    if [ "$cmd" = shoot ]; then node "$DIR/design-shoot.mjs" "$first" "$second" "$state" "$themes" "$viewport" "$allow" no "$press"
+    else
+      [[ "$first" =~ ^[A-Za-z0-9-]+$ ]] || die 'Invalid ticket name.'
+      base="$HOME/.local/state/vcc-evidence/$first"; mkdir -p "$base"; n=1; date="$(date +%F)"
+      while ! mkdir "$base/$date-design-run-$n" 2>/dev/null; do n=$((n+1)); [ "$n" -lt 10000 ] || die 'Cannot create evidence folder.'; done
+      out="$base/$date-design-run-$n"; frames "$first" "$out"
+      if [[ -z "$frame" || "$frame" = */* || ! -f "$out/frames/$frame" ]]; then echo 'Available frames:' >&2; find "$out/frames" -maxdepth 1 -type f -printf '%f\n' >&2; die 'Choose an available --frame name.'; fi
+      node "$DIR/design-shoot.mjs" "$second" "$out" "$state" "$themes" "$viewport" "$allow" no "$press"
+      { printf '# Design check\n\nTicket: %s\n\nURL: %s\n\nFrame: %s\n\n' "$first" "$second" "$frame"; printf '| Theme | Score | Corners | Purple | Sparkle | Side image |\n| --- | --- | --- | --- | --- | --- |\n'; } > "$out/report.md"
+      IFS=, read -ra theme_list <<< "$themes"
+      for theme in "${theme_list[@]}"; do
+        score="$(compare_images "$out/frames/$frame" "$out/live-$theme.png" "$out/side-$theme.png")"; counts="$(node -e 'const a=require(process.argv[1]); console.log([a.corners.count,a.purple.count,a.sparkle.count].join(" | "))' "$out/audit-$theme.json")"
+        printf '| %s | %s | %s | [side-%s.png](side-%s.png) |\n' "$theme" "${score#score }" "$counts" "$theme" "$theme" >> "$out/report.md"
+      done
+      { printf '\n## Reviewer (a different runner) marks each line PASS or FAIL\n\n'; checklist "$first"; } >> "$out/report.md"
+      printf '%s\n' "$out"
+    fi
+  fi ;;
+ *) die "Unknown command $cmd; run --help." ;;
+esac
