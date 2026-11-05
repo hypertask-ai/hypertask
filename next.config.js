@@ -174,6 +174,24 @@ const nextConfig = {
   async headers() {
     return [
       {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+      {
+        source: "/:path((?!files(?:/|$)).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: "script-src https://app.hypertask.ai/_next/static/ https://eu-assets.i.posthog.com; base-uri 'self'",
+          },
+        ],
+      },
+      {
         source: "/files/:path*",
         headers: [
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
