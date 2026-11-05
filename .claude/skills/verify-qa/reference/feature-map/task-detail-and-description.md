@@ -71,6 +71,21 @@ or description schedules `scheduleClassifyTaskAiLabels`. Use only disposable
 verify saved text and existing labels survive. Save the create/update responses
 and label readback. Never change funding, plans or keys to exhaust an allowance.
 
+Smart-label backfills remember completed matching and nonmatching verdicts when
+`htpr-7850-label-backfill-skip-unchanged` is on. A repeat skips unchanged inputs
+only while label membership still matches the verdict. Changed content, prompt,
+or membership remains eligible; unfinished batches are not cached. Off or an
+unavailable flag store retains repeat inference. Batch results superseded by a
+manual membership or prompt change do not overwrite it; content changes retain
+the existing instant refresh.
+
+Verify repeat, changed-input, flag-off, unavailable-store, and batch collection
+behavior with `tests/htpr-7850-label-backfill.test.cjs`. For live verification,
+use a disposable QA label and tasks; compare label readback and authorized
+server-side AI usage records before and after repeated backfills. Do not assume
+a public usage API exists. Record live coverage as UNREACHABLE if backfill
+triggering or usage records are unavailable.
+
 With `htpr-8099-smart-label-refusal` on, typed daily/monthly allowance refusals
 skip classification without clearing labels or raising server-error alerts.
 Real provider faults still report. Exercise direct and wrapped refusals, funding

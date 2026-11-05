@@ -1265,6 +1265,7 @@ model Task {
   // Comment_Reactions Comment_Reactions[]
   estimate            Estimate?
   taskLabels          TaskLabel[]
+  aiLabelClassifications AiLabelClassification[]
   Reminders           Reminder[]
   drafts              Drafts[]
   decisionRequests    DecisionRequest[]
@@ -1705,6 +1706,7 @@ model Label {
   projectId Int?
   project   Project?    @relation(fields: [projectId], references: [id])
   task      TaskLabel[]
+  aiClassifications AiLabelClassification[]
 }
 
 model SubscriptionPlan {
@@ -3007,4 +3009,16 @@ model AnalyticsIntent {
   createdAt     DateTime  @default(now())
 
   @@index([processedAt, nextAttemptAt])
+}
+
+model AiLabelClassification {
+  taskId    Int
+  labelId   String
+  inputHash String
+  matches   Boolean
+  task      Task  @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  label     Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, labelId])
+  @@index([labelId])
 }
