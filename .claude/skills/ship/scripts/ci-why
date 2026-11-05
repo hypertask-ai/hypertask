@@ -20,7 +20,8 @@ class ReadError(Exception):
 
 def gh_api(endpoint, raw=False):
     try:
-        result = subprocess.run(['gh', 'api', endpoint], capture_output=True, text=True, timeout=120)
+        result = subprocess.run(['gh', 'api', endpoint] + (['--allow-escape-sequences', '--paginate'] if raw else []),
+                                capture_output=True, text=True, timeout=120)
     except (OSError, subprocess.TimeoutExpired) as error:
         raise ReadError(f'cannot read GitHub API {endpoint}: {error}') from error
     if result.returncode:

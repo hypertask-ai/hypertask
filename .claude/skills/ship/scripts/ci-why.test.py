@@ -35,12 +35,16 @@ root = pathlib.Path(os.environ['CI_WHY_FIXTURES'])
 args = sys.argv[1:]
 with (root / 'calls').open('a') as log:
     log.write(json.dumps(args) + '\\n')
-assert args[0] == 'api' and args[2:] in ([], ['--paginate'], ['--jq', '.head.sha']), args
+assert args[0] == 'api' and args[2:] in ([], ['--paginate'], ['--jq', '.head.sha'],
+    ['--allow-escape-sequences'], ['--allow-escape-sequences', '--paginate']), args
+assert '--allow-escape-sequences' not in args or args[1].endswith('/logs'), args
 route = json.loads((root / 'routes').read_text()).get(args[1])
 if route is None:
     sys.exit('unexpected GitHub API read: ' + args[1])
 if 'error' in route:
     sys.exit(route['error'])
+if '\\x1b' in route.get('raw', '') and not {'--allow-escape-sequences', '--paginate'} <= set(args[2:]):
+    sys.exit('gh: escape sequences are not allowed')
 if args[2:] == ['--jq', '.head.sha']:
     print(route['json']['head']['sha'])
 else:
@@ -136,6 +140,35 @@ else:
         self.assertNotIn(TOKEN, finding['failures'] + '\n'.join(finding['errors']))
         self.assertIn(TOKEN, finding['passing_step_annotations'][0]['annotations'])
         self.assertEqual(data['advice'], ADVICE)
+
+    def test_colored_logs_in_text_and_json(self):
+        endpoint = f'{BASE}/actions/jobs/101/logs'
+        self.routes[endpoint]['raw'] = self.log.replace(TOKEN, f'\x1b[31m{TOKEN}\x1b[0m').replace(
+            'AssertionError: actual test assertion', '\x1b[31mAssertionError: actual test assertion\x1b[0m')
+        self.assert_diagnosis(self.invoke())
+        result = self.invoke('1771', '--json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        finding = json.loads(result.stdout)['jobs'][0]
+        self.assertEqual(finding['failed_step'], {'name': 'Test full suite', 'number': 5})
+        self.assertIn('tests/real-5.test.cjs:45:1', finding['failures'])
+        self.assertNotIn(TOKEN, finding['failures'] + '\n'.join(finding['errors']))
+        self.assertIn(TOKEN, finding['passing_step_annotations'][0]['annotations'])
+        self.assertNotIn('\x1b', result.stdout)
+        calls = self.calls()
+        self.assertEqual(sum(call[1] == endpoint for call in calls), 2)
+        for call in calls:
+            self.assertEqual(call[2:], ['--allow-escape-sequences', '--paginate'] if call[1] == endpoint else [])
+
+    def test_colored_log_requires_both_raw_flags(self):
+        endpoint = f'{BASE}/actions/jobs/101/logs'
+        self.routes[endpoint]['raw'] = '\x1b[31mcolored\x1b[0m'
+        (self.root / 'routes').write_text(json.dumps(self.routes))
+        for flags in ([], ['--paginate'], ['--allow-escape-sequences']):
+            with self.subTest(flags=flags):
+                result = subprocess.run(['gh', 'api', endpoint, *flags], env=self.env,
+                                        capture_output=True, text=True, timeout=15)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('escape sequences are not allowed', result.stderr)
 
     def test_no_failed_jobs(self):
         self.job['conclusion'] = 'success'
