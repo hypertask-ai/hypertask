@@ -466,14 +466,17 @@ const useDescriptionAndCommentsStates = () => {
     if (commentsListFromQuery) {
       setComments(commentsListFromQuery);
       setAgentRunActivities(agentRunActivitiesFromQuery);
+      if (!collapseAgentLane) {
+        setStacked((prev) => ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev));
+      }
     }
     void updateSeen();
-  }, [agentRunActivitiesFromQuery, commentsListFromQuery, isShareView, setAgentRunActivities, updateSeen]);
+  }, [agentRunActivitiesFromQuery, commentsListFromQuery, collapseAgentLane, isShareView, setAgentRunActivities, updateSeen]);
 
   useLayoutEffect(() => {
-    if (isShareView || !commentsListFromQuery) return;
+    if (!collapseAgentLane || isShareView || !commentsListFromQuery) return;
     setStacked((prev) =>
-      collapseAgentLane && agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed
+      agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed
         ? { ...Object.fromEntries(commentsListFromQuery.map((_, index) => [index, true])), ...prev }
         : ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
     );

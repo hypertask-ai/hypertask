@@ -7,7 +7,7 @@ import {
   ExternalLink,
   Lightbulb,
 } from "lucide-react";
-import { useState, type KeyboardEvent } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -44,6 +44,17 @@ const AgentRunActivityRow = ({
   const showLaneAuthor = useFlag(HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG);
   const { agentLaneFold } = useTaskContext();
   const laneCollapsed = agentLaneFold.taskId === taskId && agentLaneFold.collapsed;
+  const rowRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const focusWasInside = useRef(false);
+  const captureFocus = useCallback((node: HTMLDivElement | null) => {
+    if (node) return;
+    focusWasInside.current ||= rowRef.current?.contains(document.activeElement) ?? false;
+  }, []);
+  const captureHeader = useCallback((node: HTMLDivElement | null) => {
+    headerRef.current = node;
+    captureFocus(node);
+  }, [captureFocus]);
   const [override, setOverride] = useState<{ version: number; taskId: number; collapsed: boolean } | null>(null);
 
   const selectOption = async (value: string) => {
@@ -75,6 +86,14 @@ const AgentRunActivityRow = ({
     }
   };
 
+  const collapsible = collapseLane;
+  const collapsed = collapsible && (override?.version === agentLaneFold.version && override.taskId === taskId ? override.collapsed : laneCollapsed);
+  useLayoutEffect(() => {
+    if (collapsed && focusWasInside.current) rowRef.current?.focus();
+    if (!collapsed && activity.type === "elicitation" && rowRef.current === document.activeElement) headerRef.current?.focus();
+    focusWasInside.current = false;
+  }, [collapsed]);
+
   const type = activity.type;
   if (type === "response") return null;
   const laneAuthor = showLaneAuthor && activity.agentName ? (
@@ -102,8 +121,6 @@ const AgentRunActivityRow = ({
       aria-hidden
     />
   );
-  const collapsible = collapseLane;
-  const collapsed = collapsible && (override?.version === agentLaneFold.version && override.taskId === taskId ? override.collapsed : laneCollapsed);
   const toggleRow = () => {
     if (!collapsible) return;
     setOverride({ version: agentLaneFold.version, taskId, collapsed: !collapsed });
@@ -128,6 +145,7 @@ const AgentRunActivityRow = ({
   if (collapsed) {
     return (
       <div
+        ref={rowRef}
         role="button"
         tabIndex={0}
         aria-expanded={false}
@@ -161,6 +179,7 @@ const AgentRunActivityRow = ({
   if (collapseLane) {
     return (
       <div
+        ref={rowRef}
         className="my-[8px] cursor-pointer rounded-[4px] border-l-4 border-transparent bg-comment-description shadow-md outline-none focus-visible:bg-hover-active"
         data-agent-lane-corners=""
         {...(activity.type === "elicitation"
@@ -169,6 +188,7 @@ const AgentRunActivityRow = ({
       >
         <CommentBodyDesktop isStacked={false} threadSpacing>
           <div
+            ref={captureHeader}
             className={cn(
               "flex items-center gap-2 text-meta text-text-light-gray",
               styles.unstacked_grid_row1,
@@ -187,6 +207,7 @@ const AgentRunActivityRow = ({
             {time}
           </div>
           <div
+            ref={captureFocus}
             className={cn(
               "min-w-0 whitespace-pre-wrap break-words text-text-light-gray",
               styles.unstacked_grid_row2,
