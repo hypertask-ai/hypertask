@@ -150,7 +150,9 @@ for (const enabled of [true, false]) {
       },
       "@/hooks/General/useHandleMouse": { default: () => ({ handleMouseEnter: () => {}, handleMouseLeave: () => {}, handleMouseMove: () => {} }) },
       "@/lib/constants/TaskDetail": { descriptionContainerId: descriptionId },
-      "@/hooks/useFlag": { useFlag: key => { assert.equal(key, "htpr-7050-ctrl-o-links"); return enabled; } },
+      "@/hooks/useFlag": { useFlag: key => key === "htpr-8804-visible-links-first" ? false : enabled },
+      "@/lib/flags/definitions/htpr-8804-visible-links-first": { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG: "htpr-8804-visible-links-first" },
+      "./visibleLinks": load("src/components/Modals/LinksModal/visibleLinks.ts", {}),
       "@/lib/flags/keys": { HTPR_7050_CTRL_O_LINKS_FLAG: "htpr-7050-ctrl-o-links" },
     }).default;
     await React.act(async () => renderer.render(React.createElement(LinksModal, { display: true, onClose: () => {}, currentTaskId: 99, commentId: "" })));
@@ -195,3 +197,64 @@ for (const enabled of [true, false]) {
     assert.equal(calls.length, 1);
   });
 }
+
+test("visible ticket links are clipped, normalized and stably prioritized only when enabled", async t => {
+  const React = require("react");
+  const { createRoot } = require("react-dom/client");
+  const { JSDOM } = require("jsdom");
+  const dom = new JSDOM(`<div role="dialog"><div data-task-detail-path="/detail/project-15/1">
+    <div id="description-input"><a id="visible" href="/a">a</a><a id="hidden" href="/hidden" style="display:none">hidden</a>
+    <div id="clip" style="overflow:hidden"><a id="clipped" href="/clipped">clipped</a></div>
+    <nav><a id="nav" href="/nav">nav</a></nav><div role="dialog"><a id="dialog" href="/dialog">dialog</a></div></div>
+    <div id="comment-3-input"><a id="comment-link" href="https://app.hypertask.ai/b">b</a><a id="outside" href="/outside">outside</a></div>
+    <div id="comment-input-input"><a href="/outside">draft duplicate</a></div>
+    </div></div><div data-task-detail-path="/detail/project-15/2"><div id="description-input"><a id="other" href="/other">other</a></div></div><div id="root"></div>`, { url: "https://app.hypertask.ai/detail/project-15/1" });
+  const names = ["window", "document", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
+  const previous = Object.fromEntries(names.map(name => [name, global[name]]));
+  Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const renderer = createRoot(document.getElementById("root"));
+  t.after(async () => {
+    await React.act(async () => renderer.unmount());
+    for (const name of names) {
+      if (previous[name] === undefined) delete global[name];
+      else global[name] = previous[name];
+    }
+    dom.window.close();
+  });
+  const rect = (left, top, right, bottom) => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+  for (const anchor of document.querySelectorAll("a")) anchor.getClientRects = () => [rect(10, 10, 20, 20)];
+  document.getElementById("outside").getClientRects = () => [rect(0, -20, 10, -10)];
+  const clip = document.getElementById("clip");
+  clip.getBoundingClientRect = () => rect(100, 100, 200, 200);
+  Object.defineProperties(clip, { clientWidth: { value: 100 }, clientHeight: { value: 100 } });
+  const helpers = load("src/components/Modals/LinksModal/visibleLinks.ts", {});
+  const visible = helpers.snapshotVisibleLinks("/detail/project-15/1");
+  assert.deepEqual([...visible], ["https://app.hypertask.ai/a", "https://app.hypertask.ai/b"]);
+  assert.equal(helpers.normalizeLink("javascript:alert(1)"), undefined);
+  assert.equal(helpers.normalizeLink("http://["), undefined);
+  const urls = ["/hidden", "/b", "/clipped", "https://app.hypertask.ai/a", "/nav", "/outside", "/dialog", "/other"].map(urlString => ({ urlString, title: urlString }));
+  global.fetch = async () => ({ ok: true, json: async () => urls });
+  let enabled = true;
+  const box = ({ children }) => React.createElement("div", null, children);
+  const LinksModal = load("src/components/Modals/LinksModal/index.tsx", {
+    react: React, "react/jsx-runtime": require("react/jsx-runtime"), reactstrap: { ModalBody: box },
+    "@/styles/linksModal.module.scss": { default: {} }, "next/navigation": { useRouter: () => ({ push: () => {} }) },
+    "lucide-react": { Link: () => null, Search: () => null }, "next/dynamic": { default: () => () => null },
+    "@/components/Common/CommonModalComponents": {
+      ModalContainerCustom: ({ children, onOpened }) => { React.useEffect(() => { void onOpened(); }, []); return React.createElement("div", null, children); },
+      ModalHintBar: () => null, ModalInput: React.forwardRef((props, ref) => React.createElement("input", { ...props, ref })),
+      ModalListContainer: box, ModalRowElementContainer: ({ children }) => React.createElement("button", null, children),
+    },
+    "@/hooks/General/useHandleMouse": { default: () => ({ handleMouseEnter: () => {}, handleMouseLeave: () => {}, handleMouseMove: () => {} }) },
+    "@/lib/constants/TaskDetail": { descriptionContainerId: descriptionId },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-8804-visible-links-first" && enabled },
+    "@/lib/flags/definitions/htpr-8804-visible-links-first": { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG: "htpr-8804-visible-links-first" },
+    "@/lib/flags/keys": { HTPR_7050_CTRL_O_LINKS_FLAG: "htpr-7050-ctrl-o-links" }, "./visibleLinks": helpers,
+  }).default;
+  const render = async key => React.act(async () => renderer.render(React.createElement(LinksModal, { key, display: true, onClose: () => {}, currentTaskId: 1, commentId: "", visibleLinks: visible })));
+  await render("on");
+  assert.deepEqual([...document.querySelectorAll("#root button")].map(row => row.textContent), ["/b", "https://app.hypertask.ai/a", "/hidden", "/clipped", "/nav", "/outside", "/dialog", "/other"]);
+  enabled = false;
+  await render("off");
+  assert.deepEqual([...document.querySelectorAll("#root button")].map(row => row.textContent), urls.map(row => row.title));
+});

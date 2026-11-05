@@ -5,6 +5,7 @@ import type { TaskDetailState } from "./TaskDetailState";
 export type TaskDetailContext = TaskDetailState & createTaskDetailActionsHandlers;
 
 export interface createTaskDetailActionsHandlers {
+  visibleLinks: { current: Set<string> };
   taskUpdateCommentsInCache: (newComment: MoveTaskComment) => void;
   moveTaskToNextColumn: (sectionToMoveTo: ISection) => Promise<void>;
   returnCurrentFocusedType: () => "Description" | "Edit-Comment" | "New-Comment" | "Others";

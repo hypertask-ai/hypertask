@@ -261,6 +261,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
           parentTask={_parsedTask.parentTask}
           commentId={idToDelete ?? currentId}
           currentTaskId={_parsedTask.id}
+          visibleLinks={context.visibleLinks.current}
           display={showLinksModal}
           onClose={linksModalToggle}
         />

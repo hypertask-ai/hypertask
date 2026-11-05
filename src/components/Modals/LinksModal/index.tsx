@@ -11,6 +11,8 @@ import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7050_CTRL_O_LINKS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-8804-visible-links-first";
+import { prioritizeVisibleLinks } from "./visibleLinks";
 const AttachmentCarousel = dynamic(() => import("@/components/Common/AttachmentsView/AttachmentsCarousel"), { ssr: false })
 interface IProps {
   display: boolean;
@@ -20,8 +22,10 @@ interface IProps {
   subTasks?: ITask[];
   relatedTasks?: ITask[];
   parentTask?: ITask;
+  visibleLinks?: Set<string>;
 }
-const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, parentTask, relatedTasks = [] }: IProps) => {
+const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, parentTask, relatedTasks = [], visibleLinks }: IProps) => {
+  const visibleLinksFirst = useFlag(HTPR_8804_VISIBLE_LINKS_FIRST_FLAG);
   const savedLinksEnabled = useFlag(HTPR_7050_CTRL_O_LINKS_FLAG);
   const linksInputRef = useRef<HTMLInputElement>(null)
 
@@ -91,6 +95,8 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
         responseArray = [...res, ...addSubAndParentTasks()]
       }
 
+      if (visibleLinksFirst && visibleLinks) responseArray = prioritizeVisibleLinks(responseArray, visibleLinks);
+
       const legacyGalleryLinks = res.filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app/"));
       const galleryLinks = savedLinksEnabled ? res.filter(item => item.Attachment || legacyGalleryLinks.includes(item)) : legacyGalleryLinks;
       const filteredGalleryAttachment = galleryLinks
@@ -109,6 +115,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       setSelectedIndex(0)
     } else{
       let responseArray: IUrl[] = [...addSubAndParentTasks()]
+        if (visibleLinksFirst && visibleLinks) responseArray = prioritizeVisibleLinks(responseArray, visibleLinks);
         setGalleryAttachments([])
         setLinks(responseArray)
         setFilteredLinks(responseArray)

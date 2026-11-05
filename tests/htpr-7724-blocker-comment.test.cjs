@@ -27,14 +27,14 @@ function fixture({ enabled = true, failed = false, activity = false } = {}) {
     queryClient: { invalidateQueries: async (query) => invalidations.push(query) },
   };
   const { useTaskDetailCommentActions } = load("src/app/detail/[...slug]/useTaskDetailCommentActions.tsx", {
-    react: { useCallback: (fn) => fn },
+    react: { useCallback: (fn) => fn, useRef: current => ({ current }) },
     axios: { default: { post: async (url, body) => {
       posts.push({ url, body });
       if (failed) throw new Error("Write failed");
       return { data: { id: 42, blockerCommentId: body.blockerCommentId, waitingOnUserId: 8 } };
     } } },
     "react-hot-toast": { default: { error: (message) => errors.push(message) } },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, FLAG); return enabled; } },
+    "@/hooks/useFlag": { useFlag: (key) => key === FLAG && enabled },
     "@/lib/taskDetailReads": { refreshTaskDetailReadAfterWrite: (...args) => cache.push(args) },
     "@/lib/configs/taskDetail.config": { default: {} },
     "@/lib/constants": { default: {} },
@@ -158,3 +158,27 @@ for (const enabled of [false, true]) {
     assert.deepEqual(pinCalls, ["Public"]);
   });
 }
+
+test("links dispatcher snapshots before opening only when the flag is on", () => {
+  for (const enabled of [true, false]) {
+    const calls = [];
+    const context = {
+      currentTask: { projectId: 15, uniqueIndex: 1 }, showLinksModal: false,
+      setShowLinksModal: update => { calls.push("open"); context.showLinksModal = update(context.showLinksModal); },
+    };
+    const { useTaskDetailCommentActions } = load("src/app/detail/[...slug]/useTaskDetailCommentActions.tsx", {
+      react: { useCallback: fn => fn, useRef: current => ({ current }) },
+      "@/components/Modals/LinksModal/visibleLinks": { snapshotVisibleLinks: path => { calls.push(path); return new Set(["https://example.com/"]); } },
+      "@/hooks/useFlag": { useFlag: key => key === "htpr-8804-visible-links-first" && enabled },
+      "react-hot-toast": { default: {} }, "axios": { default: {} }, "@prisma/client": {},
+      "@/lib/configs/taskDetail.config": { default: {} }, "@/lib/constants": { default: {} },
+      "@/utils/helperFunctions/hasFigmaEmbed": {}, "@/lib/taskDetailReads": {},
+    });
+    const actions = useTaskDetailCommentActions(() => context);
+    actions.linksModalToggle();
+    assert.deepEqual(calls, enabled ? ["/detail/project-15/1", "open"] : ["open"]);
+    assert.equal(actions.visibleLinks.current.size, enabled ? 1 : 0);
+    actions.linksModalToggle();
+    assert.equal(calls.filter(call => call === "/detail/project-15/1").length, enabled ? 1 : 0);
+  }
+});

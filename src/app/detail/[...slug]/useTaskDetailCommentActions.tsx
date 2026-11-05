@@ -1,6 +1,8 @@
 import { IUser, IAttachment, IAssignees } from "@/models/model";
 
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
+import { snapshotVisibleLinks } from "@/components/Modals/LinksModal/visibleLinks";
+import { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG } from "@/lib/flags/definitions/htpr-8804-visible-links-first";
 import toast from "react-hot-toast";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { ViewVisibility } from "@prisma/client";
@@ -12,6 +14,8 @@ import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-772
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailCommentActions(getContext: () => TaskDetailContext) {
+  const visibleLinksFirst = useFlag(HTPR_8804_VISIBLE_LINKS_FIRST_FLAG);
+  const visibleLinks = useRef<Set<string>>(new Set());
   const blockerCommentFlag = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   let blockerCommentEnabled = false;
   if (blockerCommentFlag) blockerCommentEnabled = true;
@@ -234,6 +238,9 @@ export function useTaskDetailCommentActions(getContext: () => TaskDetailContext)
   };
 
   const linksModalToggle = (_assignees?: IUser[]) => {
+    if (!getContext().showLinksModal && visibleLinksFirst && currentTask) {
+      visibleLinks.current = snapshotVisibleLinks(`/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`);
+    }
     setShowLinksModal((prev) => !prev);
   };
   const toggleMoveModal = () => {
@@ -242,5 +249,5 @@ export function useTaskDetailCommentActions(getContext: () => TaskDetailContext)
     navigate("Refresh");
     setShowMoveModal((prev) => !prev);
   };
-  return { handleBlockerCommentFromHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, createTaskFromCommentHTC, processAttachmentsForNewTask, copyCommentURLFromHTC, copyCommentContentFromHTC, viewSubTasksfromHtc, openAifromHtc, deleteComment, updateActiveItemAndItemInView, toggleModal, toggleDeleteModal, linksModalToggle, toggleMoveModal };
+  return { visibleLinks, handleBlockerCommentFromHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, createTaskFromCommentHTC, processAttachmentsForNewTask, copyCommentURLFromHTC, copyCommentContentFromHTC, viewSubTasksfromHtc, openAifromHtc, deleteComment, updateActiveItemAndItemInView, toggleModal, toggleDeleteModal, linksModalToggle, toggleMoveModal };
 }
