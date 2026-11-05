@@ -38,6 +38,7 @@ import { HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG,
 import { HTPR_7307_CTRLJ_FOOTER_CLICKABLE_FLAG, HTPR_7652_CTRLJ_ENTER_QUEUE_FLAG, HTPR_7675_CTRLJ_ENTER_BEFORE_TEXT_RENDERS_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG, HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG } from "@/lib/flags/keys";
 import { useSkillSlashMenu } from "@/components/PageComponents/TaskDetail/AI Task Writer/useSkillSlashMenu";
 import { HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG } from "@/lib/flags/definitions/htpr-8260-ctrlj-composer-keys";
+import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8829-ctrlj-plus-composer";
 import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
@@ -87,7 +88,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const ctrlEnterSends = useFlag(HTPR_8253_CTRLJ_CTRL_ENTER_SEND_FLAG);
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
-  const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
+  const plusComposerEnabled = useFlag(HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG);
   const stopDictationButtonId = "compose-task-stop-dictation";
   const cancelDictationButtonId = "compose-task-cancel-dictation";
   const createAfterDictation = useRef(false);
@@ -110,6 +111,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const dictating = newTaskWindow && (recording || transcribing);
   const mobile = Boolean(useContext(MobileViewContext));
   const phoneTaskWriterSheet = mobile && active;
+  const plusLayout = Boolean(plusComposerEnabled && newTaskWindow && !mobile && !phoneTaskWriterSheet);
+  const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow && !plusLayout);
   const [text, setText] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
   const [writing, setWriting] = useState(false);
@@ -246,7 +249,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         event.preventDefault();
         event.stopImmediatePropagation();
         if (!addingImages) {
-          const dictationButtonId = composerKeysLayout && dictating ? stopDictationButtonId : "compose-task-audio-button";
+          const dictationButtonId = (composerKeysLayout || plusLayout) && dictating ? stopDictationButtonId : "compose-task-audio-button";
           document.getElementById(dictationButtonId)?.click();
         }
         return;
@@ -268,7 +271,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout]);
+  }, [active, writing, addingImages, handleAttachmentClick, boardPickerOpen, isApple, dictating, dictationShortcutEnabled, newTaskWindow, composerKeysLayout, plusLayout]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -450,6 +453,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           setRecording(on);
         }} onProcessingChange={setTranscribing}
         disabled={!active || addingImages} projectId={targetBoardId} mobilePrimaryTone="primary" mobilePresentation="compact"
+        {...(plusLayout ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, stopButtonId: stopDictationButtonId, hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] } } : {})}
         {...(composerKeysLayout ? { hoverTooltip: { text: "Dictate", keyCombination: dictationShortcutEnabled ? [isApple ? "CMD" : "CTRL", "SHIFT", "D"] : [] }, stopButtonId: stopDictationButtonId, cancelButtonId: cancelDictationButtonId } : {})}
         callbackHandler={(transcript, replace) => {
           dictationDelivered.current = true;
@@ -503,7 +507,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         </div>
       ) : (
         <div ref={composer} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col p-2" : "p-2"}>
-          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : "flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2"}>
+          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : plusLayout ? "flex w-full flex-col rounded-[4px] bg-ai-tiptap px-3 py-2" : "flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2"}>
             {(newTaskWindow || phoneTaskWriterSheet) && attachments && (phoneTaskWriterSheet ? (
               <div className="min-h-0 overflow-y-auto">{attachments}</div>
             ) : mobile ? attachments : (
@@ -532,7 +536,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
+              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : plusLayout ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple placeholder:opacity-50" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content caret-hypertasks-ai-purple" : "min-h-16 text-content"}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
@@ -565,6 +569,15 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             />
             {skillMenuEnabled && skillMenu.menu}
             {!newTaskWindow && !phoneTaskWriterSheet && attachments}
+            {plusLayout ? (
+              <div data-compose-plus-row className="flex w-full items-center justify-between pt-2">
+                <AttachmentButton plus disabled={addingImages || dictating} onClick={handleAttachmentClick} />
+                <div className="flex shrink-0 items-center gap-2">
+                  {dictationControl}
+                  <SendMessageButton label="Send" textButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />
+                </div>
+              </div>
+            ) : (
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
@@ -601,7 +614,14 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
                 )}
               </div>
             </div>
+            )}
           </div>
+          {plusLayout && (
+            <div data-compose-below-row className="flex w-full items-center justify-between gap-2 pt-2">
+              {boardControl || <span />}
+              {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={false} className="bottom-[110%] top-auto right-0 left-auto" />}
+            </div>
+          )}
           <input type="file" accept={newTaskWindow ? undefined : "image/*"} multiple hidden ref={fileInputRef} onChange={(event) => {
             void addImages(Array.from(event.target.files ?? []));
             event.target.value = "";
@@ -609,7 +629,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           {error && <p role="alert" className="px-2 pt-2 text-meta text-text-light-gray">{error}</p>}
         </div>
       )}
-      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className="flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
+      {!phoneTaskWriterSheet && !plusLayout && (composerKeysLayout ? <div className="flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">
         <div className="flex min-w-0 flex-wrap items-center gap-4">
           {footerKeys.left.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>
