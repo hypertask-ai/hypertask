@@ -614,7 +614,9 @@ test('composer controls follow DOM order for Graphite 2 and other layouts', asyn
       await rerender();
       const attachment = document.querySelector('[data-compose-task-writer] [aria-label="Attach files"]');
       const controls = [...attachment.parentElement.querySelectorAll('button')];
-      assert.deepEqual(controls.map((button) => button === attachment ? 'attachment' : button.hasAttribute('data-compose-board-chip') ? 'board' : 'model'), expected);
+      const model = attachment.parentElement.querySelector('button[aria-expanded]:not([data-compose-board-chip])');
+      assert.ok(model, 'model picker is present');
+      assert.deepEqual(controls.flatMap((button) => button === attachment ? ['attachment'] : button.hasAttribute('data-compose-board-chip') ? ['board'] : button === model ? ['model'] : []), expected);
     });
   }
 });
