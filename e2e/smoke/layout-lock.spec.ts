@@ -281,56 +281,67 @@ test('layout lock: phone New Task title has a real height and accepts a tap', as
 })
 
 for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }]) {
-  test(`layout lock: desktop New Task window stays narrow and inside the ${viewport.width}x${viewport.height} viewport`, async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'Desktop', 'desktop window invariant')
-    await page.setViewportSize(viewport)
-    const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
-    const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
-    await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
-    const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
-    for (const [key, enabled] of Object.entries(fixture.flags)) {
-      expect(flags[key] === true, `layout lock flag ${key}`).toBe(enabled)
-    }
-    await expect(page.locator('.kanban-column-title').first()).toBeVisible()
-    await page.evaluate(() => (document.activeElement as HTMLElement).blur())
-    await page.keyboard.press('Control+j')
-    await expect(page.getByRole('textbox', { name: 'Describe the task' })).toBeVisible()
-    const window = page.locator('.modal-dialog').filter({ has: page.locator('[data-compose-task-writer]:visible') })
-    await expect(window).toBeVisible()
-    const box = await window.boundingBox()
-    expect(box).not.toBeNull()
-    expect(box!.width, 'layout lock: New Task window must be no wider than 640px').toBeLessThanOrEqual(640)
-    if (flags['htpr-8260-ctrlj-composer-keys']) {
-      const tabs = window.getByRole('tablist', { name: 'Commands mode' })
-      const writer = window.locator('[data-compose-task-writer]')
-      const footer = writer.locator(':scope > div.border-t')
-      await expect(tabs).toBeVisible()
-      await expect(tabs.getByRole('tab', { name: 'New Task' }).locator('svg')).toHaveCount(0)
-      const tabsBox = await tabs.boundingBox()
-      expect(tabsBox).not.toBeNull()
-      expect(tabsBox!.x).toBeGreaterThanOrEqual(box!.x)
-      expect(tabsBox!.y).toBeGreaterThanOrEqual(box!.y)
-      expect(tabsBox!.x + tabsBox!.width).toBeLessThanOrEqual(box!.x + box!.width)
-      expect(tabsBox!.y + tabsBox!.height).toBeLessThanOrEqual(box!.y + box!.height)
-      expect(await window.locator('.modal-content').evaluate(element => getComputedStyle(element).borderRadius)).toBe('4px')
-      await expect(window.getByRole('button', { name: 'Choose microphone' })).toHaveCount(0)
-      expect(await footer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
-      const hints = footer.locator(':scope > div > span')
-      const boardHint = await writer.locator('[data-compose-board-chip]').count() > 0
-      const hintCount = 4 + Number(boardHint) + Number(flags['htpr-8140-ctrlj-dictation-shortcut'] === true)
-      await expect(hints).toHaveCount(hintCount)
-      const firstHint = await hints.first().boundingBox()
-      expect(firstHint).not.toBeNull()
-      for (let i = 0; i < hintCount; i++) {
-        await expect(hints.nth(i)).toBeVisible()
-        expect((await hints.nth(i).boundingBox())!.y).toBe(firstHint!.y)
+  for (const flagOn of [false, true]) {
+    test(`layout lock: desktop New Task window stays narrow and inside the ${viewport.width}x${viewport.height} viewport (${flagOn ? 'composer keys on' : 'fixture flags'})`, async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'Desktop', 'desktop window invariant')
+      await page.setViewportSize(viewport)
+      const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
+      if (flagOn) {
+        await page.route('**/api/flags*', async (route) => {
+          const response = await route.fetch()
+          const json = await response.json() as { flags: Record<string, boolean> }
+          json.flags['htpr-8260-ctrlj-composer-keys'] = true
+          await route.fulfill({ response, json })
+        })
       }
-    }
-    expect(box!.x).toBeGreaterThanOrEqual(0)
-    expect(box!.y).toBeGreaterThanOrEqual(0)
-    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width)
-    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
-  })
+      const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
+      await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+      const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
+      for (const [key, enabled] of Object.entries(fixture.flags)) {
+        expect(flags[key] === true, `layout lock flag ${key}`).toBe(flagOn && key === 'htpr-8260-ctrlj-composer-keys' ? true : enabled)
+      }
+      if (flagOn) expect(flags['htpr-8260-ctrlj-composer-keys']).toBe(true)
+      await expect(page.locator('.kanban-column-title').first()).toBeVisible()
+      await page.evaluate(() => (document.activeElement as HTMLElement).blur())
+      await page.keyboard.press('Control+j')
+      await expect(page.getByRole('textbox', { name: 'Describe the task' })).toBeVisible()
+      const window = page.locator('.modal-dialog').filter({ has: page.locator('[data-compose-task-writer]:visible') })
+      await expect(window).toBeVisible()
+      const box = await window.boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.width, 'layout lock: New Task window must be no wider than 640px').toBeLessThanOrEqual(640)
+      if (flags['htpr-8260-ctrlj-composer-keys']) {
+        const tabs = window.getByRole('tablist', { name: 'Commands mode' })
+        const writer = window.locator('[data-compose-task-writer]')
+        const footer = writer.locator(':scope > div.border-t')
+        await expect(tabs).toBeVisible()
+        await expect(tabs.getByRole('tab', { name: 'New Task' }).locator('svg')).toHaveCount(0)
+        const tabsBox = await tabs.boundingBox()
+        expect(tabsBox).not.toBeNull()
+        expect(tabsBox!.x).toBeGreaterThanOrEqual(box!.x)
+        expect(tabsBox!.y).toBeGreaterThanOrEqual(box!.y)
+        expect(tabsBox!.x + tabsBox!.width).toBeLessThanOrEqual(box!.x + box!.width)
+        expect(tabsBox!.y + tabsBox!.height).toBeLessThanOrEqual(box!.y + box!.height)
+        expect(await window.locator('.modal-content').evaluate(element => getComputedStyle(element).borderRadius)).toBe('4px')
+        await expect(window.getByRole('button', { name: 'Choose microphone' })).toHaveCount(0)
+        expect(await footer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+        const hints = footer.locator(':scope > div > span')
+        const boardHint = await writer.locator('[data-compose-board-chip]').count() > 0
+        const hintCount = 4 + Number(boardHint) + Number(flags['htpr-8140-ctrlj-dictation-shortcut'] === true)
+        await expect(hints).toHaveCount(hintCount)
+        const firstHint = await hints.first().boundingBox()
+        expect(firstHint).not.toBeNull()
+        for (let i = 0; i < hintCount; i++) {
+          await expect(hints.nth(i)).toBeVisible()
+          expect((await hints.nth(i).boundingBox())!.y).toBe(firstHint!.y)
+        }
+      }
+      expect(box!.x).toBeGreaterThanOrEqual(0)
+      expect(box!.y).toBeGreaterThanOrEqual(0)
+      expect(box!.x + box!.width).toBeLessThanOrEqual(viewport.width)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height)
+    })
+  }
 }
 
 type DescriptionFrame = {
