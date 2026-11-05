@@ -532,6 +532,7 @@ export function AI_Tiptap_Container({
                 mobile={Boolean(isMbl)}
                 textOnMobile={chatCleanupEnabled}
                 label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
+                textButton={chatCleanupEnabled && !isMbl}
                 onClick={controlledComposer.onSend}
               />
             ) : !isTyping || !isEditorEmpty ? (
@@ -542,6 +543,7 @@ export function AI_Tiptap_Container({
                 mobile={Boolean(isMbl)}
                 textOnMobile={chatCleanupEnabled}
                 label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
+                textButton={chatCleanupEnabled && !isMbl}
                 onClick={() => handleSendMessage()}
               />
             ) : null

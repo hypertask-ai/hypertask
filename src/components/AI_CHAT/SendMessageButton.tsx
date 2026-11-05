@@ -11,6 +11,7 @@ export function SendMessageButton({
   mobile,
   textOnMobile = false,
   label,
+  textButton = false,
   onClick,
 }: {
   disabled: boolean;
@@ -19,6 +20,7 @@ export function SendMessageButton({
   mobile: boolean;
   textOnMobile?: boolean;
   label?: string;
+  textButton?: boolean;
   onClick: () => void;
 }) {
   const sendTooltip =
@@ -48,6 +50,9 @@ export function SendMessageButton({
   if (mobile) {
     buttonClassName =
       `relative group flex h-11 ${textOnMobile && label ? "px-3" : "w-11"} touch-manipulation items-center justify-center ${textOnMobile ? "rounded-[4px]" : "rounded-sm"} bg-shadcn-primary text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50`;
+  } else if (label && textButton) {
+    buttonClassName =
+      "relative group flex items-center justify-center rounded-[4px] p-1 text-dense font-semibold text-white-black hover:opacity-80 disabled:cursor-not-allowed disabled:text-icon-dark-gray disabled:hover:opacity-100";
   } else if (label) {
     buttonClassName =
       `relative group flex h-7 items-center justify-center ${textOnMobile ? "rounded-[4px]" : "rounded"} bg-shadcn-primary px-2 text-dense text-primary-foreground hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50`;

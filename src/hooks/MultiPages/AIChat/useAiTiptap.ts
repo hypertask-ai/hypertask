@@ -19,7 +19,6 @@ import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6906_AUTOCAP_UNDO_FLAG, LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
-import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { usePathname } from "next/navigation";
 
@@ -56,9 +55,6 @@ const useTiptapForAI = ({
   const pathname = usePathname();
   const chatCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const fullScreenChat = chatCleanup && (pathname ?? "").startsWith("/chat");
-  const dockedChatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG) && !(pathname ?? "").startsWith("/chat");
-  const dockedChatCleanupRef = useRef(dockedChatCleanup);
-  dockedChatCleanupRef.current = dockedChatCleanup;
   const fullScreenChatRef = useRef(false);
   fullScreenChatRef.current = fullScreenChat;
 
@@ -87,7 +83,7 @@ const useTiptapForAI = ({
       Placeholder.configure({
         placeholder: () => {
           if (isMobileRef.current) return `@ for context`;
-          if (fullScreenChatRef.current || dockedChatCleanupRef.current) return `Ask anything, @ for context`;
+          if (fullScreenChatRef.current) return `Ask anything, @ for context`;
           return `Focus with CTRL + Q, @ for context`;
         },
         emptyEditorClass: `${styles.is_editor_empty}`,

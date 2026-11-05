@@ -136,6 +136,7 @@ export const AudioButton = ({
       "ai-writer-audio-button",
       "inline-draft-ai-audio-button",
     ].includes(id));
+  const primaryDesktopAiMic = isDesktopAiMic && isAiChat && compactListeningPill;
   const currentProject = useRecoilValue(currentProjectAtom);
   const resolvedProjectId =
     projectIdProp === undefined ? currentProject?.id : projectIdProp ?? undefined;
@@ -678,6 +679,7 @@ export const AudioButton = ({
                 className={cn(
                   "group relative flex cursor-pointer items-center touch-manipulation",
                   prominent ? prominentClassName : "h-[32px]",
+                  primaryDesktopAiMic && "h-7 w-7 justify-center rounded-[4px] bg-white-black text-white-black-inverted hover:opacity-80",
                   disabled && "cursor-not-allowed opacity-50",
                   className,
                 )}
@@ -730,7 +732,10 @@ export const AudioButton = ({
                     height="18"
                     viewBox="0 0 24 24"
                     fill="currentColor"
-                    className="animated-icon text-icon-dark-gray hover:text-white-black"
+                    className={cn(
+                      "animated-icon",
+                      !primaryDesktopAiMic && "text-icon-dark-gray hover:text-white-black",
+                    )}
                   >
                     <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z" />
                     <path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V21H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-3.08A7 7 0 0 0 19 11z" />
