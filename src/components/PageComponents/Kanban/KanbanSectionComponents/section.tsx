@@ -1,6 +1,7 @@
 import { HTPR_7865_AGENT_CREATOR_FILTER_FLAG } from "@/lib/flags/definitions/htpr-7865-agent-creator-filter";
 import { HTPR_7975_COLUMN_WORK_LIMITS_FLAG } from "@/lib/flags/definitions/htpr-7975-column-work-limits";
 import { HTPR_8255_KANBAN_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8255-kanban-cleanup";
+import { HTPR_8628_KANBAN_STICKY_HEADER_FLAG } from "@/lib/flags/definitions/htpr-8628-kanban-sticky-header";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 
@@ -129,6 +130,7 @@ export const Section = ({
   const currentProject = project;
   const workLimits = useFlag(HTPR_7975_COLUMN_WORK_LIMITS_FLAG);
   const cleanup = useFlag(HTPR_8255_KANBAN_CLEANUP_FLAG);
+  const stickyHeader = useFlag(HTPR_8628_KANBAN_STICKY_HEADER_FLAG);
   const activeItem = useRecoilValue(activeItemAtom);
   const active = useRecoilValue(isActiveSectionSelector(index));
   const setActiveSection = useSetRecoilState(activeSectionAtom);
@@ -466,6 +468,7 @@ export const Section = ({
           >
             <div
               {...dragHandleProps}
+              data-sticky-header-fix={stickyHeader ? "" : undefined}
               className={`task-detail-heading-tag bg-containerBackground py-2 !cursor-default ${
                 cleanup ? "pl-5 pr-2" : "px-2"
               }`}

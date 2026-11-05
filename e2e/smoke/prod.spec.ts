@@ -745,3 +745,41 @@ test('Pages list creates a document, links a ticket, persists, unlinks and separ
 })
 
 })
+
+test('column heading stays above scrolled cards', { tag: ['@id:kanban-sticky-header'] }, async ({ page }, testInfo) => {
+  test.skip(!process.env.BROWSER_SMOKE_PR || testInfo.project.name !== 'Desktop', 'isolated desktop PR fixture only')
+  await page.setViewportSize({ width: 1440, height: 900 })
+  let enabled = false
+  await page.route('**/api/flags', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8628-kanban-sticky-header': enabled } } })
+  })
+  for (enabled of [false, true]) {
+    const flagsResponse = page.waitForResponse(response => new URL(response.url()).pathname === '/api/flags' && response.ok())
+    await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+    expect((await (await flagsResponse).json()).flags['htpr-8628-kanban-sticky-header']).toBe(enabled)
+    const column = page.locator('[data-title]').filter({ has: page.locator('.kanban-task-card') }).first()
+    await expect(column.locator('.kanban-task-card').first()).toBeVisible()
+    const heading = column.locator('.task-detail-heading-tag')
+    if (enabled) await expect(heading).toHaveAttribute('data-sticky-header-fix', '')
+    else await expect(heading).not.toHaveAttribute('data-sticky-header-fix')
+    const result = await column.evaluate(async element => {
+      const title = element.querySelector<HTMLElement>('.kanban-column-title')!
+      const card = element.querySelector<HTMLElement>('.kanban-task-card')!
+      element.style.maxHeight = '75px'
+      element.scrollTop = card.getBoundingClientRect().top - title.getBoundingClientRect().top + 5
+      await new Promise(requestAnimationFrame)
+      const rect = title.getBoundingClientRect()
+      const stack = document.elementsFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+      return {
+        scrolled: element.scrollTop > 0,
+        cardOverlaps: stack.some(item => item === card || card.contains(item)),
+        titleOnTop: title.contains(stack[0]),
+      }
+    })
+    expect(result.scrolled).toBe(true)
+    expect(result.cardOverlaps).toBe(true)
+    expect(result.titleOnTop).toBe(enabled)
+  }
+})
