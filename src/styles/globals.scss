@@ -640,6 +640,10 @@ body {
   z-index: var(--z-base);
 }
 
+.task-detail-heading-tag[data-sticky-header-fix] {
+  z-index: var(--z-sticky);
+}
+
 // ======================== RESPONSIVE STYLING
 
 // The styled-scrollbar block below is desktop-only, which left mobile falling
