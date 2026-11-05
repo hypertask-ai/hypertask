@@ -488,11 +488,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       }} />
   </div>;
 
-  const writerControls = [
-    writerModelPicker && <TaskWriterModelPicker key="model" project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />,
-    !recording && <AttachmentButton key="attachment" disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />,
-  ];
-
   const footerKeys = composeWriterFooterKeys({
     recording,
     transcribing,
@@ -581,7 +576,13 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
-                {graphitePanel ? writerControls.reverse() : writerControls}
+                {graphitePanel ? <>
+                  {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
+                  {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
+                </> : <>
+                  {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
+                  {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
+                </>}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}
               </div>
