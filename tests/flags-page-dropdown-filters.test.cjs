@@ -31,10 +31,14 @@ stub("src/components/Common/CommonModalComponents/index.tsx", {
   ModalRowElementContainer: ({ children, onClick, id }) => React.createElement("button", { type: "button", onClick, id }, children),
 });
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false, jsx: { runtime: "automatic" } });
+const releaseRisk = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
+const keys = ["fixture-none", "fixture-small", "fixture-new"];
+stub("src/lib/flags/releaseRisk.ts", {
+  ...releaseRisk,
+  FEATURE_FLAG_RELEASE_RISKS: Object.fromEntries(keys.map((key, index) => [key, { risk: ["none", "small", "new"][index], reason: "Fixture risk" }])),
+});
 const Admin = jiti(path.join(root, "src/app/admin/flags/FeatureFlagsAdmin.tsx")).default;
 const { parseFlagsPageFilters: parse, serializeFlagsPageFilters: serialize, matchesFlagRisk } = jiti(path.join(root, "src/app/admin/flags/useFlagsPageFilters.ts"));
-const { FEATURE_FLAG_RELEASE_RISKS: risks } = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
-const keys = ["none", "small", "new"].map(risk => Object.keys(risks).find(key => risks[key].risk === risk));
 const rows = keys.map((key, index) => ({
   key, kind: ["feature", "improvement", "bugfix"][index], mode: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"][index],
   description: `Fixture ${index}`, shippedOn: "2026-10-10", updatedAt: null, releasedAt: null,
