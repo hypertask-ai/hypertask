@@ -33,6 +33,7 @@ function load(file, mocks = {}, sourceRoot = root) {
   new Function("require", "module", "exports", compiled)((id) => {
     if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
     if (id === "@/lib/api/errorMessage") return load("src/lib/api/errorMessage.ts", {});
+    if (id === "@/lib/themePreferences") return load("src/lib/themePreferences.ts", {}, sourceRoot);
     if (["./taskWriterSkills", "@/lib/ai/taskWriterSkills"].includes(id)) return metadata;
     if (id === "@/lib/flags/keys") return keys;
     if (id === "@/lib/flags/definitions/htpr-7736-chat-follows-task") return jiti(path.join(root, "src/lib/flags/definitions/htpr-7736-chat-follows-task.ts"));
@@ -609,7 +610,6 @@ async function sendAfterIntro(session, question) {
   const { createAiChatSend } = load("src/hooks/MultiPages/AIChat/aiChatSend.ts", {
     "@/lib/agents/chatViewerState": { sidebarChatHeaders: () => ({}) },
     "@/lib/ai/settings/catalog": { settingsScopeFromPath: () => undefined },
-    "@/lib/themePreferences": { normalizeThemePreference: () => undefined },
     "nookies": { parseCookies: () => ({}) },
     "./aiChatStream": { consumeAiChatStream: async () => {} },
     "@/lib/ai/ticketRowsHistory": { historyContent: (message) => message.content },
