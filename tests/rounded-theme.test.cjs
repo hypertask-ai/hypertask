@@ -48,12 +48,12 @@ function boot(cookie, dark, enabled, width = 768) {
   return { classes: [...classes], theme: attributes["data-theme"], color };
 }
 
-test("saved Material migrates to system at every width without changing the cookie", () => {
-  assert.equal(availableThemeOptions(true, true).some(option => option.value === "rounded"), false);
+test("saved Material follows its flag and device width", () => {
+  assert.equal(availableThemeOptions(true, true).some(option => option.value === "rounded"), true);
   for (const width of [390, 767, 768, 1440]) for (const dark of [false, true]) {
-    const theme = dark ? "amoled" : "porcelain";
+    const theme = width < 768 ? (dark ? "amoled" : "porcelain") : (dark ? "rounded-dark" : "rounded-light");
     const metadata = resolvedThemeDomMetadata[theme];
-    assert.equal(normalizeThemePreference("rounded", true), "system");
+    assert.equal(normalizeThemePreference("rounded", true), "rounded");
     assert.deepEqual(boot("rounded", dark, true, width), { classes: metadata.classes, theme, color: metadata.themeColor });
   }
 });
@@ -98,10 +98,10 @@ test("legacy themes resolve consistently on each device", () => {
   }
 });
 
-test("Material stays hidden in the command picker", () => {
+test("Material appears in the command picker only when enabled", () => {
   for (const enabled of [false, true]) {
     const commands = getAllCommands({ context: "Others" }, false, enabled, "", "", false, false, false, true).flatMap(group => group.commandLists);
-    assert.equal(commands.some(command => command.key === "roundedTheme"), false);
+    assert.equal(commands.some(command => command.key === "roundedTheme"), enabled);
   }
 });
 
@@ -139,7 +139,7 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
       "./SettingsSectionShell": { default: "section" },
     });
     const picker = appearance().props.children.props.children;
-    assert.deepEqual(picker.props.options.map(option => option.value), ["porcelain", "amoled", "graphite-2"]);
+    assert.deepEqual(picker.props.options.map(option => option.value), ["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", ...(enabled && !isMobile ? ["rounded"] : [])]);
     const source = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/commands.tsx"), "utf8");
     const parsed = ts.createSourceFile("commands.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     const names = new Set(["getCommands", "getThemeCommands", "getLegacyCommands"]);

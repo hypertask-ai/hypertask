@@ -33,9 +33,13 @@ const { getAllCommands } = jiti(
 );
 
 const expectedThemes = [
-  { title: "Light", value: "porcelain" },
-  { title: "AMOLED", value: "amoled" },
+  { title: "Follow system", value: "system" },
+  { title: "Light · Porcelain", value: "porcelain" },
+  { title: "Dark · Graphite", value: "graphite" },
   { title: "Graphite 2", value: "graphite-2" },
+  { title: "OLED black · AMOLED", value: "amoled" },
+  { title: "Paper · Dia", value: "dia" },
+  { title: "Material (follows device)", value: "rounded" },
 ];
 
 test("theme preferences use one clear label and order", () => {
@@ -61,8 +65,8 @@ test("new sessions use the system preference", () => {
 
 test("legacy cookies remain compatible and invalid cookies fall back safely", () => {
   assert.equal(normalizeThemePreference("light"), "porcelain");
-  assert.equal(normalizeThemePreference("dark"), "graphite-2");
-  assert.equal(normalizeThemePreference("dia"), "porcelain");
+  assert.equal(normalizeThemePreference("dark"), "graphite");
+  assert.equal(normalizeThemePreference("dia"), "dia");
   assert.equal(normalizeThemePreference("unknown"), undefined);
   assert.equal(normalizeThemePreference("dark", true, false), "graphite");
   assert.equal(normalizeThemePreference("dia", true, false), "dia");
@@ -155,8 +159,8 @@ test("initial documents use a dark fallback for unresolved system themes", () =>
 test("theme boot synchronizes the Android status bar before first paint", () => {
   const cases = [
     { cookie: "theme=porcelain", systemDark: true, expected: "#ffffff" },
-    { cookie: "theme=dia", systemDark: true, expected: "#ffffff" },
-    { cookie: "theme=graphite", systemDark: false, expected: "#17181b" },
+    { cookie: "theme=dia", systemDark: true, expected: "#f6f4ef" },
+    { cookie: "theme=graphite", systemDark: false, expected: "#232326" },
     { cookie: "theme=amoled", systemDark: false, expected: "#000000" },
     { cookie: "theme=system", systemDark: false, expected: "#ffffff" },
     { cookie: "theme=system", systemDark: true, expected: "#000000" },
@@ -188,23 +192,26 @@ test("theme boot synchronizes the Android status bar before first paint", () => 
   }
 });
 
-test("Ctrl+K exposes three direct theme choices without duplicate routes", () => {
+test("Ctrl+K exposes direct theme choices without duplicate routes", () => {
   const groups = getAllCommands({ context: "Others" }, false, false, "", "", false, false, false, true);
   const appearance = groups.find((group) => group.group === "Appearance");
   const settings = groups.find((group) => group.group === "Settings");
-  const themeCommands = appearance.commandLists.slice(0, expectedThemes.length);
+  const themeCommands = appearance.commandLists.slice(0, expectedThemes.length - 1);
 
   assert.deepEqual(
     themeCommands.map(({ key, name }) => ({ key, name })),
     [
-      { key: "lightTheme", name: "Light" },
-      { key: "amoledTheme", name: "AMOLED" },
+      { key: "systemTheme", name: "Follow system" },
+      { key: "lightTheme", name: "Light · Porcelain" },
+      { key: "darkTheme", name: "Dark · Graphite" },
       { key: "graphite2Theme", name: "Graphite 2" },
+      { key: "amoledTheme", name: "OLED black · AMOLED" },
+      { key: "paperTheme", name: "Paper · Dia" },
     ],
   );
   assert.ok(themeCommands.every(({ keywords }) => keywords.includes("theme")));
-  assert.ok(themeCommands[0].keywords.split(" ").includes("white"));
-  for (const keyword of ["black", "oled"]) assert.ok(themeCommands[1].keywords.split(" ").includes(keyword));
+  assert.ok(themeCommands[1].keywords.split(" ").includes("white"));
+  for (const keyword of ["black", "oled"]) assert.ok(themeCommands[4].keywords.split(" ").includes(keyword));
   assert.ok(!appearance.commandLists.some(({ key }) => key === "setTheme"));
   assert.ok(
     !appearance.commandLists.some(({ key }) => key === "toggleDarkMode"),
@@ -221,7 +228,7 @@ test("restoration isolates legacy choices and individual switches", () => {
   const restored = { restore: true, loaded: true, system: true, porcelain: true, graphite: true, amoled: true, dia: true };
   const values = ["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", "rounded"];
   assert.deepEqual(availableThemeOptions(true, true, restored).map(option => option.value), values);
-  assert.deepEqual(availableThemeOptions(true, true, { ...restored, restore: false }).map(option => option.value), ["porcelain", "amoled", "graphite-2"]);
+  assert.deepEqual(availableThemeOptions(true, true, { ...restored, restore: false }).map(option => option.value), values);
   for (const theme of ["system", "porcelain", "graphite", "amoled", "dia"]) {
     const visibility = { ...restored, [theme]: false };
     const options = availableThemeOptions(true, true, visibility);
@@ -233,9 +240,9 @@ test("restoration isolates legacy choices and individual switches", () => {
   assert.equal(normalizeThemePreference("graphite", true, true, true), "graphite");
   assert.equal(normalizeThemePreference("dia", true, true, true), "dia");
   assert.equal(normalizeThemePreference("rounded", true, true, true), "rounded");
-  assert.equal(normalizeThemePreference("dark", true, true), "graphite-2");
-  assert.equal(normalizeThemePreference("dia", true, true), "porcelain");
-  assert.equal(normalizeThemePreference("rounded", true, true), "system");
+  assert.equal(normalizeThemePreference("dark", true, true), "graphite");
+  assert.equal(normalizeThemePreference("dia", true, true), "dia");
+  assert.equal(normalizeThemePreference("rounded", true, true), "rounded");
 });
 
 test("restored boot honors theme switches without changing saved cookies", () => {

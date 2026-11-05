@@ -31,17 +31,11 @@ export type LegacyTheme = "system" | "porcelain" | "graphite" | "amoled" | "dia"
 export type ThemeVisibility = { restore: boolean; loaded: boolean } & Partial<Record<LegacyTheme, boolean>>;
 
 export const availableThemeOptions = (roundedEnabled: boolean, graphite2Enabled: boolean, visibility?: ThemeVisibility) =>
-  visibility && !visibility.loaded ? [] : visibility?.restore ? themeOptions.filter(({ value }) => {
+  visibility && !visibility.loaded ? [] : themeOptions.filter(({ value }) => {
     if (value === "rounded") return roundedEnabled;
     if (value === "graphite-2") return graphite2Enabled;
-    return visibility[value] !== false;
-  }) : graphite2Enabled
-    ? [
-        { title: "Light", value: "porcelain" as const },
-        { title: "AMOLED", value: "amoled" as const },
-        { title: "Graphite 2", value: "graphite-2" as const },
-      ]
-    : themeOptions.filter(({ value }) => value !== "graphite-2" && (value !== "rounded" || roundedEnabled));
+    return !visibility?.restore || visibility[value] !== false;
+  });
 
 const themePreferences = new Set<string>(themeOptions.map(({ value }) => value));
 
@@ -49,23 +43,12 @@ export const normalizeThemePreference = (
   theme?: string,
   roundedEnabled = false,
   graphite2Enabled = true,
-  restore = false,
+  _restore = false,
 ): ThemePreference | undefined => {
-  if (restore) {
-    if (theme === "dark") return "graphite";
-    if (theme === "light") return "porcelain";
-    if (theme === "rounded" && !roundedEnabled) return "system";
-    if (theme === "graphite-2" && !graphite2Enabled) return "system";
-  } else if (graphite2Enabled) {
-    if (theme === "dark" || theme === "graphite") return "graphite-2";
-    if (theme === "dia" || theme === "light") return "porcelain";
-    if (theme === "rounded") return "system";
-  } else {
-    if (theme === "rounded" && !roundedEnabled) return "system";
-    if (theme === "graphite-2") return "system";
-    if (theme === "dark") return "graphite";
-    if (theme === "light") return "porcelain";
-  }
+  if (theme === "dark") return "graphite";
+  if (theme === "light") return "porcelain";
+  if (theme === "rounded" && !roundedEnabled) return "system";
+  if (theme === "graphite-2" && !graphite2Enabled) return "system";
   return theme && themePreferences.has(theme) ? theme as ThemePreference : undefined;
 };
 
