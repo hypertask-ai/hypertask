@@ -182,7 +182,8 @@ export async function PATCH(request: NextRequest) {
           || lead.revokedAt !== null || (!human && !trustedSource)
           || requestedAt.getTime() > now || requestedAt > comment.createdAt
           || (human && requestedAt.getTime() !== comment.createdAt.getTime())
-          || !words.includes(normalizeVisibleText(attestation.quote))) {
+          || !words.includes(normalizeVisibleText(attestation.quote))
+          || classifyAnswer(words) === "no" || classifyAnswer(normalizeVisibleText(attestation.quote)) === "no") {
           throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         }
         const latest = await tx.featureFlagChange.findFirst({
@@ -194,11 +195,13 @@ export async function PATCH(request: NextRequest) {
         }
         const laterComments = await tx.comment.findMany({
           where: { taskId: comment.taskId, creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null,
-            agentDisplayName: null, createdAt: { gte: requestedAt } },
+            agentDisplayName: null, ...(human ? { OR: [
+              { createdAt: { gt: requestedAt } },
+              { createdAt: requestedAt, id: { gt: comment.id } },
+            ] } : { createdAt: { gte: requestedAt } }) },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: commentSelect,
         });
-        const withdrawal = laterComments.find((later) => later.id !== comment.id
-          && classifyAnswer(normalizeVisibleText(later.text || later.commentText || "")) === "no");
+        const withdrawal = laterComments.find((later) => classifyAnswer(normalizeVisibleText(later.text || later.commentText || "")) === "no");
         if (withdrawal) throw new FeatureFlagApprovalError(`Valentin said no after that approval (comment ${withdrawal.id})`);
         await tx.logs.create({ data: { type: "Board", status: "Normal", LoggedById: ctx.user.id,
           log: JSON.stringify({ event: "flag_owner_request", key: body.key, mode: body.mode,

@@ -878,6 +878,44 @@ test("trusted lead records owner intent without exposing its quote", async () =>
   assert.ok(calls.indexOf("advisory-lock") < calls.indexOf("comment-lock"));
 });
 
+for (const refusal of ["No", "Do not switch"]) {
+  for (const source of ["human", "chat"]) {
+    test(`owner request refuses ${source} source quote: ${refusal}`, async () => {
+      const body = ownerBody();
+      approvalComment.agentId = source === "chat" ? FLAG_CHAT_RECORD_AGENT_ID : null;
+      approvalComment.commentText = source === "chat" ? `Valentin said: ${refusal}` : refusal;
+      body.ownerRequest.quote = refusal;
+      assert.equal((await result(await PATCH(request("PATCH", body)))).status, 403);
+      assert.equal(writes.length, 0);
+      assert.equal(auditLogs.length, 0);
+    });
+  }
+}
+
+test("owner request refuses a human source no even when the quote omits it", async () => {
+  const body = ownerBody();
+  approvalComment.commentText = "No, do not release this";
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 403);
+  assert.equal(writes.length, 0);
+});
+
+for (const [id, status] of [[122, 200], [124, 403]]) {
+  test(`owner request ${status === 200 ? "allows earlier" : "refuses later"} equal-time human no`, async () => {
+    const body = ownerBody();
+    ticketComments.push(ticketComment(id, "No", { agentId: null, createdAt: approvalComment.createdAt }));
+    assert.equal((await result(await PATCH(request("PATCH", body)))).status, status);
+    assert.equal(writes.length, status === 200 ? 1 : 0);
+  });
+}
+
+test("trusted chat request treats an equal-time human no as withdrawal regardless of id", async () => {
+  const body = ownerBody();
+  approvalComment.agentId = FLAG_CHAT_RECORD_AGENT_ID;
+  ticketComments.push(ticketComment(122, "No", { agentId: null, createdAt: approvalComment.createdAt }));
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 403);
+  assert.equal(writes.length, 0);
+});
+
 for (const scenario of ["role", "agent", "revoked", "owner-link", "source-author", "edited", "scope", "quote", "blank", "future", "source-time", "human-time", "withdrawal", "replay", "receipt"]) {
   test(`owner request refuses ${scenario}`, async () => {
     const body = ownerBody();
