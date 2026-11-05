@@ -66,7 +66,7 @@ function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
     "./ComposeTaskWriter": defaultExport(() => null),
     "@/utils/getCurrentUser": { getCurrentUserFromCookies: () => null },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
-    nookies: {},
+    nookies: { parseCookies: () => ({}) },
     "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
     "@/hooks/MultiPages/useClickOutside": defaultExport(noop),
     "@/components/PageComponents/Interactive-Onboarding/Components/TutorialTip": defaultExport(() => null),
