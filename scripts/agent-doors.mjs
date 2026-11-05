@@ -25,8 +25,8 @@ const ACTIONS = [
   },
   {
     id: "task.move",
-    person: "Move a task to another column or board",
-    commands: /^(moveToColumn|bulkMoveToColumn|movetasktodifferentboard)$/,
+    person: "Move one or more tasks to another column or board",
+    commands: /^(moveToColumn|bulkMoveToColumn|movetasktodifferentboard|bulkMoveToBoard)$/,
     cli: "task move",
     mcp: "/mcp/tasks/move",
     ai: "move_task_between_boards",
