@@ -7,12 +7,12 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
-test("inbox name column flag is a small Owner + QA improvement", () => {
+test("inbox name column flag is a small improvement that defaults to Everyone", () => {
   const { default: flag, HTPR_8264_INBOX_NAME_COLUMN_FLAG: key } = loadModule("src/lib/flags/definitions/htpr-8264-inbox-name-column.ts");
   assert.equal(key, "htpr-8264-inbox-name-column");
   assert.equal(flag.key, key);
   assert.equal(flag.kind, "improvement");
-  assert.equal(flag.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.releaseRisk.risk, "small");
 });
 
