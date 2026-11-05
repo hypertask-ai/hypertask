@@ -17,6 +17,7 @@ on:
       - 'scripts/premerge-local.sh'
       - 'scripts/premerge-local-*.mjs'
       - '.claude/skills/verify-qa/scripts/**'
+      - '.claude/skills/verify-design/**'
       - '.github/workflows/ship-scripts-tests.yml'
       - 'docs/ci-policy.yml'
       - '.github/scripts/ci-runner-policy.cjs'
@@ -92,6 +93,7 @@ jobs:
           bash .claude/skills/ship/scripts/runner-pickup.test.sh
           python3 .claude/skills/verify-qa/scripts/evidence-prune.test.py
           node --test .claude/skills/verify-qa/scripts/qa-identity.test.mjs .claude/skills/verify-qa/scripts/qa-login.test.mjs
+          node --test .claude/skills/verify-design/scripts/design-check.test.mjs
           node --test .claude/skills/verify-qa/scripts/qa-teams.test.mjs
           node --test .claude/skills/verify-qa/scripts/fixture-cleanup.test.mjs
 

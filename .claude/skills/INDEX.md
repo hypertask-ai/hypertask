@@ -39,6 +39,7 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | verify-on-phone | Before the PR (UI) | .claude/skills/verify-on-phone/SKILL.md |
 | verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
 | verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
+| verify-design | Design QA for design-pass, Figma or visible UI tickets: live screen next to the frame per theme, scored, reviewer checklist | .claude/skills/verify-design/SKILL.md |
 
 Design work uses the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 

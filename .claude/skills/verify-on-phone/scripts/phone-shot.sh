@@ -34,7 +34,7 @@ landed somewhere other than the page you asked for.
 Usage:
   phone-shot.sh <url> <absolute out.png> [--state <absolute path>]
                 [--allow-redirect] [--dry-run] [--help]
-                [--viewport WxH] [--theme <porcelain|graphite|amoled|dia>]
+                [--viewport WxH] [--theme <porcelain|graphite|graphite-2|amoled|dia>]
 
   <url>             full https:// URL, scheme included.
   <out.png>         ABSOLUTE path for the PNG. A relative path is rejected,
@@ -121,8 +121,8 @@ if [[ ! "$VIEWPORT" =~ ^[1-9][0-9]{0,4}x[1-9][0-9]{0,4}$ ]]; then
   die "Invalid viewport '$VIEWPORT'." "Pass --viewport WxH, for example 390x844 or 1440x900."
 fi
 case "$THEME" in
-  ""|porcelain|graphite|amoled|dia) ;;
-  *) die "Unknown theme '$THEME'." "Pass --theme porcelain, graphite, amoled, or dia." ;;
+  ""|porcelain|graphite|graphite-2|amoled|dia) ;;
+  *) die "Unknown theme '$THEME'." "Pass --theme porcelain, graphite, graphite-2, amoled, or dia." ;;
 esac
 UA_LABEL="iPhone"
 if [ "${VIEWPORT%x*}" -ge 800 ]; then

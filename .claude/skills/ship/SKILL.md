@@ -48,7 +48,7 @@ Keep the ticket **In Progress** while you work, including CI, review fixes, merg
 | Clean | [clean-up](../clean-up/SKILL.md) | `ship-check cleaned` passes |
 | Reflect | [reflect](../reflect/SKILL.md), once after the last ticket | Accepted proposals handled, or skip reason in activity |
 
-Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
+Reused UI needs no new wireframe. New component files require Valentin's design approval naming them. Follow house rules for Figma frames and images. Design QA for any design-pass, Figma or visible UI ticket uses [verify-design](../verify-design/SKILL.md); a different runner marks its checklist. Do not implement before required approval. Ordinary ai-review work must not use interrogate. Money, access, security, and irreversible-data decisions use the valentin-review lane.
 
 ## Stay active until Done
 
