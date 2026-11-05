@@ -41,10 +41,11 @@ try {
             for(const prop of ['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius']) {
               const raw=css[prop], parts=raw.split(/\s+/), px=parts[0].endsWith('%')?parseFloat(parts[0])*rect.width/100:parseFloat(parts[0]);
               const py=(parts[1]||parts[0]).endsWith('%')?parseFloat(parts[1]||parts[0])*rect.height/100:parseFloat(parts[1]||parts[0]);
-              const verdict=radiusVerdict(Math.min(px,py),rect.width,rect.height);
+              const roundAllowed=el.tagName==='IMG' || /avatar|dot/i.test(`${typeof el.className==='string'?el.className:''} ${el.getAttribute('data-testid')||''}`) || Math.max(rect.width,rect.height)<=12;
+              const verdict=radiusVerdict(Math.max(px,py),rect.width,rect.height,roundAllowed);
               if(verdict!=='ok') add(verdict==='round'?'round':'corners',el,`${prop}: ${raw}`,rect);
             }
-            for(const prop of ['color','backgroundColor','fill','stroke']) if(isPurple(css[prop])) add('purple',el,`${prop}: ${css[prop]}`,rect);
+            for(const prop of ['color','backgroundColor','fill','stroke']) if(isPurple(css[prop]) && (prop!=='stroke' || (parseFloat(css.strokeWidth)>0 && Number(css.strokeOpacity)>0))) add('purple',el,`${prop}: ${css[prop]}`,rect);
             for(const side of ['Top','Right','Bottom','Left']) if(parseFloat(css[`border${side}Width`])>0 && css[`border${side}Style`]!=='none' && css[`border${side}Style`]!=='hidden' && isPurple(css[`border${side}Color`])) add('purple',el,`border${side}Color: ${css[`border${side}Color`]}`,rect);
             const match=['class','aria-label','data-icon','title'].map(k=>el.getAttribute(k)||'').find(v=>/sparkl/i.test(v));
             if(match) add('sparkle',el,match,rect);

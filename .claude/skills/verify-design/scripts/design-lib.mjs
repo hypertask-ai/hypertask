@@ -30,7 +30,7 @@ export function isPurple(color) {
   const hue = ((max === r ? (g-b)/d : max === g ? (b-r)/d+2 : (r-g)/d+4)*60+360)%360;
   return hue >= 255 && hue <= 300 && s > 0.25;
 }
-export function radiusVerdict(px, w, h) {
+export function radiusVerdict(px, w, h, roundAllowed = true) {
   if ([0,2,4].includes(px)) return 'ok';
-  return w > 0 && h > 0 && Math.abs(w-h) <= 2 && px >= Math.min(w,h)/2 ? 'round' : 'bad';
+  return roundAllowed && w > 0 && h > 0 && Math.abs(w-h) <= 2 && px >= Math.min(w,h)/2 ? 'round' : 'bad';
 }
