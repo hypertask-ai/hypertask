@@ -151,6 +151,7 @@ function editModeCleanup({ open = true, taskId = 123, messages = [] }) {
     "@/lib/ai/chipEvents": { signalAiChip: () => {} },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7766-chat-shortcuts": { HTPR_7766_CHAT_SHORTCUTS_FLAG: "htpr-7766-chat-shortcuts" },
+    "@/lib/flags/definitions/htpr-8812-chat-first-message": { HTPR_8812_CHAT_FIRST_MESSAGE_FLAG: "htpr-8812-chat-first-message" },
     "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows": { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG: "htpr-7683-ai-chat-ticket-rows" },
     "@/lib/state": { useRecoilState: () => [123, (value) => cleared.push(value)] },
     "@/store": { aiChatEditTaskIdAtom: "edit" },
