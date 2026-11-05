@@ -17,7 +17,7 @@ export function snapshotVisibleLinks(taskPath: string): Set<string> {
     if (root.dataset.taskDetailPath !== taskPath) continue;
     const anchors = root.querySelectorAll<HTMLAnchorElement>('[id="description-input"] a[href], [id^="comment-"][id$="-input"]:not([id="comment-input-input"]) a[href]');
     for (const anchor of anchors) {
-      if (anchor.closest("[data-task-detail-path]") !== root) continue;
+      if (anchor.closest("[data-task-detail-path]") !== root || anchor.closest('[contenteditable="true"]')) continue;
       const excluded = anchor.closest('nav, [role="navigation"], .modal, [role="dialog"]');
       if ((excluded && excluded !== root && root.contains(excluded)) || anchor.closest('[hidden], [aria-hidden="true"]')) continue;
       const href = normalizeLink(anchor.getAttribute("href") || "");

@@ -203,10 +203,12 @@ test("visible ticket links are clipped, normalized and stably prioritized only w
   const { createRoot } = require("react-dom/client");
   const { JSDOM } = require("jsdom");
   const dom = new JSDOM(`<div role="dialog"><div data-task-detail-path="/detail/project-15/1">
-    <div id="description-input"><a id="visible" href="/a">a</a><a id="hidden" href="/hidden" style="display:none">hidden</a>
+    <div id="description-input"><div class="tiptap ProseMirror" contenteditable="false"><a id="visible" href="/a">a</a></div><a id="hidden" href="/hidden" style="display:none">hidden</a>
     <div id="clip" style="overflow:hidden"><a id="clipped" href="/clipped">clipped</a></div>
     <nav><a id="nav" href="/nav">nav</a></nav><div role="dialog"><a id="dialog" href="/dialog">dialog</a></div></div>
     <div id="comment-3-input"><a id="comment-link" href="https://app.hypertask.ai/b">b</a><a id="outside" href="/outside">outside</a></div>
+    <div id="description-input"><div><div class="tiptap ProseMirror" contenteditable="true"><a href="/draft-description">draft description</a></div></div></div>
+    <div id="comment-4-input"><div><div class="tiptap ProseMirror" contenteditable="true"><a href="/draft-comment">draft comment</a><span contenteditable="false"><a href="/draft-embed">draft embed</a></span></div></div></div>
     <div id="comment-input-input"><a href="/outside">draft duplicate</a></div>
     <div data-task-detail-path="/detail/project-15/3"><div id="description-input"><a href="/nested">nested ticket</a></div></div>
     </div></div><div data-task-detail-path="/detail/project-15/2"><div id="description-input"><a id="other" href="/other">other</a></div></div><div id="root"></div>`, { url: "https://app.hypertask.ai/detail/project-15/1" });
@@ -233,7 +235,7 @@ test("visible ticket links are clipped, normalized and stably prioritized only w
   assert.deepEqual([...visible], ["https://app.hypertask.ai/a", "https://app.hypertask.ai/b"]);
   assert.equal(helpers.normalizeLink("javascript:alert(1)"), undefined);
   assert.equal(helpers.normalizeLink("http://["), undefined);
-  const urls = ["/hidden", "/b", "/clipped", "https://app.hypertask.ai/a", "/nav", "/outside", "/dialog", "/other"].map(urlString => ({ urlString, title: urlString }));
+  const urls = ["/draft-description", "/draft-comment", "/draft-embed", "/hidden", "/b", "/clipped", "https://app.hypertask.ai/a", "/nav", "/outside", "/dialog", "/other"].map(urlString => ({ urlString, title: urlString }));
   global.fetch = async () => ({ ok: true, json: async () => urls });
   let enabled = true;
   const box = ({ children }) => React.createElement("div", null, children);
@@ -254,7 +256,7 @@ test("visible ticket links are clipped, normalized and stably prioritized only w
   }).default;
   const render = async key => React.act(async () => renderer.render(React.createElement(LinksModal, { key, display: true, onClose: () => {}, currentTaskId: 1, commentId: "", visibleLinks: visible })));
   await render("on");
-  assert.deepEqual([...document.querySelectorAll("#root button")].map(row => row.textContent), ["/b", "https://app.hypertask.ai/a", "/hidden", "/clipped", "/nav", "/outside", "/dialog", "/other"]);
+  assert.deepEqual([...document.querySelectorAll("#root button")].map(row => row.textContent), ["/b", "https://app.hypertask.ai/a", "/draft-description", "/draft-comment", "/draft-embed", "/hidden", "/clipped", "/nav", "/outside", "/dialog", "/other"]);
   enabled = false;
   await render("off");
   assert.deepEqual([...document.querySelectorAll("#root button")].map(row => row.textContent), urls.map(row => row.title));
