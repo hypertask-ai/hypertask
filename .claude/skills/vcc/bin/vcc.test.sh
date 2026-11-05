@@ -312,6 +312,17 @@ for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;' '&#9;' '&#
   fixture "$text"
   review_refused 'What this is:' task move X-1 --section 'Valentin Review'
 done
+for context in $'\u200b' $'\u00a0\u1680\u2000\u200a\u202f\u3000\ufeff' $'\u0085\u200b\u2028\u2029\u205f'; do
+  text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+context=$'\u200b<strong>設定を確認。</strong>'
+text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+fixture "$text"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
 context='&#0009;the&#X000A;setting&#160;works'
 text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
 allowed bash "$vcc" comment add X-1 --kind question --text "$text"
@@ -372,11 +383,11 @@ No: remove it.
 My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
-for context in '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '`' '```' '* _ ` **' '[*](https://example.test)' '<em>_</em>'; do
+for context in $'\u200b' $'\u00a0\u200b\u3000\ufeff' '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '`' '```' '* _ ` **' '[*](https://example.test)' '<em>_</em>'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
 done
-for context in '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
+for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 done

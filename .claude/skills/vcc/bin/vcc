@@ -35,6 +35,7 @@ question_check() {
   jq -nr --arg text "$1" --arg markdown "${2:-false}" '
     def visible:
       gsub("<[^>]*>"; "") | gsub("&(?:nbsp|Tab|NewLine|ensp|emsp|emsp13|emsp14|numsp|puncsp|thinsp|hairsp|VeryThinSpace|ThickSpace|MediumSpace|NegativeMediumSpace|NegativeThickSpace|NegativeThinSpace|NegativeVeryThinSpace|ZeroWidthSpace);|&#0*(?:9|1[0-3]|32|133|160|5760|819[2-9]|820[0-3]|823[239]|8287|12288|65279)(?![0-9]);?|&#x0*(?:[9-d]|20|85|a0|1680|200[0-9ab]|202[89f]|205f|3000|feff)(?![0-9a-f]);?"; " "; "i") |
+      gsub("[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
     def unmention:
       sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
