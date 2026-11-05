@@ -2,10 +2,6 @@ import { appendFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { pathToFileURL } from "node:url";
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
-}
-
 // Fetch exceptions may embed credential-bearing URLs and bot tokens, so the
 // reason is stripped of both before it reaches a log line.
 export function alertFailureReason(error) {
@@ -25,50 +21,85 @@ export async function reportProductionAlert(config, fetchImpl = fetch) {
   if (summaryFile) appendFileSync(summaryFile, `\n### ${kind}: ${cause}\n${message}\n`);
   console.log(`::warning::${String(message).replace(/[\r\n]+/g, " ")}`);
   const day = (config.now ?? new Date()).toISOString().slice(0, 10);
-  const name = `PROD_ALERT_${createHash("sha256").update(`${kind}:${cause}`).digest("hex").slice(0, 24).toUpperCase()}`;
+  const name = `${kind === "setup" ? "PROD_MONITOR" : "PROD_ALERT"}_${createHash("sha256").update(`${kind}:${cause}`).digest("hex").slice(0, 24).toUpperCase()}`;
   const url = `https://api.github.com/repos/${repository}/actions/variables`;
   const headers = { Authorization: `Bearer ${githubToken}`, "Content-Type": "application/json" };
   if (!githubToken || !repository) throw new Error("Daily alert deduplication credentials are unavailable; see job summary");
-  let response = await fetchImpl(`${url}/${name}`, { headers });
+  let response;
+  try { response = await fetchImpl(`${url}/${name}`, { headers }); }
+  catch { throw new Error("Daily alert lookup failed (network error)"); }
   if (response.ok && (await response.json()).value === day) return "duplicate";
   const missing = response.status === 404;
   if (!response.ok && !missing) throw new Error(`Daily alert lookup failed (HTTP ${response.status}); see job summary`);
-  // Reserve before delivery. A failed send stays in the summary rather than
-  // retrying an ambiguous delivery and sending the same cause twice today.
-  response = await fetchImpl(missing ? url : `${url}/${name}`, {
-    method: missing ? "POST" : "PATCH", headers, body: JSON.stringify({ name, value: day }),
-  });
-  if (!response.ok) throw new Error(`Daily alert reservation failed (HTTP ${response.status}); see job summary`);
+  const reserve = async () => {
+    let result;
+    try {
+      result = await fetchImpl(missing ? url : `${url}/${name}`, {
+        method: missing ? "POST" : "PATCH", headers, body: JSON.stringify({ name, value: day }),
+      });
+    } catch { throw new Error("Daily alert reservation failed (network error)"); }
+    if (!result.ok) throw new Error(`Daily alert reservation failed (HTTP ${result.status}); see job summary`);
+  };
 
   if (kind === "setup") {
     if (!mcpToken) return "summary-only";
-    const title = `[INFRA] Production monitoring: ${cause}`;
-    const api = async (route, options = {}) => {
-      const result = await fetchImpl(`https://app.hypertask.ai/api/mcp${route}`, {
-        ...options, headers: { Authorization: `Bearer ${mcpToken}`, "Content-Type": "application/json", "Idempotency-Key": `prod-monitor-${cause}-${day}` },
-      });
-      if (!result.ok) throw new Error(`Monitoring ticket request failed (HTTP ${result.status}); see job summary`);
-      return result.json();
+    const suffix = createHash("sha256").update(cause).digest("hex").slice(0, 24);
+    const title = `Production monitoring: ${cause.replaceAll("-", " ")}`;
+    const api = async (route, options = {}, key = "") => {
+      const method = options.method || "GET";
+      let result;
+      try {
+        result = await fetchImpl(`https://app.hypertask.ai/api/mcp${route}`, {
+          ...options, headers: { Authorization: `Bearer ${mcpToken}`, "Content-Type": "application/json", ...(key ? { "Idempotency-Key": `prod-monitor-${suffix}-${day}-${key}` } : {}) },
+        });
+      } catch {
+        throw new Error(`Monitoring ${method} ${route.split("?")[0].replace(/\/runs\/[^/]+/, "/runs/:id")} failed (network error)`);
+      }
+      if (!result.ok) {
+        const safeRoute = route.split("?")[0].replace(/\/runs\/[^/]+/, "/runs/:id");
+        let code;
+        try { code = (await result.json()).code; } catch {}
+        const reason = ["invalid_field", "forbidden", "not_found", "unauthorized"].includes(code) ? `, ${code}` : "";
+        throw new Error(`Monitoring ${method} ${safeRoute} failed (HTTP ${result.status}${reason})`);
+      }
+      try { return await result.json(); }
+      catch { throw new Error(`Monitoring ${method} ${route.split("?")[0].replace(/\/runs\/[^/]+/, "/runs/:id")} returned invalid JSON`); }
     };
     let existing;
     for (const status of ["Normal", "Archive", "Deleted"]) {
-      const search = await api(`/tasks?project_id=4060&status=${status}&search=${encodeURIComponent(title)}&limit=100`);
+      const search = await api(`/tasks?project_id=11514&status=${status}&search=${encodeURIComponent(title)}&limit=100`);
       if (!Array.isArray(search.tasks)) throw new Error("Monitoring ticket search returned no task list");
       existing = search.tasks.find((task) => task.title === title);
       if (existing) break;
     }
-    const text = `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(config.runUrl)}">Workflow evidence</a></p>`;
-    if (existing) {
-      await api("/comments", { method: "POST", body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }) });
-    } else {
-      await api("/tasks/create", { method: "POST", body: JSON.stringify({ project_id: 4060, title, description: text, content_type: "html" }) });
+    if (!existing) {
+      const page = await api("/projects/11514/labels");
+      const labels = ["CI", "Hypertask CI"].map((name) => page.labels?.find((label) => label.name === name)?.id);
+      if (labels.some((id) => !id)) throw new Error("Monitoring board labels are unavailable");
+      const created = await api("/tasks/create", { method: "POST", body: JSON.stringify({ project_id: 11514, title, description: "<h2>Problem</h2><p>A production check could not finish.</p><h2>Fix</h2><p>Read the agent log for details.</p><h2>Done when</h2><p>The check finishes with a clear result.</p><h2>Risk</h2><p>A release warning could be missed.</p><h2>Decision</h2><p>None.</p>", labels }) }, "task");
+      existing = created.task;
     }
+    if (!Number.isSafeInteger(existing?.id) || existing.id < 1) throw new Error("Monitoring ticket returned no task id");
+    const marker = `prod-monitor-${suffix}-${day}`;
+    const log = await api(`/tasks/${existing.id}/agent-activity?limit=100`);
+    if (!Array.isArray(log.activities)) throw new Error("Monitoring activity search returned no list");
+    if (log.activities.some((activity) => activity.text?.includes(marker))) {
+      await reserve();
+      return "ticket";
+    }
+    const opened = await api("/agents/runs", { method: "POST", body: JSON.stringify({ taskId: existing.id, source: "runtime" }) });
+    if (typeof opened.run?.id !== "string" || !/^[a-zA-Z0-9-]+$/.test(opened.run.id)) throw new Error("Monitoring activity returned no run id");
+    await api(`/agents/runs/${opened.run.id}/activities`, { method: "POST", body: JSON.stringify({ type: "thought", text: `${marker}\n${message}\n${config.runUrl}` }) }, "activity");
+    await reserve();
     return "ticket";
   }
+  await reserve();
   if (!telegramToken || !telegramChat) throw new Error("Telegram delivery credentials are unavailable; see job summary");
-  response = await fetchImpl(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
-    method: "POST", body: new URLSearchParams({ chat_id: telegramChat, text: message }),
-  });
+  try {
+    response = await fetchImpl(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+      method: "POST", body: new URLSearchParams({ chat_id: telegramChat, text: message }),
+    });
+  } catch { throw new Error("Telegram delivery failed (network error)"); }
   if (!response.ok || (await response.json()).ok !== true) throw new Error("Telegram delivery failed; see job summary");
   return "telegram";
 }

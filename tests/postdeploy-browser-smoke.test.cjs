@@ -226,3 +226,88 @@ for (const failure of ['never opens', 'disappears', 'body disappears', 'wrong ti
     await assert.rejects(journeyHarness(failure).run());
   });
 }
+
+test('unconfirmed smoke reports safe top-level Playwright errors and a missing-error fallback', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'smoke-diagnostic-'));
+  try {
+    const file = path.join(dir, 'report.json');
+    for (const [report, expected] of [
+      [{ errors: [{ message: 'Error: "route.fetch: Test ended.\nCookie: secret' }] }, 'route.fetch: Test ended.'],
+      [{ errors: [{ message: 'Test timeout of 30000ms exceeded. secret' }] }, 'Test timeout exceeded'],
+      [{ errors: [{ message: 'Error: page.goto: net::ERR_CONNECTION_RESET at https://secret' }] }, 'page.goto: network error'],
+      [{ errors: [{ message: 'page.goto: secret' }] }, 'page.goto failed'],
+      [{ suites: [{ suites: [{ specs: [{ tests: [{ results: [{ error: { message: 'Error: expect(received).toBe(secret)' } }] }] }] }] }] }, 'expect assertion failed'],
+      [{ suites: [null, { specs: 'invalid' }], errors: 'invalid' }, 'No Playwright error was recorded'],
+      [null, 'No Playwright error was recorded'],
+      [{ errors: [{ message: 'Authorization: Bearer secret' }] }, 'Smoke error details withheld for safety'],
+      [{ errors: [] }, 'No Playwright error was recorded'],
+    ]) {
+      writeFileSync(file, JSON.stringify(report));
+      const result = spawnSync(process.execPath, ['.github/scripts/smoke-diagnostic.mjs', file], { encoding: 'utf8' });
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout.trim(), expected);
+      assert.doesNotMatch(result.stdout, /secret|Cookie|Bearer/);
+    }
+    for (const input of [path.join(dir, 'missing.json'), file]) {
+      if (input === file) writeFileSync(file, '{broken');
+      const result = spawnSync(process.execPath, ['.github/scripts/smoke-diagnostic.mjs', input], { encoding: 'utf8' });
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout.trim(), 'No Playwright error was recorded');
+    }
+    const smoke = workflow.jobs.smoke.steps.find((step) => step.id === 'smoke');
+    const decide = workflow.jobs.smoke.steps.find((step) => step.id === 'decide');
+    assert.match(smoke.run, /PLAYWRIGHT_JSON_OUTPUT_NAME=.*RUNNER_TEMP/);
+    assert.match(smoke.run, /--reporter=list,json/);
+    assert.match(decide.run, /smoke-diagnostic\.mjs/);
+    assert.match(decide.run, /smoke-unconfirmed.*\$REASON/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('actual classifier sends the safe diagnostic without confirming a rollback', () => {
+  const { mkdirSync } = require('node:fs');
+  const dir = mkdtempSync(path.join(tmpdir(), 'smoke-classifier-'));
+  try {
+    mkdirSync(path.join(dir, 'e2e/smoke/.state'), { recursive: true });
+    writeFileSync(path.join(dir, 'e2e/smoke/.state/preflight.json'), '{"ok":true}');
+    writeFileSync(path.join(dir, 'smoke-report.json'), JSON.stringify({ errors: [{ message: 'Error: route.fetch: Test ended.\nCookie: secret' }] }));
+    writeFileSync(path.join(dir, 'node'), `#!/bin/sh\nif [ "$1" = .github/scripts/production-alert.mjs ]; then printf '%s\\n' "$*" > "$ALERT_LOG"; else exec '${process.execPath}' '${path.resolve('.github/scripts/smoke-diagnostic.mjs')}' "$2"; fi\n`, { mode: 0o700 });
+    const step = workflow.jobs.smoke.steps.find((item) => item.id === 'decide');
+    const script = step.run.replaceAll('${{ github.event_name }}', 'push').replaceAll('${{ github.repository }}', 'test/repo');
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
+      cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir, ALERT_LOG: path.join(dir, 'alert'), SHA: 'fixture', GITHUB_OUTPUT: path.join(dir, 'output') },
+    });
+    assert.equal(result.status, 1);
+    assert.match(result.stdout, /route.fetch: Test ended/);
+    assert.match(readFileSync(path.join(dir, 'alert'), 'utf8'), /setup smoke-unconfirmed.*route.fetch: Test ended/);
+    assert.doesNotMatch(result.stdout + readFileSync(path.join(dir, 'alert'), 'utf8'), /Cookie|secret/);
+    assert.equal(require('node:fs').existsSync(path.join(dir, 'output')), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('healthy smoke does not qualify for classification', () => {
+  const decide = workflow.jobs.smoke.steps.find((step) => step.id === 'decide');
+  const expression = decide.if.replace(/^\$\{\{\s*|\s*\}\}$/g, '').replace(/steps\.([\w-]+)\./g, (_, id) => `steps[${JSON.stringify(id)}].`);
+  const steps = { provisioned: { outputs: { ok: 'true' } }, gate: { outputs: { ok: 'true' } }, smoke: { outcome: 'success' } };
+  for (const id of ['setup-checkout', 'setup-node', 'setup-npm', 'setup-pw']) steps[id] = { outcome: 'success' };
+  assert.equal(vm.runInNewContext(expression, { steps, cancelled: () => false }), false);
+  steps.smoke.outcome = 'failure';
+  assert.equal(vm.runInNewContext(expression, { steps, cancelled: () => false }), true);
+});
+
+test('confirmed application failure sets the rollback verdict', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'smoke-confirmed-'));
+  try {
+    require('node:fs').mkdirSync(path.join(dir, 'e2e/smoke/.state'), { recursive: true });
+    writeFileSync(path.join(dir, 'e2e/smoke/.state/preflight.json'), '{"ok":true}');
+    writeFileSync(path.join(dir, 'e2e/smoke/.state/application-failure.json'), '{"view":"board"}');
+    writeFileSync(path.join(dir, 'node'), '#!/bin/sh\nprintf "%s\\n" "$*" > "$ALERT_LOG"\n', { mode: 0o700 });
+    const step = workflow.jobs.smoke.steps.find((item) => item.id === 'decide');
+    const script = step.run.replaceAll('${{ github.event_name }}', 'workflow_dispatch').replaceAll('${{ github.repository }}', 'test/repo');
+    const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', script], {
+      cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, SHA: 'fixture', GITHUB_OUTPUT: path.join(dir, 'output'), ALERT_LOG: path.join(dir, 'alert') },
+    });
+    assert.equal(result.status, 1);
+    assert.match(readFileSync(path.join(dir, 'output'), 'utf8'), /^confirmed=true$/m);
+    assert.match(readFileSync(path.join(dir, 'alert'), 'utf8'), /live smoke-failure/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
