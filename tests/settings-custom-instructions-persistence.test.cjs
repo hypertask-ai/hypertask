@@ -60,6 +60,9 @@ test("saved instructions initialize the editor and saving refreshes reopening st
     await change("Brain tag required\nSet exactly one brain label.");
     await render("initial");
     assert.equal(value(), "Brain tag required\nSet exactly one brain label.");
+    client.setQueryData(["board-ai-custom-instructions", 7049], { ...saved, customInstruction: "Refreshed server instructions" });
+    await render("initial");
+    assert.equal(value(), "Brain tag required\nSet exactly one brain label.");
     await save();
     assert.deepEqual(request, { url: "/api/ai/project/customInstruction", body: { projectId: 7049, customInstruction: "Brain tag required\nSet exactly one brain label." } });
     assert.equal(project.ai_custom_instructions[0].customInstruction, "Brain tag required\nSet exactly one brain label.");

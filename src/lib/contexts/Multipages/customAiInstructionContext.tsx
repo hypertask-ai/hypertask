@@ -21,11 +21,18 @@ export const CustomAiProvider: FC<TCustomAIProviderProps> = ({ children, initial
     closeHandler();
   };
 
-  const [value, setValue] = useState(initialInstruction);
+  const [draft, setDraft] = useState({ saved: initialInstruction, value: initialInstruction });
   useEffect(() => {
-    setValue(initialInstruction);
+    setDraft((previous) => ({
+      saved: initialInstruction,
+      value: previous.value === previous.saved ? initialInstruction : previous.value,
+    }));
   }, [initialInstruction]);
-  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => setValue(event.target.value);
+  const value = draft.value;
+  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => setDraft((previous) => ({
+    ...previous,
+    value: event.target.value,
+  }));
   return (
     <CustomAIPromptContext.Provider
       value={{ 
