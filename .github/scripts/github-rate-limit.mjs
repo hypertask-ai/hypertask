@@ -61,6 +61,7 @@ export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promis
     return /^(--input(?:=|$)|--(?:raw-)?field(?:=|$)|-[fF])/.test(arg);
   });
   let readToken = readOnly ? env.GH_READ_TOKEN || '' : '';
+  let serverRetries = 0;
   for (;;) {
     const response = exec('gh', ['api', '--include', ...args], {
       encoding: 'utf8', timeout: 30000, maxBuffer: 32 * 1024 * 1024,
@@ -75,6 +76,10 @@ export async function ghApi(args, { exec = spawnSync, sleep = (ms) => new Promis
     }
     const status = parsed.status || Number(/HTTP (\d{3})/.exec(response.stderr || '')?.[1]);
     const wait = rateLimitWait(status, parsed.headers, parsed.body + (response.stderr || ''), now());
+    if (wait == null && [500, 502, 503, 504].includes(status) && serverRetries < 2) {
+      await sleep(++serverRetries * 1000);
+      continue;
+    }
     if (wait == null) throw new Error(`GitHub API returned HTTP ${status || 'unknown'}`);
     if (!readOnly || env.GH_API_NO_WAIT === '1') throw new GithubRateLimit(new Date(now() + wait).toISOString());
     const ms = budget.reserve(wait);
