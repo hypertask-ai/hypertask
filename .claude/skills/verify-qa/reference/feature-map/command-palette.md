@@ -38,7 +38,8 @@ Compare Light/Porcelain, AMOLED and Graphite 2 side-by-side with the approved
 Figma frame. The panel is at most 640px wide, with Search and New Task tabs
 inside the shell and 4px shell and inner corners. The footer stays on one row:
 all six hints are visible, with dictate rightmost. Board, model and attachment
-controls remain; no mic-device arrow, purple or sparkle appears.
+controls remain. The microphone sits left of Create, and the existing device
+selector remains usable. No purple or sparkle appears.
 Capture close and reopen, Enter inserting a newline, Ctrl+Shift+B opening the
 board picker, and Ctrl+U opening attachments then canceling. At 390px, confirm
 containment and the existing phone sheet. Ctrl+K and flag-off remain unchanged.
