@@ -44,7 +44,7 @@ question_check() {
     ($paragraphs | map(if $md then gsub("\\*\\*"; "") else visible end)) as $plain |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
      else $text | visible end) as $visible |
-    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
+    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "") | visible
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
     (($paragraphs | map(if $md then gsub("\\*\\*"; "") | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)") | visible else unmention | visible end) | map(select(length > 0)) | .[0]) // "") as $first |
     [
@@ -64,7 +64,7 @@ question_check() {
        then empty else "Why:" end),
       ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),
       ($visible | scan("\\bCI\\b")),
-      ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|(?<!&)#[0-9]+\\b"))
+      ($unlinked | scan("(?i)\\bPR ?#?[0-9]+\\b|#[0-9]+\\b"))
     ] | unique | join("; ")
   '
 }
