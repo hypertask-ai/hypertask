@@ -86,8 +86,8 @@ def step_sections(log, steps):
     current = executed[0]
     headers = set()
     depth = 0
-    for raw_line in log.splitlines():
-        line = re.sub(r'\x1b\[[0-9;]*m', '', raw_line)
+    log = re.sub(r'\x1b\][\s\S]*?(?:\x07|\x1b\\|\Z)|\x1b[P^_X][\s\S]*?(?:\x1b\\|\Z)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b[ -/]*[0-~]?', '', log)
+    for line in log.splitlines():
         match = re.match(r'^(\d{4}-\d\d-\d\dT\S+)\s?(.*)', line)
         moment = timestamp(match[1]) if match else None
         line = match[2] if match else line
