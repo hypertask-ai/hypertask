@@ -75,7 +75,35 @@ function comparisonBase(baseSha) {
   throw new Error('Unable to determine the PR merge base for the approval comparison after bounded history fetching.')
 }
 
-function main() {
+export async function currentBody(event, repository, token, request = fetch) {
+  const number = event.number
+  const head = event.pull_request?.head?.sha
+  if (!Number.isSafeInteger(number) || number < 1 || event.pull_request?.number !== number ||
+      typeof repository !== 'string' || !/^[\w.-]+\/[\w.-]+$/.test(repository) ||
+      event.repository?.full_name !== repository || event.pull_request?.base?.repo?.full_name !== repository ||
+      !/^[0-9a-f]{40}$/.test(head ?? '') || !token) {
+    throw new Error('Missing or invalid pull request identity or token.')
+  }
+  let pr
+  try {
+    const response = await request(`https://api.github.com/repos/${repository}/pulls/${number}`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' },
+      redirect: 'error',
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!response.ok) throw new Error()
+    pr = await response.json()
+  } catch {
+    throw new Error('Unable to read current pull request from GitHub.')
+  }
+  if (pr?.number !== number || pr?.base?.repo?.full_name !== repository || pr?.head?.sha !== head ||
+      (pr.body !== null && typeof pr.body !== 'string')) {
+    throw new Error('Current pull request metadata is invalid or has changed.')
+  }
+  return pr.body
+}
+
+async function main() {
   const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))
   if (!event.pull_request) {
     console.log('Agent scope approval: not a pull request.')
@@ -89,7 +117,8 @@ function main() {
     base: gitShow(base, file),
     head: existsSync(file) ? readFileSync(file, 'utf8') : null,
   }))
-  const { failures, approvals } = checkApproval(files, event.pull_request.body)
+  const body = await currentBody(event, process.env.GITHUB_REPOSITORY, process.env.GITHUB_TOKEN)
+  const { failures, approvals } = checkApproval(files, body)
   for (const failure of failures) console.error(`::error::${failure}`)
   for (const approval of approvals) console.log(approval)
   if (!failures.length) console.log('Agent scope approval passed.')
@@ -98,7 +127,7 @@ function main() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    process.exitCode = main()
+    process.exitCode = await main()
   } catch (error) {
     console.error(`::error::Agent scope approval: ${error.message}`)
     process.exitCode = 1
