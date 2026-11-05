@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 
 import prisma from '@/lib/prisma';
+import { mapRelatedTaskContext, relatedTaskContextSelect } from '@/lib/mcp/tasks/relatedTaskContext';
 import { extractPrLinks } from '@/lib/mcp/tasks/extractPrLinks';
 import {
   derivePullRequestDisplayState,
@@ -25,13 +26,6 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 const FULL_COMMENT_LIMIT = 20;
 const SUMMARY_COMMENT_LIMIT = 3;
 const PR_LINK_SCAN_LIMIT = 200;
-
-const relatedTaskSelect = {
-  id: true,
-  ticketNumber: true,
-  title: true,
-  uniqueIndex: true,
-} satisfies Prisma.TaskSelect;
 
 function validationError(message: string) {
   return NextResponse.json(
@@ -127,6 +121,7 @@ export async function GET(request: NextRequest) {
       status: { not: 'Deleted' },
       project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
     } satisfies Prisma.TaskWhereInput;
+    const relatedTaskSelect = relatedTaskContextSelect(ctx.user.id);
     const commentLimit = summary
       ? SUMMARY_COMMENT_LIMIT
       : FULL_COMMENT_LIMIT;
@@ -243,21 +238,18 @@ export async function GET(request: NextRequest) {
         createdAt: comment.createdAt.toISOString(),
       };
     });
-    const relatedTasks = relations.map((relation) => {
+    const relatedTasks = await Promise.all(relations.map(async (relation) => {
       const outgoing = relation.sourceTaskId === resolvedTask.id;
       const relatedTask = outgoing
         ? relation.targetTask
         : relation.sourceTask;
 
       return {
-        id: relatedTask.id,
-        ticketNumber: relatedTask.ticketNumber || undefined,
-        title: relatedTask.title,
-        uniqueIndex: relatedTask.uniqueIndex,
+        ...await mapRelatedTaskContext(relatedTask, ctx.user.id, relatedTaskAccess),
         relationType: relation.relationType,
         direction: outgoing ? 'outgoing' : 'incoming',
       };
-    });
+    }));
     const pullRequests = (
       await refreshTaskPullRequests(task.id, task.pullRequests)
     ).map((pullRequest) => {
