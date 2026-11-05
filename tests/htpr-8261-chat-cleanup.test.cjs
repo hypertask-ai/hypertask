@@ -23,7 +23,8 @@ test("listening replaces the microphone with a Dictation pill", () => {
   assert.match(audio, /recording && !compactListeningPill && "w-full"/);
   assert.match(audio, /\) : compactListeningPill \? \(/);
   assert.match(audio, /data-ai-chat-dictation-pill/);
-  assert.match(audio, />Dictation<\/span>/);
+  assert.doesNotMatch(audio, /data-ai-chat-dictation-pill[\s\S]{0,400}>Dictation<\/span>/);
+  assert.match(audio, /data-level-dots/);
   assert.match(audio, /data-ai-chat-recording-submit=\{isAiChat \|\| undefined\}/);
   assert.match(audio, /data-ai-chat-recording-cancel=\{isAiChat \|\| undefined\}/);
 });
@@ -181,7 +182,8 @@ test("chat microphone renders the compact listening controls", () => {
     const html = render(mobile);
     assert.doesNotMatch(html, /data-ai-chat-recorder="true"/);
     assert.match(html, /data-ai-chat-dictation-pill="true"[^>]*rounded-\[4px\]/);
-    assert.match(html, /aria-label="Cancel dictation" class="[^"]*rounded-\[4px\]/);
+    if (mobile) assert.match(html, /aria-label="Cancel dictation" class="[^"]*rounded-\[4px\]/);
+    else assert.doesNotMatch(html, /aria-label="Cancel dictation"/);
     assert.match(html, /aria-label="Stop dictation" class="[^"]*rounded-\[4px\]/);
   }
 });
