@@ -1,3 +1,4 @@
+import { createChatInteraction } from "@/lib/aiChat/interaction";
 import { createSessionStreams } from "@/lib/aiChat/sessionStreams";
 import { useAiChatDraft } from "./useAiChatDraft";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -124,7 +125,9 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
     surface === "my_tasks" || surface === "inbox" || surface === "calendar";
   const [chatMounted, setChatMounted] = useState<boolean>(false);
   const [minimized, setMinimized] = useState(false);
-  const [isTyping, setIsTyping] = useState(false);
+  const [, refreshInteraction] = useState(0);
+  const interaction = useMemo(() => createChatInteraction(() => refreshInteraction((version) => version + 1)), []);
+  const { isTyping, setIsTyping, sendInFlightRef, currentStreamingSession, setCurrentStreamingSession, isRecording, setIsRecording } = interaction;
   const [queuedMessages, setQueuedMessages] = useState<QueuedAiChatMessage[]>([]);
   const messageQueueRef = useRef<QueuedAiChatMessage[]>([]);
   const [, refreshStreams] = useState(0);
@@ -148,12 +151,7 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
   const streamingSessionRef = useRef<string | null>(null);
   const streamingAssistantMessageRef = useRef<string | null>(null);
   const streamingRequestRef = useRef<string | null>(null);
-  const sendInFlightRef = useRef(false);
   const settleSendRef = useRef<(() => void) | null>(null);
-  const [currentStreamingSession, setCurrentStreamingSession] = useState<
-    string | null
-  >(null);
-  const [isRecording, setIsRecording] = useState<boolean>(false);
   const [displayAiOptions] = useState<TAiModal[]>(aiOptionsWithoutOpenRouter);
   const [contextList, setContextList] = useState<MentionItem[]>([]);
   const [agentStatus, setAgentStatus] = useState<string | undefined>(undefined);
