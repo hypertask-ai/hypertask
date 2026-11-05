@@ -231,7 +231,11 @@ function validateContract(
           `${surface}: ${entry} matched ${matchingJobs.length} jobs` +
             (matchingJobs.length
               ? ` (${matchingJobs.map((job) => job.id).join(", ")})`
-              : ""),
+              : ". Registration: docs/ci.md#registering-new-command-routes. " +
+                "CI Boss owns protection updates: https://app.hypertask.ai/detail/project-11514/115 " +
+                "(Hypertask CI board 11514). " +
+                "App runners: link the app ticket/PR, exact error, and desired route, surface, and job. " +
+                "Registration must land in trusted production policy before the app rebase and rerun."),
         );
       } else assignments[surface][entry] = matchingJobs[0].id;
     }

@@ -224,6 +224,64 @@ test("five-surface parity catalog has no unreviewed drift", () => {
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 });
 
+test("unregistered entries give a CI Boss handoff without masking ambiguous mappings", (t) => {
+  const root = path.resolve(__dirname, "..");
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "parity-route-"));
+  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
+  const baseline = JSON.parse(
+    fs.readFileSync(path.join(root, "config/parity/generated-inventory.json"), "utf8"),
+  );
+  const contract = JSON.parse(
+    fs.readFileSync(path.join(root, "config/parity/contract.json"), "utf8"),
+  );
+  const entry = "hyci115 unknown-route";
+  const capabilities = path.join(temporary, "capabilities.json");
+  const contractPath = path.join(temporary, "contract.json");
+  fs.writeFileSync(
+    capabilities,
+    JSON.stringify({
+      commands: [...baseline.surfaces.cli, entry].map((name) => ({ name })),
+    }),
+  );
+  const validate = () => {
+    fs.writeFileSync(contractPath, JSON.stringify(contract));
+    return spawnSync(
+      process.execPath,
+      [
+        "scripts/parity-contract.mjs",
+        "--validate-only",
+        "--contract",
+        contractPath,
+        "--baseline",
+        "config/parity/generated-inventory.json",
+        "--cli-capabilities",
+        capabilities,
+      ],
+      { cwd: root, encoding: "utf8" },
+    );
+  };
+
+  const missing = validate();
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /cli: hyci115 unknown-route matched 0 jobs/);
+  assert.match(missing.stderr, /docs\/ci\.md#registering-new-command-routes/);
+  assert.match(missing.stderr, /https:\/\/app\.hypertask\.ai\/detail\/project-11514\/115/);
+  assert.match(missing.stderr, /Hypertask CI board 11514/);
+  assert.match(missing.stderr, /CI Boss owns protection updates/);
+  assert.match(missing.stderr, /app ticket\/PR, exact error, and desired route, surface, and job/);
+  assert.match(missing.stderr, /trusted production policy before the app rebase and rerun/);
+
+  contract.jobs[0].matches.cli.push(`^${entry}$`);
+  const registered = validate();
+  assert.equal(registered.status, 0, `${registered.stdout}\n${registered.stderr}`);
+
+  contract.jobs[1].matches.cli.push(`^${entry}$`);
+  const ambiguous = validate();
+  assert.notEqual(ambiguous.status, 0);
+  assert.match(ambiguous.stderr, /cli: hyci115 unknown-route matched 2 jobs/);
+  assert.doesNotMatch(ambiguous.stderr, /Registration: docs\/ci\.md#registering-new-command-routes/);
+});
+
 test("trusted validation rejects removals and permits only bounded concrete transitions", () => {
   const root = path.resolve(__dirname, "..");
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "parity-contract-"));
