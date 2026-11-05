@@ -664,6 +664,15 @@ jobs:
         run: npx prisma generate
 
       - name: Download test shard lists
+        id: download-test-shards
+        continue-on-error: true
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
+        with:
+          name: ci-test-shards
+          path: ci-test-shards
+
+      - name: Retry downloading test shard lists
+        if: steps.download-test-shards.outcome == 'failure'
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: ci-test-shards
