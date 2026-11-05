@@ -11,12 +11,12 @@ const mock = (name, exports) => {
 const Module = require('node:module');
 const originalLoad = Module._load;
 Module._load = function (id, ...args) { return id === 'server-only' ? {} : originalLoad.call(this, id, ...args); };
-let cookies = {}, requestHeaders, enabled, calls, response, delay, fail, drafts, access;
+let cookies = {}, requestHeaders, calls, response, delay, fail, drafts, access;
 const user = { id: 985, uid: 'qa', displayName: 'QA', email: 'qa@example.invalid', stripe_customer_id: 'billing-secret',
   UserSetting: { id: 1, onboardingTourStatus: true, snippets: 'private-settings' } };
 mock('next/headers', { cookies: async () => ({ get: key => cookies[key] ? { value: cookies[key] } : undefined }), headers: async () => { const headers = new Headers(requestHeaders); headers.set('cookie', Object.entries(cookies).map(([key, value]) => `${key}=${encodeURIComponent(value)}`).join('; ')); return headers; } });
 mock('src/lib/prisma.ts', { __esModule: true, default: { user: { findUnique: async ({ where }) => where.id === 985 ? user : null } } });
-mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true }; } });
+mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'other-flag': true }; } });
 mock('src/utils/controllers/notifications/getAll.ts', { __esModule: true, default: async id => {
   calls.push(['notifications', id]); if (fail) throw Error('read failed');
   if (delay) await new Promise(resolve => setTimeout(resolve, delay)); return response;
@@ -43,7 +43,7 @@ const row = (id, projectId = 15, overrides = {}) => ({ id, userId: 985, type: 'C
   task: { id, projectId, uniqueIndex: id, title: `Visible ${id}`, ticketNumber: `QA-${id}`, status: 'Normal', section: 'To do' },
   fromUser: { id: 986, displayName: 'Sender', email: 'sender-private@example.invalid' }, ...overrides });
 function reset() {
-  enabled = true; calls = []; fail = false; delay = 0; access = [15];
+  calls = []; fail = false; delay = 0; access = [15];
   response = { status: 200, json: { notifications: [row(1)], structuredData: { tabs: [{ project: 'unsafe stale tabs' }], data: [[777]] }, splitsNoImportant: [], showImportantSplit: false } };
   drafts = [{ id: 1, userId: 985, taskId: 1, type: 'Comment', saved: false, content: '<p>Draft preview</p>', updatedAt: '2026-10-04T01:30:00.000Z', task: row(1).task }];
   cookies = { ht_session: signSession({ id: 985, email: user.email }), nookies_user: JSON.stringify({ id: 985 }), [BOARD_DISPLAY_COOKIE]: JSON.stringify(display) };
@@ -53,6 +53,8 @@ function reset() {
 test('signed inbox uses existing controllers with verified identity, complete live projection and selected split', async () => {
   reset(); const snapshot = await readInboxDocument('/inbox?split=All', JSON.stringify(display));
   assert.ok(snapshot); assert.ok(getInboxDocument(snapshot, 985)); assert.equal(getInboxDocument(snapshot, 986), null);
+  assert.equal(getInboxDocument({ ...snapshot, flags: { ...snapshot.flags, accountId: 986 } }, 985), null);
+  assert.equal(getInboxDocument({ ...snapshot, completeness: 'display-only' }, 985), null);
   assert.deepEqual(calls, [['notifications', '985'], ['access', 985], ['drafts', 985], ['preferences', 985]]);
   assert.equal(snapshot.data.payload.structuredData.tabs[snapshot.selection.split].project, 'All');
   assert.equal(snapshot.data.payload.structuredData.data[snapshot.selection.split][0].task.title, 'Visible 1');
@@ -104,8 +106,7 @@ test('authoritative empty selection seeds the existing zero image once, but an A
   assert.equal(all.data.isInboxZero, false); assert.equal(all.data.zeroImage, null);
 });
 
-test('flag OFF, unknown or wrong-account preferences and tutorial routes use the unchanged path without inbox reads', async () => {
-  reset(); enabled = false; assert.equal(await readInboxDocument('/inbox', JSON.stringify(display)), null); assert.deepEqual(calls, []);
+test('unknown or wrong-account preferences and tutorial routes use the unchanged path without inbox reads', async () => {
   for (const value of [undefined, '{}', JSON.stringify({ ...display, accountId: 986 })]) {
     reset(); assert.equal(await readInboxDocument('/inbox', value), null); assert.deepEqual(calls, []);
   }

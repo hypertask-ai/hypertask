@@ -26,7 +26,7 @@ const task = { id: 6934, projectId: 15, uniqueIndex: 6934, ticketNumber: 'HTPR-6
   taskLabels: [{ id: 1, label: { value: 'SSR' } }], subTasks: [], assignees: [], notifications: [] };
 const snapshot = { schemaVersion: 1, buildVersion: 'test', scope: { accountId: 985, route: '/project', generation: 'request-A' },
   authorization: { outcome: 'authorized', checkedAt: '2026-10-04T00:30:00.000Z' }, now: '2026-10-04T00:30:00.000Z',
-  fetchedAt: '2026-10-04T00:30:00.000Z', flags: { accountId: 985, evaluatedAt: '2026-10-04T00:30:00.000Z', values: { 'htpr-6934-server-first-screen': true } },
+  fetchedAt: '2026-10-04T00:30:00.000Z', flags: { accountId: 985, evaluatedAt: '2026-10-04T00:30:00.000Z', values: {} },
   display: { version: 1, accountId: 985, timeZone: 'America/Los_Angeles', locale: 'en-US', boardLayout: 'board',
     theme: 'porcelain', railCollapsed: false, quickTips: false, draftsFirst: false },
   completeness: 'complete', projectsCompleteness: 'active-board-only',
@@ -277,16 +277,18 @@ test('seeded clock stays exact through hydration then advances timestamps and di
   } finally { Object.assign(global, original); }
 });
 
-test('unseeded, mismatched-account, flag-off, unknown-preference and off-route chrome does not take ownership', async () => {
+test('unseeded, mismatched-account, unknown-preference and off-route chrome does not take ownership', async () => {
   pathname = '/project';
   const child = React.createElement(Chrome, { currentUser: user });
   assert.equal(renderToString(wrap(child, null)), '');
   for (const seed of [{ ...snapshot, scope: { ...snapshot.scope, accountId: 7 } }, { ...snapshot, display: {} },
-    { ...snapshot, flags: { ...snapshot.flags, values: {} } }]) assert.equal(renderToString(wrap(child, seed)), '');
+    { ...snapshot, flags: { ...snapshot.flags, accountId: 7 } }]) assert.equal(renderToString(wrap(child, seed)), '');
   pathname = '/detail/project-15/6934';
   assert.equal(renderToString(wrap(child)), '');
   function Ownership() { return React.createElement('output', null, String(Boolean(useFirstScreenSurface(985)))); }
   assert.equal(renderToString(wrap(React.createElement(Ownership))), '<output>false</output>');
+  pathname = '/project';
+  assert.equal(renderToString(wrap(React.createElement(Ownership))), '<output>true</output>');
 });
 
 test('integration retains the old import/readiness path, offscreen policy and global live owners', () => {

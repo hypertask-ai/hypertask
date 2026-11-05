@@ -2,7 +2,6 @@ import type { IProject, IProjectsAll, IUser } from "@/models/model";
 import type { FirstScreenInitialModel, FirstScreenWireValue } from "./contract";
 import type { BoardTasksPayload } from "./boardPayload";
 
-export const BOARD_FIRST_SCREEN_FLAG = "htpr-6934-server-first-screen";
 export const BOARD_DOCUMENT_ROUTE_HEADER = "x-ht-board-document-route";
 export const BOARD_DOCUMENT_TIMEOUT_MS = 800;
 
@@ -18,8 +17,7 @@ export type BoardDocument = FirstScreenInitialModel<FirstScreenWireValue> & {
 export function getBoardDocument(snapshot: FirstScreenInitialModel<FirstScreenWireValue> | null, accountId: number, projectId?: number | null): BoardDocument | null {
   if (!snapshot || snapshot.schemaVersion !== 1 || snapshot.scope.accountId !== accountId || snapshot.scope.route !== "/project" ||
       snapshot.authorization.outcome !== "authorized" || snapshot.flags.accountId !== accountId ||
-      !Number.isFinite(Date.parse(snapshot.fetchedAt)) || snapshot.completeness !== "complete" ||
-      snapshot.flags.values[BOARD_FIRST_SCREEN_FLAG] !== true) return null;
+      !Number.isFinite(Date.parse(snapshot.fetchedAt)) || snapshot.completeness !== "complete") return null;
   const data = snapshot.data as unknown as BoardDocument["data"];
   return data?.user?.id === accountId && data.projects?.accountId === accountId &&
     data.payload?.project?.id === data.projectId &&

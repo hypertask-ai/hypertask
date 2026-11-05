@@ -67,7 +67,7 @@ const Provider = load('src/utils/Providers.tsx', {
   '@/utils/queryIndexedDbPersister': { createQueryPersister: () => ({ dispose() {} }) },
   '@/utils/helperFunctions/chunkLoadRecovery': { CHUNK_RELOAD_STORAGE_KEY: 'recovery', stripChunkRecoveryParam: () => null },
 }).default;
-const values = { 'htpr-6934-server-first-screen': true, 'htpr-7627-ticket-first-screen': true, 'visible-ticket-flag': true };
+const values = { 'htpr-7627-ticket-first-screen': true, 'visible-ticket-flag': true };
 const seed = { accountId: 985, flags: { accountId: 985, evaluatedAt: new Date().toISOString(), values },
   display: { version: 1, accountId: 985, timeZone: 'UTC', locale: 'en-US', boardLayout: 'table', theme: 'graphite',
     railCollapsed: true, quickTips: false, draftsFirst: false, isMobile: true,

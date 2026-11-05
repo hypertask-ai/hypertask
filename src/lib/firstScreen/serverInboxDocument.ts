@@ -12,7 +12,7 @@ import { fetchUserPreferenceController } from "@/utils/controllers/users/fetch_p
 import type { INotification } from "@/models/model";
 import type { IUserDraft } from "@/hooks/General/useGetUserDrafts";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
-import { BOARD_FIRST_SCREEN_FLAG, projectBoardDocumentUser } from "./boardDocument";
+import { projectBoardDocumentUser } from "./boardDocument";
 import { activeInboxDrafts, INBOX_DOCUMENT_ROUTE_HEADER, INBOX_DOCUMENT_TIMEOUT_MS, type InboxDocument } from "./inboxDocument";
 import { projectInboxFirstScreen } from "./inbox";
 import { selectInboxZeroImage } from "./inboxZero";
@@ -28,7 +28,7 @@ export async function readInboxDocument(route: string, displayCookie: string | u
   if (!display?.inbox || typeof display.inbox.nudgeDismissed !== "boolean" || typeof display.inbox.pushEnabled !== "boolean" ||
       !["default", "granted", "denied"].includes(display.inbox.pushPermission)) return null;
   const flags = await featureFlagsForUser(user.id);
-  if (flags[BOARD_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
+  if (performance.now() > deadline) return null;
   const [response, projectIds, drafts, preferences] = await Promise.all([
     notificationGetAll(String(user.id), principal), getInboxAccessibleProjectIds(user.id),
     getUserDrafts(user.id), fetchUserPreferenceController(user.id),

@@ -34,7 +34,6 @@ mock('src/lib/flags.ts', { featureFlagsForUser: async id => {
 const { signSession } = require('../src/lib/auth/session.ts');
 const { DEFAULT_TABLE_COLUMNS } = require('../src/utils/helperFunctions/Views/TableColumnsHelperFunctions.ts');
 const { BOARD_DISPLAY_COOKIE } = require('../src/lib/firstScreen/boardDisplay.ts');
-const { BOARD_FIRST_SCREEN_FLAG } = require('../src/lib/firstScreen/boardDocument.ts');
 const { HTPR_7627_TICKET_FIRST_SCREEN_FLAG: ticketFlag, default: definition } = require('../src/lib/flags/definitions/htpr-7627-ticket-first-screen.ts');
 const { readTicketShell, getServerTicketShell } = require('../src/lib/firstScreen/serverTicketShell.ts');
 const { getTicketShellSeed } = require('../src/lib/firstScreen/ticketShell.ts');
@@ -46,7 +45,7 @@ const display = { version: 1, accountId: 985, timeZone: 'UTC', locale: 'en-US', 
 function reset(route = '/detail/project-8190/26?hash=comment') {
   cookieValues = { ht_session: signSession({ id: 985 }), nookies_user: JSON.stringify({ id: 985 }), [BOARD_DISPLAY_COOKIE]: JSON.stringify(display) };
   requestHeaders = new Headers({ 'x-ht-ticket-document-route': route });
-  flags = { [BOARD_FIRST_SCREEN_FLAG]: true, [ticketFlag]: true, 'other-flag': true };
+  flags = { [ticketFlag]: true, 'other-flag': true };
   calls = []; resolveFlags = null; failRead = false; foundUser = true;
 }
 
@@ -76,10 +75,8 @@ test('RSC, absent header, missing display cookie and non-ticket paths still get 
   }
 });
 
-test('either server flag Off and invalid or other-account display preferences still refuse the shell', async () => {
-  for (const flag of [ticketFlag, BOARD_FIRST_SCREEN_FLAG]) {
-    reset(); flags[flag] = false; assert.equal(await getServerTicketShell(), null);
-  }
+test('ticket flag Off and invalid or other-account display preferences still refuse the shell', async () => {
+  reset(); flags[ticketFlag] = false; assert.equal(await getServerTicketShell(), null);
   for (const value of ['{}', JSON.stringify({ ...display, accountId: 6 }), JSON.stringify({ ...display, railCollapsed: 'true' })]) {
     reset(); cookieValues[BOARD_DISPLAY_COOKIE] = value; assert.equal(await getServerTicketShell(), null);
     assert.deepEqual(calls, [['user', 985]]);
@@ -116,8 +113,7 @@ test('client shell validation ignores any account mismatch or disabled flag', as
   for (const bad of [{ ...seed, accountId: 6 }, { ...seed, flags: { ...seed.flags, accountId: 6 } },
     { ...seed, display: { ...seed.display, accountId: 6 } }, { ...seed, flags: { ...seed.flags, evaluatedAt: 'invalid' } }])
     assert.equal(getTicketShellSeed(bad, 985), null);
-  for (const flag of [ticketFlag, BOARD_FIRST_SCREEN_FLAG])
-    assert.equal(getTicketShellSeed({ ...seed, flags: { ...seed.flags, values: { ...flags, [flag]: false } } }, 985), null);
+  assert.equal(getTicketShellSeed({ ...seed, flags: { ...seed.flags, values: { ...flags, [ticketFlag]: false } } }, 985), null);
 });
 
 test('per-user HTML rollout is Owner + QA with explicit access risk', () => {

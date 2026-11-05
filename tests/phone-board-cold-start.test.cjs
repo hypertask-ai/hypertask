@@ -45,7 +45,7 @@ function loadLayout(board, inbox = null, overrides = {}) {
 }
 
 const document = (mobile = true, theme = "porcelain", route = "/project") => ({
-  scope: { route, accountId: 985 }, display: { isMobile: mobile, theme }, flags: { values: { "htpr-6934-server-first-screen": true } },
+  scope: { route, accountId: 985 }, display: { isMobile: mobile, theme }, flags: { values: {} },
 });
 
 test("HTPR-7718: layout seeds only authenticated first document visits and isolates seed failures", async () => {

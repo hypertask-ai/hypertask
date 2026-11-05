@@ -176,7 +176,6 @@ test('new flag is discovered from its single client-safe definition with an Ever
   assert.equal(definition.kind, 'improvement');
   assert.equal(definition.defaultMode, 'EVERYONE');
   assert.equal(definition.shippedOn, '2026-10-20');
-  assert.deepEqual(definition.related, ['htpr-6934-server-first-screen']);
   assert.equal(definition.releaseRisk.risk, 'small');
 });
 

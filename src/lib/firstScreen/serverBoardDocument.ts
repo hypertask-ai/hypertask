@@ -14,7 +14,7 @@ import getBoardTasks from "@/utils/controllers/projects/getBoardTasks";
 import getFirst from "@/utils/controllers/projects/getFirst";
 import notificationGetCount from "@/utils/controllers/notifications/getCountWithBoardAccessRequests";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
-import { BOARD_DOCUMENT_ROUTE_HEADER, BOARD_DOCUMENT_TIMEOUT_MS, BOARD_FIRST_SCREEN_FLAG,
+import { BOARD_DOCUMENT_ROUTE_HEADER, BOARD_DOCUMENT_TIMEOUT_MS,
   projectBoardDocumentPayload, projectBoardDocumentUser, type BoardDocument } from "./boardDocument";
 import { hydrateBoardSections, hydrateBoardWithPayload, type BoardTasksPayload } from "./boardPayload";
 import { pinProjectViewToUrl, projectBoardFirstScreen } from "./boardView";
@@ -29,7 +29,7 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   const display = parseBoardDisplay(displayCookie, user.id, { desktopChat: true });
   if (!display) return null;
   const flags = await featureFlagsForUser(user.id);
-  if (flags[BOARD_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
+  if (performance.now() > deadline) return null;
   if (!display.isMobile && (display.board.chatPinned || (display.board.openChat && !display.board.chatSuppressed)) &&
       flags[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] !== true) return null;
   const cookieStore = await cookies();

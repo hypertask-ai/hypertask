@@ -13,7 +13,7 @@ const root = path.resolve(__dirname, '..');
 const source = p => fs.readFileSync(path.join(root, p), 'utf8');
 const project = { id: 15, title: 'Document board', tasks: [{ id: 1, title: 'Fresh task' }], section: [], sections: [] };
 const snapshot = { schemaVersion: 1, scope: { accountId: 985, route: '/project', generation: 'request-A' },
-  authorization: { outcome: 'authorized' }, fetchedAt: '2026-10-04T12:00:00.000Z', completeness: 'complete', flags: { accountId: 985, values: { 'htpr-6934-server-first-screen': true } },
+  authorization: { outcome: 'authorized' }, fetchedAt: '2026-10-04T12:00:00.000Z', completeness: 'complete', flags: { accountId: 985, values: {} },
   data: { projectId: 15, user: { id: 985 }, payload: { project, tasks: project.tasks, allViews: [] },
     projects: { accountId: 985, dataOrigin: 'network', projectsCompleteness: 'active-board-only', serverDocumentGeneration: 'request-A',
       updatedProjects: [project], notificationsCount: { all: 3, unseen: 1 } } } };
