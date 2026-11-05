@@ -126,6 +126,7 @@ const moduleMocks = {
   "@/utils/helperFunctions/Views/SubtaskHelperFunction": { getAppliedSubtaskSections: (sections) => sections },
   "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": { getFilteredEmptySections: (sections) => sections },
   "@/lib/constants/builtinViews": {
+    BUILTIN_VIEW_IDS: { blockedByMe: "builtin:blocked-by-me" },
     getActiveBoardViewId: () => "default", isBuiltinViewId: () => false,
     buildBuiltinViewContext: () => ({}), getBuiltinView: () => null,
   },

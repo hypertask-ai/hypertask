@@ -1,6 +1,6 @@
 import { ITask, ISection, ILabel, IUser, IProject } from "@/models/model";
 import { IFilterSettings, TFilter, TCondition, IFilter, TMatchFilters, IValuePropUpdatedAt, IGetBoardAppliedViewReturnBody, IFilterRuntimeContext } from "@/models/Filters/model";
-import { getFromLocalStorage, setInLocalStorage } from "@/utils/helperFunctions/helperFunctions";
+import { getFromLocalStorage, setInLocalStorage, returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { IPrioritiesConstants, IEstimateConstants } from "@/lib/constants/constants";
 import { buildViewId, getActiveFiltersFromProject } from "./ViewsHelperFunctions";
 import { daysSince, stalenessLevel } from "@/lib/staleness";
@@ -9,6 +9,8 @@ import {
   BuiltinViewContext,
   BuiltinViewId,
   getBuiltinView,
+  BUILTIN_VIEW_IDS,
+  getBlockedByMeSections,
 } from "@/lib/constants/builtinViews";
 
 
@@ -336,6 +338,12 @@ export const getFilteredSections = (
   builtinContext: BuiltinViewContext = {},
   runtimeContext?: IFilterRuntimeContext,
 ) => {
+  if (runtimeContext?.blockedByMeListEnabled && builtinViewId === BUILTIN_VIEW_IDS.blockedByMe) {
+    return getBlockedByMeSections(project, builtinContext, sections).map((section) => ({
+      ...section,
+      items: returnSortedItems(section.items, project),
+    }));
+  }
   const builtinView = getBuiltinView(builtinViewId);
   if (builtinView && (!builtinView.available || builtinView.available(builtinContext))) {
     const builtinSections = (builtinView.sectionPredicate

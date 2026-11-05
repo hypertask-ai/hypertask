@@ -12,17 +12,19 @@ import {
   BUILTIN_VIEW_IDS,
   buildBuiltinViewContext,
   getActiveBoardViewId,
+  getBlockedByMeSections,
   isBuiltinView,
   viewTabPreferenceKey,
 } from '@/lib/constants/builtinViews'
 import useOrderedViews from './useOrderedViews'
 import { useBoardRunningTimers } from '@/hooks/Task Detail/useTimeTracking'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/definitions/htpr-7804-blocked-by-me'
 import { DEFAULT_SUBTASK_SETTING } from '@/models/Views/model'
 
 const useRenderedViews = (project: IProject | null) => {
+  const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG)
   const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG)
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
@@ -84,10 +86,12 @@ const useRenderedViews = (project: IProject | null) => {
       ...savedViewTaskCounts,
       ...BUILTIN_VIEWS.map((view) => [
         view.id,
-        tasks.filter((task) => view.predicate(task, builtinContext)).length,
+        blockedByMeListEnabled && project && view.id === BUILTIN_VIEW_IDS.blockedByMe
+          ? getBlockedByMeSections(project, builtinContext).reduce((count, section) => count + section.items.length, 0)
+          : tasks.filter((task) => view.predicate(task, builtinContext)).length,
       ] as const),
     ])
-  }, [currentUser?.id, currentUser?.displayName, project, savedViewTaskCounts])
+  }, [blockedByMeListEnabled, currentUser?.id, currentUser?.displayName, project, savedViewTaskCounts])
 
   const renderedViews: BoardView[] = useMemo(() => {
     if (showEmptyViewTabs) return views
