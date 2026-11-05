@@ -599,6 +599,26 @@ test('HTPR-8260 Ctrl+J footer spells every key in words and offers a Create text
   }
 });
 
+test('composer controls follow DOM order for Graphite 2 and other layouts', async (t) => {
+  for (const [theme, keys, expected] of [
+    ['graphite-2', true, ['board', 'attachment', 'model']],
+    ['dark', true, ['board', 'model', 'attachment']],
+    ['graphite-2', false, ['model', 'attachment', 'board']],
+  ]) {
+    await withPalette(t, { tab: 'compose', theme, boards: composeBoards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
+      flags['htpr-8260-ctrlj-composer-keys'] = keys;
+      flags['htpr-8265-task-shortcuts-writer-model'] = true;
+      flags['htpr-8054-graphite-2'] = true;
+      flags['htpr-8710-restore-themes'] = true;
+      flags['htpr-7313-ctrlj-always-board-chip'] = true;
+      await rerender();
+      const attachment = document.querySelector('[data-compose-task-writer] [aria-label="Attach files"]');
+      const controls = [...attachment.parentElement.querySelectorAll('button')];
+      assert.deepEqual(controls.map((button) => button === attachment ? 'attachment' : button.hasAttribute('data-compose-board-chip') ? 'board' : 'model'), expected);
+    });
+  }
+});
+
 test('HTPR-8260 follows restored themes without changing Search', async (t) => {
   for (const [theme, restore, unified] of [
     ['graphite', true, false], ['dark', true, false], ['graphite-2', true, true],

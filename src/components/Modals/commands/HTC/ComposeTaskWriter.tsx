@@ -576,8 +576,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
-                {writerModelPicker && <div className={graphitePanel ? "order-1" : "contents"}><TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" /></div>}
+                {writerModelPicker && !graphitePanel && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
+                {writerModelPicker && graphitePanel && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}
               </div>
