@@ -238,7 +238,7 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
             return
         }
         else if (e.key === "Enter" && data) {
-            if (value === 0 && filteredData) {
+            if (value === 0 && filteredData?.[selectedIndex]) {
                 setKeyword("")
                 const indexof = data.findIndex(item => item.id === filteredData[selectedIndex].id)
                 console.log("🚀 ~ file: index.tsx:204 ~ handleKeyDown ~ indexof:", indexof)
