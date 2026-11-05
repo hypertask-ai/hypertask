@@ -336,6 +336,8 @@ mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 1
 : > "$D/log"; ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: same-agent loss exits 3" "$?" 3
 grep -q unassign "$D/log" && bad "same-agent loss called unassign" || ok "same-agent loss does not unassign"
 grep -q 'Stepping back' "$D/log" && ok "same-agent loss still posts the note" || bad "no note"
+mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 3' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a runner slot resumes past its own old claim" "$?" 0
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 : > "$D/log"; out=$(./ship-claim YPER4-999); rc=$?
 eq "flow winner exit code" "$rc" 0

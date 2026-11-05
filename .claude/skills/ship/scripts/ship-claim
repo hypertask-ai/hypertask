@@ -13,6 +13,7 @@
 # before ours is ignored only when its agent has no ticket activity in the last 6 h (`vcc activity
 # last`); if that read fails the old claim counts. Losing to the same agent identity (another
 # session) never unassigns, because that would remove the winner.
+# A RUNNER n slot runs one session at a time, so its own claims older than 6 h from another session never count.
 # A claim also stops counting (YPER4-269) when (a) its agent is no longer assigned to the ticket (read once
 # with `hypertask tasks get`; skipped if that read fails, if no agent is assigned, or if the claim is within
 # 5 min of ours, because a claimer may not have assigned itself yet), or (b) the same agent later posted a
@@ -298,7 +299,7 @@ for _ in 1 2 3 4 5 6 7 8; do
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
-      if [ "$old" = 1 ] && agent_idle "$oid" "$same"; then echo "$oid" >> "$IDLE"; continue; fi ;;
+      if [ "$old" = 1 ] && { { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ [1-9][0-9]*$ ]]; } || agent_idle "$oid" "$same"; }; then echo "$oid" >> "$IDLE"; continue; fi ;;
   esac
   break
 done
