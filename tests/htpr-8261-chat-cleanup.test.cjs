@@ -231,3 +231,9 @@ test("chat header corners follow cleanup only outside full-screen chat", () => {
     }
   } finally { view.close(); }
 });
+
+test("a minimized floating chat docks flush on the bottom edge", () => {
+  const layout = read("src/components/AI_CHAT/AI_Chat_Layout.tsx");
+  assert.match(layout, /const dockMinimizedTab = chatCleanup && minimized && !showQuickTips;/);
+  assert.match(layout, /dockMinimizedTab \? "bottom-0" : showQuickTips \? "bottom-10" : "bottom-5"/);
+});
