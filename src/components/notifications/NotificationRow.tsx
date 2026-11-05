@@ -19,6 +19,7 @@ import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import Tooltip from "../Common/Tooltip";
 import { useNotificationContext } from "@/lib/contexts/NotificationContext";
 import { HTPR_8264_INBOX_ROW_FILL_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-row-fill";
+import { HTPR_8264_INBOX_NAME_COLUMN_FLAG } from "@/lib/flags/definitions/htpr-8264-inbox-name-column";
 import { buildInboxRowFillParts, clipInboxPreview, type InboxRowFillPartKind } from "@/lib/inbox/inboxRowFill";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import TaskRowContainer from "../Common/TaskRowComponents/TaskRowContainer";
@@ -47,6 +48,7 @@ const NotificationRow = (props: Props) => {
     const { handleMouseEnter, selected, handleMouseLeave, openTask, taskRef, index, eHandler, disableButtons = false, appShellRail = false } = props
     const { notification, isIbxSlctd, selectedIds } = useNotificationContext();
     const inboxRowFill = useFlag(HTPR_8264_INBOX_ROW_FILL_FLAG);
+    const inboxNameColumn = useFlag(HTPR_8264_INBOX_NAME_COLUMN_FLAG);
     const flipMentionHierarchy = !inboxRowFill && notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
     const handleClick = () => {
@@ -67,7 +69,7 @@ const NotificationRow = (props: Props) => {
                 justify-between w-full flex-col md:flex-row`}
         >
 
-            <div className={cn('flex md:space-x-6', inboxRowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>
+            <div className={cn('flex md:space-x-6', inboxRowFill && inboxNameColumn ? 'md:w-[180px] md:min-w-[180px] md:max-w-[180px] md:shrink-0' : inboxRowFill ? 'md:shrink-0 md:min-w-0 md:max-w-[180px]' : 'md:w-[15%] md:min-w-[15%] md:max-w-[15%] md:shrink-0')}>
 
                 <div className='flex justify-between w-100 md:min-w-0'>
                     <NotificationUserName />
