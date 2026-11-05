@@ -27,8 +27,15 @@ export const resolvedThemeDomMetadata: Record<
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 
-export const availableThemeOptions = (roundedEnabled: boolean, graphite2Enabled: boolean) =>
-  graphite2Enabled
+export type LegacyTheme = "system" | "porcelain" | "graphite" | "amoled" | "dia";
+export type ThemeVisibility = { restore: boolean; loaded: boolean } & Partial<Record<LegacyTheme, boolean>>;
+
+export const availableThemeOptions = (roundedEnabled: boolean, graphite2Enabled: boolean, visibility?: ThemeVisibility) =>
+  visibility && !visibility.loaded ? [] : visibility?.restore ? themeOptions.filter(({ value }) => {
+    if (value === "rounded") return roundedEnabled;
+    if (value === "graphite-2") return graphite2Enabled;
+    return visibility[value] !== false;
+  }) : graphite2Enabled
     ? [
         { title: "Light", value: "porcelain" as const },
         { title: "AMOLED", value: "amoled" as const },
@@ -42,8 +49,14 @@ export const normalizeThemePreference = (
   theme?: string,
   roundedEnabled = false,
   graphite2Enabled = true,
+  restore = false,
 ): ThemePreference | undefined => {
-  if (graphite2Enabled) {
+  if (restore) {
+    if (theme === "dark") return "graphite";
+    if (theme === "light") return "porcelain";
+    if (theme === "rounded" && !roundedEnabled) return "system";
+    if (theme === "graphite-2" && !graphite2Enabled) return "system";
+  } else if (graphite2Enabled) {
     if (theme === "dark" || theme === "graphite") return "graphite-2";
     if (theme === "dia" || theme === "light") return "porcelain";
     if (theme === "rounded") return "system";
@@ -54,6 +67,17 @@ export const normalizeThemePreference = (
     if (theme === "light") return "porcelain";
   }
   return theme && themePreferences.has(theme) ? theme as ThemePreference : undefined;
+};
+
+export const availableThemePreference = (
+  theme: ThemePreference | undefined,
+  roundedEnabled: boolean,
+  graphite2Enabled: boolean,
+  visibility?: ThemeVisibility,
+): ThemePreference => {
+  if (!visibility?.restore) return theme ?? "system";
+  return theme && availableThemeOptions(roundedEnabled, graphite2Enabled, visibility)
+    .some((option) => option.value === theme) ? theme : "system";
 };
 
 export const themeCookieSeedValue = (

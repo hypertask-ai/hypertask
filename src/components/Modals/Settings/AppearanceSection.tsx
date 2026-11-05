@@ -1,6 +1,7 @@
 "use client";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 
+import { useThemeVisibility } from "@/hooks/useThemeVisibility";
 import { useMobileView } from "@/lib/contexts/mobileContext";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
@@ -42,10 +43,11 @@ const AppearanceThemePicker = ({ options }: { options: ReturnType<typeof availab
 };
 
 const AppearanceSection = () => {
+  const visibility = useThemeVisibility();
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const isMobile = useMobileView();
-  const availableThemes = availableThemeOptions(roundedEnabled && !isMobile, graphite2Enabled);
+  const availableThemes = availableThemeOptions(roundedEnabled && !isMobile, graphite2Enabled, visibility);
 
   return (
     <SettingsSectionShell title="Appearance">

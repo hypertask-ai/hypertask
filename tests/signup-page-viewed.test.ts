@@ -77,7 +77,7 @@ function harness() {
     "@/lib/fonts/inter": { inter: {} },
     "@/lib/fonts/newsreader": { newsreader: {} },
     "@/lib/fonts/ibmPlexSans": { ibmPlexSans: {} },
-    "@/lib/themePreferences": { normalizeThemePreference: () => "porcelain", resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#fff" } } },
+    "@/lib/themePreferences": { availableThemePreference: (x: string) => x, normalizeThemePreference: () => "porcelain", resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#fff" } } },
     "@/lib/themeBootScript": { buildThemeBootScript: () => "" },
     "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
     "@/components/analytics/StoreUTM": { default: "UTMCookieHandler" },

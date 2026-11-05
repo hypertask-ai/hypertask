@@ -1,3 +1,4 @@
+import { readThemeVisibility } from "@/lib/themeVisibilityServer";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -42,7 +43,13 @@ export async function POST(request: NextRequest) {
   try {
     const input = actionSchema.safeParse(await request.json());
     if (!input.success) return NextResponse.json({ error: "Invalid setting action" }, { status: 400 });
-    const scope: SettingsScope | undefined = input.data.scope ? { ...input.data.scope, theme: normalizeThemePreference(request.cookies.get("theme")?.value, true, await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId)) ?? "system" } : undefined;
+    let scope: SettingsScope | undefined;
+    if (input.data.scope) {
+      const [graphite2, visibility] = await Promise.all([
+        isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId), readThemeVisibility(userId),
+      ]);
+      scope = { ...input.data.scope, theme: normalizeThemePreference(request.cookies.get("theme")?.value, true, graphite2, visibility.restore) ?? "system" };
+    }
     const result = await actOnSettingProposal(userId, input.data.id, input.data.action, scope);
     const response = NextResponse.json(result);
     if ("theme" in result && result.theme) response.cookies.set("theme", result.theme, { maxAge: 600 * 60 * 24 * 7, path: "/", sameSite: "lax" });

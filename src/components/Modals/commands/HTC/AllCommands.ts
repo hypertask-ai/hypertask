@@ -1306,6 +1306,7 @@ export const getAllCommands = (
   shareKeyLabels = false,
   removeImageGeneration = false,
   graphite2Enabled = false,
+  visibility?: import("@/lib/themePreferences").ThemeVisibility,
 ): CommandGroup[] => {
   const themeCommands: Record<(typeof themeOptions)[number]["value"], ICommandList> = {
     system: {
@@ -1342,7 +1343,7 @@ export const getAllCommands = (
     rounded: { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "material rounded theme appearance" },
   };
   const appearanceCommands = { ...appearance, commandLists: [
-    ...availableThemeOptions(roundedEnabled, graphite2Enabled).map(({ value, title }) => ({ ...themeCommands[value], name: title })),
+    ...availableThemeOptions(roundedEnabled, graphite2Enabled, visibility).map(({ value, title }) => ({ ...themeCommands[value], name: title })),
     ...appearance.commandLists,
   ] };
   const navigate = getNavigateCommands(commandOptions);

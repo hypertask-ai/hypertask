@@ -1,3 +1,4 @@
+import { HTPR_8710_RESTORE_THEMES_FLAG, themeFlagKeys } from "@/lib/themeFlags";
 import { HTPR_8145_PHONE_ZOOM_FLAG } from "@/lib/flags/definitions/htpr-8145-phone-zoom";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG } from "@/lib/flags/definitions/htpr-7650-ai-chat-open-switches";
@@ -26,6 +27,7 @@ import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
+  availableThemePreference,
   resolvedThemeDomMetadata,
   resolveInitialThemeColor,
   resolveThemePreference,
@@ -117,10 +119,24 @@ export default async function RootLayout(
     value: authConfig.cookies.defaultTheme,
     name: authConfig.cookies.theme,
   };
-  const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
-  const graphite2Enabled = await isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, analyticsSession?.id ?? -1);
+  const themeUserId = analyticsSession?.id ?? -1;
+  const [roundedEnabled, graphite2Enabled, restoreThemes] = await Promise.all([
+    isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, themeUserId),
+    isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, themeUserId),
+    isFeatureEnabled(HTPR_8710_RESTORE_THEMES_FLAG, themeUserId),
+  ]);
+  const [system, porcelain, graphite, amoled, dia] = restoreThemes
+    ? await Promise.all([
+        isFeatureEnabled(themeFlagKeys.system, themeUserId),
+        isFeatureEnabled(themeFlagKeys.porcelain, themeUserId),
+        isFeatureEnabled(themeFlagKeys.graphite, themeUserId),
+        isFeatureEnabled(themeFlagKeys.amoled, themeUserId),
+        isFeatureEnabled(themeFlagKeys.dia, themeUserId),
+      ])
+    : [false, false, false, false, false];
+  const visibility = { restore: restoreThemes, loaded: true, system, porcelain, graphite, amoled, dia };
   const flagReaderSubscribe = await isFeatureEnabled(HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG, analyticsSession?.id ?? -1);
-  const themeValue = normalizeThemePreference(theme.value, roundedEnabled, graphite2Enabled) ?? "system";
+  const themeValue = availableThemePreference(normalizeThemePreference(theme.value, roundedEnabled, graphite2Enabled, restoreThemes), roundedEnabled, graphite2Enabled, visibility);
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
   const initialThemeColor = resolveInitialThemeColor(themeValue);
@@ -157,6 +173,7 @@ export default async function RootLayout(
               systemDarkTheme,
               roundedEnabled,
               graphite2Enabled,
+              visibility,
             ),
           }}
         />

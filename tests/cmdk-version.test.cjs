@@ -52,7 +52,7 @@ function renderPalette({ mobile = false, env = buildEnv, rows = 2 } = {}) {
       useRecoilValue: (atom) => atom.default,
       useSetRecoilState: () => noop,
     },
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlagLoaded: () => true, useFlag: () => false },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/lib/contexts/TourContext": { useTourContext: () => ({ endTour: noop }) },
     "@/hooks/MultiPages/useGetAllProjectsMinimal": { useGetAllProjectsMinimal: () => ({ data: [] }) },
