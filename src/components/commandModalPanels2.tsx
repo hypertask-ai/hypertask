@@ -94,8 +94,10 @@ function renderPaletteModalGroup1(context: Context) {
           {commandMode === CommandMode.TrialModal && _currentProject && (
             <TrialModal closeCallback={boardCloseHandler} />
           )}
-          {commandMode === CommandMode.MoveTaskToBoard && (
+          {commandMode === CommandMode.MoveTaskToBoard && (!hasBulkSelection || kanbanBulkSelection?.bulkMoveBoardEnabled) && (
             <MoveTaskGlobal
+              bulkSourceProjectId={hasBulkSelection ? bulkActionProjectId ?? undefined : undefined}
+              onBulkMove={hasBulkSelection && kanbanBulkSelection?.bulkMoveBoardEnabled ? kanbanBulkSelection.moveSelectedToBoard : undefined}
               closeHTC={() => {
                 boardCloseHandler();
                 refreshRowTaskList();

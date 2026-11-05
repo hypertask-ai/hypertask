@@ -32,6 +32,8 @@ type IProps = {
     closeHTC: () => void;
     onSelectBoard?: (boardId: number) => void;
     boards?: IProject[];
+    bulkSourceProjectId?: number;
+    onBulkMove?: (projectId: number, sectionId: number) => Promise<void>;
 }
 const MoveTaskGlobal = (props: IProps) => {
     const composeBoardPicker = Boolean(props.onSelectBoard);
@@ -45,7 +47,10 @@ const MoveTaskGlobal = (props: IProps) => {
             || (a.title ?? a.name ?? "").localeCompare(b.title ?? b.name ?? "")
         );
     }, [composeBoardPicker, usageOrderEnabled, props.boards, lastUsedBoards]);
-    const data = composeBoardPicker ? orderedBoards : projects.data;
+    const data = useMemo(() => {
+        const boards = composeBoardPicker ? orderedBoards : projects.data;
+        return props.onBulkMove ? boards?.filter((board: IProject) => board.id !== props.bulkSourceProjectId) : boards;
+    }, [composeBoardPicker, orderedBoards, projects.data, props.onBulkMove, props.bulkSourceProjectId]);
     const isLoading = composeBoardPicker ? !props.boards : projects.isLoading;
     const [inViewObject, __] = useRecoilState(inViewObjectAtom);
 
@@ -86,6 +91,10 @@ const MoveTaskGlobal = (props: IProps) => {
         try {
             console.log('Submitting...', values);
             setRedirectingToTask(true)
+            if (props.onBulkMove) {
+                await props.onBulkMove(values.projectId, values.sectionId);
+                return;
+            }
             const body = {
                 sectionId: formik.values.sectionId,
                 projectId: formik.values.projectId,
@@ -129,17 +138,21 @@ const MoveTaskGlobal = (props: IProps) => {
             return;
         }
         if (currentScreenValue === 0) {
+            const board = data[callbackIndexorString];
+            if (props.onBulkMove && board.id === props.bulkSourceProjectId) return;
             formik.setValues({
                 ...formik.values,
-                projectId: data[callbackIndexorString].id
+                projectId: board.id
             })
+            const columns = returnActiveOrDefaultColumnSections(board) ?? [];
+            const availableSections = new Map((board.section ?? []).filter((section: { visibility?: boolean; deleted?: boolean }) => section.visibility !== false && !section.deleted).map((section: { id?: number }) => [section.id, section] as const));
             setCurrentScreen({
                 ...currentScreen,
                 value: 1,
                 next: 2,
                 prev: 0,
                 title: "Select Column",
-                data: returnActiveOrDefaultColumnSections(data[callbackIndexorString])??[]
+                data: props.onBulkMove ? columns.flatMap((section: { id?: number }) => { const current = availableSections.get(section.id); return current ? [current] : []; }) : columns
             })
         }
         else if (currentScreenValue === 1) {

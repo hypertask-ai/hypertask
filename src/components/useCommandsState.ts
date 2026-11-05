@@ -94,6 +94,7 @@ export function useCommandsState(context: Context) {
         task: undefined,
         taskOptions: undefined,
         bulkSelectionCount: bulkSelection?.selectedCount,
+        bulkMoveBoardEnabled: !!kanbanBulkSelection?.bulkMoveBoardEnabled,
         kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!kanbanBulkSelection,
       }
     : contextOptions && {
