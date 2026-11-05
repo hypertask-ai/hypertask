@@ -5,7 +5,7 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseOnly = false, corruptBaseline = false, webpackBase = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
+function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseDependenciesCached, headDependenciesCached, baseOnly = false, corruptBaseline = false, webpackBase = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
   const filename = path.join(__dirname, "../scripts/visual-regression-ci.mjs");
   const code = readFileSync(filename, "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, "").replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
   const calls = [];
@@ -16,6 +16,8 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
   let pid = 100;
   const env = { GITHUB_ACTIONS: "true", GITHUB_WORKSPACE: "/workspace", RUNNER_TEMP: "/temp", DATABASE_URL: "postgresql://127.0.0.1/fixture", REDIS_URL: "redis://localhost", GITHUB_STEP_SUMMARY: summaryPath };
   if (cachedBase) env.VISUAL_BASE_CACHE_HIT = "true";
+  if (baseDependenciesCached !== undefined) env.VISUAL_BASE_DEPENDENCIES_CACHED = baseDependenciesCached;
+  if (headDependenciesCached !== undefined) env.VISUAL_HEAD_DEPENDENCIES_CACHED = headDependenciesCached;
   if (baseOnly) env.VISUAL_BASE_ONLY = "true";
   const context = {
     path, pathToFileURL, URL, AbortSignal,
@@ -185,6 +187,37 @@ test("production warming captures base only; an ordinary miss still runs both li
   const miss = fixture();
   await miss.main();
   assert.deepEqual(miss.calls, [...commands("base"), ...commands("head")]);
+});
+
+test("dependency cache hits skip only their own install and regenerate flags", async () => {
+  for (const [base, head] of [["true", "false"], ["false", "true"], ["true", "true"], ["TRUE", "1"]]) {
+    const run = fixture({ baseDependenciesCached: base, headDependenciesCached: head });
+    await run.main();
+    const expected = phase => {
+      const lifecycle = commands(phase);
+      if ((phase === "base" ? base : head) === "true") lifecycle[0] = `${phase}: npm run flags:generate`;
+      return lifecycle;
+    };
+    assert.deepEqual(run.calls, [...expected("base"), ...expected("head")]);
+  }
+});
+
+test("cached dependencies still validate Playwright versions", async () => {
+  const run = fixture({ baseDependenciesCached: "true", headDependenciesCached: "true", playwrightVersions: { base: "1.64.1", head: "1.64.2" } });
+  await assert.rejects(run.main(), /base has 1\.64\.1, head has 1\.64\.2/);
+  assert.equal(run.calls.at(-1), "head: npm run flags:generate");
+});
+
+test("cached dependencies must match each checkout's locked Playwright version", async () => {
+  for (const phase of ["base", "head"]) {
+    const run = fixture({
+      baseDependenciesCached: "true", headDependenciesCached: "true",
+      playwrightVersions: { base: "1.64.1", head: "1.64.1", [phase]: "1.64.2" },
+      lockVersions: { base: "1.64.1", head: "1.64.1" },
+    });
+    await assert.rejects(run.main(), new RegExp(`${phase} installed Playwright 1\\.64\\.2 but its package-lock\\.json locks 1\\.64\\.1`));
+    assert.equal(run.calls.at(-1), `${phase}: npm run flags:generate`);
+  }
 });
 
 test("base and head must install one Playwright version so the screenshots compare", async () => {
