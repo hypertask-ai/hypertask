@@ -80,8 +80,28 @@ const AgentRunActivityRow = ({
   const laneAuthor = showLaneAuthor && activity.agentName ? (
     <span className="shrink-0">{activity.agentName}</span>
   ) : null;
-  const Icon = ACTIVITY_ICONS[type];
+  const Icon = collapseLane ? Lightbulb : ACTIVITY_ICONS[type];
+  const icon = (
+    <Icon
+      className={cn(
+        collapseLane ? "h-3.5 w-3.5 shrink-0" : "mt-0.5 h-3 w-3 shrink-0",
+        !collapseLane && type === "error" && "text-destructive",
+      )}
+      strokeWidth={1.75}
+      aria-hidden
+    />
+  );
   const link = safeAgentRunActivityLink(activity.link);
+  const linkIcon = (
+    <ExternalLink
+      className={cn(
+        "mt-0.5 h-3 w-3 shrink-0",
+        collapseLane && "opacity-0 group-hover/link:opacity-100 focus-visible:opacity-100",
+      )}
+      strokeWidth={1.75}
+      aria-hidden
+    />
+  );
   const collapsible = collapseLane;
   const collapsed = collapsible && (override?.version === agentLaneFold.version && override.taskId === taskId ? override.collapsed : laneCollapsed);
   const toggleRow = () => {
@@ -117,14 +137,7 @@ const AgentRunActivityRow = ({
         onKeyDown={rowKeyDown}
         className="my-[4px] flex h-[29px] min-w-0 cursor-pointer items-center gap-2 rounded-[4px] border-l-4 border-transparent px-4 py-1 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
       >
-        <Icon
-          className={cn(
-            "h-3.5 w-3.5 shrink-0",
-            activity.type === "error" && "text-destructive",
-          )}
-          strokeWidth={1.75}
-          aria-hidden
-        />
+        {icon}
         {laneAuthor}
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           {activity.text}
@@ -169,7 +182,7 @@ const AgentRunActivityRow = ({
               },
             } : {})}
           >
-            <Lightbulb className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
+            {icon}
             <span>Agent</span>
             {time}
           </div>
@@ -188,7 +201,7 @@ const AgentRunActivityRow = ({
                 className="group/link inline-flex items-start gap-1 hover:text-white-black"
               >
                 <span>{activity.text}</span>
-                <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 opacity-0 group-hover/link:opacity-100 focus-visible:opacity-100" strokeWidth={1.75} aria-hidden />
+                {linkIcon}
               </a>
             ) : activity.text}
             {activity.type === "elicitation" && activity.options ? (
@@ -243,14 +256,7 @@ const AgentRunActivityRow = ({
         )}
       >
         <div className="flex min-w-0 items-start gap-1.5">
-          <Icon
-            className={cn(
-              "mt-0.5 h-3 w-3 shrink-0",
-              activity.type === "error" && "text-destructive",
-            )}
-            strokeWidth={1.75}
-            aria-hidden
-          />
+          {icon}
           {laneAuthor}
           {link ? (
             <a
@@ -261,11 +267,7 @@ const AgentRunActivityRow = ({
               className="inline-flex min-w-0 items-start gap-1 text-white-black hover:text-hypertasks-purple"
             >
               <span className="break-words">{activity.text}</span>
-              <ExternalLink
-                className="mt-0.5 h-3 w-3 shrink-0"
-                strokeWidth={1.75}
-                aria-hidden
-              />
+              {linkIcon}
             </a>
           ) : (
             <span className="min-w-0 break-words">{activity.text}</span>
