@@ -4,19 +4,16 @@ import useInput from "@/hooks/General/useInput";
 import useLoadingState from "@/hooks/General/useLoadingState";
 import { REACT_QUERY_KEYS } from "@/lib/constants/constants";
 import { TCustomAIProviderProps, TCustomPromptContextType } from "@/models/Contexts";
-import { currentProjectAtom } from "@/store";
-import { createContext, FC, ReactNode, useContext } from "react";
+import { createContext, FC, useContext } from "react";
 import toast from "react-hot-toast";
-import { useRecoilState } from "@/lib/state";
 
 export const CustomAIPromptContext = createContext<TCustomPromptContextType | undefined>(undefined);
 
-export const CustomAiProvider: FC<TCustomAIProviderProps> = ({ children, projectId, closeHandler }) => {
+export const CustomAiProvider: FC<TCustomAIProviderProps> = ({ children, initialInstruction, projectId, closeHandler }) => {
   const { uploadInProgress, uploadingFiles, setUploadingFiles } = useFileUploadingStates(
     REACT_QUERY_KEYS.CustomPrompt(projectId),
     REACT_QUERY_KEYS.uploadStates
   );
-    const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom)
     const { loading, setLoading } = useLoadingState()
 
   const onModalClose = () => {
@@ -25,7 +22,7 @@ export const CustomAiProvider: FC<TCustomAIProviderProps> = ({ children, project
   };
 
   const { handleChange, input: value } = useInput({
-    defaultValue: _currentProject?.ai_custom_instructions?.[0]?.customInstruction ?? ""
+    defaultValue: initialInstruction
 })
   return (
     <CustomAIPromptContext.Provider

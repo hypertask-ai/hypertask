@@ -89,6 +89,7 @@ export const BoardAiSettingsProvider = ({
       key={board.id}
       closeHandler={() => undefined}
       projectId={board.id}
+      initialInstruction={customInstructions?.customInstruction ?? ""}
     >
       {children}
     </CustomAiProvider>

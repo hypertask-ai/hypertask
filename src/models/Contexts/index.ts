@@ -10,6 +10,7 @@ export interface TCustomPromptContextType extends TReturnUseFileUploadingStates 
 
 export interface TCustomAIProviderProps {
   children: ReactNode;
+  initialInstruction: string;
   projectId: number;
   closeHandler: () => void;
 
