@@ -20,7 +20,7 @@ import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { activeItemAtom, showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
-import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
+import { BULK_MOVE_BOARD_LIMIT, getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
 
@@ -266,6 +266,10 @@ export const KanbanBulkSelectionProvider = ({
   const moveSelectedToBoard = useCallback(async (projectId: number, sectionId: number) => {
     if (!bulkMoveBoardEnabled || isProcessing || selectedTasks.length === 0) return;
     const snapshot = selectedTasks;
+    if (snapshot.length > BULK_MOVE_BOARD_LIMIT) {
+      toast.error(`Select at most ${BULK_MOVE_BOARD_LIMIT} tasks to move to another board.`);
+      return;
+    }
     const sourceProjectId = snapshot[0]?.projectId;
     if (!sourceProjectId || snapshot.some((task) => task.projectId !== sourceProjectId)) return;
     setIsProcessing(true);

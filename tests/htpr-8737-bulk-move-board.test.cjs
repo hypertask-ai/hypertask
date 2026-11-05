@@ -115,3 +115,45 @@ test('plan failures reach each selected family member', async () => {
   assert.deepEqual(result.failedIds, [3, 1, 2]);
   assert.ok(result.issues.every(issue => issue.message.includes('Upgrade to move more tickets')));
 });
+
+test('board moves accept 500 selections and stop 501 before sending', async () => {
+  const { loader, mount, React } = require('./helpers/htpr-7260-ui.cjs');
+  for (const count of [500, 501]) {
+    const ui = mount();
+    const requests = [];
+    const errors = [];
+    let selection;
+    const loadUI = loader({
+      '@/hooks/useFlag': { useFlag: () => true },
+      '@/lib/state': { useSetRecoilState: () => () => {}, useRecoilValue: () => null },
+      '@/store': {},
+      '@/utils/helperFunctions/helperFunctions': { returnIfModalOrInputActive: () => false },
+      '@/lib/boardSync/reconcileActiveBoardQuery': { reconcileActiveBoardQuery: async () => {} },
+      'react-hot-toast': { default: { error: message => errors.push(message), success: () => {} } },
+      'axios': { default: { post: async (url, body) => {
+        requests.push({ url, body });
+        return { data: { movedIds: body.ids, failedIds: [], issues: [] } };
+      } } },
+    });
+    const { KanbanBulkSelectionProvider, useKanbanBulkSelection } = loadUI('src/lib/contexts/Kanban/BulkSelectionContext.tsx');
+    function Probe() { selection = useKanbanBulkSelection(); return null; }
+    const items = Array.from({ length: count }, (_, i) => ({ id: i + 1, sectionId: 10, projectId: 10 }));
+    const noop = async () => {};
+    try {
+      ui.render(React.createElement(KanbanBulkSelectionProvider, { items, onArchiveTask: noop,
+        onArchiveUndo: noop, onMoveTask: noop, onAssignTask: noop, onLabelTask: noop }, React.createElement(Probe)));
+      React.act(() => selection.selectAll());
+      await React.act(async () => selection.moveSelectedToBoard(20, 30));
+      if (count === 500) {
+        assert.equal(requests.length, 1);
+        assert.equal(requests[0].body.ids.length, 500);
+        assert.equal(selection.selectedCount, 0);
+        assert.deepEqual(errors, []);
+      } else {
+        assert.equal(requests.length, 0);
+        assert.equal(selection.selectedCount, 501);
+        assert.match(errors[0], /at most 500/);
+      }
+    } finally { ui.close(); }
+  }
+});

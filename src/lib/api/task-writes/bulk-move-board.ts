@@ -10,11 +10,12 @@ import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDiffer
 import { isPlanLimitReachedError } from "@/lib/planLimits";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { broadcastBoardChange } from "@/lib/realtime/server";
+import { BULK_MOVE_BOARD_LIMIT } from "@/lib/kanbanBulkSelection";
 
 const positiveId = z.number().int().positive();
 
 export const POST = taskWriteRoute({
-  schema: z.object({ ids: z.array(positiveId).min(1).max(500), sourceProjectId: positiveId, projectId: positiveId, sectionId: positiveId, agentId: z.string().optional() }),
+  schema: z.object({ ids: z.array(positiveId).min(1).max(BULK_MOVE_BOARD_LIMIT), sourceProjectId: positiveId, projectId: positiveId, sectionId: positiveId, agentId: z.string().optional() }),
   validationMessage: "Invalid move request",
   prepare: async (session) => ({ session, currentUser: await loadSessionUserRecord(session.userId) }),
   operation: async ({ ids, sourceProjectId, projectId, sectionId }, { session, currentUser }) => {
