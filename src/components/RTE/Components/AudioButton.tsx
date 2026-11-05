@@ -679,7 +679,7 @@ export const AudioButton = ({
                 className={cn(
                   "group relative flex cursor-pointer items-center touch-manipulation",
                   prominent ? prominentClassName : "h-[32px]",
-                  primaryDesktopAiMic && "h-7 w-7 justify-center rounded-[4px] bg-white-black text-white-black-inverted hover:opacity-80",
+                  primaryDesktopAiMic && "h-7 w-7 justify-center rounded-[4px] bg-shadcn-primary text-primary-foreground hover:opacity-80",
                   disabled && "cursor-not-allowed opacity-50",
                   className,
                 )}
