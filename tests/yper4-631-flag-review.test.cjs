@@ -193,11 +193,17 @@ stubModule("src/lib/mcp/auth.ts", {
     return ctx;
   },
 });
-stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async () => roleRefusal?.clone() ?? null });
+const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
+const { getAgentRole, roleMeets, insufficientScopeResponse } = jiti(path.join(root, "src/lib/mcp/agents/scopes.ts"));
+stubModule("src/lib/mcp/agents/readRoleGuard.ts", { requireAgentWriteRole: async (ctx, options) => {
+  if (!options?.alwaysEnforce) return roleRefusal?.clone() ?? null;
+  if (!ctx.agentId) return null;
+  const role = ctx.agentRole ?? await getAgentRole(ctx);
+  return roleMeets(role, "write") ? null : insufficientScopeResponse(role, "write");
+} });
 stubModule("src/lib/mcp/routeWrapper.ts", { wrapMcpRoute: (callback) => { wrapped++; return callback; } });
 stubModule("src/lib/realtime/server.ts", { broadcastFeatureFlagsChange: async () => { broadcasts++; } });
 delete process.env.REDIS_URL;
-const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const flags = jiti(path.join(root, "src/lib/flags.ts"));
 const { PATCH } = jiti(path.join(root, "src/app/api/mcp/flags/route.ts"));
 const { POST } = jiti(path.join(root, "src/app/api/mcp/flags/reviews/route.ts"));
