@@ -47,6 +47,8 @@ stubModule(path.join(root, "src/lib/prisma.ts"), {
   },
 });
 
+stubModule(path.join(root, "src/lib/flags.ts"), { isFeatureEnabled: async () => false });
+
 stubModule(path.join(root, "src/lib/subscription.ts"), {
   generateCustomerPortalLink: async (customerId) => {
     portalCustomerIds.push(customerId);

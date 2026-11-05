@@ -85,3 +85,9 @@ Live QA remains read-only: record actual plan snapshots and reload persistence. 
 On an owned Free QA scope with both switches enabled, create the third and twentieth board through the app and MCP/API; read each back after creation. Restore an empty archived test board. Check Slack and AI board creation only with configured QA integrations; otherwise record UNREACHABLE with the reason. Verify a ticket or attachment refusal still applies when its respective bypass is Off. Never alter a rollout or plan to manufacture a live path.
 
 Settings > Team > Plans must show Unlimited boards, retaining the correct ticket and file lines. Capture desktop and phone in all themes, reload, and compare paid plan prices against baseline. Archive only boards created during this run.
+
+## Dedicated billing portal
+
+`htpr-7980-stripe-portal-billing` defaults to Owner + QA because it changes billing. The existing Billing section shows one plan card when available. An unsubscribed Free owner can open checkout; any Stripe-linked customer can use the dedicated portal, including Free or canceled teams. Other members cannot launch either action. Flag off preserves existing controls. Missing, unready, or rejected portal configuration restores existing controls.
+
+Readiness checks the authenticated user, ticket flag, and live dedicated configuration policy without creating a session. Provider errors retain existing controls. The server checks ownership and the ticket flag. Checkout refuses existing subscriptions, pending completed checkouts, and complimentary teams. The dedicated portal requires `STRIPE_BILLING_PORTAL_CONFIGURATION_ID` and validates price-only changes, period-end cancellation, prorations, continued trials, unchanged billing anchors and no quantity editing. Configuration and live payment verification remain separate release steps; do not create Stripe resources during verification without approval.

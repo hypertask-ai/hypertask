@@ -1,0 +1,171 @@
+const assert = require("node:assert/strict");
+const path = require("node:path");
+const { test, beforeEach } = require("node:test");
+const root = path.resolve(__dirname, "..");
+const priceIds = ["price_byok_month", "price_byok_year", "price_pro_month", "price_pro_year"];
+for (const [index, name] of ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"].entries()) {
+  process.env[`NEXT_PUBLIC_STRIPE_${name}`] = priceIds[index];
+}
+process.env.STRIPE_SECRET_KEY = "sk_test_fixture";
+process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
+function stub(rel, exports) {
+  const filename = path.join(root, rel);
+  require.cache[filename] = { id: filename, filename, loaded: true, exports };
+}
+let user, team, enabled, flagLookups, retrieved, sessions, legacy;
+let configuration, retrievalError;
+const validConfiguration = () => ({
+  id: "bpc_dedicated", active: true, is_default: false, livemode: false,
+  metadata: { ticket: "HTPR-7980" },
+  features: {
+    customer_update: { enabled: true, allowed_updates: ["email"] },
+    invoice_history: { enabled: true }, payment_method_update: { enabled: true },
+    subscription_cancel: { enabled: true, mode: "at_period_end" },
+    subscription_update: {
+      enabled: true, default_allowed_updates: ["price"],
+      products: [{ product: "prod_byok", prices: priceIds.slice(0, 2), adjustable_quantity: { enabled: false } },
+        { product: "prod_pro", prices: priceIds.slice(2), adjustable_quantity: { enabled: false } }],
+      proration_behavior: "create_prorations", billing_cycle_anchor: "unchanged",
+      trial_update_behavior: "continue_trial", schedule_at_period_end: { conditions: [] },
+    },
+  },
+});
+stub("src/lib/auth/serverUser.ts", { getServerCookieUser: async () => user });
+stub("src/lib/prisma.ts", { default: { team: { findUnique: async () => team } } });
+stub("src/lib/flags.ts", { isFeatureEnabled: async (_key, userId) => { flagLookups.push(userId); return enabled; } });
+stub("src/lib/subscription.ts", { generateCustomerPortalLink: async (customerId) => { legacy.push(customerId); return "https://billing.stripe.test/legacy"; } });
+stub("src/lib/stripe.ts", { getStripeInstance: () => ({ billingPortal: {
+  configurations: { retrieve: async (id, params) => { retrieved.push({ id, ...params }); if (retrievalError) throw retrievalError; return configuration; } },
+  sessions: { create: async (params) => { sessions.push(params); return { url: "https://billing.stripe.test/dedicated" }; } },
+} }) });
+const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
+const { GET, POST } = jiti(path.join(root, "src/app/api/stripe/billing-portal/route.ts"));
+const request = (body = { teamId: "team_owned" }) => new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
+  method: "POST", body: JSON.stringify({ intent: "settings-billing-portal", ...body }), headers: { "Content-Type": "application/json" },
+});
+beforeEach(() => {
+  user = { id: 985, accountId: "account_owned" };
+  team = { googleAccount: { userId: 985 }, googleAccountId: "account_owned", stripe_customer_id: "cus_owned" };
+  enabled = true; flagLookups = []; retrieved = []; sessions = []; legacy = [];
+  configuration = validConfiguration(); retrievalError = null;
+  process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = "bpc_dedicated";
+});
+test("owned team uses only the explicit validated configuration and trusted customer", async () => {
+  const response = await POST(request({ teamId: "team_owned", customer: "cus_attacker", configuration: "bpc_attacker" }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { url: "https://billing.stripe.test/dedicated" });
+  assert.deepEqual(flagLookups, [985]);
+  assert.deepEqual(retrieved, [{ id: "bpc_dedicated", expand: ["features.subscription_update.products"] }]);
+  assert.deepEqual(sessions, [{ customer: "cus_owned", configuration: "bpc_dedicated", return_url: "https://app.hypertask.ai/settings/billing" }]);
+  assert.deepEqual(legacy, []);
+});
+test("untrusted caller cannot resolve flag, config, customer or portal session", async () => {
+  user = { id: 42, accountId: "account_other" };
+  assert.equal((await POST(request())).status, 403);
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
+  user = null;
+  assert.equal((await POST(request())).status, 401);
+});
+test("non-object request bodies refuse before resolving billing access", async () => {
+  for (const body of [null, "team_owned", 42]) {
+    const response = await POST(new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
+      method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json" },
+    }));
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
+});
+test("owner linked through the authenticated account remains allowed", async () => {
+  user.id = 986;
+  assert.equal((await POST(request())).status, 200);
+  assert.equal(sessions.length, 1);
+});
+test("flag off rejects the new intent and retains the legacy portal", async () => {
+  enabled = false;
+  assert.equal((await POST(request())).status, 403);
+  assert.equal((await POST(request({ intent: undefined }))).status, 200);
+  assert.deepEqual(legacy, ["cus_owned"]);
+  assert.deepEqual(retrieved, []);
+  assert.deepEqual(sessions, []);
+});
+test("legacy billing controls remain available without a dedicated configuration", async () => {
+  delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+  assert.equal((await POST(request({ teamId: "team_owned", intent: undefined }))).status, 200);
+  assert.deepEqual(legacy, ["cus_owned"]);
+  assert.deepEqual([flagLookups, retrieved, sessions], [[], [], []]);
+});
+test("legacy requests cannot bypass team ownership", async () => {
+  user = { id: 42, accountId: "account_other" };
+  assert.equal((await POST(request({ teamId: "team_owned", intent: undefined }))).status, 403);
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
+});
+test("missing dedicated config refuses rather than falling back to default", async () => {
+  delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+  assert.equal((await POST(request())).status, 503);
+  assert.deepEqual([retrieved, sessions, legacy], [[], [], []]);
+});
+for (const [name, mutate] of [
+  ["default config", (c) => { c.is_default = true; }],
+  ["inactive config", (c) => { c.active = false; }],
+  ["unrelated config", (c) => { c.metadata.ticket = "OTHER"; }],
+  ["disabled subscription updates", (c) => { c.features.subscription_update.enabled = false; }],
+  ["disabled cancellation", (c) => { c.features.subscription_cancel.enabled = false; }],
+  ["disabled customer updates", (c) => { c.features.customer_update.enabled = false; }],
+  ["missing email updates", (c) => { c.features.customer_update.allowed_updates = []; }],
+  ["missing price updates", (c) => { c.features.subscription_update.default_allowed_updates = []; }],
+  ["quantity updates", (c) => { c.features.subscription_update.default_allowed_updates.push("quantity"); }],
+  ["adjustable product quantity", (c) => { c.features.subscription_update.products[0].adjustable_quantity.enabled = true; }],
+  ["immediate cancellation", (c) => { c.features.subscription_cancel.mode = "immediately"; }],
+  ["trial ending", (c) => { c.features.subscription_update.trial_update_behavior = "end_trial"; }],
+  ["unapproved credit policy", (c) => { c.features.subscription_update.proration_behavior = "none"; }],
+  ["reset billing anchor", (c) => { c.features.subscription_update.billing_cycle_anchor = "now"; }],
+  ["deferred schedule", (c) => { c.features.subscription_update.schedule_at_period_end.conditions.push({ type: "decreasing_item_amount" }); }],
+  ["missing BYOK choice", (c) => { c.features.subscription_update.products.shift(); }],
+  ["duplicate price replacing an approved price", (c) => { c.features.subscription_update.products[0].prices[0] = priceIds[1]; }],
+  ["unexpected price", (c) => { c.features.subscription_update.products[0].prices.push("price_unknown"); }],
+  ["missing invoices", (c) => { c.features.invoice_history.enabled = false; }],
+  ["missing card management", (c) => { c.features.payment_method_update.enabled = false; }],
+  ["other customer edits", (c) => { c.features.customer_update.allowed_updates.push("address"); }],
+]) test(`unsafe policy refuses ${name} before creating any session`, async () => {
+  mutate(configuration);
+  const readiness = await GET();
+  assert.deepEqual(await readiness.json(), { available: false });
+  assert.deepEqual([sessions, legacy], [[], []]);
+  assert.equal((await POST(request())).status, 503);
+  assert.deepEqual([sessions, legacy], [[], []]);
+});
+test("portal availability requires sign-in without calling Stripe", async () => {
+  user = null;
+  assert.equal((await GET()).status, 401);
+  assert.deepEqual([flagLookups, retrieved, sessions, legacy], [[], [], [], []]);
+});
+for (const [name, value, available] of [
+  ["missing configuration", undefined, false],
+  ["blank configuration", "  ", false],
+  ["invalid configuration", "not_a_configuration", false],
+  ["configured portal", " bpc_dedicated ", true],
+]) test(`portal availability reports ${name} without exposing the ID`, async () => {
+  if (value === undefined) delete process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID;
+  else process.env.STRIPE_BILLING_PORTAL_CONFIGURATION_ID = value;
+  const response = await GET();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { available });
+  assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.deepEqual(retrieved, available ? [{ id: "bpc_dedicated", expand: ["features.subscription_update.products"] }] : []);
+  assert.deepEqual([sessions, legacy], [[], []]);
+});
+test("portal availability respects the server ticket flag", async () => {
+  enabled = false;
+  const response = await GET();
+  assert.deepEqual(await response.json(), { available: false });
+  assert.deepEqual([retrieved, sessions, legacy], [[], [], []]);
+});
+
+test("portal provider errors leave readiness unavailable and never create a session", async () => {
+  retrievalError = new Error("Stripe unavailable");
+  const response = await GET();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { available: false });
+  assert.equal((await POST(request())).status, 503);
+  assert.deepEqual([sessions, legacy], [[], []]);
+});
