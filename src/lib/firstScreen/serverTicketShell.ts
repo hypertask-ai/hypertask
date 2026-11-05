@@ -5,7 +5,7 @@ import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { featureFlagsForUser } from "@/lib/flags";
 import { HTPR_7627_TICKET_FIRST_SCREEN_FLAG } from "@/lib/flags/keys";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
-import { BOARD_DOCUMENT_TIMEOUT_MS, BOARD_FIRST_SCREEN_FLAG } from "./boardDocument";
+import { BOARD_DOCUMENT_TIMEOUT_MS } from "./boardDocument";
 import { TICKET_DOCUMENT_ROUTE_HEADER, type TicketShellSeed } from "./ticketShell";
 
 export async function readTicketShell(route: string, displayCookie: string | undefined, deadline = Infinity): Promise<TicketShellSeed | null> {
@@ -16,7 +16,7 @@ export async function readTicketShell(route: string, displayCookie: string | und
   const display = parseBoardDisplay(displayCookie, user.id, { desktopChat: true });
   if (!display) return null;
   const flags = await featureFlagsForUser(user.id);
-  if (flags[BOARD_FIRST_SCREEN_FLAG] !== true || flags[HTPR_7627_TICKET_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
+  if (flags[HTPR_7627_TICKET_FIRST_SCREEN_FLAG] !== true || performance.now() > deadline) return null;
   return { accountId: user.id, flags: { accountId: user.id, evaluatedAt: new Date().toISOString(), values: flags }, display };
 }
 

@@ -8,7 +8,7 @@ const mock = (name, exports) => {
   const id = name.startsWith('src/') ? path.join(root, name) : require.resolve(name);
   require.cache[id] = { id, filename: id, loaded: true, exports };
 };
-let cookieValues = {}, enabled = true, desktopChat = false, response, calls = [], delay = 0, failRead = false, assigneeFix;
+let cookieValues = {}, desktopChat = false, response, calls = [], delay = 0, failRead = false, assigneeFix;
 const user = { id: 985, uid: 'qa', displayName: 'QA', email: 'qa@example.invalid', stripe_customer_id: 'billing-secret',
   UserSetting: { id: 1, onboardingTourStatus: true, snippets: 'private-settings' } };
 const Module = require('node:module');
@@ -22,7 +22,7 @@ mock('src/lib/auth/getSessionUser.ts', { getSessionUser: async () => {
 } });
 mock('src/lib/agents/boardAccessRequests/service.ts', { getOwnerBoardAccessNotifications: async () => [] });
 mock('src/lib/prisma.ts', { __esModule: true, default: { user: { findUnique: async ({ where }) => where.id === user.id ? user : null } } });
-mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'htpr-6934-server-first-screen': enabled, 'other-flag': true, 'htpr-7406-desktop-server-board': desktopChat, ...(assigneeFix === undefined ? {} : { 'htpr-7725-saved-view-assignee': assigneeFix }) }; } });
+mock('src/lib/flags.ts', { featureFlagsForUser: async id => { assert.equal(id, 985); return { 'other-flag': true, 'htpr-7406-desktop-server-board': desktopChat, ...(assigneeFix === undefined ? {} : { 'htpr-7725-saved-view-assignee': assigneeFix }) }; } });
 mock('src/utils/controllers/projects/getBoardTasks.ts', { __esModule: true, default: async (...args) => {
   calls.push(args); if (failRead) throw Error('Disposable read failure');
   if (delay) await new Promise(resolve => setTimeout(resolve, delay)); return response;
@@ -46,7 +46,7 @@ const fixture = { project: { id: 15, title: 'Authorized board', section: [{ id: 
   tasks: [{ id: 1, title: 'Authorized card', projectId: 15, sectionId: 1, ranking: 'A0100', status: 'Normal',
     taskLabels: [], assignees: [], notifications: [], subTasks: [], description_: { content: '<p>API-flagged instant open</p>' } }], allViews: [] };
 function reset() {
-  enabled = true; desktopChat = false; assigneeFix = undefined; calls = []; delay = 0; failRead = false; response = { status: 200, json: structuredClone(fixture) };
+  desktopChat = false; assigneeFix = undefined; calls = []; delay = 0; failRead = false; response = { status: 200, json: structuredClone(fixture) };
   cookieValues = { nookies_user: JSON.stringify({ id: 985 }), ht_session: signSession({ id: 985, email: user.email }), [BOARD_DISPLAY_COOKIE]: JSON.stringify(display) };
 }
 
@@ -68,10 +68,7 @@ test('matching signed user uses the exact controller arguments and complete live
   assert.ok(htmlPayload.includes('API-flagged instant open'));
 });
 
-test('flag OFF and unknown display preferences read no board and return the unchanged path', async () => {
-  reset(); enabled = false;
-  assert.equal(await readBoardDocument('/project?id=15', JSON.stringify(display)), null);
-  assert.deepEqual(calls, []);
+test('unknown display preferences read no board and return the unchanged path', async () => {
   reset();
   assert.equal(await readBoardDocument('/project?id=15', undefined), null);
   assert.deepEqual(calls, []);

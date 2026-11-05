@@ -39,6 +39,7 @@ export const FEATURE_FLAG_QA_USER = {
 } as const;
 
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-6934-server-first-screen",
   "htpr-5913-consistent-comment-shortcuts",
   "htpr-6160-inbox-archive-cluster",
   "htpr-6157-new-task-auto-description",

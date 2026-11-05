@@ -33,7 +33,6 @@ export function useFirstScreenSurface(accountId?: number | null) {
     (accountId === undefined || accountId === snapshot.scope.accountId) &&
     snapshot.authorization.outcome === "authorized" &&
     snapshot.flags.accountId === snapshot.scope.accountId &&
-    snapshot.flags.values["htpr-6934-server-first-screen"] === true &&
     hasFirstScreenDisplayPreferences(snapshot.display, snapshot.scope.accountId)
     ? snapshot : null;
 }

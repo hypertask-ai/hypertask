@@ -3,7 +3,6 @@ import type { IUserDraft } from "@/hooks/General/useGetUserDrafts";
 import type { DisplayAvatar } from "@prisma/client";
 import type { InboxQueryPayload } from "@/utils/helperFunctions/inboxHelpers";
 import type { FirstScreenInitialModel, FirstScreenWireValue } from "./contract";
-import { BOARD_FIRST_SCREEN_FLAG } from "./boardDocument";
 
 export const INBOX_DOCUMENT_ROUTE_HEADER = "x-ht-inbox-document-route";
 export const INBOX_DOCUMENT_TIMEOUT_MS = 800;
@@ -24,8 +23,7 @@ export type InboxDocument = FirstScreenInitialModel<FirstScreenWireValue> & {
 export function getInboxDocument(snapshot: FirstScreenInitialModel<FirstScreenWireValue> | null, accountId: number): InboxDocument | null {
   if (!snapshot || snapshot.schemaVersion !== 1 || snapshot.scope.accountId !== accountId || snapshot.scope.route !== "/inbox" ||
       snapshot.authorization.outcome !== "authorized" || snapshot.flags.accountId !== accountId ||
-      !Number.isFinite(Date.parse(snapshot.fetchedAt)) || snapshot.completeness !== "complete" ||
-      snapshot.flags.values[BOARD_FIRST_SCREEN_FLAG] !== true) return null;
+      !Number.isFinite(Date.parse(snapshot.fetchedAt)) || snapshot.completeness !== "complete") return null;
   const data = snapshot.data as unknown as InboxDocument["data"];
   return data?.user?.id === accountId && data.payload?.accountId === accountId &&
     Array.isArray(data.payload.notifications) && Array.isArray(data.drafts) &&

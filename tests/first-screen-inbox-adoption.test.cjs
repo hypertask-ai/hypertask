@@ -14,7 +14,7 @@ const rows = [{ id: 1, taskId: 1, userId: 985, projectId: 15, type: 'Comment', s
   task: { id: 1, projectId: 15, title: 'Server row', status: 'Normal' }, project: { id: 15, title: 'Board', name: 'Board' } }];
 const snapshot = { schemaVersion: 1, buildVersion: 'test', scope: { accountId: 985, route: '/inbox', generation: 'document-A' },
   authorization: { outcome: 'authorized', checkedAt: now }, fetchedAt: now, now,
-  flags: { accountId: 985, evaluatedAt: now, values: { 'htpr-6934-server-first-screen': true } }, completeness: 'complete',
+  flags: { accountId: 985, evaluatedAt: now, values: {} }, completeness: 'complete',
   selection: { split: 0 }, data: { user: { id: 985 }, payload: { accountId: 985, dataOrigin: 'network', notifications: rows,
     splitsNoImportant: [], showImportantSplit: false, structuredData: { tabs: [{ project: 'All', idx: 0, length: 1, hasUnseen: true }], data: [rows] } },
     drafts: [{ id: 1, userId: 985, content: 'Draft' }], counts: { all: 1, unseen: 1 } } };

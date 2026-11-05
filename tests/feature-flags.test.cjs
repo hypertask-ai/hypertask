@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const { createJiti } = require("jiti");
@@ -597,20 +598,31 @@ test("size label clicks no longer have a feature flag", async () => {
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6978-size-label-click"), false);
 });
 
-test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
-  const key = flags.HTPR_6934_SERVER_FIRST_SCREEN_FLAG;
-  assert.equal(key, "htpr-6934-server-first-screen");
-  assert.equal((await flags.listFeatureFlagModes()).find(row => row.key === key).mode, "OWNER_AND_QA");
+test("server first-screen flag is retired and scoped flag seeds reuse server evaluation", async () => {
+  const key = "htpr-6934-server-first-screen";
+  assert.equal(flags.HTPR_6934_SERVER_FIRST_SCREEN_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261105120000_drop_htpr_6934_server_first_screen_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
   const { getFirstScreenFlagSeed } = jiti(path.join(root, "src/lib/firstScreen/serverFlags.ts"));
   const clock = "2026-10-04T00:30:00.000Z";
-  assert.deepEqual(await getFirstScreenFlagSeed(985, [key, "missing"], clock), {
-    accountId: 985, evaluatedAt: clock, values: { [key]: true, missing: false },
+  const active = flags.HTPR_6899_STABLE_LAYOUT_FLAG;
+  assert.deepEqual(await getFirstScreenFlagSeed(985, [active, "missing"], clock), {
+    accountId: 985, evaluatedAt: clock, values: { [active]: true, missing: false },
   });
-  assert.deepEqual(await getFirstScreenFlagSeed(7, [key], clock), {
-    accountId: 7, evaluatedAt: clock, values: { [key]: false },
+  assert.deepEqual(await getFirstScreenFlagSeed(7, [active], clock), {
+    accountId: 7, evaluatedAt: clock, values: { [active]: false },
   });
-  await assert.rejects(getFirstScreenFlagSeed(0, [key], clock), /scope/);
-  await assert.rejects(getFirstScreenFlagSeed(985, [key], "bad"), /scope/);
+  await assert.rejects(getFirstScreenFlagSeed(0, [active], clock), /scope/);
+  await assert.rejects(getFirstScreenFlagSeed(985, [active], "bad"), /scope/);
 });
 
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {

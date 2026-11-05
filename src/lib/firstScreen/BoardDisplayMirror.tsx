@@ -8,11 +8,9 @@ import { fcmAtom, currentUserAtom, boardLayoutPreferenceAtom, appShellRailAtom, 
   showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom, tableVisibleColumnsAtom, tableColumnWidthsAtom,
   tableTitleWrapAtom, openAiChatByDefaultAtom, keepAiChatClosedAtom, aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
 import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
-import { BOARD_FIRST_SCREEN_FLAG } from "./boardDocument";
 import { BOARD_DISPLAY_COOKIE, parseBoardDisplay } from "./boardDisplay";
 
 export default function BoardDisplayMirror({ accountId }: { accountId: number | null }) {
-  const enabled = useFlag(BOARD_FIRST_SCREEN_FLAG);
   const desktopChat = useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG);
   const hydrated = useHydrated();
   const user = useRecoilValue(currentUserAtom);
@@ -39,7 +37,7 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
     document.documentElement.style.removeProperty("--ticket-sidebar-width");
   }, [hydrated]);
   useEffect(() => {
-    if (!enabled || accountId === null || user?.id !== accountId) return;
+    if (accountId === null || user?.id !== accountId) return;
     const mirror = () => {
       let nudgeDismissed: boolean;
       try {
@@ -66,7 +64,7 @@ export default function BoardDisplayMirror({ accountId }: { accountId: number | 
     const themes = new MutationObserver(mirror);
     themes.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => { window.removeEventListener("resize", mirror); window.removeEventListener("pagehide", mirror); window.removeEventListener("ht-inbox-display-change", mirror); themes.disconnect(); };
-  }, [enabled, desktopChat, accountId, user?.id, fcm.permissionStatus, fcm.statusToggleFromDB, boardLayout, railOn, railCollapsed, quickTips, showEmptyViewTabs, hiddenViewTabIds,
+  }, [desktopChat, accountId, user?.id, fcm.permissionStatus, fcm.statusToggleFromDB, boardLayout, railOn, railCollapsed, quickTips, showEmptyViewTabs, hiddenViewTabIds,
     viewTabsOrder, tableColumns, tableWidths, tableTitleWrap, openChat, keepChatClosed, chatSuppressed, chatPinned, chatWidth, chatSidebarMode]);
   return null;
 }
