@@ -39,7 +39,7 @@ for source, text in [('description', description)] + [(f"comment-{c['id']}", c.g
             match = re.search(r'(?:^|_)([^_/]+\.png)(?:_|$)', basename, re.I)
             name = match.group(1) if match else ''
         if not name:
-            raise SystemExit(f'Cannot determine image name: {url}')
+            continue
         if name in used:
             if used[name] == url:
                 continue

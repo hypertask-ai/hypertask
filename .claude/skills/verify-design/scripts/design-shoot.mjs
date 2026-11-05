@@ -44,7 +44,8 @@ try {
               const verdict=radiusVerdict(Math.min(px,py),rect.width,rect.height);
               if(verdict!=='ok') add(verdict==='round'?'round':'corners',el,`${prop}: ${raw}`,rect);
             }
-            for(const prop of ['color','backgroundColor','borderTopColor','borderRightColor','borderBottomColor','borderLeftColor']) if(isPurple(css[prop])) add('purple',el,`${prop}: ${css[prop]}`,rect);
+            for(const prop of ['color','backgroundColor','fill','stroke']) if(isPurple(css[prop])) add('purple',el,`${prop}: ${css[prop]}`,rect);
+            for(const side of ['Top','Right','Bottom','Left']) if(parseFloat(css[`border${side}Width`])>0 && css[`border${side}Style`]!=='none' && css[`border${side}Style`]!=='hidden' && isPurple(css[`border${side}Color`])) add('purple',el,`border${side}Color: ${css[`border${side}Color`]}`,rect);
             const match=['class','aria-label','data-icon','title'].map(k=>el.getAttribute(k)||'').find(v=>/sparkl/i.test(v));
             if(match) add('sparkle',el,match,rect);
           }

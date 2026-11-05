@@ -32,5 +32,5 @@ export function isPurple(color) {
 }
 export function radiusVerdict(px, w, h) {
   if ([0,2,4].includes(px)) return 'ok';
-  return px >= Math.min(w,h)/2 && w > 0 && h > 0 ? 'round' : 'bad';
+  return w > 0 && h > 0 && Math.abs(w-h) <= 2 && px >= Math.min(w,h)/2 ? 'round' : 'bad';
 }

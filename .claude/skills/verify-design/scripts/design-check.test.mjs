@@ -13,5 +13,5 @@ test('purple colours', () => {
   for (const x of ['#6b7280','transparent','#3b82f6']) assert.equal(isPurple(x), false, x);
 });
 test('radius', () => {
-  for (const [r,w,h,v] of [[4,100,100,'ok'],[6,100,100,'bad'],[12,24,24,'round'],[9999,20,20,'round'],[8,200,40,'bad']]) assert.equal(radiusVerdict(r,w,h),v);
+  for (const [r,w,h,v] of [[4,100,100,'ok'],[6,100,100,'bad'],[12,24,24,'round'],[9999,20,20,'round'],[8,200,40,'bad'],[20,120,40,'bad']]) assert.equal(radiusVerdict(r,w,h),v);
 });
