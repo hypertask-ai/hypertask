@@ -450,7 +450,6 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     </Suspense>
   );
 
-  const attachmentControl = !recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />;
   const dictationControl = newTaskWindow && (
     <div className={composerKeysLayout && dictating ? "hidden" : undefined}>
       <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
@@ -577,9 +576,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
-                {graphitePanel && attachmentControl}
-                {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
-                {!graphitePanel && attachmentControl}
+                {!graphitePanel && writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
+                {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
+                {composerKeysEnabled && graphitePanel && writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}
               </div>
