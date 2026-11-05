@@ -64,6 +64,19 @@ export const blockedPredicate: BuiltinView["predicate"] = (task) =>
 export const blockedByMePredicate: BuiltinView["predicate"] = (task, context) =>
   context.currentUserId != null && task.waitingOnUserId === context.currentUserId;
 
+export const getBlockedByMeSections = (
+  project: IProject,
+  context: BuiltinViewContext,
+) => (project.section ?? []).map((section) => ({
+  ...section,
+  sectionId: section.id ?? section.sectionId,
+  visibility: true,
+  items: (project.tasks ?? []).filter((task) =>
+    task.sectionId === (section.id ?? section.sectionId) &&
+    blockedByMePredicate(task, context),
+  ),
+}));
+
 export const agentsPredicate: BuiltinView["predicate"] = (task) =>
   (task.assignees ?? []).some((assignee) => assignee.agentId != null);
 

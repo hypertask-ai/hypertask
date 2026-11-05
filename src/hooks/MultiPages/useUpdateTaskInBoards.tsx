@@ -25,7 +25,7 @@ import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/c
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { HTPR_8039_ARCHIVE_COLUMN_BOUNDARY_FLAG } from "@/lib/flags/definitions/htpr-8039-archive-column-boundary";
@@ -185,6 +185,7 @@ const UpdateKanban = () => {
   const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
   const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
   const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
+  const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -264,6 +265,7 @@ const UpdateKanban = () => {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
       agentCreatorFilterEnabled,
       legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
+      blockedByMeListEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),

@@ -33,7 +33,7 @@ import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builti
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from '@/lib/flags/keys'
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
@@ -53,6 +53,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG)
     const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG)
     const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG)
+    const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
     const queryClient = useQueryClient();   
     const store = useStore();
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
@@ -504,6 +505,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       legacyAgentAssigneeMatch: !assigneeFixEnabled,
       agentCreatorFilterEnabled,
       legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
+      blockedByMeListEnabled,
       ...(Array.isArray(runningTimers)
         ? { runningTaskIds: new Set(runningTimers.map((timer) => timer.taskId)) }
         : {}),

@@ -11,12 +11,12 @@ import useTrialModal from "@/hooks/MultiPages/Route/useTrialModal";
 import { getFilteredSections } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getFilteredEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
-import { buildBuiltinViewContext, getActiveBoardViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
+import { buildBuiltinViewContext, getActiveBoardViewId, isBuiltinViewId, BUILTIN_VIEW_IDS } from "@/lib/constants/builtinViews";
 import { useBoardRunningTimers } from "@/hooks/Task Detail/useTimeTracking";
 import { useBoardStartup } from "@/lib/contexts/boardStartupContext";
 import { setLastBoardTeam } from "@/lib/lastBoardTeam";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8826_BLOCKED_BY_ME_LIST_FLAG, HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import type { SectionCompProps } from "./LandingPageSection";
@@ -34,6 +34,7 @@ const agentCreatorFilterEnabled = useFlag(HTPR_7865_AGENT_CREATOR_FILTER_FLAG);
 const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
 const assigneeFixEnabled = useFlag(HTPR_7725_SAVED_VIEW_ASSIGNEE_FLAG);
 const defaultFiltersFixEnabled = useFlag(HTPR_7776_DEFAULT_VIEW_FILTERS_FLAG);
+const blockedByMeListEnabled = useFlag(HTPR_8826_BLOCKED_BY_ME_LIST_FLAG);
 const router = useRouter();
 const queryClient = useQueryClient();
 const {
@@ -75,12 +76,13 @@ const filterRuntimeContext = useMemo(() => ({
   legacyAgentAssigneeMatch: !assigneeFixEnabled,
   agentCreatorFilterEnabled,
   legacyMissingPersonalViewFilters: !defaultFiltersFixEnabled,
+  blockedByMeListEnabled,
   runningTaskIds: timerDataReady
     ? new Set(runningTimers.keys())
     : new Set(sections.flatMap((section) =>
         (section.items ?? []).map((task) => task.id)
       )),
-}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, runningTimers, sections, timerDataReady]);
+}), [agentCreatorFilterEnabled, assigneeFixEnabled, defaultFiltersFixEnabled, blockedByMeListEnabled, runningTimers, sections, timerDataReady]);
 
 useEffect(() => {
   const project = _allProjects?.[_projectIndex]
@@ -100,13 +102,16 @@ const subtaskSectionsForActiveView = useMemo(() => {
     buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
     filterRuntimeContext,
   );
-  return getAppliedSubtaskSections(filtered, _currentProject);
+  return blockedByMeListEnabled && activeViewId === BUILTIN_VIEW_IDS.blockedByMe
+    ? filtered
+    : getAppliedSubtaskSections(filtered, _currentProject);
 }, [
   _allProjects,
   _currentProject,
   _currentUser.id,
   _projectIndex,
   activeBuiltinViews,
+  blockedByMeListEnabled,
   filterRuntimeContext,
   sections,
 ]);
