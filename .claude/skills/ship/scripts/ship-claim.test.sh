@@ -427,7 +427,7 @@ for section in Done 'Flag: Everyone' 'Flag: Only Me + QA' 'Flag: Off'; do
 done
 jq -e '.["6"]["YPER4-999"].admission == true' "$RUNNER_INBOX_DIR/domain-ownership.json" >/dev/null && ok "unassigned fake claim retains reservation" || bad "fake claim lost reservation"
 export RUNNER_INBOX_DIR=$D/inbox-later
-jq '.tasks[0].section="QA" | .tasks[0].assignees[0].agent.displayName="Runner 16"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+jq '.tasks[0].section="In Progress" | .tasks[0].assignees[0].agent.displayName="Runner 16"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "another runner never holds this runner" "$?" 0
 jq '.tasks[0].assignees[0].agent.displayName="RUNNER 6"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 printf '[]' > "$HOLD_MERGED"
