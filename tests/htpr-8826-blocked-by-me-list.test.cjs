@@ -1,9 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const Module = require('node:module');
-const ts = require('typescript');
+const { loadModule } = require('./helpers/loadModule.cjs');
 const { load, filters, board } = require('./board-filters/runtime.cjs');
 const { fixture, sectionIds } = require('./board-filters/fixture.cjs');
 const builtin = load('lib/constants/builtinViews.ts');
@@ -29,9 +26,6 @@ function restrictedProject() {
 }
 
 function landing(project, enabled) {
-  const filename = path.resolve(__dirname, '../src/app/[...boardURL]/useLandingSectionState.ts');
-  const loaded = new Module(filename, module);
-  loaded.filename = filename;
   const state = { activeBuiltinViewsAtom: 'active' };
   const stubs = {
     react: { useMemo: (fn) => fn(), useState: (value) => [value, () => {}], useRef: () => ({ current: null }), useEffect: () => {}, useLayoutEffect: () => {}, useContext: () => false },
@@ -53,14 +47,8 @@ function landing(project, enabled) {
         '@/lib/flags/definitions/htpr-7865-agent-creator-filter': {},
     '@/lib/flags/keys': flag,
   };
-  loaded.require = (name) => {
-    assert.ok(name in stubs, `Unexpected dependency: ${name}`);
-    return stubs[name];
-  };
-  loaded._compile(ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, esModuleInterop: true },
-  }).outputText, filename);
-  return loaded.exports.useLandingSectionState({ _allProjects: [project], _projectIndex: 0, _currentUser: { id: 6 }, _boardLayout: 'board' }).filteredSectionsForActiveView;
+  const { useLandingSectionState } = loadModule('src/app/[...boardURL]/useLandingSectionState.ts', stubs);
+  return useLandingSectionState({ _allProjects: [project], _projectIndex: 0, _currentUser: { id: 6 }, _boardLayout: 'board' }).filteredSectionsForActiveView;
 }
 
 test('Blocked by me count and landing rows agree after selecting a Done-only saved view', () => {
