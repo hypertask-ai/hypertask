@@ -226,6 +226,7 @@ test("server document gates Graphite 2 without changing other saved themes", asy
       ...Object.fromEntries(unused.map(name => [name, {}])),
       "next/headers": { cookies: async () => ({ get: name => name === "theme" ? { value: theme } : undefined }) },
       "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 985 }) },
+      "@/lib/themeVisibilityServer": { readThemeVisibility: async () => ({ restore, loaded: true, system: restore, porcelain: restore, graphite: restore, amoled: restore, dia: restore }) },
       "@/lib/flags": { isFeatureEnabled: async key => key === flag ? enabled : key.startsWith("htpr-8710-") && restore },
       "@/utils/serverActions": { isMobileDevice: async () => ({ isMobile: false, isApple: false }) },
       "@/lib/configs/auth.config": { default: { cookies: { theme: "theme", defaultTheme: "system" } } },

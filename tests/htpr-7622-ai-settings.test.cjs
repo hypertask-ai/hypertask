@@ -861,3 +861,40 @@ test("restored theme choices and disabled switches apply to AI settings", async 
   assert.equal(allowed.status, 200);
   assert.equal(allowed.cookies.get("theme").value, "dia");
 });
+
+test("undo restores enabled Graphite after applied Graphite 2 is disabled", async () => {
+  const h = harness();
+  h.state.visibility = { restore: true, loaded: true, system: true, porcelain: true, graphite: true, amoled: true, dia: true };
+  const scope = { section: "appearance", theme: "graphite" };
+  const card = await h.proposals.createSettingProposal(6, sessionId, scope, { kind: "theme", value: "graphite-2" });
+  const applied = await h.route.POST(request({ id: card.id, action: "apply", scope }, { theme: "graphite" }));
+  assert.equal(applied.status, 200);
+  assert.equal(applied.cookies.get("theme").value, "graphite-2");
+  h.state.graphite2 = false;
+  const undone = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "graphite-2" }));
+  assert.equal(undone.status, 200);
+  assert.equal((await undone.json()).proposal.status, "undone");
+  assert.equal(undone.cookies.get("theme").value, "graphite");
+});
+
+test("undo allows a disabled applied theme but refuses a disabled destination", async () => {
+  const h = harness();
+  h.state.visibility = { restore: true, loaded: true, system: true, porcelain: true, graphite: true, amoled: true, dia: true };
+  const scope = { section: "appearance", theme: "graphite" };
+  const card = await h.proposals.createSettingProposal(6, sessionId, scope, { kind: "theme", value: "dia" });
+  const applied = await h.route.POST(request({ id: card.id, action: "apply", scope }, { theme: "graphite" }));
+  assert.equal(applied.status, 200);
+  assert.equal(applied.cookies.get("theme").value, "dia");
+  h.state.visibility.dia = false;
+  const page = await h.actions.readSettingsPage(6, { ...scope, theme: "dia" });
+  assert.equal(page.theme, "dia");
+  assert.equal(page.options.some(option => option.value === "dia"), false);
+  h.state.visibility.graphite = false;
+  const blocked = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "dia" }));
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.headers.get("set-cookie"), null);
+  h.state.visibility.graphite = true;
+  const undone = await h.route.POST(request({ id: card.id, action: "undo", scope }, { theme: "dia" }));
+  assert.equal(undone.status, 200);
+  assert.equal(undone.cookies.get("theme").value, "graphite");
+});

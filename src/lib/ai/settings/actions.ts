@@ -3,7 +3,7 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { readThemeVisibility } from "@/lib/themeVisibilityServer";
-import { availableThemePreference, availableThemeOptions, normalizeThemePreference } from "@/lib/themePreferences";
+import { availableThemeOptions, normalizeThemePreference } from "@/lib/themePreferences";
 import setMemberRole from "@/utils/controllers/projects/setMemberRole";
 import { notificationCategories, notificationCellValue, updateNotificationMatrix } from "@/utils/controllers/notifications/updateNotificationMatrix";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -18,7 +18,7 @@ export async function readSettingsPage(userId: number, scope: SettingsScope) {
       isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId),
       readThemeVisibility(userId),
     ]);
-    return { theme: availableThemePreference(normalizeThemePreference(scope.theme, true, graphite2, visibility.restore), rounded, graphite2, visibility), options: availableThemeOptions(rounded, graphite2, visibility) };
+    return { theme: normalizeThemePreference(scope.theme, true, visibility.restore || graphite2, visibility.restore) ?? "system", options: availableThemeOptions(rounded, graphite2, visibility) };
   }
   if (scope.section === "notifications") {
     const settings = await prisma.userSetting.findUnique({
@@ -73,7 +73,7 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
     if (visibility.restore && !availableThemeOptions(true, graphite2, visibility).some(option => option.value === destination)) {
       throw new Error("Theme is not available for your account.");
     }
-    return { label: "Theme", value: availableThemePreference(normalizeThemePreference(scope.theme, true, graphite2, visibility.restore), true, graphite2, visibility) };
+    return { label: "Theme", value: normalizeThemePreference(scope.theme, true, visibility.restore || graphite2, visibility.restore) ?? "system" };
   }
   if (change.kind === "notification") {
     const settings = await prisma.userSetting.findUnique({
