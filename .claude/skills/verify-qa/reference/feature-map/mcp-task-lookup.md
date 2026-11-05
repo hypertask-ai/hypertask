@@ -61,3 +61,14 @@ Use only QA-owned fixtures, and remove them afterward.
 ## Cleanup
 
 Read-only calls. No board writes or fixtures.
+
+## Related task context
+
+Use existing QA-owned tasks with incoming and outgoing relations, a visible
+agent assignee, and recent agent activity. Read only: call
+`GET /api/mcp/tasks/context?task_id=<id>&project_id=<id>` with the QA
+credential, then repeat with `summary=true`. Check each accessible related task
+has its direction, section, assignees, and up to five newest `agentActivities`.
+Check inaccessible and deleted related tasks are absent. Repeat with a scoped
+agent credential and confirm no outside-board task or private agent name leaks.
+Record unavailable fixtures as `UNREACHABLE`; never create or change tickets.

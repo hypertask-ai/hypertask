@@ -1,4 +1,5 @@
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
+import type { McpTaskAssignee } from '@/lib/mcp/tasks/types';
 import type { IApiClient } from '../../types/index';
 import { logger } from '../../utils/logger';
 import { generateCorrelationId } from '../../utils/correlation';
@@ -246,6 +247,15 @@ export interface TaskContextResponse {
     ticketNumber?: string;
     title: string;
     uniqueIndex: number;
+    section: string;
+    assignees: McpTaskAssignee[];
+    agentActivities: Array<{
+      id: string;
+      agentName: string | null;
+      type: string;
+      text: string;
+      createdAt: string;
+    }>;
     relationType: string;
     direction: 'outgoing' | 'incoming';
   }>;

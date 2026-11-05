@@ -4,6 +4,7 @@ import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
 import { Prisma } from "@prisma/client";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
+import { mapRelatedTaskContext, relatedTaskContextSelect } from "@/lib/mcp/tasks/relatedTaskContext";
 import { taskMcpGetInclude } from "@/lib/mcp/tasks/mappers";
 import { mcpVisibleAgentSelect, mapVisibleMcpAgent } from "@/lib/mcp/agents";
 import { resolvePublicAgentDisplayName } from "@/lib/agents/publicAgent";
@@ -47,12 +48,7 @@ export function createTaskContextTool(context: ToolContext) {
           status: { not: "Deleted" },
           project: getProjectWhere(user.id),
         } satisfies Prisma.TaskWhereInput;
-        const relatedTaskSelect = {
-          id: true,
-          ticketNumber: true,
-          title: true,
-          uniqueIndex: true,
-        } satisfies Prisma.TaskSelect;
+        const relatedTaskSelect = relatedTaskContextSelect(user.id);
 
         const [task, commentCount, recentComments, prComments, relations] =
           await Promise.all([
@@ -139,20 +135,22 @@ export function createTaskContextTool(context: ToolContext) {
             createdAt: comment.createdAt.toISOString(),
           };
         });
-        const relatedTasks = relations.map((relation) => {
+        const relatedTasks = await Promise.all(relations.map(async (relation) => {
           const outgoing = relation.sourceTaskId === resolvedTask.id;
           const relatedTask = outgoing
             ? relation.targetTask
             : relation.sourceTask;
+          const related = await mapRelatedTaskContext(relatedTask, user.id, relatedTaskAccess);
           return {
-            id: relatedTask.id,
-            ticketNumber: relatedTask.ticketNumber || undefined,
-            title: relatedTask.title,
-            uniqueIndex: relatedTask.uniqueIndex,
+            ...related,
+            agentActivities: related.agentActivities.map((activity) => ({
+              ...activity,
+              text: stripInlineDataUris(activity.text),
+            })),
             relationType: relation.relationType,
             direction: outgoing ? "outgoing" : "incoming",
           };
-        });
+        }));
         const linkedPRs = extractPrLinks(
           mappedTask.description,
           ...prComments.flatMap((comment) => [comment.text, comment.commentText])

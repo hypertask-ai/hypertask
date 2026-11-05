@@ -51,6 +51,7 @@ function loadRoute(comments) {
     },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/mcp/tasks/extractPrLinks": { extractPrLinks: () => [] },
+    "@/lib/mcp/tasks/relatedTaskContext": { relatedTaskContextSelect: () => ({}) },
     "@/lib/pullRequests/githubPullRequests": {
       derivePullRequestDisplayState: () => "open",
       parseGithubPullRequestUrl: () => null,
