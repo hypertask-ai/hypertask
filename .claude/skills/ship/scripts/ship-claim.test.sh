@@ -509,6 +509,10 @@ prs 5;  eq "queue 5, app ticket -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 20; eq "queue exactly 20 -> normal" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, app ticket -> hold" "$(holdrc 'RUNNER 6' HTPR-1)" 4
 grep -q 'queue full: infra only (21 open non-draft PRs > 20)' "$D/hold-out" && ok "queue brake message" || bad "queue brake message: $(cat "$D/hold-out")"
+jq -n '[range(30) | {number: ., headRefName: "ci-runner-2/hyci-\(.)", title: "HYCI-\(.) [INFRA] CI", isDraft: false}]
+  + [range(5) | {number: (100 + .), headRefName: "dependabot/npm/x\(.)", title: "Bump x", isDraft: false}]
+  + [range(5) | {number: (200 + .), headRefName: "infra-lead/yper4-\(.)", title: "YPER4-\(.) [INFRA] tool", isDraft: false}]' > "$HOLD_OPEN"
+eq "30 CI, 5 dependency and 5 infra PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
 prs 21; eq "queue 21, CI ticket -> allowed" "$(holdrc 'RUNNER 6' HYCI-30)" 0
 prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0
