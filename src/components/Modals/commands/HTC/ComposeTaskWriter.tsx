@@ -1,4 +1,5 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
+import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, composeTaskOriginalNoteAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
@@ -88,6 +89,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
+  const { currentTheme } = useDarkMode();
   const stopDictationButtonId = "compose-task-stop-dictation";
   const cancelDictationButtonId = "compose-task-cancel-dictation";
   const createAfterDictation = useRef(false);
@@ -109,6 +111,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [transcribing, setTranscribing] = useState(false);
   const dictating = newTaskWindow && (recording || transcribing);
   const mobile = Boolean(useContext(MobileViewContext));
+  const graphitePanel = composerKeysLayout && currentTheme === "graphite-2" && !mobile;
   const phoneTaskWriterSheet = mobile && active;
   const [text, setText] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
@@ -503,7 +506,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
         </div>
       ) : (
         <div ref={composer} className={phoneTaskWriterSheet ? "flex min-h-0 flex-1 flex-col p-2" : "p-2"}>
-          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : `flex w-full flex-col ${composerKeysLayout ? "rounded-[4px]" : "rounded-[5px]"} bg-ai-tiptap px-3 py-2`}>
+          <div className={phoneTaskWriterSheet ? "flex min-h-0 w-full flex-1 flex-col rounded-[5px] bg-ai-tiptap px-3 py-2" : `flex w-full flex-col ${graphitePanel ? "rounded-[4px]" : "rounded-[5px]"} bg-ai-tiptap px-3 py-2`}>
             {(newTaskWindow || phoneTaskWriterSheet) && attachments && (phoneTaskWriterSheet ? (
               <div className="min-h-0 overflow-y-auto">{attachments}</div>
             ) : mobile ? attachments : (
@@ -532,7 +535,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={`${phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content" : "min-h-16 text-content"} ${(phoneTaskWriterSheet || (!composerKeysLayout && newTaskWindow)) ? "caret-hypertasks-ai-purple" : ""}`}
+              className={phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content caret-hypertasks-ai-purple" : newTaskWindow ? `min-h-16 max-h-52 overflow-y-auto text-content ${graphitePanel ? "" : "caret-hypertasks-ai-purple"}` : "min-h-16 text-content"}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;
@@ -568,8 +571,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
-                {writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
+                {!graphitePanel && writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
+                {graphitePanel && writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}
               </div>
@@ -609,11 +613,11 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
           {error && <p role="alert" className="px-2 pt-2 text-meta text-text-light-gray">{error}</p>}
         </div>
       )}
-      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className="flex items-center justify-between gap-2 overflow-x-auto border-t border-light-black-border-1 px-3 py-2 text-micro text-text-light-gray">
-        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+      {!phoneTaskWriterSheet && (composerKeysLayout ? <div className={graphitePanel ? "flex items-center justify-between gap-2 overflow-x-auto border-t border-light-black-border-1 px-3 py-2 text-micro text-text-light-gray" : "flex items-center justify-between gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray"}>
+        <div className={graphitePanel ? "flex shrink-0 items-center gap-2 whitespace-nowrap" : "flex min-w-0 flex-wrap items-center gap-4"}>
           {footerKeys.left.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>
-        <div className="flex shrink-0 items-center gap-2 whitespace-nowrap">
+        <div className={graphitePanel ? "flex shrink-0 items-center gap-2 whitespace-nowrap" : "flex shrink-0 items-center gap-4"}>
           {footerKeys.right.map(([keys, action]) => <span key={`${keys}-${action}`}><HintKey>{keys}</HintKey> {action}</span>)}
         </div>
       </div> : <div className="flex flex-wrap items-center gap-4 border-t border-light-black-border-1 px-4 py-2 text-micro text-text-light-gray">

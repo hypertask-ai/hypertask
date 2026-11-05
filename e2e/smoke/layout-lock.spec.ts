@@ -282,25 +282,31 @@ test('layout lock: phone New Task title has a real height and accepts a tap', as
 
 for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }]) {
   for (const flagOn of [false, true]) {
-    test(`layout lock: desktop New Task window stays narrow and inside the ${viewport.width}x${viewport.height} viewport (${flagOn ? 'composer keys on' : 'fixture flags'})`, async ({ page }, testInfo) => {
+    test(`layout lock: desktop New Task window stays narrow and inside the ${viewport.width}x${viewport.height} viewport (${flagOn ? 'composer keys on' : 'composer keys off'})`, async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== 'Desktop', 'desktop window invariant')
       await page.setViewportSize(viewport)
       const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
       if (flagOn) {
-        await page.route('**/api/flags*', async (route) => {
-          const response = await route.fetch()
-          const json = await response.json() as { flags: Record<string, boolean> }
-          json.flags['htpr-8260-ctrlj-composer-keys'] = true
-          await route.fulfill({ response, json })
-        })
+        await page.context().clearCookies({ name: 'theme' })
+        await page.context().addCookies([{ name: 'theme', value: 'graphite-2', url: testInfo.project.use.baseURL! }])
       }
+      await page.route('**/api/flags*', async (route) => {
+        const response = await route.fetch()
+        const json = await response.json() as { flags: Record<string, boolean> }
+        json.flags['htpr-8260-ctrlj-composer-keys'] = flagOn
+        if (flagOn) json.flags['htpr-8054-graphite-2'] = true
+        await route.fulfill({ response, json })
+      })
       const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
       await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
       const { flags } = await (await flagsResponse).json() as { flags: Record<string, boolean> }
       for (const [key, enabled] of Object.entries(fixture.flags)) {
-        expect(flags[key] === true, `layout lock flag ${key}`).toBe(flagOn && key === 'htpr-8260-ctrlj-composer-keys' ? true : enabled)
+        expect(flags[key] === true, `layout lock flag ${key}`).toBe(key === 'htpr-8260-ctrlj-composer-keys' ? flagOn : flagOn && key === 'htpr-8054-graphite-2' ? true : enabled)
       }
-      if (flagOn) expect(flags['htpr-8260-ctrlj-composer-keys']).toBe(true)
+      expect(flags['htpr-8260-ctrlj-composer-keys']).toBe(flagOn)
+      if (flagOn) {
+        expect(flags['htpr-8054-graphite-2']).toBe(true)
+      }
       await expect(page.locator('.kanban-column-title').first()).toBeVisible()
       await page.evaluate(() => (document.activeElement as HTMLElement).blur())
       await page.keyboard.press('Control+j')
@@ -310,7 +316,8 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900
       const box = await window.boundingBox()
       expect(box).not.toBeNull()
       expect(box!.width, 'layout lock: New Task window must be no wider than 640px').toBeLessThanOrEqual(640)
-      if (flags['htpr-8260-ctrlj-composer-keys']) {
+      if (flagOn) {
+        await expect(page.locator('html')).toHaveAttribute('data-theme', 'graphite-2')
         const tabs = window.getByRole('tablist', { name: 'Commands mode' })
         const writer = window.locator('[data-compose-task-writer]')
         const footer = writer.locator(':scope > div.border-t')
@@ -335,6 +342,13 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900
           await expect(hints.nth(i)).toBeVisible()
           expect((await hints.nth(i).boundingBox())!.y).toBe(firstHint!.y)
         }
+      } else {
+        const tabs = window.getByRole('tablist', { name: 'Commands mode' })
+        await expect(tabs).toBeVisible()
+        await expect(tabs.getByRole('tab', { name: 'New Task' }).locator('svg')).toHaveCount(1)
+        const tabsBox = await tabs.boundingBox()
+        expect(tabsBox).not.toBeNull()
+        expect(tabsBox!.y + tabsBox!.height).toBeLessThanOrEqual(box!.y)
       }
       expect(box!.x).toBeGreaterThanOrEqual(0)
       expect(box!.y).toBeGreaterThanOrEqual(0)

@@ -37,6 +37,7 @@ import styles from "@/styles/linksModal.module.scss";
 import { ICommandList } from "./HTCTypes";
 import CommandGroups from "./CommandGroup";
 import useHTC from "@/hooks/MultiPages/HTC/useHTC";
+import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import type { CommandFocusProxy } from "@/components/commandTypes";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7547_SEARCH_LAZY_CLOSED_FLAG, HTPR_7656_CTRLJ_SKILL_MENU_FLAG } from "@/lib/flags/keys";
 import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
@@ -140,6 +141,7 @@ const Commands = (props: Props) => {
   const isApple = useDeviceContext();
   const lazyClosedCommands = useFlag(HTPR_7547_SEARCH_LAZY_CLOSED_FLAG);
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
+  const { currentTheme } = useDarkMode();
   const composeEnabled = !props.isDemo && !props.isInteractive;
   const newTaskWindow = composeEnabled;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
@@ -747,7 +749,7 @@ const Commands = (props: Props) => {
     return () => document.removeEventListener("keydown", switchTab, true);
   }, [newTaskWindow, isCompose, writing, setShowCommands, skillMenuOwnsKeys]);
 
-  const unifiedPanel = composerKeysEnabled && isCompose && !isMobile;
+  const unifiedPanel = composerKeysEnabled && currentTheme === "graphite-2" && isCompose && !isMobile;
   const modeSwitch = !isDemo && !isInteractive ? (
     <div className={unifiedPanel ? "flex w-full border-b border-light-black-border-1 px-2 py-1" : "absolute -top-12 left-0 flex w-full justify-center"}>
       <SettingsScopeTabs
