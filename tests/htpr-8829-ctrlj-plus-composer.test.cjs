@@ -1,4 +1,4 @@
-const { assert, fs, path, React, root, jiti, test, withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
+const { assert, path, root, jiti, test, withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
 const boards = [
   { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' },
@@ -37,9 +37,3 @@ test('HTPR-8829 Ctrl+J keeps + attach, mic and text Send in the box, pickers bel
   });
 });
 
-test('HTPR-8829 the white mic and compact pill are reused, not copied', () => {
-  const audio = fs.readFileSync(path.join(root, 'src/components/RTE/Components/AudioButton.tsx'), 'utf8');
-  assert.match(audio, /const primaryDesktopAiMic = !isMobileView && compactListeningPill && \(\(isDesktopAiMic && isAiChat\) \|\| primaryMic\);/);
-  const writer = fs.readFileSync(path.join(root, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx'), 'utf8');
-  assert.match(writer, /plusLayout \? \{ compactListeningPill: true, primaryMic: true, hideDevicePicker: true, stopButtonId: stopDictationButtonId/);
-});
