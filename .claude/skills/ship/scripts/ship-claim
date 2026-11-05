@@ -71,7 +71,7 @@ decide() {
       end' "$2"
 }
 
-QUEUE_MAX=20  # queue brake: above this many open non-draft PRs, RUNNER n may claim YPER4 (Fleet Infra) and HYCI (CI) tickets only
+QUEUE_MAX=20  # queue brake: above this many open non-draft app PRs (CI, Fleet Infra and dependency PRs excluded), RUNNER n may claim YPER4 (Fleet Infra) and HYCI (CI) tickets only
 
 # Infra first (Valentin, 2026-10-27: "infrastructure fixes always go first, in code, not prose"). After the open-PR and
 # unfinished-merged-work holds, a NEW app (non-YPER4, non-HYCI) claim is refused while more than QUEUE_MAX non-draft PRs are open
@@ -171,7 +171,9 @@ hold_check() {
     return 0
   fi
   [[ $t == YPER4-* || $t == HYCI-* ]] && return 0  # Fleet Infra and CI work are never braked (Valentin, 2026-10-31: "CI work only, so CI gets fixed first")
-  n=$(jq -e '[.[] | select(.isDraft | not)] | length' <<<"$open") \
+  n=$(jq -e '[.[] | select((.isDraft | not)
+      and (.title | test("^(YPER4|HYCI)-") | not)
+      and (.headRefName | test("^(ci-runner-[0-9]+|ci-boss|infra-lead|dependabot)/") | not))] | length' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot count open PRs for RUNNER $rn." >&2; return 4; }
   if [ "$n" -gt "$QUEUE_MAX" ]; then
     echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) or HYCI (CI) ticket, or nothing."
