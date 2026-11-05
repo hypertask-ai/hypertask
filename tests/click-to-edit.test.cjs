@@ -98,6 +98,7 @@ async function mount(t, { surface, mobile = false, enabled = true, guest = false
     "@/hooks/useFlag": { useFlag: (key) => key === "htpr-7044-double-click-to-edit" ? enabled : false },
     "@/lib/flags/keys": { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG: "htpr-7044-double-click-to-edit", },
     "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
+    "@/lib/flags/definitions/htpr-8262-agent-lane-collapse": { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG: "htpr-8262-agent-lane-collapse" },
     "@/lib/taskDetailEditTarget": editTarget,
     "@/hooks/MultiPages/useDoubleTap": doubleTap,
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container", DELIBERATE_DOUBLE_CLICK_MS: 500 },

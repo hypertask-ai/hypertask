@@ -97,6 +97,7 @@ function renderComment({ mobile, enabled, blockerCommentId }) {
     "@/hooks/useFlag": { useFlag: (key) => key === FLAG ? enabled : false },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: FLAG },
+    "@/lib/flags/definitions/htpr-8262-agent-lane-collapse": { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG: "htpr-8262-agent-lane-collapse" },
     "@/models/enums": {},
     "@/hooks/MultiPages/useDoubleTap": { useDoubleTap: () => ({}) },
     "@/lib/constants/TaskDetail": {},

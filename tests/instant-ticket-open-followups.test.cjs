@@ -133,6 +133,7 @@ test("quiet: deferred activity/comments suspend without loading text", () => {
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
     "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
     "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
+    "@/lib/flags/definitions/htpr-8262-agent-lane-collapse": { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG: "htpr-8262-agent-lane-collapse" },
     "@/lib/taskDetailEditTarget": compile(read("src/lib/taskDetailEditTarget.ts"), {}),
     "@/lib/htc/isCommentCreatedByUser": { isCommentCreatedByUser: () => false },
     "@/components/Common/AttachmentsView": { __esModule: true, default: noop },
