@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { load } = require('./task-route-loader.cjs');
 
-function fixture({ enabled = true, sourceAllowed = true, targetAllowed = true, partial = false, refuse = false, cleanupFailure = false, planFailure = false } = {}) {
+function fixture({ enabled = true, sourceAllowed = true, targetAllowed = true, targetVisible = true, partial = false, refuse = false, cleanupFailure = false, planFailure = false } = {}) {
   const tasks = [
     { id: 1, parentTaskId: null, projectId: 10 },
     { id: 2, parentTaskId: 1, projectId: 10 },
@@ -12,7 +12,7 @@ function fixture({ enabled = true, sourceAllowed = true, targetAllowed = true, p
   const calls = [];
   const prisma = {
     project: { findFirst: async () => sourceAllowed ? { id: 10 } : null },
-    section: { findFirst: async () => targetAllowed ? { id: 20 } : null },
+    section: { findFirst: async ({ where }) => targetAllowed && (where.visibility === undefined || where.visibility === targetVisible) ? { id: 20 } : null },
     task: { findFirst: async ({ where }) => tasks.find(t => t.id === where.id && t.projectId === where.projectId) ?? null,
       findMany: async ({ where }) => where.id
       ? tasks.filter(t => where.id.in.includes(t.id) && t.projectId === where.projectId).map(({ id }) => ({ id }))
@@ -53,6 +53,17 @@ test('bulk moves each selected family once and preserves hierarchy', async () =>
   assert.deepEqual(f.calls, [1, 4]);
   assert.deepEqual((await response.json()).failedIds, []);
   assert.deepEqual(f.tasks.map(t => [t.id, t.projectId, t.parentTaskId]), [[1,20,null],[2,20,1],[3,20,2],[4,20,null]]);
+});
+
+test('only a visible destination column accepts moves', async () => {
+  const hidden = fixture({ targetVisible: false });
+  assert.equal((await hidden.route(body)).status, 404);
+  assert.deepEqual(hidden.calls, []);
+  assert.ok(hidden.tasks.every(t => t.projectId === 10));
+
+  const visible = fixture({ targetVisible: true });
+  assert.equal((await visible.route(body)).status, 200);
+  assert.deepEqual(visible.calls, [1, 4]);
 });
 
 test('partial tree failure reports actual selected membership and continues', async () => {

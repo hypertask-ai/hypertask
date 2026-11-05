@@ -30,7 +30,7 @@ export const POST = taskWriteRoute({
     });
     if (!source) return NextResponse.json({ message: "Source board unavailable. Check your access." }, { status: 404 });
     const section = await prisma.section.findFirst({
-      where: { id: sectionId, projectId, deleted: false, project: taskWriteAccessWhere(session.userId, session.agentId, session.teamScope) },
+      where: { id: sectionId, projectId, deleted: false, visibility: true, project: taskWriteAccessWhere(session.userId, session.agentId, session.teamScope) },
       select: { id: true },
     });
     if (!section) return NextResponse.json({ message: "Destination column unavailable. Check your access and choose a visible column." }, { status: 404 });
