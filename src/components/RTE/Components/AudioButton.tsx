@@ -248,6 +248,19 @@ export const AudioButton = ({
     ctx.clearRect(0, 0, rect.width, rect.height);
     ctx.fillStyle = getComputedStyle(canvas).color || "#999a9d";
 
+    if (canvas.hasAttribute("data-level-dots")) {
+      const dots = 6;
+      const latest = barsRef.current[barsRef.current.length - 1] ?? 0;
+      const lit = Math.max(1, Math.min(dots, Math.ceil(latest * dots)));
+      const lit_color = ctx.fillStyle;
+      const muted = getComputedStyle(document.documentElement).getPropertyValue("--color-text-light-gray").trim() || "#8e9093";
+      for (let i = 0; i < dots; i++) {
+        ctx.fillStyle = i < lit ? lit_color : muted;
+        ctx.fillRect(i * 4, 0, 2, 2);
+      }
+      return;
+    }
+
     const bw = 3;
     const gap = 2;
     const step = bw + gap;
@@ -849,41 +862,19 @@ export const AudioButton = ({
         <div
           data-ai-chat-dictation-pill
           className={cn(
-            "flex items-center gap-1.5 rounded-[4px] bg-hover-active pl-2 pr-1",
+            "flex items-center gap-2 rounded-[4px] bg-hover-active px-[10px]",
             isMobileView ? "h-11" : "h-7",
             visualizerClassName,
           )}
         >
-          <canvas
-            ref={waveCanvasRef}
-            className="block h-3 w-7 text-icon-dark-gray"
-            aria-hidden="true"
-          />
-          <span className="text-dense text-white-black">Dictation</span>
-          <span
-            data-ai-chat-recording-elapsed
-            className="shrink-0 text-dense tabular-nums text-icon-dark-gray"
-          >
-            {String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:
-            {String(elapsedSeconds % 60).padStart(2, "0")}
-          </span>
-          <button
-            type="button"
-            data-ai-chat-recording-cancel={isAiChat || undefined}
-            onClick={closeHandler}
-            aria-label="Cancel dictation"
-            className={cn("flex items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black", isMobileView ? "h-11 w-11" : "h-5 w-5")}
-          >
-            <X size={14} strokeWidth={1.75} />
-          </button>
           <button
             type="button"
             data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Stop dictation"
-            className={cn("group relative flex items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black", isMobileView ? "h-11 w-11" : "h-5 w-5")}
+            className={cn("group relative flex items-center justify-center rounded-[4px]", isMobileView ? "h-11 w-11" : "h-5 w-3")}
           >
-            <Square size={14} strokeWidth={2.2} />
+            <span className="block h-[10px] w-[10px] rounded-[2px] bg-white-black" aria-hidden="true" />
             <Tooltip
               left={0}
               bottom={-45}
@@ -891,6 +882,29 @@ export const AudioButton = ({
               text={"Stop dictation"}
             />
           </button>
+          <span
+            data-ai-chat-recording-elapsed
+            className="shrink-0 text-dense font-medium tabular-nums text-white-black"
+          >
+            {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, "0")}
+          </span>
+          <canvas
+            ref={waveCanvasRef}
+            data-level-dots
+            className="block h-[2px] w-[22px] text-white-black"
+            aria-hidden="true"
+          />
+          {isMobileView && (
+            <button
+              type="button"
+              data-ai-chat-recording-cancel={isAiChat || undefined}
+              onClick={closeHandler}
+              aria-label="Cancel dictation"
+              className="flex h-11 w-11 items-center justify-center rounded-[4px] text-icon-dark-gray hover:text-white-black"
+            >
+              <X size={14} strokeWidth={1.75} />
+            </button>
+          )}
         </div>
       ) : (
         <div
