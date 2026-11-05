@@ -14,6 +14,7 @@ import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_8038_CHAT_OPENER_READY_FLAG } from "@/lib/flags/definitions/htpr-8038-chat-opener-ready";
 import { HTPR_8030_CHAT_OPEN_RACE_FLAG } from "@/lib/flags/definitions/htpr-8030-chat-open-race";
 import { HTPR_8042_AMOLED_CHAT_BORDER_FLAG } from "@/lib/flags/definitions/htpr-8042-amoled-chat-border";
+import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
 import {
   MOBILE_OVERLAY_SHEET_Z,
   mobileOverlayAppSheetBodyClass,
@@ -68,7 +69,10 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
     renameChat,
     currentSession,
     togglePopover,
+    minimized,
   } = chat;
+  const chatCleanup = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  const dockMinimizedTab = chatCleanup && minimized && !showQuickTips;
   const idempotentChatOpen = useFlag(HTPR_8030_CHAT_OPEN_RACE_FLAG);
   const amoledChatBorder = useFlag(HTPR_8042_AMOLED_CHAT_BORDER_FLAG);
   const deferChatOpen = useFlag(HTPR_8038_CHAT_OPENER_READY_FLAG);
@@ -150,7 +154,7 @@ const ChatPanelsContent = ({ chat }: { chat: ChatContextType }) => {
             <div
               className={cn(
                 "fixed right-[0.5rem] z-floating",
-                showQuickTips ? "bottom-10" : "bottom-5"
+                dockMinimizedTab ? "bottom-0" : showQuickTips ? "bottom-10" : "bottom-5"
               )}
             >
               <ChatWindow />
