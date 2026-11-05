@@ -8,12 +8,12 @@ A pull request does not need to repair unrelated historical drift. It must not i
 
 Hypertask is minimal and keyboard-first. Controls use compact geometry, quiet hierarchy, and semantic theme tokens. Prefer an existing component or composition over a new visual pattern.
 
-The core themes are AMOLED, Graphite, and Porcelain. Dia deliberately changes typography and card geometry. The legacy `dark.css` and `light.css` themes are compatibility sources, not references for new UI.
+The supported themes are Light, AMOLED, and Graphite 2. Owner rule, 2026-11-04 (https://app.hypertask.ai/detail/project-15/8705): design, build, and QA only for these three. Graphite, Porcelain, Dia, Rounded, and the legacy `dark.css` are not references for new UI. Graphite 2 colors follow the approved Figma screen from https://app.hypertask.ai/detail/project-15/8050.
 
 Sources:
 
 - `tailwind.config.ts`
-- `src/styles/tailwindThemes/{amoled,graphite,porcelain,dia}.css`
+- `src/styles/tailwindThemes/porcelain.css` (the Light option), `amoled.css`, and `graphite-2.css`
 - `src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/NewCommentComponent.tsx`
 - `src/components/Common/AttachmentsUpload/index.tsx`
 - `src/lib/configs/general.config.ts`
@@ -27,18 +27,16 @@ Sources:
 | Keyboard badges and very small inset marks | 2px | `rounded-[2px]` |
 | Compact controls, menu rows, chips | 4px | `rounded-sm` or `rounded-[4px]` |
 | Cards, panels, modals, sheets | 4px | `rounded-sm` or `rounded-[4px]` |
-| Mobile comment input well only | 8px | `rounded-lg` |
-| Avatars, status dots, and established circular icon actions | 50% | `rounded-full` |
+| Mobile comment input well | 4px | `rounded-sm` or `rounded-[4px]` |
+| Avatars and status dots only | 50% | `rounded-full` |
 
-Product corners are 2px or 4px. Owner rule, 2026-11-04: any corner that is not 2 or 4px goes back to Bugs. Existing 5px corners are legacy; a change from 5px to 4px conforms.
+Product corners are 2px or 4px. Never 5px, 6px, 8px, or larger. Owner rule, 2026-11-04: any corner that is not 2 or 4px goes back to Bugs. Existing 5px and 8px corners are legacy; a change from either to 4px conforms. Full round is only for avatars and status dots. No pills.
 
 `ChatWindowFrame` in multi-window chat uses a maximum 4px radius. Poteto Advisor's design QA correction: https://app.hypertask.ai/detail/project-15/8334#comment-351288
 
 The Ctrl+J palette, standalone floating chat, and outer framed chat windows use 4px corners: [QA correction](https://app.hypertask.ai/detail/project-15/8055#comment-351287).
 
-Do not use `rounded-xl`, `rounded-2xl`, or another generic large SaaS radius on product UI. Do not turn labels or counts into outlined pills.
-
-Dia is an intentional exception. Its kanban cards and posted comments use 10px corners, and its modals use 12px corners. Keep those values scoped under `.dia`; do not copy them into another theme.
+Do not use `rounded-lg`, `rounded-xl`, `rounded-2xl`, or another generic large SaaS radius on product UI. Do not turn labels or counts into outlined pills.
 
 ### Borders and shadows
 
@@ -52,19 +50,21 @@ Dia is an intentional exception. Its kanban cards and posted comments use 10px c
 
 Use semantic Tailwind names or their CSS variables in components. A raw color is acceptable only when it is already declared as a theme or brand token and no semantic utility exists. New colors belong in every supported theme before use.
 
-| Role | Component utility | CSS variable | AMOLED | Graphite | Porcelain | Dia |
-|---|---|---|---|---|---|---|
-| Page | `bg-pageBackground` | `--bg-pageBackground` | `#000000` | `#0e0e0e` | `#ffffff` | `#f6f4ef` |
-| Card | `bg-cardBackground` | `--bg-cardBackground` | `#1d1d1d` | `#262a30` | `#ffffff` | `#ffffff` |
-| Modal or menu | `bg-modalBackground` | `--bg-modalBackground` | `#141414` | `#2c2f36` | `#ffffff` | `#ffffff` |
-| Comment surface | `bg-comment-description` | `--bg-comment-description` | `#121212` | `#262a30` | `#f9f9fa` | `#ffffff` |
-| Mobile comment well | `bg-newcomment-well` | `--bg-newcomment-well` | `#000000` | `#17191d` | `#ececef` | `#f1ede6` |
-| Primary text | `text-white-black` | `--color-white-black` | `#ececec` | `#ffffff` | `#18181b` | `#1f1d1a` |
-| Muted text | `text-text-light-gray` | `--color-text-light-gray` | `#8a8a8a` | `#8e9093` | `#727279` | `#67635b` |
-| Quiet border | `border-border-light-gray-thin` | `--border-light-gray-thin` | `#333333` | `#33373e` | `#e2e2e6` | `#e9e4da` |
-| Primary action | `bg-shadcn-primary` | `--shadcn-primary` | `222 9% 46%` | `225 10% 49%` | `228 10% 40%` | `142 27% 33%` |
+| Role | Component utility | CSS variable | Light | AMOLED | Graphite 2 |
+|---|---|---|---|---|---|
+| Page | `bg-pageBackground` | `--bg-pageBackground` | `#ffffff` | `#000000` | `#17181b` |
+| Card | `bg-cardBackground` | `--bg-cardBackground` | `#ffffff` | `#1d1d1d` | `#1f2125` |
+| Modal or menu | `bg-modalBackground` | `--bg-modalBackground` | `#ffffff` | `#141414` | `#1f2125` |
+| Comment surface | `bg-comment-description` | `--bg-comment-description` | `#f9f9fa` | `#121212` | `#1f2125` |
+| Mobile comment well | `bg-newcomment-well` | `--bg-newcomment-well` | `#ececef` | `#000000` | `var(--bg-pageBackground)` |
+| Primary text | `text-white-black` | `--color-white-black` | `#18181b` | `#ececec` | `#ececed` |
+| Muted text | `text-text-light-gray` | `--color-text-light-gray` | `#727279` | `#8a8a8a` | `#9a9ca1` |
+| Quiet border | `border-border-light-gray-thin` | `--border-light-gray-thin` | `#e2e2e6` | `#333333` | `#2a2c31` |
+| Primary action | `bg-shadcn-primary` | `--shadcn-primary` | `228 10% 40%` | `222 9% 46%` | `221.5385 12.2642% 41.5686%` |
 
-Static brand tokens are `hypertasks-purple` (`#4455BB`), `hypertasks-green` (`#C2CFA5`), `hypertasks-ai-purple` (`#C668FF`), and `hypertasks-header-blue` (`rgb(35, 131, 226)`). Brand colors are accents, not substitutes for themed surfaces or text.
+Static brand tokens are `hypertasks-green` (`#C2CFA5`) and `hypertasks-header-blue` (`rgb(35, 131, 226)`). Brand colors are accents, not substitutes for themed surfaces or text.
+
+No purple. Do not use `hypertasks-purple`, `hypertasks-ai-purple`, or any other purple or violet on new or changed UI, including AI features. No sparkle icons (`Sparkles`, `PencilSparkles`, or similar) on new or changed UI.
 
 ## Spacing
 
@@ -79,7 +79,7 @@ Tailwind's base spacing unit is 4px. Build normal layout rhythm from `1`, `2`, `
 
 ## Typography
 
-AMOLED, Graphite, and Porcelain use IBM Plex Sans. Dia uses italic Newsreader for board, column, modal, and `h1` to `h3` headings. Inter is the fallback for surfaces outside a core-theme selector.
+Light, AMOLED, and Graphite 2 use IBM Plex Sans. Inter is the fallback for surfaces outside a theme selector.
 
 Use the eight named sizes from `tailwind.config.ts`:
 
@@ -135,9 +135,9 @@ The mobile comment composer is the reference for combining shape, spacing, token
 1. A bottom sheet with `bg-cardBackground`, a 4px outer radius, and `shadow-md`.
 2. A drag handle above the field.
 3. Twelve pixels of horizontal sheet padding and 6px below the field.
-4. A borderless recessed input well using `bg-newcomment-well`, 8px corners, 12px horizontal padding, and 4px vertical padding.
+4. A borderless recessed input well using `bg-newcomment-well`, 4px corners (production still carries a legacy 8px `rounded-lg`; moving it to 4px conforms), 12px horizontal padding, and 4px vertical padding.
 5. A 14px editor with 8px vertical padding and the “Add a comment…” placeholder.
-6. One flat action row with an 8px gap: Plus, purple `PencilSparkles`, spacer, mic, then Send. The Plus menu contains attachments, mention, commands, and discard.
+6. One flat action row with an 8px gap: Plus, the AI writer action, spacer, mic, then Send. The AI writer action uses a neutral themed icon, not purple and not a sparkle. The Plus menu contains attachments, mention, commands, and discard.
 7. Empty dictation, recording confirmation, and Send use a 48×44 inverted-theme action with 4px corners. With text, the ghost mic sits immediately left of Send.
 
 Relevant markup lives in `NewCommentComponent.tsx`; action ordering lives in `AttachmentsUpload/index.tsx` and `mobileCommentComposer.ts`. Preserve the single-row ordering because re-parenting the microphone destroys an in-flight recording.
@@ -151,8 +151,7 @@ A style finding gates only when the diff itself proves that the pull request int
 Do not gate on:
 
 - unchanged historical drift;
-- Dia's scoped 10px and 12px geometry;
-- established circular avatars, status dots, floating actions, or AI chat send controls;
+- established circular avatars and status dots;
 - data visualization colors that cannot map to a semantic UI role;
 - third-party widgets that the app does not style;
 - an owner-approved design whose exception is documented in the pull request.
