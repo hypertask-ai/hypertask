@@ -336,8 +336,6 @@ mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 1
 : > "$D/log"; ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: same-agent loss exits 3" "$?" 3
 grep -q unassign "$D/log" && bad "same-agent loss called unassign" || ok "same-agent loss does not unassign"
 grep -q 'Stepping back' "$D/log" && ok "same-agent loss still posts the note" || bad "no note"
-mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
-: > "$D/log"; SHIP_SESSION_NAME='RUNNER 3' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a runner slot resumes past its own old claim" "$?" 0
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 : > "$D/log"; out=$(./ship-claim YPER4-999); rc=$?
 eq "flow winner exit code" "$rc" 0
@@ -393,6 +391,9 @@ chmod +x "$D/hold-gh" "$D/hold-ht"
 export RUNNER_INBOX_DIR=$D/inbox
 export HOLD_READS=$D/hold-reads HOLD_OPEN=$D/open.json HOLD_MERGED=$D/merged.json HOLD_BOARD=$D/board.json HOLD_BOARD_PAGE2=$D/page2.json HOLD_ORIGINAL_HT=$D/hypertask
 export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUME="claude --resume $ME"
+mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
+printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 3' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a runner slot resumes past its own old claim" "$?" 0
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 printf '[]' > "$HOLD_OPEN"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
