@@ -51,6 +51,21 @@ function landing(project, enabled) {
   return useLandingSectionState({ _allProjects: [project], _projectIndex: 0, _currentUser: { id: 6 }, _boardLayout: 'board' }).filteredSectionsForActiveView;
 }
 
+function tabCount(project) {
+  const { default: useRenderedViews } = loadModule('src/hooks/Homepage/Views/useRenderedViews.ts', {
+    react: { useMemo: (fn) => fn() },
+    '@/lib/state': { useRecoilValue: (atom) => atom === 'user' ? { id: 6 } : {} },
+    '@/store': { currentUserAtom: 'user' },
+    './useOrderedViews': { default: () => builtin.BUILTIN_VIEWS },
+    '@/hooks/Task Detail/useTimeTracking': { useBoardRunningTimers: () => ({ timers: new Map() }) },
+    '@/hooks/useFlag': { useFlag: () => true },
+    '@/lib/constants/builtinViews': builtin,
+    '@/utils/helperFunctions/Views/FilterHelperFunctions': filters,
+    '@/utils/helperFunctions/Views/SubtaskHelperFunction': subtasks,
+  });
+  return useRenderedViews(project).viewTaskCounts.get(id);
+}
+
 test('Blocked by me count and landing rows agree after selecting a Done-only saved view', () => {
   const project = restrictedProject();
   const before = structuredClone(project);
@@ -59,6 +74,8 @@ test('Blocked by me count and landing rows agree after selecting a Done-only sav
   const counted = builtin.getBlockedByMeSections(project, context);
   assert.deepEqual(sectionIds(rows).sort(), ['a', 'g']);
   assert.deepEqual(sectionIds(rows).sort(), sectionIds(counted).sort());
+  assert.equal(tabCount(project), 2);
+  assert.equal(tabCount(project), sectionIds(rows).length);
   assert.ok(rows.every((section) => section.visibility));
   assert.deepEqual(project, before, 'saved views and blocker markers remain unchanged');
 });
@@ -67,6 +84,7 @@ test('blocker changes remove a child row and its count together; another viewer 
   const project = restrictedProject();
   project.tasks[0].waitingOnUserId = null;
   assert.deepEqual(sectionIds(landing(project, true)), ['g']);
+  assert.equal(tabCount(project), 1);
   assert.deepEqual(sectionIds(builtin.getBlockedByMeSections(project, context)), ['g']);
   assert.deepEqual(sectionIds(builtin.getBlockedByMeSections(project, { currentUserId: 7 })), ['b']);
   assert.deepEqual(sectionIds(builtin.getBlockedByMeSections(project, {})), []);
