@@ -69,13 +69,13 @@ verdict() {
           action: ((.detailsUrl // "") |
             (capture("/actions/runs/(?<run>[0-9]+)/job/(?<job>[0-9]+)")? |
               {run: (.run | tonumber), job: (.job | tonumber)}) // null),
-          identity: [.__typename, (.name // .context // "?"), (.checkSuite.workflowRun.workflow.name // "")]
+          identity: [.__typename, (.name // .context // "?"), (.checkSuite.workflowRun.workflow.name // ""), (.checkSuite.app.id // "")]
         }
       ]
       | group_by(.identity)
       | map(
           (map(select(.action != null)) |
-            if length > 0 then [max_by([.action.run, .action.job, .t, risk])] else [] end)
+            if length > 0 then (map(.action.run) | max) as $run | map(select(.action.run == $run)) else [] end)
           + (map(select(.action == null)) |
             map(select(.t == "" or .t == "0001-01-01T00:00:00Z"))
             + (map(select(.t != "" and .t != "0001-01-01T00:00:00Z")) |
@@ -95,7 +95,7 @@ check() {
     repository(owner:$owner, name:$repo) {
       pullRequest(number:$pr) { state headRefOid }
       object(oid:$head) { ... on Commit { oid statusCheckRollup { contexts(first:100) {
-        nodes { __typename ... on CheckRun { name status conclusion startedAt detailsUrl checkSuite { workflowRun { workflow { name } } } } ... on StatusContext { context state createdAt } }
+        nodes { __typename ... on CheckRun { name status conclusion startedAt detailsUrl checkSuite { app { id } workflowRun { workflow { name } } } } ... on StatusContext { context state createdAt } }
         pageInfo { hasNextPage }
       } } } }
     }
