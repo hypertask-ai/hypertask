@@ -1,8 +1,9 @@
 ## GitHub completion notifications (YPER4-881)
 
-`ci-wait <PR> --repo hypertask-ai/hypertask --timeout 1800` waits on local
-notification files. It rereads GitHub after a notification, at most once per
-minute, with a ten-minute fallback. It does not replace the release guard:
+`ci-wait <PR> --repo hypertask-ai/hypertask --timeout 1800 --head <PUSHED_SHA>` waits on local
+notification files. Use the known pushed commit SHA, not a fresh GitHub read.
+It rereads GitHub after a notification, at most once per five minutes,
+with a ten-minute fallback. It does not replace the release guard:
 required checks still need current-head success before merging.
 
 The runner receiver accepts `POST /github/notify` only for hook/repository pairs

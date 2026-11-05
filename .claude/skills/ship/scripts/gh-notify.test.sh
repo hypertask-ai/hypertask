@@ -117,19 +117,19 @@ done
 cat > "$T/gh" <<G
 #!/bin/sh
 { printf "%s " "\$*" | tr "\\n" " "; echo; } >> "$T/gh.log"
-case "\$*" in *headRefName*) echo runner8/x ;; *statusCheckRollup*) cat "$T/rollup" ;; esac
+case "\$*" in *headRefName*) echo '{"headRefName":"runner8/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' ;; *statusCheckRollup*) cat "$T/rollup" ;; esac
 G
 roll() { # state then name:status:conclusion ...
   local st=$1; shift
-  printf '%s\n' "$@" | jq -Rn --arg st "$st" '{state:$st, statusCheckRollup:[inputs | split(":") | {__typename:"CheckRun", name:.[0], status:.[1], conclusion:(.[2] // "")}]}' > "$T/rollup"
+  printf '%s\n' "$@" | jq -Rn --arg st "$st" '{data:{repository:{pullRequest:{state:$st,headRefOid:("a" * 40)},object:{oid:("a" * 40),statusCheckRollup:{contexts:{nodes:[inputs | split(":") | {name:.[0],status:.[1],conclusion:(.[2] // "")}],pageInfo:{hasNextPage:false}}}}}}}' > "$T/rollup"
 }
 chmod +x "$T/gh"; roll OPEN "CI Tests:IN_PROGRESS:" "Lint:COMPLETED:SUCCESS"
 for repo in '' 'not-a-repository' 'owner/repo/extra'; do
-  CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --repo "$repo" >/dev/null 2>&1
+  CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo "$repo" >/dev/null 2>&1
   eq "invalid explicit repository exits 3 ($repo)" "$?" 3
 done
 [ ! -e "$T/gh.log" ] && ok "invalid repository makes no GitHub reads" || bad "invalid repository read GitHub"
-( CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify CI_WAIT_TICK=1 CI_WAIT_GAP=0 ./ci-wait 6 --repo hypertask-ai/hypertask --timeout 30 > "$T/cw.out"; echo $? > "$T/cw.rc" ) &
+( CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify CI_WAIT_TICK=1 CI_WAIT_GAP=0 ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 30 > "$T/cw.out"; echo $? > "$T/cw.rc" ) &
 CW=$!
 sleep 3
 eq "ci-wait read the checks once and then waits" "$(grep -c statusCheckRollup "$T/gh.log")" 1
@@ -142,16 +142,21 @@ eq "ci-wait exits 0 after the notify" "$(cat "$T/cw.rc")" 0
 eq "two check reads in total" "$(grep -c statusCheckRollup "$T/gh.log")" 2
 eq "waiter file removed" "$(ls "$T/notify/waiters" | grep -vc "^$W$")" 0
 roll OPEN "CI Tests:COMPLETED:FAILURE" "Lint:IN_PROGRESS:"
-CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --repo hypertask-ai/hypertask >/dev/null; eq "failed check exits 1" "$?" 1
+CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask >/dev/null; eq "failed check exits 1" "$?" 1
 roll OPEN "CI Tests:COMPLETED:CANCELLED" "Lint:COMPLETED:SUCCESS"
-out=$(CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --repo hypertask-ai/hypertask); eq "cancelled check is not a pass" "$?" 1
+out=$(CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask); eq "cancelled check is not a pass" "$?" 1
 grep -q 'CI Tests (cancelled)' <<<"$out" && ok "cancelled check is named" || bad "cancelled not named: $out"
 roll MERGED "CI Tests:COMPLETED:CANCELLED"
-CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --repo hypertask-ai/hypertask >/dev/null; eq "merged PR exits 0" "$?" 0
+CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask >/dev/null; eq "merged PR exits 0" "$?" 0
 roll OPEN "CI Tests:COMPLETED:SUCCESS" "Lint:QUEUED:"
-CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify CI_WAIT_TICK=1 ./ci-wait 6 --repo hypertask-ai/hypertask --timeout 2 >/dev/null; eq "timeout exits 2" "$?" 2
+CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify CI_WAIT_TICK=1 ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 2 >/dev/null; eq "timeout exits 2" "$?" 2
 ./ci-wait abc >/dev/null 2>&1; eq "bad usage exits 3" "$?" 3
 grep -q 'CI_WAIT_FALLBACK=600\|FALLBACK=600' ci-wait && ok "fallback poll floor is 600 s" || bad "fallback floor"
+before=$(lines "$T/deliver.log")
+post 111 workflow_run d13 "$(run hypertask-ai/hypertask runner7/yper4-1 'CI Tests' success 5 cccccccccccccccccccccccccccccccccccccccc)" >/dev/null
+settle "$T/deliver.log" "$((before + 1))"
+eq "CI Tests success wakes the owner once" "$(lines "$T/deliver.log")" "$((before + 1))"
+tail -1 "$T/deliver.log" | grep -Fq -- 'ci-wait 5 --repo hypertask-ai/hypertask --head cccccccccccccccccccccccccccccccccccccccc' && ok "success includes the complete ci-wait hint" || bad "success ci-wait hint"
 echo "$passes passed, $fails failed"
 [ "$fails" = 0 ] && echo "ALL PASS"
 exit "$fails"

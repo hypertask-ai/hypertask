@@ -483,7 +483,7 @@ def gh_message(ev):
     if ev["conclusion"] in GH_FAIL:
         return f"GitHub: {ev['workflow']} failed on {pr} ({where}) {gh_url(ev)}. Read it with one gh call; wait with ci-wait, never --watch."
     if ev["conclusion"] == "success" and ev["workflow"] in GH_PASS_WAKE:
-        return f"GitHub: {ev['workflow']} passed on {pr} ({where}). Confirm with ci-wait {ev.get('pr') or ''} --repo {ev['repo']}, then go on."
+        return f"GitHub: {ev['workflow']} passed on {pr} ({where}). Confirm with ci-wait {ev.get('pr') or ''} --repo {ev['repo']} --head {ev['sha']}, then go on."
     return None
 
 
