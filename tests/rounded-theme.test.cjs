@@ -126,6 +126,7 @@ test("Rounded registry retains the feature default and exact small release risk"
 test("component flag branches preserve theme choices, cookie reads and writes, and command results", () => {
   for (const enabled of [false, true]) for (const isMobile of [false, true]) {
     const appearance = load("src/components/Modals/Settings/AppearanceSection.tsx", {
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: false, loaded: true }) },
       "@/hooks/useFlag": { useFlag: key => key === "htpr-8054-graphite-2" || enabled },
       "@/lib/contexts/mobileContext": { useMobileView: () => isMobile },
       "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme" },
@@ -145,16 +146,19 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
     const statements = [];
     const visit = (node) => {
       if ((ts.isVariableStatement(node) && node.declarationList.declarations.some(item => names.has(item.name.getText(parsed)))) ||
-          (ts.isIfStatement(node) && node.expression.getText(parsed) === "roundedEnabled || graphite2Enabled")) statements.push(node.getText(parsed));
+          (ts.isIfStatement(node) && node.expression.getText(parsed) === "roundedEnabled || graphite2Enabled || visibility.restore || !visibility.loaded")) statements.push(node.getText(parsed));
       ts.forEachChild(node, visit);
     };
     visit(parsed);
     assert.equal(statements.length, 4);
     const code = ts.transpileModule(statements.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
-    const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "isMobile", "keepAiChatClosedKeywords", "aiChatAutoOpenCommandName", "blockerCommentEnabled", "shareKeyLabels", "removeImageGeneration", "graphite2Enabled", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, isMobile, "", "", false, false, false, false);
+    const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "isMobile", "keepAiChatClosedKeywords", "aiChatAutoOpenCommandName", "blockerCommentEnabled", "shareKeyLabels", "removeImageGeneration", "graphite2Enabled", "visibility", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, isMobile, "", "", false, false, false, false, { restore: false, loaded: true });
     for (const options of [undefined, { context: "Others" }, { context: "Task", kanbanSelectAllEnabled: true }]) {
       assert.deepEqual(getCommands(options), getAllCommands(options, options?.kanbanSelectAllEnabled, enabled && !isMobile));
     }
+    const loadingCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "isMobile", "keepAiChatClosedKeywords", "aiChatAutoOpenCommandName", "blockerCommentEnabled", "shareKeyLabels", "removeImageGeneration", "graphite2Enabled", "visibility", `${code}; return getCommands;`)((callback) => callback, getAllCommands, false, isMobile, "", "", false, false, false, false, { restore: false, loaded: false });
+    const loadingKeys = loadingCommands({ context: "Others" }).flatMap(group => group.commandLists.map(command => command.key));
+    for (const key of ["systemTheme", "lightTheme", "darkTheme", "amoledTheme", "paperTheme", "graphite2Theme", "roundedTheme"]) assert.equal(loadingKeys.includes(key), false);
     const dispatcherSource = fs.readFileSync(path.join(root, "src/components/commands.tsx"), "utf8");
     const dispatcher = ts.createSourceFile("commands.tsx", dispatcherSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let themeWriter;
@@ -175,7 +179,8 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
         "next/navigation": { useRouter: () => ({ refresh: () => { refreshes++; } }) },
         "nookies": { parseCookies: () => ({ theme }), default: { set: (...args) => { written = args; } } },
         "react": { useEffect: () => {}, useState: () => [dark ? "dark" : "light", () => {}] },
-        "@/hooks/useFlag": { useFlag: key => key === "htpr-8054-graphite-2" || enabled },
+        "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: false, loaded: true }) },
+      "@/hooks/useFlag": { useFlag: key => key === "htpr-8054-graphite-2" || enabled },
         "@/lib/contexts/mobileContext": { useMobileView: () => isMobile },
         "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme" },
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
@@ -230,6 +235,7 @@ test("listener migrates saved themes on width and device scheme changes without 
     };
     const listener = load("src/lib/contexts/ThemeListener.tsx", {
       react: { useEffect: effect => { cleanup = effect(); } },
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: false, loaded: true }) },
       "@/hooks/useFlag": { useFlag: key => key === "htpr-8054-graphite-2" || enabled, useFlagLoaded: () => true },
       "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme" },
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "htpr-8054-graphite-2" },
@@ -271,5 +277,47 @@ test("listener migrates saved themes on width and device scheme changes without 
     assert.equal(desktop.change, undefined);
     assert.equal(dark.change, undefined);
     assert.equal(disconnected, true);
+  }
+});
+
+test("restored Material follows its own switch even with Graphite 2 enabled", () => {
+  const visibility = { restore: true, loaded: true, system: true, porcelain: true, graphite: true, amoled: true, dia: true };
+  for (const enabled of [false, true]) {
+    assert.equal(normalizeThemePreference("rounded", enabled, true, true), enabled ? "rounded" : "system");
+    const options = availableThemeOptions(enabled, true, visibility);
+    assert.equal(options.some(option => option.value === "rounded"), enabled);
+    const commands = getAllCommands({ context: "Others" }, false, enabled, "", "", false, false, false, true, visibility).flatMap(group => group.commandLists);
+    assert.equal(commands.some(command => command.key === "roundedTheme"), enabled);
+  }
+});
+
+test("listener preserves the server theme until restoration switches load", () => {
+  for (const loaded of [false, true]) {
+    const attributes = { "data-theme": "graphite" };
+    const classes = new Set(["dark", "graphite"]);
+    let writes = 0;
+    const media = { matches: false, addEventListener() {}, removeEventListener() {} };
+    const document = {
+      get cookie() { return "theme=graphite"; },
+      set cookie(_) { assert.fail("listener must not write cookies"); },
+      documentElement: {
+        classList: { [Symbol.iterator]: () => classes.values(), contains: value => classes.has(value), add: (...values) => values.forEach(value => classes.add(value)), remove: (...values) => values.forEach(value => classes.delete(value)) },
+        getAttribute: key => attributes[key],
+        setAttribute: (key, value) => { writes++; attributes[key] = value; },
+      },
+      querySelector: () => null,
+    };
+    const listener = load("src/lib/contexts/ThemeListener.tsx", {
+      react: { useEffect: effect => effect() },
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: true, loaded, system: true, porcelain: true, graphite: false, amoled: true, dia: true }) },
+      "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
+      "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "rounded" },
+      "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: "graphite2" },
+      "@/lib/themePreferences": jiti("../src/lib/themePreferences.ts"),
+    }, { document, window: { matchMedia: () => media }, MutationObserver: class { observe() {} disconnect() {} } });
+    listener();
+    assert.equal(attributes["data-theme"], loaded ? "porcelain" : "graphite");
+    assert.equal(writes, loaded ? 1 : 0);
+    assert.equal(document.cookie, "theme=graphite");
   }
 });

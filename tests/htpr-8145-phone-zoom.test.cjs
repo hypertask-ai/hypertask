@@ -27,7 +27,7 @@ function viewport({ mobile, enabled, userId = 985 }) {
     "@/lib/ai/AiChipEventRecorder", "@/components/System/DeploySkewGuard",
     "@/components/FilesImageFallback", "@/lib/configs/auth.config", "@/lib/configs/general.config",
     "@/lib/fonts/inter", "@/lib/fonts/newsreader", "@/lib/fonts/ibmPlexSans",
-    "@/lib/themePreferences", "@/lib/themeBootScript", "@/lib/appShellBootstrap/client",
+    "@/lib/themeVisibilityServer", "@/lib/themePreferences", "@/lib/themeBootScript", "@/lib/appShellBootstrap/client",
     "@/lib/firstScreen/serverBoardDocument", "@/lib/firstScreen/serverInboxDocument",
     "@/lib/firstScreen/serverTicketShell", "@/lib/ticketSidebarBoot",
   ];

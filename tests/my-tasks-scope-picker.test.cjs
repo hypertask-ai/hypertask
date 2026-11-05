@@ -17,7 +17,7 @@ let changeBoardSearch;
 const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
 const members = { members: [], owner: null };
-stub("src/hooks/useFlag.tsx", { useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" });
+stub("src/hooks/useFlag.tsx", { useFlagLoaded: () => true, useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" });
 stub("src/lib/state.tsx", {
   useRecoilValue: (atom) => atom?.default ?? null,
   useSetRecoilState: () => noop,

@@ -58,6 +58,7 @@ test("Appearance picker shows Graphite 2 only when enabled and selects the saved
     const writes = [];
     const { default: Appearance } = load("src/components/Modals/Settings/AppearanceSection.tsx", {
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: flag },
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: false, loaded: true }) },
       "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
       "@/lib/flags/keys": {},
       "@/lib/contexts/mobileContext": { useMobileView: () => false },
@@ -88,6 +89,7 @@ test("theme hook gates cookie reads and writes independently of Material", () =>
     const { default: useDarkMode } = load("src/hooks/MultiPages/HTC/useDarkMode.tsx", {
       "@/lib/flags/definitions/htpr-8054-graphite-2": { HTPR_8054_GRAPHITE_2_FLAG: flag },
       "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "rounded" },
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: false, loaded: true }) },
       "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : rounded },
       "@/lib/contexts/mobileContext": { useMobileView: () => false },
       "next/navigation": { useRouter: () => ({ refresh: () => refreshes++ }) },
@@ -213,18 +215,19 @@ test("server document gates Graphite 2 without changing other saved themes", asy
     "@/components/ErrorBoundary/ClientErrorReporter", "@/lib/ai/AiChipEventRecorder", "@/components/System/DeploySkewGuard",
     "@/components/FilesImageFallback", "@/lib/ticketSidebarBoot",
   ];
-  for (const [theme, off, on] of [
-    ["graphite-2", "system", "graphite-2"],
-    ["graphite", "graphite", "graphite-2"],
-    ["porcelain", "porcelain", "porcelain"],
-    ["amoled", "amoled", "amoled"],
-    ["dia", "dia", "porcelain"],
-  ]) for (const [enabled, expected] of [[false, off], [true, on]]) {
+  for (const [theme, off, on, restored] of [
+    ["graphite-2", "system", "graphite-2", "graphite-2"],
+    ["graphite", "graphite", "graphite-2", "graphite"],
+    ["porcelain", "porcelain", "porcelain", "porcelain"],
+    ["amoled", "amoled", "amoled", "amoled"],
+    ["dia", "dia", "porcelain", "dia"],
+  ]) for (const [enabled, restore, expected] of [[false, false, off], [true, false, on], [true, true, restored]]) {
     const { default: RootLayout } = load("src/app/layout.tsx", {
       ...Object.fromEntries(unused.map(name => [name, {}])),
       "next/headers": { cookies: async () => ({ get: name => name === "theme" ? { value: theme } : undefined }) },
       "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => ({ id: 985 }) },
-      "@/lib/flags": { isFeatureEnabled: async key => key === flag && enabled },
+      "@/lib/themeVisibilityServer": { readThemeVisibility: async () => ({ restore, loaded: true, system: restore, porcelain: restore, graphite: restore, amoled: restore, dia: restore }) },
+      "@/lib/flags": { isFeatureEnabled: async key => key === flag ? enabled : key.startsWith("htpr-8710-") && restore },
       "@/utils/serverActions": { isMobileDevice: async () => ({ isMobile: false, isApple: false }) },
       "@/lib/configs/auth.config": { default: { cookies: { theme: "theme", defaultTheme: "system" } } },
       "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { bodyLayout: "body-layout" } },
@@ -249,6 +252,7 @@ test("command entry refuses disabled themes while preserving every allowed choic
     const writes = [];
     let dispatch;
     const { default: Commands } = load("src/components/commands.tsx", {
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => ({ restore: false, loaded: true }) },
       "@/hooks/useFlag": { useFlag: key => key === flag ? enabled : key === "rounded" && rounded },
       "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "rounded" },
       react: { useEffect() {} },
@@ -264,5 +268,94 @@ test("command entry refuses disabled themes while preserving every allowed choic
     Commands({});
     for (const theme of ["graphite-2", "rounded", "graphite", "porcelain", "amoled", "dia", "system"]) dispatch.switchToTheme(theme);
     assert.deepEqual(writes, [enabled ? "graphite-2" : "system", rounded ? "rounded" : "system", "graphite", "porcelain", "amoled", "dia", "system"]);
+  }
+});
+
+test("restored appearance and cookie writes respect each independent switch", () => {
+  for (const enabled of [false, true]) {
+    const visibility = { restore: true, loaded: true, system: true, porcelain: true, graphite: enabled, amoled: true, dia: true };
+    const writes = [];
+    const { default: Appearance } = load("src/components/Modals/Settings/AppearanceSection.tsx", {
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => visibility },
+      "@/hooks/useFlag": { useFlag: () => true },
+      "@/lib/contexts/mobileContext": { useMobileView: () => false },
+      "lucide-react": { Check: "check" },
+      "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme: "graphite", effectiveTheme: "dark", switchToTheme: value => writes.push(value) }) },
+      "@/lib/themePreferences": preferences,
+      "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+      "./SettingsCard": { default: "section" }, "./SettingsSectionShell": { default: "section" },
+    });
+    const picker = Appearance().props.children.props.children;
+    assert.equal(picker.props.options.some(option => option.value === "graphite"), enabled);
+    const { default: hook } = load("src/hooks/MultiPages/HTC/useDarkMode.tsx", {
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => visibility },
+      "@/hooks/useFlag": { useFlag: () => true },
+      "@/lib/contexts/mobileContext": { useMobileView: () => false },
+      "next/navigation": { useRouter: () => ({ refresh() {} }) },
+      nookies: { parseCookies: () => ({ theme: "graphite" }), default: { set: (...args) => writes.push(args[2]) } },
+      react: { useEffect() {}, useState: () => ["dark"] },
+      "@/lib/themePreferences": preferences,
+    });
+    const result = hook();
+    assert.deepEqual(writes, []);
+    result.switchToTheme("graphite");
+    assert.deepEqual(writes, enabled ? ["graphite"] : []);
+  }
+});
+
+test("dark toggle chooses an available opposite theme and never writes while loading", () => {
+  const base = { restore: true, loaded: true, system: false, porcelain: false, graphite: false, amoled: false, dia: false };
+  for (const { visibility, theme, system, graphite2 = false, expected } of [
+    { visibility: { ...base, graphite: true }, theme: "porcelain", system: "light", expected: "graphite" },
+    { visibility: { ...base, dia: true }, theme: "amoled", system: "dark", expected: "dia" },
+    { visibility: base, theme: "porcelain", system: "light", graphite2: true, expected: "graphite-2" },
+    { visibility: { ...base, system: true, amoled: true }, theme: "amoled", system: "light", expected: "system" },
+    { visibility: { ...base, porcelain: true }, theme: "porcelain", system: "light" },
+    { visibility: { ...base, loaded: false, graphite: true }, theme: "porcelain", system: "light" },
+    { visibility: { ...base, restore: false, loaded: false }, theme: "porcelain", system: "light" },
+    { visibility: { ...base, restore: false }, theme: "porcelain", system: "light", expected: "amoled" },
+  ]) {
+    const writes = [];
+    let refreshes = 0;
+    const { default: hook } = load("src/hooks/MultiPages/HTC/useDarkMode.tsx", {
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => visibility },
+      "@/hooks/useFlag": { useFlag: key => key === flag && graphite2 },
+      "@/lib/contexts/mobileContext": { useMobileView: () => false },
+      "next/navigation": { useRouter: () => ({ refresh: () => refreshes++ }) },
+      nookies: { parseCookies: () => ({ theme }), default: { set: (_ctx, _key, value) => writes.push(value) } },
+      react: { useEffect() {}, useState: () => [system] },
+      "@/lib/themePreferences": preferences,
+    });
+    const result = hook();
+    result.toggleDarkModeHandler();
+    if (!visibility.loaded) result.switchToTheme("porcelain");
+    assert.deepEqual(writes, expected ? [expected] : []);
+    assert.equal(refreshes, expected ? 1 : 0);
+  }
+});
+
+test("appearance picker and theme commands wait for visibility and show only enabled choices", () => {
+  for (const visibility of [
+    { restore: false, loaded: false },
+    { restore: true, loaded: false, system: true, porcelain: true, graphite: false, amoled: true, dia: false },
+    { restore: true, loaded: true, system: true, porcelain: true, graphite: false, amoled: true, dia: false },
+  ]) {
+    const { default: Appearance } = load("src/components/Modals/Settings/AppearanceSection.tsx", {
+      "@/hooks/useThemeVisibility": { useThemeVisibility: () => visibility },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/contexts/mobileContext": { useMobileView: () => false },
+      "lucide-react": { Check: "check" },
+      "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme: "system", effectiveTheme: "light", switchToTheme() {} }) },
+      "@/lib/themePreferences": preferences,
+      "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+      "./SettingsCard": { default: "section" }, "./SettingsSectionShell": { default: "section" },
+    });
+    const picker = Appearance().props.children.props.children;
+    const values = picker.props.options.map(option => option.value);
+    assert.deepEqual(values, visibility.loaded ? ["system", "porcelain", "amoled"] : []);
+    const keys = getAllCommands({ context: "Others" }, false, false, "", "", false, false, false, false, visibility)
+      .flatMap(group => group.commandLists).map(command => command.key);
+    assert.deepEqual(["systemTheme", "lightTheme", "darkTheme", "amoledTheme", "paperTheme"].filter(key => keys.includes(key)),
+      visibility.loaded ? ["systemTheme", "lightTheme", "amoledTheme"] : []);
   }
 });

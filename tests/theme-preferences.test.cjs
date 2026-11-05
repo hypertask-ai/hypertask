@@ -216,3 +216,49 @@ test("Ctrl+K exposes three direct theme choices without duplicate routes", () =>
   assert.ok(!appearanceSettings.keywords.split(" ").includes("theme"));
 });
 
+
+test("restoration isolates legacy choices and individual switches", () => {
+  const restored = { restore: true, loaded: true, system: true, porcelain: true, graphite: true, amoled: true, dia: true };
+  const values = ["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", "rounded"];
+  assert.deepEqual(availableThemeOptions(true, true, restored).map(option => option.value), values);
+  assert.deepEqual(availableThemeOptions(true, true, { ...restored, restore: false }).map(option => option.value), ["porcelain", "amoled", "graphite-2"]);
+  for (const theme of ["system", "porcelain", "graphite", "amoled", "dia"]) {
+    const visibility = { ...restored, [theme]: false };
+    const options = availableThemeOptions(true, true, visibility);
+    assert.deepEqual(options.map(option => option.value), values.filter(value => value !== theme));
+    const commands = getAllCommands({ context: "Others" }, false, true, "", "", false, false, false, true, visibility).find(group => group.group === "Appearance").commandLists;
+    assert.deepEqual(commands.slice(0, options.length).map(command => command.name), options.map(option => option.title));
+  }
+  assert.equal(normalizeThemePreference("dark", true, true, true), "graphite");
+  assert.equal(normalizeThemePreference("graphite", true, true, true), "graphite");
+  assert.equal(normalizeThemePreference("dia", true, true, true), "dia");
+  assert.equal(normalizeThemePreference("rounded", true, true, true), "rounded");
+  assert.equal(normalizeThemePreference("dark", true, true), "graphite-2");
+  assert.equal(normalizeThemePreference("dia", true, true), "porcelain");
+  assert.equal(normalizeThemePreference("rounded", true, true), "system");
+});
+
+test("restored boot honors theme switches without changing saved cookies", () => {
+  const visibility = { restore: true, loaded: true, system: true, porcelain: true, graphite: true, amoled: true, dia: true };
+  for (const [saved, enabled, expected] of [["dark", true, "graphite"], ["graphite", false, "amoled"], ["dia", true, "dia"], ["rounded", true, "rounded-dark"], ["graphite-2", true, "graphite-2"]]) {
+    const attributes = {};
+    const document = {
+      get cookie() { return `theme=${saved}`; },
+      set cookie(_) { assert.fail("boot must not write cookies"); },
+      documentElement: { classList: { add() {}, remove() {} }, setAttribute(name, value) { attributes[name] = value; } },
+      querySelector() { return null; },
+    };
+    vm.runInNewContext(buildThemeBootScript("theme", "porcelain", "amoled", true, true, { ...visibility, graphite: enabled }), { document, window: { matchMedia: () => ({ matches: true }) } });
+    assert.equal(attributes["data-theme"], expected);
+    assert.equal(document.cookie, `theme=${saved}`);
+  }
+});
+
+test("restoration and individual theme switches are owner-and-QA bugfixes", () => {
+  for (const name of ["restore-themes", "theme-system", "theme-porcelain", "theme-graphite", "theme-amoled", "theme-dia"]) {
+    const flag = jiti(path.join(root, `src/lib/flags/definitions/htpr-8710-${name}.ts`));
+    const definition = flag.default ?? flag;
+    assert.equal(definition.kind, "bugfix");
+    assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  }
+});

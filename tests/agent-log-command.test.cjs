@@ -44,8 +44,8 @@ function gatedValue(file, name, bindings, extraNames = [], flagName) {
 
 function groups(showHistory, roundedEnabled = false, isMobile = false, kanbanSelectAllEnabled, removeImageGeneration = false) {
   const getCommands = gatedValue(palette, "getCommands", {
-    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "", blockerCommentEnabled: false, shareKeyLabels: false, removeImageGeneration, graphite2Enabled: false,
-  }, ["getThemeCommands", "getLegacyCommands"], "roundedEnabled || graphite2Enabled");
+    getAllCommands, useCallback: (callback) => callback, roundedEnabled, isMobile, keepAiChatClosedKeywords: "", aiChatAutoOpenCommandName: "", blockerCommentEnabled: false, shareKeyLabels: false, removeImageGeneration, graphite2Enabled: false, visibility: { restore: false, loaded: true },
+  }, ["getThemeCommands", "getLegacyCommands"], "roundedEnabled || graphite2Enabled || visibility.restore || !visibility.loaded");
   return getCommands({ context: "Task", kanbanSelectAllEnabled, taskOptions: { showHistory, isKanban: false } });
 }
 

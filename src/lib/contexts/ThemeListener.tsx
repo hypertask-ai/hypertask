@@ -1,16 +1,19 @@
 "use client";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 
+import { useThemeVisibility } from "@/hooks/useThemeVisibility";
 import { useEffect } from "react";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import {
   normalizeThemePreference,
+  availableThemePreference,
   resolvedThemeDomMetadata,
   resolveThemePreference,
 } from "@/lib/themePreferences";
 
 const ThemeListener = () => {
+  const visibility = useThemeVisibility();
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
   const roundedLoaded = useFlagLoaded(HTPR_7328_ROUNDED_THEME_FLAG);
@@ -25,9 +28,10 @@ const ThemeListener = () => {
           .find((row) => row.startsWith("theme="))
           ?.split("=")[1] || "system";
 
+      if (!visibility.loaded) return;
       if (stored === "rounded" && !roundedLoaded) return;
       if (["graphite-2", "graphite", "dark", "dia", "rounded"].includes(stored) && !graphite2Loaded) return;
-      const theme = normalizeThemePreference(stored, roundedEnabled, graphite2Enabled);
+      const theme = availableThemePreference(normalizeThemePreference(stored, roundedEnabled, graphite2Enabled, visibility.restore), roundedEnabled, graphite2Enabled, visibility);
       const resolved = resolveThemePreference(
         theme === "rounded" && !desktop.matches ? "system" : theme,
         match.matches ? "dark" : "light"
@@ -72,7 +76,7 @@ const ThemeListener = () => {
       desktop.removeEventListener("change", applyTheme);
       serverRenderedThemeObserver.disconnect();
     };
-  }, [roundedEnabled, roundedLoaded, graphite2Enabled, graphite2Loaded]);
+  }, [roundedEnabled, roundedLoaded, graphite2Enabled, graphite2Loaded, visibility]);
 
   return null;
 };
