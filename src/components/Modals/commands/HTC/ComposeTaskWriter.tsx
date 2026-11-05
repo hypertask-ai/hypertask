@@ -532,7 +532,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               rows={mobile ? 3 : 2}
               placeholder="Describe the task"
               aria-label="Describe the task"
-              className={`${phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content" : "min-h-16 text-content"} ${!composerKeysLayout && (phoneTaskWriterSheet || newTaskWindow) ? "caret-hypertasks-ai-purple" : ""}`}
+              className={`${phoneTaskWriterSheet ? "min-h-16 flex-1 overflow-y-auto text-content" : newTaskWindow ? "min-h-16 max-h-52 overflow-y-auto text-content" : "min-h-16 text-content"} ${(phoneTaskWriterSheet || (!composerKeysLayout && newTaskWindow)) ? "caret-hypertasks-ai-purple" : ""}`}
               onPaste={(event) => {
                 const images = extractPastedImageFiles(event.clipboardData?.items);
                 if (!images.length) return;

@@ -282,6 +282,7 @@ test('layout lock: phone New Task title has a real height and accepts a tap', as
 
 test('layout lock: desktop New Task window stays narrow and inside the viewport', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'Desktop', 'desktop window invariant')
+  await page.setViewportSize({ width: 1440, height: 900 })
   const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { flags: Record<string, boolean> }
   const flagsResponse = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/flags' && response.ok())
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
@@ -307,10 +308,12 @@ test('layout lock: desktop New Task window stays narrow and inside the viewport'
     await expect(window.getByRole('button', { name: 'Choose microphone' })).toHaveCount(0)
     expect(await footer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     const hints = footer.locator(':scope > div > span')
-    await expect(hints).toHaveCount(6)
+    const boardHint = await writer.locator('[data-compose-board-chip]').count() > 0
+    const hintCount = 4 + Number(boardHint) + Number(flags['htpr-8140-ctrlj-dictation-shortcut'] === true)
+    await expect(hints).toHaveCount(hintCount)
     const firstHint = await hints.first().boundingBox()
     expect(firstHint).not.toBeNull()
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < hintCount; i++) {
       await expect(hints.nth(i)).toBeVisible()
       expect((await hints.nth(i).boundingBox())!.y).toBe(firstHint!.y)
     }
