@@ -35,7 +35,7 @@ REPO=${SHIP_REPO:-hypertask-ai/hypertask}
 BASE=${SHIP_BASE:-production}
 readonly -a NON_RELEASING_REPOS=(hypertask-ai/cli-node valentinyeo/ceo)
 EVID=${VCC_EVIDENCE_DIR:-$HOME/.local/state/vcc-evidence}
-PREFIXES='HTPR|HYFA|YPER4|HYCI|IGSH|MARK|HEFE'
+PREFIXES='HTPR|HYFA|YPER4|HYCI|IGSH|MARK|HEFE|HTFE'
 TITLE_RE="^($PREFIXES)-[0-9]+ \\[(BUG|BUGFIX|FEATURE|IMPROVE|CLI/MCP/AI|SPEED|FEEDBACK|DASH|QA|BOARD|COST|PLAN|INFRA|REFACTOR)\\] [^ ]"
 
 fail() { echo "FAIL: $*"; exit 1; }
