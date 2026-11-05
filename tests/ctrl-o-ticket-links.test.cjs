@@ -208,6 +208,7 @@ test("visible ticket links are clipped, normalized and stably prioritized only w
     <nav><a id="nav" href="/nav">nav</a></nav><div role="dialog"><a id="dialog" href="/dialog">dialog</a></div></div>
     <div id="comment-3-input"><a id="comment-link" href="https://app.hypertask.ai/b">b</a><a id="outside" href="/outside">outside</a></div>
     <div id="comment-input-input"><a href="/outside">draft duplicate</a></div>
+    <div data-task-detail-path="/detail/project-15/3"><div id="description-input"><a href="/nested">nested ticket</a></div></div>
     </div></div><div data-task-detail-path="/detail/project-15/2"><div id="description-input"><a id="other" href="/other">other</a></div></div><div id="root"></div>`, { url: "https://app.hypertask.ai/detail/project-15/1" });
   const names = ["window", "document", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
