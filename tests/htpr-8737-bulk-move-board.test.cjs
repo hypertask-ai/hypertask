@@ -84,13 +84,20 @@ test('per-tree refusal leaves that family while another tree moves', async () =>
   assert.deepEqual(f.calls, [1, 4]);
 });
 
-test('flag and board permissions refuse at the same endpoint', async () => {
+test('board permissions refuse unauthorized moves and allow authorized moves at the same endpoint', async () => {
   for (const options of [{ enabled: false }, { sourceAllowed: false }, { targetAllowed: false }]) {
     const f = fixture(options);
     assert.equal((await f.route(body)).status, 404);
     assert.deepEqual(f.calls, []);
     assert.ok(f.tasks.every(t => t.projectId === 10));
   }
+
+  const allowed = fixture();
+  const response = await allowed.route(body);
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).failedIds, []);
+  assert.deepEqual(allowed.calls, [1, 4]);
+  assert.ok(allowed.tasks.every(t => t.projectId === 20));
 });
 
 
