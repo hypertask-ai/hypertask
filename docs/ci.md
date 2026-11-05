@@ -494,6 +494,15 @@ The light gate dependency contract accepts a dynamic `import(pathToFileURL(..))`
 target, which loads a local file and therefore no package, and still fails
 closed on every other non-literal dynamic load.
 
+Run `.claude/skills/ship/scripts/ci-why <PR> --release` to inspect required
+checks on the current PR head. Add `--json` for structured output. Requirements
+come from embedded classic branch protection and effective rules. Warnings flag
+unknown classic requirements or a head/base change during reads. Check states
+are preserved when app metadata is missing. `app_verified` is true for a
+matching app, false when a pin cannot be verified (including missing checks),
+and null for unpinned checks. Text marks observed checks with unknown apps as
+`app pin unverified`; their state alone does not establish release safety.
+
 ## Feature-map citation check (YPER4-610)
 
 The non-required `feature-map-check` job in
