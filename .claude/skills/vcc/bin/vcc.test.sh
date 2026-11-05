@@ -373,10 +373,11 @@ My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
 for context in '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)'; do
-  text="${markdown/the setting that keeps the board tidy./$context}"
+  text="${markdown/the setting that keeps the board tidy./"$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
 done
-text="${markdown/the setting that keeps the board tidy./'&#9;See [the setting](https://example.test)&#x20;here.'}"
+context='&#9;See [the setting](https://example.test)&#x20;here.'
+text="${markdown/the setting that keeps the board tidy./"$context"}"
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
 printf '%s\n' "$markdown" > "$T/question.md"
