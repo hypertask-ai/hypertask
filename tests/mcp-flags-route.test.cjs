@@ -42,6 +42,7 @@ let auditLogs;
 let latestChange;
 let legacyFlagReads;
 let legacyFlagsFail;
+let storedRole;
 const week = 7 * 24 * 60 * 60 * 1000;
 const approvalRequired = "Needs a clear yes from Valentin within 7 days: his thumbs up on the switch question, his own comment on the ticket after exactly one switch question, or HT Product Lead's in-chat record of his exact words. Questions name the switch: Switch <flag-key> to <mode>";
 const ambiguousQuestion = "Ambiguous or missing question: Valentin's yes must follow exactly one switch question; ask him to thumbs-up the one he means";
@@ -68,6 +69,7 @@ stubModule("src/lib/flags.ts", {
     legacyFlagReads++;
     if (legacyFlagsFail) throw new Error("legacy flag unavailable");
     assert.equal(userId, 6);
+    if (flagKey === "htpr-7665-agent-read-role-guard") return false;
     if (flagKey === "htpr-8339-template-switch-question") return templateQuestionFlagOn;
     assert.equal(flagKey, "htpr-7727-plain-yes-flag-approval");
     return plainYesFlagOn;
@@ -191,6 +193,11 @@ const tx = {
 stubModule("src/lib/prisma.ts", {
   default: {
     agent: {
+      findUnique: async (query) => {
+        assert.deepEqual(query, { where: { id: ctx.agentId }, select: { permissions: true } });
+        calls.push("role-lookup");
+        return { permissions: { role: storedRole } };
+      },
       findUniqueOrThrow: async (query) => {
         assert.deepEqual(query, { where: { id: ctx.agentId }, select: { displayName: true } });
         calls.push("agent");
@@ -220,7 +227,7 @@ async function result(response) {
   return { status: response.status, body: await response.json() };
 }
 test.beforeEach((t) => {
-  approvalLogs = []; auditLogs = []; latestChange = null; legacyFlagReads = 0; legacyFlagsFail = false;
+  approvalLogs = []; auditLogs = []; latestChange = null; legacyFlagReads = 0; legacyFlagsFail = false; storedRole = "write";
   t.mock.method(console, "info", (...args) => approvalLogs.push(args));
   ticketComments = []; candidateLocks = []; editOnCandidateLock = null;
   leadAgent = { userId: 6, revokedAt: null };
@@ -313,7 +320,7 @@ test("PATCH passes the authenticated actor, returns previous mode and broadcasts
   assert.equal(response.body.previousMode, "OWNER_AND_QA");
   assert.deepEqual(writes, [[key, "OFF", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason, source: "api" }]]);
   assert.equal(broadcasts, 1);
-  assert.deepEqual(calls, ["rate-limit", "auth", "owner", "agent", "comment-lock", "reaction-lock", "approval", "write"]);
+  assert.deepEqual(calls, ["rate-limit", "auth", "owner", "agent", "advisory-lock", "comment-lock", "reaction-lock", "approval", "write"]);
 });
 
 test("PATCH handles an unstored default or unchanged mode", async () => {
@@ -417,7 +424,7 @@ for (const rejected of ["refusal after switch", "missing key", "wrong mode", "re
     assert.equal(writes.length, 0);
     assert.equal(broadcasts, 0);
     const early = ["unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"].includes(rejected);
-    assert.deepEqual(calls, early ? ["rate-limit", "auth", "owner", "agent"] : ["rate-limit", "auth", "owner", "agent", "comment-lock", "reaction-lock", "approval"]);
+    assert.deepEqual(calls, early ? ["rate-limit", "auth", "owner", "agent"] : ["rate-limit", "auth", "owner", "agent", "advisory-lock", "comment-lock", "reaction-lock", "approval"]);
     assert.equal(approvalQueries.length, early ? 0 : 1);
   });
 }
@@ -893,6 +900,24 @@ for (const scenario of ["role", "agent", "revoked", "owner-link", "source-author
     assert.equal(writes.length, 0);
     assert.equal(auditLogs.length, 0);
   });
+}
+
+for (const flagFails of [false, true]) {
+  for (const role of ["read", "write"]) {
+    test(`PATCH ${role === "read" ? "refuses" : "allows"} stored ${role} when the legacy guard flag ${flagFails ? "throws" : "is off"}`, async () => {
+      const body = ownerBody();
+      ctx.agentRole = undefined;
+      storedRole = role;
+      legacyFlagsFail = flagFails;
+      const response = await result(await PATCH(request("PATCH", body)));
+      assert.equal(response.status, role === "read" ? 403 : 200);
+      if (role === "read") assert.equal(response.body.code, "insufficient_scope");
+      assert.equal(writes.length, role === "read" ? 0 : 1);
+      assert.equal(broadcasts, role === "read" ? 0 : 1);
+      assert.equal(legacyFlagReads, 0);
+      assert.equal(calls.filter((call) => call === "role-lookup").length, 1);
+    });
+  }
 }
 
 test("trusted lead source may record an earlier owner request", async () => {

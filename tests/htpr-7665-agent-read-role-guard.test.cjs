@@ -332,6 +332,24 @@ test("helper: a flag lookup error is logged and treated as off, so old behaviour
   assert.equal(w.counters.agentReads, 0);
 });
 
+for (const flag of ["off", "throw"]) {
+  for (const role of ["read", "write", "admin"]) {
+    for (const carried of [true, false]) {
+      test(`helper: strict mode ${role === "read" ? "refuses" : "allows"} ${carried ? "carried" : "stored"} ${role} with flag ${flag}`, async () => {
+        const w = world({ ctxRole: carried ? role : undefined, dbRole: role, flag });
+        const response = await w.guard.requireAgentWriteRole(w.ctx, { alwaysEnforce: true });
+        if (role === "read") {
+          assert.equal(response.status, 403);
+          assert.equal(response.body.code, "insufficient_scope");
+        } else {
+          assert.equal(response, null);
+        }
+        assert.deepEqual(w.counters, { agentReads: carried ? 0 : 1, flagReads: 0 });
+      });
+    }
+  }
+}
+
 test("helper: a role lookup error propagates and never defaults to write", async () => {
   const w = world({ ctxRole: undefined, dbRole: "throw", flag: "on" });
   await assert.rejects(w.guard.requireAgentWriteRole(w.ctx), ROLE_ERROR);

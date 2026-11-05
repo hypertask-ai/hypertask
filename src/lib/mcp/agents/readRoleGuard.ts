@@ -14,11 +14,12 @@ export async function agentReadRoleGuardEnabled(ownerUserId: number): Promise<bo
 }
 
 export async function requireAgentWriteRole(
-  ctx: Pick<McpAuthContext, 'agentId' | 'agentRole'> & { user: { id: number } }
+  ctx: Pick<McpAuthContext, 'agentId' | 'agentRole'> & { user: { id: number } },
+  options: { alwaysEnforce?: boolean } = {}
 ): Promise<NextResponse | null> {
   if (!ctx.agentId) return null
   if (ctx.agentRole && roleMeets(ctx.agentRole, 'write')) return null
-  if (!(await agentReadRoleGuardEnabled(ctx.user.id))) return null
+  if (!options.alwaysEnforce && !(await agentReadRoleGuardEnabled(ctx.user.id))) return null
 
   const role = ctx.agentRole ?? (await getAgentRole(ctx))
   if (roleMeets(role, 'write')) return null

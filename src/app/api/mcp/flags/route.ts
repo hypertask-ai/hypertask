@@ -1,4 +1,4 @@
-import { getAgentRole, insufficientScopeResponse, roleMeets } from "@/lib/mcp/agents/scopes";
+import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
@@ -67,9 +67,8 @@ export async function PATCH(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const role = ctx.agentRole ?? await getAgentRole(ctx);
-    if (!roleMeets(role, "write")) {
-      const refusal = insufficientScopeResponse(role, "write");
+    const refusal = await requireAgentWriteRole(ctx, { alwaysEnforce: true });
+    if (refusal) {
       refusal.headers.set("Cache-Control", "private, no-store");
       return refusal;
     }
