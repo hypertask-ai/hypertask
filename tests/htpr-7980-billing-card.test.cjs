@@ -1,37 +1,30 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const { test, beforeEach, afterEach } = require("node:test");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
 const { renderToStaticMarkup } = require("react-dom/server");
 const { JSDOM } = require("jsdom");
 const axios = require("axios");
-const root = path.resolve(__dirname, "..");
 const slots = ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"];
 for (const [i, slot] of slots.entries()) process.env[`NEXT_PUBLIC_STRIPE_${slot}`] = `price_choice_${i}`;
 let team, refreshedTeam, enabled, portalAvailable, availabilityError, userId, requests, redirects, refreshCount, dom, mounted;
-function stub(rel, exports) {
-  const filename = path.join(root, rel);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
-stub("src/hooks/useFlag.tsx", { useFlag: () => enabled });
-const stateFile = path.join(root, "src/lib/state.tsx");
-require.cache[stateFile] = { id: stateFile, filename: stateFile, loaded: true, exports: { useRecoilValue: () => ({ id: userId }) } };
-stub("src/store/index.ts", { currentUserAtom: {} });
-stub("src/components/Modals/Settings/SettingsSectionShell.tsx", { default: ({ children }) => React.createElement("main", null, children) });
-stub("src/components/Modals/Settings/settingsNavigation.ts", { getSettingsPath: (section) => `/settings/${section}` });
-stub("src/components/Modals/OptionPicker/index.tsx", { default: ({ options, onSelect }) => React.createElement("div", null,
-  options.map(option => React.createElement("button", { key: option.id, onClick: () => onSelect(option) }, option.label))) });
-require.cache[require.resolve("next/navigation")] = { id: require.resolve("next/navigation"), filename: require.resolve("next/navigation"), loaded: true,
-  exports: { useRouter: () => ({ push() {}, refresh() {} }) } };
-const jiti = require("jiti")(__filename, { interopDefault: true, jsx: true, alias: { "@": path.join(root, "src") } });
-const { deriveTeamBilling } = jiti(path.join(root, "src/lib/deriveCurrentBoardBilling.ts"));
-stub("src/components/Modals/Settings/useSettingsTeam.ts", { useSettingsTeam: () => ({
-  billing: deriveTeamBilling(team), ownerAndMembers: { owner: { id: 985 }, members: [] },
-  project: null, team, refetchTeam: async () => { refreshCount++; return refreshedTeam; },
-}) });
-const { settingsBillingSummary } = jiti(path.join(root, "src/lib/settingsBillingSummary.ts"));
-const BillingSection = jiti(path.join(root, "src/components/Modals/Settings/BillingSection.tsx")).default;
+const { deriveTeamBilling } = loadModule("src/lib/deriveCurrentBoardBilling.ts");
+const { settingsBillingSummary } = loadModule("src/lib/settingsBillingSummary.ts");
+const { default: BillingSection } = loadModule("src/components/Modals/Settings/BillingSection.tsx", {
+  "@/hooks/useFlag": { useFlag: () => enabled },
+  "@/lib/state": { useRecoilValue: () => ({ id: userId }) },
+  "@/store": { currentUserAtom: {} },
+  "./SettingsSectionShell": { default: ({ children }) => React.createElement("main", null, children) },
+  "./settingsNavigation": { getSettingsPath: (section) => `/settings/${section}` },
+  "@/components/Modals/OptionPicker": { default: ({ options, onSelect }) => React.createElement("div", null,
+    options.map(option => React.createElement("button", { key: option.id, onClick: () => onSelect(option) }, option.label))) },
+  "next/navigation": { useRouter: () => ({ push() {}, refresh() {} }) },
+  "./useSettingsTeam": { useSettingsTeam: () => ({
+    billing: deriveTeamBilling(team), ownerAndMembers: { owner: { id: 985 }, members: [] },
+    project: null, team, refetchTeam: async () => { refreshCount++; return refreshedTeam; },
+  }) },
+});
 function subscribed(status = "active", extra = {}) {
   return { ...team, activeSubscriptionPlanId: "sub_current", subscriptionPlan: [{
     subscriptionId: "sub_current", subscriptionStatus: status, priceId: "price_choice_2",

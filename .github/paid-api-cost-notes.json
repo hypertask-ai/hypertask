@@ -83,5 +83,25 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-8276 keeps the existing single Slack chat.postMessage call per new board-15 feedback ticket; only its notification fallback text now carries the line instead of the words 'Hypertask response'. Slack Web API calls are not billed per call.",
     "source": "https://api.slack.com/methods/chat.postMessage"
+  },
+  "src/components/Modals/Settings/BillingSection.tsx:e951e2c7308886854b516004c35166ded8bfb13605da4c0ebac3cea4476fc1a7": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7980: Checks portal availability through the same-origin route, which retrieves Stripe configuration. The request submits no payment; Stripe payment fees are not per-request fees.",
+    "source": "https://stripe.com/pricing"
+  },
+  "src/components/Modals/Settings/BillingSection.tsx:4b83072d8ea93bdbfc1fe6bc590953d4bbefad583e4dd03654e839b0ca4ec45c": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7980: Requests a portal session through the same-origin route. Session creation submits no payment; Stripe payment fees are not per-request fees.",
+    "source": "https://stripe.com/pricing"
+  },
+  "src/components/Modals/Settings/BillingSection.tsx:5aac8f3bd7b2d91e43a1eb03286b7bd411626d7fc56b3b5236c45244e08b3485": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7980: Requests customer provisioning through the same-origin route. Creating a customer submits no payment; Stripe payment fees are not per-request fees.",
+    "source": "https://stripe.com/pricing"
+  },
+  "src/components/Modals/Settings/BillingSection.tsx:e71ec19a9565c64dbf44e0770298f103a8b0d34c4227241940970864e4febf04": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7980: Requests a Checkout session through the same-origin route. Session creation submits no payment; later completed payments may incur Stripe fees, not per-request fees.",
+    "source": "https://stripe.com/pricing"
   }
 }

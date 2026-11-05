@@ -1,17 +1,12 @@
 const assert = require("node:assert/strict");
-const path = require("node:path");
+const { loadModule } = require("./helpers/loadModule.cjs");
 const { test, beforeEach } = require("node:test");
-const root = path.resolve(__dirname, "..");
 const priceIds = ["price_byok_month", "price_byok_year", "price_pro_month", "price_pro_year"];
 for (const [index, name] of ["MONTHLY_PRICE_ID_BYOK", "YEARLY_PRICE_ID_BYOK", "MONTHLY_PRICE_ID_PRO", "YEARLY_PRICE_ID_PRO"].entries()) {
   process.env[`NEXT_PUBLIC_STRIPE_${name}`] = priceIds[index];
 }
 process.env.STRIPE_SECRET_KEY = "sk_test_fixture";
 process.env.NEXT_PUBLIC_BASEURL = "https://app.hypertask.ai";
-function stub(rel, exports) {
-  const filename = path.join(root, rel);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
 let user, team, enabled, flagLookups, retrieved, sessions, legacy;
 let configuration, retrievalError;
 const validConfiguration = () => ({
@@ -30,18 +25,18 @@ const validConfiguration = () => ({
     },
   },
 });
-stub("src/lib/auth/serverUser.ts", { getServerCookieUser: async () => user });
-stub("src/lib/prisma.ts", { default: { team: { findUnique: async () => team } } });
-stub("src/lib/flags.ts", { isFeatureEnabled: async (_key, userId) => { flagLookups.push(userId); return enabled; } });
-stub("src/lib/subscription.ts", { generateCustomerPortalLink: async (customerId) => { legacy.push(customerId); return "https://billing.stripe.test/legacy"; } });
-stub("src/lib/stripe.ts", { getStripeInstance: () => ({ billingPortal: {
-  configurations: { retrieve: async (id, params) => { retrieved.push({ id, ...params }); if (retrievalError) throw retrievalError; return configuration; } },
-  sessions: { create: async (params) => { sessions.push(params); return { url: "https://billing.stripe.test/dedicated" }; } },
-} }) });
-const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
-const { GET, POST } = jiti(path.join(root, "src/app/api/stripe/billing-portal/route.ts"));
-const request = (body = { teamId: "team_owned" }) => new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
-  method: "POST", body: JSON.stringify({ intent: "settings-billing-portal", ...body }), headers: { "Content-Type": "application/json" },
+const { GET, POST } = loadModule("src/app/api/stripe/billing-portal/route.ts", {
+  "@/lib/auth/serverUser": { getServerCookieUser: async () => user },
+  "@/lib/prisma": { default: { team: { findUnique: async () => team } } },
+  "@/lib/flags": { isFeatureEnabled: async (_key, userId) => { flagLookups.push(userId); return enabled; } },
+  "@/lib/subscription": { generateCustomerPortalLink: async (customerId) => { legacy.push(customerId); return "https://billing.stripe.test/legacy"; } },
+  "@/lib/stripe": { getStripeInstance: () => ({ billingPortal: {
+    configurations: { retrieve: async (id, params) => { retrieved.push({ id, ...params }); if (retrievalError) throw retrievalError; return configuration; } },
+    sessions: { create: async (params) => { sessions.push(params); return { url: "https://billing.stripe.test/dedicated" }; } },
+  } }) },
+});
+const request = (body = {}) => new Request("https://app.hypertask.ai/api/stripe/billing-portal", {
+  method: "POST", body: JSON.stringify({ teamId: "team_owned", intent: "settings-billing-portal", ...body }), headers: { "Content-Type": "application/json" },
 });
 beforeEach(() => {
   user = { id: 985, accountId: "account_owned" };

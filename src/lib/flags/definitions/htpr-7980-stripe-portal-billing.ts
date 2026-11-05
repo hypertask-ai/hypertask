@@ -6,7 +6,7 @@ export default {
   key: HTPR_7980_STRIPE_PORTAL_BILLING_FLAG,
   kind: "feature",
   defaultMode: "OWNER_AND_QA",
-  shippedOn: "2026-10-26",
+  shippedOn: "2026-11-05",
   description: "A single Billing card with checkout for unsubscribed Free teams and an explicitly configured, price-only Stripe billing portal for existing subscriptions.",
   releaseRisk: {
     risk: "new",
