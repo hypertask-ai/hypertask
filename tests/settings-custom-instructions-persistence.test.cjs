@@ -51,9 +51,15 @@ test("saved instructions initialize the editor and saving refreshes reopening st
   const change = async (text) => React.act(async () => editor.handleChange({ target: { value: text } }));
   const save = async () => React.act(async () => document.querySelector("button").click());
   try {
+    client.setQueryData(["board-ai-custom-instructions", 7049], { ...saved, customInstruction: "" });
+    await render("initial");
+    assert.equal(value(), "");
+    client.setQueryData(["board-ai-custom-instructions", 7049], saved);
     await render("initial");
     assert.equal(value(), "Previously saved instructions");
     await change("Brain tag required\nSet exactly one brain label.");
+    await render("initial");
+    assert.equal(value(), "Brain tag required\nSet exactly one brain label.");
     await save();
     assert.deepEqual(request, { url: "/api/ai/project/customInstruction", body: { projectId: 7049, customInstruction: "Brain tag required\nSet exactly one brain label." } });
     assert.equal(project.ai_custom_instructions[0].customInstruction, "Brain tag required\nSet exactly one brain label.");

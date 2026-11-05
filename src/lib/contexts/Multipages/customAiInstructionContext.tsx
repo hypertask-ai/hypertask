@@ -1,10 +1,10 @@
 'use client'
 import useFileUploadingStates from "@/hooks/General/useFileUploadingStates";
-import useInput from "@/hooks/General/useInput";
+import type { ChangeEvent } from "react";
 import useLoadingState from "@/hooks/General/useLoadingState";
 import { REACT_QUERY_KEYS } from "@/lib/constants/constants";
 import { TCustomAIProviderProps, TCustomPromptContextType } from "@/models/Contexts";
-import { createContext, FC, useContext } from "react";
+import { createContext, FC, useContext, useEffect, useState } from "react";
 import toast from "react-hot-toast";
 
 export const CustomAIPromptContext = createContext<TCustomPromptContextType | undefined>(undefined);
@@ -21,9 +21,11 @@ export const CustomAiProvider: FC<TCustomAIProviderProps> = ({ children, initial
     closeHandler();
   };
 
-  const { handleChange, input: value } = useInput({
-    defaultValue: initialInstruction
-})
+  const [value, setValue] = useState(initialInstruction);
+  useEffect(() => {
+    setValue(initialInstruction);
+  }, [initialInstruction]);
+  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => setValue(event.target.value);
   return (
     <CustomAIPromptContext.Provider
       value={{ 
