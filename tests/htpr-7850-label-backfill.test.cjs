@@ -1,15 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const path = require("node:path");
-const ts = require("typescript");
 const { createHash } = require("node:crypto");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
-const output = load(path.join(root, "src/lib/ai/labelClassifierOutput.ts"));
+const output = loadModule("src/lib/ai/labelClassifierOutput.ts");
 
-function fixture({ matches = true, batch = false, flag = true } = {}) {
+function fixture(t, { matches = true, batch = false, flag = true } = {}) {
   const records = new Map();
   const labels = new Set();
   const usage = [];
@@ -80,45 +76,31 @@ function fixture({ matches = true, batch = false, flag = true } = {}) {
       return { text: malformed ? "invalid" : JSON.stringify(matches ? [label.id] : []) };
     } },
   };
-  const filename = path.join(root, "src/lib/ai/labelClassifier.ts");
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  const loaded = { exports: {} };
-  new Function("module", "exports", "require", "console", code)(loaded, loaded.exports, id => {
-    if (id === "node:crypto") return require(id);
-    assert.ok(id in stubs, `Unexpected import: ${id}`);
-    return stubs[id];
-  }, { error: (...args) => errors.push(args), warn: (...args) => errors.push(args) });
-  const batchJobs = load(path.join(root, "src/lib/ai/batch/batchJobs.ts"));
-  const loadWithStubs = (relative, extra) => {
-    const source = fs.readFileSync(path.join(root, relative), "utf8");
-    const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-    const mod = { exports: {} };
-    new Function("module", "exports", "require", "console", compiled)(mod, mod.exports, id => {
-      const imports = { ...stubs, "@/lib/ai/batch/batchJobs": batchJobs, ...extra };
-      assert.ok(id in imports, `Unexpected import: ${id}`);
-      return imports[id];
-    }, { error: (...args) => errors.push(args), warn: (...args) => errors.push(args) });
-    return mod.exports;
-  };
-  const submit = loadWithStubs("src/lib/ai/labelClassifierBatch.ts", {
+  t.mock.method(console, "error", (...args) => errors.push(args));
+  t.mock.method(console, "warn", (...args) => errors.push(args));
+  const loaded = loadModule("src/lib/ai/labelClassifier.ts", stubs);
+  const batchJobs = loadModule("src/lib/ai/batch/batchJobs.ts");
+  const submit = loadModule("src/lib/ai/labelClassifierBatch.ts", {
+    ...stubs,
+    "@/lib/ai/batch/batchJobs": batchJobs,
     "@/lib/ai/batch/submitBatch": { submitBatch: async args => { submittedBatch = { ...args, id: "batch", gatewayBatchId: "gateway", createdAt: new Date() }; } },
   });
-  const collect = loadWithStubs("src/lib/ai/batch/collectBatches.ts", {
+  const collect = loadModule("src/lib/ai/batch/collectBatches.ts", {
+    ...stubs,
+    "@/lib/ai/batch/batchJobs": batchJobs,
     "@/app/api/ai/_lib/aiUsage": { logAiUsage: async () => {} },
     "@/app/api/ai/_lib/sharedAllowance": { modelPricing: async () => null },
     "@/lib/ai/batch/gatewayBatch": { gatewayBatchState: async () => "completed", gatewayBatchOutcomes: async () => [{ id: "t91", status: "succeeded", text: matches ? '["bug"]' : '[]', usage: { inputTokens: 1, outputTokens: 1 } }] },
-    "@/lib/ai/labelClassifier": loaded.exports,
+    "@/lib/ai/labelClassifier": loaded,
     "@/lib/crypto/byokCipher": {}, "@/lib/slack/threadSummary": {}, "@/utils/controllers/comments/createCommentService": {},
   });
-  return { ...loaded.exports, ...submit, ...collect, task, label, records, labels, usage, pending, errors,
+  return { ...loaded, ...submit, ...collect, task, label, records, labels, usage, pending, errors,
     fail: value => { failure = value; }, malformed: value => { malformed = value; }, stale: value => { stale = value; } };
 }
 
 for (const matches of [true, false]) {
-  test(`backfill remembers successful ${matches ? "matching" : "nonmatching"} verdicts`, async () => {
-    const f = fixture({ matches });
+  test(`backfill remembers successful ${matches ? "matching" : "nonmatching"} verdicts`, async (t) => {
+    const f = fixture(t, { matches });
     await f.backfillAiLabel("bug", 985);
     assert.equal(f.usage.length, 1);
     assert.deepEqual([...f.labels], matches ? ["bug"] : []);
@@ -130,8 +112,8 @@ for (const matches of [true, false]) {
   });
 }
 
-test("changed classifier inputs reclassify, unrelated task changes do not", async () => {
-  const f = fixture();
+test("changed classifier inputs reclassify, unrelated task changes do not", async (t) => {
+  const f = fixture(t);
   await f.backfillAiLabel("bug", 985);
   for (const edit of [() => { f.task.title = "Another broken button"; }, () => { f.task.description = "New details"; },
     () => { f.task.description_ = { content: "Updated rich description" }; }, () => { f.label.ai_prompt = "All broken controls"; }]) {
@@ -146,8 +128,8 @@ test("changed classifier inputs reclassify, unrelated task changes do not", asyn
   assert.equal(f.usage.length, 0);
 });
 
-test("a manually changed label remains eligible for repair", async () => {
-  const f = fixture();
+test("a manually changed label remains eligible for repair", async (t) => {
+  const f = fixture(t);
   await f.backfillAiLabel("bug", 985);
   f.labels.delete("bug");
   await f.backfillAiLabel("bug", 985);
@@ -156,8 +138,8 @@ test("a manually changed label remains eligible for repair", async () => {
 });
 
 for (const kind of ["fail", "malformed", "stale"]) {
-  test(`${kind} inference never records a completed verdict`, async () => {
-    const f = fixture();
+  test(`${kind} inference never records a completed verdict`, async (t) => {
+    const f = fixture(t);
     f[kind](true);
     await f.backfillAiLabel("bug", 985);
     assert.equal(f.records.size, 0);
@@ -169,8 +151,8 @@ for (const kind of ["fail", "malformed", "stale"]) {
   });
 }
 
-test("batch dispatch excludes unchanged completed items, not merely submitted items", async () => {
-  const f = fixture({ batch: true });
+test("batch dispatch excludes unchanged completed items, not merely submitted items", async (t) => {
+  const f = fixture(t, { batch: true });
   await f.backfillAiLabel("bug", 985);
   assert.equal(f.pending.length, 1);
   assert.equal(f.records.size, 0);
@@ -188,8 +170,8 @@ test("batch dispatch excludes unchanged completed items, not merely submitted it
   assert.equal(f.pending.length, 3);
 });
 
-test("batch results cannot cache when membership changed after submission", async () => {
-  const f = fixture({ batch: true });
+test("batch results cannot cache when membership changed after submission", async (t) => {
+  const f = fixture(t, { batch: true });
   await f.backfillAiLabel("bug", 985);
   const submitted = f.pending[0].tasks[0];
   f.labels.add("bug");
@@ -213,8 +195,8 @@ test("fingerprint follows the actual truncated classifier prompt", () => {
 });
 
 for (const flag of [false, "unavailable"]) {
-  test(`backfill repeats inference when flag is ${flag}`, async () => {
-    const f = fixture({ flag });
+  test(`backfill repeats inference when flag is ${flag}`, async (t) => {
+    const f = fixture(t, { flag });
     await f.backfillAiLabel("bug", 985);
     await f.backfillAiLabel("bug", 985);
     assert.equal(f.usage.length, 2);
@@ -225,8 +207,8 @@ for (const flag of [false, "unavailable"]) {
 }
 
 for (const changed of [false, true]) {
-  test(`real batch submission and collection ${changed ? "preserves manual membership" : "caches verdict"}`, async () => {
-    const f = fixture({ batch: true, matches: !changed });
+  test(`real batch submission and collection ${changed ? "preserves manual membership" : "caches verdict"}`, async (t) => {
+    const f = fixture(t, { batch: true, matches: !changed });
     await f.backfillAiLabel("bug", 985);
     const args = f.pending[0];
     await f.submitSmartLabelBatch(args);
@@ -240,8 +222,8 @@ for (const changed of [false, true]) {
   });
 }
 
-test("collector refreshes a batch result after task content changes", async () => {
-  const f = fixture({ batch: true });
+test("collector refreshes a batch result after task content changes", async (t) => {
+  const f = fixture(t, { batch: true });
   await f.backfillAiLabel("bug", 985);
   await f.submitSmartLabelBatch(f.pending[0]);
   f.task.title = "Changed while batch was waiting";
