@@ -1314,3 +1314,18 @@ test("agent nudge is permanent and no longer registered", async () => {
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
+
+for (const [key, risk] of [
+  ["htpr-7982-cancelled-free", "money"],
+  ["htpr-8215-agent-archive-delete", "data-deletion"],
+  ["yper4-651-self-follow-quiet", "customer-email"],
+]) {
+  test(`owner-authorized changes support all modes for ${risk}`, async () => {
+    assert.equal(definitions.find((definition) => definition.key === key).releaseRisk.highRisk, risk);
+    const actor = { userId: 6, agentId: "lead", source: "api" };
+    for (const mode of ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"]) {
+      const changed = await flags.setFeatureFlagMode(key, mode, actor, async () => {});
+      assert.equal(changed.mode, mode);
+    }
+  });
+}

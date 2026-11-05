@@ -11,3 +11,11 @@ New feature and improvement flags set `defaultMode: "EVERYONE"` in their definit
 Only for Valentin's own explicit request, a new flag may instead use `defaultMode: "OWNER_ONLY"` with `releaseRisk.ownerRequest: { quote: "<his exact request>", ticketUrl: "<ticket link>" }`: the quote must be non-blank and the link must match `^https://app\.hypertask\.ai/detail/project-\d+/\d+$`. This exception permits only Owner only, not Owner + QA or Off, and does not replace required `releaseRisk.highRisk` metadata.
 
 Test click removed (Valentin 2026-10-21); safety is flags, revert, live QA after release and the YPER4-550 screenshot check.
+
+## API
+
+`PATCH /api/mcp/flags` accepts `key`, `mode`, and one evidence field. For `ownerRequest`, use `source` (the scoped Hypertask comment URL), `quote` (1–1000 characters), and `requestedAt` (ISO datetime). Only the active owner-linked trusted lead with write access may submit it. The source must be unedited, accessible, and authored by the owner or trusted lead. The quote must occur in its visible text. Human source timestamps must equal the comment creation time; lead records may refer to an earlier request. Later owner withdrawals and superseding flag changes prevent replay. The audit stores the source and a SHA-256 quote hash, not the quote.
+
+Existing approved `reason` links remain supported. Review receipts do not authorize switches. A `failure` record only moves Everyone to Owner + QA.
+
+The trusted lead attests to the owner’s request. For lead-authored sources, the API cannot independently verify the original conversation or its provenance.

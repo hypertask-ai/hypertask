@@ -90,6 +90,7 @@ function harness() {
       },
       delete: async () => { state.followers = []; },
     },
+    $executeRaw: async () => 0,
     $transaction: async (run) => run(db),
   };
   const notify = { default: async () => ({ fromUser: actor, user: recipient }) };

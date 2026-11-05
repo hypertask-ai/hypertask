@@ -113,8 +113,9 @@ test("the web emoji click only ever finds and deletes the person's own rows", as
     rows.splice(0, rows.length, ...seeded);
   };
   stubModule("src/lib/auth/agentScope.ts", { withAgentScopeRequest: (_req, run) => run() });
-  stubModule("src/lib/prisma.ts", {
-    default: {
+  const db = {
+      $executeRaw: async () => 0,
+      $transaction: async (run) => run(db),
       comment: { findFirst: async () => ({ id: 7 }) },
       reaction: {
         findMany: async ({ where }) => rows.filter((row) => matchesWhere(row, where)),
@@ -124,8 +125,8 @@ test("the web emoji click only ever finds and deletes the person's own rows", as
           return { count: hit.length };
         },
       },
-    },
-  });
+  };
+  stubModule("src/lib/prisma.ts", { default: db });
   stubModule("src/models/model.ts", {});
   stubModule("src/utils/controllers/FCM/index.ts", { sendDataNewCommentFCM: async () => {} });
   stubModule("src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts", {});
