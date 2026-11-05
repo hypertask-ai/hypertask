@@ -1,5 +1,6 @@
 import { useKeepAiChatClosed } from "@/hooks/General/useKeepAiChatClosed";
-import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
+import { normalizeThemePreference } from "@/lib/themePreferences";
+import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, composeTaskSkillFollowupAtom, composeTaskQuestionsTaskIdAtom, composeTaskOriginalNoteAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatNewTicketPathAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
@@ -31,7 +32,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
-import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG } from "@/lib/flags/keys";
+import { HTPR_8140_CTRLJ_DICTATION_SHORTCUT_FLAG, HTPR_7979_ACTION_CHIPS_FLAG, HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { HTPR_7650_AI_CHAT_OPEN_SWITCHES_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7317_CTRLJ_TICKET_QUESTIONS_FLAG, HTPR_7305_BOARD_FROM_TEXT_FLAG, HTPR_7306_CTRLJ_FOOTER_ONE_LINE_FLAG, HTPR_7312_CTRLJ_SKILLS_FLAG } from "@/lib/flags/keys";
 import { matchComposeTaskBoard } from "@/lib/ai/composeTaskBoard";
 import type { CommandFocusProxy } from "@/components/commandTypes";
@@ -89,7 +90,9 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const footerButtonClassName = "rounded-[4px] transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none";
   const composerKeysEnabled = useFlag(HTPR_8260_CTRLJ_COMPOSER_KEYS_FLAG);
   const composerKeysLayout = Boolean(composerKeysEnabled && newTaskWindow);
-  const { currentTheme } = useDarkMode();
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
+  const currentTheme = normalizeThemePreference(parseCookies().theme, roundedEnabled, graphite2Enabled);
   const stopDictationButtonId = "compose-task-stop-dictation";
   const cancelDictationButtonId = "compose-task-cancel-dictation";
   const createAfterDictation = useRef(false);
@@ -571,9 +574,8 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             <div className={phoneTaskWriterSheet ? "flex w-full shrink-0 items-center justify-between pt-2" : "flex w-full items-center justify-between pt-2"}>
               <div className="flex min-w-0 flex-1 items-center gap-2">
                 {composerKeysLayout && boardControl}
-                {!graphitePanel && writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
+                {writerModelPicker && <div className={graphitePanel ? "order-1" : "contents"}><TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" /></div>}
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
-                {graphitePanel && writerModelPicker && <TaskWriterModelPicker project={targetBoard} mobile={mobile} className="bottom-[110%] top-auto" />}
                 {!composerKeysLayout && dictationControl}
                 {!composerKeysLayout && boardControl}
               </div>
