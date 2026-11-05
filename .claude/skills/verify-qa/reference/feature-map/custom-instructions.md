@@ -1,8 +1,14 @@
 # Board custom instructions
 
-Use QA 985 on sandbox board 7049. Never replace another board's instructions.
+## How a customer reaches it
 
-1. Open Settings > Board > Custom instructions. Compare the textarea with
+Settings > Board > Custom instructions, or
+`https://app.hypertask.ai/settings/board-ai`.
+Use QA 985 on sandbox board 7049.
+
+## How to drive it
+
+1. Compare the textarea with
    `GET /api/ai/project/customInstruction?projectId=7049`.
 2. Save non-empty multiline instructions. Require a successful POST and the
    exact saved value from GET. Reload Settings and verify the same text.
@@ -13,10 +19,22 @@ Use QA 985 on sandbox board 7049. Never replace another board's instructions.
 5. Check an empty save, a rejected save, and loading existing instructions
    before the current-project store has hydrated. A failed save keeps the
    draft, shows an error and does not replace the last successful value.
-6. Capture desktop and phone in Light, AMOLED and Graphite 2. Compare with
-   production before the fix: controls and layout must not change.
-7. Restore the sandbox's previous instructions through the same save action.
-   Run the core inbox cycle after deployment.
+
+## What usually breaks
+
+Initializing from a project store before query hydration shows an empty
+editor despite a successful GET. A stale query after saving can restore the
+previous text when reopening. This saved-data fix has no flag and changes
+no prompts or models.
+
+## What proof to collect
 
 Record response status, saved text and textarea values after reload/reopen.
-This saved-data fix has no flag and changes no prompts or models.
+Capture desktop and phone in Light, AMOLED and Graphite 2. Compare with
+production before the fix: controls and layout must not change.
+Run the core inbox cycle after deployment.
+
+## Cleanup
+
+Restore the sandbox's previous instructions through the same save action.
+Never replace another board's instructions. Delete only this run's fixtures.
