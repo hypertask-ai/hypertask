@@ -323,7 +323,7 @@ for (const viewport of [{ width: 1280, height: 720 }, { width: 1440, height: 900
         expect(tabsBox!.x + tabsBox!.width).toBeLessThanOrEqual(box!.x + box!.width)
         expect(tabsBox!.y + tabsBox!.height).toBeLessThanOrEqual(box!.y + box!.height)
         expect(await window.locator('.modal-content').evaluate(element => getComputedStyle(element).borderRadius)).toBe('4px')
-        await expect(window.getByRole('button', { name: 'Choose microphone' })).toHaveCount(0)
+        await expect(window.getByRole('button', { name: 'Choose microphone' })).toBeVisible()
         expect(await footer.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
         const hints = footer.locator(':scope > div > span')
         const boardHint = await writer.locator('[data-compose-board-chip]').count() > 0
