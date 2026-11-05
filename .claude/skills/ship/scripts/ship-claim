@@ -132,7 +132,7 @@ hold_check() {
         echo "ship-claim: HOLD. Board $board repeated a ticket while paging." >&2; return 4
       fi
       candidates=$(jq -r --arg runner "runner $rn" '.tasks[]
-        | select(.section | IN("In Progress", "QA", "AI Review"))
+        | select(.section | IN("In Progress", "AI Review"))
         | select(any(.assignees[]; (.agent.displayName // "" | ascii_downcase) == $runner))
         | [.ticketNumber, .projectId, .uniqueIndex] | @tsv' <<<"$page") \
         || { echo "ship-claim: HOLD. Cannot read RUNNER $rn assignments." >&2; return 4; }

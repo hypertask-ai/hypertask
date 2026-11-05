@@ -394,15 +394,18 @@ export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUM
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 printf '[]' > "$HOLD_OPEN"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
-jq -n '{success:true,total:1,tasks:[{ticketNumber:"HTPR-123",projectId:15,uniqueIndex:123,section:"QA",assignees:[{agent:{id:"r6",displayName:"Runner 6"}}]}]}' > "$HOLD_BOARD"
+jq -n '{success:true,total:1,tasks:[{ticketNumber:"HTPR-123",projectId:15,uniqueIndex:123,section:"In Progress",assignees:[{agent:{id:"r6",displayName:"Runner 6"}}]}]}' > "$HOLD_BOARD"
 : > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim YPER4-999 2>&1); rc=$?
 eq "merged but not Done refuses a new claim" "$rc" 4
 [[ $out == *'https://app.hypertask.ai/detail/project-15/123'* && $out == *'live QA'* && $out == *'Done'* ]] && ok "hold names unfinished ticket and next step" || bad "unclear hold: $out"
 [ ! -s "$D/log" ] && ok "completion hold runs before every board write" || bad "hold allowed a board write"
-for section in 'In Progress' 'AI Review'; do
+for section in 'AI Review' 'In Progress'; do
   jq --arg s "$section" '.tasks[0].section=$s' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
   SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "merged $section work holds" "$?" 4
 done
+jq '.tasks[0].section="QA"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "merged work waiting in QA for another runner does not hold" "$?" 0
+jq '.tasks[0].section="In Progress"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null; eq "resuming the unfinished ticket stays allowed" "$?" 0
 jq '.tasks += [.tasks[0] | .ticketNumber="HTPR-124" | .uniqueIndex=124] | .total=2' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"},{"number":43,"title":"HTPR-124 [BUGFIX] Other unfinished work"}]' > "$HOLD_MERGED"
@@ -424,7 +427,7 @@ for section in Done 'Flag: Everyone' 'Flag: Only Me + QA' 'Flag: Off'; do
 done
 jq -e '.["6"]["YPER4-999"].admission == true' "$RUNNER_INBOX_DIR/domain-ownership.json" >/dev/null && ok "unassigned fake claim retains reservation" || bad "fake claim lost reservation"
 export RUNNER_INBOX_DIR=$D/inbox-later
-jq '.tasks[0].section="QA" | .tasks[0].assignees[0].agent.displayName="Runner 16"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
+jq '.tasks[0].section="In Progress" | .tasks[0].assignees[0].agent.displayName="Runner 16"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "another runner never holds this runner" "$?" 0
 jq '.tasks[0].assignees[0].agent.displayName="RUNNER 6"' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 printf '[]' > "$HOLD_MERGED"
