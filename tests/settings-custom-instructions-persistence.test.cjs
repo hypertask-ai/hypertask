@@ -7,7 +7,7 @@ const { loadModule } = require("./helpers/loadModule.cjs");
 
 test("saved instructions initialize the editor and saving refreshes reopening state", async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/settings/board-ai" });
-  const originals = { window: global.window, document: global.document, navigator: global.navigator, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
+  const originals = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT };
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
   const { createRoot } = require("react-dom/client");
   const root = createRoot(document.getElementById("root"));
