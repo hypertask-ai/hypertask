@@ -7,11 +7,13 @@ import {
   ExternalLink,
   Lightbulb,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useState, type KeyboardEvent } from "react";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 import RelativeTime from "@/components/Common/RelativeTime";
+import CommentBodyDesktop from "./CommentContainer/CommentBodyDesktop";
+import styles from "@/styles/tiptap.module.scss";
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
@@ -40,16 +42,9 @@ const AgentRunActivityRow = ({
   const selectionLocked = activity.selectedOption !== null || pendingValue !== null;
   const collapseLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
   const showLaneAuthor = useFlag(HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG);
-  const { stacked } = useTaskContext();
-  const laneCollapsed = useMemo(() => {
-    const folds = Object.values(stacked ?? {});
-    return folds.length > 0 && folds.every(Boolean);
-  }, [stacked]);
-  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    setExpandedOverride(null);
-  }, [laneCollapsed]);
+  const { agentLaneFold } = useTaskContext();
+  const laneCollapsed = agentLaneFold.taskId === taskId && agentLaneFold.collapsed;
+  const [override, setOverride] = useState<{ version: number; taskId: number; collapsed: boolean } | null>(null);
 
   const selectOption = async (value: string) => {
     if (selectionLocked) return;
@@ -87,11 +82,11 @@ const AgentRunActivityRow = ({
   ) : null;
   const Icon = ACTIVITY_ICONS[type];
   const link = safeAgentRunActivityLink(activity.link);
-  const collapsible = collapseLane && type !== "elicitation";
-  const collapsed = collapsible && (expandedOverride ?? laneCollapsed);
+  const collapsible = collapseLane;
+  const collapsed = collapsible && (override?.version === agentLaneFold.version && override.taskId === taskId ? override.collapsed : laneCollapsed);
   const toggleRow = () => {
     if (!collapsible) return;
-    setExpandedOverride(!collapsed);
+    setOverride({ version: agentLaneFold.version, taskId, collapsed: !collapsed });
   };
   const rowKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
@@ -117,9 +112,10 @@ const AgentRunActivityRow = ({
         tabIndex={0}
         aria-expanded={false}
         aria-label={`Agent ${activity.type}, collapsed`}
+        data-agent-lane-corners=""
         onClick={toggleRow}
         onKeyDown={rowKeyDown}
-        className="my-[4px] flex min-w-0 cursor-pointer items-center gap-2 rounded-[5px] px-4 py-1 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
+        className="my-[4px] flex h-[29px] min-w-0 cursor-pointer items-center gap-2 rounded-[4px] border-l-4 border-transparent px-4 py-1 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
       >
         <Icon
           className={cn(
@@ -142,11 +138,94 @@ const AgentRunActivityRow = ({
     ? {
         role: "button" as const,
         tabIndex: 0,
+        "aria-label": `Agent ${activity.type}`,
         "aria-expanded": true,
         onClick: toggleRow,
         onKeyDown: rowKeyDown,
       }
     : { role: "group" as const, "aria-label": `Agent ${activity.type}` };
+
+  if (collapseLane) {
+    return (
+      <div
+        className="my-[8px] cursor-pointer rounded-[4px] border-l-4 border-transparent bg-comment-description shadow-md outline-none focus-visible:bg-hover-active"
+        data-agent-lane-corners=""
+        {...(activity.type === "elicitation"
+          ? { role: "group" as const, "aria-label": `Agent ${activity.type}`, onClick: toggleRow }
+          : openRowProps)}
+      >
+        <CommentBodyDesktop isStacked={false} threadSpacing>
+          <div
+            className={cn(
+              "flex items-center gap-2 text-meta text-text-light-gray",
+              styles.unstacked_grid_row1,
+              activity.type === "elicitation" && "outline-none focus-visible:bg-hover-active",
+            )}
+            {...(activity.type === "elicitation" ? {
+              ...openRowProps,
+              onClick: (event: React.MouseEvent<HTMLDivElement>) => {
+                event.stopPropagation();
+                toggleRow();
+              },
+            } : {})}
+          >
+            <Lightbulb className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} aria-hidden />
+            <span>Agent</span>
+            {time}
+          </div>
+          <div
+            className={cn(
+              "min-w-0 whitespace-pre-wrap break-words text-text-light-gray",
+              styles.unstacked_grid_row2,
+            )}
+          >
+            {link ? (
+              <a
+                href={link}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                className="group/link inline-flex items-start gap-1 hover:text-white-black"
+              >
+                <span>{activity.text}</span>
+                <ExternalLink className="mt-0.5 h-3 w-3 shrink-0 opacity-0 group-hover/link:opacity-100 focus-visible:opacity-100" strokeWidth={1.75} aria-hidden />
+              </a>
+            ) : activity.text}
+            {activity.type === "elicitation" && activity.options ? (
+              <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label="Choose a response">
+                {activity.options.map((option) => {
+                  const selected = activity.selectedOption?.value === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      aria-pressed={selected}
+                      aria-disabled={selectionLocked}
+                      aria-busy={pendingValue === option.value || undefined}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void selectOption(option.value);
+                      }}
+                      className={cn(
+                        "min-h-11 min-w-11 rounded-[4px] px-3 py-2 text-dense font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white-black",
+                        selected
+                          ? "bg-white-black text-white-black-inverted"
+                          : "bg-hoverCardBackground text-white-black hover:bg-hover-active",
+                        selectionLocked && !selected && "opacity-50",
+                        pendingValue === option.value && "cursor-wait",
+                      )}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        </CommentBodyDesktop>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -140,6 +140,7 @@ const useTaskDetailGlobalStates = (
     }));
   }, []);
   const [stacked, setStacked] = useState<StackedType>(_initialStacked ?? {});
+  const [agentLaneFold, setAgentLaneFold] = useState({ taskId: _parsedTask?.id, collapsed: false, version: 0 });
 
   const [tasksPlayList, setTasksPlaylist] = useRecoilState(tasksPlayListAtom);
   const [__, setInboxTaskIndexAtom] = useRecoilState(InboxTaskIndexAtom);
@@ -800,6 +801,8 @@ const useTaskDetailGlobalStates = (
     requestDescriptionFocus,
     stacked,
     setStacked,
+    agentLaneFold,
+    setAgentLaneFold,
     returnCurrentFocusedType,
     CTRL_J_ENTER_Handler,
     comments,

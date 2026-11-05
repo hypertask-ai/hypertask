@@ -52,7 +52,7 @@ const SharedCommentsContainer = () => {
         <Suspense fallback={<>loading...</>}>
           {!comment.activity ? (
             <>
-              <CommentBodyDesktop>
+              <CommentBodyDesktop isStacked={isStacked}>
                 <CommentCreatedBy />
 
                 <SharedCommentText />

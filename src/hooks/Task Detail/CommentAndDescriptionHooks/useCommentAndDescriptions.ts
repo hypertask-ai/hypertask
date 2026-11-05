@@ -1,5 +1,6 @@
 
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
@@ -116,6 +117,8 @@ const useDescriptionAndCommentsStates = () => {
     setDescription,
     stacked,
     setStacked,
+    agentLaneFold,
+    setAgentLaneFold,
     CTRL_J_ENTER_Handler,
     comments,
     setComments,
@@ -179,6 +182,7 @@ const useDescriptionAndCommentsStates = () => {
     request: null,
   });
   const [allStacked, setAllStacked] = useState<boolean>(true);
+  const collapseAgentLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
@@ -463,13 +467,18 @@ const useDescriptionAndCommentsStates = () => {
       setComments(commentsListFromQuery);
       setAgentRunActivities(agentRunActivitiesFromQuery);
       setStacked((prev) =>
-        ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
+        collapseAgentLane && agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed
+          ? Object.fromEntries(commentsListFromQuery.map((_, index) => [index, true]))
+          : ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
       );
     }
     void updateSeen();
   }, [
     agentRunActivitiesFromQuery,
     commentsListFromQuery,
+    collapseAgentLane,
+    agentLaneFold,
+    currentTask?.id,
     isShareView,
     setAgentRunActivities,
     updateSeen,
@@ -620,13 +629,19 @@ const useDescriptionAndCommentsStates = () => {
   };
 
   const toggleAllComments = () => {
-    const initialMap: any = {};
-    comments &&
-      comments.map((item, index) => {
-        initialMap[index] = !allStacked;
-      });
-    setStacked(ensureAtLeastOneCommentIsOpen(comments, initialMap));
-    setAllStacked((prev) => !prev);
+    const collapsed = collapseAgentLane
+      ? !(agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed)
+      : !allStacked;
+    const initialMap: Record<number, boolean> = {};
+    comments.forEach((_, index) => {
+      initialMap[index] = collapsed;
+    });
+    setStacked(collapseAgentLane ? initialMap : ensureAtLeastOneCommentIsOpen(comments, initialMap));
+    if (collapseAgentLane) {
+      setAgentLaneFold((prev) => ({ taskId: currentTask?.id, collapsed, version: prev.version + 1 }));
+    } else {
+      setAllStacked((prev) => !prev);
+    }
   };
 
   useEffect(() => {
