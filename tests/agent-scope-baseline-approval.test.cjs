@@ -96,7 +96,7 @@ for (const [name, kind] of [['baseline', 'debt'], ['exceptions', 'exception']]) 
   })
 
   test(`${kind}: reruns use the live body instead of the event body`, t => {
-    const pr = checkoutPr(t, file, { head: [entry] })
+    const pr = checkoutPr(t, file, { production: [], head: [entry] })
     const added = pr.run('', undefined, line)
     assert.equal(added.status, 0, added.stderr)
     const removed = pr.run(line, undefined, '')
