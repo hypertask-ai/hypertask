@@ -306,13 +306,13 @@ late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>
 question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
 empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
 question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
-for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;'; do
+for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;' '&#9;' '&#10;' '&#11;' '&#12;' '&#13;' '&#00009;' '&#00010;' '&#x000A;' '&#X000d;' '&#9&#xA' '&#8192;&#x200A;&#8239;&#xFEFF;' '&Tab;&NewLine;&ensp;&emsp;&thinsp;&ZeroWidthSpace;'; do
   text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --text "$text"
   fixture "$text"
   review_refused 'What this is:' task move X-1 --section 'Valentin Review'
 done
-context='&#32;the&#x20;setting&#160;works'
+context='&#0009;the&#X000A;setting&#160;works'
 text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
 allowed bash "$vcc" comment add X-1 --kind question --text "$text"
 fixture "$text"
@@ -372,6 +372,13 @@ No: remove it.
 My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
+for context in '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)'; do
+  text="${markdown/the setting that keeps the board tidy./$context}"
+  question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
+done
+text="${markdown/the setting that keeps the board tidy./'&#9;See [the setting](https://example.test)&#x20;here.'}"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
 printf '%s\n' "$markdown" > "$T/question.md"
 question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
