@@ -144,3 +144,7 @@ html.graphite-2 {
 .graphite-2 svg.lucide:not(.keep-stroke) {
   stroke-width: 1.5;
 }
+
+.graphite-2 .app-shell-rail svg {
+  stroke-width: 1.85;
+}
