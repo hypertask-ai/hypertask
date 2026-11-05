@@ -3,7 +3,7 @@
 # GitHub's repo webhook reaches runner-webhook (POST /github/notify), which rewrites
 # $GH_NOTIFY_DIR/<owner>__<repo>/<branch>.json whenever a workflow finishes or the PR closes.
 # ci-wait blocks on that file's mtime (a local stat every few seconds, no network) and reads the checks
-# with one gh call only after a change, at most once per CI_WAIT_GAP seconds, plus a slow fallback read
+# only after a change, at most once per CI_WAIT_GAP seconds, plus a slow fallback read
 # every CI_WAIT_FALLBACK seconds (never under 600) in case an event is lost.
 # Usage: ci-wait <pr-number> [--repo OWNER/REPO] [--timeout SECONDS] --head SHA
 # Exit: 0 all checks passed or the PR merged, 1 a check failed or the PR closed unmerged, 2 timed out, 3 usage or gh error.
@@ -90,7 +90,7 @@ verdict() {
     end'
 }
 check() {
-  local json
+  local json result runs
   json=$("$GH" api graphql -f query='query($owner:String!, $repo:String!, $pr:Int!, $head:GitObjectID!) {
     repository(owner:$owner, name:$repo) {
       pullRequest(number:$pr) { state headRefOid }
@@ -100,7 +100,20 @@ check() {
       } } } }
     }
   }' -f owner="${repo%/*}" -f repo="${repo#*/}" -F pr="$pr" -f head="$head" 2>/dev/null) || return 1
-  verdict <<<"$json"
+  result=$(verdict <<<"$json") || return 1
+  if [ "$result" != pass ]; then
+    printf '%s\n' "$result"
+    return
+  fi
+  runs=$("$GH" api --paginate --slurp "repos/$repo/actions/runs?head_sha=$head&per_page=100" 2>/dev/null) || return 1
+  jq -er --arg head "$head" '
+    if type != "array" or length == 0 or any(.[]; (.workflow_runs | type) != "array") then error("invalid workflow runs") else . end
+    | [.[].workflow_runs[] | select(.head_sha == $head)]
+    | if any(.[]; (.workflow_id | type) != "number" or (.id | type) != "number" or (.status | type) != "string") then error("invalid workflow run") else . end
+    | group_by(.workflow_id) | map(max_by(.id)) as $latest
+    | [$latest[] | select(.status == "completed" and (.conclusion | IN("success", "neutral", "skipped") | not)) | "\(.name // .workflow_id) (\(.conclusion // "unknown"))"] as $failed
+    | if ($failed | length) > 0 then "fail " + ($failed | join(", "))
+      elif any($latest[]; .status != "completed") then "pending" else "pass" end' <<<"$runs"
 }
 
 start=$(date +%s) last_check=0 seen=$(mtime) calls=0
