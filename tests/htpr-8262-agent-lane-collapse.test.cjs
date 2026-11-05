@@ -158,16 +158,20 @@ test("the real thread hook toggles all rows across a refresh", async () => {
   const root = createRoot(document.getElementById("root"));
   try {
     await React.act(async () => root.render(React.createElement(Harness)));
+    const localNote = { id: 5 };
+    await React.act(async () => context.setComments((comments) => [...comments, localNote]));
     signal++;
     await React.act(async () => root.render(React.createElement(Harness)));
-    assert.deepEqual(result.stacked, { 0: true, 1: true, 2: true });
-    assert.equal(context.agentLaneFold.collapsed, true);
-    query = [...thread, { id: 4 }];
-    await React.act(async () => root.render(React.createElement(Harness)));
+    assert.deepEqual(result.comments, [...thread, localNote]);
     assert.deepEqual(result.stacked, { 0: true, 1: true, 2: true, 3: true });
+    assert.equal(context.agentLaneFold.collapsed, true);
+    await React.act(async () => result.updateStackedComments(0));
+    query = [...thread, localNote, { id: 4 }];
+    await React.act(async () => root.render(React.createElement(Harness)));
+    assert.deepEqual(result.stacked, { 0: false, 1: true, 2: true, 3: true, 4: true });
     signal++;
     await React.act(async () => root.render(React.createElement(Harness)));
-    assert.deepEqual(result.stacked, { 0: false, 1: false, 2: false, 3: false });
+    assert.deepEqual(result.stacked, { 0: false, 1: false, 2: false, 3: false, 4: false });
     assert.equal(context.agentLaneFold.collapsed, false);
 
     query = thread;

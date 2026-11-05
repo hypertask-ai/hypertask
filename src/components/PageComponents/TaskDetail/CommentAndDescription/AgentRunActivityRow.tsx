@@ -207,7 +207,7 @@ const AgentRunActivityRow = ({
                         void selectOption(option.value);
                       }}
                       className={cn(
-                        "min-h-11 min-w-11 rounded-[4px] px-3 py-2 text-dense font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white-black",
+                        "min-h-11 min-w-11 rounded-[4px] px-3 py-2 text-dense font-medium transition-colors focus-visible:outline-none focus-visible:bg-hover-active focus-visible:text-white-black",
                         selected
                           ? "bg-white-black text-white-black-inverted"
                           : "bg-hoverCardBackground text-white-black hover:bg-hover-active",

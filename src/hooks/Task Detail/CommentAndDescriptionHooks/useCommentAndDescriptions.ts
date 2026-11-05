@@ -466,23 +466,18 @@ const useDescriptionAndCommentsStates = () => {
     if (commentsListFromQuery) {
       setComments(commentsListFromQuery);
       setAgentRunActivities(agentRunActivitiesFromQuery);
-      setStacked((prev) =>
-        collapseAgentLane && agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed
-          ? Object.fromEntries(commentsListFromQuery.map((_, index) => [index, true]))
-          : ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
-      );
     }
     void updateSeen();
-  }, [
-    agentRunActivitiesFromQuery,
-    commentsListFromQuery,
-    collapseAgentLane,
-    agentLaneFold,
-    currentTask?.id,
-    isShareView,
-    setAgentRunActivities,
-    updateSeen,
-  ]);
+  }, [agentRunActivitiesFromQuery, commentsListFromQuery, isShareView, setAgentRunActivities, updateSeen]);
+
+  useLayoutEffect(() => {
+    if (isShareView || !commentsListFromQuery) return;
+    setStacked((prev) =>
+      collapseAgentLane && agentLaneFold.taskId === currentTask?.id && agentLaneFold.collapsed
+        ? { ...Object.fromEntries(commentsListFromQuery.map((_, index) => [index, true])), ...prev }
+        : ensureAtLeastOneCommentIsOpen(commentsListFromQuery, prev)
+    );
+  }, [commentsListFromQuery, collapseAgentLane, agentLaneFold, currentTask?.id, isShareView, setStacked]);
 
   useLayoutEffect(() => {
     updateStackFromSidebar();
