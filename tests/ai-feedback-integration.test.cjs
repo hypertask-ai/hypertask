@@ -9,9 +9,9 @@ const stub = (file, exports) => {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-let plainMode = 'OFF', mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
+let plainMode = 'OFF', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
 let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false, lockBlock, transactionError, onLockAttempt
-const enabledFor = (id) => mode === 'EVERYONE' || mode === 'OWNER_AND_QA' && [6, 985].includes(id)
+const enabledFor = () => true
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
 stub('src/lib/prisma.ts', { default: {
   $transaction: async (callback, options) => {
@@ -36,9 +36,9 @@ stub('src/lib/prisma.ts', { default: {
   agent: { findUnique: async () => ({ permissions: { role: 'write' } }) },
 } })
 stub('src/lib/flags.ts', {
-  isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : key === 'htpr-7195-ai-feedback' && enabledFor(id),
+  isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : enabledFor(id),
   featureFlagCandidateUserIds: async (key) => {
-    const selected = key === 'htpr-7536-plain-ai-feedback' ? plainMode : key === 'htpr-7195-ai-feedback' ? mode : 'OFF'
+    const selected = key === 'htpr-7536-plain-ai-feedback' ? plainMode : 'EVERYONE'
     return selected === 'EVERYONE' ? null : selected === 'OFF' ? [] : [6, 985]
   },
 })
@@ -74,7 +74,7 @@ const restRequest = (body) => new NextRequest('https://app.hypertask.ai/api/mcp/
 const rpcRequest = (method, params) => new Request('https://mcp.hypertask.ai/mcp', { method: 'POST', headers: { Authorization: 'Bearer fixture', 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
 async function drain() { while (pending.length) { const batch = pending.splice(0); await Promise.all(batch) } }
 
-test.beforeEach(() => { plainMode = 'OFF'; mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockBlock = undefined; transactionError = undefined; onLockAttempt = undefined; delete process.env.AI_FEEDBACK_AGENT_USER_ID })
+test.beforeEach(() => { plainMode = 'OFF'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockBlock = undefined; transactionError = undefined; onLockAttempt = undefined; delete process.env.AI_FEEDBACK_AGENT_USER_ID })
 test.afterEach(drain)
 
 test('REST accepts legitimate agent caller and returns the exact contract without private account fields', async () => {
@@ -96,30 +96,26 @@ test('REST invalid fields, content arguments and malformed JSON return clear 400
   assert.equal(files.length, 0)
 })
 
-test('REST requires authentication, returns 404 when disabled or outside flag audience, and 429 without filing over quota', async () => {
+test('REST requires authentication and returns 429 without filing over quota', async () => {
   authorized = false
   assert.equal((await POST(restRequest({ surface: 'api' }))).status, 401)
   authorized = true
-  mode = 'OFF'
-  assert.equal((await POST(restRequest({ surface: 'api' }))).status, 404)
-  mode = 'OWNER_AND_QA'; userId = 42
-  assert.equal((await POST(restRequest({ surface: 'api' }))).status, 404)
-  mode = 'EVERYONE'
+  userId = 42
   assert.equal((await POST(restRequest({ surface: 'api' }))).status, 200)
   quotaCount = 10
   assert.equal((await POST(restRequest({ surface: 'api' }))).status, 429)
   assert.equal(files.length, 1)
 })
 
-test('MCP tool is listed and callable only for enabled users, and instructs autonomous private reporting', async () => {
+test('MCP tool is always listed and callable, and instructs autonomous private reporting', async () => {
   for (const consolidated of [false, true]) {
     catalogEnabled = consolidated
-    for (const [state, id, expected] of [['OFF', 985, false], ['OWNER_AND_QA', 42, false], ['OWNER_AND_QA', 985, true], ['EVERYONE', 42, true]]) {
-      mode = state; userId = id
+    for (const id of [42, 985]) {
+      userId = id
       const listed = await (await mcpHandler(rpcRequest('tools/list'))).json()
-      assert.equal(listed.result.tools.some((tool) => tool.name === 'hypertask_report_feedback'), expected)
+      assert.equal(listed.result.tools.some((tool) => tool.name === 'hypertask_report_feedback'), true)
       const result = await (await mcpHandler(rpcRequest('tools/call', { name: 'hypertask_report_feedback', arguments: { tool: 'hypertask_tasks', status: 500 } }))).json()
-      assert.equal(Boolean(result.result && !result.result.isError), expected)
+      assert.equal(Boolean(result.result && !result.result.isError), true)
     }
   }
   assert.match(reportFeedbackTool.description, /ON YOUR OWN, without being asked/)
@@ -138,8 +134,6 @@ test('MCP clientInfo is captured across requests and used instead of arbitrary c
   assert.match(files[0].description, /Category: unexpected_result/)
   assert.equal(files[0].description.includes('unexpected empty result'), false)
   await assert.rejects(reportFeedbackTool.execute({ surface: 'cli', client: 'fake' }, 'fixture'), /Unrecognized/)
-  mode = 'OFF'
-  await assert.rejects(reportFeedbackTool.execute({}, 'fixture'), { status: 404 })
 })
 
 test('tool exceptions and returned 5xx report in background without capturing messages, arguments or response data', async () => {
@@ -154,25 +148,14 @@ test('tool exceptions and returned 5xx report in background without capturing me
   assert.equal(files.length, 2)
   for (const row of files) assert.match(row.description, /Category: call_failed/)
   for (const row of files) for (const secret of ['Secret', 'private@example', 'Private response']) assert.equal(row.description.includes(secret), false)
-  mode = 'OFF'; files = []
-  await assert.rejects(tools[0].execute({}, 'fixture'))
-  await drain()
-  assert.equal(files.length, 0)
 })
 
-test('MCP empty list reports and unauthenticated 401 reports use only Everyone global bucket', async () => {
-  mode = 'OFF'
-  await handleStatelessMcpRequest(rpcRequest('tools/list'), { token: 'fixture', clientId: '985' }, [])
-  await drain(); assert.equal(files.length, 0)
-  mode = 'OWNER_AND_QA'
+test('MCP empty list reports and unauthenticated 401 reports use the dedicated anonymous bot', async () => {
   await handleStatelessMcpRequest(rpcRequest('tools/list'), { token: 'fixture', clientId: '985' }, [])
   await drain(); assert.equal(files.length, 1)
   assert.match(files[0].description, /empty-tools-list/)
   assert.match(files[0].description, /Category: empty_result/)
   files = []; authorized = false
-  assert.equal((await mcpHandler(rpcRequest('tools/list'))).status, 401)
-  await drain(); assert.equal(files.length, 0)
-  mode = 'EVERYONE'
   assert.equal((await mcpHandler(rpcRequest('tools/list'))).status, 401)
   await drain(); assert.equal(files.length, 0)
   process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
@@ -373,13 +356,8 @@ test('MCP input schema documents free-text non-storage and the optional category
 })
 
 
-test('REST and MCP feedback check flags before the shared attempt limit and filing', async () => {
+test('REST and MCP feedback enforce the shared attempt limit before filing', async () => {
   attemptCount = 60
-  mode = 'OFF'
-  const response = await POST(restRequest({ surface: 'api' }))
-  assert.equal(response.status, 404)
-  assert.equal(attemptCount, 60)
-  mode = 'EVERYONE'
   const limited = await POST(restRequest({ surface: 'api' }))
   assert.equal(limited.status, 429)
   assert.match((await limited.json()).error, /attempt limit/)
@@ -433,7 +411,7 @@ test('plain flag On quiets explicit REST and MCP refusals but keeps missing rout
 })
 
 test('plain flag On preserves automatic auth-failure and thrown 404 reports', async () => {
-  plainMode = 'EVERYONE'; mode = 'EVERYONE'; authorized = false
+  plainMode = 'EVERYONE'; authorized = false
   process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
   assert.equal((await mcpHandler(rpcRequest('tools/list'))).status, 401)
   await drain()

@@ -53,7 +53,6 @@ test("the handler uses the authenticated user's flag to control the real error r
       "./listQueryContract": { resolvePortableTools: (tools) => tools },
       "./legacy-sse": { isLegacySseRequest: () => false },
       "@/lib/telemetry/mcpSseAnalytics": { recordLegacyMcpRequest: () => {} },
-      "@/lib/aiFeedback/enabled": { aiFeedbackEnabled: async () => false },
       "@/lib/aiFeedback/automatic": { observeFeedbackTools: (tools) => tools },
       "@/lib/mcp/auth": {
         extractBearerToken: (header) => header?.replace(/^Bearer /, ""),

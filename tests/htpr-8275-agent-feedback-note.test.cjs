@@ -37,7 +37,6 @@ function setup({ enabled = true, user = internalAgent, flagError = false } = {})
   const load = loader({
     '@vercel/functions': { waitUntil: work => work },
     '@/lib/prisma': { __esModule: true, default: db },
-    './enabled': { aiFeedbackEnabled: async () => true },
     './rateLimit': { reserveFeedbackAttempt: async () => true, reserveFeedbackQuota: async () => true },
     '@/lib/flags': {
       isFeatureEnabled: on,

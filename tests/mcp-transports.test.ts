@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 const ts = require('typescript') as typeof import('typescript')
 const root = process.cwd()
 const token = 'transport-test-token'
-const flags = { stateless: false, deferred: false, feedback: false, flatSchema: false }
+const flags = { stateless: false, deferred: false, flatSchema: false }
 const echoCalls: unknown[] = []
 const schemaSelections: boolean[] = []
 const echoTool = {
@@ -87,7 +87,7 @@ function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
         HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'flatSchema',
         isFeatureEnabled: async (flag: string, userId: number) => {
           if (flag === 'flatSchema') assert.ok(userId === 6 || userId === 7)
-          return flag === 'htpr-7195-ai-feedback' ? flags.feedback : flags[flag as keyof typeof flags] ?? false
+          return flags[flag as keyof typeof flags] ?? false
         },
       }
       if (request.startsWith('.') || request.startsWith('@/')) {
@@ -287,8 +287,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       }
     })
 
-    await t.test('open SSE sessions can enable and disable feedback without reconnecting', async () => {
-      flags.feedback = false
+    await t.test('open SSE sessions always expose feedback without reconnecting', async () => {
       const stream = frames(await first.sse.GET(request('/sse')))
       streams.push(stream)
       try {
@@ -300,20 +299,12 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
         }
         await rpc(20, 'initialize', initialize.params)
         const names = async (id: number) => (await rpc(id, 'tools/list')).result.tools.map((tool: { name: string }) => tool.name)
-        assert.equal((await names(21)).includes(feedbackTool.name), false)
-        flags.feedback = true
-        assert.equal((await names(22)).includes(feedbackTool.name), true)
+        assert.equal((await names(21)).includes(feedbackTool.name), true)
         const before = feedbackCalls
         const allowed = await rpc(23, 'tools/call', { name: feedbackTool.name, arguments: {} })
         assert.equal(allowed.result.isError, undefined)
         assert.equal(feedbackCalls, before + 1)
-        flags.feedback = false
-        assert.equal((await names(24)).includes(feedbackTool.name), false)
-        const denied = await rpc(25, 'tools/call', { name: feedbackTool.name, arguments: {} })
-        assert.ok(denied.error || denied.result.isError)
-        assert.equal(feedbackCalls, before + 1)
       } finally {
-        flags.feedback = false
         await stream.reader.cancel()
       }
     })

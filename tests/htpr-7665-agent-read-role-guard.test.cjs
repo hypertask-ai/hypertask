@@ -446,7 +446,6 @@ test("a read agent can still do MCP JSON-RPC initialize and tools/list (the guar
       extractBearerToken: (header) => header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null,
       validateMcpAuth: async () => readAgent,
     },
-    "@/lib/aiFeedback/enabled": { aiFeedbackEnabled: async () => false },
     "@/lib/aiFeedback/automatic": { observeFeedbackTools: (tools) => tools, queueAiFeedback: () => {}, queueMcpAuthFailure: () => {} },
     "@/lib/aiFeedback/clientInfo": { rememberFeedbackClient: () => {} },
     "@/lib/telemetry/mcpSseAnalytics": { recordLegacyMcpRequest: () => {} },

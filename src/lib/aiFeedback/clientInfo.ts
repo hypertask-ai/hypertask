@@ -7,13 +7,13 @@ function clientKey(token: string) {
   return `ai-feedback:client:${createHash('sha256').update(token).digest('hex')}`
 }
 
-export function rememberFeedbackClient(token: string, name: unknown, userId: number): void {
+export function rememberFeedbackClient(token: string, name: unknown, _userId: number): void {
   const client = feedbackClient(name)
   if (!client) return
   try {
-    waitUntil(import('./enabled').then(async ({ aiFeedbackEnabled }) => {
-      if (await aiFeedbackEnabled(userId)) await (await getRedis()).set(clientKey(token), client, 'EX', 3600)
-    }).catch(() => {}))
+    waitUntil((async () => {
+      await (await getRedis()).set(clientKey(token), client, 'EX', 3600)
+    })().catch(() => {}))
   } catch {}
 }
 

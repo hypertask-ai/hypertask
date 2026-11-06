@@ -6,7 +6,7 @@ const stub = (file, exports) => {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-let enabled, globalEnabled, plainEnabled, rows, created, updates, comments, commentCreates, descriptionWrites, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
+let plainEnabled, rows, created, updates, comments, commentCreates, descriptionWrites, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
 let bucketCounts, lockQueue, lockKeys, attempts, activeRedis, prismaCalls, flagCalls, onQuota, labelError, labelRace, onLock, onTaskCreate, transactionError, onQueued, openTransactions, transactionRecords
 const redis = {
   eval: async (script, _keys, key, now, limit, token) => {
@@ -29,7 +29,7 @@ const redis = {
   },
 }
 stub('src/lib/redis.ts', { getRedis: async () => activeRedis })
-stub('src/lib/flags.ts', { isFeatureEnabled: async (key) => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return key === 'htpr-7536-plain-ai-feedback' ? plainEnabled : key === 'htpr-7195-ai-feedback' && enabled }, featureFlagCandidateUserIds: async (key) => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return (key === 'htpr-7536-plain-ai-feedback' ? plainEnabled : key === 'htpr-7195-ai-feedback' && globalEnabled) ? null : [6, 985] } })
+stub('src/lib/flags.ts', { isFeatureEnabled: async (key) => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return key === 'htpr-7536-plain-ai-feedback' && plainEnabled }, featureFlagCandidateUserIds: async (key) => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return key === 'htpr-7536-plain-ai-feedback' && plainEnabled ? null : [6, 985] } })
 const db = {
   user: { findUnique: async (query) => { userQuery = query; return { displayName: 'Kamil <Admin> customer@example.test' } } },
   project: {
@@ -114,14 +114,14 @@ let pending = []
 const vercelPath = require.resolve('@vercel/functions')
 require.cache[vercelPath] = { id: vercelPath, filename: vercelPath, loaded: true, exports: { waitUntil: (promise) => pending.push(promise) } }
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false })
-const { fileAiFeedback, aiFeedbackEnabled } = jiti('../src/lib/aiFeedback/report.ts')
+const { fileAiFeedback } = jiti('../src/lib/aiFeedback/report.ts')
 const { reserveFeedbackAttempt, reserveFeedbackQuota, FEEDBACK_QUOTA_SCRIPT } = jiti('../src/lib/aiFeedback/rateLimit.ts')
 const { feedbackFingerprint } = jiti('../src/lib/aiFeedback/input.ts')
 const { queueAiFeedback } = jiti('../src/lib/aiFeedback/automatic.ts')
 const input = { surface: 'mcp', client: 'claude', tool: 'hypertask_tasks', status: 503, errorCode: 'unavailable', error: 'Cannot save "Confidential task description" for customer@example.test' }
 
 test.beforeEach(() => {
-  pending = []; enabled = true; globalEnabled = false; plainEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; labelCreated = 0; bucketCounts = new Map(); lockQueue = new Map(); lockKeys = []; attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; onLock = undefined; onTaskCreate = undefined; transactionError = undefined; onQueued = undefined; openTransactions = 0; transactionRecords = []; userQuery = undefined; taskQuery = undefined
+  pending = []; plainEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; labelCreated = 0; bucketCounts = new Map(); lockQueue = new Map(); lockKeys = []; attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; onLock = undefined; onTaskCreate = undefined; transactionError = undefined; onQueued = undefined; openTransactions = 0; transactionRecords = []; userQuery = undefined; taskQuery = undefined
   delete process.env.AI_FEEDBACK_AGENT_USER_ID
 })
 
@@ -216,11 +216,10 @@ test('account new and bump quotas are separate, inclusive and reject without wri
   assert.equal((await fileAiFeedback({ ...input, tool: 'tool-11' }, 43)).count, 1)
 })
 
-test('anonymous reports require a dedicated bot and Everyone and share one quota for new reports and bumps', async () => {
-  process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
-  await assert.rejects(fileAiFeedback(input), { status: 404 })
+test('anonymous reports require a dedicated bot and share one quota for new reports and bumps', async () => {
+  for (let index = 0; index < 20; index++) await fileAiFeedback(input)
   assert.equal(created.length, 0)
-  globalEnabled = true
+  process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
   for (let index = 0; index < 20; index++) await fileAiFeedback(input)
   assert.equal(created.length, 1); assert.equal(updates.length, 19)
   await assert.rejects(fileAiFeedback({ ...input, tool: 'another-tool' }), { status: 429 })
@@ -230,11 +229,7 @@ test('anonymous reports require a dedicated bot and Everyone and share one quota
   assert.equal(comments[0].creatorId, 77)
 })
 
-test('flag-off and invalid input precede attempts and never write or consume filing quota; failed writes keep reservations', async () => {
-  enabled = false
-  assert.equal(await aiFeedbackEnabled(42), false)
-  await assert.rejects(fileAiFeedback(input, 42), { status: 404 })
-  enabled = true
+test('invalid input precedes attempts and never write or consume filing quota; failed writes keep reservations', async () => {
   await assert.rejects(fileAiFeedback({ ...input, arguments: { title: 'private' } }, 42), { status: 400 })
   assert.equal(created.length, 0); assert.equal(bucketCounts.size, 0)
   failWrite = true
@@ -314,14 +309,14 @@ test('real Redis quotas and attempts are atomic across clients and storage error
 })
 
 
-test('flag storage errors fail closed and transaction timeouts return explicit 503', async () => {
+test('plain-flag storage errors leave plain mode off and transaction timeouts return explicit 503', async () => {
   failFlag = true
-  assert.equal(await aiFeedbackEnabled(42), false)
-  assert.equal(await aiFeedbackEnabled(), false)
-  await assert.rejects(fileAiFeedback(input, 42), { status: 404 })
-  assert.equal(created.length, 0)
-  assert.equal(attempts.size, 0)
+  assert.equal((await fileAiFeedback(input, 42)).success, true)
+  assert.equal(created.length, 1)
   failFlag = false
+  created.length = 0
+  rows.length = 0
+  comments.length = 0
   transactionError = Object.assign(new Error('Transaction expired'), { code: 'P2028' })
   await assert.rejects(fileAiFeedback(input, 42), { status: 503, message: 'Feedback timed out, try again shortly' })
   assert.equal(created.length, 0)
@@ -411,16 +406,13 @@ test('different fingerprints file without waiting for a blocked fingerprint', { 
   assert.equal(lockQueue.size, 0)
 })
 
-test('attempt limit follows flag and validation but precedes any Prisma call or lock', async () => {
+test('attempt limit follows validation but precedes any Prisma call or lock', async () => {
   attempts.set('ai-feedback:attempt:42', 60)
   await assert.rejects(fileAiFeedback(input, 42), { status: 429 })
   assert.equal(prismaCalls, 0)
-  assert.equal(flagCalls, 1)
+  assert.equal(flagCalls, 0)
   assert.equal(lockKeys.length, 0)
   assert.equal(bucketCounts.size, 0)
-  enabled = false
-  await assert.rejects(fileAiFeedback(input, 42), { status: 404 })
-  enabled = true
   await assert.rejects(fileAiFeedback(null, 42), { status: 400 })
   assert.equal(attempts.get('ai-feedback:attempt:42'), 61)
   assert.equal((await fileAiFeedback(input, 43)).success, true)
@@ -468,14 +460,13 @@ test('tally lookup never edits a human comment or another agent comment with the
 })
 
 test('anonymous automatic reports skip silently without a valid dedicated bot, without destination work', async () => {
-  globalEnabled = true
   for (const value of [undefined, '', 'invalid', '0', '-1', '1.5']) {
     if (value === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
     else process.env.AI_FEEDBACK_AGENT_USER_ID = value
     assert.equal(await fileAiFeedback(input), undefined)
   }
   assert.equal(prismaCalls, 0)
-  assert.equal(flagCalls, 6)
+  assert.equal(flagCalls, 0)
   assert.equal(lockQueue.size, 0)
   assert.equal(attempts.get('ai-feedback:attempt:anonymous'), 6)
   process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
@@ -584,7 +575,6 @@ test('corrected quota rejection leaves the holder tally unchanged', async () => 
 })
 
 test('anonymous concurrent new-to-bump decisions reserve the shared bucket only once per report', async () => {
-  globalEnabled = true
   process.env.AI_FEEDBACK_AGENT_USER_ID = '77'
   const results = await Promise.all([fileAiFeedback(input), fileAiFeedback(input)])
   assert.deepEqual(results.map((result) => result.count), [1, 2])

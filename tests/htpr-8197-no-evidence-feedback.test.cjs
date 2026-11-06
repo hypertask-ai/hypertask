@@ -34,7 +34,6 @@ function setup({ enabled = true, flagError = false } = {}) {
   const load = loader({
     '@vercel/functions': { waitUntil: work => work },
     '@/lib/prisma': { __esModule: true, default: db },
-    './enabled': { aiFeedbackEnabled: async () => true },
     '@/lib/flags': { isFeatureEnabled: flagEnabled, featureFlagCandidateUserIds: async key => await flagEnabled(key) ? null : [] },
     './rateLimit': { reserveFeedbackAttempt: async () => true, reserveFeedbackQuota: async () => true },
     '@/utils/controllers/tasks/createTaskCore': { createProvisionedTaskCore: async options => {
