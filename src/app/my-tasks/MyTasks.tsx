@@ -9,7 +9,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144-phone-my-tasks";
 import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-6940-drop-board-tabs";
 import {
-  HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
@@ -137,7 +136,6 @@ const MyTasks = ({
   const showCommands = useRecoilValue(showCommandsAtom);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const boardTabsHidden = useFlag(HTPR_6940_DROP_BOARD_TABS_FLAG);
   const boardParam = searchParams?.get("board") ?? null;
   const [sections, setSections] = useState(initialSections);
@@ -549,12 +547,9 @@ const MyTasks = ({
     (index: number) => {
       if (boardTabsHidden) return;
       pickedBoard.current = true;
-      if (iconControlsEnabled) {
-        const sources = groupBy === "time" ? boardSplitSources : filteredSections;
-        const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
-        rememberMyTasksView(currentUser.id, { boardId: sources[nextIndex - 1]?.projectId ?? null });
-      }
+      const sources = groupBy === "time" ? boardSplitSources : filteredSections;
       const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
+      rememberMyTasksView(currentUser.id, { boardId: sources[nextIndex - 1]?.projectId ?? null });
       if (groupBy === "time") {
         const nextBoardId = availableBoards[nextIndex - 1]?.id ?? null;
         activeBoardId.current = nextBoardId;
@@ -574,7 +569,6 @@ const MyTasks = ({
       boardTabsHidden,
       filteredSections,
       groupBy,
-      iconControlsEnabled,
       currentUser.id,
       replaceBoardParam,
     ],
@@ -609,7 +603,7 @@ const MyTasks = ({
   }, [filteredSections, groupBy, replaceBoardParam]);
 
   useEffect(() => {
-    if (!iconControlsEnabled || memoryRestored.current) return;
+    if (memoryRestored.current) return;
     memoryRestored.current = true;
     const memory = readMyTasksViewMemory(currentUser.id);
     const defaultViewId = views.find((view) => view.isDefault)?.id ?? null;
@@ -630,7 +624,7 @@ const MyTasks = ({
         ...(restoreBoard ? { boardId: memory.boardId } : {}),
       });
     }
-  }, [activeViewId, boardTabsHidden, currentUser.id, iconControlsEnabled, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views]);
+  }, [activeViewId, boardTabsHidden, currentUser.id, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views]);
 
   useEffect(() => {
     if (observedViewParam.current === viewParam) return;
@@ -690,7 +684,7 @@ const MyTasks = ({
 
   const selectView = (viewId: number | null) => {
     pickedView.current = true;
-    if (iconControlsEnabled) rememberMyTasksView(currentUser.id, {
+    rememberMyTasksView(currentUser.id, {
       viewId, defaultViewId: views.find((view) => view.isDefault)?.id ?? null,
     });
     const view = views.find((candidate) => candidate.id === viewId);
@@ -725,7 +719,7 @@ const MyTasks = ({
       setViews((current) => [...current, created]);
       setActiveViewId(created.id);
       pickedView.current = true;
-      if (iconControlsEnabled) rememberMyTasksView(currentUser.id, { viewId: created.id, defaultViewId: views.find((view) => view.isDefault)?.id ?? null });
+      rememberMyTasksView(currentUser.id, { viewId: created.id, defaultViewId: views.find((view) => view.isDefault)?.id ?? null });
       updateViewConfig(created.config);
       replaceParams({ viewId: created.id });
     } catch (error) {
@@ -787,7 +781,7 @@ const MyTasks = ({
     setViewBusy(true);
     try {
       const saved = await patchView(viewId, { isDefault: true });
-      if (iconControlsEnabled) rememberMyTasksView(currentUser.id, { viewId, defaultViewId: viewId });
+      rememberMyTasksView(currentUser.id, { viewId, defaultViewId: viewId });
       setViews((current) =>
         current.map((view) => ({
           ...(view.id === saved.id ? saved : view),
@@ -980,7 +974,6 @@ const boardTabCounts = useMemo(() => {
           <span className="sr-only">Live list updates on</span>
         </span>
         <MyTasksViewControls
-          variant={iconControlsEnabled ? "icons" : "labels"}
           boards={boards}
           config={viewConfig}
           onChange={updateViewConfig}

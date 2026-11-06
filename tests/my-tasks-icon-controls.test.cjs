@@ -10,7 +10,6 @@ const { JSDOM } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const flag = "htpr-6938-my-tasks-icon-controls";
-const flagName = "HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG";
 const controlsFile = "src/app/my-tasks/MyTasksViewControls.tsx";
 const tabsFile = "src/app/my-tasks/MyTasksViewTabs.tsx";
 const shellFile = "src/components/PageComponents/Kanban/HeaderComponents/ShellViewControls.tsx";
@@ -89,16 +88,6 @@ const controlProps = (config) => ({ variant: "icons", boards, config, onChange: 
   tableColumnsEnabled: true, onOpenTableColumns: noop, onOpenKanbanFilters: noop });
 const trigger = (label) => document.querySelector(`button[aria-label="${label}"]`);
 
-test("flag registration, Owner + QA, and added gates on every changed UI entry", () => {
-  assert.match(require("./helpers/flag-files.cjs").source(), new RegExp(`${flagName} = "${flag}"`));
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), new RegExp(`key: ${flagName},`));
-  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.ok(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === flag));
-  for (const file of [controlsFile, tabsFile, shellFile, splitFile, tasksFile]) {
-    assert.match(read(file), new RegExp(`useFlag\\(${flagName}\\)`), file);
-  }
-});
-
 test("all six controls reuse icon-only kanban triggers with tooltips and phone targets", () => {
   enabled = true;
   render(Controls, controlProps(structuredClone(DEFAULT_MY_TASKS_VIEW_CONFIG)));
@@ -144,37 +133,21 @@ test("all six non-default controls are active and retain compact count badges", 
   assert.doesNotMatch(trigger(labels[2]).className, /text-view-control-active/);
 });
 
-test("6938 off preserves existing labelled controls and shared active styling", () => {
-  render(Controls, controlProps(structuredClone(DEFAULT_MY_TASKS_VIEW_CONFIG)));
-  for (const label of labels.filter((label) => label !== "Sort My Tasks")) {
-    assert.ok(trigger(label).querySelector("span.hidden"));
-    assert.doesNotMatch(trigger(label).className, /size-8/);
-  }
-  render(ViewControlButton, { label: "Sort board", tooltipLeft: -72, onClick: noop, active: true });
-  assert.match(trigger("Sort board").className, /text-shadcn-primary/);
-  enabled = true;
-  render(ViewControlButton, { label: "Sort board", tooltipLeft: -72, onClick: noop, active: true });
-  assert.match(trigger("Sort board").className, /text-view-control-active/);
-});
-
 test("active semantic token reuses the theme link color defined in all six palettes", () => {
   const config = load("tailwind.config.ts").default;
   assert.deepEqual(config.theme.extend.colors["view-control-active"], {
     DEFAULT: "var(--color-rich-text-link)",
     hover: "var(--color-white-black)",
   });
-  assert.match(read(shellFile), /iconControlsEnabled \? "text-view-control-active hover:text-view-control-active-hover"/);
+  assert.match(read(shellFile), /active \? "text-view-control-active hover:text-view-control-active-hover"/);
   for (const theme of ["light", "dark", "amoled", "graphite", "porcelain", "dia"]) {
     assert.match(read(`src/styles/tailwindThemes/${theme}.css`), /--color-rich-text-link:\s*#[0-9a-f]{6}/i, theme);
   }
 });
 
-test("saved-view and board-split overdue badges expose N overdue and portal hover tooltips only when enabled", () => {
+test("saved-view and board-split overdue badges expose N overdue and portal hover tooltips", () => {
   const views = [{ id: 7, name: "Mine", isDefault: false }];
   const props = { views, activeViewId: null, dirty: false, busy: false, onSelect: noop, overdueAll: 3, overdueByViewId: { 7: 2 } };
-  render(Tabs, props);
-  assert.equal(document.querySelector('[data-htpr-6459-my-tasks-overdue-badges]').getAttribute("aria-label"), null);
-  enabled = true;
   render(Tabs, props);
   const hint = () => document.body.querySelector("[data-hover-tooltip-portal]");
   for (const count of [3, 2]) {
@@ -190,13 +163,9 @@ test("saved-view and board-split overdue badges expose N overdue and portal hove
   assert.ok(badge);
   act(() => badge.dispatchEvent(new dom.window.MouseEvent("mouseenter")));
   assert.equal(hint().textContent.trim(), "4 overdue");
-  enabled = false;
-  render(SplitTitle, { tab: { idx: 0, project: "All", length: 1, hasUnseen: false, overdueCount: 4 }, isSelected: true, onClick: noop });
-  assert.equal(document.querySelector('span[aria-label="4 overdue"]'), null);
-  assert.equal(hint(), null);
 });
 
-test("production tab picks persist the selected view only behind 6938 and retain board scope checks", () => {
+test("production tab picks persist the selected view and retain board scope checks", () => {
   const source = ts.createSourceFile(tasksFile, read(tasksFile), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let expression;
   function visit(node) {
@@ -208,9 +177,9 @@ test("production tab picks persist the selected view only behind 6938 and retain
   const js = ts.transpileModule(`const select = ${expression}; select(selected);`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS },
   }).outputText;
-  const run = (on, selected, boardParam = "2") => {
+  const run = (selected, boardParam = "2") => {
     const writes = [], urls = [], selectedIds = [];
-    const context = { selected, boardParam, iconControlsEnabled: on, pickedView: { current: false }, currentUser: { id: 985 },
+    const context = { selected, boardParam, pickedView: { current: false }, currentUser: { id: 985 },
       views: [{ id: 5, isDefault: true, config: { boardIds: null } }, { id: 7, config: { boardIds: [1] } }],
       rememberMyTasksView: (...args) => writes.push(args), parseMyTasksViewConfig: (value) => value,
       DEFAULT_MY_TASKS_VIEW_CONFIG, setActiveViewId: (id) => selectedIds.push(id), updateViewConfig: noop,
@@ -218,10 +187,9 @@ test("production tab picks persist the selected view only behind 6938 and retain
     new Function(...Object.keys(context), js)(...Object.values(context));
     return { writes, urls, selectedIds };
   };
-  assert.deepEqual(run(true, 7), { writes: [[985, { viewId: 7, defaultViewId: 5 }]], urls: [{ viewId: 7, boardId: null }], selectedIds: [7] });
-  assert.deepEqual(run(true, null).writes, [[985, { viewId: null, defaultViewId: 5 }]]);
-  assert.deepEqual(run(false, 7).writes, []);
-  assert.deepEqual(run(true, 7, "1").urls, [{ viewId: 7 }]);
+  assert.deepEqual(run(7), { writes: [[985, { viewId: 7, defaultViewId: 5 }]], urls: [{ viewId: 7, boardId: null }], selectedIds: [7] });
+  assert.deepEqual(run(null).writes, [[985, { viewId: null, defaultViewId: 5 }]]);
+  assert.deepEqual(run(7, "1").urls, [{ viewId: 7 }]);
 });
 
 test("memory isolates users, merges board picks, remembers All, and tolerates invalid or blocked storage", () => {
@@ -280,13 +248,12 @@ test("production restore honors explicit URLs, defaults, removed views, flag loa
   assert.deepEqual(run(memory, { entryParams: { current: { view: "5", board: "1" } } }).calls, []);
   assert.deepEqual(run({ viewId: 7, defaultViewId: null }).calls, [], "new default beats an older pick");
   assert.deepEqual(run({ viewId: 999, defaultViewId: 5 }).calls, [], "deleted saved view falls back to default");
-  assert.deepEqual(run(memory, { iconControlsEnabled: false }).calls, []);
   assert.deepEqual(run({ viewId: 7, defaultViewId: 5 }, { pickedView: { current: true } }).calls, []);
   assert.deepEqual(run(memory, { pickedBoard: { current: true } }).calls, [{ viewId: 7 }], "new board pick is not overwritten after flags load");
   assert.deepEqual(run(memory, { boardTabsHidden: true }).calls, [{ viewId: 7 }], "no remembered board while the board tab row is hidden");
   const source = read(tasksFile);
-  assert.match(source, /const selectView[\s\S]*if \(iconControlsEnabled\) rememberMyTasksView\(currentUser.id/);
+  assert.match(source, /const selectView[\s\S]*rememberMyTasksView\(currentUser.id/);
   assert.match(source, /const updateSplit[\s\S]*rememberMyTasksView\(currentUser.id, \{ boardId: sources\[nextIndex - 1\]\?\.projectId/);
-  assert.match(source, /patchView\(viewId, \{ isDefault: true \}\);\s+if \(iconControlsEnabled\) rememberMyTasksView/);
+  assert.match(source, /patchView\(viewId, \{ isDefault: true \}\);\s+rememberMyTasksView/);
   assert.match(source, /getMyTasksSplitIndex\(boardSplitSources, boardParam\)/);
 });

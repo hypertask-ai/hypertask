@@ -934,7 +934,7 @@ test("the retired infra flag-pages key is hidden and cannot be re-enabled", asyn
   await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
 });
 
-for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attachments", "htpr-6035-agent-chat-skills"]) test(`the retired ${key} stays on in client payloads but is not editable`, async () => {
+for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attachments", "htpr-6035-agent-chat-skills", "htpr-6938-my-tasks-icon-controls"]) test(`the retired ${key} stays on in client payloads but is not editable`, async () => {
   listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
   row = { mode: "OFF", updatedAt: new Date() };
 

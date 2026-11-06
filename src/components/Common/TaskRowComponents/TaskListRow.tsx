@@ -1,6 +1,4 @@
 import Tooltip from "@/components/Common/Tooltip";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG } from "@/lib/flags/keys";
 import { ITask } from "@/models/model";
 import { assigneePublicName } from "@/lib/assignees";
 import React from "react";
@@ -263,7 +261,6 @@ export const SplitTitle = ({
   isSelected: boolean;
   onClick: any;
 }) => {
-  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const overdueCount = tab.overdueCount ?? 0;
   return (
     <div
@@ -295,11 +292,11 @@ export const SplitTitle = ({
         {overdueCount > 0 ? (
           <span
             data-htpr-6459-my-tasks-overdue-badges=""
-            aria-label={iconControlsEnabled ? `${overdueCount} overdue` : undefined}
+            aria-label={`${overdueCount} overdue`}
             className="font-semibold footer_tags text-micro text-destructive"
           >
             {overdueCount}
-            {iconControlsEnabled && <Tooltip text={`${overdueCount} overdue`} left={0} bottom={-34} keyCombination={[]} portal />}
+            <Tooltip text={`${overdueCount} overdue`} left={0} bottom={-34} keyCombination={[]} portal />
           </span>
         ) : null}
       </div>

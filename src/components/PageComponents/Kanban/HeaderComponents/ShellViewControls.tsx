@@ -1,7 +1,5 @@
 'use client'
 
-import { useFlag } from "@/hooks/useFlag"
-import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG } from "@/lib/flags/keys"
 import Tooltip from "@/components/Common/Tooltip"
 import { MobileViewContext } from "@/lib/contexts/mobileContext"
 import { useRecoilState, useSetRecoilState } from "@/lib/state"
@@ -119,14 +117,13 @@ export const ViewControlButton = ({
   expanded?: boolean
   className?: string
 }) => {
-  const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG)
   return (
   <button
     type="button"
     aria-label={label}
     aria-expanded={expanded}
     onClick={onClick}
-    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? (iconControlsEnabled ? "text-view-control-active hover:text-view-control-active-hover" : "text-shadcn-primary hover:text-white-black") : "text-text-light-gray hover:text-white-black"} ${className}`}
+    className={`group relative flex size-8 items-center justify-center transition-colors ${active ? "text-view-control-active hover:text-view-control-active-hover" : "text-text-light-gray hover:text-white-black"} ${className}`}
   >
     {children}
     <Tooltip
