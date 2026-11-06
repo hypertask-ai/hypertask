@@ -60,7 +60,7 @@
     "src/app/chat/Chat.tsx": 1,
     "src/app/my-tasks/MyTasks.tsx": 2,
     "src/app/my-tasks/MyTasksKanbanFilterModal.tsx": 3,
-    "src/app/my-tasks/MyTasksViewControls.tsx": 10,
+    "src/app/my-tasks/MyTasksViewControls.tsx": 2,
     "src/app/reminders/ReminderPageComponent.tsx": 1,
     "src/app/search/SearchComp.tsx": 2,
     "src/app/time/TimeComp.tsx": 2,
