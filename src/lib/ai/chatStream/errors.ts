@@ -87,9 +87,7 @@ export async function normalizeProviderAuthError(error: unknown, userId: number)
         .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7754_DEEPSEEK_AUTH_REFUSAL_FLAG, userId))
         .catch(() => false);
       if (!enabled) return error;
-      const message = ownKeyRejectedMessage("byok:deepseek");
-      if (!message) return error;
-      const refusal = new Error(message);
+      const refusal = new Error("DeepSeek rejected your AI key. Update it in Settings > AI keys, then try again.");
       refusal.name = "AiProviderAuthenticationError";
       Object.assign(refusal, { statusCode: 401 });
       return refusal;
@@ -224,12 +222,10 @@ export async function reportHandledChatError(
   extra?: Record<string, string | number | boolean | null>,
 ) {
   if (includedAllowanceError(error)) return;
-  if (
-    isOwnKeyAuthFailure(
-      typeof extra?.provider === "string" ? extra.provider : null,
-      error,
-    )
-  ) {
+  const reportedProvider = typeof extra?.provider === "string" && extra.provider !== "byok:deepseek"
+    ? extra.provider
+    : null;
+  if (isOwnKeyAuthFailure(reportedProvider, error)) {
     return;
   }
   if (

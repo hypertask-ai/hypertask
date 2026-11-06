@@ -491,18 +491,8 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         } finally {
           if (timer) clearTimeout(timer);
         }
-        const authError = outcome === "failed" && attribution.feature === "chat"
-          ? await import("@/lib/ai/chatStream/errors").then(async ({ isOwnKeyAuthFailure, normalizeProviderAuthError }) => {
-            if (isOwnKeyAuthFailure(row.provider, error)) {
-              const refusal = new Error("Own provider key rejected");
-              refusal.name = "AiProviderAuthenticationError";
-              return refusal;
-            }
-            if (row.provider === "byok:deepseek" && typeof attribution.userId === "number") {
-              return normalizeProviderAuthError(error, attribution.userId);
-            }
-            return error;
-          }).catch(() => error)
+        const authError = outcome === "failed" && attribution.feature === "chat" && row.provider === "byok:deepseek" && typeof attribution.userId === "number"
+          ? await import("@/lib/ai/chatStream/errors").then(({ normalizeProviderAuthError }) => normalizeProviderAuthError(error, attribution.userId!)).catch(() => error)
           : error;
         await Promise.allSettled([
           logAiUsage(row),
