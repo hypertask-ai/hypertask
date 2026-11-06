@@ -1,0 +1,10 @@
+[Unit]
+Description=YPER4-1348 daily ticket-origin recount
+
+[Service]
+Type=oneshot
+Environment=HOME=%h
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/.local/share/ticket-police
+ExecStart=/bin/bash -euc 'HT_TOKEN=$(cat "%h/.config/hypertask-agents/credentials/sessions/infra-runner-2-agent-token"); export HT_TOKEN; exec /bin/bash "%h/.local/share/ticket-police/daily.sh"'
+TimeoutStartSec=15min
