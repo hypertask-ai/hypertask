@@ -125,6 +125,34 @@ export function activationHarness() {
       return { count };
     },
   };
+  const outboxRows: any[] = [];
+  const outboxMatches = (row: any, where: any): boolean => Object.entries(where).every(([key, value]: [string, any]) => {
+    if (value instanceof Date) return row[key]?.getTime() === value.getTime();
+    if (value && typeof value === "object") {
+      if ("lte" in value) return row[key] !== null && row[key] <= value.lte;
+      if ("lt" in value) return row[key] !== null && row[key] < value.lt;
+    }
+    return row[key] === value;
+  });
+  prisma.analyticsOutbox = {
+    findUnique: async ({ where }: any) => outboxRows.find((row) => outboxMatches(row, where)) ?? null,
+    findMany: async ({ where, take }: any) => outboxRows.filter((row) => outboxMatches(row, where)).slice(0, take ?? outboxRows.length).map((row) => ({ ...row })),
+    create: async ({ data }: any) => {
+      const row = {
+        id: `outbox-${outboxRows.length + 1}`, attempts: 0, nextAttemptAt: new Date(0), deliveredAt: null,
+        lastError: null, createdAt: new Date(), ...data,
+      };
+      outboxRows.push(row);
+      return { ...row };
+    },
+    updateMany: async ({ where, data }: any) => {
+      const rows = outboxRows.filter((row) => outboxMatches(row, where));
+      for (const row of rows) for (const [key, value] of Object.entries(data) as [string, any][]) {
+        row[key] = value && typeof value === "object" && "increment" in value ? row[key] + value.increment : value;
+      }
+      return { count: rows.length };
+    },
+  };
   prisma.user.update = async () => ({});
   let transactionTail = Promise.resolve();
   prisma.$transaction = (callback: any) => {
