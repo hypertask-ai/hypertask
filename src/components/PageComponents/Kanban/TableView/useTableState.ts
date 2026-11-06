@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation";
 import { type TableRowDragData } from "./tableRowDrag";
 import { tableSectionKey, tableSectionNumber } from "./tableCreateTask";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG } from "@/lib/flags/keys";
 import { useStarAndPin } from "@/hooks/Task Detail/useStarAndPin";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
@@ -37,8 +37,7 @@ export function useTableState(context: Context) {
 
   const showEmptyViewColumns = useFlag(HTPR_7807_EMPTY_VIEW_COLUMNS_FLAG);
   const queryClient = useQueryClient();
-  const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const myTasksSnoozeEnabled = myTasksSnoozeFlag && Boolean(myTasksSnoozeActive);
+  const myTasksSnoozeEnabled = Boolean(myTasksSnoozeActive);
   const router = useRouter();
   const { navigateToTask } = useHypertasksNavigate();
   const { toggleCreateTaskGlobally } = useHypertasksRecoilStates();

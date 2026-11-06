@@ -15,7 +15,6 @@ import checkReminderAndCreateNotification from "@/utils/controllers/notification
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
-import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
 
 const REMINDER_LOCK_CLASS = 1_446_420_610
 
@@ -42,7 +41,7 @@ export default  async function handler(
   const remindAtDate = new Date(remindAt);
   const defaultInvoke = reminderOption ?? "DurationComplete"
   try {
-      const hideOnMyTasks = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId)
+      const hideOnMyTasks = true
       const reminder = await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${Number(taskId)}::int)`
         const existing = await tx.reminder.findMany({

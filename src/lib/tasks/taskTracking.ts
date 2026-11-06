@@ -5,7 +5,6 @@ import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
 import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
-import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
 import { HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-8217-agent-follow-reminder";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import {
@@ -128,7 +127,7 @@ export async function setTaskTracking({
       return { status: 400, body: { message: "remindAt must be a valid date" } };
     }
     const userId = context.currentUser.id;
-    const hideOnMyTasks = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId);
+    const hideOnMyTasks = true;
     const saved = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${REMINDER_LOCK_CLASS}::int, ${taskId}::int)`;
       const existing = await tx.reminder.findMany({
