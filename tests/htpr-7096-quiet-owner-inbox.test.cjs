@@ -3,21 +3,9 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
-const flagKey = "htpr-7096-quiet-owner-inbox";
 let entryId = 0;
 
-function stubModule(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = { id: filename, filename, loaded: true, exports };
-}
-
-function load(flagOn, flagChecks = []) {
-  stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async (key, userId) => {
-      flagChecks.push([key, userId]);
-      return flagOn;
-    },
-  });
+function load() {
   const jiti = require("jiti")(path.join(root, `tests/htpr-7096-${++entryId}.cjs`), {
     interopDefault: true,
     alias: { "@": path.join(root, "src") },
@@ -50,34 +38,24 @@ function recipientDeps({ assignees = [], followers = [] } = {}) {
   };
 }
 
-test("1 flag on: own agent comment without a mention does not notify the owner", async () => {
-  const checks = [];
-  const { notifications } = load(true, checks);
+test("own agent comment without a mention does not notify the owner", async () => {
+  const { notifications } = load();
   const ids = await notifications.resolveCommentRecipientUserIds(
     recipientDeps(), task, OWNER, OWNER, "agent-a", "<p>done</p>",
   );
   assert.deepEqual(ids, []);
-  assert.deepEqual(checks, [[flagKey, OWNER]]);
 });
 
-test("1 flag on: own agent comment that mentions the owner still notifies the owner", async () => {
-  const { notifications } = load(true);
+test("own agent comment that mentions the owner still notifies the owner", async () => {
+  const { notifications } = load();
   const ids = await notifications.resolveCommentRecipientUserIds(
     recipientDeps(), task, OWNER, OWNER, "agent-a", mentionOf(OWNER),
   );
   assert.deepEqual(ids, [OWNER]);
 });
 
-test("1 flag off: own agent comment notifies the owner as today", async () => {
-  const { notifications } = load(false);
-  const ids = await notifications.resolveCommentRecipientUserIds(
-    recipientDeps(), task, OWNER, OWNER, "agent-a", "<p>done</p>",
-  );
-  assert.deepEqual(ids, [OWNER]);
-});
-
-test("1 flag on: human assignees and followers stay, a human comment still notifies the owner", async () => {
-  const { notifications } = load(true);
+test("human assignees and followers stay, a human comment still notifies the owner", async () => {
+  const { notifications } = load();
   const deps = recipientDeps({ assignees: [{ userId: 11 }], followers: [{ userId: 12 }] });
   const agent = await notifications.resolveCommentRecipientUserIds(
     deps, task, OWNER, OWNER, "agent-a", "<p>done</p>",
@@ -89,8 +67,8 @@ test("1 flag on: human assignees and followers stay, a human comment still notif
   assert.deepEqual([...human].sort((a, b) => a - b), [8, 11, 12]);
 });
 
-test("1 flag on: an agent comment from a different user's token is not treated as the owner's agent", async () => {
-  const { notifications } = load(true);
+test("an agent comment from a different user's token is not treated as the owner's agent", async () => {
+  const { notifications } = load();
   const ids = await notifications.resolveCommentRecipientUserIds(
     recipientDeps(), task, 7, OWNER, "agent-z", "<p>done</p>",
   );
@@ -112,8 +90,8 @@ const row = (over) => ({
   ...over,
 });
 
-test("2 question detection: bold, plain, any paragraph; not mid-sentence", () => {
-  const { pure } = load(true);
+test("question detection: bold, plain, any paragraph; not mid-sentence", () => {
+  const { pure } = load();
   assert.equal(pure.isQuestionComment("<p><strong>Question:</strong> ship it?</p>"), true);
   assert.equal(pure.isQuestionComment("<p>Question: ship it?</p>"), true);
   assert.equal(pure.isQuestionComment("<p>Done.</p><p><strong>Question: </strong>ok?</p>"), true);
@@ -123,14 +101,14 @@ test("2 question detection: bold, plain, any paragraph; not mid-sentence", () =>
 });
 
 function importantOf(rows) {
-  const { tabs } = load(true);
+  const { tabs } = load();
   const { tabs: names, data } = tabs.getInboxTabs(rows);
   const important = names.find((tab) => tab.project === "Important");
   return important ? data[important.idx] : [];
 }
 
-test("2 flag on: agent mention that is not a Question leaves Important; Question and human stay", async () => {
-  const { quiet } = load(true);
+test("agent mention that is not a Question leaves Important; Question and human stay", async () => {
+  const { quiet } = load();
   const rows = [
     row({ comment: q("<p>FYI done</p>"), taskId: 1 }),
     row({ comment: q("<p><strong>Question:</strong> ok?</p>"), taskId: 2 }),
@@ -142,18 +120,8 @@ test("2 flag on: agent mention that is not a Question leaves Important; Question
   assert.deepEqual(importantOf(marked), [1, 2]);
 });
 
-test("2 flag off: rows are untouched and every mention is Important as today", async () => {
-  const { quiet } = load(false);
-  const rows = [row({ taskId: 1 }), row({ comment: q("<p>Question: ok?</p>"), taskId: 2 })];
-  const marked = await quiet.markQuietAgentMentions(
-    { comment: { groupBy: async () => { throw new Error("no query when off"); } } }, OWNER, rows,
-  );
-  assert.equal(marked, rows);
-  assert.deepEqual(importantOf(marked), [0, 1]);
-});
-
-test("3 flag on: a Question answered by the owner leaves Important, stays in the list", async () => {
-  const { quiet } = load(true);
+test("a Question answered by the owner leaves Important, stays in the list", async () => {
+  const { quiet } = load();
   const rows = [
     row({ comment: q("<p>Question: ok?</p>"), taskId: 5, createdAt: "2026-10-10T10:00:00.000Z" }),
     row({ comment: q("<p>Question: ok?</p>"), taskId: 6, createdAt: "2026-10-10T10:00:00.000Z" }),
@@ -174,21 +142,21 @@ test("3 flag on: a Question answered by the owner leaves Important, stays in the
   assert.equal(seenWhere.creatorId, OWNER);
   assert.equal(seenWhere.agentId, null);
   assert.deepEqual(importantOf(marked), [1]);
-  const { tabs, data } = load(true).tabs.getInboxTabs(marked);
+  const { tabs, data } = load().tabs.getInboxTabs(marked);
   const all = tabs.flatMap((tab) => data[tab.idx]);
   assert.ok(all.includes(0), "answered row stays in the normal list");
 });
 
-test("3 answered time uses earnedAt when the row is display-swapped", () => {
-  const { pure } = load(true);
+test("answered time uses earnedAt when the row is display-swapped", () => {
+  const { pure } = load();
   const base = { type: "Mentioned", fromAgentId: "a", taskId: 1, comment: q("<p>Question: x</p>") };
   const answered = new Map([[1, new Date("2026-10-10T10:30:00Z").getTime()]]);
   assert.equal(pure.isQuietAgentMention({ ...base, createdAt: "2026-10-10T12:00:00Z", earnedAt: "2026-10-10T10:00:00Z" }, answered), true);
   assert.equal(pure.isQuietAgentMention({ ...base, createdAt: "2026-10-10T12:00:00Z", earnedAt: "2026-10-10T11:00:00Z" }, answered), false);
 });
 
-test("4 question detection: attributed p and li, bold variants, mid-sentence", () => {
-  const { pure } = load(true);
+test("question detection: attributed p and li, bold variants, mid-sentence", () => {
+  const { pure } = load();
   assert.equal(pure.isQuestionComment('<p class="x">Question: proceed?</p>'), true);
   assert.equal(pure.isQuestionComment('<ul><li data-id="1">Question: proceed?</li></ul>'), true);
   assert.equal(pure.isQuestionComment('<p>Done.</p><p style="a:b"><strong>Question:</strong> ok?</p>'), true);
@@ -213,8 +181,8 @@ const ev = (over) => ({
   ...over,
 });
 
-test("5 flag on: a human mention still active on the task keeps Important despite a newer agent FYI", async () => {
-  const { quiet } = load(true);
+test("a human mention still active on the task keeps Important despite a newer agent FYI", async () => {
+  const { quiet } = load();
   const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
   const marked = await quiet.markQuietAgentMentions(
     mixedDb([ev({}), ev({ fromAgentId: "agent-a", comment: q("<p>FYI done</p>") })]), OWNER, rows,
@@ -223,8 +191,8 @@ test("5 flag on: a human mention still active on the task keeps Important despit
   assert.deepEqual(importantOf(marked), [0]);
 });
 
-test("5 flag on: an unanswered agent Question on the task keeps Important despite a newer FYI", async () => {
-  const { quiet } = load(true);
+test("an unanswered agent Question on the task keeps Important despite a newer FYI", async () => {
+  const { quiet } = load();
   const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
   const marked = await quiet.markQuietAgentMentions(
     mixedDb([
@@ -235,8 +203,8 @@ test("5 flag on: an unanswered agent Question on the task keeps Important despit
   assert.equal(marked[0].quietImportant, undefined);
 });
 
-test("5 flag on: only agent FYI mentions on the task quiet it", async () => {
-  const { quiet } = load(true);
+test("only agent FYI mentions on the task quiet it", async () => {
+  const { quiet } = load();
   const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
   const marked = await quiet.markQuietAgentMentions(
     mixedDb([
@@ -250,45 +218,45 @@ test("5 flag on: only agent FYI mentions on the task quiet it", async () => {
 
 const fyi = () => ev({ fromAgentId: "agent-a", comment: q("<p>FYI done</p>") });
 async function markMixed(events, assigned) {
-  const { quiet } = load(true);
+  const { quiet } = load();
   const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
   return quiet.markQuietAgentMentions(mixedDb(events, assigned), OWNER, rows);
 }
 
-test("7 flag on: a human Comment on a task the owner is assigned to keeps Important despite a newer agent FYI", async () => {
+test("a human Comment on a task the owner is assigned to keeps Important despite a newer agent FYI", async () => {
   const marked = await markMixed([ev({ type: "Comment" }), fyi()], [9]);
   assert.equal(marked[0].quietImportant, undefined);
   assert.deepEqual(importantOf(marked), [0]);
 });
 
-test("7 flag on: a human Comment on a task the owner is not assigned to is not Important today, so the FYI quiets it", async () => {
+test("a human Comment on a task the owner is not assigned to is not Important today, so the FYI quiets it", async () => {
   const marked = await markMixed([ev({ type: "Comment" }), fyi()], []);
   assert.equal(marked[0].quietImportant, true);
 });
 
-test("7 flag on: a personal Assigned event keeps Important despite a newer agent FYI", async () => {
+test("a personal Assigned event keeps Important despite a newer agent FYI", async () => {
   const marked = await markMixed([ev({ type: "Assigned" }), fyi()], []);
   assert.equal(marked[0].quietImportant, undefined);
   assert.deepEqual(importantOf(marked), [0]);
 });
 
-test("7 flag on: an Assigned event made by an agent is housekeeping and does not keep Important", async () => {
+test("an Assigned event made by an agent is housekeeping and does not keep Important", async () => {
   const marked = await markMixed([ev({ type: "Assigned", fromAgentId: "agent-a" }), fyi()], []);
   assert.equal(marked[0].quietImportant, true);
 });
 
-test("7 flag on: a direct reply keeps Important despite a newer agent FYI", async () => {
+test("a direct reply keeps Important despite a newer agent FYI", async () => {
   const marked = await markMixed([ev({ type: "Comment", fromAgentId: "agent-a", directReply: true }), fyi()], []);
   assert.equal(marked[0].quietImportant, undefined);
 });
 
-test("7 flag on: a human mention plus a newer agent FYI keeps Important", async () => {
+test("a human mention plus a newer agent FYI keeps Important", async () => {
   const marked = await markMixed([ev({ type: "Mentioned" }), fyi()], []);
   assert.equal(marked[0].quietImportant, undefined);
   assert.deepEqual(importantOf(marked), [0]);
 });
 
-test("7 flag on: only an agent FYI is quiet, an unanswered agent Question stays Important", async () => {
+test("only an agent FYI is quiet, an unanswered agent Question stays Important", async () => {
   const quietOnly = await markMixed([fyi()], []);
   assert.equal(quietOnly[0].quietImportant, true);
   assert.deepEqual(importantOf(quietOnly), []);
@@ -298,15 +266,15 @@ test("7 flag on: only an agent FYI is quiet, an unanswered agent Question stays 
   assert.equal(question[0].quietImportant, undefined);
 });
 
-test("8 bold Question with the colon inside or outside the tags is detected", () => {
-  const { pure } = load(true);
+test("bold Question with the colon inside or outside the tags is detected", () => {
+  const { pure } = load();
   assert.equal(pure.isQuestionComment("<p><strong>Question</strong>: ok?</p>"), true);
   assert.equal(pure.isQuestionComment("<p><strong>Question:</strong> ok?</p>"), true);
   assert.equal(pure.isQuestionComment("<p><strong>Questions</strong>: ok?</p>"), false);
 });
 
-test("6 flag on: assignee or follower owner is filtered from own agent chatter, mention path stays", async () => {
-  const { notifications } = load(true);
+test("assignee or follower owner is filtered from own agent chatter, mention path stays", async () => {
+  const { notifications } = load();
   const deps = recipientDeps({ assignees: [{ userId: OWNER }, { userId: 11 }], followers: [{ userId: OWNER }] });
   const quiet = await notifications.resolveCommentRecipientUserIds(
     deps, task, OWNER, OWNER, "agent-a", "<p>done</p>",
@@ -316,13 +284,4 @@ test("6 flag on: assignee or follower owner is filtered from own agent chatter, 
     deps, task, OWNER, OWNER, "agent-a", mentionOf(OWNER),
   );
   assert.deepEqual([...mentioned].sort((a, b) => a - b), [8, 11]);
-});
-
-test("6 flag off: assignee owner still gets own agent chatter", async () => {
-  const { notifications } = load(false);
-  const deps = recipientDeps({ assignees: [{ userId: OWNER }] });
-  const ids = await notifications.resolveCommentRecipientUserIds(
-    deps, task, OWNER, OWNER, "agent-a", "<p>done</p>",
-  );
-  assert.deepEqual(ids, [OWNER]);
 });
