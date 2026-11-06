@@ -236,7 +236,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     const attachShortcut = (event: KeyboardEvent) => {
       if (boardPickerOpen) return;
       const cmdControl = (isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey);
-      if (composerKeysLayout && dictating && cmdControl && !event.altKey && !event.shiftKey && !event.isComposing && event.key === "Enter") {
+      if ((composerKeysLayout || plusLayout) && dictating && cmdControl && !event.altKey && !event.shiftKey && !event.isComposing && event.key === "Enter") {
         event.preventDefault();
         event.stopImmediatePropagation();
         createAfterDictation.current = true;
