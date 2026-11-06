@@ -105,10 +105,39 @@ eq "non-runner session: silent" "$(hook 'HTPR-1 | something' "$pl")" ""
 eq "unnamed session: silent" "$(hook '' "$pl")" ""
 eq "stop_hook_active: silent" "$(hook 'RUNNER 3' '{"session_id":"abcdef123456","stop_hook_active":true}')" ""
 eq "another runner: silent" "$(hook 'RUNNER 5' "$pl")" ""
+# A session that started before the move still has its gates inside the project it works in.
 mkdir -p "$T/work/.unlazy/s-abcdef12"
 printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+eq "legacy project ledger still makes the runner busy" "$(hook 'RUNNER 3' "$pl")|$(jq '[.items[]|select(.delivered|not)]|length' "$inbox")" "|1"
+rm -rf "$T/work/.unlazy"
+# A gate the ticket's home ledger settles is decided there; its leftover project copy cannot hold
+# the runner away from new work for ever (HYCI-44).
+mkdir -p "$T/work/.unlazy/s-abcdef12" "$T/home/.unlazy/ledgers/HTPR-1"
+printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
+printf -- '- [ ] HTPR-1.merged: open in the old project copy\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [x] HTPR-1.merged: settled in the home ledger\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+eq "a settled gate's leftover project copy does not hold the runner" "$(jq -r .decision <<<"$(hook 'RUNNER 3' "$pl")")" "block"
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+printf -- '- [ ] HTPR-1.done: still open at home\n  CHECK: true\n' >> "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+eq "an open gate in the home ledger still holds the runner" "$(hook 'RUNNER 3' "$pl")" ""
+# A carried gate file settles its id too: a custom gate adopted beside the ledger, and the copy the
+# project still holds, must not disagree about whether this session is idle (HYCI-44).
+mkdir -p "$T/home/.unlazy/ledgers/HTPR-1/gates"
+printf -- '- [x] HTPR-1.merged: settled in the home ledger\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+printf -- '- [ ] HTPR-1.custom: open in the old project copy\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [x] HTPR-1.custom: settled in the carried gate file\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/gates/adopted.md"
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+eq "a carried gate settled at home does not hold the runner" "$(jq -r .decision <<<"$(hook 'RUNNER 3' "$pl")")" "block"
+printf -- '- [ ] HTPR-1.custom2: still open at home\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/gates/adopted.md"
+eq "an open carried gate at home still holds the runner" "$(hook 'RUNNER 3' "$pl")" ""
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+rm -rf "$T/work/.unlazy" "$T/home/.unlazy/ledgers"
+# Ship keeps one ledger folder per ticket under the home folder, tagged with its session.
+mkdir -p "$T/home/.unlazy/ledgers/HTPR-1"
+printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
 eq "busy runner (unmet gate): silent and still queued" "$(hook 'RUNNER 3' "$pl")|$(jq '[.items[]|select(.delivered|not)]|length' "$inbox")" "|1"
-printf -- '- [ ] G1: open work\n  CHECK: true\nABANDON: G1 waiting for Valentin\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [ ] G1: open work\n  CHECK: true\nABANDON: G1 waiting for Valentin\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
 out=$(hook 'RUNNER 3' "$pl")
 eq "idle runner: blocks with the full title and URL" "$(jq -r .decision <<<"$out")" "block"
 case "$(jq -r .reason <<<"$out")" in
@@ -121,11 +150,18 @@ before=$(activity); RUNNER_PICKUP_MAX_AGE_DAYS=100000 "$SCRIPT" run 3 2>/dev/nul
 eq "delivered item is not requeued or announced" "$(activity)" "$before"
 jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 eq "prompt mode adds context instead of blocking" "$(hook 'RUNNER 3' "$pl" prompt | jq -r .hookSpecificOutput.hookEventName)" "UserPromptSubmit"
+# A ledger's session file holds the full session id: another session sharing eight characters is not it.
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+printf 'abcdef123456-longer\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
+out=$(hook 'RUNNER 3' '{"session_id":"abcdef12","cwd":"'$T'/work"}')
+eq "a ledger of another session sharing the prefix does not hold the runner" "$(jq -r .decision <<<"$out")" "block"
+printf 'abcdef123456\n' > "$T/home/.unlazy/ledgers/HTPR-1/session"
 
 # Weekly pickup pause also holds tickets already queued before the threshold was crossed.
 status=$HOME/.local/state/token-ladder/status.json
 mkdir -p "$(dirname "$status")"
-printf -- '- [x] G1: settled\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [x] G1: settled\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
 for usage in 86 85.1 100; do
   printf '{"claude":{"week":{"used":%s}}}\n' "$usage" > "$status"
   for mode in stop prompt; do
@@ -175,7 +211,7 @@ eq "every run refreshes the hook-alive marker with the session pid" "$(jq -r .pi
 ev runner-3 e3 'three'
 eq "prompt: event as UserPromptSubmit additionalContext" "$(hook 'RUNNER 3' "$pl" prompt | ctx | tail -1)" "1) three"
 ev runner-3 e4 'four'
-printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/home/.unlazy/ledgers/HTPR-1/GATES.md"
 out=$(hook 'RUNNER 3' '{"session_id":"abcdef123456","cwd":"'$T'/work","stop_hook_active":true}')
 eq "stop: events block even with an unmet gate and stop_hook_active" "$(jq -r .decision <<<"$out")|$(jq -r .reason <<<"$out" | tail -1)" "block|1) four"
 eq "stop: second stop is silent" "$(hook 'RUNNER 3' "$pl")" ""

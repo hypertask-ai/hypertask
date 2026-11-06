@@ -173,13 +173,41 @@ ticket_ok() {
     return 1
   fi
   # Idle means no unmet gate in this session's unlazy ledger (unchecked and not abandoned).
-  local sid cwd ledger id
-  sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null); cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
-  for ledger in "${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md"; do
-    [ -n "$sid" ] && [ -f "$ledger" ] || continue
-    while IFS= read -r id; do
-      grep -qE "^ABANDON: $id( |:|$)" "$ledger" || return 1
-    done < <(grep -E '^- \[ \] ' "$ledger" | sed -E 's/^- \[ \] ([^:]+):.*/\1/')
+  # Ship keeps one ledger folder per ticket under the home folder; its session file names the
+  # session that holds it. The vcc skill keeps a session ledger beside it, and a session that
+  # started before the move still has its gates inside the project it works in.
+  local sid ledger id dir cwd
+  sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null)
+  [ -n "$sid" ] || return 0
+  cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
+  local home_ledgers=() home_extras=() old_ledgers=("${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md")
+  for dir in "${SHIP_STATE_ROOT:-$HOME}/.unlazy/ledgers"/*; do
+    [ -f "$dir/session" ] && grep -qxF -- "$sid" "$dir/session" 2>/dev/null || continue
+    home_ledgers+=("$dir/GATES.md")
+    home_extras+=("$dir"/gates/*.md)
+  done
+  # A gate the ticket's home ledger settles is decided there, in GATES.md or in a carried gate file:
+  # its leftover copy in the project, from before the move, cannot hold the runner away from new
+  # work for ever.
+  local decided=''
+  for ledger in "${home_ledgers[@]}" "${home_extras[@]}"; do
+    [ -f "$ledger" ] || continue
+    decided+=$(grep -E '^- \[[ xX]\] ' "$ledger" | sed -E 's/^- \[[ xX]\] ([^:]+):.*/\1/')$'\n'
+  done
+  unsettled() {
+    local file=$1 skip=${2:-} open
+    [ -f "$file" ] || return 1
+    while IFS= read -r open; do
+      if [ -n "$skip" ] && grep -qxF -- "$open" <<<"$skip"; then continue; fi
+      grep -qE "^ABANDON: $open( |:|$)" "$file" || return 0
+    done < <(grep -E '^- \[ \] ' "$file" | sed -E 's/^- \[ \] ([^:]+):.*/\1/')
+    return 1
+  }
+  for ledger in "${home_ledgers[@]}" "${home_extras[@]}"; do
+    unsettled "$ledger" && return 1
+  done
+  for ledger in "${old_ledgers[@]}"; do
+    unsettled "$ledger" "$decided" && return 1
   done
   return 0
 }

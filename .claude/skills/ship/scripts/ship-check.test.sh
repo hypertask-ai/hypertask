@@ -721,8 +721,9 @@ env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval),
 for _ in range(2):
     r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo, env=env, text=True, capture_output=True)
     assert r.returncode == 0 and 'ALL MET' in r.stderr, r.stdout + r.stderr
-ledger = repo / '.unlazy/s-worker-g/GATES.md'
+ledger = home / '.unlazy' / 'ledgers' / 'YPER4-999' / 'GATES.md'
 text = ledger.read_text()
+assert not (repo/'.unlazy').exists(), 'a ship run left session state in the worker project'
 prefix = "SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT='/tmp/worker checkout' SHIP_WORKER='workers/docs agent' "
 assert text.count('  CHECK: ' + prefix) == 8
 assert text.count('automatic-evidence=v1') == 8
@@ -1280,28 +1281,27 @@ echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
 git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-901-fix 2>/dev/null; echo 2 > "$NC/ahead"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote branch" || ok "nochange refuses an origin branch ahead of base"
 
-# deeper gate (YPER4-435): a Deeper: activity with the four parts and a runnable proof gate in the session scope.
-DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo/.unlazy/s-abcd1234/gates"
+# deeper gate (YPER4-435): a Deeper: activity with the four parts and a runnable proof gate in the ticket folder.
+DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo" "$DP/state/.unlazy/ledgers/YPER4-902/gates"
 printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
 chmod +x "$DP/bin/ht"; export DP
-DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
+DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" SHIP_STATE_ROOT="$DP/state" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
 act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
 full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | breaks if: another suite turns red | proof gate: YPER4-902.deeper-ci'
 gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'
-printf '%s' "$gate" > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+printf '%s' "$gate" > "$DP/state/.unlazy/ledgers/YPER4-902/gates/extra.md"
 act "$full"; DE YPER4-902 | grep -qx 'deeper ok' && ok "deeper passes with all parts and a runnable proof gate" || bad "deeper pass: $(DE YPER4-902)"
-DSID=otherses-full DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper ignores another session's proof gate" || bad "deeper used another session's scope"
-DSID= DE YPER4-902 | grep -q "needs this session's id" && ok "deeper refuses without a session id" || bad "deeper without session id"
+DSID=otherses-full DE YPER4-902 | grep -qx 'deeper ok' && ok "deeper reads the ticket folder whatever the session id" || bad "deeper hid the ticket's proof gate"
 echo '{"success":true,"activities":[]}' > "$DP/acts"
 DE YPER4-902 | grep -q 'no agent activity starting with "Deeper:"' && ok "deeper refuses a ticket with no Deeper: activity" || bad "deeper no activity"
 act "${full/ | method: stub tests/}"; DE YPER4-902 | grep -q 'no "method:" part' && ok "deeper refuses a missing part" || bad "deeper missing part"
 act "${full/ | breaks if: another suite turns red/}"; DE YPER4-902 | grep -q 'no "breaks if:" part' && ok "deeper refuses a Deeper: activity without breaks if" || bad "deeper missing breaks if"
 act "${full/YPER4-902.deeper-ci/YPER4-903.deeper-ci}"; DE YPER4-902 | grep -q 'must name its proof gate' && ok "deeper refuses another ticket's proof gate" || bad "deeper wrong ticket gate"
-act "$full"; printf -- '- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: I looked at it\n' > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+act "$full"; printf -- '- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: I looked at it\n' > "$DP/state/.unlazy/ledgers/YPER4-902/gates/extra.md"
 DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper refuses a manual proof gate" || bad "deeper manual gate"
-printf -- '- [ ] YPER4-902.deeper-cix: other\n  CHECK: true\n  EXPECT: x\n- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: manual\n' > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+printf -- '- [ ] YPER4-902.deeper-cix: other\n  CHECK: true\n  EXPECT: x\n- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: manual\n' > "$DP/state/.unlazy/ledgers/YPER4-902/gates/extra.md"
 DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper does not borrow another gate's CHECK" || bad "deeper borrowed CHECK"
-printf '%s' "$gate" > "$DP/repo/.unlazy/s-abcd1234/GATES.md"; rm "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
+printf '%s' "$gate" > "$DP/state/.unlazy/ledgers/YPER4-902/GATES.md"; rm "$DP/state/.unlazy/ledgers/YPER4-902/gates/extra.md"
 DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper needs the proof gate outside the generated GATES.md" || bad "deeper read GATES.md"
 DE 'YPER4-902;x' | grep -q 'needs a ticket id' && ok "deeper refuses a malformed ticket id" || bad "deeper malformed id"
 echo 0 > "$NC/ahead"
