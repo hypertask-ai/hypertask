@@ -1,6 +1,6 @@
 export type FeedbackRefusal = { code?: string; field?: string; options?: readonly unknown[] };
 
-const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big", "not_found", "missing_field", "invalid_date", "invalid_range", "invalid_element", "max_length_exceeded", "unsupported_value", "unknown_mention", "ambiguous_mention"]);
+const CALLER_FIXABLE_CODES = new Set(["unrecognized_keys", "invalid_enum_value", "invalid_value", "invalid_type", "invalid_literal", "invalid_format", "too_small", "too_big", "not_found", "missing_field", "invalid_date", "invalid_range", "invalid_element", "max_length_exceeded", "unsupported_value", "unknown_mention", "ambiguous_mention", "agent_writing"]);
 
 export function callerCanFix(refusal: FeedbackRefusal): boolean {
   if (!refusal.code) return false;
@@ -13,7 +13,7 @@ export function callerCanFixRefusal(details: FeedbackRefusal | undefined, status
   return status < 500 && callerCanFix(details ?? {});
 }
 
-const NAMED_FIELD_REFUSALS = new Set(["unrecognized_keys", "invalid_type", "invalid_literal", "invalid_union", "invalid_enum_value", "invalid_string", "invalid_date", "invalid_key", "too_small", "too_big", "not_multiple_of", "unrecognized", "custom", "unknown_mention", "ambiguous_mention"]);
+const NAMED_FIELD_REFUSALS = new Set(["unrecognized_keys", "invalid_type", "invalid_literal", "invalid_union", "invalid_enum_value", "invalid_string", "invalid_date", "invalid_key", "too_small", "too_big", "not_multiple_of", "unrecognized", "custom", "unknown_mention", "ambiguous_mention", "agent_writing"]);
 const LISTED_VALUE_REFUSALS = new Set(["unrecognized_keys", "invalid_enum_value", "unrecognized"]);
 
 export function quietInputRefusal(input: { status?: number; errorCode?: string; field?: string }): boolean {
