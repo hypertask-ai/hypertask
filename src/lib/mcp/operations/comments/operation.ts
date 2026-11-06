@@ -6,7 +6,7 @@ import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { AttachmentFileInput } from "@/lib/mcp-server/validations/attachment.validation";
-import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, HTPR_7512_ATTACH_KEEPS_COMMENT_FLAG, HTPR_7514_INLINE_AGENT_IMAGES_FLAG, HTPR_8268_MENTION_BY_NAME_FLAG, HTPR_8344_LOG_POST_STATUS_FLAG, HTPR_8513_AGENT_MENTIONS_FLAG, HTPR_8811_AGENT_NOTE_IMAGE_LINKS_FLAG } from "@/lib/flags/keys";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
@@ -193,7 +193,14 @@ async function htmlToLogText(html: string) {
     if (!href || href === label) continue
     anchor.set_content(escapeHtmlText(label ? `${label} (${href})` : href))
   }
-  return root.structuredText.trim()
+  const text = root.structuredText.split('\n').map((line) => line.trim()).filter((line) => line.length > 0).join('\n')
+  const imageLines = root.querySelectorAll('img').flatMap((image) => {
+    const src = image.getAttribute('src')?.trim()
+    if (!src || text.includes(src)) return []
+    const alt = image.getAttribute('alt')?.trim()
+    return [alt && alt !== src ? `${alt} (${src})` : src]
+  })
+  return [text, ...imageLines].filter((part) => part.length > 0).join('\n')
 }
 
 function escapeHtmlText(value: string) {
@@ -1012,7 +1019,11 @@ export async function POST(request: NextRequest) {
           source: 'agent' as const,
         }
       : null
-    if (writingPolicy && ctx.agentId && kind === undefined && (has_attachments || images?.length || /<img\b/i.test(sanitizedText) || (Array.isArray(body.attachments) && body.attachments.length))) {
+    const suppliedAttachment = Boolean(has_attachments) || Boolean(images?.length) || (Array.isArray(body.attachments) && body.attachments.length > 0)
+    const imageMarkupRequiresKind = writingPolicy && ctx.agentId && kind === undefined && !suppliedAttachment && /<img\b/i.test(sanitizedText)
+      ? !(await isFeatureEnabled(HTPR_8811_AGENT_NOTE_IMAGE_LINKS_FLAG, user.id))
+      : false
+    if (writingPolicy && ctx.agentId && kind === undefined && (suppliedAttachment || imageMarkupRequiresKind)) {
       return NextResponse.json(buildFieldError('missing_field', 'kind', 'Choose kind (question|qa|done) before attaching files to a people comment.'), { status: 400 })
     }
     const legacyRouting = writingPolicy ? undefined : {

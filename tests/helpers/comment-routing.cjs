@@ -49,7 +49,9 @@ function setup(options = {}) {
     '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
     '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: options.textMentions ?? [] }) },
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
-    '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => options.formattedText ?? text },
+    ...(options.realMarkdown ? {} : {
+      '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => options.formattedText ?? text },
+    }),
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
     '@/lib/mcp/comments/activityMetadata': {},
     '@/lib/mcp/agents/scopes': { requireRole: async () => null },
@@ -76,7 +78,8 @@ function setup(options = {}) {
           (key === 'yper4-910-agent-writing' && options.writing !== false) ||
           (key === 'htpr-7512-attach-keeps-comment' && options.attachFlag !== false) ||
           (key === 'htpr-7514-inline-agent-images' && options.inlineImages === true) ||
-          (key === 'htpr-8344-log-post-status' && options.logStatusFlag === true)
+          (key === 'htpr-8344-log-post-status' && options.logStatusFlag === true) ||
+          (key === 'htpr-8811-agent-note-image-links' && options.imageNoteLinks !== false)
       },
     },
     '@/lib/mcp/listQuery': load('src/lib/mcp/listQuery.ts', {}),

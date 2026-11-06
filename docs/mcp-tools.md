@@ -88,7 +88,7 @@ Reports land in board 15, Bugs, with the ai-feedback label and Medium priority. 
 
 ## Agent comment visibility
 
-An agent comment without `kind`, a reply target, a person @mention, images or attachments goes to the hidden ticket agent log, not the conversation people read. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. This documents the existing routing; it does not change it.
+An agent comment without `kind`, a reply target, a person @mention, or a file attachment (`has_attachments`, `images`, or uploaded files) goes to the hidden ticket agent log, not the conversation people read. Image links written in the note stay in that log. For people, use `kind: "question"` for a decision, `"qa"` for a QA verdict, or `"done"` for a closing summary. Switching `htpr-8811-agent-note-image-links` off makes image markup in the note ask for `kind` again.
 
 Nothing is published when the log cannot take the note. When the board's owner has no agent log at all, the answer is `400` naming `kind`, so the caller learns to send a people kind instead of retrying forever. When the agent is not an accepted member of the board, the answer is `403` naming its board access, with the `hypertask_request_board_access` route. Only a log that fails while opening keeps `503` with a retry.
 
