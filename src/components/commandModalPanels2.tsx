@@ -16,7 +16,7 @@ import type { createCommandDispatcher } from "./commandDispatcher";
 import type { IHTCProps } from "./commandTypes";
 
 
-type Context = Pick<IHTCProps & ReturnType<typeof useCommandsState> & ReturnType<typeof createBoardCommandActions> & ReturnType<typeof createGeneralCommandActions> & ReturnType<typeof createCommandModalCallbacks> & ReturnType<typeof createCommandDispatcher>, "focusProxy" | "isMbl" | "commandMode" | "handleAction" | "paletteContextOptions" | "billing" | "appShellRailOn" | "showCommands" | "currentUser" | "boardCloseHandler" | "_currentProject" | "refreshRowTaskList" | "relationPicker" | "activeTaskId" | "callbackHandler" | "archiveHandler" | "confirmDelete" | "DeleteMessageHandler" | "setDueDateCallback" | "queryClient" | "inViewObject" | "_activeTask" | "setRecurrenceHandler" | "taskTemplatePickerForCurrentProject" | "openTaskTemplateHandler" | "myTasksBulkSelectionEnabled" | "hasBulkSelection" | "kanbanBulkSelection" | "bulkSelection" | "bulkTasks" | "bulkActionProjectId" | "_activeTaskAssignees" | "toggleAssignModal" | "taskProject" | "updateAutoAssignHandler" | "createBoard" | "createColumn" | "contextOptions" | "toggleManageColumns" | "updateBoard" | "reSendInvite" | "cancelInvite" | "inviteNewMemberHandlerLocal" | "removeMemberLocal" | "addAgentToBoardLocal" | "removeAgentFromBoardLocal" | "callbackProjectId" | "toggleBoardSortingHandler" | "togglePriorityModal" | "toggleEstimateModal" | "setShowCommands" | "setCommandMode" | "toggleLabelModal" | "myTasksSnoozeEnabled" | "togglRemindMeModal" | "toggleSubTaskSettingsHandler" | "toggleManageViewsHandler" | "toggleBoardViewsHandler" | "toggleSubtaskLinkingHandler" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "toggleRenameTaskModal" | "agentToEdit" | "closeCallbackCreateAgent" | "inboxZeroRules">;
+type Context = Pick<IHTCProps & ReturnType<typeof useCommandsState> & ReturnType<typeof createBoardCommandActions> & ReturnType<typeof createGeneralCommandActions> & ReturnType<typeof createCommandModalCallbacks> & ReturnType<typeof createCommandDispatcher>, "focusProxy" | "isMbl" | "commandMode" | "handleAction" | "paletteContextOptions" | "billing" | "appShellRailOn" | "showCommands" | "currentUser" | "boardCloseHandler" | "_currentProject" | "refreshRowTaskList" | "relationPicker" | "activeTaskId" | "callbackHandler" | "archiveHandler" | "confirmDelete" | "DeleteMessageHandler" | "setDueDateCallback" | "queryClient" | "inViewObject" | "_activeTask" | "setRecurrenceHandler" | "taskTemplatePickerForCurrentProject" | "openTaskTemplateHandler" | "hasBulkSelection" | "kanbanBulkSelection" | "bulkSelection" | "bulkTasks" | "bulkActionProjectId" | "_activeTaskAssignees" | "toggleAssignModal" | "taskProject" | "updateAutoAssignHandler" | "createBoard" | "createColumn" | "contextOptions" | "toggleManageColumns" | "updateBoard" | "reSendInvite" | "cancelInvite" | "inviteNewMemberHandlerLocal" | "removeMemberLocal" | "addAgentToBoardLocal" | "removeAgentFromBoardLocal" | "callbackProjectId" | "toggleBoardSortingHandler" | "togglePriorityModal" | "toggleEstimateModal" | "setShowCommands" | "setCommandMode" | "toggleLabelModal" | "myTasksSnoozeEnabled" | "togglRemindMeModal" | "toggleSubTaskSettingsHandler" | "toggleManageViewsHandler" | "toggleBoardViewsHandler" | "toggleSubtaskLinkingHandler" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "toggleRenameTaskModal" | "agentToEdit" | "closeCallbackCreateAgent" | "inboxZeroRules">;
 
 export function renderCommandModals2(context: Context) {
   const {
@@ -24,7 +24,7 @@ export function renderCommandModals2(context: Context) {
   appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
   refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
   confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
   hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
   _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
   createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
@@ -58,7 +58,7 @@ function renderPaletteModalGroup1(context: Context) {
   appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
   refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
   confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
   hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
   _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
   createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
@@ -212,7 +212,7 @@ function renderPaletteModalGroup2(context: Context) {
   appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
   refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
   confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
   hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
   _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
   createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
@@ -223,24 +223,7 @@ function renderPaletteModalGroup2(context: Context) {
   myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
   } = context;
   return (<>{commandMode === CommandMode.OpenAssignModal && (
-            myTasksBulkSelectionEnabled && hasBulkSelection && !kanbanBulkSelection ? (
-              bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
-              <AssignModal
-                onClose={boardCloseHandler}
-                project={{ id: bulkActionProjectId } as IProject}
-                task={{
-                  id: bulkTasks[0].id,
-                  title: bulkTasks[0].title,
-                  link: "",
-                }}
-                assignees={_activeTaskAssignees}
-                bulkTaskIds={bulkTasks.map((task) => task.id)}
-                onBulkAssign={(assignee) =>
-                  bulkSelection.assignSelected(assignee, "assign")
-                }
-              />
-              ) : null
-            ) : hasBulkSelection ? (
+            hasBulkSelection ? (
               bulkSelection && bulkTasks[0] && bulkActionProjectId ? (
               <AssignModal
                 onClose={boardCloseHandler}
@@ -379,7 +362,7 @@ function renderPaletteModalGroup3(context: Context) {
   appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
   refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
   confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
   hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
   _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
   createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
@@ -552,7 +535,7 @@ function renderPaletteModalGroup4(context: Context) {
   appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
   refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
   confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+  _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
   hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
   _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
   createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,

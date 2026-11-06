@@ -39,6 +39,16 @@ stubSourceModule("src/hooks/Task Detail/useTimeTracking.ts", {
 stubSourceModule("src/lib/state.tsx", {
   useRecoilValue: () => false,
   useRecoilState: () => [0, () => {}],
+  useSetRecoilState: () => () => {},
+});
+stubSourceModule("src/hooks/General/useUndo.tsx", {
+  useUndoContext: () => ({ performActionAndStoreUndoData: async () => {} }),
+});
+stubSourceModule("src/hooks/Task Detail/useAssignTaskUser.ts", {
+  useAssignTaskUser: () => async () => {},
+});
+stubSourceModule("src/hooks/MultiPages/useMoveTaskToSection.ts", {
+  default: () => ({ mutateAsync: async () => {} }),
 });
 stubSourceModule("src/store/index.ts", {
   appShellRailAtom: {},

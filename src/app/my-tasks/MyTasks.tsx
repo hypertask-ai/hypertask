@@ -18,7 +18,6 @@ import {
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_VIEWS_FLAG,
-  MY_TASKS_BULK_SELECTION_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -207,7 +206,6 @@ const MyTasks = ({
   const lastColumnsPickerRequest = useRef(columnsPickerRequest);
 
   const filterEnabled = useFlag(MY_TASKS_PRIORITY_FILTER_FLAG);
-  const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const [prioritySelection, setPrioritySelection] = useState<
     IPrioritiesConstants[]
   >([]);
@@ -1157,7 +1155,6 @@ const boardTabCounts = useMemo(() => {
 
       <div data-testid="my-tasks-list" className="mt-3 flex-1 min-h-0 w-full">
         <MyTasksBulkSelectionProvider
-          enabled={myTasksBulkSelectionEnabled}
           resetSelectionKey={`${activeViewId ?? "all"}:${splitIndex}:${prioritySelection
             .map((priority) => priority.priority_index)
             .join(",")}`}
@@ -1178,9 +1175,9 @@ const boardTabCounts = useMemo(() => {
             tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined
           }
           myTasksSectionOverdueCounts={sectionOverdueCounts}
-          enableMyTasksBulkSelection={myTasksBulkSelectionEnabled}
+          enableMyTasksBulkSelection
         />
-        {myTasksBulkSelectionEnabled ? <MyTasksBulkActionBar /> : null}
+        <MyTasksBulkActionBar />
         </MyTasksBulkSelectionProvider>
       </div>
 

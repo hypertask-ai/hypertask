@@ -78,7 +78,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
   queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
-  myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
+  myTasksSnoozeEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
   showCommands, setShowCommands, setBoardZoomedOutByProject, showAiChatInterface, setShowAiChatInterface,
@@ -236,7 +236,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
         appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
         refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
         confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-        _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+        _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
         hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
         _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
         createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
