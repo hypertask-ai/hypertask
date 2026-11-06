@@ -12,7 +12,6 @@ function stub(filename, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 let owner = true;
-let urlFiltersEnabled = false;
 let reads = 0;
 let rows = [];
 stub(path.join(root, "src/lib/flags.ts"), {
@@ -23,7 +22,6 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
-    if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
     throw new Error(`Unexpected flag ${key}`);
   },
 });
@@ -51,7 +49,7 @@ const fixture = (key, extra = {}) => ({
 const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
-  owner = true; reads = 0; urlFiltersEnabled = false;
+  owner = true; reads = 0;
   rows = [fixture("htpr-7000-inbox-next-open"), fixture("yper4-123-board-check")];
 });
 
@@ -350,7 +348,6 @@ test("detail related links point to anchored cards on the overview", async () =>
 });
 
 test("flagged page restores type and risk filters, excludes Off from waiting, and displays risk reasons", async () => {
-  urlFiltersEnabled = true;
   const { FEATURE_FLAG_RELEASE_RISKS: risks } = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
   const noneKey = "htpr-8555-risk-none-fixture";
   const addedNone = !Object.values(risks).some(entry => entry?.risk === "none");
@@ -391,21 +388,4 @@ test("flagged page restores type and risk filters, excludes Off from waiting, an
   } finally {
     if (addedNone) delete risks[noneKey];
   }
-});
-
-test("7058 Off no longer disables dropdown filters or URL state on the flags page", async () => {
-  urlFiltersEnabled = false;
-  const flags = [fixture("htpr-7058-flags-page-url-filters", { mode: "OFF" })];
-  await withAdmin({}, { flags }, async ({ document, click }) => {
-    assert.ok(document.querySelector('[aria-label="Flag filters"]'));
-    assert.match(document.body.textContent, /Showing 0 of 1 flags/);
-    assert.ok(document.querySelector('[aria-label="Filter Type"]'));
-    assert.match(document.body.textContent, /Status: Unreleased/);
-    assert.match(document.body.textContent, /Type: Bug/);
-    assert.match(document.body.textContent, /Release risk: No visible change/);
-    assert.match(document.body.textContent, /Sort: Oldest first/);
-    const sort = document.querySelector('[aria-label="Filter Sort"]');
-    await pickFilter({ document, click }, "Sort", "Oldest first");
-    assert.equal(new URLSearchParams(window.location.search).get("sort"), "oldest");
-  }, "?tab=unreleased&type=bug&risk=none&sort=oldest&q=missing");
 });

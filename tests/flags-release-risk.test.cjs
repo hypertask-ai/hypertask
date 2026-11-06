@@ -24,7 +24,6 @@ test(`every declared flag first shipped from ${RELEASE_RISK_REQUIRED_FROM} has a
   assert.ok(definitions.length > 0);
   assert.deepEqual(new Set(definitions.map(flag => flag.key)), new Set(FEATURE_FLAG_KEYS));
   assert.deepEqual(missingRiskEntries(definitions, risks), []);
-  assert.ok(risks["htpr-7058-flags-page-url-filters"]);
 });
 
 test("required-entry check rejects a new flag without metadata, not an older flag", () => {
