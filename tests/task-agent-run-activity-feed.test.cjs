@@ -131,7 +131,7 @@ test("quiet activity rows follow the history toggle but keep questions visible",
       "agent-activity-question",
       "agent-activity-error",
     ],
-    "flag off preserves the existing feed",
+    "legacy feed without quiet rows",
   );
   assert.deepEqual(
     mergeTaskThreadFeed([], activities, false, true).map(({ id }) => id),

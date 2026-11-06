@@ -308,6 +308,7 @@ test('missing or invalid workflow metadata still produces explicit error artifac
 test('rerun attempts preserve distinct measurement artifacts', async () => {
   const f = fixture([file('src/a.ts', 1)]);
   try {
+    f.context.runAttempt = 1;
     await reportSize(f);
     f.context.runAttempt = 2;
     await reportSize(f);

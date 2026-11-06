@@ -82,7 +82,6 @@ function setup(options = {}) {
     '@/lib/mcp/listQuery': load('src/lib/mcp/listQuery.ts', {}),
     '@/lib/mcp/readListQuery': {},
     '@/lib/agentRuns/service': {
-      runtimeAgentRunsEnabledFor: async () => options.runtime !== false,
       createRuntimeAgentRun: async (...args) => {
         calls.runs.push(args)
         return options.noRun ? null : { id: 'run-1' }

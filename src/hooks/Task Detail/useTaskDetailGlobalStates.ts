@@ -69,7 +69,7 @@ import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-772
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { commentsStackedSetting, foldCommentsFromFirstPaintNow } from "@/lib/taskDetailCommentsStacked";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG, HTPR_7531_ESCAPE_OWN_BOARD_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 
 export type TReturnFocusedEl =
   | "Description"
@@ -205,23 +205,20 @@ const useTaskDetailGlobalStates = (
   } = useCommentAndDescriptionUploadingStates();
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  const quietRunActivityEnabled = useFlag(HTPR_6551_QUIET_RUN_ACTIVITY_FLAG);
   const [showHistory, setShowHistory] = useRecoilState(showTaskHistoryAtom);
   const toggleHistory = useCallback(
     () => setShowHistory((prev) => !prev),
     [setShowHistory]
   );
   const visibleFeedItems = useMemo(
-    quietRunActivityEnabled
-      ? () =>
-          mergeTaskThreadFeed(
-            comments,
-            agentRunActivities,
-            showHistory,
-            true,
-          )
-      : () => mergeTaskThreadFeed(comments, agentRunActivities, showHistory),
-    [agentRunActivities, comments, quietRunActivityEnabled, showHistory],
+    () =>
+      mergeTaskThreadFeed(
+        comments,
+        agentRunActivities,
+        showHistory,
+        true,
+      ),
+    [agentRunActivities, comments, showHistory],
   );
   const visibleCommentIndices = useMemo(
     () =>

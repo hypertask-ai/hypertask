@@ -18,10 +18,6 @@ import {
   persistAgentWebhookEvent,
   publishAgentWebhookDeliveries,
 } from "@/lib/agentWebhooks/outbox";
-import {
-  HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
 import { refreshBoardForAgentRun } from "@/lib/agentStatus/boardRefresh";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
@@ -127,12 +123,6 @@ async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: 
         }
       : { agent: { userId: principal.userId } }),
   };
-}
-
-export async function runtimeAgentRunsEnabledFor(
-  principal: AgentRunPrincipal,
-): Promise<boolean> {
-  return isFeatureEnabled(HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, principal.userId);
 }
 
 export async function createRuntimeAgentRun(
