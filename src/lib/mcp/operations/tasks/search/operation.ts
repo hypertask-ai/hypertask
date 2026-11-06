@@ -24,13 +24,13 @@ import {
   parseUpdatedSince,
   projectRows,
   resolveListLimit,
+  TASK_SEARCH_SORT_FIELDS,
   withTaskPresentation,
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { findIdParamOutOfRange, idOutOfRangeMessage, parseSectionFilter } from '@/lib/mcp/listParams'
 
-const SEARCH_SORT_FIELDS = ['id', 'createdAt', 'updatedAt', 'title', 'dueDate', 'ticketNumber'] as const
-type SearchSortField = (typeof SEARCH_SORT_FIELDS)[number]
+type SearchSortField = (typeof TASK_SEARCH_SORT_FIELDS)[number]
 
 export interface TaskSearchItem {
   id: number
@@ -158,12 +158,17 @@ export async function GET(request: NextRequest) {
       )
     }
     const sortField = listQuery?.sortBy
-    if (sortField && !SEARCH_SORT_FIELDS.includes(sortField as SearchSortField)) {
+    if (sortField && !TASK_SEARCH_SORT_FIELDS.includes(sortField as SearchSortField)) {
       return NextResponse.json(
         {
           success: false,
           error: 'Validation error',
-          message: `sort must be one of ${SEARCH_SORT_FIELDS.join(', ')}`,
+          message: `sort must be one of ${TASK_SEARCH_SORT_FIELDS.join(', ')}`,
+          details: {
+            field: 'sort',
+            code: 'invalid_value',
+            allowed_values: [...TASK_SEARCH_SORT_FIELDS],
+          },
         },
         { status: 400 },
       )
