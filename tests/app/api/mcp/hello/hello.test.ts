@@ -165,6 +165,8 @@ async function demo() {
       'escalate',
       'nextTask',
       'webhooks',
+      'reactions',
+      'abilities',
     ])
     assert.deepEqual(
       happyBody.conventions.map(
