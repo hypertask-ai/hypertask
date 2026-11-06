@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import { ViewControlButton } from "@/components/PageComponents/Kanban/HeaderComponents/ShellViewControls";
 import MyTasksInvolvementPicker from "./MyTasksInvolvementPicker";
@@ -46,6 +47,13 @@ interface Props {
 }
 
 
+
+export const Field = ({ label, children }: { label: string; children: ReactNode }) => (
+  <section className="space-y-1.5">
+    <p className="text-meta font-semibold text-text-light-gray">{label}</p>
+    {children}
+  </section>
+);
 
 export const CheckRow = ({
   checked,

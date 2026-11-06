@@ -8,7 +8,7 @@
     "src/app/all-tasks/AllTasks.tsx": 1,
     "src/app/chat/Chat.tsx": 1,
     "src/app/my-tasks/MyTasks.tsx": 1,
-    "src/app/my-tasks/MyTasksViewControls.tsx": 3,
+    "src/app/my-tasks/MyTasksViewControls.tsx": 0,
     "src/app/my-tasks/MyTasksViewTabs.tsx": 1,
     "src/app/page/[publicId]/PageEditor.tsx": 1,
     "src/app/search/SearchChipsInput.tsx": 1,

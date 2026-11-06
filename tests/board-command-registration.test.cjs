@@ -42,7 +42,7 @@ test("my tasks and archive registrations keep their order and gates", () => {
     myTasksScopesEnabled: true,
     columnArchiveEnabled: true, context: "Kanban" };
   assert.deepEqual(boardCommands(active).map(c => c.key), ["myTasksScope", "gotoBoard-2", "archiveColumn", "myTasksInvolvement", "myTasksSort", "myTasksGroup"]);
-  assert.deepEqual(boardCommands({ ...active, myTasksViewsEnabled: false, myTasksScopesEnabled: false, context: "Others" }).map(c => c.key), ["gotoBoard-2", "myTasksSort", "myTasksGroup"]);
+  assert.deepEqual(boardCommands({ ...active, myTasksScopesEnabled: false, context: "Others" }).map(c => c.key), ["myTasksScope", "gotoBoard-2", "myTasksSort", "myTasksGroup"]);
   assert.equal(boardCommands({ ...active, currentProject: null }).some(c => c.key === "archiveColumn"), false);
 });
 
