@@ -961,6 +961,7 @@
   "tests/htpr-7857-heartbeat-step-cap.test.cjs": 102,
   "tests/htpr-7858-comment-summary-reuse.test.cjs": 199,
   "tests/htpr-7859-remove-image-generation-flag.test.cjs": 36,
+  "tests/htpr-8766-remove-quiet-owner-inbox-flag.test.cjs": 41,
   "tests/htpr-7863-page-alias.test.cjs": 823,
   "tests/htpr-7865-created-by-agent.test.cjs": 292,
   "tests/htpr-7866-assign-guidance.test.cjs": 226,
