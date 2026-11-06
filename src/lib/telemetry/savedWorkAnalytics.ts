@@ -1,7 +1,7 @@
 import "server-only";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
-import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, HTPR_7273_COLUMN_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import type { AccountCategory } from "./accountCategory";
 import { captureActivationCompleted } from "./activationCompleted";
@@ -80,7 +80,7 @@ export async function captureBoardCreated(
 }
 
 async function captureBoardColumns(board: Board, method: BoardCreationMethod, actor: SavedWorkActor, occurredAt: Date): Promise<void> {
-  if (isGuestUser(board.owner) || !(await isFeatureEnabled(HTPR_7273_COLUMN_EVENTS_FLAG, actor.userId ?? board.owner.id))) return;
+  if (isGuestUser(board.owner)) return;
   const columns = await prisma.section.findMany({ where: { projectId: board.id, deleted: false }, select: { id: true }, orderBy: { ranking: "asc" } });
   const columnMethod: ColumnCreationMethod = board.seeded || method === "seeded" || method === "adopted_demo" ? "seeded" : "default";
   for (const column of columns) {
@@ -124,7 +124,6 @@ async function loadColumnBoard(columnId: number, actor: SavedWorkActor) {
   if (!column) return null;
   const board = await loadBoard(column.projectId);
   if (!board || isGuestUser(board.owner)) return null;
-  if (!(await isFeatureEnabled(HTPR_7273_COLUMN_EVENTS_FLAG, actor.userId ?? board.owner.id))) return null;
   return board;
 }
 
