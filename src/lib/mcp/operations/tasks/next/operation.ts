@@ -180,13 +180,16 @@ export async function GET(request: NextRequest) {
           expiresAt: { gt: now },
         },
       },
+    }
+    const claimableWhere: Prisma.TaskWhereInput = {
+      ...where,
       ...(ctx.agentId != null && skipOtherAgents
         ? otherAgentAssigneeWhere(ctx.agentId)
         : {}),
     }
 
     const tasks = await prisma.task.findMany({
-      where: { ...where, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+      where: { ...claimableWhere, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: {
         id: true,
         ticketNumber: true,
