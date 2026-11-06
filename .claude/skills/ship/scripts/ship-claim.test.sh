@@ -179,6 +179,10 @@ eq "a legacy step-back never retires another runner's claim" "$(decideS "$L9" "$
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_LOG"
+if [ "$1 $2" = "task move" ] && [ -n "${FAKE_MUTATE_TASK:-}" ]; then
+  jq --arg section "$5" '.tasks[0].section=$section' "$FAKE_TASK" > "$FAKE_TASK.next"
+  mv "$FAKE_TASK.next" "$FAKE_TASK"
+fi
 if [ "$1 $2" = "activity add" ] && [[ "$4" == Takeover:* ]] && [ -n "${FAKE_HANDOFF_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_ASSIGN_FAIL:-}" ]; then exit 1; fi
 if [ "$1 $2" = "task assign" ] && [ -n "${FAKE_NOT_MEMBER:-}" ]; then
@@ -611,6 +615,14 @@ for identity in 'RUNNER 6' 'HT Design Builder' 'Infra Runner 2'; do
     SHIP_SESSION_NAME="$identity" FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
     eq "$identity may claim design-pass outside QA" "$?" 0
   fi
+done
+eligible_task QA design-pass
+for attempt in first retry; do
+  : > "$D/log"
+  SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json FAKE_MUTATE_TASK=1 ./ship-claim YPER4-999 >/dev/null 2>&1
+  eq "QA design claim $attempt remains eligible" "$?" 0
+  eq "QA design claim $attempt preserves QA" "$(jq -r '.tasks[0].section' "$D/eligibility.json")" QA
+  grep -q '^task move YPER4-999 --section QA$' "$D/log" && ok 'QA claim does not become implementation work' || bad 'QA claim moved outside QA'
 done
 for label in brain-medium brain-hard; do
   eligible_task 'In Progress' "$label"
