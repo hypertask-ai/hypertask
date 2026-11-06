@@ -215,7 +215,7 @@ test('failed logging releases the idempotency claim so the same request can reco
 
 
 test('untyped embedded images require a people kind instead of losing their source', async () => {
-  const h = setup({ formattedText: '<p>Evidence</p><img src="https://example.com/proof.png">' })
+  const h = setup({ imageNoteLinks: false, formattedText: '<p>Evidence</p><img src="https://example.com/proof.png">' })
   const response = await h.post()
   assert.equal(response.status, 400)
   assert.equal(response.body.field, 'kind')
