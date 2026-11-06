@@ -301,7 +301,7 @@ test('no resolved skills leave model instructions unchanged with the flag on', a
   for (const note of ['Add CSV export', '/unknown Add CSV export']) {
     const on = await harness().prepare(note);
     const off = await harness({ enabled: false }).prepare(note);
-    assert.equal(on.instructions, off.instructions);
+    assert.deepEqual(on.instructions, off.instructions);
     assert.deepEqual(on.messages, off.messages);
     assert.ok(!instructionText(on.instructions).includes(composeSkillRule));
   }
