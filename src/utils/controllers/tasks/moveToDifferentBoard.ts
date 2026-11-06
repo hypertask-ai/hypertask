@@ -219,7 +219,7 @@ async function moveAllSubtasksRecursively(
   currentUser: IUser,
   agentId?: string | null,
   teamScope?: AgentTokenTeamScope | null,
-) {
+): Promise<MoveTaskToDifferentBoardResult> {
   const section = await prisma.section.findUnique({ where: { id: sectionId } });
   for (const subtask of subtasks) {
     const result = await moveTaskWithDestinationIdentity({
@@ -235,10 +235,13 @@ async function moveAllSubtasksRecursively(
     });
     if (result.status !== 200) {
       if (isPlanLimitReachedError(result.json)) throw result.json;
-      throw new Error(toErrorMessage(result.json, "Failed to move subtask"));
+      const statusCode = result.status ?? 500;
+      const error = toErrorMessage(result.json, "Failed to move subtask");
+      if (statusCode >= 500) throw new Error(error);
+      return { success: false, error, statusCode };
     }
     if (subtask.subTasks?.length > 0) {
-      await moveAllSubtasksRecursively(
+      const nested = await moveAllSubtasksRecursively(
         subtask.subTasks,
         projectId,
         sectionId,
@@ -248,8 +251,10 @@ async function moveAllSubtasksRecursively(
         agentId,
         teamScope
       );
+      if (!nested.success) return nested;
     }
   }
+  return { success: true };
 }
 
 async function checkUserTeamMembership(userId: number, teamId: string) {
@@ -556,7 +561,7 @@ export async function moveTaskToDifferentBoard(
   const updatedTask = result.json;
 
   if (taskToMove.subTasks?.length > 0) {
-    await moveAllSubtasksRecursively(
+    const movedSubtasks = await moveAllSubtasksRecursively(
       taskToMove.subTasks,
       targetProjectId,
       targetSectionId,
@@ -566,6 +571,7 @@ export async function moveTaskToDifferentBoard(
       agentId,
       teamScope
     );
+    if (!movedSubtasks.success) return movedSubtasks;
   }
 
   await detachSplitPageHierarchy(getAllTaskIdsRecursively(taskToMove));
