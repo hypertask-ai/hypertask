@@ -31,13 +31,12 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
 });
 stub(path.join(root, "src/styles/linksModal.module.scss"), { __esModule: true, default: {} });
 const box = ({ children }) => React.createElement("div", null, children);
-const reactstrapPath = require.resolve("reactstrap");
-require.cache[reactstrapPath] = { id: reactstrapPath, filename: reactstrapPath, loaded: true, exports: { ModalBody: box } };
+stub(require.resolve("reactstrap"), { ModalBody: box });
 stub(path.join(root, "src/components/Common/CommonModalComponents/index.tsx"), {
   ModalContainerCustom: ({ id, children }) => React.createElement("div", { id, role: "dialog" }, children),
   ModalListContainer: box,
   ModalHeaderComp: ({ header }) => React.createElement("h2", null, header),
-  ModalInput: ({ autofocus, ...props }) => React.createElement("input", props),
+  ModalInput: ({ autofocus, ...props }) => React.createElement("input", { type: "search", ...props }),
   ModalRowElementContainer: ({ children, onClick, id }) => React.createElement("button", { type: "button", onClick, id }, children),
 });
 stub(require.resolve("next/headers"), { headers: async () => new Headers() });
