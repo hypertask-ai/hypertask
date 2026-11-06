@@ -295,7 +295,7 @@ test("discovery off keeps cards plain while url filters stay on the overview", a
     assert.ok(document.querySelector('[aria-label="Flag filters"]'));
     assert.ok(document.getElementById("flag-search"));
     assert.doesNotMatch(document.body.textContent, /Related:/);
-    assert.equal(document.querySelector('[id^="flag-"]'), null);
+    assert.equal([...document.querySelectorAll("[id]")].some((node) => node.id.startsWith("flag-") && node.id !== "flag-search"), false);
     assert.ok(document.querySelector(".label-pill"));
     for (const group of document.querySelectorAll('[aria-label^="Mode for"]')) {
       assert.deepEqual([...group.querySelectorAll("button")].map(button => [button.textContent, button.getAttribute("aria-pressed")]), [
@@ -415,7 +415,10 @@ test("7058 Off no longer disables dropdown filters or URL state on the flags pag
     assert.ok(document.querySelector('[aria-label="Flag filters"]'));
     assert.match(document.body.textContent, /Showing 0 of 1 flags/);
     assert.ok(document.querySelector('[aria-label="Filter Type"]'));
-    assert.match(document.body.textContent, /Release risk first/);
+    assert.match(document.body.textContent, /Status: Unreleased/);
+    assert.match(document.body.textContent, /Type: Bug/);
+    assert.match(document.body.textContent, /Release risk: No visible change/);
+    assert.match(document.body.textContent, /Sort: Oldest first/);
     const sort = document.querySelector('[aria-label="Filter Sort"]');
     await pickFilter({ document, click }, "Sort", "Oldest first");
     assert.equal(new URLSearchParams(window.location.search).get("sort"), "oldest");
