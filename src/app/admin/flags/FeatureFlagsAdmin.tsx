@@ -6,12 +6,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX,
-  useFlag,
 } from "@/hooks/useFlag";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
@@ -137,8 +135,7 @@ export default function FeatureFlagsAdmin({
   flagKey?: string;
 }) {
   const queryClient = useQueryClient();
-  const urlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG) || true;
-  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, true);
+  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(!flagKey, true);
   const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
   const setAudienceFilter = (audience: FeatureFlagAudienceFilter) => change({ ...filters, audience });
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
@@ -182,8 +179,8 @@ export default function FeatureFlagsAdmin({
   });
 
   const counts = useMemo(
-    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], urlFiltersEnabled),
-    [flags.data?.flags, urlFiltersEnabled],
+    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], true),
+    [flags.data?.flags],
   );
   const clusters = useMemo(
     () => {
@@ -194,14 +191,15 @@ export default function FeatureFlagsAdmin({
       return clusterFeatureFlagsByReleaseDate(
         rows.filter((flag) => (
           matchesFeatureFlagSearch(flag, search)
-          && (!urlFiltersEnabled || (matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)))
+          && matchesFlagKind(flag, kinds)
+          && matchesFlagRisk(flag, risk)
         )),
         sortDirection,
         audienceFilter,
-        { shippedOnly: urlFiltersEnabled && sortDirection !== "desc", unreleasedOnly: urlFiltersEnabled },
+        { shippedOnly: sortDirection !== "desc", unreleasedOnly: true },
       );
     },
-    [flagKey, flags.data?.flags, sortDirection, audienceFilter, urlFiltersEnabled, search, kinds, risk],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter, search, kinds, risk],
   );
 
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
@@ -209,10 +207,10 @@ export default function FeatureFlagsAdmin({
   const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
   const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
   const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
-    : audienceFilter === "UNRELEASED" ? (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")
+    : audienceFilter === "UNRELEASED" ? isUnreleasedFeatureFlag(flag)
       : flag.mode === audienceFilter;
   const statusCounts = countFeatureFlagsByAudience(
-    searchedRows.filter((flag) => matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)), urlFiltersEnabled,
+    searchedRows.filter((flag) => matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)), true,
   );
   const dropdowns = [
     {
@@ -268,7 +266,7 @@ export default function FeatureFlagsAdmin({
       <ModalInput
         id="flag-search"
         autofocus={false}
-        onBlur={urlFiltersEnabled ? commitSearch : undefined}
+        onBlur={commitSearch}
         className="rounded-sm bg-comment-description px-3"
         placeholder="Search by ticket ID or words…"
         value={search}
@@ -340,8 +338,8 @@ export default function FeatureFlagsAdmin({
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
           {rows.map((flag) => {
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
-            const releaseRisk = urlFiltersEnabled ? FEATURE_FLAG_RELEASE_RISKS[flag.key] : undefined;
-            const daysWaiting = urlFiltersEnabled ? flagDaysWaiting(flag) : null;
+            const releaseRisk = FEATURE_FLAG_RELEASE_RISKS[flag.key];
+            const daysWaiting = flagDaysWaiting(flag);
             const related = relatedFeatureFlags(flag, flags.data?.flags ?? []);
             let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between scroll-mt-24";
             if (highlightedKey === flag.key) cardClassName += " bg-hover-active";
