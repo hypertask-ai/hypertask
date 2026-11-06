@@ -4,7 +4,10 @@ import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from '@/lib/flags/definitions/htpr-8786-picker-skips-other-agents'
 import { priorityScore } from '@/lib/mcp/tasks/priorityScore'
+import { otherAgentAssigneeWhere } from '@/lib/mcp/tasks/otherAgentAssignee'
 import { blockerStillOpen } from '@/lib/mcp/tasks/blockerStillOpen'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -123,6 +126,12 @@ export async function GET(request: NextRequest) {
     const labelIds = labelFilters.filter(isLabelIdParam)
     const labelNames = labelFilters.filter((label) => !isLabelIdParam(label))
     const now = new Date()
+    const skipOtherAgents =
+      ctx.agentId != null &&
+      (await isFeatureEnabled(
+        HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG,
+        ctx.user.id,
+      ))
     const doneTitlesByProject = await loadDoneTitlesByProject(
       [projectId],
       mcpDoneNameFallback
@@ -172,9 +181,15 @@ export async function GET(request: NextRequest) {
         },
       },
     }
+    const claimableWhere: Prisma.TaskWhereInput = {
+      ...where,
+      ...(ctx.agentId != null && skipOtherAgents
+        ? otherAgentAssigneeWhere(ctx.agentId)
+        : {}),
+    }
 
     const tasks = await prisma.task.findMany({
-      where: { ...where, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
+      where: { ...claimableWhere, project: getProjectWhere(ctx.user.id, ctx.agentId, ctx.teamScope) },
       select: {
         id: true,
         ticketNumber: true,
