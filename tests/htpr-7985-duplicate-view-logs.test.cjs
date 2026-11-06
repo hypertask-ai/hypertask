@@ -74,7 +74,10 @@ function pipeline(create, filters) {
     async makeRequest() {
       const response = await POST({});
       const body = await response.json();
-      if (!response.ok) throw errors.mapHttpErrorToMcpError(response.status, body.error);
+      if (!response.ok) {
+        const message = typeof body.message === 'string' && body.message ? body.message : body.error
+        throw errors.mapHttpErrorToMcpError(response.status, message, undefined, body)
+      }
       return body;
     },
   });

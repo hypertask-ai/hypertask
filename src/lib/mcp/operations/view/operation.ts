@@ -12,7 +12,7 @@ import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions'
 import { isSubtaskSetting } from '@/models/Views/model'
 import { sanitizeBoardFilters, projectVisibleViewRelations } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
-import { viewInputRefusal, viewListSortFields, viewMutationRefusal } from '@/lib/mcp/views/viewRefusal'
+import { isViewCallerError, plainViewError, viewInputRefusal, viewListSortFields, viewMutationRefusal } from '@/lib/mcp/views/viewRefusal'
 
 
 type CreateViewRequestBody = Partial<
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
     } else {
       console.error('Error creating view:', error)
     }
-    return viewMutationRefusal(error)
+    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
   }
 
   })(request)

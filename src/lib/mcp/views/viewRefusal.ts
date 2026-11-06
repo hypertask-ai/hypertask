@@ -48,6 +48,22 @@ const MESSAGE_REFUSALS: Array<{
   { test: /^set_as_default must be a boolean$/, field: 'set_as_default', code: 'invalid_type' },
 ]
 
+export function isViewCallerError(error: unknown): boolean {
+  if (error instanceof ValidationError) {
+    const details = error.details
+    if (details && typeof details.field === 'string') return true
+  }
+  const message = error instanceof Error ? error.message : ''
+  return MESSAGE_REFUSALS.some(({ test }) => test.test(message))
+}
+
+export function plainViewError(error: unknown) {
+  return NextResponse.json(
+    { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
+    { status: 400 },
+  )
+}
+
 export function viewMutationRefusal(error: unknown) {
   if (error instanceof ValidationError) {
     const details = error.details
