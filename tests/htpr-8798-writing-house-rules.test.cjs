@@ -139,6 +139,20 @@ test('a Question in the house shape still passes', () => {
   assert.doesNotThrow(() => assertAgentWriting('agent', { text: shaped }, {}, { houseRules: true }))
 })
 
+test('a Question split by line breaks still passes', () => {
+  const text = shaped
+    .replace('</p>\n<p><strong>My recommendation:</strong>', '<br><strong>My recommendation:</strong>')
+    .replace('</p>\n<p><strong>Why:</strong>', '<br><strong>Why:</strong>')
+    .replace('</p>\n<p><strong>Yes:</strong>', '<br><strong>Yes:</strong>')
+    .replace('</p>\n<p><strong>No:</strong>', '<br><strong>No:</strong>')
+  assert.doesNotThrow(() => assertAgentWriting('agent', { text }, {}, { houseRules: true }))
+})
+
+test('a ticket heading with a non-breaking space still passes', () => {
+  const description = withRisk.replace('<h2>Done when</h2>', '<p><strong>Done&nbsp;when:</strong></p>')
+  assert.doesNotThrow(() => assertAgentWriting('agent', { description }, {}, { create: true, houseRules: true }))
+})
+
 test('a Question with four context points is refused', () => {
   const error = refusal({
     text: shaped.replace('<p><strong>Question:</strong>', '<ul><li><p>One.</p></li><li><p>Two.</p></li><li><p>Three.</p></li><li><p>Four.</p></li></ul><p><strong>Question:</strong>'),

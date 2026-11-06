@@ -129,7 +129,7 @@ function labelPattern(label: string): RegExp {
 function questionHit(html: string): Hit | null {
   const textLines = lines(html)
   if (!textLines.some((line) => labelPattern('Question').test(line))) return null
-  const blocks = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n').split(/<\/(?:p|li|h[1-6]|div)>/i)
+  const blocks = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n').split(/<br\s*\/?>|<\/(?:p|li|h[1-6]|div)>/i)
   const owners = new Map<string, number>()
   blocks.forEach((block, index) => {
     const text = block.replace(/<[^>]+>/g, ' ')
@@ -155,7 +155,7 @@ function questionHit(html: string): Hit | null {
 
 function hasTicketPart(html: string, name: string): boolean {
   const label = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
-  const source = html.replace(/<[^>]+>/g, '\n')
+  const source = parse(html).structuredText
   return new RegExp(`(?:^|\\n)\\s*(?:\\*\\*)?${label}\\s*[:.]?(?:\\*\\*)?(?=\\s|$)`, 'i').test(source)
 }
 
