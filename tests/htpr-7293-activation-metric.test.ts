@@ -290,7 +290,6 @@ test("guest exclusion still precedes v1 fact loading", async () => {
 
 test("captureTaskCreated emits versioned activation once for human and agent replays", async () => {
   const h = harness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   h.projects.get(15).status = "Archive";
   h.tasks.get(1).deletedAt = LATER;
   h.tasks.get(2).status = "Archive";

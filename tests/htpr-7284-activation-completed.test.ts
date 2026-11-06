@@ -157,13 +157,13 @@ for (const [userId, email, category] of [[985, "qa@example.test", "qa"], [6, "ow
   });
 }
 
-test("a collaborator's task evaluates only the board owner even when task_created is off", async () => {
+test("a collaborator's task evaluates only the board owner for activation", async () => {
   const h = harness();
   h.users.set(777, { ...h.users.get(123), id: 777 });
   h.projects.get(15).ownerId = 777;
   h.projects.get(15).owner = h.users.get(777);
   await h.load("src/lib/telemetry/savedWorkAnalytics.ts").captureTaskCreated(3, { userId: 123 }, "web");
-  assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["activation_completed", "777"]]);
+  assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["task_created", "777"], ["activation_completed", "777"]]);
   assert.equal(h.queries[0].where.ownerId, 777);
   assert.ok(h.flagChecks.some(({ key, userId }) => key === FLAG && userId === 777));
   assert.ok(!h.flagChecks.some(({ key, userId }) => key === FLAG && userId === 123));
@@ -171,7 +171,6 @@ test("a collaborator's task evaluates only the board owner even when task_create
 
 test("agent-created tasks count and activation follows task_created using task.createdAt", async () => {
   const h = harness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   for (const task of h.tasks.values()) Object.assign(task, { userId: 777, agentId: "agent-1" });
   await h.load("src/lib/telemetry/savedWorkAnalytics.ts").captureTaskCreated(3, { userId: 777, agentId: "agent-1" }, "agent");
   assert.deepEqual(h.captures.map((capture) => capture.event), ["task_created", "activation_completed"]);
@@ -181,7 +180,6 @@ test("agent-created tasks count and activation follows task_created using task.c
 
 test("activation flag off keeps task_created without activation", async () => {
   const h = harness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   h.setFlagEnabled(FLAG, false);
   await h.load("src/lib/telemetry/savedWorkAnalytics.ts").captureTaskCreated(3, { userId: 123 }, "web");
   assert.deepEqual(h.captures.map((capture) => capture.event), ["task_created"]);
