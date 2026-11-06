@@ -22,6 +22,10 @@ const skill = (id, slug, scope) => ({
 });
 const available = [skill(1, 'deeper', { projectId: 15 }), skill(2, 'review', { userId: 985 })];
 
+function instructionText(value) {
+  return typeof value === "string" ? value : value.map((message) => message.content).join("\n\n");
+}
+
 function moduleWithStubs(file, stubs) {
   const code = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -97,7 +101,7 @@ for (const [slug, note, cleaned] of [
   test(`Ctrl+J invokes /${slug} and strips the token from every note copy: ${note}`, async () => {
     const h = harness();
     const result = await h.prepare(note);
-    assert.ok(result.instructions.includes(`Instructions for ${slug}.`));
+    assert.ok(instructionText(result.instructions).includes(`Instructions for ${slug}.`));
     assert.deepEqual(result.skills.map((entry) => entry.slug), [slug]);
     assert.ok(!result.messages[0].content.includes(`/${slug}`));
     assert.ok(!h.parts[0].taskDescription.includes(`/${slug}`));
@@ -116,7 +120,7 @@ test('unknown /slugs remain literal in the prompt, note and retrieval text', asy
   assert.ok(result.messages[0].content.includes('/unknown Fix checkout'));
   assert.equal(h.parts[0].taskDescription, '<p>/unknown Fix checkout</p>');
   assert.deepEqual(h.retrieval, ['/unknown Fix checkout']);
-  assert.ok(!result.instructions.includes('<skill'));
+  assert.ok(!instructionText(result.instructions).includes('<skill'));
 });
 
 test('known and unknown skills can be mixed without removing unknown text', async () => {
@@ -124,7 +128,7 @@ test('known and unknown skills can be mixed without removing unknown text', asyn
   const result = await h.prepare('/unknown Please /deeper fix checkout');
   assert.ok(result.messages[0].content.includes('/unknown Please fix checkout'));
   assert.deepEqual(h.retrieval, ['/unknown Please fix checkout']);
-  assert.ok(result.instructions.includes(available[0].body));
+  assert.ok(instructionText(result.instructions).includes(available[0].body));
 });
 
 test('multiple and repeated skills share popup ordering and deduplication', async () => {
@@ -132,15 +136,15 @@ test('multiple and repeated skills share popup ordering and deduplication', asyn
   const result = await h.prepare('/deeper Please /review fix checkout /deeper');
   assert.deepEqual(result.skills.map((entry) => entry.slug), ['deeper', 'review']);
   assert.deepEqual(h.retrieval, ['Please fix checkout']);
-  assert.equal(result.instructions.split('Instructions for deeper.').length - 1, 1);
-  assert.equal(result.instructions.split('Instructions for review.').length - 1, 1);
+  assert.equal(instructionText(result.instructions).split('Instructions for deeper.').length - 1, 1);
+  assert.equal(instructionText(result.instructions).split('Instructions for review.').length - 1, 1);
 });
 
 test('built-in /i works without a database skill', async () => {
   const h = harness({ skills: [] });
   const result = await h.prepare('/i Fix checkout');
   assert.deepEqual(result.skills.map((entry) => entry.slug), ['i']);
-  assert.ok(result.instructions.includes('built-in formatting template'));
+  assert.ok(instructionText(result.instructions).includes('built-in formatting template'));
   assert.deepEqual(h.retrieval, ['Fix checkout']);
   assert.equal(h.lookups.length, 0);
 });
@@ -164,7 +168,7 @@ test('skills from another user or board are not invoked', async () => {
 test('server flag off preserves the existing popup resolution and untouched secondary note copies', async () => {
   const h = harness({ enabled: false });
   const result = await h.prepare('/deeper Fix checkout');
-  assert.ok(result.instructions.includes(available[0].body));
+  assert.ok(instructionText(result.instructions).includes(available[0].body));
   assert.ok(!result.messages[0].content.includes('/deeper'));
   assert.equal(h.parts[0].taskDescription, '<p>/deeper Fix checkout</p>');
   assert.deepEqual(h.retrieval, ['/deeper Fix checkout']);
@@ -185,9 +189,9 @@ test('Ctrl+J and the older popup use the same resolver, scope and instruction bo
   const compose = await h.prepare('/deeper Fix checkout');
   const popup = await h.prepare('/deeper Fix checkout', { requestKind: 'manual', invokeSkills: false });
   assert.deepEqual(compose.skills, popup.skills);
-  assert.ok(compose.instructions.startsWith(popup.instructions));
-  assert.ok(compose.instructions.includes(composeSkillRule));
-  assert.ok(!popup.instructions.includes(composeSkillRule));
+  assert.ok(instructionText(compose.instructions).startsWith(instructionText(popup.instructions)));
+  assert.ok(instructionText(compose.instructions).includes(composeSkillRule));
+  assert.ok(!instructionText(popup.instructions).includes(composeSkillRule));
   assert.equal(compose.messages[0].content, popup.messages[0].content);
   assert.equal(h.resolutions.length, 4);
 });
@@ -198,7 +202,7 @@ test('a skill-only prompt is not reintroduced after stripping', async () => {
   assert.equal(h.parts[0].input, '');
   assert.equal(h.parts[0].taskDescription, '');
   assert.deepEqual(h.retrieval, ['']);
-  assert.ok(result.instructions.includes(available[0].body));
+  assert.ok(instructionText(result.instructions).includes(available[0].body));
 });
 
 test("Ctrl+J skill body and precedence reach the model prompt with cached instructions", async () => {
@@ -282,10 +286,10 @@ test('flag off, missing opt-in and popup retain the exact production instruction
     const expected = taskPrompts.createTaskWriterSystemPromptTemplate(
       `${prompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`,
     ) + `\n\n${resolved.systemPromptAddition}`;
-    if (extra.requestKind === 'manual') assert.equal(result.instructions, expected);
+    if (extra.requestKind === 'manual') assert.equal(instructionText(result.instructions), expected);
     else {
-      assert.ok(result.instructions.startsWith(expected));
-      assert.match(result.instructions, /replace the single HTML output contract with the structured tasks object/);
+      assert.ok(instructionText(result.instructions).startsWith(expected));
+      assert.match(instructionText(result.instructions), /replace the single HTML output contract with the structured tasks object/);
     }
     assert.equal(h.parts[0].taskDescription, '<p>/review Audit checkout</p>');
     assert.deepEqual(h.retrieval, ['/review Audit checkout']);
@@ -299,7 +303,7 @@ test('no resolved skills leave model instructions unchanged with the flag on', a
     const off = await harness({ enabled: false }).prepare(note);
     assert.equal(on.instructions, off.instructions);
     assert.deepEqual(on.messages, off.messages);
-    assert.ok(!on.instructions.includes(composeSkillRule));
+    assert.ok(!instructionText(on.instructions).includes(composeSkillRule));
   }
 });
 
