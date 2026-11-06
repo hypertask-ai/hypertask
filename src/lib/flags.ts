@@ -75,6 +75,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6320-ai-observability",
   "htpr-6673-capture-user-signed-up-in-posthog",
   "htpr-7269-signup-identity-link",
+  "htpr-7367-server-description-first",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,

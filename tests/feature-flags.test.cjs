@@ -1361,6 +1361,16 @@ test("agent nudge is permanent and no longer registered", async () => {
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("server description in the first page load is permanent and no longer registered", async () => {
+  const key = "htpr-7367-server-description-first";
+  assert.equal(flags.HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, undefined);
+  assert.equal(definitions.some((definition) => definition.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 for (const [key, risk] of [
   ["htpr-7982-cancelled-free", "money"],
   ["htpr-8215-agent-archive-delete", "data-deletion"],
