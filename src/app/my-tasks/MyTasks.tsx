@@ -13,7 +13,6 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_OVERDUE_BADGES_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -165,7 +164,6 @@ const MyTasks = ({
 
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const tableColumnsFeatureEnabled = true;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
@@ -286,13 +284,12 @@ const MyTasks = ({
   }, [reconcileRunner]);
 
   useEffect(() => {
-    if (!overdueBadgesEnabled) return;
     const bumpOverdueCounts = () =>
       setOverdueCountsVersion((version) => version + 1);
     window.addEventListener("my-tasks-snooze-changed", bumpOverdueCounts);
     return () =>
       window.removeEventListener("my-tasks-snooze-changed", bumpOverdueCounts);
-  }, [overdueBadgesEnabled]);
+  }, []);
 
   useEffect(() => {
     if (!myTasksSnoozeEnabled) return;
@@ -335,7 +332,6 @@ const MyTasks = ({
   }, []);
 
   useEffect(() => {
-    if (!overdueBadgesEnabled) return;
     const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
     window.addEventListener("focus", refreshDateFilters);
     let timer: number | undefined;
@@ -350,7 +346,7 @@ const MyTasks = ({
       window.removeEventListener("focus", refreshDateFilters);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [overdueBadgesEnabled]);
+  }, []);
 
   const overdueViewsKey = JSON.stringify(
     views.map((view) => [view.id, view.config]),
@@ -362,7 +358,6 @@ const MyTasks = ({
         .join(",")
     : "";
   useEffect(() => {
-    if (!overdueBadgesEnabled) return;
     const timeZone = browserTimeZone();
     if (!timeZone) return;
     const token = ++overdueCountsFetchToken.current;
@@ -392,7 +387,6 @@ const MyTasks = ({
     };
   }, [
     dateFilterVersion,
-    overdueBadgesEnabled,
     overdueCountsVersion,
     overdueViewsKey,
     runningTaskIdsKey,
@@ -884,9 +878,6 @@ const boardTabCounts = useMemo(() => {
   };
 
   const viewOverdueCounts = useMemo(() => {
-    if (!overdueBadgesEnabled) {
-      return EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS;
-    }
     const now = new Date();
     const options = {
       applyFilterSettings: true,
@@ -906,39 +897,37 @@ const boardTabCounts = useMemo(() => {
   }, [
     activeViewId,
     dateFilterVersion,
-    overdueBadgesEnabled,
     remoteOverdueCounts,
     runtimeContext,
     sections,
     viewConfig,
   ]);
 
-  const splitOverdueCounts = useMemo(() => {
-    if (!overdueBadgesEnabled) return [] as number[];
-    return splitTabOverdueCounts(
-      groupBy,
+  const splitOverdueCounts = useMemo(
+    () =>
+      splitTabOverdueCounts(
+        groupBy,
+        allTasksForBoardTabs,
+        availableBoards,
+        filteredSections,
+        new Date(),
+      ),
+    [
       allTasksForBoardTabs,
       availableBoards,
+      dateFilterVersion,
       filteredSections,
-      new Date(),
-    );
-  }, [
-    allTasksForBoardTabs,
-    availableBoards,
-    dateFilterVersion,
-    filteredSections,
-    groupBy,
-    overdueBadgesEnabled,
-  ]);
+      groupBy,
+    ],
+  );
 
-  const tabOverdue = (index: number) =>
-    overdueBadgesEnabled ? (splitOverdueCounts[index] ?? 0) : 0;
+  const tabOverdue = (index: number) => splitOverdueCounts[index] ?? 0;
 
   const sectionOverdueCounts = useMemo(
-    () => (boardTabsHidden && overdueBadgesEnabled
+    () => (boardTabsHidden
       ? visibleSections.map((section) => countMyTasksOverdue(section.items, new Date()))
       : undefined),
-    [boardTabsHidden, dateFilterVersion, overdueBadgesEnabled, visibleSections],
+    [boardTabsHidden, dateFilterVersion, visibleSections],
   );
 
   const togglePriority = (priority: IPrioritiesConstants) =>

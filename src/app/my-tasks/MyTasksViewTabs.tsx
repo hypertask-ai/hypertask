@@ -7,7 +7,6 @@ import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG } from "@/lib/flags/keys";
-import { MY_TASKS_OVERDUE_BADGES_FLAG } from "@/lib/flags/keys";
 import type { MyTasksSavedView } from "@/models/MyTasksView";
 import { House, MoreHorizontal } from "lucide-react";
 import { useRef, useState } from "react";
@@ -45,13 +44,12 @@ const MyTasksViewTabs = ({
 }: Props) => {
   const iconControlsEnabled = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const [saveOpen, setSaveOpen] = useState(false);
-  const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
   const [actionsOpen, setActionsOpen] = useState(false);
   const actionsRef = useRef<HTMLDivElement>(null);
   useClickOutside(actionsRef, () => setActionsOpen(false));
   const activeView = views.find((view) => view.id === activeViewId);
   const overdueBadge = (count: number) =>
-    overdueBadgesEnabled && count > 0 ? (
+    count > 0 ? (
       <span
         data-htpr-6459-my-tasks-overdue-badges=""
         aria-label={iconControlsEnabled ? `${count} overdue` : undefined}
@@ -62,7 +60,7 @@ const MyTasksViewTabs = ({
       </span>
     ) : null;
   const overdueLabel = (name: string, count: number) =>
-    overdueBadgesEnabled && count > 0 ? `${name}, ${count} overdue` : undefined;
+    count > 0 ? `${name}, ${count} overdue` : undefined;
 
   const rename = () => {
     if (!activeView) return;

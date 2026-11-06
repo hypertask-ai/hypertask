@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
@@ -18,12 +17,6 @@ export async function GET(request: NextRequest) {
     const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (!(await isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, userId))) {
-      return NextResponse.json(
-        { error: "My Tasks overdue badges are not enabled" },
-        { status: 403 },
-      );
     }
 
     const timeZone = parseIanaTimeZone(
