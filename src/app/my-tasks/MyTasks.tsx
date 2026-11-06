@@ -594,9 +594,9 @@ const MyTasks = ({
   );
 
   useEffect(() => {
-    const sources = groupBy === "time" ? boardSplitSources : sections;
-    setActiveSplit(getMyTasksSplitIndex(sources, boardParam));
-  }, [boardParam, boardSplitSources, groupBy, sections]);
+    if (groupBy !== "time") return;
+    setActiveSplit(getMyTasksSplitIndex(boardSplitSources, boardParam));
+  }, [boardParam, boardSplitSources, groupBy]);
 
   useEffect(() => {
     if (groupBy !== "time") return;
