@@ -614,18 +614,12 @@ const MyTasks = ({
 
   useEffect(() => {
     if (groupBy === "time") return;
-    const split = getMyTasksSplitIndex(filteredSections, boardParam);
+    const param = new URLSearchParams(window.location.search).get("board");
+    const split = getMyTasksSplitIndex(filteredSections, param);
     activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
     setActiveSplit(split);
-    if (boardParam && split === 0) replaceBoardParam(null);
-  }, [
-    availableBoards,
-    boardParam,
-    boardSplitSources,
-    filteredSections,
-    groupBy,
-    replaceBoardParam,
-  ]);
+    if (param && split === 0) replaceBoardParam(null);
+  }, [filteredSections, groupBy, replaceBoardParam]);
 
   useEffect(() => {
     if (!iconControlsEnabled || memoryRestored.current) return;
