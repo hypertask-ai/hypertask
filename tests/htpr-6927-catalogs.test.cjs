@@ -117,7 +117,8 @@ test('handler keeps scoped annotated tools without consulting the retired switch
     '@/lib/flags': { isFeatureEnabled: async (key, id) => { calls.push([key, id]); assert.notEqual(key, 'htpr-6927-mcp-v2'); return false } },
   })('src/lib/mcp-server/handler.ts').mcpHandler
   const on = JSON.parse(await (await handler(request('tools/list', { user_id: 6 }))).text()).result.tools
-  assert.ok(on.every((tool) => tool.annotations.readOnlyHint))
+  assert.ok(on.filter((tool) => tool.name !== 'hypertask_report_feedback').every((tool) => tool.annotations.readOnlyHint))
+  assert.equal(on.some((tool) => tool.name === 'hypertask_report_feedback'), true)
   assert.ok(calls.every(([, id]) => id === auth.user.id))
   assert.ok(on.length > 0)
 
@@ -184,7 +185,7 @@ test('legacy SSE registration preserves SDK annotations and resolves per-message
     const restricted = { ...auth, extra: { managementPermissions: { management: ['read'] }, mcpAuthContext: { user: { id: 985 }, agentId: null } } }
     callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: restricted }))
     await new Promise((resolve) => setImmediate(resolve))
-    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name).sort(), ['hypertask_agents', 'hypertask_user_context'])
+    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name).sort(), ['hypertask_agents', 'hypertask_report_feedback', 'hypertask_user_context'])
   } finally {
     abort.abort()
     if (originalRedis === undefined) delete process.env.REDIS_URL

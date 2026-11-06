@@ -36,7 +36,6 @@ function setup({ plain = true } = {}) {
   const load = loader({
     '@vercel/functions': { waitUntil: work => pending.push(work) },
     '@/lib/prisma': { __esModule: true, default: db },
-    './enabled': { aiFeedbackEnabled: async () => true },
     './rateLimit': { reserveFeedbackAttempt: async () => true, reserveFeedbackQuota: async () => true },
     '@/lib/flags': { isFeatureEnabled: async (key) => key !== 'htpr-7941-quiet-fixable-reports' && plain },
     '@/utils/controllers/tasks/createTaskCore': { createProvisionedTaskCore: async options => {

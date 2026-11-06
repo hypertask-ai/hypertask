@@ -113,7 +113,6 @@ test('authenticated HTTP requests evaluate the flag for the user and advertise t
     const isolated = loader({
       './tools': { MCP_TOOLS: legacy },
       '@/lib/mcp/auth': { extractBearerToken: () => 'fixture', validateMcpAuth: async () => ({ user: { id: 7 } }) },
-      '@/lib/aiFeedback/enabled': { aiFeedbackEnabled: async () => true },
       '@/lib/aiFeedback/automatic': { observeFeedbackTools: (tools) => tools, queueAiFeedback: () => {} },
       '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
       '@/lib/flags': { HTPR_7203_MCP_FLAT_SCHEMA_FLAG: key, isFeatureEnabled: async (flag, userId) => {

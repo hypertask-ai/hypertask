@@ -45,7 +45,6 @@ function setup({ mode = null, name = 'Robin', flagError = false, auth, pending =
     '@/lib/mcp/operationContext': { getMcpExecutionContext: () => auth, withMcpExecutionContext: (t, a, fn) => fn() },
     '@/lib/aiFeedback/clientInfo': { getFeedbackClient: async () => undefined },
     '../config/tool-metadata': { TOOL_METADATA: { REPORT_FEEDBACK: { name: 'hypertask_report_feedback' } } },
-    './enabled': { aiFeedbackEnabled: async () => true },
     '@/lib/flags': {
       isFeatureEnabled: enabled,
       featureFlagCandidateUserIds: async flag => await enabled(flag) ? null : [],

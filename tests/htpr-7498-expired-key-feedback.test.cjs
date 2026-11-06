@@ -49,7 +49,6 @@ function setup({ mode = null, handshakeMode = null, reason, revoked = false } = 
       verifyMcpJwtToken: (token) => { try { return jwt.verify(token, signingKey) } catch { return null } },
       tokenRevocationJtis: (_userId, _token, payload) => [payload.jti],
     },
-    '@/lib/aiFeedback/enabled': { aiFeedbackEnabled: async () => false },
     '@/lib/aiFeedback/clientInfo': { rememberFeedbackClient: () => {} },
     '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
     './legacy-sse': { isLegacySseRequest: () => false },

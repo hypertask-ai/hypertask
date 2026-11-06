@@ -28,7 +28,6 @@ source('src/lib/flags.ts', {
   HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'htpr-7203-mcp-flat-schema',
   isFeatureEnabled: async (key) => key === 'htpr-7220-legacy-sse-keepalive' && flagOn,
 })
-source('src/lib/aiFeedback/enabled.ts', { aiFeedbackEnabled: async () => false })
 source('src/lib/aiFeedback/automatic.ts', { observeFeedbackTools: (tools) => tools })
 source('src/lib/aiFeedback/clientInfo.ts', { rememberFeedbackClient: () => {} })
 source('src/lib/mcp-server/stateless-http.ts', {
