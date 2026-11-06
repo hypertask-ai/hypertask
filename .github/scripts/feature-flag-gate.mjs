@@ -1877,6 +1877,11 @@ function readLabelsFromEnv() {
 export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
     .split("\n").filter(Boolean);
+  const uiFiles = changedFiles.filter(isUiFile);
+  const runtimeFiles = changedFiles.filter((path) =>
+    /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
+    !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
+    !/\.stories\.[jt]sx?$/.test(path));
   if (changedFiles.some((path) => ["src/lib/flags/keys.ts", "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/releaseRisk.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
     try {
       const mergeBase = git(["merge-base", baseSha, headSha]).trim();
@@ -1899,20 +1904,27 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
             definition.defaultMode !== "EVERYONE" &&
             !(definition.defaultMode === "OWNER_ONLY" && definition.releaseRisk?.ownerRequest)) {
-          throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email; or defaultMode: "OWNER_ONLY" with releaseRisk.ownerRequest containing Valentin's exact quote and ticketUrl)`);
+          let gatesUi = false;
+          if (definition.defaultMode === "OWNER_AND_QA") {
+            const coveredUi = uiFiles.filter((uiPath) => {
+              try { git(["cat-file", "-e", `${headSha}:${uiPath}`]); return true; } catch { return false; }
+            });
+            gatesUi = coveredUi.length > 0 && runtimeFiles.some((runtimePath) => {
+              try { git(["cat-file", "-e", `${headSha}:${runtimePath}`]); } catch { return false; }
+              return referencesFlagAtRuntime(headSha, runtimePath, headRegistry, new Set([definition.key]),
+                addedLinesFor(mergeBase, headSha, runtimePath), addedLinesFor(mergeBase, headSha, runtimePath, true), mergeBase) &&
+                runtimeGateCoveredUiFiles(headSha, runtimePath, coveredUi).size > 0;
+            });
+          }
+          if (!gatesUi) throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or "OWNER_AND_QA" when this flag controls an extant changed UI entry; or releaseRisk.highRisk for money, access, data-deletion or customer-email; or defaultMode: "OWNER_ONLY" with releaseRisk.ownerRequest containing Valentin's exact quote and ticketUrl)`);
         }
       }
     } catch (error) {
       return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
     }
   }
-  const uiFiles = changedFiles.filter(isUiFile);
   const serverFiles = changedFiles.filter(isServerFile).filter((path) =>
     git(["ls-tree", "--name-only", headSha, "--", path]).trim());
-  const runtimeFiles = changedFiles.filter((path) =>
-    /^src\//.test(path) && /\.[jt]sx?$/.test(path) &&
-    !/(^|\/)tests?\//.test(path) && !/\.(test|spec)\.[jt]sx?$/.test(path) &&
-    !/\.stories\.[jt]sx?$/.test(path));
   if (uiFiles.length === 0 && serverFiles.length === 0) {
     return { pass: true, ownerReview: null, reason: "No changed file matches the UI/server-change path filter." };
   }
