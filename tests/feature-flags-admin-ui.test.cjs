@@ -374,6 +374,9 @@ test("detail related links point to anchored cards on the overview", async () =>
 test("flagged page restores type and risk filters, excludes Off from waiting, and displays risk reasons", async () => {
   urlFiltersEnabled = true;
   const { FEATURE_FLAG_RELEASE_RISKS: risks } = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
+  const noneKey = "htpr-8555-risk-none-fixture";
+  const addedNone = !Object.values(risks).some(entry => entry?.risk === "none");
+  if (addedNone) risks[noneKey] = { risk: "none", reason: "Server-side analytics only; nothing users see changes." };
   const key = value => Object.keys(risks).find(key => risks[key].risk === value);
   const flags = [
     fixture(key("none"), { kind: "improvement", mode: "OWNER_ONLY" }),
@@ -381,6 +384,7 @@ test("flagged page restores type and risk filters, excludes Off from waiting, an
     fixture(key("new"), { kind: "feature" }),
     fixture("released", { mode: "EVERYONE" }),
   ];
+  try {
   await withAdmin({}, { flags }, async (helpers) => {
     const { document, click } = helpers;
     const shown = () => [...document.querySelectorAll("code")].map(node => node.textContent);
@@ -406,6 +410,9 @@ test("flagged page restores type and risk filters, excludes Off from waiting, an
     assert.ok(sort.textContent.includes("Sort: Oldest first"));
     assert.equal(new URLSearchParams(window.location.search).get("sort"), "oldest");
   }, "?tab=unreleased&type=improvement&risk=none");
+  } finally {
+    if (addedNone) delete risks[noneKey];
+  }
 });
 
 test("7058 Off no longer disables dropdown filters or URL state on the flags page", async () => {
