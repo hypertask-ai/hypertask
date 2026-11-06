@@ -63,7 +63,7 @@ const getMyTasks = async (
 
     const scopeOr = buildMyTasksScopeOr(
       userId,
-      effectiveMyTasksScopes(scopes, true),
+      effectiveMyTasksScopes(scopes),
     );
     const tasks = await prisma.task.findMany({
       where: {

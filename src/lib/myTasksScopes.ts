@@ -26,9 +26,7 @@ export function normalizeMyTasksScopes(value: unknown): MyTasksScope[] {
 
 export function effectiveMyTasksScopes(
   scopes: MyTasksScope[] | undefined,
-  flagEnabled: boolean,
 ): MyTasksScope[] {
-  if (!flagEnabled) return [...DEFAULT_MY_TASKS_SCOPES];
   return normalizeMyTasksScopes(scopes ?? DEFAULT_MY_TASKS_SCOPES);
 }
 

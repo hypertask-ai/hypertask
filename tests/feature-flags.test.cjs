@@ -1089,6 +1089,19 @@ test("the retired My Tasks overdue badges flag is hidden, immutable and enabled 
   assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
 });
 
+test("the retired My Tasks scopes flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6457-my-tasks-scopes";
+  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  for (const userId of [985, 42]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+});
+
 test("the retired scoped refetch flag is hidden, immutable and enabled for old tabs", async () => {
   const key = "htpr-6166-scoped-board-refetch";
   listedRows = [

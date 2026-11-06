@@ -11,7 +11,6 @@ import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-694
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
-  MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -110,7 +109,6 @@ interface IProps {
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
-  scopesEnabled?: boolean;
 }
 
 const MY_TASKS_SORTING_MODE = "DueDate" as TBoardSortingViewMode;
@@ -132,7 +130,6 @@ const MyTasks = ({
   currentUser,
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
-  scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
   const phoneLayoutEnabled = useFlag(HTPR_8144_PHONE_MY_TASKS_FLAG);
@@ -162,7 +159,6 @@ const MyTasks = ({
   }, []);
   const splitIndex = boardTabsHidden ? 0 : activeSplit;
 
-  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const tableColumnsFeatureEnabled = true;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
@@ -208,10 +204,9 @@ const MyTasks = ({
   );
   useClickOutside(filterRef, () => setFilterOpen(false));
 
-  const scopesFeatureEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
   const reconcileScopes = useMemo(
-    () => effectiveMyTasksScopes(viewConfig.scopes, scopesFeatureEnabled),
-    [scopesFeatureEnabled, viewConfig.scopes],
+    () => effectiveMyTasksScopes(viewConfig.scopes),
+    [viewConfig.scopes],
   );
   const scopesRef = useRef(reconcileScopes);
   scopesRef.current = reconcileScopes;
@@ -990,7 +985,6 @@ const boardTabCounts = useMemo(() => {
           config={viewConfig}
           onChange={updateViewConfig}
           tableColumnsEnabled={tableColumnsFeatureEnabled}
-          scopesEnabled={scopesEnabled}
           snoozeEnabled={myTasksSnoozeEnabled}
           onOpenTableColumns={openTableColumnsPicker}
           onOpenKanbanFilters={() => {

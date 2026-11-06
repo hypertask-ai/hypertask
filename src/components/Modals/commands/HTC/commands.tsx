@@ -79,7 +79,6 @@ import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
-  MY_TASKS_SCOPES_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
 import Tooltip from "@/components/Common/Tooltip";
@@ -217,7 +216,7 @@ const Commands = (props: Props) => {
   if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
+  const myTasksScopesEnabled = true;
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
   const pageActions = isMobile && currentPageActions &&
     pathname === `/page/${currentPageActions.publicId}`

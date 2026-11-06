@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -33,10 +32,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const scopesEnabled = await isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId);
     const snoozeEnabled = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
-    const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
+    const scopes = effectiveMyTasksScopes(requested);
     const showSnoozed =
       snoozeEnabled &&
       (request.nextUrl.searchParams.get("showSnoozed") === "1" ||

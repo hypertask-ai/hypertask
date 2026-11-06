@@ -5,10 +5,7 @@ import { Suspense } from "react";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
-import {
-  MY_TASKS_SCOPES_FLAG,
-  MY_TASKS_SNOOZE_FLAG,
-} from "@/lib/flags/keys";
+import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import { IUser } from "@/models/model";
 import {
@@ -49,75 +46,31 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const scopesEnabled = await isFeatureEnabled(
-    MY_TASKS_SCOPES_FLAG,
-    sessionUser.userId,
-  );
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
     sessionUser.userId,
   );
   const rawView = Array.isArray(query.view) ? query.view[0] : query.view;
   const requestedViewId = rawView && /^\d+$/.test(rawView) ? Number(rawView) : null;
-
-  let views: Awaited<ReturnType<typeof getMyTasksViews>> = [];
-  let myTasks: Awaited<ReturnType<typeof getMyTasks>>;
-  myTasks = undefined as unknown as Awaited<ReturnType<typeof getMyTasks>>;
-
-  if (!scopesEnabled) {
-    const [tasksResult, viewsResult] = await Promise.all([
-      getMyTasks(sessionUser.userId, true),
-      getMyTasksViews(sessionUser.userId),
-    ]);
-    myTasks = tasksResult;
-    views = viewsResult;
-  } else {
-    views = await getMyTasksViews(sessionUser.userId);
-  }
-
+  const views = await getMyTasksViews(sessionUser.userId);
   const initialViewId =
     rawView === undefined
       ? (views.find((view) => view.isDefault)?.id ?? null)
       : rawView === "all"
         ? null
         : (views.find((view) => view.id === requestedViewId)?.id ?? null);
-
-  if (scopesEnabled) {
-    const scopes = effectiveMyTasksScopes(
-      parseMyTasksViewConfig(
-        views.find((view) => view.id === initialViewId)?.config ??
-          DEFAULT_MY_TASKS_VIEW_CONFIG,
-      ).scopes,
-      true,
-    );
-    myTasks = await getMyTasks(sessionUser.userId, true, scopes);
-  }
-
-  if (snoozeEnabled) {
-    const showSnoozed =
-      parseMyTasksViewConfig(
-        views.find((view) => view.id === initialViewId)?.config ??
-          DEFAULT_MY_TASKS_VIEW_CONFIG,
-      ).filters.showSnoozed === true;
-    if (scopesEnabled) {
-      const scopes = effectiveMyTasksScopes(
-        parseMyTasksViewConfig(
-          views.find((view) => view.id === initialViewId)?.config ??
-            DEFAULT_MY_TASKS_VIEW_CONFIG,
-        ).scopes,
-        true,
-      );
-      myTasks = await getMyTasks(sessionUser.userId, true, scopes, {
-        snoozeEnabled: true,
-        showSnoozed,
-      });
-    } else {
-      myTasks = await getMyTasks(sessionUser.userId, true, undefined, {
-        snoozeEnabled: true,
-        showSnoozed,
-      });
-    }
-  }
+  const activeViewConfig = parseMyTasksViewConfig(
+    views.find((view) => view.id === initialViewId)?.config ??
+      DEFAULT_MY_TASKS_VIEW_CONFIG,
+  );
+  const scopes = effectiveMyTasksScopes(activeViewConfig.scopes);
+  const showSnoozed = activeViewConfig.filters.showSnoozed === true;
+  const myTasks = await getMyTasks(
+    sessionUser.userId,
+    true,
+    scopes,
+    snoozeEnabled ? { snoozeEnabled: true, showSnoozed } : {},
+  );
 
   const { json: projects } = await getAllMinimal(
     sessionUser.userId,
@@ -136,35 +89,18 @@ export default async function Page({
         data-htpr-6459-my-tasks-overdue-badges
         aria-hidden
       />
-      {scopesEnabled ? (
-        <MyTasks
-          sections={myTasks.sections}
-          tabs={myTasks.tabs}
-          boards={myTasks.boards}
-          accessibleProjectIds={accessibleProjectIds}
-          nearestSnoozeUntil={
-            snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
-          }
-          currentUser={userObj}
-          initialViews={views}
-          initialViewId={initialViewId}
-          scopesEnabled
-        />
-      ) : (
-        <MyTasks
-          sections={myTasks.sections}
-          tabs={myTasks.tabs}
-          boards={myTasks.boards}
-          accessibleProjectIds={accessibleProjectIds}
-          nearestSnoozeUntil={
-            snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
-          }
-          currentUser={userObj}
-          initialViews={views}
-          initialViewId={initialViewId}
-          scopesEnabled={false}
-        />
-      )}
+      <MyTasks
+        sections={myTasks.sections}
+        tabs={myTasks.tabs}
+        boards={myTasks.boards}
+        accessibleProjectIds={accessibleProjectIds}
+        nearestSnoozeUntil={
+          snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
+        }
+        currentUser={userObj}
+        initialViews={views}
+        initialViewId={initialViewId}
+      />
     </Suspense>
   );
 }
