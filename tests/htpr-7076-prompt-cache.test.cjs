@@ -8,7 +8,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false, interopDefault: true });
-const FLAG = "htpr-7076-prompt-cache";
+const key = "htpr-7076-prompt-cache";
 const cache = load(path.join(root, "src/app/api/ai/_lib/promptCache.ts"));
 const { modelCostUsd } = load(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"));
 const registry = load(path.join(root, "src/lib/ai/prompts/registry.ts"));
@@ -17,25 +17,26 @@ const { isHaiku55Model, isHaiku45Model, resolveHaikuModelId } = load(path.join(r
 const LONG = "Fixed writer instructions. ".repeat(100);
 const CACHE_OPTIONS = { anthropic: { cacheControl: { type: "ephemeral" } } };
 
-test("flag file registers with a release risk, default Owner and QA", () => {
+test("prompt cache rollout is permanent and the stored rollout is retired", () => {
   const keys = load(path.join(root, "src/lib/flags/keys.ts"));
-  assert.equal(keys.HTPR_7076_PROMPT_CACHE_FLAG, FLAG);
-  const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7076-prompt-cache.ts")).default;
-  assert.equal(definition.kind, "feature");
-  assert.ok(definition.releaseRisk.risk);
+  assert.equal(Object.hasOwn(keys, "HTPR_7076_PROMPT_CACHE_FLAG"), false);
+  assert.ok(!Object.values(keys).includes(key));
+  assert.equal(fs.existsSync(path.join(root, "src/lib/flags/definitions", `${key}.ts`)), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_7076_prompt_cache_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  const modes = JSON.parse(fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
+  assert.equal(Object.hasOwn(modes.modes, key), false);
 });
 
-test("helper returns the plain string when the flag is off, the model is not Claude, or the text is short", () => {
-  assert.equal(cache.cachedInstructions({ enabled: false, modelId: "claude-sonnet-5.5", fixed: LONG }), LONG);
-  assert.equal(cache.cachedInstructions({ enabled: true, modelId: "openai/gpt-6-luna", fixed: LONG }), LONG);
-  assert.equal(cache.cachedInstructions({ enabled: true, modelId: "claude-sonnet-5.5", fixed: "x".repeat(2044) }), "x".repeat(2044));
-  assert.equal(cache.cachedInstructions({ enabled: false, modelId: "claude-sonnet-5.5", fixed: LONG, suffix: "\n\nmore" }), `${LONG}\n\nmore`);
+test("helper returns the plain string when the model is not Claude or the text is short", () => {
+  assert.equal(cache.cachedInstructions({ modelId: "openai/gpt-6-luna", fixed: LONG }), LONG);
+  assert.equal(cache.cachedInstructions({ modelId: "claude-sonnet-5.5", fixed: "x".repeat(2044) }), "x".repeat(2044));
 });
 
 test("helper returns a cached system message followed by the uncached suffix", () => {
-  const only = cache.cachedInstructions({ enabled: true, modelId: "anthropic/claude-haiku-5.5", fixed: LONG });
+  const only = cache.cachedInstructions({ modelId: "anthropic/claude-haiku-5.5", fixed: LONG });
   assert.deepEqual(only, [{ role: "system", content: LONG, providerOptions: CACHE_OPTIONS }]);
-  const withSuffix = cache.cachedInstructions({ enabled: true, modelId: "claude-sonnet-5.5", fixed: LONG, suffix: "\n\nExtra rule." });
+  const withSuffix = cache.cachedInstructions({ modelId: "claude-sonnet-5.5", fixed: LONG, suffix: "\n\nExtra rule." });
   assert.equal(withSuffix.length, 2);
   assert.equal(withSuffix[0].content, LONG);
   assert.deepEqual(withSuffix[1], { role: "system", content: "Extra rule." });
@@ -119,11 +120,10 @@ function moduleWithStubs(file, stubs) {
   return mod.exports;
 }
 
-async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", dueDate = false, language = false, skill = "" }) {
+async function writerInstructions({ modelId = "claude-sonnet-5.5", dueDate = false, language = false, skill = "" }) {
   const dates = load(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
   const keys = load(path.join(root, "src/lib/flags/keys.ts"));
   const on = new Set([keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG]);
-  if (cacheOn) on.add(FLAG);
   if (dueDate) on.add(keys.HTPR_7054_CTRLJ_DUE_DATE_FLAG);
   if (language) on.add(keys.HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG);
   const flags = { isFeatureEnabled: async (flag) => on.has(flag), ...keys };
@@ -154,19 +154,17 @@ async function writerInstructions({ cacheOn, modelId = "claude-sonnet-5.5", dueD
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true },
     "@/app/api/ai/_lib/boardTemplateContext": { BOARD_TEMPLATE_LIMIT: 10 },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { searchTasks: async () => [] },
-    "@/app/api/ai/_lib/promptCache": {
-      cachedInstructionsForUser: async (userId, args) => cache.cachedInstructions({ ...args, enabled: await flags.isFeatureEnabled(FLAG, userId) }),
-    },
+    "@/app/api/ai/_lib/promptCache": cache,
   });
   const result = await run.prepareTaskWriterRun({ projectId: 7, PROMPT: "note", requestKind: "compose-task", aiMode: "AiTaskWriter", taskIds: [], images64: [], pdfs64: [], docx64: [], userRetrievalTexts: [], byokProviderFlags: [] }, 985);
   return result.instructions;
 }
 
-test("task writer: cached prefix is identical whatever the flag-dependent suffix is", async () => {
+test("task writer: cached prefix is identical whatever the suffix is", async () => {
   const variants = [{}, { dueDate: true }, { language: true }, { skill: "Skill body." }, { dueDate: true, language: true, skill: "Skill body." }];
   const prefixes = new Set();
   for (const variant of variants) {
-    const result = await writerInstructions({ cacheOn: true, ...variant });
+    const result = await writerInstructions(variant);
     assert.ok(Array.isArray(result), JSON.stringify(variant));
     assert.deepEqual(result[0].providerOptions, CACHE_OPTIONS);
     prefixes.add(result[0].content);
@@ -175,12 +173,8 @@ test("task writer: cached prefix is identical whatever the flag-dependent suffix
   assert.deepEqual([...prefixes], [LONG]);
 });
 
-test("task writer: cache off keeps the same text as the cached prefix plus its suffix", async () => {
-  const off = await writerInstructions({ cacheOn: false, language: true, skill: "Skill body." });
-  const on = await writerInstructions({ cacheOn: true, language: true, skill: "Skill body." });
-  assert.equal(typeof off, "string");
-  assert.equal(off.replace(/\s+/g, " "), `${on[0].content}\n\n${on[1].content}`.replace(/\s+/g, " "));
-  assert.equal(typeof await writerInstructions({ cacheOn: true, modelId: "openai/gpt-6-luna" }), "string");
+test("task writer: non-Claude models keep a plain string prompt", async () => {
+  assert.equal(typeof await writerInstructions({ modelId: "openai/gpt-6-luna" }), "string");
 });
 
 test("task questions use the cached helper and task summaries stay below the minimum", () => {

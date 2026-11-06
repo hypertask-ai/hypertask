@@ -326,13 +326,6 @@ export async function GET(request: NextRequest) {
       _count: { _all: true },
     })) as UsageRow[]
 
-    let showCache = false
-    try {
-      const { promptCacheEnabled } = await import('@/app/api/ai/_lib/planGate')
-      showCache = await promptCacheEnabled(ctx.user.id)
-    } catch {
-    }
-
     const groups = rows
       .map((r) => ({
         key: (r as Record<string, unknown>)[groupField] as string | number,
@@ -340,12 +333,8 @@ export async function GET(request: NextRequest) {
         inputTokens: r._sum.inputTokens ?? 0,
         outputTokens: r._sum.outputTokens ?? 0,
         totalTokens: r._sum.totalTokens ?? 0,
-        ...(showCache
-          ? {
-              cachedInputTokens: r._sum.cachedInputTokens ?? 0,
-              cacheWriteInputTokens: r._sum.cacheWriteInputTokens ?? 0,
-            }
-          : {}),
+        cachedInputTokens: r._sum.cachedInputTokens ?? 0,
+        cacheWriteInputTokens: r._sum.cacheWriteInputTokens ?? 0,
       }))
       .sort((a, b) => b.totalTokens - a.totalTokens)
 

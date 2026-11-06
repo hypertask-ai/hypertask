@@ -17,6 +17,10 @@ const research = load(path.join(root, "src/app/api/ai/_lib/taskWriterBoardResear
 const registry = load(path.join(root, "src/lib/ai/prompts/registry.ts"));
 const flag = "htpr-7057-writer-heading-language";
 
+function instructionText(value) {
+  return typeof value === "string" ? value : value.map((message) => message.content).join("\n\n");
+}
+
 async function prepare({ prompt, enabled = true, aiMode = "AiTaskWriter" }) {
   const filename = path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
@@ -73,23 +77,24 @@ async function prepare({ prompt, enabled = true, aiMode = "AiTaskWriter" }) {
       const { run, checks } = await prepare({ prompt });
       assert.ok(checks.some(([key, id]) => key === flag && id === 1000));
       assert.ok(run.messages[0].content.endsWith(prompt));
-      assert.match(run.instructions, /language the user explicitly asks for/);
-      assert.match(run.instructions, /otherwise use the language of the user's request/);
-      assert.match(run.instructions, /not the language of board context, templates, or examples/);
-      assert.match(run.instructions, /Translate all section headings/);
-      assert.match(run.instructions, /<h2>Akzeptanzkriterien<\/h2>/);
-      assert.match(run.instructions, /For English output, keep the English headings/);
-      assert.match(run.instructions, /overrides.*headings.*verbatim/);
-      assert.match(run.instructions, /same section meanings, order, and HTML structure/);
-      assert.match(run.instructions, /Keep all existing structured IDs, numeric property values, URLs, and media tokens unchanged/);
-      assert.match(run.instructions, /<p id="ai-generated-task-properties">/);
+      const text = instructionText(run.instructions);
+      assert.match(text, /language the user explicitly asks for/);
+      assert.match(text, /otherwise use the language of the user's request/);
+      assert.match(text, /not the language of board context, templates, or examples/);
+      assert.match(text, /Translate all section headings/);
+      assert.match(text, /<h2>Akzeptanzkriterien<\/h2>/);
+      assert.match(text, /For English output, keep the English headings/);
+      assert.match(text, /overrides.*headings.*verbatim/);
+      assert.match(text, /same section meanings, order, and HTML structure/);
+      assert.match(text, /Keep all existing structured IDs, numeric property values, URLs, and media tokens unchanged/);
+      assert.match(text, /<p id="ai-generated-task-properties">/);
     });
   }
   test(`flag off preserves today's full prompt`, async () => {
     const prompt = "Behebe den Fehler beim Speichern. Bitte auf Deutsch schreiben";
     const { run } = await prepare({ prompt, enabled: false });
     const expected = taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_WEB_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_WEB_RULES}`);
-    assert.equal(run.instructions, `${expected}\n\nUse the board structure.`);
+    assert.equal(instructionText(run.instructions), `${expected}\n\nUse the board structure.`);
   });
 }
 
@@ -97,10 +102,12 @@ test("Write with AI has its own comment template and stays unchanged", async () 
   const prompt = "Bitte auf Deutsch schreiben";
   const on = await prepare({ prompt, aiMode: "WriteWithAI" });
   const off = await prepare({ prompt, aiMode: "WriteWithAI", enabled: false });
-  assert.equal(on.run.instructions, off.run.instructions);
-  assert.equal(on.run.instructions, `${editorPrompts.createKanbanSystemPrompt("write_with_ai", editorPrompts.TASK_AUTHORING_WEB_STYLE)}\n\nUse the board structure.`);
+  const onText = instructionText(on.run.instructions);
+  const offText = instructionText(off.run.instructions);
+  assert.equal(onText, offText);
+  assert.equal(onText, `${editorPrompts.createKanbanSystemPrompt("write_with_ai", editorPrompts.TASK_AUTHORING_WEB_STYLE)}\n\nUse the board structure.`);
   assert.ok(!on.checks.some(([key]) => key === flag));
-  assert.doesNotMatch(on.run.instructions, /sections covering: problem, affected screen, acceptance criteria, out of scope/);
+  assert.doesNotMatch(onText, /sections covering: problem, affected screen, acceptance criteria, out of scope/);
 });
 
 test("German headings and localized property chrome survive extraction correctly on server and browser", () => {
