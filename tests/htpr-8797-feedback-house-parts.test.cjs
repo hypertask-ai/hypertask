@@ -7,7 +7,8 @@ const report = { surface: 'mcp', tool: 'hypertask_tasks', status: 400, errorCode
 
 function setup({ enabled = true } = {}) {
   const created = [], comments = [], rows = []
-  const on = async (key) => key !== flag || enabled
+  let houseOn = enabled
+  const on = async (key) => key !== flag || houseOn
   const db = {
     section: { findMany: async () => [{ id: 2, section_title: 'Done' }] },
     project: { findFirst: async () => ({ uniqueIdentifier: 'HTPR', section: [{ id: 1, section_title: 'Bugs' }] }) },
@@ -48,7 +49,11 @@ function setup({ enabled = true } = {}) {
     } },
     '@/lib/realtime/server': { broadcastTaskChange: async () => {} },
   })
-  return { ...load('src/lib/aiFeedback/report.ts'), load, created, comments }
+  return {
+    ...load('src/lib/aiFeedback/report.ts'),
+    load, created, comments,
+    setEnabled(value) { houseOn = value },
+  }
 }
 
 test('flag is a bug fix on for everyone', () => {
@@ -83,6 +88,23 @@ test('a repeat report adds to the old ticket', async () => {
   assert.equal(second.ticketNumber, first.ticketNumber)
   assert.equal(second.count, 2)
   assert.match(f.comments[0].text, /Seen 2 times/)
+})
+
+test('turning the flag off still joins the same ticket and refreshes the tally', async () => {
+  const f = setup()
+  const first = await f.fileAiFeedback(report, 42, { origin: 'automatic' })
+  f.setEnabled(false)
+  const second = await f.fileAiFeedback(report, 42, { origin: 'automatic' })
+  assert.equal(f.created.length, 1)
+  assert.equal(second.deduped, true)
+  assert.equal(second.ticketNumber, first.ticketNumber)
+  assert.match(f.comments[0].text, /Fingerprint: ai-fb-/)
+  assert.match(f.comments[0].text, /Seen 2 times/)
+  assert.match(f.comments[0].activity.data.text, /Seen 2 times/)
+  const third = await f.fileAiFeedback(report, 42, { origin: 'automatic' })
+  assert.equal(f.created.length, 1)
+  assert.equal(third.deduped, true)
+  assert.equal(third.count, 3)
 })
 
 test('flag off keeps the error code in the description', async () => {

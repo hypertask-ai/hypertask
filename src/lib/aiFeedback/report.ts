@@ -300,14 +300,20 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
         const comment = existing ? await tx.comment.findFirst({
           where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
-          orderBy: { id: 'asc' }, select: { id: true, text: true },
+          orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
         }) : null
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
-        const logText = (text: string) => house ? text + description(input, fingerprint, displayName, stored) : text
+        const keptMarker = Boolean(comment?.text.includes(marker))
+        const logText = (text: string) => {
+          const logged = house ? text + description(input, fingerprint, displayName, stored) : text
+          return keptMarker && !logged.includes(marker) ? logged + marker : logged
+        }
         if (existing) {
           const count = storedCount + 1
           const text = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
-          const activity = house ? feedbackLogActivity(text) : undefined
+          const previous = comment?.activity
+          const hadLog = Boolean(previous && typeof previous === 'object' && !Array.isArray(previous) && previous.type === 'AiFeedbackLog')
+          const activity = house || hadLog ? feedbackLogActivity(text) : undefined
           if (comment) {
             await tx.comment.update({ where: { id: comment.id }, data: { text, summary: null, ...(activity ? { activity } : {}) } })
           } else {
