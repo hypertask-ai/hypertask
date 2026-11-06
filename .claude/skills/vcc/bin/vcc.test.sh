@@ -550,8 +550,11 @@ case "$url" in
   */agents/runs)
     [ "$method" = POST ] && [ "$data" = '{"taskId":42,"source":"runtime"}' ] || exit 93
     printf '%s' '{"success":true,"run":{"id":"fixture-run"}}' > "$output" ;;
+  */agents/runs/fixture-run)
+    [ "$method" = GET ] || exit 94
+    printf '%s' '{"success":true,"run":{"status":"active"}}' > "$output" ;;
   */agents/runs/fixture-run/activities)
-    [ "$method" = POST ] && [ "$data" = '{"type":"thought","text":"Fixture note"}' ] || exit 94
+    [ "$method" = POST ] && jq -e '.type == "thought" and (.text == "Fixture note" or .text == "- Fixture note")' <<< "$data" >/dev/null || exit 94
     printf '%s' '{"success":true,"activity":{"id":"fixture-note"}}' > "$output" ;;
   *) exit 95 ;;
 esac
@@ -593,6 +596,9 @@ run bash "$vcc" activity add 42 'Fixture note'
 [ "$status" = 0 ] || fail "numeric task add failed: $(cat "$T/err")"
 [ "$(< "$T/out")" = fixture-note ] || fail 'activity add returned no note ID'
 [[ $(< "$VCC_TEST_TRACE") == *'POST https://app.hypertask.ai/api/mcp/agents/runs/fixture-run/activities'* ]] || fail 'activity add did not write the note'
+run bash "$vcc" activity add X-1 '- Fixture note'
+[ "$status" = 0 ] || fail 'ordinary bullet note was mistaken for an option'
+[[ $(< "$VCC_TEST_TRACE") == *'"text":"- Fixture note"'* ]] || fail 'bullet note text changed'
 printf '%s' '{"tasks":[]}' > "$VCC_TEST_TASK"
 run bash "$vcc" activity add 99 'Fixture note'
 [ "$status" != 0 ] || fail 'unresolved numeric task was accepted'
