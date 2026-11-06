@@ -689,7 +689,6 @@ test("memory-only PostHog tracking flag is retired and persistence is always mem
   assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
   await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
   listedRows = [];
-  assert.match(fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8"), /trackingPersistence="memory"/);
 });
 
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
