@@ -1125,6 +1125,17 @@ test("listed related keys cannot mutate registered flag metadata", async () => {
   assert.notEqual(second.related, first.related);
 });
 
+test("flags page type search no longer has a feature flag", async () => {
+  const key = "htpr-6964-flags-page-type-search";
+  assert.equal(flags.HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6964_flags_page_type_search_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+});
+
 test("every registered flag has a valid kind and only registered explicit related keys", async () => {
   const rows = await flags.listFeatureFlagModes();
   assert.equal(rows.length, flags.FEATURE_FLAG_KEYS.length);
@@ -1135,13 +1146,6 @@ test("every registered flag has a valid kind and only registered explicit relate
       assert.notEqual(entry.key, key);
     }
   }
-  const entry = rows.find(({ key }) => key === flags.HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.ticketId, "HTPR-6964");
-  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(entry.key, id))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
 test("typed property writes are no longer listed as a rollout", async () => {

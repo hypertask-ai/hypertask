@@ -11,7 +11,7 @@ import {
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
@@ -137,7 +137,6 @@ export default function FeatureFlagsAdmin({
   flagKey?: string;
 }) {
   const queryClient = useQueryClient();
-  const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
   const urlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG) || true;
   const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, true);
   const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
@@ -194,7 +193,7 @@ export default function FeatureFlagsAdmin({
       const rows = flags.data?.flags ?? [];
       return clusterFeatureFlagsByReleaseDate(
         rows.filter((flag) => (
-          (!(discoveryEnabled || urlFiltersEnabled) || matchesFeatureFlagSearch(flag, search))
+          matchesFeatureFlagSearch(flag, search)
           && (!urlFiltersEnabled || (matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)))
         )),
         sortDirection,
@@ -202,7 +201,7 @@ export default function FeatureFlagsAdmin({
         { shippedOnly: urlFiltersEnabled && sortDirection !== "desc", unreleasedOnly: urlFiltersEnabled },
       );
     },
-    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter, urlFiltersEnabled, search, kinds, risk],
   );
 
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
@@ -251,17 +250,17 @@ export default function FeatureFlagsAdmin({
   ];
 
   useEffect(() => {
-    if (!discoveryEnabled || flagKey) return;
+    if (flagKey) return;
     const hash = window.location.hash;
     if (hash.startsWith("#flag-")) setHighlightedKey(hash.slice(6));
-  }, [discoveryEnabled, flagKey]);
+  }, [flagKey]);
 
   useEffect(() => {
-    if (!discoveryEnabled || !highlightedKey) return;
+    if (!highlightedKey) return;
     const card = document.getElementById(`flag-${highlightedKey}`);
     card?.scrollIntoView({ behavior: "smooth", block: "start" });
     card?.focus({ preventScroll: true });
-  }, [discoveryEnabled, highlightedKey, flags.isLoading]);
+  }, [highlightedKey, flags.isLoading]);
 
   const searchInput = (
     <>
@@ -307,7 +306,7 @@ export default function FeatureFlagsAdmin({
           </p>
         )}
 
-        {(discoveryEnabled || urlFiltersEnabled) && !flagKey && (
+        {!flagKey && (
           <div className="sticky top-0 z-10 mt-6 bg-pageBackground py-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">{searchInput}</div>
@@ -343,21 +342,18 @@ export default function FeatureFlagsAdmin({
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
             const releaseRisk = urlFiltersEnabled ? FEATURE_FLAG_RELEASE_RISKS[flag.key] : undefined;
             const daysWaiting = urlFiltersEnabled ? flagDaysWaiting(flag) : null;
-            const related = discoveryEnabled ? relatedFeatureFlags(flag, flags.data?.flags ?? []) : [];
-            let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between";
-            if (discoveryEnabled) cardClassName += " scroll-mt-24";
-            if (discoveryEnabled && highlightedKey === flag.key) cardClassName += " bg-hover-active";
+            const related = relatedFeatureFlags(flag, flags.data?.flags ?? []);
+            let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between scroll-mt-24";
+            if (highlightedKey === flag.key) cardClassName += " bg-hover-active";
             return (
             <div
               key={flag.key}
-              id={discoveryEnabled ? `flag-${flag.key}` : undefined}
-              tabIndex={discoveryEnabled ? -1 : undefined}
+              id={`flag-${flag.key}`}
+              tabIndex={-1}
               className={cardClassName}
             >
               <div className="min-w-0 sm:max-w-lg">
-                {(discoveryEnabled || urlFiltersEnabled) && (
-                  <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
-                )}
+                <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
                 {flagKey ? (
                   <>
                     <code className="break-all text-dense text-white-black">{flag.key}</code>
