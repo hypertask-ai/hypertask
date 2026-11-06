@@ -289,7 +289,18 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json(response, { status: 200 });
     } catch (error) {
-        if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
+        if (error instanceof AgentWritingError) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: error.message,
+                    code: error.code,
+                    field: error.field,
+                    details: { field: error.field, code: 'agent_writing' },
+                },
+                { status: 400 }
+            )
+        }
         if (isPlanLimitReachedError(error)) {
             const refusal = planLimitResponse(error);
             return NextResponse.json(refusal.body, { status: refusal.status });
