@@ -228,6 +228,7 @@
   "tests/htpr-7092-decisions.test.cjs": 1,
   "tests/htpr-7095-reaction-webhook.test.cjs": 2,
   "tests/htpr-7096-quiet-owner-inbox.test.cjs": 1,
+  "tests/htpr-8766-remove-quiet-owner-inbox-flag.test.cjs": 0,
   "tests/htpr-7097-deleted-view-leaves-tabs.test.cjs": 1,
   "tests/htpr-7098-batch-background-ai.test.cjs": 1,
   "tests/htpr-7121-mcp-not-found-detail.test.cjs": 4,

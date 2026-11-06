@@ -2,7 +2,6 @@ import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
 import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
-import { isQuietOwnerInboxOn } from '@/utils/controllers/notifications/quietOwnerInbox';
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from '@/lib/flags/definitions/htpr-8090-assignee-inbox';
 
 export async function resolveCommentRecipientUserIds(
@@ -50,8 +49,7 @@ export async function resolveCommentRecipientUserIds(
   if (
     fromAgentId &&
     recipientUserIds.has(creatorId) &&
-    !dependencies.getMentionedUserIdsFromCommentText(commentText ?? "").includes(creatorId) &&
-    (await isQuietOwnerInboxOn(creatorId))
+    !dependencies.getMentionedUserIdsFromCommentText(commentText ?? "").includes(creatorId)
   ) {
     recipientUserIds.delete(creatorId);
   }
