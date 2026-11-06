@@ -1,7 +1,5 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
 const { load } = require('./task-route-loader.cjs')
 
 const flag = 'htpr-8839-evidence-board-number'
@@ -93,11 +91,12 @@ function fixture({ enabled = true, flagError = false, rows = [report, hiddenId] 
 }
 
 test('flag definition is a bugfix, live for everyone', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/lib/flags/definitions/htpr-8839-evidence-board-number.ts'), 'utf8')
-  assert.match(source, /export const HTPR_8839_EVIDENCE_BOARD_NUMBER_FLAG = "htpr-8839-evidence-board-number"/)
-  assert.match(source, /kind: "bugfix"/)
-  assert.match(source, /defaultMode: "EVERYONE"/)
-  assert.match(source, /risk: "small"/)
+  const definition = load('src/lib/flags/definitions/htpr-8839-evidence-board-number.ts')
+  assert.equal(definition.HTPR_8839_EVIDENCE_BOARD_NUMBER_FLAG, flag)
+  assert.equal(definition.default.key, flag)
+  assert.equal(definition.default.kind, 'bugfix')
+  assert.equal(definition.default.defaultMode, 'EVERYONE')
+  assert.equal(definition.default.releaseRisk.risk, 'small')
 })
 
 test('the board number from a feedback link attaches evidence to that report', async () => {
