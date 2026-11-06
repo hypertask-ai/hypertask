@@ -2,7 +2,7 @@
 
 [AI review verdict to ticket](../.github/workflows/ai-review-mirror.yml) copies
 the current GitHub AI Review verdict onto the ticket named by the branch, so the
-review reaches the people reading the board and not only the pull request. It
+review reaches the agent log and not only the pull request. It
 runs here, not in the private reviewer repository: this repository already owns
 the board token that binds titles and files tickets, while the reviewer's own
 copy was rejected ("Unauthorized") and the failure was hidden by
@@ -17,19 +17,17 @@ copy was rejected ("Unauthorized") and the failure was hidden by
 - Copies only the verdict whose `reviewed-commit` marker equals the current PR
   head, so a review of an older commit never reaches the ticket as the verdict
   for what will merge.
-- The concurrency group carries the comment author and never cancels, so an
-  ordinary comment on the same PR cannot cancel the reviewer's delivery.
-- Posts one comment with `kind: qa`, because an agent comment without a kind is
-  filed in the hidden agent log instead of the ticket thread. The text is one
-  short plain line naming the verdict and pointing at the pull request, never the
-  findings: the board refuses technical text in a people comment, and the
-  YPER4-910 voice guard answers it with `HTTP 400`. That guard broke five real
-  mirrors between 18:46 and 19:18 UTC on 2026-10-31 while the skip runs stayed
-  green, and the agent log refuses this token (`HTTP 503`), so the findings stay
-  on the pull request (YPER4-978).
-- Skips a commit the ticket already carries and sends an `Idempotency-Key` of
-  `ai-review-mirror-<pr>-<sha>`, so a re-run or an edited verdict never doubles
-  the comment.
+- Dispatches and comment events share a non-cancelling concurrency group per PR.
+- Reads the agent log newest first, paging until it finds this mirror's latest
+  entry for the PR or reaches the end. An unchanged verdict is skipped across
+  heads; a changed verdict is recorded, including a return to an earlier verdict.
+- Before posting without `kind`, sends the same payload with `dry_run: true` and
+  no idempotency key. The preflight must confirm a valid agent-log route, or no
+  verdict is posted. The post must also confirm `routedTo: log` and
+  `visibleToPeople: false`; there is no people-comment fallback. Findings stay
+  on the pull request.
+- The idempotency key hashes the PR, head, verdict, review contents and update
+  time, and the previous mirror entry ID. Retries do not suppress later changes.
 - A rejected read or post fails the run. A silent skip is exactly the failure
   this replaces.
 - Both GitHub reads use the same reset-aware retry as the other trusted

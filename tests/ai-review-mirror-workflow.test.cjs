@@ -2,7 +2,11 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const yaml = require("js-yaml");
+const { parse } = require("node-html-parser");
 const { loadModule } = require("./helpers/loadModule.cjs");
+const { formatRichTextInput } = loadModule("src/utils/helperFunctions/markdownToHtml.ts");
+const { sanitizeRichHtml } = loadModule("src/utils/helperFunctions/sanitizeRichHtml.ts");
+const { normalizeBlockHtml } = loadModule("src/lib/mcp/normalizeBlockHtml.ts");
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const SHA = "b".repeat(40);
@@ -25,7 +29,10 @@ async function runMirror({
   issue = { number: 43, pull_request: { url: "https://api.github.com/repos/hypertask-ai/hypertask/pulls/43" } },
   inputs = {},
   pr = productionPr(),
-  postResponse = { status: 200, body: { success: true, url: "https://app.hypertask.ai/detail/project-15/1234" } },
+  postResponse = { status: 200, body: { success: true, routedTo: "log", visibleToPeople: false } },
+  preflightResponse = { status: 200, body: { success: true, valid: true, would: { routedTo: "log" } } },
+  readResponse,
+  board = { activities: [], keys: new Set() },
   token = "test-token",
   rateLimitReads = 0,
   rateLimitCommentRead = false,
@@ -53,6 +60,20 @@ async function runMirror({
 
   const fetchStub = async (url, init = {}) => {
     calls.push({ url, method: init.method ?? "GET", init });
+    if (!init.method) {
+      const offset = Number(new URL(url).searchParams.get("offset"));
+      const response = readResponse ?? { status: 200, body: { success: true, activities: board.activities.slice(offset, offset + 100) } };
+      return { ok: response.status < 400, status: response.status, json: async () => response.body };
+    }
+    if (JSON.parse(init.body).dry_run === true) {
+      return { ok: preflightResponse.status < 400, status: preflightResponse.status, json: async () => preflightResponse.body };
+    }
+    if (postResponse.status < 400 && postResponse.body.success && postResponse.body.routedTo === "log" && !board.keys.has(init.headers["Idempotency-Key"])) {
+      board.keys.add(init.headers["Idempotency-Key"]);
+      const { text, content_type } = JSON.parse(init.body);
+      const html = normalizeBlockHtml(sanitizeRichHtml(formatRichTextInput(text.trim().replace(/\r\n?/g, "\n"), content_type)));
+      board.activities.unshift({ id: String(board.keys.size), text: parse(html).structuredText.trim() });
+    }
     return { ok: postResponse.status < 400, status: postResponse.status, json: async () => postResponse.body };
   };
 
@@ -98,7 +119,7 @@ async function runMirror({
   }
 
   assert.equal(refusedReads, 0, "every refused read must have been retried");
-  return { calls, failures, infos, warnings, posts: calls.filter(call => call.method === "POST") };
+  return { calls, failures, infos, warnings, posts: calls.filter(call => call.method === "POST" && JSON.parse(call.init.body).dry_run !== true) };
 }
 
 function productionPr(overrides = {}) {
@@ -111,37 +132,100 @@ function productionPr(overrides = {}) {
   };
 }
 
-test("the review verdict lands in the ticket thread as one short plain line", async () => {
-  const { posts, failures } = await runMirror();
-
+test("the verdict is sent only to the agent log", async () => {
+  const { calls, posts, failures } = await runMirror();
   assert.deepEqual(failures, []);
   assert.equal(posts.length, 1);
   assert.match(posts[0].url, /\/api\/mcp\/comments$/);
-  assert.equal(posts[0].init.headers["Idempotency-Key"], `ai-review-mirror-43-${SHA}`);
   const body = JSON.parse(posts[0].init.body);
   assert.equal(body.ticket_number, "HTPR-1234");
-  assert.equal(body.kind, "qa");
-  assert.match(body.text, /APPROVE/);
-  assert.match(body.text, /pull request/);
-  assert.doesNotMatch(body.text, /MINOR/);
-  assert.ok(!body.text.includes(SHA), "no commit hash reaches the people thread");
+  assert.equal(body.kind, undefined);
+  assert.equal(body.content_type, "html");
+  const preflight = calls.find(call => call.method === "POST" && JSON.parse(call.init.body).dry_run === true);
+  assert.ok(preflight);
+  assert.ok(calls.indexOf(preflight) < calls.indexOf(posts[0]));
+  assert.equal(preflight.init.headers?.["Idempotency-Key"], undefined);
+  assert.deepEqual(JSON.parse(preflight.init.body), { ...body, dry_run: true });
+  assert.match(body.text, /^<p>AI review mirror \[hypertask-ai\/hypertask#43\]: APPROVE<\/p>/);
 });
 
-test("the people line passes the board's voice guard, which the findings cannot (YPER4-910)", async () => {
-  const { posts } = await runMirror();
-  const { assertAgentWriting, AgentWritingError } = loadModule("src/lib/agents/writing.ts");
+test("five runs across heads deduplicate and verdict transitions are recorded", async () => {
+  const board = { activities: [], keys: new Set() };
+  for (let i = 0; i < 5; i++) {
+    const sha = String(i + 1).repeat(40);
+    const pr = productionPr({ head: { ...productionPr().head, sha }, comments: [{ user: REVIEWER, body: REVIEW.replace(SHA, sha) }] });
+    const result = await runMirror({ board, pr });
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.posts.length, i === 0 ? 1 : 0);
+    assert.equal(board.activities[0].text, "AI review mirror [hypertask-ai/hypertask#43]: APPROVE\nhttps://github.com/hypertask-ai/hypertask/pull/43");
+  }
+  for (const verdict of ["CONCERNS", "APPROVE"]) {
+    const result = await runMirror({ board, pr: productionPr({ comments: [{ user: REVIEWER, body: REVIEW.replace("APPROVE", verdict) }] }) });
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.posts.length, 1);
+    assert.equal(JSON.parse(result.posts[0].init.body).kind, undefined);
+  }
+  assert.deepEqual(board.activities.map(a => a.text.split("\n")[0].split(": ").pop()), ["APPROVE", "CONCERNS", "APPROVE"]);
+});
 
-  assert.doesNotThrow(
-    () => assertAgentWriting("agent-id", { text: JSON.parse(posts[0].init.body).text }),
-    "the short plain verdict must survive the guard",
-  );
-  assert.throws(
-    () => assertAgentWriting("agent-id", {
-      text: `<p><strong>AI review:</strong> APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**</p>
-<pre>- **MINOR** — \`.github/scripts/pr-size.cjs:34\` hardcodes report-only, which is longer than twelve words</pre>`,
-    }),
-    AgentWritingError,
-  );
+test("manual and bot events deduplicate against the same board", async () => {
+  for (const first of ["workflow_dispatch", "issue_comment"]) {
+    const board = { activities: [], keys: new Set() };
+    const second = first === "workflow_dispatch" ? "issue_comment" : "workflow_dispatch";
+    const initial = await runMirror({ board, eventName: first, inputs: { pr: "43" } });
+    const repeated = await runMirror({ board, eventName: second, inputs: { pr: "43" } });
+    assert.deepEqual(initial.failures, []);
+    assert.deepEqual(repeated.failures, []);
+    assert.equal(initial.posts.length, 1);
+    assert.equal(repeated.posts.length, 0);
+    assert.equal(board.activities.length, 1);
+  }
+});
+
+test("pagination finds the latest mirror for this PR behind unrelated activity", async () => {
+  const board = { activities: [{ id: "old", text: "AI review mirror [hypertask-ai/hypertask#43]: APPROVE\nurl" }], keys: new Set() };
+  board.activities.unshift(...Array.from({ length: 105 }, (_, i) => ({ id: `other-${i}`, text: `AI review mirror [hypertask-ai/hypertask#44]: CONCERNS\nurl` })));
+  const result = await runMirror({ board });
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.posts.length, 0);
+  assert.match(result.calls[1].url, /offset=100/);
+});
+
+test("preflight failures never write a verdict", async () => {
+  for (const preflightResponse of [
+    { status: 200, body: { success: true, valid: true, would: { routedTo: "comments" } } },
+    { status: 503, body: { success: false } },
+    { status: 200, body: null },
+    { status: 200, body: { success: true, would: { routedTo: "log" } } },
+  ]) {
+    const result = await runMirror({ preflightResponse });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.posts.length, 0);
+    assert.equal(result.calls.filter(call => call.method === "POST").length, 1);
+  }
+});
+
+test("failed reads and unconfirmed log routing fail without fallback", async () => {
+  for (const readResponse of [
+    { status: 503, body: { success: false } },
+    { status: 200, body: { success: false } },
+    { status: 200, body: { success: true, activities: [{}] } },
+  ]) {
+    const result = await runMirror({ readResponse });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.posts.length, 0);
+  }
+  for (const postResponse of [
+    { status: 503, body: { success: false } },
+    { status: 200, body: { success: true } },
+    { status: 200, body: { success: true, routedTo: "comments", visibleToPeople: true } },
+    { status: 200, body: { success: true, routedTo: "log", visibleToPeople: true } },
+  ]) {
+    const result = await runMirror({ postResponse });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.posts.length, 1);
+    assert.equal(JSON.parse(result.posts[0].init.body).kind, undefined);
+  }
 });
 
 test("only the reviewer's comment wakes the mirror and only production PRs are mirrored", async () => {
@@ -230,7 +314,7 @@ test("a PR with no verdict comment yet posts nothing", async () => {
   assert.deepEqual(failures, []);
 });
 
-test("no review text or markup is copied into the people thread", async () => {
+test("no review text or markup is copied into the log", async () => {
   const { posts } = await runMirror({
     pr: productionPr({
       comments: [{
@@ -284,7 +368,7 @@ test("the workflow mirrors no candidate code into the run", async () => {
   assert.deepEqual(workflow.on.issue_comment.types, ["created", "edited"]);
   assert.equal(workflow.on.workflow_dispatch.inputs.pr.required, true);
   assert.equal(workflow.concurrency["cancel-in-progress"], false);
-  assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
+  assert.equal(workflow.concurrency.group, "ai-review-mirror-${{ github.event.issue.number || inputs.pr }}");
   assert.ok(script.env.REVIEW_COMMENT_AUTHOR);
 });
 
