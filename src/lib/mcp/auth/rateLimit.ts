@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { HTPR_7133_MCP_RATELIMIT_FAST_FLAG, HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG } from '@/lib/flags/keys';
+import { HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
 import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
@@ -14,7 +14,6 @@ const MAX_LOCAL_COUNTS = 1_000
 const LEASE = 10
 const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
 let localWindowStart: number | undefined
-let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 let exactCountFlagLookup: Promise<boolean> | undefined
 
@@ -32,19 +31,6 @@ async function shouldUseExactCountRateLimit(): Promise<boolean> {
     })().finally(() => { exactCountFlagLookup = undefined })
   }
   return exactCountFlagLookup
-}
-
-async function shouldUseFastRateLimit(): Promise<boolean> {
-  if (fastFlagDecision && fastFlagDecision.expiresAt > Date.now()) return fastFlagDecision.enabled
-  try {
-    const { featureFlagCandidateUserIds } = await import('@/lib/flags')
-    const enabled = await featureFlagCandidateUserIds(HTPR_7133_MCP_RATELIMIT_FAST_FLAG) === null
-    fastFlagDecision = { enabled, expiresAt: Date.now() + 30_000 }
-    return enabled
-  } catch {
-    fastFlagDecision = { enabled: false, expiresAt: Date.now() + 30_000 }
-    return false
-  }
 }
 
 export function classifyMcpRateLimitCount(
@@ -74,7 +60,7 @@ export async function checkMcpRateLimit(
       localCounts.clear()
       localWindowStart = windowStartSeconds
     }
-    const fastEnabled = !(await shouldUseExactCountRateLimit()) && await shouldUseFastRateLimit()
+    const fastEnabled = !(await shouldUseExactCountRateLimit())
     if (!fastEnabled) localCounts.clear()
     const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
@@ -83,7 +69,7 @@ export async function checkMcpRateLimit(
       return null
     }
 
-    const trackCount = fastEnabled && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds
+    const trackCount = fastEnabled && localWindowStart === windowStartSeconds
     const state = trackCount ? localCounts.get(key) : undefined
     const increment = state && !state.leasing && state.count + LEASE <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE : 1
     if (state && increment === LEASE) state.leasing = true
@@ -95,7 +81,7 @@ export async function checkMcpRateLimit(
     }
     if (count === increment) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
     let keptSlots = false
-    if (trackCount && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds) {
+    if (trackCount && localWindowStart === windowStartSeconds) {
       let entry = localCounts.get(key)
       if (!entry && localCounts.size < MAX_LOCAL_COUNTS) {
         entry = { count: 0, reserved: 0, leasing: false }
