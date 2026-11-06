@@ -217,11 +217,6 @@ test("server projection scopes queries before limits and emits safe chronologica
       return projectWhere;
     },
   });
-  let runtimeTitlesEnabled = true;
-  stub("src/lib/flags.ts", {
-    HTPR_6551_QUIET_RUN_ACTIVITY_FLAG: "htpr-6551-quiet-run-activity",
-    isFeatureEnabled: async () => runtimeTitlesEnabled,
-  });
   const server = load("src/lib/agents/agentChatActivity.ts");
 
   const rows = await server.listAgentChatActivity(
@@ -264,14 +259,6 @@ test("server projection scopes queries before limits and emits safe chronologica
   );
   assert.equal(rows[0].text, "Runtime investigation");
   assert.equal(queries.runs.select.title, true);
-
-  runtimeTitlesEnabled = false;
-  const hiddenTitleRows = await server.listAgentChatActivity(
-    { agentId: "agent-1", sessionId: "session-1", userId: 6, limit: 10 },
-    db,
-  );
-  assert.equal(hiddenTitleRows[0].text, "Started HTPR-42");
-  runtimeTitlesEnabled = true;
 
   await server.listAgentChatActivity(
     { agentId: "agent-1", sessionId: "session-1", userId: 6, limit: NaN },
@@ -432,10 +419,6 @@ test("server projection derives durable task milestones after agent involvement"
   stub("src/lib/prisma.ts", { default: db });
   stub("src/utils/controllers/projects/getAllIncludes.ts", {
     getProjectWhere: () => projectWhere,
-  });
-  stub("src/lib/flags.ts", {
-    HTPR_6551_QUIET_RUN_ACTIVITY_FLAG: "htpr-6551-quiet-run-activity",
-    isFeatureEnabled: async () => true,
   });
   const server = load("src/lib/agents/agentChatActivity.ts");
 

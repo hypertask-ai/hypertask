@@ -8,7 +8,6 @@ import { handlePatchAgentRequest } from '@/lib/mcp/agents/lifecycleRequests'
 import {
   authenticateAgentRunRequest,
   createRuntimeAgentRun,
-  runtimeAgentRunsEnabledFor,
 } from '@/lib/agentRuns/service'
 import {
   AgentRunInputError,
@@ -59,10 +58,6 @@ export async function POST(
         403
       )
     }
-    if (!(await runtimeAgentRunsEnabledFor(principal))) {
-      return noStore({ success: false, error: 'Not found' }, 404)
-    }
-
     const input = parseRuntimeAgentRunInput(
       await request.json().catch(() => null)
     )

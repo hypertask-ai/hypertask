@@ -16,10 +16,9 @@ function stub(relativePath, exports) {
   };
 }
 
-function loadRoute({ principal = null, enabled = true, createRun = async () => null } = {}) {
+function loadRoute({ principal = null, createRun = async () => null } = {}) {
   stub("src/lib/agentRuns/service.ts", {
     authenticateAgentRunRequest: async () => principal,
-    runtimeAgentRunsEnabledFor: async () => enabled,
     createRuntimeAgentRun: createRun,
   });
   stub("src/lib/mcp/auth.ts", { checkMcpRateLimit: async () => null });
@@ -49,13 +48,11 @@ function request(body) {
 
 function loadStopRoute({
   principal,
-  runtimeEnabled = true,
   stopRun = async () => null,
 } = {}) {
   stub("src/lib/agentRuns/service.ts", {
     authenticateAgentRunRequest: async () => principal,
     browserMutationIsSameOrigin: () => true,
-    runtimeAgentRunsEnabledFor: async () => runtimeEnabled,
     stopAgentRun: stopRun,
   });
   stub("src/lib/mcp/auth.ts", { checkMcpRateLimit: async () => null });
@@ -176,12 +173,11 @@ test("runtime run close rejects malformed JSON without stopping the run", async 
   assert.equal(stops, 0);
 });
 
-test("runtime final statuses are gated while legacy bodyless stop remains available", async () => {
+test("runtime final statuses accept explicit JSON bodies", async () => {
   const received = [];
-  const run = { id: "run-1", status: "stopped" };
+  const run = { id: "run-1", status: "done" };
   const { POST } = loadStopRoute({
     principal: agentPrincipal,
-    runtimeEnabled: false,
     stopRun: async (_principal, _id, _now, finalStatus) => {
       received.push(finalStatus);
       return run;
@@ -190,11 +186,11 @@ test("runtime final statuses are gated while legacy bodyless stop remains availa
   const context = { params: Promise.resolve({ id: "run-1" }) };
 
   const explicit = await POST(stopRequest('{"status":"done"}'), context);
-  assert.equal(explicit.status, 404);
-  assert.deepEqual(received, []);
+  assert.equal(explicit.status, 200);
+  assert.deepEqual(await explicit.json(), { success: true, run });
+  assert.deepEqual(received, ["DONE"]);
 
   const legacy = await POST(stopRequest(), context);
   assert.equal(legacy.status, 200);
-  assert.deepEqual(await legacy.json(), { success: true, run });
-  assert.deepEqual(received, ["STOPPED"]);
+  assert.deepEqual(received, ["DONE", "STOPPED"]);
 });
