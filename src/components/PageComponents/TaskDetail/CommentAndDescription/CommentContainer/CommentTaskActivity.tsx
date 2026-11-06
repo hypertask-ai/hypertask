@@ -78,6 +78,8 @@ const CommentTaskActivity = () => {
           <TaskWaitingOnActivity activity={comment.activity} />
         ) : comment.activity?.type === "TaskPullRequest" ? (
           <TaskPullRequestActivity activity={comment.activity} />
+        ) : comment.activity?.type === "AiFeedbackLog" ? (
+          <span className="whitespace-pre-wrap">{comment.activity.data.text}</span>
         ) : null}
       </span>
       {!_mbl && <CreatedAtCard stacked={true} createdAt={comment.createdAt} />}
