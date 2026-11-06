@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HOME = Path.home()
+DEST = HOME / '.local/lib/hypertask/merge-guard'
+WRAPPER = HOME / '.local/bin/gh'
+LINE = 'exec $REAL "$@"'
+FILES = ('gh-merge-guard', 'ship-check', 'ci-test-failures.py')
+BUILTINS = set('agent-task alias api attestation auth browse cache codespace completion config copilot extension gist gpg-key issue label licenses org preview pr project release repo ruleset run search secret ssh-key status variable version workflow help'.split())
+INSERT = '"$HOME/.local/lib/hypertask/merge-guard/gh-merge-guard" -- "$@" || exit $?\n'
+
+
+def install():
+    source = Path(__file__).resolve().parent
+    text = WRAPPER.read_text()
+    if text.count(LINE) != 1 or text.count(INSERT) > 1 or (INSERT in text and INSERT + LINE not in text):
+        raise ValueError('unrecognized gh wrapper shape')
+    if not text.startswith('#!/bin/bash\n') or text.count('\n' + LINE + '\n') != 1:
+        raise ValueError('unrecognized gh wrapper execution boundary')
+    for name in FILES:
+        if not (source / name).is_file():
+            raise ValueError('missing installer source: ' + name)
+    DEST.mkdir(parents=True, exist_ok=True)
+    for name in FILES:
+        with tempfile.NamedTemporaryFile(dir=DEST, delete=False) as tmp:
+            temporary = Path(tmp.name)
+        try:
+            shutil.copyfile(source / name, temporary)
+            temporary.chmod(0o755)
+            os.replace(temporary, DEST / name)
+        finally:
+            temporary.unlink(missing_ok=True)
+    if INSERT not in text:
+        with tempfile.NamedTemporaryFile(mode='w', dir=WRAPPER.parent, delete=False) as tmp:
+            temporary = Path(tmp.name)
+            tmp.write(text.replace(LINE, INSERT + LINE))
+        try:
+            temporary.chmod(WRAPPER.stat().st_mode & 0o777)
+            os.replace(temporary, WRAPPER)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def guard(args):
+    prefix = []
+    i = 0
+    while i < len(args) and args[i].startswith('-'):
+        arg = args[i]
+        if arg in ('-h', '--help', '--version') and len(args) == 1:
+            return 0
+        if arg in ('-R', '--repo'):
+            if i + 1 >= len(args):
+                raise ValueError('missing repository argument')
+            prefix.extend(args[i:i + 2])
+            i += 2
+        elif arg.startswith('--repo=') or (arg.startswith('-R') and len(arg) > 2):
+            prefix.append(arg)
+            i += 1
+        else:
+            raise ValueError('unsupported global arguments')
+    if i == len(args):
+        return 0
+    command = args[i]
+    if command not in BUILTINS:
+        raise ValueError('unsupported command; gh aliases are not supported')
+    if command != 'pr':
+        return 0
+    i += 1
+    while i < len(args) and args[i].startswith('-'):
+        arg = args[i]
+        if arg in ('-R', '--repo'):
+            if i + 1 >= len(args):
+                raise ValueError('missing repository argument')
+            prefix.extend(args[i:i + 2])
+            i += 2
+        elif arg.startswith('--repo=') or (arg.startswith('-R') and len(arg) > 2):
+            prefix.append(arg)
+            i += 1
+        elif arg in ('-h', '--help') and i == len(args) - 1:
+            return 0
+        else:
+            raise ValueError('unsupported pr parent arguments')
+    if i == len(args) or args[i] != 'merge':
+        return 0
+    args = ['pr', 'merge', *prefix, *args[i + 1:]]
+    if os.environ.get('GH_HOST', 'github.com').lower() != 'github.com':
+        raise ValueError('unsupported GitHub host')
+    repo = None
+    target = None
+    options = {'--merge', '--squash', '--rebase', '--auto', '--disable-auto', '--delete-branch', '-d', '--admin', '--match-head-commit', '--subject', '-t', '--body', '-b', '--body-file', '-F'}
+    values = {'--match-head-commit', '--subject', '-t', '--body', '-b', '--body-file', '-F'}
+    i = 2
+    while i < len(args):
+        arg = args[i]
+        if arg in ('-R', '--repo'):
+            i += 1
+            if i >= len(args) or repo is not None:
+                raise ValueError('invalid repository argument')
+            repo = args[i]
+        elif arg.startswith('--repo=') or (arg.startswith('-R') and len(arg) > 2):
+            if repo is not None:
+                raise ValueError('multiple repositories')
+            repo = arg.split('=', 1)[1] if arg.startswith('--repo=') else arg[2:].removeprefix('=')
+        elif arg in options:
+            if arg in values:
+                i += 1
+                if i >= len(args):
+                    raise ValueError('missing option value')
+        elif any(arg.startswith(option + '=') for option in values if option.startswith('--')):
+            pass
+        elif not arg.startswith('-') and target is None:
+            target = arg
+        else:
+            raise ValueError('unsupported merge arguments')
+        i += 1
+    url = re.fullmatch(r'https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([0-9]+)', target or '', re.I)
+    if url:
+        if repo is not None:
+            raise ValueError('repository and PR URL cannot be combined')
+        repo, target = url.groups()
+    if not target or not re.fullmatch(r'[0-9]+', target):
+        raise ValueError('name a PR number or GitHub PR URL')
+    if repo is None:
+        repo = os.environ.get('GH_REPO') or None
+    if repo is None:
+        raise ValueError('name an explicit repository with --repo, a PR URL, or GH_REPO')
+    repo = re.sub(r'^github\.com/', '', repo, flags=re.I).lower()
+    if not re.fullmatch(r'[a-z0-9_.-]+/[a-z0-9_.-]+', repo):
+        raise ValueError('unsupported repository')
+    command = 'gh pr merge ' + target + ' -R ' + repo
+    checker = DEST / 'ship-check'
+    env = os.environ.copy()
+    if 'SHIP_REPO' in env:
+        env['SHIP_REPO'] = repo
+    if repo == 'hypertask-ai/hypertask':
+        env['SHIP_BASE'] = 'production'
+    result = subprocess.run([str(checker), 'guard'], input=json.dumps({'tool_input': {'command': command}, 'cwd': os.getcwd()}), text=True, env=env)
+    return result.returncode if result.returncode > 0 else (1 if result.returncode < 0 else 0)
+
+
+try:
+    if sys.argv[1:] == ['--install']:
+        install()
+    elif sys.argv[1:2] == ['--']:
+        sys.exit(guard(sys.argv[2:]))
+    else:
+        raise ValueError('expected --install or -- followed by gh arguments')
+except (OSError, ValueError) as error:
+    print('gh merge guard: ' + str(error), file=sys.stderr)
+    sys.exit(2)

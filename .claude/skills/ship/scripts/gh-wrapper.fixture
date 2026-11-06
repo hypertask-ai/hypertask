@@ -1,0 +1,11 @@
+#!/bin/bash
+REAL=/usr/bin/gh
+export GH_REAL="${GH_REAL:-$HOME/.local/lib/gh-release/gh}"
+if [ -z "$GH_TOKEN" ] && [ -z "$GITHUB_TOKEN" ] && [ -z "$GH_NO_APP_TOKEN" ]; then
+  export HT_GH_CACHE_DIR="${HT_GH_CACHE_DIR:-$HOME/.local/state/gh-shared-cache-app}"
+fi
+if [ -e "${FLEET_INFRA_FIRST_FILE:-$HOME/.config/fleet/infra-first}" ]; then
+  guard=$HOME/.local/lib/fleet-gh/infra-first-guard
+  [ -x "$guard" ] && "$guard" "$@" || exit 4
+fi
+exec $REAL "$@"
