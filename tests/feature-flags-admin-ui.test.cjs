@@ -24,13 +24,21 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
-    if (key === "htpr-7069-flags-dropdown-filters") return false;
     if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
     assert.equal(key, "htpr-6964-flags-page-type-search");
     return discoveryEnabled;
   },
 });
 stub(path.join(root, "src/styles/linksModal.module.scss"), { __esModule: true, default: {} });
+const box = ({ children }) => React.createElement("div", null, children);
+stub(require.resolve("reactstrap"), { ModalBody: box });
+stub(path.join(root, "src/components/Common/CommonModalComponents/index.tsx"), {
+  ModalContainerCustom: ({ id, children }) => React.createElement("div", { id, role: "dialog" }, children),
+  ModalListContainer: box,
+  ModalHeaderComp: ({ header }) => React.createElement("h2", null, header),
+  ModalInput: ({ autofocus, ...props }) => React.createElement("input", { type: "search", ...props }),
+  ModalRowElementContainer: ({ children, onClick, id }) => React.createElement("button", { type: "button", onClick, id }, children),
+});
 stub(require.resolve("next/headers"), { headers: async () => new Headers() });
 stub(require.resolve("next/navigation"), { notFound: () => { throw new Error("NOT_FOUND"); } });
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false, jsx: { runtime: "automatic" } });
@@ -141,7 +149,7 @@ for (const [key, project, number] of [["htpr-7000-inbox-next-open", 15, 7000], [
       assert.equal(document.querySelector("time").getAttribute("datetime"), "2026-10-03");
       assert.equal(document.querySelector('a[href="/admin/flags"]').textContent, "Back to all flags");
       assert.ok(document.querySelector(`a[href="https://app.hypertask.ai/detail/project-${project}/${number}"]`));
-      assert.equal(document.querySelector('[aria-label="Filter by audience"]'), null);
+      assert.equal(document.querySelector('[aria-label="Flag filters"]'), null);
       const active = document.querySelector('button[aria-pressed="true"]');
       assert.equal(active.textContent, "Owner + QA");
       assert.equal(document.querySelectorAll("button").length, 4);
@@ -187,6 +195,13 @@ test("legacy detail has no invented ticket or shipped date; missing client row h
   });
 });
 
+async function pickFilter({ document, click }, label, optionPrefix) {
+  await click(document.querySelector(`[aria-label="Filter ${label}"]`));
+  const row = [...document.querySelectorAll("[id^='option-picker-']")].find((element) => element.querySelector("span").textContent.startsWith(optionPrefix));
+  assert.ok(row, `${label}: ${optionPrefix}`);
+  await click(row);
+}
+
 test("overview counts every audience and Unreleased filters exactly the release pile", async () => {
   const flags = [
     fixture("owner", { mode: "OWNER_ONLY" }),
@@ -194,45 +209,52 @@ test("overview counts every audience and Unreleased filters exactly the release 
     fixture("released", { mode: "EVERYONE" }),
     fixture("hidden", { mode: "OFF" }),
   ];
-  await withAdmin({}, { flags, detailsEnabled: true }, async ({ document, click }) => {
-    const chips = () => [...document.querySelectorAll('[aria-label="Filter by audience"] button')];
-    assert.deepEqual(chips().map((button) => button.textContent), ["All 4", "Unreleased 3", "Only me 1", "Owner + QA 1", "Everyone 1", "Off 1"]);
-    assert.match(document.body.textContent, /3 unreleased flags waiting for release/);
-    for (const [index, keys] of [[1, ["owner", "qa", "hidden"]], [2, ["owner"]], [3, ["qa"]], [4, ["released"]], [5, ["hidden"]], [0, flags.map((flag) => flag.key)]]) {
-      await click(chips()[index]);
+  await withAdmin({}, { flags, detailsEnabled: true }, async (helpers) => {
+    const { document, click } = helpers;
+    await click(document.querySelector('[aria-label="Filter Status"]'));
+    const options = [...document.querySelectorAll("[id^='option-picker-']")].filter((element) => /^option-picker-\d+$/.test(element.id)).map((row) => row.querySelector("span").textContent);
+    assert.deepEqual(options, ["All (4)", "Unreleased (2)", "Only me (1)", "Owner + QA (1)", "Everyone (1)", "Off (1)"]);
+    assert.match(document.body.textContent, /2 unreleased flags waiting for release/);
+    for (const [label, keys] of [
+      ["Unreleased", ["owner", "qa"]],
+      ["Only me", ["owner"]],
+      ["Owner + QA", ["qa"]],
+      ["Everyone", ["released"]],
+      ["Off", ["hidden"]],
+      ["All", flags.map((flag) => flag.key)],
+    ]) {
+      await pickFilter(helpers, "Status", label);
       assert.deepEqual([...document.querySelectorAll("code")].map((code) => code.textContent).sort(), keys.sort());
-      assert.equal(chips()[index].getAttribute("aria-pressed"), "true");
+      assert.ok(document.querySelector('[aria-label="Filter Status"]').textContent.includes(`Status: ${label}`));
     }
   });
 });
 
 test("counts and the active Unreleased list update before PATCH finishes, then roll back a failed release", async () => {
-  await withAdmin({}, { flags: [fixture("qa")], detailsEnabled: true }, async ({ document, click, settle, pausePatch, setFail }) => {
-    const chip = (label) => [...document.querySelectorAll('[aria-label="Filter by audience"] button')].find((button) => button.textContent.startsWith(`${label} `));
+  await withAdmin({}, { flags: [fixture("qa")], detailsEnabled: true }, async (helpers) => {
+    const { document, click, settle, pausePatch, setFail } = helpers;
     const mode = (label) => [...document.querySelectorAll('[aria-label^="Mode for"] button')].find((button) => button.textContent === label);
-    await click(chip("Unreleased"));
+    const statusSummary = () => document.querySelector('[role="status"]').textContent;
+    await pickFilter(helpers, "Status", "Unreleased");
     assert.match(document.body.textContent, /1 unreleased flag waiting for release/);
     const finishRelease = pausePatch();
     await click(mode("Everyone"));
-    assert.equal(chip("Unreleased").textContent, "Unreleased 0");
-    assert.equal(chip("Everyone").textContent, "Everyone 1");
+    assert.match(statusSummary(), /Showing 0 of 1 flags/);
     assert.equal(document.querySelectorAll("code").length, 0);
     assert.match(document.body.textContent, /No flags match this filter/);
     await React.act(async () => finishRelease());
     await settle();
-    await click(chip("All"));
+    await pickFilter(helpers, "Status", "All");
     await click(mode("Owner + QA"));
-    assert.equal(chip("Unreleased").textContent, "Unreleased 1");
-    await click(chip("Unreleased"));
+    assert.match(document.body.textContent, /1 unreleased flag waiting for release/);
+    await pickFilter(helpers, "Status", "Unreleased");
     setFail();
     const finishFailure = pausePatch();
     await click(mode("Everyone"));
-    assert.equal(chip("Unreleased").textContent, "Unreleased 0");
+    assert.match(statusSummary(), /Showing 0 of 1 flags/);
     await React.act(async () => finishFailure());
     await settle();
-    assert.equal(chip("All").textContent, "All 1");
-    assert.equal(chip("Unreleased").textContent, "Unreleased 1");
-    assert.equal(chip("Everyone").textContent, "Everyone 0");
+    assert.match(statusSummary(), /Showing 1 of 1 flags/);
     assert.equal(document.querySelectorAll("code").length, 1);
     assert.equal(document.querySelector('[role="alert"]').textContent, "Update unavailable");
   });
@@ -267,11 +289,14 @@ for (const singleFlag of [false, true]) {
   });
 }
 
-test("flag off keeps the original cards, no search, badges, relations, anchors or focus changes", async () => {
+test("discovery off keeps cards plain while url filters stay on the overview", async () => {
   rows[0] = { ...rows[0], related: [rows[1].key], kind: "bugfix" };
   await withAdmin({}, { flags: rows, detailsEnabled: true }, async ({ document }) => {
-    assert.equal(document.querySelector('input, .label-pill, [id^="flag-"], [tabindex]'), null);
-    assert.doesNotMatch(document.body.textContent, /Related:|Improvement/);
+    assert.ok(document.querySelector('[aria-label="Flag filters"]'));
+    assert.ok(document.getElementById("flag-search"));
+    assert.doesNotMatch(document.body.textContent, /Related:/);
+    assert.equal([...document.querySelectorAll("[id]")].some((node) => node.id.startsWith("flag-") && node.id !== "flag-search"), false);
+    assert.ok(document.querySelector(".label-pill"));
     for (const group of document.querySelectorAll('[aria-label^="Mode for"]')) {
       assert.deepEqual([...group.querySelectorAll("button")].map(button => [button.textContent, button.getAttribute("aria-pressed")]), [
         ["Only me", "false"], ["Owner + QA", "true"], ["Everyone", "false"], ["Off", "false"],
@@ -292,7 +317,7 @@ test("flag on shows shared kind labels, sticky search, all-word reduction, empty
     assert.deepEqual([...document.querySelectorAll(".label-pill")].map(node => node.textContent), ["Bug", "Feature", "Improvement"]);
     const input = document.querySelector('input[type="search"]');
     assert.equal(document.querySelector('label[for="flag-search"]').textContent, "Search flags");
-    assert.ok(input.parentElement.classList.contains("sticky"));
+    assert.ok(input.closest(".sticky"));
     const enter = async (value) => {
       await React.act(async () => {
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
@@ -321,7 +346,7 @@ test("related link clears filters, reveals its target, scrolls, highlights and f
   await withAdmin({}, { flags: [a, b], detailsEnabled: true }, async ({ document, click, calls }) => {
     const scrolled = [];
     window.HTMLElement.prototype.scrollIntoView = function (options) { scrolled.push([this.id, options]); };
-    await click([...document.querySelectorAll('[aria-label="Filter by audience"] button')].find(button => button.textContent.startsWith("Owner + QA")));
+    await pickFilter({ document, click }, "Status", "Owner + QA");
     assert.equal(document.getElementById(`flag-${b.key}`), null);
     const link = document.querySelector(`a[href="#flag-${b.key}"]`);
     assert.equal(link.textContent, b.key);
@@ -356,44 +381,46 @@ test("flagged page restores type and risk filters, excludes Off from waiting, an
     fixture(key("new"), { kind: "feature" }),
     fixture("released", { mode: "EVERYONE" }),
   ];
-  await withAdmin({}, { flags }, async ({ document, click }) => {
-    const chips = label => [...document.querySelectorAll(`[aria-label="${label}"] button`)];
+  await withAdmin({}, { flags }, async (helpers) => {
+    const { document, click } = helpers;
     const shown = () => [...document.querySelectorAll("code")].map(node => node.textContent);
     assert.match(document.body.textContent, /2 unreleased flags waiting for release/);
     assert.deepEqual(shown(), [key("none")]);
     assert.match(document.body.textContent, /No visible change/);
     assert.ok(document.body.textContent.includes(risks[key("none")].reason));
     assert.match(document.body.textContent, /days waiting/);
-    await click(chips("Filter by release risk")[0]);
+    await pickFilter(helpers, "Release risk", "All");
     assert.deepEqual(shown(), [key("none")]);
-    await click(chips("Filter by type").find(button => button.textContent === "Feature"));
+    await pickFilter(helpers, "Type", "Feature");
     assert.deepEqual(shown(), [key("none"), key("new")]);
-    await click(chips("Filter by audience").find(button => button.textContent === "Off 1"));
+    await pickFilter(helpers, "Status", "Off");
     assert.deepEqual(shown(), []);
-    await click(chips("Filter by type").find(button => button.textContent === "Bug"));
+    await pickFilter(helpers, "Type", "Bug");
     assert.deepEqual(shown(), [key("small")]);
     assert.ok(document.body.textContent.includes(risks[key("small")].reason));
     assert.doesNotMatch(document.body.textContent, /days waiting/);
-    const sort = [...document.querySelectorAll("button")].find(button => button.textContent === "Release risk first");
-    await click(sort);
-    assert.equal(sort.textContent, "Newest first");
-    await click(sort);
-    assert.equal(sort.textContent, "Oldest first");
+    const sort = document.querySelector('[aria-label="Filter Sort"]');
+    await pickFilter(helpers, "Sort", "Newest first");
+    assert.ok(sort.textContent.includes("Sort: Newest first"));
+    await pickFilter(helpers, "Sort", "Oldest first");
+    assert.ok(sort.textContent.includes("Sort: Oldest first"));
     assert.equal(new URLSearchParams(window.location.search).get("sort"), "oldest");
   }, "?tab=unreleased&type=improvement&risk=none");
 });
 
-test("flag Off leaves URL, legacy waiting count, sort and cards unchanged", async () => {
+test("7058 Off no longer disables dropdown filters or URL state on the flags page", async () => {
+  urlFiltersEnabled = false;
   const flags = [fixture("htpr-7058-flags-page-url-filters", { mode: "OFF" })];
   await withAdmin({}, { flags }, async ({ document, click }) => {
-    const before = window.location.href;
-    assert.match(document.body.textContent, /1 unreleased flag waiting for release/);
-    assert.equal(document.querySelector('[aria-label="Filter by type"]'), null);
-    assert.equal(document.querySelector('[aria-label="Filter by release risk"]'), null);
-    assert.doesNotMatch(document.body.textContent, /Small change|days waiting|Release risk first/);
-    const sort = [...document.querySelectorAll("button")].find(button => button.textContent === "Newest first");
-    await click(sort);
-    assert.equal(sort.textContent, "Oldest first");
-    assert.equal(window.location.href, before);
+    assert.ok(document.querySelector('[aria-label="Flag filters"]'));
+    assert.match(document.body.textContent, /Showing 0 of 1 flags/);
+    assert.ok(document.querySelector('[aria-label="Filter Type"]'));
+    assert.match(document.body.textContent, /Status: Unreleased/);
+    assert.match(document.body.textContent, /Type: Bug/);
+    assert.match(document.body.textContent, /Release risk: No visible change/);
+    assert.match(document.body.textContent, /Sort: Oldest first/);
+    const sort = document.querySelector('[aria-label="Filter Sort"]');
+    await pickFilter({ document, click }, "Sort", "Oldest first");
+    assert.equal(new URLSearchParams(window.location.search).get("sort"), "oldest");
   }, "?tab=unreleased&type=bug&risk=none&sort=oldest&q=missing");
 });

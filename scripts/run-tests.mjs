@@ -237,7 +237,10 @@ process.on("exit", (exitCode) => {
 if (cjsTests.length > 0) {
   const { serial, pool, safe, weightOf, workOf } = await classifySuite({ root, files: cjsTests });
   for (const file of serial) {
-    await run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`, { serial: true });
+    const serialArgs = ["--test", FILE_TIMEOUT];
+    if (file === "tests/feature-flags-admin-ui.test.cjs") serialArgs.push("--test-concurrency=1");
+    serialArgs.push(file);
+    await run(process.execPath, serialArgs, `Isolated Node test: ${file}`, { serial: true });
   }
   const width = Math.max(1, Number(TEST_CONCURRENCY));
   let poolFiles = safe.length > 1 ? pool : [...pool, ...safe];

@@ -8,8 +8,6 @@ const { createJiti } = require("jiti");
 const { QueryClient, QueryClientProvider } = require("@tanstack/react-query");
 const root = path.resolve(__dirname, "..");
 const queryKey = ["admin-feature-flags"];
-let enabled = true;
-let oldEnabled = true;
 const stub = (relative, exports) => {
   const filename = path.join(root, relative);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
@@ -17,7 +15,7 @@ const stub = (relative, exports) => {
 stub("src/hooks/useFlag.tsx", {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: queryKey,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
-  useFlag: key => key === "htpr-7069-flags-dropdown-filters" ? enabled : oldEnabled,
+  useFlag: () => true,
 });
 stub("src/styles/linksModal.module.scss", { __esModule: true, default: {} });
 const box = ({ children }) => React.createElement("div", null, children);
@@ -97,7 +95,7 @@ async function withAdmin(query, run, props = {}) {
   }
 }
 
-test.beforeEach(() => { enabled = true; oldEnabled = true; });
+test.beforeEach(() => {});
 
 test("all dropdowns show current choices and per-option counts; count matches actual cards", async () => {
   await withAdmin("", async ({ document, open }) => {
@@ -178,28 +176,6 @@ test("risk multi-select uses the same risk param; legacy parsing and single valu
   assert.equal(matchesFlagRisk(rows[0], ["none", "new"]), true);
   assert.equal(matchesFlagRisk(rows[1], ["none", "new"]), false);
   assert.equal(matchesFlagRisk(rows[3], ["none", "new"]), false);
-});
-
-test("flag off renders the old three bars and no shown count or dropdowns", async () => {
-  enabled = false;
-  await withAdmin("?risk=small", async ({ document }) => {
-    for (const label of ["audience", "type", "release risk"]) assert.ok(document.querySelector(`[aria-label="Filter by ${label}"]`));
-    assert.equal(document.querySelector('[aria-label="Flag filters"]'), null);
-    assert.equal(document.querySelector('[role="status"]'), null);
-    const input = document.getElementById("flag-search");
-    assert.ok(input.parentElement.classList.contains("sticky"), "legacy search retains its exact parent");
-  });
-});
-
-test("new flag works independently of older flags and does not change detail controls", async () => {
-  oldEnabled = false;
-  await withAdmin("?type=bug", async ({ document }) => {
-    assert.equal(document.querySelector('[role="status"]').textContent, "Showing 1 of 4 flags");
-  });
-  await withAdmin("", async ({ document }) => {
-    assert.equal(document.querySelector('[aria-label="Flag filters"]'), null);
-    assert.equal(document.querySelector('[role="status"]'), null);
-  }, { flagKey: rows[0].key });
 });
 
 test("single selects close the picker and return focus to the trigger; multi selects stay open", async () => {
