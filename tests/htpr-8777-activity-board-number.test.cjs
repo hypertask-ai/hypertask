@@ -103,11 +103,43 @@ test('the board number from a feedback link opens activity on that ticket', asyn
   assert.deepEqual(f.flagReads, [{ key: flag, userId: 6 }])
 })
 
-test('the database id still opens that ticket, including with its project', async () => {
-  const f = fixture()
-  const response = await f.post({ taskId: report.id, projectId: 15, source: 'runtime' })
+test('the database id still opens that ticket, including with its project and board number', async () => {
+  const other = {
+    id: 88000,
+    projectId: 15,
+    uniqueIndex: 100,
+    ticketNumber: 'HTPR-100',
+    status: 'Normal',
+    accessible: true,
+  }
+  const f = fixture({ rows: [report, hiddenId, other] })
+  const response = await f.post({
+    taskId: report.id,
+    projectId: 15,
+    boardNumber: other.uniqueIndex,
+    source: 'runtime',
+  })
   assert.equal(response.status, 201)
   assert.deepEqual(f.opened, [{ taskId: report.id, title: null, source: 'runtime' }])
+})
+
+test('a missed database id falls back to the named board number on that project', async () => {
+  const f = fixture()
+  const response = await f.post({ taskId: 999999, projectId: 15, boardNumber: 8777, source: 'runtime' })
+  assert.equal(response.status, 201)
+  assert.deepEqual(f.opened, [{ taskId: report.id, title: null, source: 'runtime' }])
+})
+
+test('flag off keeps the database id and does not follow the board number', async () => {
+  const f = fixture({ enabled: false })
+  const opened = await f.post({ taskId: report.id, projectId: 15, boardNumber: 8777, source: 'runtime' })
+  assert.equal(opened.status, 201)
+  const missed = await f.post({ taskId: 999999, projectId: 15, boardNumber: 8777, source: 'runtime' })
+  assert.equal(missed.status, 404)
+  assert.deepEqual(f.opened, [
+    { taskId: report.id, title: null, source: 'runtime' },
+    { taskId: 999999, title: null, source: 'runtime' },
+  ])
 })
 
 test('a bare board number is not guessed onto another board', async () => {

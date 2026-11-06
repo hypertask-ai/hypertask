@@ -317,10 +317,7 @@ open_run() {
   task_id=$(jq -er '.tasks[0].id' <<<"$task_json") || fail "cannot read $ticket"
   project_id=$(jq -er '.tasks[0].projectId' <<<"$task_json") || fail "cannot read $ticket"
   board_number=$(jq -er '.tasks[0].uniqueIndex' <<<"$task_json") || fail "cannot read $ticket"
-  request POST agents/runs "$(jq -nc --argjson id "$task_id" --argjson project "$project_id" '{taskId:$id,projectId:$project,source:"runtime"}')"
-  if [ "$code" = 404 ] && [ "$board_number" != "$task_id" ] && jq -e '.error == "Task not found"' "$body" >/dev/null 2>&1; then
-    request POST agents/runs "$(jq -nc --argjson id "$board_number" --argjson project "$project_id" '{taskId:$id,projectId:$project,source:"runtime"}')"
-  fi
+  request POST agents/runs "$(jq -nc --argjson id "$task_id" --argjson project "$project_id" --argjson board "$board_number" '{taskId:$id,projectId:$project,boardNumber:$board,source:"runtime"}')"
   success
   run=$(jq -er '.run.id | select(type == "string" and test("^[A-Za-z0-9-]+$"))' "$body") || fail 'open returned no run id'
   printf '%s\n' "$run" > "$cache"

@@ -34,6 +34,11 @@ export async function resolveRuntimeActivityTaskId(
     principal.teamScope,
   )
   const byId = await lookup({ task_id: input.taskId, project_id: input.projectId })
+  if (input.boardNumber != null) {
+    if (byId) return byId.id
+    const namedBoard = await lookup({ unique_index: input.boardNumber, project_id: input.projectId })
+    return namedBoard?.id ?? null
+  }
   const byBoardNumber = await lookup({ unique_index: input.taskId, project_id: input.projectId })
   if (byId && byBoardNumber && byBoardNumber.id !== byId.id) {
     throw new AgentRunInputError(
