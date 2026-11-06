@@ -406,6 +406,10 @@ mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 1
 printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"
 jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 3' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a runner slot resumes past its own old claim" "$?" 0
+mk "$(c 10 2026-10-11T09:50:00.000Z a7 'CI Runner 4' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a CI runner slot resumes past its own fresh claim" "$?" 0
+mk "$(c 10 2026-10-11T09:50:00.000Z a8 'CI Runner 2' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a CI runner slot still steps back for another runner" "$?" 3
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 printf '[]' > "$HOLD_OPEN"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
