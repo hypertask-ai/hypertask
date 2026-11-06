@@ -258,7 +258,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
         await stream.next()
         assert.equal((await post({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202)
         const listed = await rpc(10, 'tools/list')
-        assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ['consolidated_echo'])
+        assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ['consolidated_echo', 'hypertask_report_feedback'])
         assert.equal(listed.result.tools[0].outputSchema.type, 'object')
         for (const flatSchema of [true, false]) {
           flags.flatSchema = flatSchema
