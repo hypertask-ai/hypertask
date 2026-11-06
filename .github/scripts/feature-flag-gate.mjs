@@ -1897,6 +1897,13 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
       const baseFiles = new Set(flagDefinitionPaths(mergeBase));
       for (const path of flagDefinitionPaths(headSha)) {
         const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
+        if (definition.releaseRisk?.highRisk && !definition.releaseRisk.harmEvidence) {
+          const baseDefinition = !added.has(definition.key) && baseFiles.has(path)
+            ? parseFlagFile(git(["show", `${mergeBase}:${path}`]), path).definition : null;
+          if (added.has(definition.key) || JSON.stringify(definition.releaseRisk) !== JSON.stringify(baseDefinition?.releaseRisk)) {
+            throw new Error(`new or changed highRisk metadata for ${definition.key} needs releaseRisk.harmEvidence with a matching lasting harm and scenario`);
+          }
+        }
         if (added.has(definition.key) && definition.releaseRisk?.highRisk === "money" && definition.defaultMode !== "OWNER_AND_QA") {
           throw new Error(`new money flag ${definition.key} must set defaultMode: "OWNER_AND_QA"; Valentin approves release`);
         }
