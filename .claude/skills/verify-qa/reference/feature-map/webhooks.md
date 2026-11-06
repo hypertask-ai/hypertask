@@ -12,7 +12,7 @@ Sign in as QA user 985 (`~/.config/hypertask-videos/storageState-qa.json`) and c
 
 - Signing keys stored encrypted (`enc:v1:`, HTPR-7624, flag `htpr-7624-sealed-webhook-keys`): a key that cannot be opened (wrong or replaced `BYOK_CIPHER_SECRET`, damaged value) makes the delivery fail with "Webhook signing key is unavailable" and no request is sent. The hint then shows `unavailable`.
 - Old plain-text keys must keep delivering until the backfill cron (`/api/cron/webhook-signing-key-sweep`, runs only when the flag is Everyone) seals them.
-- Rollback: once any key is sealed, reverting below HTPR-7624 makes those endpoints sign with the stored ciphertext, so receivers reject the deliveries. Switch the flag Off instead.
+- Rollback: once any key is sealed, reverting below HTPR-7624 makes those endpoints sign with the stored ciphertext, so receivers reject the deliveries. Keep the compatible key reader and roll back only the failing behavior; leave the flag mode unchanged. Follow [failed live QA](../../../../reference/flags.md#failed-live-qa), never a full revert below the sealed-key reader.
 - Team-owner checks: only the team owner can manage workspace webhooks (403 otherwise), and a board must belong to the chosen team.
 
 ## What proof to collect
