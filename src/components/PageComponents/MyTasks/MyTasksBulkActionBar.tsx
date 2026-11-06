@@ -3,8 +3,6 @@
 import { Archive, Columns3, Tag, UserRoundPlus } from "lucide-react";
 
 import { CommandMode } from "@/models/enums";
-import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_BULK_SELECTION_FLAG } from "@/lib/flags/keys";
 import { useMyTasksBulkSelection } from "@/lib/contexts/MyTasks/BulkSelectionContext";
 import { sharedProjectId } from "@/lib/myTasksBulkSelection";
 
@@ -68,7 +66,6 @@ export const BulkActionButtons = ({
 );
 
 const MyTasksBulkActionBar = () => {
-  const bulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const {
     selectedCount,
     selectedTasks,
@@ -81,7 +78,7 @@ const MyTasksBulkActionBar = () => {
 
   const sameBoard = sharedProjectId(selectedTasks) !== null;
 
-  return bulkSelectionEnabled && selectedCount > 0 ? (
+  return selectedCount > 0 ? (
     <div
       className="fixed bottom-5 left-1/2 z-menu flex -translate-x-1/2 items-center gap-2 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4"
       role="status"

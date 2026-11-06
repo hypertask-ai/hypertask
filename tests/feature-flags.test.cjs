@@ -1006,11 +1006,11 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
-  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6444-my-tasks-bulk-selection" ? { ...definition, kind: "bugfix" } : definition))};`);
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6461-my-tasks-snooze" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
     .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
-  const key = "htpr-6444-my-tasks-bulk-selection";
+  const key = "htpr-6461-my-tasks-snooze";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
@@ -1036,7 +1036,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "explicit-bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
-  const key = "htpr-6444-my-tasks-bulk-selection";
+  const key = "htpr-6461-my-tasks-snooze";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
     fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);
