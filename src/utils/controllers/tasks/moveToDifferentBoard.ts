@@ -235,11 +235,10 @@ async function moveAllSubtasksRecursively(
     });
     if (result.status !== 200) {
       if (isPlanLimitReachedError(result.json)) throw result.json;
-      return {
-        success: false,
-        error: toErrorMessage(result.json, "Failed to move subtask"),
-        statusCode: result.status ?? 500,
-      };
+      const statusCode = result.status ?? 500;
+      const error = toErrorMessage(result.json, "Failed to move subtask");
+      if (statusCode >= 500) throw new Error(error);
+      return { success: false, error, statusCode };
     }
     if (subtask.subTasks?.length > 0) {
       const nested = await moveAllSubtasksRecursively(

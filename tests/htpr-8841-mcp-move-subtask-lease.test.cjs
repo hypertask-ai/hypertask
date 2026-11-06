@@ -87,6 +87,15 @@ test("a subtask lease refusal is returned as 409 instead of crashing the move", 
   assert.deepEqual(harness.moved, [20, 21]);
 });
 
+test("a subtask server failure still rejects the move", async () => {
+  const harness = loadMove((mutation) => mutation.id === 21
+    ? { status: 500, json: { message: "Failed to update task" } }
+    : { status: 200, json: { id: mutation.id } });
+
+  await assert.rejects(harness.move(), /Failed to update task/);
+  assert.deepEqual(harness.moved, [20, 21]);
+});
+
 test("a tree move still succeeds when every subtask accepts the move", async () => {
   const harness = loadMove((mutation) => ({ status: 200, json: { id: mutation.id, projectId: 2 } }));
 
