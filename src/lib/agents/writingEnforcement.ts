@@ -1,4 +1,6 @@
 import { assertAgentWriting, type AgentWritingContext } from '@/lib/agents/writing'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules'
 import { YPER4_910_AGENT_WRITING_FLAG } from '@/lib/flags/definitions/yper4-910-agent-writing'
 
 export async function agentWritingPolicyEnabled(userId: number): Promise<boolean> {
@@ -18,5 +20,6 @@ export async function enforceAgentWriting(
   context: AgentWritingContext = {},
 ): Promise<void> {
   if (!agentId) return
-  if (await agentWritingPolicyEnabled(userId)) assertAgentWriting(agentId, fields, previous, context)
+  const houseRules = context.houseRules === true || await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)
+  if (await agentWritingPolicyEnabled(userId)) assertAgentWriting(agentId, fields, previous, { ...context, houseRules })
 }

@@ -10,6 +10,7 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { waitUntil } from "@vercel/functions";
 import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7131-index-new-tickets";
+import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from "@/lib/flags/definitions/htpr-8798-writing-house-rules";
 import { scheduleClassifyNewTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -75,7 +76,11 @@ export const getUniqueTaskCount = async (
 
 const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
-            await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true });
+            if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+                await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true, houseRules: true });
+            } else {
+                await enforceAgentWriting(userId, agentId, { title, description });
+            }
             const allowedProject = await prisma.project.findFirst({
                 where: {
                     id: projectId,

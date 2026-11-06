@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { isFeatureEnabled } from '@/lib/flags';
 import { waitUntil } from '@vercel/functions';
 import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from '@/lib/flags/definitions/htpr-7131-index-new-tickets';
+import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules';
 import { getUniqueTaskCount } from './create';
 import generateRank from '@/utils/generateRank';
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create';
@@ -77,7 +78,11 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
     } = options;
 
     const descriptionContent = normalizeBlockHtml(description);
-    await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent }, {}, { create: true });
+    if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+        await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent }, {}, { create: true, houseRules: true });
+    } else {
+        await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent });
+    }
     const taskCount = await getUniqueTaskCount(projectId);
     const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;
 

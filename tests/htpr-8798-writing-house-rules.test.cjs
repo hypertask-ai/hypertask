@@ -104,7 +104,7 @@ No: both stay. Nothing changes.</p>` },
 
 function refusal(fields, context) {
   try {
-    assertAgentWriting('agent', fields, {}, context)
+    assertAgentWriting('agent', fields, {}, { houseRules: true, ...context })
   } catch (error) {
     return error
   }
@@ -132,11 +132,11 @@ for (const example of board15) {
 test('a quote block of Valentin still passes', () => {
   assert.doesNotThrow(() => assertAgentWriting('agent', {
     text: '<p>Valentin, 2026-10-24:</p><blockquote><p>no a yes MUST count as well!!! change that that makes no sense to force a thumbs up</p></blockquote>',
-  }))
+  }, {}, { houseRules: true }))
 })
 
 test('a Question in the house shape still passes', () => {
-  assert.doesNotThrow(() => assertAgentWriting('agent', { text: shaped }))
+  assert.doesNotThrow(() => assertAgentWriting('agent', { text: shaped }, {}, { houseRules: true }))
 })
 
 test('a Question with four context points is refused', () => {
@@ -149,12 +149,12 @@ test('a Question with four context points is refused', () => {
 
 for (const [ticket, body] of Object.entries(modelTickets)) {
   test(`model ticket ${ticket} still passes`, () => {
-    assert.doesNotThrow(() => assertAgentWriting('agent', body))
+    assert.doesNotThrow(() => assertAgentWriting('agent', body, {}, { houseRules: true }))
   })
 }
 
 test('model ticket HTPR-7852 still passes on create', () => {
-  assert.doesNotThrow(() => assertAgentWriting('agent', modelTickets['HTPR-7852'], {}, { create: true }))
+  assert.doesNotThrow(() => assertAgentWriting('agent', modelTickets['HTPR-7852'], {}, { create: true, houseRules: true }))
 })
 
 function taskRoutes() {
@@ -177,7 +177,7 @@ function taskRoutes() {
     '@/lib/mcp/tasks/mappers': { mapTaskToDetail: (task) => task },
     '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, write) => write(), IdempotencyAccessError: class extends Error {}, IdempotencyInProgressError: class extends Error {} },
     '@/lib/prisma': { default: { task: { findMany: async () => [] }, user: { findUnique: async () => ({ id: 6, email: 'qa@example.com' }) }, label: { findMany: async () => [] } } },
-    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'yper4-910-agent-writing' },
+    '@/lib/flags': { isFeatureEnabled: async (key) => key === 'yper4-910-agent-writing' || key === 'htpr-8798-writing-house-rules' },
     '@/lib/media/inlineAgentImages.server': { inlineAgentImagesForUser: async (text) => text },
     '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
     '@/lib/planLimits': { isPlanLimitReachedError: () => false, planLimitResponse: () => null },

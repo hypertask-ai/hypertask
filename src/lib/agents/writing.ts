@@ -170,7 +170,9 @@ function fail(field: string, id: string, hit: Hit): never {
   throw new AgentWritingError(field, `Rule ${rule.name}: ${hit.reason}`, hit.offender, hit.fix ?? rule.fix, rule.id)
 }
 
-export type AgentWritingContext = { create?: boolean }
+export type AgentWritingContext = { create?: boolean; houseRules?: boolean }
+
+const HOUSE_RULES = new Set(["dashed-code-name", "plain-valentin-quote", "question-shape", "ticket-parts"])
 
 export function assertAgentWriting(
   agentId: string | null | undefined,
@@ -190,17 +192,18 @@ export function assertAgentWriting(
     const fresh = lines(value).filter((line) => !unchanged.has(line))
     for (const line of fresh) {
       for (const rule of lineRules) {
+        if (!context.houseRules && HOUSE_RULES.has(rule.id)) continue
         const hit = lineHit(rule.id, line)
         if (hit) fail(field, rule.id, hit)
       }
     }
-    if (fresh.some((line) => labelPattern('Question').test(line))) {
+    if (context.houseRules && fresh.some((line) => labelPattern('Question').test(line))) {
       for (const rule of fieldRules) {
         const hit = rule.id === 'question-shape' ? questionHit(value) : null
         if (hit) fail(field, rule.id, hit)
       }
     }
-    if (context.create && field === 'description') {
+    if (context.houseRules && context.create && field === 'description') {
       for (const rule of createRules) {
         const hit = rule.id === 'ticket-parts' ? partsHit(value) : null
         if (hit) fail(field, rule.id, hit)

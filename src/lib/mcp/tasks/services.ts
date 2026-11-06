@@ -1,4 +1,6 @@
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules'
 import { waitUntil } from '@vercel/functions';
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -448,7 +450,11 @@ export async function createTask(data: {
 }) {
     const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds, creationChannel, analyticsAgentId } = data;
 
-    await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true });
+    if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+        await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true, houseRules: true });
+    } else {
+        await enforceAgentWriting(userId, agentId, { title, description });
+    }
     if (!projectUniqueIdentifier) {
         throw new Error('Project identifier is required');
     }
