@@ -36,6 +36,7 @@ function declaration(file, name) {
 
 test("retired kanban reuse key is absent from the registry and controls are permanent", () => {
   assert.equal(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === "htpr-6930-my-tasks-kanban-reuse"), false, "retired key is absent from registry");
+  assert.equal(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === "htpr-6422-my-tasks-views"), false, "retired views key is absent from registry");
   for (const file of [controlsFile, tabsFile, sortFile, saveFile, modalFile, commandsFile,
     "src/app/my-tasks/MyTasksInvolvementPicker.tsx", "src/app/my-tasks/MyTasksGroupPicker.tsx",
     "src/app/my-tasks/MyTasksSortPicker.tsx",
@@ -92,7 +93,7 @@ test("Commands uses board picker commands and dispatches matching local events",
   const keys = (changes) => boardCommands({ ...options, ...changes }).map(({ key }) => key);
   assert.deepEqual(keys({}), ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup"]);
   assert.deepEqual(keys({ onMyTasks: false }), []);
-  assert.deepEqual(keys({ myTasksViewsEnabled: false, myTasksScopesEnabled: false }), ["myTasksGroup"]);
+  assert.deepEqual(keys({ myTasksViewsEnabled: false, myTasksScopesEnabled: false }), ["myTasksScope", "myTasksSort", "myTasksGroup"]);
   for (const [key, event] of Object.entries({ myTasksInvolvement: "my-tasks-involvement-picker", myTasksSort: "my-tasks-sort-picker", myTasksGroup: "my-tasks-group-picker" })) {
     assert.match(read(commandsFile), new RegExp(`${key}: "${event}"`));
     assert.match(read(controlsFile), new RegExp(`addEventListener\\("${event}"`));

@@ -281,8 +281,6 @@ test("production restore honors explicit URLs, defaults, removed views, flag loa
   assert.deepEqual(run({ viewId: 7, defaultViewId: null }).calls, [], "new default beats an older pick");
   assert.deepEqual(run({ viewId: 999, defaultViewId: 5 }).calls, [], "deleted saved view falls back to default");
   assert.deepEqual(run(memory, { iconControlsEnabled: false }).calls, []);
-  assert.deepEqual(run(memory, { viewsFeatureEnabled: false }).calls, [{ boardId: 2 }], "board memory also works without saved views");
-  assert.deepEqual(run({ viewId: 7, defaultViewId: 5 }, { viewsFeatureEnabled: false }).calls, []);
   assert.deepEqual(run({ viewId: 7, defaultViewId: 5 }, { pickedView: { current: true } }).calls, []);
   assert.deepEqual(run(memory, { pickedBoard: { current: true } }).calls, [{ viewId: 7 }], "new board pick is not overwritten after flags load");
   assert.deepEqual(run(memory, { boardTabsHidden: true }).calls, [{ viewId: 7 }], "no remembered board while the board tab row is hidden");

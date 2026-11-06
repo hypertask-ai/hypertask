@@ -5,7 +5,6 @@ import {
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { parseIanaTimeZone } from "@/lib/myTasksTimeZone";
 import { getMyTasksOverdueCounts } from "@/utils/controllers/tasks/myTasksOverdueCounts";
@@ -37,12 +36,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [viewsEnabled, scopesEnabled, snoozeEnabled] = await Promise.all([
-      isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
+    const [scopesEnabled, snoozeEnabled] = await Promise.all([
       isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
       isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId),
     ]);
-    const views = viewsEnabled ? await getMyTasksViews(userId) : [];
+    const views = await getMyTasksViews(userId);
     const counts = await getMyTasksOverdueCounts({
       userId,
       views,
