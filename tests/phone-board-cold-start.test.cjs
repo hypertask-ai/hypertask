@@ -24,7 +24,7 @@ function loadLayout(board, inbox = null, overrides = {}) {
     "@/lib/fonts/inter": { inter: font },
     "@/lib/fonts/newsreader": { newsreader: font },
     "@/lib/fonts/ibmPlexSans": { ibmPlexSans: font },
-    "@/lib/flags/keys": { HTPR_7278_MEMORY_ONLY_TRACKING_FLAG: "htpr-7278-memory-only-tracking", HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen" },
+    "@/lib/flags/keys": { HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen" },
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/themeVisibilityServer": { readThemeVisibility: async () => ({ restore: false, loaded: true }) },
     "@/lib/themePreferences": { availableThemePreference: x => x, normalizeThemePreference: x => x, resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" } } },

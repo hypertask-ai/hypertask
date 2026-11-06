@@ -76,6 +76,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6673-capture-user-signed-up-in-posthog",
   "htpr-7269-signup-identity-link",
   "htpr-7273-column-events",
+  "htpr-7278-memory-only-tracking",
   "htpr-7367-server-description-first",
   "htpr-7133-mcp-ratelimit-fast",
 ]);
