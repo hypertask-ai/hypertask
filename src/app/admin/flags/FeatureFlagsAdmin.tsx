@@ -11,7 +11,7 @@ import {
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG, HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
@@ -138,10 +138,8 @@ export default function FeatureFlagsAdmin({
 }) {
   const queryClient = useQueryClient();
   const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
-  const dropdownFiltersEnabled = useFlag(HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG);
-  const existingUrlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
-  const urlFiltersEnabled = existingUrlFiltersEnabled || dropdownFiltersEnabled;
-  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, dropdownFiltersEnabled);
+  const urlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG) || true;
+  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, true);
   const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
   const setAudienceFilter = (audience: FeatureFlagAudienceFilter) => change({ ...filters, audience });
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
@@ -311,94 +309,16 @@ export default function FeatureFlagsAdmin({
 
         {(discoveryEnabled || urlFiltersEnabled) && !flagKey && (
           <div className="sticky top-0 z-10 mt-6 bg-pageBackground py-3">
-            {dropdownFiltersEnabled ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-0 flex-1">{searchInput}</div>
-                <p role="status" className="text-content text-text-light-gray">Showing {shownCount} of {allRows.length} flags</p>
-              </div>
-            ) : searchInput}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">{searchInput}</div>
+              <p role="status" className="text-content text-text-light-gray">Showing {shownCount} of {allRows.length} flags</p>
+            </div>
           </div>
         )}
 
-        {dropdownFiltersEnabled && !flagKey && (
+        {!flagKey && (
           <div className="mt-6 flex flex-wrap gap-3" aria-label="Flag filters">
             {dropdowns.map((dropdown) => <FlagFilterPicker key={dropdown.label} {...dropdown} />)}
-          </div>
-        )}
-
-        {!dropdownFiltersEnabled && !flagKey && (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <div
-              className="flex flex-wrap gap-1 rounded-sm bg-comment-description p-1"
-              role="group"
-              aria-label="Filter by audience"
-            >
-              {AUDIENCE_FILTERS.map((filter) => (
-                <button
-                  key={filter.mode}
-                  type="button"
-                  aria-pressed={audienceFilter === filter.mode}
-                  onClick={() => setAudienceFilter(filter.mode)}
-                  className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
-                    audienceFilter === filter.mode
-                      ? "bg-shadcn-primary text-primary-foreground"
-                      : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
-                  }`}
-                >
-                  {filter.label} {counts[filter.mode]}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => change({ ...filters, sort: sortDirection === "risk" ? "desc" : sortDirection === "desc" ? "asc" : urlFiltersEnabled ? "risk" : "desc" })}
-              className="rounded-sm border border-border-light-gray-thin px-3 py-1.5 text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
-            >
-              {sortDirection === "risk" ? "Release risk first" : sortDirection === "desc" ? "Newest first" : "Oldest first"}
-            </button>
-          </div>
-        )}
-
-        {urlFiltersEnabled && !dropdownFiltersEnabled && !flagKey && (
-          <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by type">
-            {FLAG_FILTER_KINDS.map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                aria-pressed={kinds.includes(kind)}
-                onClick={() => change({
-                  ...filters,
-                  kinds: kinds.includes(kind) ? kinds.filter((selected) => selected !== kind) : [...kinds, kind],
-                })}
-                className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
-                  kinds.includes(kind)
-                    ? "bg-hover-active text-white-black"
-                    : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
-                }`}
-              >
-                {KIND_LABELS[kind]}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {urlFiltersEnabled && !dropdownFiltersEnabled && !flagKey && (
-          <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by release risk">
-            {[null, ...RELEASE_RISK_ORDER].map((value) => (
-              <button
-                key={value ?? "all"}
-                type="button"
-                aria-pressed={risk === value}
-                onClick={() => change({ ...filters, risk: value })}
-                className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
-                  risk === value
-                    ? "bg-shadcn-primary text-primary-foreground"
-                    : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
-                }`}
-              >
-                {value ? RELEASE_RISK_LABELS[value] : "All risks"}
-              </button>
-            ))}
           </div>
         )}
 
