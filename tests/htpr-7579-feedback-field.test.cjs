@@ -20,7 +20,14 @@ function setup({ plain = true } = {}) {
     label: { findFirst: async () => ({ id: 'ai-feedback' }) },
     task: { findFirst: async ({ where }) => created.find(row => row.description.includes(where.description_.is.content.contains)) ?? null },
     comment: {
-      findFirst: async ({ where }) => comments.find(row => row.taskId === where.taskId && row.text.includes(where.text.contains)) ?? null,
+      findFirst: async ({ where }) => {
+        if (where.task) {
+          const comment = comments.find(row => row.text.includes(where.text.contains))
+          const task = comment && created.find(row => row.id === comment.taskId)
+          return task ? { task: { id: task.id, userId: task.userId, ticketNumber: task.ticketNumber, uniqueIndex: task.uniqueIndex, createdAt: task.createdAt } } : null
+        }
+        return comments.find(row => row.taskId === where.taskId && row.text.includes(where.text.contains)) ?? null
+      },
       update: async ({ where, data }) => Object.assign(comments.find(row => row.id === where.id), data),
     },
     $queryRaw: async () => [{ locked: true }],
@@ -56,7 +63,7 @@ function setup({ plain = true } = {}) {
     reports.push(args)
     return report.fileAiFeedback(...args)
   } })
-  return { load, created, reports, pending, ...report, ...load('src/lib/aiFeedback/automatic.ts') }
+  return { load, created, comments, reports, pending, ...report, ...load('src/lib/aiFeedback/automatic.ts') }
 }
 
 const refusalCodes = /^(unrecognized_keys|invalid_type|invalid_literal|invalid_union|invalid_enum_value|invalid_string|invalid_date|invalid_key|too_small|too_big|not_multiple_of|unrecognized|custom)$/
@@ -98,8 +105,9 @@ test('a refused field still renders both engineer fields once the same tool fail
   const f = await observe(error)
   assert.equal(f.input.errorCode, 'invalid_type')
   assert.equal(f.input.field, 'project_id')
-  assert.match(f.description, /<p>Error code: invalid_type<\/p><p>Field: project_id<\/p>/)
-  assert.equal(f.description.includes('<h2>Details for engineers</h2>'), true)
+  assert.match(f.description, /<h2>Problem<\/h2>/)
+  assert.doesNotMatch(f.description, /Error code:|Field:|Fingerprint:|Details for engineers/)
+  assert.match(f.comments[0].text, /<p>Error code: invalid_type<\/p><p>Field: project_id<\/p>/)
 })
 
 test('automatic nested Zod issue preserves tasks.0.title without its input value or message', async () => {
@@ -281,8 +289,9 @@ test('automatic REST reporting still ignores 400 responses and reports only serv
   f.queueRestFailure(request, 500, { user: { id: 42 } })
   await Promise.all(f.pending)
   assert.equal(f.created.length, 1)
-  assert.match(f.created[0].description, /Error code: http-server-error/)
-  assert.doesNotMatch(f.created[0].description, /<p>Field:/)
+  assert.match(f.created[0].description, /<h2>Problem<\/h2>/)
+  assert.doesNotMatch(f.created[0].description, /Error code:|<p>Field:|Fingerprint:/)
+  assert.match(f.comments[0].text, /Error code: http-server-error/)
 })
 
 test('automatic input refusals open no ticket and server errors still file', async t => {
