@@ -218,7 +218,6 @@ const Commands = (props: Props) => {
   if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const myTasksViewsEnabled = true;
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
@@ -245,7 +244,7 @@ const Commands = (props: Props) => {
       return getHTCFrecencyScore(usage?.frequency, usage?.lastUsedAt, now);
     };
     const boardCommands = getBoardCommands({
-      projects, currentProject, onMyTasks, myTasksViewsEnabled,
+      projects, currentProject, onMyTasks, myTasksViewsEnabled: true,
       myTasksScopesEnabled, columnArchiveEnabled,
       context: contextOptions?.context,
     });
@@ -278,7 +277,7 @@ const Commands = (props: Props) => {
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
               boardLayout === "table" ||
-              (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled)) &&
+              (onMyTasks && myTasksTableColumnsEnabled)) &&
             (![
               CommandMode.ToggleCalendarWeekends,
               CommandMode.CalendarWeekStartsMonday,
@@ -432,7 +431,6 @@ const Commands = (props: Props) => {
     onAgentChat,
     onCalendar,
     onMyTasks,
-    myTasksViewsEnabled,
     myTasksScopesEnabled,
     myTasksTableColumnsEnabled,
     projects,

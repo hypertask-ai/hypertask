@@ -92,6 +92,9 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
   boards.push(...[91001, 91002].map((id) => ({
     id, title: `Browser smoke board ${id}`, sections: [], labels: [], members: [],
   })))
+  const tabBoards = groupBy === 'board'
+    ? [...boards].sort((a, b) => a.title.localeCompare(b.title))
+    : boards
   const sections = boards.map((board) => ({
     id: board.id, projectId: board.id, section_title: board.title, items: [],
   }))
@@ -127,10 +130,10 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
     await route.continue().catch(() => {})
   })
   const assertSplit = async (index: number) => {
-    const title = index === 0 ? 'All' : boards[index - 1].title
+    const title = index === 0 ? 'All' : tabBoards[index - 1].title
     await expect(selected, 'Tab must keep the chosen split').toHaveText(title)
     await expect(page.locator('body'), 'Tab must not move focus into an unrelated control').toBeFocused()
-    await expect(page).toHaveURL((url) => url.searchParams.get('board') === (index === 0 ? null : String(boards[index - 1].id)))
+    await expect(page).toHaveURL((url) => url.searchParams.get('board') === (index === 0 ? null : String(tabBoards[index - 1].id)))
     expect(await page.evaluate(async () => {
       const samples: string[] = []
       const until = performance.now() + 250
@@ -154,10 +157,10 @@ test(`My Tasks Tab keeps the chosen split without server navigation (${groupBy} 
         for (let press = 0; press < count; press++) {
           await page.keyboard.press(direction === 1 ? 'Tab' : 'Shift+Tab')
           await page.waitForTimeout(80)
-          index = (index + direction + boards.length + 1) % (boards.length + 1)
-          const title = index === 0 ? 'All' : boards[index - 1].title
+          index = (index + direction + tabBoards.length + 1) % (tabBoards.length + 1)
+          const title = index === 0 ? 'All' : tabBoards[index - 1].title
           expect(await selected.textContent(), `rapid press ${press + 1} must select ${title}`).toBe(title)
-          expect(new URL(page.url()).searchParams.get('board')).toBe(index === 0 ? null : String(boards[index - 1].id))
+          expect(new URL(page.url()).searchParams.get('board')).toBe(index === 0 ? null : String(tabBoards[index - 1].id))
         }
         await assertSplit(index)
       }
