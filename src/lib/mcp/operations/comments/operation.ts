@@ -439,7 +439,9 @@ export async function GET(request: NextRequest) {
     }
 
     const total = await prisma.comment.count({
-      where: commentWhere
+      where: ctx.teamScope != null
+        ? { ...commentWhere, task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } }
+        : commentWhere,
     })
 
     const sortField = listQuery?.sortBy === 'id' ? 'id' : 'createdAt'
@@ -448,7 +450,9 @@ export async function GET(request: NextRequest) {
       : listQuery?.sortOrder ?? (sortOrder as 'asc' | 'desc')
     const pageLimit = listQuery?.limit ?? limit
     const comments = await prisma.comment.findMany({
-      where: commentWhere,
+      where: ctx.teamScope != null
+        ? { ...commentWhere, task: { project: getProjectWhere(user.id, ctx.agentId, ctx.teamScope) } }
+        : commentWhere,
       include: commentInclude(user.id, task.projectId),
       orderBy: [
         { [sortField]: effectiveSortOrder },
