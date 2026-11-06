@@ -365,8 +365,11 @@ test("the workflow mirrors no candidate code into the run", async () => {
   }
   assert.deepEqual(workflow.on.issue_comment.types, ["created", "edited"]);
   assert.equal(workflow.on.workflow_dispatch.inputs.pr.required, true);
-  assert.equal(workflow.concurrency["cancel-in-progress"], false);
-  assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
+  assert.equal(workflow.jobs.mirror.if, "github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request && (github.event.comment.user.login == 'hypertask-ai-review' || github.event.comment.user.login == 'hypertask-ai-review[bot]'))");
+  assert.deepEqual(workflow.jobs.mirror.concurrency, {
+    group: "ai-review-mirror-${{ github.event.issue.number || inputs.pr }}",
+    queue: "max",
+  });
   assert.ok(script.env.REVIEW_COMMENT_AUTHOR);
 });
 

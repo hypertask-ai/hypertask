@@ -29,15 +29,12 @@ permissions:
   contents: read
   pull-requests: read
 
-# The author is part of the group so an ordinary comment on the same pull
-# request cannot cancel the delivery the reviewer just woke, and cancelling is
-# off so a queued round re-reads the newest verdict instead of racing it.
-concurrency:
-  group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}-${{ github.event.comment.user.login || 'dispatch' }}
-  cancel-in-progress: false
-
 jobs:
   mirror:
+    if: github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request && (github.event.comment.user.login == 'hypertask-ai-review' || github.event.comment.user.login == 'hypertask-ai-review[bot]'))
+    concurrency:
+      group: ai-review-mirror-${{ github.event.issue.number || inputs.pr }}
+      queue: max
     name: Copy the verdict to the ticket
     runs-on: ubuntu-latest
     timeout-minutes: 10
