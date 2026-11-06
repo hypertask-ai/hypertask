@@ -11,7 +11,6 @@ const stub = (file, exports) => {
 }
 let plainMode = 'OFF', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
 let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false, lockBlock, transactionError, onLockAttempt
-const enabledFor = () => true
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
 stub('src/lib/prisma.ts', { default: {
   $transaction: async (callback, options) => {
@@ -36,10 +35,12 @@ stub('src/lib/prisma.ts', { default: {
   agent: { findUnique: async () => ({ permissions: { role: 'write' } }) },
 } })
 stub('src/lib/flags.ts', {
-  isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : enabledFor(id),
+  isFeatureEnabled: async (key, id) => key === 'htpr-7536-plain-ai-feedback' ? plainMode === 'EVERYONE' : key === 'htpr-6804-mcp-tools' ? catalogEnabled : false,
   featureFlagCandidateUserIds: async (key) => {
-    const selected = key === 'htpr-7536-plain-ai-feedback' ? plainMode : 'EVERYONE'
-    return selected === 'EVERYONE' ? null : selected === 'OFF' ? [] : [6, 985]
+    if (key === 'htpr-7536-plain-ai-feedback') {
+      return plainMode === 'EVERYONE' ? null : plainMode === 'OFF' ? [] : [6, 985]
+    }
+    return [6, 985]
   },
 })
 stub('src/lib/redis.ts', { getRedis: async () => ({
