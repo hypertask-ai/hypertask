@@ -215,17 +215,3 @@ for (const mobile of [false, true]) {
     assert.match(fixture.container.textContent, /Cached ticket body/);
   });
 }
-
-test("with secondary layout flags off on the server and in the browser, the server HTML keeps no rows and hydration fills them as before", async (t) => {
-  const fixture = setup(t, true, false, { descriptionStart: "live" });
-  fixture.container.innerHTML = renderToString(fixture.render());
-  assert.equal(fixture.container.querySelectorAll("[data-index]").length, 0);
-  fixture.populateRows();
-  fixture.installBrowser();
-  const errors = [];
-  await React.act(async () => {
-    fixture.setRoot(hydrateRoot(fixture.container, fixture.render(), { onRecoverableError: (error) => errors.push(error.message) }));
-  });
-  assert.deepEqual(errors, []);
-  assert.equal(fixture.container.querySelectorAll("[data-index]").length, 2);
-});

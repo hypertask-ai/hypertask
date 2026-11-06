@@ -560,7 +560,6 @@ test("UI create updates the automatic suggestion until edited and submits the ov
   }
 });
 
-const descriptionFirstKey = "htpr-7367-server-description-first";
 const foldCommentsKey = "htpr-7611-comments-fold-from-first-paint";
 function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueIndex: 7 }, projectId = 15, userId = 6 } = {}) {
   const calls = [];
@@ -574,7 +573,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: descriptionFirstKey, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG: foldCommentsKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
+    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG: foldCommentsKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
     "@/utils/helperFunctions/TaskDetail": {}, "@/utils/controllers/users/fetch_preferences": { fetchUserPreferenceController: async () => ({}) },
@@ -630,7 +629,7 @@ test("production: prefixed ticket URLs pass the proxy before page flag and acces
   for (const enabled of [false, true]) {
     const numeric = detailPage({ enabled, projectId: 7049, userId: 985 });
     assert.equal((await numeric.page("33")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, [["flag", descriptionFirstKey, 985], ["flag", foldCommentsKey, 985]], "numeric ids never read the prefix flag; only the description-first and comment-fold reads run beside the task fetch");
+    assert.deepEqual(numeric.calls, [["flag", foldCommentsKey, 985]], "numeric ids never read the prefix flag; only the comment-fold read runs beside the task fetch");
   }
 });
 
@@ -648,7 +647,7 @@ test("review: detail URLs check the server flag before resolving and redirecting
   for (const enabled of [false, true]) {
     const numeric = detailPage({ enabled });
     assert.equal((await numeric.page("123")).type, "Unauthorized");
-    assert.deepEqual(numeric.calls, [["flag", descriptionFirstKey, 6], ["flag", foldCommentsKey, 6]], "numeric ids never read the prefix flag; only the description-first and comment-fold reads run beside the task fetch");
+    assert.deepEqual(numeric.calls, [["flag", foldCommentsKey, 6]], "numeric ids never read the prefix flag; only the comment-fold read runs beside the task fetch");
   }
 });
 

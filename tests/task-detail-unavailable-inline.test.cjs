@@ -34,7 +34,6 @@ stubLocal("src/lib/auth/serverUser.ts", {
 stubLocal("src/lib/prisma.ts", { default: {} });
 stubLocal("src/lib/flags.ts", {
   HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix",
-  HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "htpr-7367-server-description-first",
   isFeatureEnabled: async () => false,
 });
 stubLocal("src/lib/contexts/TaskDetail/TaskProvider.tsx", {

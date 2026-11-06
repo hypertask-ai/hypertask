@@ -10,7 +10,7 @@ import {
 import { Metadata } from "next";
 import { getServerCookieUser, requireServerCookieUser } from "@/lib/auth/serverUser";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
-import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
 import { redirect } from "next/navigation";
@@ -91,11 +91,10 @@ export default async function Page(
   const slug = detailSlug;
 
   const commentsUpdatedAt = currentDate.getTime();
-  const [taskResult, commentsJson, userPreferences, descriptionFirst, foldCommentsFromFirstPaint] = await Promise.all([
+  const [taskResult, commentsJson, userPreferences, foldCommentsFromFirstPaint] = await Promise.all([
     fetchTaskDetail(params.slug[0], params.slug[1], userObj.id),
     fetchCommentsForSlug(slug, userObj.id),
     fetchUserPreferenceController(userObj.id),
-    isFeatureEnabled(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, userObj.id),
     isFeatureEnabled(HTPR_7611_COMMENTS_FOLD_FROM_FIRST_PAINT_FLAG, userObj.id),
   ]);
 
@@ -153,7 +152,7 @@ export default async function Page(
         parsedTask={JSON.stringify(task)}
         serverTaskSeed={{ userId: userObj.id, taskId: task.id, projectId: slug.projectId, uniqueIndex: slug.uniqueIndex, updatedAt: currentDate.getTime() }}
         scrollSetting={scrollSetting}
-        descriptionStart={descriptionFirst ? "server" : "live"}
+        descriptionStart="server"
       >
         <Suspense fallback={<>Loading...</>}>
           <FollowersProvider>
