@@ -11,7 +11,6 @@ import { HTPR_8144_PHONE_MY_TASKS_FLAG } from "@/lib/flags/definitions/htpr-8144
 import { HTPR_6940_DROP_BOARD_TABS_FLAG } from "@/lib/flags/definitions/htpr-6940-drop-board-tabs";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
-  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -175,7 +174,6 @@ const MyTasks = ({
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
-  const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
   const tableColumnsFeatureEnabled =
     myTasksTableColumnsEnabled && viewsFeatureEnabled;
@@ -463,12 +461,11 @@ const MyTasks = ({
       )
       .flatMap((section) => section.items as MyTasksTask[]);
     return applyMyTasksView(flat, viewConfig, now, {
-      applyFilterSettings: filterParityEnabled,
+      applyFilterSettings: true,
       runtimeContext,
     });
   }, [
     dateFilterVersion,
-    filterParityEnabled,
     groupBy,
     priorityFilteredSections,
     runtimeContext,
@@ -508,7 +505,7 @@ const MyTasks = ({
         viewConfig,
         now,
         {
-          applyFilterSettings: filterParityEnabled,
+          applyFilterSettings: true,
           runtimeContext,
         },
       ),
@@ -519,7 +516,6 @@ const MyTasks = ({
     allTasksForBoardTabs,
     availableBoards,
     dateFilterVersion,
-    filterParityEnabled,
     groupBy,
     runtimeContext,
     sections,
@@ -946,7 +942,7 @@ const boardTabCounts = useMemo(() => {
     }
     const now = new Date();
     const options = {
-      applyFilterSettings: filterParityEnabled,
+      applyFilterSettings: true,
       runtimeContext,
     };
     const activeCount = overdueCountForMyTasksView(
@@ -963,7 +959,6 @@ const boardTabCounts = useMemo(() => {
   }, [
     activeViewId,
     dateFilterVersion,
-    filterParityEnabled,
     overdueBadgesEnabled,
     remoteOverdueCounts,
     runtimeContext,
@@ -1299,7 +1294,7 @@ const boardTabCounts = useMemo(() => {
         content
       )}
       <BackButton left={appShellRailOn ? 56 : undefined} />
-      {filterParityEnabled && kanbanFiltersOpen && (
+      {kanbanFiltersOpen && (
         <MyTasksKanbanFilterModal
           boards={boards}
           config={viewConfig}

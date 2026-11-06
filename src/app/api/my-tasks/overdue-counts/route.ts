@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
@@ -38,20 +37,18 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [viewsEnabled, scopesEnabled, snoozeEnabled, filterParityEnabled] =
-      await Promise.all([
-        isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
-        isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
-        isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId),
-        isFeatureEnabled(MY_TASKS_FILTER_PARITY_FLAG, userId),
-      ]);
+    const [viewsEnabled, scopesEnabled, snoozeEnabled] = await Promise.all([
+      isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
+      isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
+      isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId),
+    ]);
     const views = viewsEnabled ? await getMyTasksViews(userId) : [];
     const counts = await getMyTasksOverdueCounts({
       userId,
       views,
       scopesEnabled,
       snoozeEnabled,
-      applyFilterSettings: filterParityEnabled,
+      applyFilterSettings: true,
       timeZone,
     });
     return NextResponse.json(counts, {

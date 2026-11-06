@@ -33,7 +33,6 @@ test('Ctrl+K board name search answers a lowercase query and a capitalized query
         currentProject: null,
         onMyTasks: false,
         myTasksViewsEnabled: false,
-        myTasksFilterParityEnabled: false,
         myTasksScopesEnabled: false,
         columnArchiveEnabled: false,
       }),
