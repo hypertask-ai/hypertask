@@ -21,6 +21,7 @@ import { requireRole } from '@/lib/mcp/agents/scopes';
 import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
+import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules';
 import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
 import prisma from '@/lib/prisma';
 
@@ -110,7 +111,16 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        await enforceAgentWriting(user.id, ctx.agentId, { title, description });
+        try {
+            if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, user.id)) {
+                await enforceAgentWriting(user.id, ctx.agentId, { title, description }, {}, { create: true, houseRules: true });
+            } else {
+                await enforceAgentWriting(user.id, ctx.agentId, { title, description });
+            }
+        } catch (error) {
+            if (error instanceof AgentWritingError) throw error;
+            await enforceAgentWriting(user.id, ctx.agentId, { title, description }, {}, { create: true, houseRules: true });
+        }
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
         if (projectCheck.error) {
             return NextResponse.json(

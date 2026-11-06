@@ -199,7 +199,7 @@ test('real MCP create outgoing request is admitted by proxy decision', async t =
   const f = fixture()
   const { createTask } = load('src/lib/mcp/tasks/services.ts', f.mocks)
   const outgoing = await throughGuard(t, f, async () => {
-    const task = await createTask({ projectId: 15, title: 'Created', description: '', sectionId: 10, sectionTitle: 'Todo', userId: 7, priorityIndex: 0, estimateIndex: 0, projectUniqueIdentifier: 'HTPR', teamId: 'team', agentId: f.ctx.agentId, creationChannel: 'mcp' })
+    const task = await createTask({ projectId: 15, title: 'Created', description: 'Problem: Numbers collide.\nFix: Lock the counter.\nDone when: Each create gets its own number.\nRisk: A retry can duplicate. Delete the extra ticket.\nDecision: Keep the lock.', sectionId: 10, sectionTitle: 'Todo', userId: 7, priorityIndex: 0, estimateIndex: 0, projectUniqueIdentifier: 'HTPR', teamId: 'team', agentId: f.ctx.agentId, creationChannel: 'mcp' })
     assert.equal(task.id, 101)
   })
   assert.deepEqual(outgoing, ['POST /api/tasks/createGlobally'])

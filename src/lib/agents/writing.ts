@@ -14,6 +14,49 @@ const TECHNICAL_KINDS: Array<[RegExp, string]> = [
   [/(?:^|\s)--[a-z][\w-]+/, 'a command flag'],
 ]
 const TECHNICAL_DETAIL = new RegExp(TECHNICAL_KINDS.map(([pattern]) => pattern.source).join('|'))
+const DASHED_CODE_NAME = /\b(?:htpr|yper\d+|hyci|htfe|hefe|inne)-\d+(?:-[a-z0-9]+)+\b/i
+const PLAIN_VALENTIN_QUOTE = /Valentin\b(?:\s*,|\s+\([^)\n]{0,48}\))?(?:\s+\d{4}-\d{2}-\d{2})?\s*:\s*["“]|Valentin\s+(?:said|says|wrote|asked|replied)\b[^.\n]{0,24}["“]/i
+const TICKET_PARTS = ['Problem', 'Fix', 'Done when', 'Risk', 'Decision'] as const
+const QUESTION_PARTS = ['What this is', 'Question', 'My recommendation', 'Why', 'Yes', 'No'] as const
+
+const PLAIN_ADVICE = 'Use short plain sentences for people; put technical details and status in the agent log.'
+const TECHNICAL_ADVICE = 'Keep people text plain: say what happened and put the raw value in the agent log.'
+const BUILD_LINK_ADVICE = 'Keep people text plain: link the build or commit instead of pasting its id; put the raw value in the agent log.'
+const DASHED_CODE_FIX = 'Say what it does in plain words. Put the code name in the agent log.'
+const QUOTE_FIX = 'Put his words in a quote block, not in quote marks.'
+const QUESTION_FIX = 'Start with What this is. Then at most three plain points. Then Question, My recommendation, Why, Yes and No, each on its own line.'
+const PARTS_FIX = 'Add the missing part in plain words. Risk says what can go wrong and how to undo.'
+
+export type AgentWritingRule = {
+  id: string
+  name: string
+  fix: string
+  scope: 'line' | 'field' | 'create-description'
+}
+
+export const AGENT_WRITING_RULES: AgentWritingRule[] = [
+  { id: 'robot-status', name: 'Robot status', fix: PLAIN_ADVICE, scope: 'line' },
+  { id: 'technical-detail', name: 'Technical detail', fix: TECHNICAL_ADVICE, scope: 'line' },
+  { id: 'dashed-code-name', name: 'Dashed code name', fix: DASHED_CODE_FIX, scope: 'line' },
+  { id: 'plain-valentin-quote', name: 'Plain quote', fix: QUOTE_FIX, scope: 'line' },
+  { id: 'sentence-length', name: 'Sentence length', fix: PLAIN_ADVICE, scope: 'line' },
+  { id: 'question-shape', name: 'Question shape', fix: QUESTION_FIX, scope: 'field' },
+  { id: 'ticket-parts', name: 'Ticket parts', fix: PARTS_FIX, scope: 'create-description' },
+]
+
+type Hit = { reason: string; offender?: string; fix?: string; legacy?: boolean }
+
+const RULES = new Map(AGENT_WRITING_RULES.map((rule) => [rule.id, rule]))
+
+export class AgentWritingError extends Error {
+  readonly status = 400
+  readonly code = 'invalid_field'
+
+  constructor(readonly field: string, reason: string, offender?: string, advice = PLAIN_ADVICE, readonly rule?: string) {
+    const quoted = excerpt(offender)
+    super(`${field}: ${reason}${quoted ? ` ("${quoted}")` : ''}. ${advice}`)
+  }
+}
 
 function excerpt(text: string | undefined): string {
   if (!text) return ''
@@ -34,46 +77,136 @@ function refusedValue(text: string, index: number, length: number): string {
   return text.slice(start, end).replace(/^[("'\u201c]+/, '').replace(/[.,;:!?)"'\u201d]+$/, '')
 }
 
-const PLAIN_ADVICE = 'Use short plain sentences for people; put technical details and status in the agent log.'
-const TECHNICAL_ADVICE = 'Keep people text plain: say what happened and put the raw value in the agent log.'
-const BUILD_LINK_ADVICE = 'Keep people text plain: link the build or commit instead of pasting its id; put the raw value in the agent log.'
-
-export class AgentWritingError extends Error {
-  readonly status = 400
-  readonly code = 'invalid_field'
-
-  constructor(readonly field: string, reason: string, offender?: string, advice = PLAIN_ADVICE) {
-    const quoted = excerpt(offender)
-    super(`${field}: ${reason}${quoted ? ` ("${quoted}")` : ''}. ${advice}`)
-  }
-}
-
 function lines(text: string): string[] {
   return parse(text.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n'))
     .structuredText.split('\n').map((line) => line.trim()).filter((line) => line && !FEEDBACK_TALLY_LINE.test(line))
 }
 
-export function assertAgentWriting(agentId: string | null | undefined, fields: { title?: unknown; description?: unknown; text?: unknown }, previous: typeof fields = {}): void {
+function ruleById(id: string): AgentWritingRule {
+  const rule = RULES.get(id)
+  if (!rule) throw new Error(`Missing writing rule ${id}`)
+  return rule
+}
+
+function lineHit(id: string, line: string): Hit | null {
+  const plain = line.replace(/https?:\/\/\S+/g, 'LINK')
+  if (id === 'robot-status') {
+    const status = plain.match(ROBOT_STATUS)
+    return status ? { legacy: true, reason: 'Robot status belongs in the agent log', offender: status[0] } : null
+  }
+  if (id === 'technical-detail') {
+    const detail = plain.match(TECHNICAL_DETAIL)
+    if (detail?.index === undefined) return null
+    const kind = technicalKind(detail[0])
+    return {
+      legacy: true,
+      reason: `Technical details belong in the agent log: ${kind}`,
+      offender: refusedValue(plain, detail.index, detail[0].length),
+      fix: kind === BUILD_ID ? BUILD_LINK_ADVICE : TECHNICAL_ADVICE,
+    }
+  }
+  if (id === 'dashed-code-name') {
+    const name = plain.match(DASHED_CODE_NAME)
+    return name ? { reason: 'a code name belongs in the agent log', offender: name[0] } : null
+  }
+  if (id === 'plain-valentin-quote') {
+    const quote = plain.match(PLAIN_VALENTIN_QUOTE)
+    return quote ? { reason: 'Valentin is quoted with quote marks', offender: plain } : null
+  }
+  if (id === 'sentence-length') {
+    for (const sentence of plain.replace(/"[^"]+"|“[^”]+”/g, 'LINK').split(/(?<=[.!?:;])\s+/)) {
+      const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu)?.filter((word) => word !== 'LINK') ?? []
+      if (words.length > 12) return { legacy: true, reason: 'Keep each sentence within twelve words', offender: sentence }
+    }
+  }
+  return null
+}
+
+function labelPattern(label: string): RegExp {
+  return new RegExp(`(?:^|\\s)${label.replace(/\s+/g, '\\s+')}\\s*:`, 'i')
+}
+
+function questionHit(html: string): Hit | null {
+  const textLines = lines(html)
+  if (!textLines.some((line) => labelPattern('Question').test(line))) return null
+  const blocks = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '\n').split(/<br\s*\/?>|<\/(?:p|li|h[1-6]|div)>/i)
+  const owners = new Map<string, number>()
+  blocks.forEach((block, index) => {
+    const text = block.replace(/<[^>]+>/g, ' ')
+    for (const label of QUESTION_PARTS) {
+      if (labelPattern(label).test(text) && !owners.has(label)) owners.set(label, index)
+    }
+  })
+  const placed = QUESTION_PARTS.filter((label) => owners.has(label))
+  if (new Set(placed.map((label) => owners.get(label))).size < placed.length) {
+    return { reason: 'Question, My recommendation, Why, Yes and No must each be on their own line', offender: 'Question:' }
+  }
+  for (const label of QUESTION_PARTS) {
+    if (!textLines.some((line) => labelPattern(label).test(line))) return { reason: `${label} is missing`, offender: label }
+  }
+  const questionLine = textLines.find((line) => labelPattern('Question').test(line)) ?? ''
+  const asked = questionLine.replace(/^[\s\S]*\bQuestion\s*:\s*/i, '').trim()
+  if (!asked.endsWith('?')) return { reason: 'the question must end with a question mark', offender: questionLine }
+  const beforeQuestion = html.split(/Question\s*:/i)[0] ?? ''
+  const bullets = beforeQuestion.match(/<li\b/gi)?.length ?? 0
+  if (bullets > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
+  return null
+}
+
+function hasTicketPart(html: string, name: string): boolean {
+  const label = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+')
+  const source = parse(html).structuredText
+  return new RegExp(`(?:^|\\n)\\s*(?:\\*\\*)?${label}\\s*[:.]?(?:\\*\\*)?(?=\\s|$)`, 'i').test(source)
+}
+
+function partsHit(html: string): Hit | null {
+  const missing = TICKET_PARTS.find((part) => !hasTicketPart(html, part))
+  return missing ? { reason: `${missing} is missing`, offender: missing } : null
+}
+
+function fail(field: string, id: string, hit: Hit): never {
+  const rule = ruleById(id)
+  if (hit.legacy) throw new AgentWritingError(field, hit.reason, hit.offender, hit.fix ?? rule.fix, rule.id)
+  throw new AgentWritingError(field, `Rule ${rule.name}: ${hit.reason}`, hit.offender, hit.fix ?? rule.fix, rule.id)
+}
+
+export type AgentWritingContext = { create?: boolean; houseRules?: boolean }
+
+const HOUSE_RULES = new Set(["dashed-code-name", "plain-valentin-quote", "question-shape", "ticket-parts"])
+
+export function assertAgentWriting(
+  agentId: string | null | undefined,
+  fields: { title?: unknown; description?: unknown; text?: unknown },
+  previous: typeof fields = {},
+  context: AgentWritingContext = {},
+): void {
   if (!agentId) return
+  const lineRules = AGENT_WRITING_RULES.filter((rule) => rule.scope === 'line')
+  const fieldRules = AGENT_WRITING_RULES.filter((rule) => rule.scope === 'field')
+  const createRules = AGENT_WRITING_RULES.filter((rule) => rule.scope === 'create-description')
   for (const field of ['title', 'description', 'text'] as const) {
     const value = fields[field]
     if (typeof value !== 'string') continue
     const old = previous[field]
     const unchanged = new Set(typeof old === 'string' ? lines(old) : [])
-    for (const line of lines(value)) {
-      if (unchanged.has(line)) continue
-      const plain = line.replace(/https?:\/\/\S+/g, 'LINK')
-      if (ROBOT_STATUS.test(plain)) {
-        throw new AgentWritingError(field, 'Robot status belongs in the agent log', plain.match(ROBOT_STATUS)?.[0])
+    const fresh = lines(value).filter((line) => !unchanged.has(line))
+    for (const line of fresh) {
+      for (const rule of lineRules) {
+        if (!context.houseRules && HOUSE_RULES.has(rule.id)) continue
+        const hit = lineHit(rule.id, line)
+        if (hit) fail(field, rule.id, hit)
       }
-      const detail = plain.match(TECHNICAL_DETAIL)
-      if (detail?.index !== undefined) {
-        const kind = technicalKind(detail[0])
-        throw new AgentWritingError(field, `Technical details belong in the agent log: ${kind}`, refusedValue(plain, detail.index, detail[0].length), kind === BUILD_ID ? BUILD_LINK_ADVICE : TECHNICAL_ADVICE)
+    }
+    if (context.houseRules && fresh.some((line) => labelPattern('Question').test(line))) {
+      for (const rule of fieldRules) {
+        const hit = rule.id === 'question-shape' ? questionHit(value) : null
+        if (hit) fail(field, rule.id, hit)
       }
-      for (const sentence of plain.replace(/"[^"]+"|“[^”]+”/g, 'LINK').split(/(?<=[.!?:;])\s+/)) {
-        const words = sentence.match(/[\p{L}\p{N}][\p{L}\p{N}_'’/-]*/gu)?.filter((word) => word !== 'LINK') ?? []
-        if (words.length > 12) throw new AgentWritingError(field, 'Keep each sentence within twelve words', sentence)
+    }
+    if (context.houseRules && context.create && field === 'description') {
+      for (const rule of createRules) {
+        const hit = rule.id === 'ticket-parts' ? partsHit(value) : null
+        if (hit) fail(field, rule.id, hit)
       }
     }
   }
