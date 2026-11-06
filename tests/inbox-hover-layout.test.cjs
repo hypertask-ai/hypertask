@@ -92,8 +92,8 @@ if (require.main === module) {
       const rendered = new JSDOM(createFixture(undefined, enabled).render()).window.document.querySelector("#inbox-6883");
       assert.ok(rendered.classList.contains("px-[20px]"));
       assert.ok(rendered.classList.contains("md:px-0"));
-      assert.ok(rendered.classList.contains(enabled ? "rounded" : "rounded-md"));
-      assert.ok(!rendered.classList.contains(enabled ? "rounded-md" : "rounded"));
+      assert.ok(rendered.classList.contains(enabled ? "rounded-[4px]" : "rounded-md"));
+      assert.ok(!rendered.classList.contains(enabled ? "rounded-md" : "rounded-[4px]"));
     });
   }
   test("hover and keyboard selection keep the same three outer flex children", () => {
