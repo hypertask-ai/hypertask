@@ -87,8 +87,11 @@ export async function normalizeProviderAuthError(error: unknown, userId: number)
         .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7754_DEEPSEEK_AUTH_REFUSAL_FLAG, userId))
         .catch(() => false);
       if (!enabled) return error;
-      const refusal = new Error("DeepSeek rejected your AI key. Update it in Settings > AI keys, then try again.");
+      const message = ownKeyRejectedMessage("byok:deepseek");
+      if (!message) return error;
+      const refusal = new Error(message);
       refusal.name = "AiProviderAuthenticationError";
+      Object.assign(refusal, { statusCode: 401 });
       return refusal;
     }
     current = record.cause ?? record.lastError;
@@ -96,11 +99,64 @@ export async function normalizeProviderAuthError(error: unknown, userId: number)
   return error;
 }
 
-export function userFacingErrorMessage(error: unknown, stage: string) {
+const OWN_KEY_PROVIDER_NAMES: Record<string, string> = {
+  "byok:openai": "OpenAI",
+  "byok:claude": "Claude",
+  "byok:google": "Google",
+  "byok:deepseek": "DeepSeek",
+  "byok:moonshot": "Moonshot",
+  "byok:zhipu": "Z.ai",
+  "byok:alibaba": "Alibaba",
+  "byok:openrouter": "OpenRouter",
+  "byok:custom": "custom",
+  "byok:baseten": "Baseten",
+};
+
+export function ownKeyRejectedMessage(provider: string | null | undefined) {
+  const name = provider ? OWN_KEY_PROVIDER_NAMES[provider] : undefined;
+  if (!name) return null;
+  return `Your ${name} key was rejected. Update it in Settings, AI, Bring your own key.`;
+}
+
+function providerAuthStatus(error: unknown): 401 | 403 | null {
+  const pending: unknown[] = [error];
+  const visited = new Set<unknown>();
+  while (pending.length > 0 && visited.size < 12) {
+    const current = pending.shift();
+    if (!current || typeof current !== "object" || visited.has(current)) continue;
+    visited.add(current);
+    const record = current as {
+      statusCode?: unknown;
+      status?: unknown;
+      response?: { status?: unknown };
+      cause?: unknown;
+      lastError?: unknown;
+      errors?: unknown;
+    };
+    for (const value of [record.statusCode, record.status, record.response?.status]) {
+      if (value === 401 || value === 403) return value;
+    }
+    if (record.cause) pending.push(record.cause);
+    if (record.lastError) pending.push(record.lastError);
+    if (Array.isArray(record.errors)) pending.push(...record.errors);
+  }
+  return null;
+}
+
+export function isOwnKeyAuthFailure(provider: string | null | undefined, error: unknown) {
+  return providerAuthStatus(error) !== null && ownKeyRejectedMessage(provider) !== null;
+}
+
+export function userFacingErrorMessage(error: unknown, stage: string, provider?: string | null) {
   const allowanceError = includedAllowanceError(error);
   if (allowanceError) {
     console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);
     return allowanceError.message;
+  }
+  const ownKeyMessage = isOwnKeyAuthFailure(provider, error) ? ownKeyRejectedMessage(provider) : null;
+  if (ownKeyMessage) {
+    console.warn(`[ai/chat/stream] ${stage} refused: own provider key rejected`);
+    return ownKeyMessage;
   }
   if (error instanceof Error && error.name === "AiProviderAuthenticationError") {
     console.warn(`[ai/chat/stream] ${stage} refused: DeepSeek AI key rejected`);
@@ -168,6 +224,14 @@ export async function reportHandledChatError(
   extra?: Record<string, string | number | boolean | null>,
 ) {
   if (includedAllowanceError(error)) return;
+  if (
+    isOwnKeyAuthFailure(
+      typeof extra?.provider === "string" ? extra.provider : null,
+      error,
+    )
+  ) {
+    return;
+  }
   if (
     error instanceof Error &&
     (error.name === "AiPlanAccessError" ||

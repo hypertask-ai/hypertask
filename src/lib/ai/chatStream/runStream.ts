@@ -240,7 +240,7 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     if (!state.errorSent) {
       state.errorSent = true;
       state.send("error", {
-        content: userFacingErrorMessage(error, "stream-handler"),
+        content: userFacingErrorMessage(error, "stream-handler", state.selected.usageProvider),
         ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
       });
       state.finish("error");

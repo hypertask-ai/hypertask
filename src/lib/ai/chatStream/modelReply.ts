@@ -62,7 +62,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
       return;
     }
     state.send("error", {
-      content: userFacingErrorMessage(error, "model-stream"),
+      content: userFacingErrorMessage(error, "model-stream", state.selected.usageProvider),
       toolsExecuted: toolExecutions.length > 0,
       ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
     });

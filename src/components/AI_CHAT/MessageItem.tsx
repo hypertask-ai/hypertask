@@ -122,8 +122,12 @@ const ASSISTANT_ERROR_MESSAGES = [
   "Sorry, I'm having trouble responding right now.",
 ] as const;
 
+const isOwnKeyRejectedContent = (trimmed: string) =>
+  /^Your (OpenAI|Claude|Google|DeepSeek|Moonshot|Z\.ai|Alibaba|OpenRouter|custom|Baseten) key was rejected\. Update it in Settings, AI, Bring your own key\.$/.test(trimmed);
+
 const isAssistantErrorContent = (trimmed: string) =>
-  ASSISTANT_ERROR_MESSAGES.includes(trimmed as (typeof ASSISTANT_ERROR_MESSAGES)[number]);
+  ASSISTANT_ERROR_MESSAGES.includes(trimmed as (typeof ASSISTANT_ERROR_MESSAGES)[number]) ||
+  isOwnKeyRejectedContent(trimmed);
 
 const handleActionKeyDown = (event: KeyboardEvent, action: () => void) => {
   if (event.keyCode === KeyCodes.ENTER) {
