@@ -2135,6 +2135,8 @@ test("new UI flags accept Owner and QA without bypassing registry or runtime che
   for (const [kind, mode, risk, gated, ui, pass, message] of [
     ["feature", 'defaultMode: "OWNER_AND_QA",', '', true, true, true],
     ["improvement", 'defaultMode: "OWNER_AND_QA",', '', true, true, true],
+    ["feature", 'defaultMode: "EVERYONE",', '', true, true, true],
+    ["improvement", 'defaultMode: "EVERYONE",', '', true, true, true],
     ["feature", '', '', true, true, false, /must set defaultMode: "EVERYONE"/],
     ["feature", 'defaultMode: "OFF",', '', true, true, false, /must set defaultMode: "EVERYONE"/],
     ["feature", 'defaultMode: "UNKNOWN",', '', true, true, false, /defaultMode/],
