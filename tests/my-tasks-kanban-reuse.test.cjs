@@ -47,13 +47,11 @@ test("retired kanban reuse key is absent from the registry and controls are perm
   }
 });
 
-test("All boards toggles through setBoards in AssignModal and the legacy filter row", () => {
+test("All boards toggles through setBoards in AssignModal scope picker", () => {
   const source = read(controlsFile);
   const toggle = /setBoards\(config\.boardIds === null \? \[\] : null\)/g;
-  assert.equal([...source.matchAll(toggle)].length, 2);
+  assert.equal([...source.matchAll(toggle)].length, 1);
   assert.match(source, /onSelect: \(id\) => id === null \? setBoards\(config\.boardIds === null/);
-  assert.match(source, /sectionIds: config\.filters\.sectionIds\.filter/);
-  assert.match(source, /labelIds: config\.filters\.labelIds\.filter/);
   assert.match(read("src/components/Modals/AssignToUser/AssignToUser.tsx"), /\{boardPicker \? \(/);
 });
 
@@ -90,7 +88,7 @@ test("Commands uses board picker commands and dispatches matching local events",
   const memo = declaration(commandsFile, "allCommands_");
   assert.match(memo, /getBoardCommands\(\{[\s\S]*?onMyTasks[\s\S]*?myTasksViewsEnabled[\s\S]*?myTasksScopesEnabled/);
   assert.match(memo, /group: "Boards", commandLists: boardCommands/);
-  const options = { projects: [], onMyTasks: true, myTasksViewsEnabled: true, myTasksFilterParityEnabled: true, myTasksScopesEnabled: true, columnArchiveEnabled: false };
+  const options = { projects: [], onMyTasks: true, myTasksViewsEnabled: true, myTasksScopesEnabled: true, columnArchiveEnabled: false };
   const keys = (changes) => boardCommands({ ...options, ...changes }).map(({ key }) => key);
   assert.deepEqual(keys({}), ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup"]);
   assert.deepEqual(keys({ onMyTasks: false }), []);

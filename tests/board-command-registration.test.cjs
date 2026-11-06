@@ -13,7 +13,6 @@ const options = {
   currentProject: { id: 1 },
   onMyTasks: false,
   myTasksViewsEnabled: false,
-  myTasksFilterParityEnabled: false,
   myTasksScopesEnabled: false,
   columnArchiveEnabled: false,
 };
@@ -40,10 +39,10 @@ test("board navigation limits results after excluding the current board", () => 
 
 test("my tasks and archive registrations keep their order and gates", () => {
   const active = { ...options, onMyTasks: true, myTasksViewsEnabled: true,
-    myTasksFilterParityEnabled: true, myTasksScopesEnabled: true,
+    myTasksScopesEnabled: true,
     columnArchiveEnabled: true, context: "Kanban" };
   assert.deepEqual(boardCommands(active).map(c => c.key), ["myTasksScope", "gotoBoard-2", "archiveColumn", "myTasksInvolvement", "myTasksSort", "myTasksGroup"]);
-  assert.deepEqual(boardCommands({ ...active, myTasksFilterParityEnabled: false, myTasksScopesEnabled: false, context: "Others" }).map(c => c.key), ["gotoBoard-2", "myTasksSort", "myTasksGroup"]);
+  assert.deepEqual(boardCommands({ ...active, myTasksScopesEnabled: false, context: "Others" }).map(c => c.key), ["myTasksScope", "gotoBoard-2", "myTasksSort", "myTasksGroup"]);
   assert.equal(boardCommands({ ...active, currentProject: null }).some(c => c.key === "archiveColumn"), false);
 });
 

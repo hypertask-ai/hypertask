@@ -47,6 +47,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6059-lazy-emoji-list",
   "htpr-6322-agent-chat-parked-reply",
+  "htpr-6447-my-tasks-filter-parity",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
   "htpr-6254-heic-heif-attachments",

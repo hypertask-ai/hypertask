@@ -598,6 +598,22 @@ test("size label clicks no longer have a feature flag", async () => {
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6978-size-label-click"), false);
 });
 
+test("my tasks filter parity flag is retired after becoming permanent", async () => {
+  const key = "htpr-6447-my-tasks-filter-parity";
+  assert.equal(flags.MY_TASKS_FILTER_PARITY_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6447_my_tasks_filter_parity_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
+});
+
 test("server first-screen flag is retired and scoped flag seeds reuse server evaluation", async () => {
   const key = "htpr-6934-server-first-screen";
   assert.equal(flags.HTPR_6934_SERVER_FIRST_SCREEN_FLAG, undefined);

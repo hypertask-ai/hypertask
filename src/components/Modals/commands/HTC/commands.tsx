@@ -80,7 +80,6 @@ import {
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
-  MY_TASKS_FILTER_PARITY_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
@@ -222,7 +221,6 @@ const Commands = (props: Props) => {
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
-  const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
   const pageActions = isMobile && currentPageActions &&
@@ -249,7 +247,7 @@ const Commands = (props: Props) => {
     };
     const boardCommands = getBoardCommands({
       projects, currentProject, onMyTasks, myTasksViewsEnabled,
-      myTasksFilterParityEnabled, myTasksScopesEnabled, columnArchiveEnabled,
+      myTasksScopesEnabled, columnArchiveEnabled,
       context: contextOptions?.context,
     });
     const registryGroups = getCommands({
@@ -437,7 +435,6 @@ const Commands = (props: Props) => {
     onMyTasks,
     myTasksViewsEnabled,
     myTasksScopesEnabled,
-    myTasksFilterParityEnabled,
     myTasksTableColumnsEnabled,
     projects,
     showByokApiKeys,

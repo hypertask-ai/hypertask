@@ -7,7 +7,6 @@ type BoardCommandOptions = {
   currentProject?: IProject | null;
   onMyTasks: boolean;
   myTasksViewsEnabled: boolean;
-  myTasksFilterParityEnabled: boolean;
   myTasksScopesEnabled: boolean;
   columnArchiveEnabled: boolean;
   context?: string;
@@ -15,7 +14,7 @@ type BoardCommandOptions = {
 
 export function boardCommands({
   projects, currentProject, onMyTasks, myTasksViewsEnabled,
-  myTasksFilterParityEnabled, myTasksScopesEnabled, columnArchiveEnabled, context,
+  myTasksScopesEnabled, columnArchiveEnabled, context,
 }: BoardCommandOptions): ICommandList[] {
   const availableProjects: IProject[] = Array.isArray(projects)
     ? projects
@@ -31,7 +30,7 @@ export function boardCommands({
       keywords: `${project.title} board project go open switch`,
     }));
   let scopeCommand: ICommandList | undefined;
-  if (onMyTasks && myTasksViewsEnabled && myTasksFilterParityEnabled) {
+  if (onMyTasks && myTasksViewsEnabled) {
     scopeCommand = {
       key: "myTasksScope",
       name: "Scope",

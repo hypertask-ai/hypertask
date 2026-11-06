@@ -7,7 +7,7 @@ import type {
   CalendarUserSummary,
 } from "@/lib/calendarSync/contract";
 import type { SerializableFilterSettings } from "@/lib/filterSettingsMutations";
-import { MY_TASKS_FILTER_PARITY_FLAG, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import type { MyTasksBoardMetadata, MyTasksViewConfig } from "@/models/MyTasksView";
 import { MyTasksFilterProvider } from "@/lib/myTasksFilterContext";
 import { CheckRow, Field } from "./MyTasksViewControls";
@@ -41,7 +41,6 @@ export default function MyTasksKanbanFilterModal({
   onViewChange,
   snoozeEnabled = false,
 }: Props) {
-  const filterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const snoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const updateScopeFilters = (filters: Partial<MyTasksViewConfig["filters"]>) => {
     if (config && onViewChange) onViewChange({ ...config, filters: { ...config.filters, ...filters } });
@@ -73,7 +72,6 @@ export default function MyTasksKanbanFilterModal({
       ) : null}
     </div>
   ) : null;
-  if (!filterParityEnabled) return null;
 
   return (
     <MyTasksFilterProvider
