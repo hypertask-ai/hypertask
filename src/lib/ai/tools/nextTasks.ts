@@ -8,13 +8,16 @@ import { loadDoneTitlesByProject } from "@/utils/controllers/notifications/inbox
 import { columnRole } from "@/lib/mcp/boards/columnRole";
 import { blockerStillOpen } from "@/lib/mcp/tasks/blockerStillOpen";
 import { priorityScore } from "@/lib/mcp/tasks/priorityScore";
+import { otherAgentAssigneeWhere } from "@/lib/mcp/tasks/otherAgentAssignee";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from "@/lib/flags/definitions/htpr-8786-picker-skips-other-agents";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
 import type { ToolContext } from "./context";
 
 export function createNextTasksTool(context: ToolContext) {
-  const { sendStatus, user } = context;
+  const { sendStatus, user, actingAgentId } = context;
   return {
     hypertask_next_tasks: tool({
       description:
@@ -56,6 +59,12 @@ export function createNextTasksTool(context: ToolContext) {
         const labelIds = labelFilters.filter((label: string) => labelIdPattern.test(label));
         const labelNames = labelFilters.filter((label: string) => !labelIdPattern.test(label));
         const now = new Date();
+        const skipOtherAgents = actingAgentId
+          ? await isFeatureEnabled(
+              HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG,
+              user.id,
+            )
+          : false;
         const where: Prisma.TaskWhereInput = {
           projectId: input.project_id,
           project: projectAccessWhere,
@@ -80,6 +89,9 @@ export function createNextTasksTool(context: ToolContext) {
           taskLease: {
             isNot: { expiresAt: { gt: now } },
           },
+          ...(actingAgentId && skipOtherAgents
+            ? otherAgentAssigneeWhere(actingAgentId)
+            : {}),
         };
 
         const scanLimit = 500;
