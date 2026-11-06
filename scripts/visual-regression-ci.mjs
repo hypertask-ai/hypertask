@@ -230,7 +230,29 @@ async function main() {
         console.log("Visual head reuses the one app build from app-build; no second next build");
       } else {
         recordPhase(`${phase} build`);
-        command(root, env, await buildArguments(root));
+        const args = await buildArguments(root);
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const child = spawn(args[0], args.slice(1), { cwd: root, env, stdio: ["ignore", "pipe", "pipe"] });
+          let fontError = false;
+          for (const [stream, output] of [[child.stdout, process.stdout], [child.stderr, process.stderr]]) {
+            let tail = "";
+            stream.on("data", chunk => {
+              const text = tail + chunk.toString();
+              if (/An error occurred in `next\/font`|next\/font` error:|@next\/font\/dist\/google\/loader\.js/.test(text)) fontError = true;
+              tail = text.slice(-512);
+            });
+            stream.pipe(output, { end: false });
+          }
+          const result = await new Promise((resolve, reject) => {
+            child.once("error", reject);
+            child.once("close", (status, signal) => resolve({ status, signal }));
+          });
+          if (result.status === 0 && !result.signal) break;
+          if (result.signal || result.status === null || !fontError || attempt === 1) {
+            throw new Error(`${path.basename(root)}: ${args.slice(0, 3).join(" ")} failed`);
+          }
+          console.log(`${phase}: next/font build failure; retrying once`);
+        }
         recordPhase(`${phase} seed+capture`);
       }
       const stop = await startServer(root, env, path.join(temp, `visual-${phase}-server.log`));
