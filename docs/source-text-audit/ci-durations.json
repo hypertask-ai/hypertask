@@ -1498,7 +1498,8 @@
 2178.7
 ],
 [
-"tests/htpr-7294-funnel-probe-category.test.ts",
+"tests/htpr-8559-funnel-probe-category.test.ts",
+"tests/htpr-8559-remove-funnel-probe-category-flag.test.cjs",
 1675.9
 ],
 [
