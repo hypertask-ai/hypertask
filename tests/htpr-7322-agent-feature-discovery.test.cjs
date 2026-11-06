@@ -228,7 +228,7 @@ test('hello and tool guidance explain the actual Decisions workflow, not structu
   })
   const { capabilities } = await hello.getHelloPayload(reader)
   assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
-  assert.equal(hello.HTPR_7122_HELLO_CAPABILITIES.decisions, DECISIONS_GUIDANCE)
+  assert.equal(hello.HELLO_CAPABILITIES.decisions, DECISIONS_GUIDANCE)
   const descriptionMocks = Object.fromEntries(
     fs.readdirSync(path.join(root, 'src/lib/mcp-server/config/descriptions'))
       .filter((file) => file.endsWith('.json'))
@@ -247,24 +247,22 @@ test('hello and tool guidance explain the actual Decisions workflow, not structu
   assert.match(capabilities.features, /GET \/api\/mcp\/features/)
 })
 
-test('hello advertises feature discovery only when its flag is enabled, independently of reaction guidance', async () => {
+test('hello advertises feature discovery only when its flag is enabled, and always includes reaction guidance', async () => {
   for (const discoveryEnabled of [false, true]) {
-    for (const reactionsEnabled of [false, true]) {
-      const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
-        '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
-        '@/lib/mcp/auth': {},
-        '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-          assert.equal(userId, reader.user.id)
-          if (key === 'htpr-7519-login-guided-start') return false
-          return key === discoveryKey ? discoveryEnabled : reactionsEnabled
-        } },
-        '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
-      })
-      const { capabilities } = await hello.getHelloPayload(reader)
-      assert.equal('features' in capabilities, discoveryEnabled)
-      assert.equal('reactions' in capabilities, reactionsEnabled)
-      assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
-    }
+    const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
+      '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
+      '@/lib/mcp/auth': {},
+      '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
+        assert.equal(userId, reader.user.id)
+        if (key === 'htpr-7519-login-guided-start') return false
+        return key === discoveryKey ? discoveryEnabled : false
+      } },
+      '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
+    })
+    const { capabilities } = await hello.getHelloPayload(reader)
+    assert.equal('features' in capabilities, discoveryEnabled)
+    assert.match(capabilities.reactions, /POST \/api\/mcp\/comments\/\{comment_id\}\/reactions/)
+    assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
   }
 })
 
