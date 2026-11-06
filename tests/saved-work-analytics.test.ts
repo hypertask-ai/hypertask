@@ -6,7 +6,6 @@ process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 function harness() {
   const h = activationHarness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   h.prisma.project_View = { upsert: async () => ({ default_view_id: 1 }) };
   h.projects.get(15).seeded = false;
   return h;
@@ -47,14 +46,6 @@ test("manual board sends board_created with the new contract once per board", as
   assert.equal(properties.creator_type, "human");
   assert.equal(properties.actor_id, "123");
   assert.equal(properties.account_category, "customer");
-});
-
-test("with the flag off, the old board_created payload is kept", async () => {
-  const h = activationHarness();
-  h.prisma.project_View = { upsert: async () => ({ default_view_id: 1 }) };
-  await h.load("src/utils/controllers/projects/create.ts").default(123, "Board", "team", "account", "BOARD");
-  await h.drain();
-  assert.deepEqual(h.captures.map((capture) => capture.properties), [{ source: "manual" }]);
 });
 
 test("seeded onboarding board is saved as seeded and sent flagged", async () => {
@@ -154,15 +145,6 @@ test("a manifest task made for an agent is sent as agent-made without changing t
   assert.equal(h.captures[0].properties.actor_id, "agent:agent-9");
 });
 
-test("a collaborator outside the rollout sends nothing on an enabled owner's board", async () => {
-  const h = harness();
-  h.mocks["@/lib/flags"] = { ...h.mocks["@/lib/flags"], isFeatureEnabled: async (key: string, userId: number) => key !== "htpr-7272-payment-login-agent-events" && userId === 123 };
-  await saveTask(h, 46, { userId: 777, agentId: null }, "web");
-  await saveTask(h, 47, { userId: 123, agentId: null }, "web");
-  await h.drain();
-  assert.deepEqual(h.captures.map((capture) => capture.properties.task_id), ["47"]);
-});
-
 test("replaying the same task sends no duplicate", async () => {
   const h = harness();
   const { enqueueTaskCreated, processAnalyticsIntentSoon } = h.load("src/lib/telemetry/savedWork.ts");
@@ -179,13 +161,6 @@ test("a failed save sends nothing", async () => {
   await assert.rejects(taskEvents(h).createTaskWithBoardWebhookOutbox(h.prisma, { userId: 123, agentId: null }, async () => {
     throw new Error("mock save failed");
   }, "web"));
-  await h.drain();
-  assert.equal(h.captures.length, 0);
-});
-
-test("with the flag off, no task_created is sent", async () => {
-  const h = activationHarness();
-  await saveTask(h, 44, { userId: 123, agentId: null }, "web");
   await h.drain();
   assert.equal(h.captures.length, 0);
 });

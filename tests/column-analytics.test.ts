@@ -10,7 +10,6 @@ type Column = { id: number; projectId: number; section_title: string; ranking: s
 
 function harness(columns: Column[] = []) {
   const h = activationHarness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   h.setFlagEnabled("htpr-7273-column-events", true);
   h.prisma.project_View = { upsert: async () => ({ default_view_id: 1 }) };
   h.projects.get(15).seeded = false;

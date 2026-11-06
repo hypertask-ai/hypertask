@@ -6,7 +6,6 @@ process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 function harness() {
   const h = activationHarness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   h.setFlagEnabled("htpr-7273-column-events", true);
   h.mocks["@/lib/telemetry/analyticsOutbox"] = { isAnalyticsOutboxEnabled: async () => false };
   const intents = h.load("src/lib/telemetry/analyticsIntents.ts");
