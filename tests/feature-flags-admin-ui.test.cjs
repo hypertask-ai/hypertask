@@ -12,7 +12,6 @@ function stub(filename, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 let owner = true;
-let discoveryEnabled = false;
 let urlFiltersEnabled = false;
 let reads = 0;
 let rows = [];
@@ -25,8 +24,7 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
     if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
-    assert.equal(key, "htpr-6964-flags-page-type-search");
-    return discoveryEnabled;
+    throw new Error(`Unexpected flag ${key}`);
   },
 });
 stub(path.join(root, "src/styles/linksModal.module.scss"), { __esModule: true, default: {} });
@@ -53,7 +51,7 @@ const fixture = (key, extra = {}) => ({
 const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
-  owner = true; reads = 0; discoveryEnabled = false; urlFiltersEnabled = false;
+  owner = true; reads = 0; urlFiltersEnabled = false;
   rows = [fixture("htpr-7000-inbox-next-open"), fixture("yper4-123-board-check")];
 });
 
@@ -289,25 +287,7 @@ for (const singleFlag of [false, true]) {
   });
 }
 
-test("discovery off keeps cards plain while url filters stay on the overview", async () => {
-  rows[0] = { ...rows[0], related: [rows[1].key], kind: "bugfix" };
-  await withAdmin({}, { flags: rows, detailsEnabled: true }, async ({ document }) => {
-    assert.ok(document.querySelector('[aria-label="Flag filters"]'));
-    assert.ok(document.getElementById("flag-search"));
-    assert.doesNotMatch(document.body.textContent, /Related:/);
-    assert.equal([...document.querySelectorAll("[id]")].some((node) => node.id.startsWith("flag-") && node.id !== "flag-search"), false);
-    assert.ok(document.querySelector(".label-pill"));
-    for (const group of document.querySelectorAll('[aria-label^="Mode for"]')) {
-      assert.deepEqual([...group.querySelectorAll("button")].map(button => [button.textContent, button.getAttribute("aria-pressed")]), [
-        ["Only me", "false"], ["Owner + QA", "true"], ["Everyone", "false"], ["Off", "false"],
-      ]);
-      assert.equal(group.parentElement.className, "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between");
-    }
-  });
-});
-
-test("flag on shows shared kind labels, sticky search, all-word reduction, empty state and Escape clears", async () => {
-  discoveryEnabled = true;
+test("shows shared kind labels, sticky search, all-word reduction, empty state and Escape clears", async () => {
   const flags = [
     fixture("htpr-6853-fast-open", { kind: "bugfix", ticketId: "HTPR-6853", ticketTitle: "Instant details", description: "Comment editor ready" }),
     fixture("htpr-0001-search", { kind: undefined }),
@@ -340,7 +320,6 @@ test("flag on shows shared kind labels, sticky search, all-word reduction, empty
 });
 
 test("related link clears filters, reveals its target, scrolls, highlights and focuses without a network read", async () => {
-  discoveryEnabled = true;
   const a = fixture("htpr-1-child", { related: ["htpr-2-parent"] });
   const b = fixture("htpr-2-parent", { mode: "OFF" });
   await withAdmin({}, { flags: [a, b], detailsEnabled: true }, async ({ document, click, calls }) => {
@@ -362,7 +341,6 @@ test("related link clears filters, reveals its target, scrolls, highlights and f
 });
 
 test("detail related links point to anchored cards on the overview", async () => {
-  discoveryEnabled = true;
   rows[0].related = [rows[1].key];
   await withAdmin({ flagKey: rows[0].key }, { flags: rows, detailsEnabled: true }, async ({ document }) => {
     assert.ok(document.querySelector(`a[href="/admin/flags#flag-${rows[1].key}"]`));
