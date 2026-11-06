@@ -12,6 +12,15 @@ export async function agentWritingPolicyEnabled(userId: number): Promise<boolean
   }
 }
 
+async function houseRulesEnabled(userId: number, context: AgentWritingContext): Promise<boolean> {
+  if (context.houseRules === true) return true
+  try {
+    return await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)
+  } catch {
+    return true
+  }
+}
+
 export async function enforceAgentWriting(
   userId: number,
   agentId: string | null | undefined,
@@ -20,6 +29,6 @@ export async function enforceAgentWriting(
   context: AgentWritingContext = {},
 ): Promise<void> {
   if (!agentId) return
-  const houseRules = context.houseRules === true || await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)
+  const houseRules = await houseRulesEnabled(userId, context)
   if (await agentWritingPolicyEnabled(userId)) assertAgentWriting(agentId, fields, previous, { ...context, houseRules })
 }

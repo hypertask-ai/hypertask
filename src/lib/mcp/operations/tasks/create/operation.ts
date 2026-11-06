@@ -111,10 +111,15 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, user.id)) {
+        try {
+            if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, user.id)) {
+                await enforceAgentWriting(user.id, ctx.agentId, { title, description }, {}, { create: true, houseRules: true });
+            } else {
+                await enforceAgentWriting(user.id, ctx.agentId, { title, description });
+            }
+        } catch (error) {
+            if (error instanceof AgentWritingError) throw error;
             await enforceAgentWriting(user.id, ctx.agentId, { title, description }, {}, { create: true, houseRules: true });
-        } else {
-            await enforceAgentWriting(user.id, ctx.agentId, { title, description });
         }
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId, ctx.teamScope);
         if (projectCheck.error) {

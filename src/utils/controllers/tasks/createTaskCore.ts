@@ -1,3 +1,4 @@
+import { AgentWritingError } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import prisma from '@/lib/prisma';
 import { isFeatureEnabled } from '@/lib/flags';
@@ -78,10 +79,15 @@ async function createTaskCoreWithWriter(options: CreateTaskCoreOptions, writeTas
     } = options;
 
     const descriptionContent = normalizeBlockHtml(description);
-    if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+    try {
+        if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+            await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent }, {}, { create: true, houseRules: true });
+        } else {
+            await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent });
+        }
+    } catch (error) {
+        if (error instanceof AgentWritingError) throw error;
         await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent }, {}, { create: true, houseRules: true });
-    } else {
-        await enforceAgentWriting(userId, options.actingAgentId ?? agentId, { title, description: descriptionContent });
     }
     const taskCount = await getUniqueTaskCount(projectId);
     const ticketNumber = `${projectIdentifier}-${taskCount + 1}`;

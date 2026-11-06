@@ -119,6 +119,7 @@ function harness() {
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@vercel/functions": { waitUntil: () => {} },
     "@/lib/flags/definitions/htpr-7131-index-new-tickets": load("src/lib/flags/definitions/htpr-7131-index-new-tickets.ts", {}),
+    "@/lib/flags/definitions/htpr-8798-writing-house-rules": { HTPR_8798_WRITING_HOUSE_RULES_FLAG: "htpr-8798-writing-house-rules" },
     "../description/common-description-create": { __esModule: true, default: async () => undefined },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/ai/labelClassifier": { scheduleClassifyNewTaskAiLabels: () => undefined },

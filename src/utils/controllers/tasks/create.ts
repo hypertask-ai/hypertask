@@ -76,10 +76,15 @@ export const getUniqueTaskCount = async (
 
 const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId,teamScope}:IProps) => {
         try {
-            if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+            try {
+                if (await isFeatureEnabled(HTPR_8798_WRITING_HOUSE_RULES_FLAG, userId)) {
+                    await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true, houseRules: true });
+                } else {
+                    await enforceAgentWriting(userId, agentId, { title, description });
+                }
+            } catch (error) {
+                if (error instanceof AgentWritingError) throw error;
                 await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true, houseRules: true });
-            } else {
-                await enforceAgentWriting(userId, agentId, { title, description });
             }
             const allowedProject = await prisma.project.findFirst({
                 where: {
