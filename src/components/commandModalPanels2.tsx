@@ -16,7 +16,7 @@ import type { createCommandDispatcher } from "./commandDispatcher";
 import type { IHTCProps } from "./commandTypes";
 
 
-type Context = Pick<IHTCProps & ReturnType<typeof useCommandsState> & ReturnType<typeof createBoardCommandActions> & ReturnType<typeof createGeneralCommandActions> & ReturnType<typeof createCommandModalCallbacks> & ReturnType<typeof createCommandDispatcher>, "focusProxy" | "isMbl" | "commandMode" | "handleAction" | "paletteContextOptions" | "billing" | "appShellRailOn" | "showCommands" | "currentUser" | "boardCloseHandler" | "_currentProject" | "refreshRowTaskList" | "relationPicker" | "activeTaskId" | "callbackHandler" | "archiveHandler" | "confirmDelete" | "DeleteMessageHandler" | "setDueDateCallback" | "queryClient" | "inViewObject" | "_activeTask" | "setRecurrenceHandler" | "taskTemplatePickerForCurrentProject" | "openTaskTemplateHandler" | "hasBulkSelection" | "kanbanBulkSelection" | "bulkSelection" | "bulkTasks" | "bulkActionProjectId" | "_activeTaskAssignees" | "toggleAssignModal" | "taskProject" | "updateAutoAssignHandler" | "createBoard" | "createColumn" | "contextOptions" | "toggleManageColumns" | "updateBoard" | "reSendInvite" | "cancelInvite" | "inviteNewMemberHandlerLocal" | "removeMemberLocal" | "addAgentToBoardLocal" | "removeAgentFromBoardLocal" | "callbackProjectId" | "toggleBoardSortingHandler" | "togglePriorityModal" | "toggleEstimateModal" | "setShowCommands" | "setCommandMode" | "toggleLabelModal" | "myTasksSnoozeEnabled" | "togglRemindMeModal" | "toggleSubTaskSettingsHandler" | "toggleManageViewsHandler" | "toggleBoardViewsHandler" | "toggleSubtaskLinkingHandler" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "toggleRenameTaskModal" | "agentToEdit" | "closeCallbackCreateAgent" | "inboxZeroRules">;
+type Context = Pick<IHTCProps & ReturnType<typeof useCommandsState> & ReturnType<typeof createBoardCommandActions> & ReturnType<typeof createGeneralCommandActions> & ReturnType<typeof createCommandModalCallbacks> & ReturnType<typeof createCommandDispatcher>, "focusProxy" | "isMbl" | "commandMode" | "handleAction" | "paletteContextOptions" | "billing" | "appShellRailOn" | "showCommands" | "currentUser" | "boardCloseHandler" | "_currentProject" | "refreshRowTaskList" | "relationPicker" | "activeTaskId" | "callbackHandler" | "archiveHandler" | "confirmDelete" | "DeleteMessageHandler" | "setDueDateCallback" | "queryClient" | "inViewObject" | "_activeTask" | "setRecurrenceHandler" | "taskTemplatePickerForCurrentProject" | "openTaskTemplateHandler" | "hasBulkSelection" | "kanbanBulkSelection" | "bulkSelection" | "bulkTasks" | "bulkActionProjectId" | "_activeTaskAssignees" | "toggleAssignModal" | "taskProject" | "updateAutoAssignHandler" | "createBoard" | "createColumn" | "contextOptions" | "toggleManageColumns" | "updateBoard" | "reSendInvite" | "cancelInvite" | "inviteNewMemberHandlerLocal" | "removeMemberLocal" | "addAgentToBoardLocal" | "removeAgentFromBoardLocal" | "callbackProjectId" | "toggleBoardSortingHandler" | "togglePriorityModal" | "toggleEstimateModal" | "setShowCommands" | "setCommandMode" | "toggleLabelModal" | "myTasksSnoozeEnabled" | "togglRemindMeModal" | "toggleSubTaskSettingsHandler" | "toggleManageViewsHandler" | "toggleBoardViewsHandler" | "toggleSubtaskLinkingHandler" | "onMyTasks" | "myTasksViewsEnabled" | "toggleRenameTaskModal" | "agentToEdit" | "closeCallbackCreateAgent" | "inboxZeroRules">;
 
 export function renderCommandModals2(context: Context) {
   const {
@@ -32,7 +32,7 @@ export function renderCommandModals2(context: Context) {
   callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
   setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
   toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-  myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+  toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
   } = context;
   return (<><div
         id="htc-container"
@@ -66,7 +66,7 @@ function renderPaletteModalGroup1(context: Context) {
   callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
   setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
   toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-  myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+  toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
   } = context;
   return (<>
           {commandMode === CommandMode.Command && (
@@ -220,7 +220,7 @@ function renderPaletteModalGroup2(context: Context) {
   callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
   setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
   toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-  myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+  toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
   } = context;
   return (<>{commandMode === CommandMode.OpenAssignModal && (
             hasBulkSelection ? (
@@ -370,7 +370,7 @@ function renderPaletteModalGroup3(context: Context) {
   callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
   setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
   toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-  myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+  toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
   } = context;
   return (<>{commandMode === CommandMode.InviteMember && (
             <InviteMember
@@ -520,7 +520,7 @@ function renderPaletteModalGroup3(context: Context) {
             />
           )}
           {commandMode === CommandMode.ConfigureTableColumns &&
-            !(onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) && (
+            !(onMyTasks && myTasksViewsEnabled) && (
             <TableColumnsPicker closeHandler={boardCloseHandler} projectId={_currentProject?.id} />
           )}
           {commandMode === CommandMode.ManageCustomFields && (
@@ -543,7 +543,7 @@ function renderPaletteModalGroup4(context: Context) {
   callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
   setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
   toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-  myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+  toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
   } = context;
   return (<>{commandMode === CommandMode.RenameTask && inViewObject && (
             <RenameTaskModal closeCallback={toggleRenameTaskModal} />

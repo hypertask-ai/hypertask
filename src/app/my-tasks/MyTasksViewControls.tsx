@@ -14,7 +14,6 @@ import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_TABLE_COLUMNS_FLAG,
 } from "@/lib/flags/keys";
 import {
   MY_TASKS_SCOPE_VALUES,
@@ -98,7 +97,6 @@ const MyTasksViewControls = ({
 }: Props) => {
   const iconControlsFlag = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const iconControlsEnabled = iconControlsFlag && variant === "icons";
-  const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
@@ -268,7 +266,7 @@ const MyTasksViewControls = ({
           )}
         </div>
       ) : null}
-      {myTasksTableColumnsFlag && tableColumnsEnabled && onOpenTableColumns ? (
+      {tableColumnsEnabled && onOpenTableColumns ? (
         iconControlsEnabled ? (
             <ViewControlButton
               label="Configure table columns"
