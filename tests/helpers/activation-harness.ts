@@ -202,7 +202,8 @@ export function activationHarness() {
       if (name.startsWith(".")) key = "@/" + path.relative(path.join(root, "src"), path.resolve(path.dirname(absolute), name)).replace(/\.ts$/, "");
       if (key in mocks) {
         const mocked = mocks[key];
-        if (mocked && typeof mocked === "object") mocked.__esModule = true;
+        const descriptor = mocked && typeof mocked === "object" ? Object.getOwnPropertyDescriptor(mocked, "__esModule") : undefined;
+        if (mocked && typeof mocked === "object" && (!descriptor || descriptor.writable || descriptor.set)) mocked.__esModule = true;
         return mocked;
       }
       if (key.startsWith("@/")) {

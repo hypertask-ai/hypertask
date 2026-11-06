@@ -89,7 +89,7 @@ test("the request returns before database lookup and shared capture runs after l
 for (const job of ["occurrence", "connection"] as const) {
   const record = async (h: ReturnType<typeof activationHarness>, occurrence = "retry") => {
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-    if (job === "connection") h.capture.connection(123, occurrence, "mcp", "Cursor");
+    if (job === "connection") h.capture.connection(123, occurrence, "mcp", "Cursor", new Date(), occurrence);
     else h.capture.activation(123, "board_created", occurrence, { method: "link" });
   };
 
@@ -177,10 +177,10 @@ test("the advisory lock covers capture and marker writes for concurrent cold con
   const pendingCaptures = [first.captureAgentConnection(payload), second.captureAgentConnection(payload)];
   await capturing;
   assert.deepEqual(h.logs, [], "marker cannot precede the pending capture");
-  assert.equal(locks, 1, "the competing transaction waits for capture to finish");
+  assert.equal(locks, 3, "the claim locks finish and one capture stays in flight");
   release();
   await Promise.all(pendingCaptures);
-  assert.equal(locks, 2);
+  assert.equal(locks, 4);
   assert.equal(h.captures.length, 1);
   assert.equal(h.logs.length, 1);
 });
