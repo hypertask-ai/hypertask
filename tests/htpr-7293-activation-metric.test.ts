@@ -256,7 +256,7 @@ test("flag off keeps the unversioned live-task contract unchanged", async () => 
     account_category: "customer", signup_at: SIGNUP.toISOString(), activated_at: LATER.toISOString(),
     hours_since_signup: 5, task_count: 4, is_seeded: false,
   });
-  assert.deepEqual(h.queries.map(({ model }) => model), ["user", "project", "user"]);
+  assert.deepEqual(h.queries.map(({ model }) => model), ["user", "project"]);
 });
 
 for (const enabled of [false, true]) {
