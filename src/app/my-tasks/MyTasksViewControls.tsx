@@ -15,7 +15,6 @@ import {
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
-  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
   MY_TASKS_SCOPE_VALUES,
@@ -97,7 +96,6 @@ const MyTasksViewControls = ({
   scopesEnabled = false,
   snoozeEnabled: snoozeEnabledProp = false,
 }: Props) => {
-  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const iconControlsFlag = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const iconControlsEnabled = iconControlsFlag && variant === "icons";
   const myTasksTableColumnsFlag = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
@@ -119,7 +117,6 @@ const MyTasksViewControls = ({
   useClickOutside(groupRef, () => setGroupOpen(false));
 
   useEffect(() => {
-    if (!myTasksViewsEnabled) return;
     const openScope = () => {
       setScopeOpen(true);
       setInvolvementOpen(false);
@@ -128,13 +125,13 @@ const MyTasksViewControls = ({
     };
     window.addEventListener("my-tasks-scope-picker", openScope);
     return () => window.removeEventListener("my-tasks-scope-picker", openScope);
-  }, [myTasksViewsEnabled]);
+  }, []);
 
   useEffect(() => {
     const openPicker = (picker: "involvement" | "sort" | "group") => {
       setScopeOpen(false);
       setInvolvementOpen(picker === "involvement" && myTasksScopesEnabled);
-      setSortOpen(picker === "sort" && myTasksViewsEnabled);
+      setSortOpen(picker === "sort");
       setGroupOpen(picker === "group");
     };
     const openInvolvement = () => openPicker("involvement");
@@ -148,7 +145,7 @@ const MyTasksViewControls = ({
       window.removeEventListener("my-tasks-sort-picker", openSort);
       window.removeEventListener("my-tasks-group-picker", openGroup);
     };
-  }, [myTasksScopesEnabled, myTasksViewsEnabled]);
+  }, [myTasksScopesEnabled]);
 
   const scopes = normalizeMyTasksScopes(config.scopes);
   const involvementCount =
@@ -301,7 +298,6 @@ const MyTasksViewControls = ({
         </button>
         )
       ) : null}
-      {myTasksViewsEnabled ? (
         <>
           <div ref={scopeRef} className="relative">
             {iconControlsEnabled ? (
@@ -409,9 +405,6 @@ const MyTasksViewControls = ({
           </button>
           )}
         </>
-      ) : null}
-
-      {myTasksViewsEnabled ? (
       <div ref={sortRef} className="relative">
         <ViewControlButton
           label="Sort My Tasks"
@@ -434,7 +427,6 @@ const MyTasksViewControls = ({
           <MyTasksSortPicker sort={config.sort} onSortChange={(sort) => onChange({ ...config, sort })} onClose={() => setSortOpen(false)} />
         )}
       </div>
-      ) : null}
 
       <div ref={groupRef} className="relative hidden @md:block">
         {iconControlsEnabled ? (

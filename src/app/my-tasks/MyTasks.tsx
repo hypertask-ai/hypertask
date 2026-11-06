@@ -2,7 +2,6 @@
 
 import BackButton from "@/components/Buttons/BackButton";
 import { SplitTitle } from "@/components/Common/TaskRowComponents/TaskListRow";
-import PriorityLabelComponent from "@/components/Modals/TaskPriority/PriorityLabelComponent";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
 import TableView from "@/components/PageComponents/Kanban/TableView/TableView";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
@@ -16,7 +15,6 @@ import {
   MY_TASKS_SNOOZE_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
-  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
   buildMyTasksListUrl,
@@ -75,7 +73,6 @@ import { appShellRailAtom,
   myTasksTableColumnsPickerRequestAtom, showCommandsAtom } from "@/store";
 import styles from "@/styles/search.module.scss";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Check, Filter } from "lucide-react";
 import {
   useCallback,
   useContext,
@@ -115,7 +112,6 @@ interface IProps {
   currentUser: IUser;
   initialViews: MyTasksSavedView[];
   initialViewId: number | null;
-  viewsEnabled: boolean;
   scopesEnabled?: boolean;
 }
 
@@ -138,7 +134,6 @@ const MyTasks = ({
   currentUser,
   initialViews = EMPTY_MY_TASKS_VIEWS,
   initialViewId = null,
-  viewsEnabled = false,
   scopesEnabled = false,
 }: IProps) => {
   const isMbl = useContext(MobileViewContext);
@@ -169,14 +164,11 @@ const MyTasks = ({
   }, []);
   const splitIndex = boardTabsHidden ? 0 : activeSplit;
 
-  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
-  const viewsFeatureEnabled = viewsEnabled && myTasksViewsEnabled;
-  const tableColumnsFeatureEnabled =
-    myTasksTableColumnsEnabled && viewsFeatureEnabled;
+  const tableColumnsFeatureEnabled = myTasksTableColumnsEnabled;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
@@ -339,11 +331,10 @@ const MyTasks = ({
   }, [myTasksSnoozeEnabled, nearestSnoozeUntil, reconcileRunner]);
 
   useEffect(() => {
-    if (!viewsFeatureEnabled) return;
     const refreshDateFilters = () => setDateFilterVersion((version) => version + 1);
     window.addEventListener("focus", refreshDateFilters);
     return () => window.removeEventListener("focus", refreshDateFilters);
-  }, [viewsFeatureEnabled]);
+  }, []);
 
   useEffect(() => {
     if (!overdueBadgesEnabled) return;
@@ -373,7 +364,7 @@ const MyTasks = ({
         .join(",")
     : "";
   useEffect(() => {
-    if (!overdueBadgesEnabled || !viewsFeatureEnabled) return;
+    if (!overdueBadgesEnabled) return;
     const timeZone = browserTimeZone();
     if (!timeZone) return;
     const token = ++overdueCountsFetchToken.current;
@@ -407,7 +398,6 @@ const MyTasks = ({
     overdueCountsVersion,
     overdueViewsKey,
     runningTaskIdsKey,
-    viewsFeatureEnabled,
   ]);
 
   const activeView = views.find((view) => view.id === activeViewId);
@@ -444,11 +434,6 @@ const MyTasks = ({
 
   const allTasksForBoardTabs = useMemo(() => {
     if (groupBy !== "time") return [];
-    if (!viewsFeatureEnabled) {
-      return priorityFilteredSections.flatMap(
-        (section) => section.items as MyTasksTask[],
-      );
-    }
     const now = new Date();
     const selectedBoards = viewConfig.boardIds
       ? new Set(viewConfig.boardIds)
@@ -467,11 +452,9 @@ const MyTasks = ({
   }, [
     dateFilterVersion,
     groupBy,
-    priorityFilteredSections,
     runtimeContext,
     sections,
     viewConfig,
-    viewsFeatureEnabled,
   ]);
 
   const viewFilteredSections = useMemo(() => {
@@ -521,18 +504,14 @@ const MyTasks = ({
     sections,
     viewConfig,
   ]);
-  const filteredSections =
-    viewsFeatureEnabled || groupBy === "time"
-      ? viewFilteredSections
-      : priorityFilteredSections;
+  const filteredSections = viewFilteredSections;
 
   const activeTabs = useMemo(() => {
     if (groupBy === "time") {
       return ["All", ...availableBoards.map((board) => board.title)];
     }
-    if (!viewsFeatureEnabled) return tabs;
     return ["All", ...filteredSections.map((section) => section.section_title)];
-  }, [availableBoards, filteredSections, groupBy, tabs, viewsFeatureEnabled]);
+  }, [availableBoards, filteredSections, groupBy]);
   const activeBoardId = useRef<number | null>(
     groupBy === "time"
       ? availableBoards[splitIndex - 1]?.id ?? null
@@ -579,27 +558,14 @@ const MyTasks = ({
     [router, searchParams],
   );
 
-  const updateLegacySplit = useCallback(
-    (index: number) => {
-      const nextIndex = Math.max(0, Math.min(index, tabs.length - 1));
-      setActiveSplit(nextIndex);
-      replaceBoardParam(sections[nextIndex - 1]?.projectId ?? null);
-    },
-    [replaceBoardParam, sections, tabs.length]
-  );
-
   const updateSplit = useCallback(
     (index: number) => {
       if (boardTabsHidden) return;
       pickedBoard.current = true;
       if (iconControlsEnabled) {
-        const sources = groupBy === "time" ? boardSplitSources : viewsFeatureEnabled ? filteredSections : sections;
+        const sources = groupBy === "time" ? boardSplitSources : filteredSections;
         const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
         rememberMyTasksView(currentUser.id, { boardId: sources[nextIndex - 1]?.projectId ?? null });
-      }
-      if (groupBy !== "time" && !viewsFeatureEnabled) {
-        updateLegacySplit(index);
-        return;
       }
       const nextIndex = Math.max(0, Math.min(index, activeTabs.length - 1));
       if (groupBy === "time") {
@@ -624,15 +590,13 @@ const MyTasks = ({
       iconControlsEnabled,
       currentUser.id,
       replaceBoardParam,
-      updateLegacySplit,
-      viewsFeatureEnabled,
     ],
   );
 
   useEffect(() => {
-    const sources = groupBy === "time" ? boardSplitSources : sections;
-    setActiveSplit(getMyTasksSplitIndex(sources, boardParam));
-  }, [boardParam, boardSplitSources, groupBy, sections]);
+    if (groupBy !== "time") return;
+    setActiveSplit(getMyTasksSplitIndex(boardSplitSources, boardParam));
+  }, [boardParam, boardSplitSources, groupBy]);
 
   useEffect(() => {
     if (groupBy !== "time") return;
@@ -649,27 +613,20 @@ const MyTasks = ({
   ]);
 
   useEffect(() => {
-    if (groupBy === "time" || !viewsFeatureEnabled) return;
-    const split = getMyTasksSplitIndex(filteredSections, boardParam);
+    if (groupBy === "time") return;
+    const param = new URLSearchParams(window.location.search).get("board");
+    const split = getMyTasksSplitIndex(filteredSections, param);
     activeBoardId.current = filteredSections[split - 1]?.projectId ?? null;
     setActiveSplit(split);
-    if (boardParam && split === 0) replaceBoardParam(null);
-  }, [
-    availableBoards,
-    boardParam,
-    boardSplitSources,
-    filteredSections,
-    groupBy,
-    replaceBoardParam,
-    viewsFeatureEnabled,
-  ]);
+    if (param && split === 0) replaceBoardParam(null);
+  }, [filteredSections, groupBy, replaceBoardParam]);
 
   useEffect(() => {
     if (!iconControlsEnabled || memoryRestored.current) return;
     memoryRestored.current = true;
     const memory = readMyTasksViewMemory(currentUser.id);
     const defaultViewId = views.find((view) => view.isDefault)?.id ?? null;
-    const restoreView = viewsFeatureEnabled && entryParams.current.view === null && !pickedView.current &&
+    const restoreView = entryParams.current.view === null && !pickedView.current &&
       memory.viewId !== undefined && memory.defaultViewId === defaultViewId &&
       (memory.viewId === null || views.some((view) => view.id === memory.viewId));
     const restoreBoard = !boardTabsHidden && entryParams.current.board === null && !pickedBoard.current && memory.boardId !== undefined;
@@ -681,16 +638,15 @@ const MyTasks = ({
     }
     if (restoreView || restoreBoard) {
       observedViewParam.current = viewParam;
-      if (!viewsFeatureEnabled) replaceBoardParam(memory.boardId ?? null);
-      else replaceParams({
+      replaceParams({
         viewId: restoreView ? memory.viewId ?? null : activeViewId,
         ...(restoreBoard ? { boardId: memory.boardId } : {}),
       });
     }
-  }, [activeViewId, boardTabsHidden, currentUser.id, iconControlsEnabled, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views, viewsFeatureEnabled]);
+  }, [activeViewId, boardTabsHidden, currentUser.id, iconControlsEnabled, replaceBoardParam, replaceParams, updateViewConfig, viewParam, views]);
 
   useEffect(() => {
-    if (!viewsFeatureEnabled || observedViewParam.current === viewParam) return;
+    if (observedViewParam.current === viewParam) return;
     observedViewParam.current = viewParam;
     if (!viewParam) {
       if (activeViewId !== null) replaceParams({ viewId: activeViewId });
@@ -707,7 +663,7 @@ const MyTasks = ({
     setActiveViewId(requestedView.id);
     updateViewConfig(parseMyTasksViewConfig(requestedView.config));
     setFilterOpen(false);
-  }, [activeViewId, replaceParams, updateViewConfig, viewParam, views, viewsFeatureEnabled]);
+  }, [activeViewId, replaceParams, updateViewConfig, viewParam, views]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -937,7 +893,7 @@ const boardTabCounts = useMemo(() => {
   };
 
   const viewOverdueCounts = useMemo(() => {
-    if (!overdueBadgesEnabled || !viewsFeatureEnabled) {
+    if (!overdueBadgesEnabled) {
       return EMPTY_MY_TASKS_VIEW_OVERDUE_COUNTS;
     }
     const now = new Date();
@@ -964,7 +920,6 @@ const boardTabCounts = useMemo(() => {
     runtimeContext,
     sections,
     viewConfig,
-    viewsFeatureEnabled,
   ]);
 
   const splitOverdueCounts = useMemo(() => {
@@ -1023,8 +978,7 @@ const boardTabCounts = useMemo(() => {
       data-testid="my-tasks-panel"
       className={`py-9 h-screen min-h-0 overflow-hidden bg-containerBackground flex-col rounded-[4px] my-0 w-full flex linksModal ${styles.links_modal} ${phoneLayoutEnabled ? styles.phone_layout : ""}`}
     >
-      {viewsEnabled && myTasksViewsEnabled && (
-        <div className="mb-4 px-[16px] @md:!px-[78px]">
+      <div className="mb-4 px-[16px] @md:!px-[78px]">
           <MyTasksViewTabs
             views={views}
             activeViewId={activeViewId}
@@ -1041,7 +995,6 @@ const boardTabCounts = useMemo(() => {
             overdueByViewId={viewOverdueCounts.byViewId}
           />
         </div>
-      )}
 
       <div data-testid="my-tasks-toolbar" className="flex gap-2 px-[16px] @md:!px-[88px]">
         <span className="flex items-baseline gap-2 font-bold text-subheading text-white-black">
@@ -1074,72 +1027,6 @@ const boardTabCounts = useMemo(() => {
             setKanbanFiltersOpen(true);
           }}
         />
-        {myTasksSnoozeEnabled && !viewsFeatureEnabled ? (
-          <label className="ml-auto flex items-center gap-2 self-center text-content text-text-light-gray">
-            <input
-              type="checkbox"
-              checked={showSnoozed}
-              onChange={() =>
-                updateViewConfig((current) => ({
-                  ...current,
-                  filters: {
-                    ...current.filters,
-                    showSnoozed: !current.filters.showSnoozed,
-                  },
-                }))
-              }
-            />
-            Show snoozed
-          </label>
-        ) : null}
-        {filterEnabled && (
-          !viewsFeatureEnabled ? (
-          <div ref={filterRef} className="relative ml-auto self-center">
-            <button
-              id="my-tasks-priority-filter"
-              type="button"
-              aria-haspopup="menu"
-              aria-expanded={filterOpen}
-              onClick={() => setFilterOpen((open) => !open)}
-              className={`${isMbl ? MOBILE_TARGET : "inline-flex h-7 items-center"} gap-1 rounded-[4px] border-0 px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:outline-none`}
-            >
-              <Filter size={14} strokeWidth={1.75} />
-              <span className="sr-only">Filter by priority</span>
-              {selectedPriorities.length > 0 && (
-                <span className="text-meta font-medium" aria-hidden="true">{selectedPriorities.length}</span>
-              )}
-            </button>
-            {filterOpen && (
-              <div
-                role="menu"
-                aria-label="Priority filter"
-                className="absolute right-0 top-full z-30 mt-1 min-w-[170px] rounded-[5px] bg-modalBackground py-1 shadow-md"
-              >
-                {PriorityConstants.map((priority) => {
-                  const checked = selectedPriorities.some(
-                    (p) => p.priority_index === priority.priority_index
-                  );
-                  return (
-                    <button
-                      key={`priority-filter-${priority.priority_index}`}
-                      type="button"
-                      role="menuitemcheckbox"
-                      aria-checked={checked}
-                      onClick={() => togglePriority(priority)}
-                      className="flex w-full items-center gap-3 px-2 py-1.5 text-left transition-colors hover:bg-hover-active focus-visible:bg-hover-active focus-visible:outline-none"
-                    >
-                      <span className="flex-grow">
-                        <PriorityLabelComponent priority={priority} />
-                      </span>
-                      {checked && <Check size={16} strokeWidth={1.75} />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          ) : null
-        )}
       </div>
 
       {!boardTabsHidden && (
@@ -1161,10 +1048,10 @@ const boardTabCounts = useMemo(() => {
           _currentProject={null}
           _activeSortingMode={MY_TASKS_SORTING_MODE}
           currentUser={currentUser}
-          myTasksSort={viewsFeatureEnabled ? viewConfig.sort : undefined}
+          myTasksSort={viewConfig.sort}
           myTasksSortKey={activeViewId}
           myTasksSnoozeActive={myTasksSnoozeEnabled}
-          onMyTasksSortChange={viewsFeatureEnabled ? updateViewSort : undefined}
+          onMyTasksSortChange={updateViewSort}
           myTasksVisibleColumns={myTasksVisibleColumns}
           onMyTasksVisibleColumnsChange={
             tableColumnsFeatureEnabled ? updateTableVisibleColumns : undefined

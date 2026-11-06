@@ -9,7 +9,6 @@ import {
   MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { effectiveMyTasksScopes } from "@/lib/myTasksScopes";
 import { IUser } from "@/models/model";
@@ -51,12 +50,7 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [
-    viewsEnabled,
-    scopesEnabled,
-    overdueBadgesEnabled,
-  ] = await Promise.all([
-    isFeatureEnabled(MY_TASKS_VIEWS_FLAG, sessionUser.userId),
+  const [scopesEnabled, overdueBadgesEnabled] = await Promise.all([
     isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
     isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
   ]);
@@ -73,15 +67,13 @@ export default async function Page({
 
   if (!scopesEnabled) {
     const [tasksResult, viewsResult] = await Promise.all([
-      getMyTasks(sessionUser.userId, viewsEnabled),
-      viewsEnabled
-        ? getMyTasksViews(sessionUser.userId)
-        : Promise.resolve([] as Awaited<ReturnType<typeof getMyTasksViews>>),
+      getMyTasks(sessionUser.userId, true),
+      getMyTasksViews(sessionUser.userId),
     ]);
     myTasks = tasksResult;
     views = viewsResult;
   } else {
-    views = viewsEnabled ? await getMyTasksViews(sessionUser.userId) : [];
+    views = await getMyTasksViews(sessionUser.userId);
   }
 
   const initialViewId =
@@ -99,7 +91,7 @@ export default async function Page({
       ).scopes,
       true,
     );
-    myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes);
+    myTasks = await getMyTasks(sessionUser.userId, true, scopes);
   }
 
   if (snoozeEnabled) {
@@ -116,12 +108,12 @@ export default async function Page({
         ).scopes,
         true,
       );
-      myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, scopes, {
+      myTasks = await getMyTasks(sessionUser.userId, true, scopes, {
         snoozeEnabled: true,
         showSnoozed,
       });
     } else {
-      myTasks = await getMyTasks(sessionUser.userId, viewsEnabled, undefined, {
+      myTasks = await getMyTasks(sessionUser.userId, true, undefined, {
         snoozeEnabled: true,
         showSnoozed,
       });
@@ -157,9 +149,8 @@ export default async function Page({
             snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
           }
           currentUser={userObj}
-          initialViews={viewsEnabled ? views : []}
+          initialViews={views}
           initialViewId={initialViewId}
-          viewsEnabled={viewsEnabled}
           scopesEnabled
         />
       ) : (
@@ -172,9 +163,8 @@ export default async function Page({
             snoozeEnabled ? (myTasks.nearestSnoozeUntil ?? null) : null
           }
           currentUser={userObj}
-          initialViews={viewsEnabled ? views : []}
+          initialViews={views}
           initialViewId={initialViewId}
-          viewsEnabled={viewsEnabled}
           scopesEnabled={false}
         />
       )}

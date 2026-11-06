@@ -4,7 +4,6 @@ import { isFeatureEnabled } from "@/lib/flags";
 import {
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import {
   effectiveMyTasksScopes,
@@ -34,10 +33,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const [scopesEnabled, viewsEnabled] = await Promise.all([
-      isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId),
-      isFeatureEnabled(MY_TASKS_VIEWS_FLAG, userId),
-    ]);
+    const scopesEnabled = await isFeatureEnabled(MY_TASKS_SCOPES_FLAG, userId);
     const snoozeEnabled = await isFeatureEnabled(MY_TASKS_SNOOZE_FLAG, userId);
     const requested = parseScopesParam(request.nextUrl.searchParams.get("scopes"));
     const scopes = effectiveMyTasksScopes(requested, scopesEnabled);
@@ -49,7 +45,7 @@ export async function GET(request: NextRequest) {
           .map((part) => part.trim())
           .includes("__showSnoozed"));
 
-    const myTasks = await getMyTasks(userId, viewsEnabled, scopes, {
+    const myTasks = await getMyTasks(userId, true, scopes, {
       throwOnError: true,
       snoozeEnabled,
       showSnoozed,
