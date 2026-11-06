@@ -250,7 +250,14 @@ export async function runContract() {
     taskRow(await call(token, "tasks", "get", { task_id: [board.task.id] }), board.task.id, board.task.title);
     taskRow(await call(token, "search", "tasks", { query: "contract", project_id: board.id }), board.task.id, board.task.title);
     const title = `${role} contract ${Date.now()}`;
-    const created = await call(token, "tasks", "create", { project_id: board.id, title, section_id: board.columns[0].id });
+    const description = [
+      "Problem: The contract needs a ticket.",
+      "Fix: Create one on the seeded board.",
+      "Done when: The new ticket can be read back.",
+      "Risk: A bad write can leave a fixture ticket. Delete it.",
+      "Decision: Keep the ticket for the rest of this check.",
+    ].join("\n");
+    const created = await call(token, "tasks", "create", { project_id: board.id, title, section_id: board.columns[0].id, description });
     requireThat(Number.isInteger(created.task?.id) && created.task.title === title, `${role}: invalid created task`);
     const id = created.task.id;
     taskRow(await rest(`/tasks?task_id=${id}`, token), id, title);
