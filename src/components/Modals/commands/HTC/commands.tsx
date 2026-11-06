@@ -81,7 +81,6 @@ import {
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_TABLE_COLUMNS_FLAG,
-  MY_TASKS_VIEWS_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
 import Tooltip from "@/components/Common/Tooltip";
@@ -219,7 +218,7 @@ const Commands = (props: Props) => {
   if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
+  const myTasksViewsEnabled = true;
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);

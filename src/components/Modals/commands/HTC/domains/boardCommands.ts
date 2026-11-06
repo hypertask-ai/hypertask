@@ -13,7 +13,7 @@ type BoardCommandOptions = {
 };
 
 export function boardCommands({
-  projects, currentProject, onMyTasks, myTasksViewsEnabled,
+  projects, currentProject, onMyTasks,
   myTasksScopesEnabled, columnArchiveEnabled, context,
 }: BoardCommandOptions): ICommandList[] {
   const availableProjects: IProject[] = Array.isArray(projects)
@@ -30,7 +30,7 @@ export function boardCommands({
       keywords: `${project.title} board project go open switch`,
     }));
   let scopeCommand: ICommandList | undefined;
-  if (onMyTasks && myTasksViewsEnabled) {
+  if (onMyTasks) {
     scopeCommand = {
       key: "myTasksScope",
       name: "Scope",
@@ -53,7 +53,7 @@ export function boardCommands({
       key: "myTasksInvolvement", name: "Involvement", commandMode: CommandMode.GoToBoard,
       keywords: "involvement assigned created mentioned watching my tasks",
     });
-    if (myTasksViewsEnabled) myTasksPickerCommands.push({
+    myTasksPickerCommands.push({
       key: "myTasksSort", name: "Sort", commandMode: CommandMode.GoToBoard,
       keywords: "sort order field direction my tasks",
     });
