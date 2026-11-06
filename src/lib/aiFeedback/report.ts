@@ -64,6 +64,18 @@ function description(input: AutomaticFeedbackInput, fingerprint: string, display
     reporterLine('Clients', input.client ? [input.client] : [])
 }
 
+function preservedDiagnostics(content: string): string {
+  const labels = ['Surface', 'Tool', 'HTTP status', 'Error code', 'Field', 'Category', 'Kind', 'Note']
+  const rows = labels.flatMap((label) => {
+    const match = content.match(new RegExp(`<p>${label}: [^<]*</p>`))
+    return match ? [match[0]] : []
+  })
+  if (content.includes('<p>Free text was supplied and not stored, for privacy.</p>')) {
+    rows.push('<p>Free text was supplied and not stored, for privacy.</p>')
+  }
+  return rows.join('')
+}
+
 function membershipRefusal(input: AiFeedbackInput): boolean {
   const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
   return /\bnot a member\b/i.test(code) || /\bnot a member of (?:this|that|the) (?:board|project|team)\b/i.test(input.error ?? '')
@@ -305,7 +317,9 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
         const keptMarker = Boolean(comment?.text.includes(marker))
         const logText = (text: string) => {
-          const logged = house ? text + description(input, fingerprint, displayName, stored) : text
+          const logged = house
+            ? text + description(input, fingerprint, displayName, stored)
+            : text + preservedDiagnostics(comment?.text ?? '')
           return keptMarker && !logged.includes(marker) ? logged + marker : logged
         }
         if (existing) {
