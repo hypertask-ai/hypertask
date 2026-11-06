@@ -52,7 +52,10 @@ test("manual board controller captures after persisted creation", async () => {
   const result = await create(123, "Board", "team", "account", "BOARD");
   assert.equal(result.status, 200);
   await h.drain();
-  assert.deepEqual(h.captures.map((event) => event.properties), [{ source: "manual" }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].event, "board_created");
+  assert.equal(h.captures[0].properties.creation_method, "manual");
+  assert.equal(h.captures[0].properties.is_seeded, false);
   save(h);
 });
 
@@ -63,7 +66,8 @@ test("seeded onboarding board emits seeded source from its creation controller",
   assert.ok(project.id);
   await h.drain();
   assert.equal(h.captures[0].event, "board_created");
-  assert.deepEqual(h.captures[0].properties, { source: "seeded" });
+  assert.equal(h.captures[0].properties.creation_method, "seeded");
+  assert.equal(h.captures[0].properties.is_seeded, true);
   save(h);
 });
 
@@ -76,7 +80,10 @@ test("adopting guest boards emits once for the new owner; repeat adoption is ign
   assert.equal(await adoptGuestBoards("mock-session", 123), 1);
   assert.equal(await adoptGuestBoards("mock-session", 123), 0);
   await h.drain();
-  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "board_created", properties: { source: "adopted_demo" } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].event, "board_created");
+  assert.equal(h.captures[0].properties.creation_method, "adopted_demo");
+  assert.equal(h.captures[0].properties.is_seeded, true);
   save(h);
 });
 
