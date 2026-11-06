@@ -274,7 +274,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
           assert.equal(called.result.structuredContent.invocation.requestId, '11')
         }
         const callsBeforeDenied = echoCalls.length
-        assert.deepEqual((await rpc(16, 'tools/list', undefined, 'restricted-owner')).result.tools, [])
+        assert.deepEqual((await rpc(16, 'tools/list', undefined, 'restricted-owner')).result.tools.map((tool: { name: string }) => tool.name), ['hypertask_report_feedback'])
         for (const name of ['consolidated_echo', 'echo']) {
           const denied = await rpc(17, 'tools/call', { name, arguments: { text: 'restricted' } }, 'restricted-owner')
           assert.ok(denied.error || denied.result.isError)
