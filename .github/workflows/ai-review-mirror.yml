@@ -15,12 +15,6 @@ name: AI review verdict to ticket
 # a full installation window fails with the rate limit named instead of a
 # missing verdict.
 #
-# YPER4-978: the board stopped accepting the mirror's people comment. The voice
-# guard (YPER4-910) refuses technical text in the thread people read, and the
-# findings carry paths, code and long sentences, so five real mirrors failed
-# with HTTP 400 while the skip runs stayed green. The thread now gets one short
-# plain verdict line that points at the pull request; the agent log answers this
-# token with HTTP 503, so the findings stay where they already are.
 on:
   issue_comment:
     types: [created, edited]
@@ -139,7 +133,7 @@ jobs:
               return;
             }
 
-            const ticket = /(htpr|yper4|hyfa)-\d+/i.exec(pr.head.ref)?.[0]?.toUpperCase();
+            const ticket = /(htpr|yper4|hyfa|hyci)-\d+/i.exec(pr.head.ref)?.[0]?.toUpperCase();
             if (!ticket) {
               core.info(`Branch ${pr.head.ref} names no ticket; nothing to mirror.`);
               return;
@@ -168,24 +162,11 @@ jobs:
               return;
             }
 
-            const body = review.body ?? '';
-            const verdict = body.split('\n')[0].trim().slice(0, 300);
-            const sha = /reviewed-commit:\s*([0-9a-f]{40})/.exec(body)?.[1];
-
-            const escapeHtml = value => value
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')
-              .replace(/"/g, '&quot;');
-            // The board refuses technical text in a people comment: no paths, no
-            // code, no sentence over twelve words (YPER4-910). Findings are all
-            // of that, and the agent log answers this token with HTTP 503, so the
-            // ticket gets one short plain line that points at the pull request.
-            const verdictWord = /^(APPROVE|CONCERNS)\b/.exec(verdict)?.[1] ?? 'APPROVE';
-            const text = [
-              `<p><strong>AI review (PR <a href="${escapeHtml(pr.html_url)}">#${pr.number}</a>):</strong> ${verdictWord}.</p>`,
-              `<p>Findings are in the pull request.</p>`,
-            ].join('\n');
+            const verdictWord = /^(APPROVE|CONCERNS)\b/.exec(review.body)[1];
+            const identity = `ai-review-mirror-${repository.replace('/', '-')}-${prNumber}-${headSha}`;
+            const mirrorText = verdict => `AI review ${verdict}: ${pr.html_url}\n${identity}-${verdict}`;
+            const text = mirrorText(verdictWord);
+            let previousId;
 
             const appRequest = (path, init = {}) => fetch(`${APP}${path}`, {
               ...init,
@@ -198,20 +179,68 @@ jobs:
               },
             });
 
-            // `kind: qa` keeps the line in the ticket thread people read: an
-            // agent comment without a kind is filed in the hidden agent log. The
-            // per-commit key makes a re-run or an edited verdict a no-op (YPER4-925).
-            const response = await appRequest('/api/mcp/comments', {
-              method: 'POST',
-              headers: { 'Idempotency-Key': `ai-review-mirror-${prNumber}-${sha}` },
-              body: JSON.stringify({ ticket_number: ticket, kind: 'qa', text }),
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok || result.success !== true) {
-              core.setFailed(
-                `Posting the verdict to ${ticket} failed: HTTP ${response.status} ` +
-                `${result.error ?? result.message ?? 'no error text'}.`,
-              );
+            const requestJson = async (path, init, label) => {
+              const response = await appRequest(path, init);
+              const result = await response.json().catch(() => ({}));
+              if (!response.ok || result?.success !== true) {
+                core.setFailed(`${label} for ${ticket} failed: HTTP ${response.status} ${result?.error ?? result?.message ?? 'no error text'}.`);
+                return null;
+              }
+              return result;
+            };
+
+            const tasks = await requestJson(`/api/mcp/tasks?ticket_number=${encodeURIComponent(ticket)}`, {}, 'Task lookup');
+            if (!tasks) return;
+            const taskId = tasks.tasks?.[0]?.id;
+            if (!Number.isSafeInteger(taskId) || taskId <= 0 || tasks.tasks.length !== 1) {
+              core.setFailed(`Task lookup for ${ticket} returned no unique task.`);
               return;
             }
-            core.info(`Mirrored ${verdictWord} for ${sha.slice(0, 12)} to ${ticket}: ${result.url ?? 'saved'}`);
+
+            for (let offset = 0; ; offset += 100) {
+              const history = await requestJson(`/api/mcp/tasks/${taskId}/agent-activity?limit=100&offset=${offset}`, {}, 'Activity lookup');
+              if (!history) return;
+              if (!Array.isArray(history.activities) || history.activities.some(activity =>
+                !activity || typeof activity.id !== 'string' || typeof activity.type !== 'string' || typeof activity.text !== 'string')) {
+                core.setFailed(`Activity lookup for ${ticket} returned invalid data.`);
+                return;
+              }
+              const previous = history.activities.find(activity => activity?.type === 'thought' &&
+                (activity.text === mirrorText('APPROVE') || activity.text === mirrorText('CONCERNS')));
+              if (previous) {
+                if (previous.text === text) {
+                  core.info(`Already mirrored ${verdictWord} for ${headSha.slice(0, 12)} to ${ticket}.`);
+                  return;
+                }
+                if (typeof previous.id !== 'string' || !/^[A-Za-z0-9-]+$/.test(previous.id)) {
+                  core.setFailed(`Activity lookup for ${ticket} returned an invalid mirror ID.`);
+                  return;
+                }
+                previousId = previous.id;
+                break;
+              }
+              if (history.activities.length < 100) break;
+            }
+            const key = `${identity}-${verdictWord}${previousId ? `-${previousId}` : ''}`;
+
+            const opened = await requestJson('/api/mcp/agents/runs', {
+              method: 'POST',
+              body: JSON.stringify({ taskId, source: 'runtime' }),
+            }, 'Opening agent run');
+            if (!opened) return;
+            const runId = opened.run?.id;
+            if (typeof runId !== 'string' || !/^[A-Za-z0-9-]+$/.test(runId)) {
+              core.setFailed(`Opening agent run for ${ticket} returned no valid run ID.`);
+              return;
+            }
+            const result = await requestJson(`/api/mcp/agents/runs/${encodeURIComponent(runId)}/activities`, {
+              method: 'POST',
+              headers: { 'Idempotency-Key': key },
+              body: JSON.stringify({ type: 'thought', text }),
+            }, 'Posting agent activity');
+            if (!result) return;
+            if (!result.activity?.id) {
+              core.setFailed(`Posting agent activity for ${ticket} returned no activity ID.`);
+              return;
+            }
+            core.info(`Mirrored ${verdictWord} for ${headSha.slice(0, 12)} to ${ticket}: ${result.activity.id}`);

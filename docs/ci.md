@@ -370,7 +370,7 @@ settings, runners, or required checks.
 
 [AI review verdict to ticket](../.github/workflows/ai-review-mirror.yml) copies
 the current GitHub AI Review verdict onto the ticket named by the branch, so the
-review reaches the people reading the board and not only the pull request. It
+review reaches the ticket agent activity and not only the pull request. It
 runs here, not in the private reviewer repository: this repository already owns
 the board token that binds titles and files tickets, while the reviewer's own
 copy was rejected ("Unauthorized") and the failure was hidden by
@@ -387,17 +387,15 @@ copy was rejected ("Unauthorized") and the failure was hidden by
   for what will merge.
 - The concurrency group carries the comment author and never cancels, so an
   ordinary comment on the same PR cannot cancel the reviewer's delivery.
-- Posts one comment with `kind: qa`, because an agent comment without a kind is
-  filed in the hidden agent log instead of the ticket thread. The text is one
-  short plain line naming the verdict and pointing at the pull request, never the
-  findings: the board refuses technical text in a people comment, and the
-  YPER4-910 voice guard answers it with `HTTP 400`. That guard broke five real
-  mirrors between 18:46 and 19:18 UTC on 2026-10-31 while the skip runs stayed
-  green, and the agent log refuses this token (`HTTP 503`), so the findings stay
-  on the pull request (YPER4-978).
-- Skips a commit the ticket already carries and sends an `Idempotency-Key` of
-  `ai-review-mirror-<pr>-<sha>`, so a re-run or an edited verdict never doubles
-  the comment.
+- Resolves the branch ticket through MCP tasks, then opens a runtime agent run
+  and posts a `thought` activity. It never posts people comments or falls back
+  to them. Findings remain on the pull request.
+- Identifies each mirrored thought by repository, PR, head, and verdict.
+  It searches newest-first paginated ticket activity before posting, because
+  activity idempotency keys are scoped to a run. An unchanged latest verdict
+  is skipped even after its run closes. Changed verdicts include the previous
+  mirror activity ID in the delivery key, so APPROVE → CONCERNS → APPROVE
+  delivers all three transitions. Concurrent deliveries in one run share the key.
 - A rejected read or post fails the run. A silent skip is exactly the failure
   this replaces.
 - Both GitHub reads use the same reset-aware retry as the other trusted
