@@ -109,6 +109,16 @@ DELETE ?provider=openrouter
 
 Live table: https://analytics.hypertask.app/ai-features
 
+## Grok text watermark (checked 2026-11-06, HTPR-8247)
+
+From 7 November 2026, xAI watermarks text from `grok-4.7` and the other models named in their output-watermarking docs. The mark is in which tokens the model picks. The response adds no characters, markup, or hidden text. The only extra signal is the `x-watermark` header. This app does not read that header.
+
+The catalog calls xAI only for `grok-4.7` (`spacexai/grok-4.7`), and only while `htpr-7939-grok-gemini4-models` shows that model. Saved ids `grok-4.1-fast-instant`, `grok-4.1-fast-thinking`, `grok-4.20-instant`, `grok-4.20-thinking`, and `grok-4.5` resolve to `gpt-6-luna`. Chat titles and the fast ladder (summaries, question suggestions, status updates) do not call Grok.
+
+`getByokOrTeamGatewayApiKeyForModelOption` loads the `xai` key slot. A paid team's own non-gateway xAI key goes to `https://api.x.ai/v1` as `grok-4.7`. A `vck_` key, including the team gateway key, goes through the AI Gateway as `spacexai/grok-4.7`. On an agent's own chat turn, that agent's `xai` key wins. A custom endpoint can also target `api.x.ai` on the team's key.
+
+Chat, task writer, editor AI, board generation, and @HyperAI store the returned text unchanged. There is no character sequence to strip. Turning the watermark off is a team-admin confirmation in the xAI console, not a code or billing switch. That console setting was left as xAI ships it.
+
 ## Non-team keys (added 2026-07-14, HTPR-4248)
 
 Not every gateway key maps to a customer team. Two internal keys exist; never
