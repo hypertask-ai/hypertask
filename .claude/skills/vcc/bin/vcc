@@ -64,6 +64,15 @@ question_check() {
     ] | unique | join("; ")
   '
 }
+TICKET_LINT=${VCC_TICKET_LINT:-$HOME/.local/share/house-rules/skills/tickets/scripts/ticket-lint}
+house_lint() {
+  local what=$1 text=$2 out
+  shift 2
+  [ -x "$TICKET_LINT" ] || { printf 'vcc: %s refused: ticket-lint missing at %s; run house-rules-sync\n' "$what" "$TICKET_LINT" >&2; exit 5; }
+  out=$(printf '%s' "$text" | "$TICKET_LINT" "$@" - 2>&1) && return 0
+  printf 'vcc: %s refused by the house ticket rules (skills/tickets).\n%s\n' "$what" "$out" >&2
+  exit 5
+}
 question_refuse() {
   printf 'vcc: Question refused: %s; rewrite it for a product owner (pospeak)\n' "$1" >&2
   exit 5
@@ -94,9 +103,10 @@ question_comment() {
   fi
   reason=$(question_check "$text" "$markdown") || question_refuse 'cannot check Question'
   [ -z "$reason" ] || question_refuse "$reason"
+  house_lint Question "$text"
 }
 people_content() {
-  local mode='' kind='' text='' file='' description='' description_file='' mentioned=false arg status
+  local mode='' kind='' text='' file='' description='' description_file='' has_description=false mentioned=false arg status
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --project|--team) [ "$#" -ge 2 ] || return 0; shift 2 ;;
@@ -119,16 +129,16 @@ people_content() {
           --kind) kind=$2 ;;
           --text|--body) text=$2; file='' ;;
           --file) file=$2; text='' ;;
-          --description) description=$2 ;;
-          --description-file) description_file=$2 ;;
+          --description) description=$2; has_description=true ;;
+          --description-file) description_file=$2; has_description=true ;;
           --mentions) mentioned=true ;;
         esac
         shift ;;
       --kind=*) kind=${arg#*=} ;;
       --text=*|--body=*) text=${arg#*=}; file='' ;;
       --file=*) file=${arg#*=}; text='' ;;
-      --description=*) description=${arg#*=} ;;
-      --description-file=*) description_file=${arg#*=} ;;
+      --description=*) description=${arg#*=}; has_description=true ;;
+      --description-file=*) description_file=${arg#*=}; has_description=true ;;
       --mentions=*) mentioned=true ;;
     esac
     shift
@@ -149,6 +159,9 @@ people_content() {
   if [ "$status" != 1 ]; then
     printf '%s\n' 'vcc: agent detail belongs in vcc activity add' >&2
     exit 5
+  fi
+  if [ "$mode" = description ] && [ "$has_description" = true ]; then
+    house_lint 'Ticket description' "$text" --shape
   fi
 }
 people_content "$@"
@@ -212,7 +225,7 @@ review_refuse() {
 }
 review_move() {
   case "${1:-} ${2:-}" in 'task move'|'tasks move') ;; *) return 0 ;; esac
-  local ticket='' section='' comments newest reason
+  local ticket='' section='' comments newest reason description
   shift 2
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -235,6 +248,9 @@ review_move() {
   ' <<< "$comments" 2>/dev/null) || review_refuse "$ticket" 'cannot parse comments'
   reason=$(question_check "$(jq -r '.text // ""' <<< "$newest")") || review_refuse "$ticket" 'cannot check Question'
   [ -z "$reason" ] || review_refuse "$ticket" "$reason; rewrite it for a product owner (pospeak)"
+  house_lint "Valentin Review move ($ticket Question)" "$(jq -r '.text // ""' <<< "$newest")"
+  description=$(hypertask tasks get "$ticket" --json 2>/dev/null | jq -er '.tasks[0].description // ""') || review_refuse "$ticket" 'cannot read description'
+  house_lint "Valentin Review move ($ticket description)" "$description" --shape
 }
 if [ "${1:-}" != activity ]; then
   review_move "$@"
