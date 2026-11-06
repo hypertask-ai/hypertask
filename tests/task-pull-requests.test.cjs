@@ -183,6 +183,68 @@ test("fetchGithubPullRequest normalizes network failures", async () => {
   );
 });
 
+test("fetchGithubPullRequest reads a public pull request when the configured token is refused", async () => {
+  const previous = process.env.GITHUB_TOKEN;
+  process.env.GITHUB_TOKEN = "scoped-token";
+  const parsed = parseGithubPullRequestUrl(
+    "https://github.com/valentinyeo/multiprompt/pull/778",
+  );
+  const calls = [];
+  try {
+    await withMockFetch(
+      async (url, init) => {
+        const authorization = init?.headers?.Authorization ?? null;
+        calls.push({ url: String(url), authorization });
+        if (authorization) {
+          return new Response(
+            JSON.stringify({ message: "Resource not accessible by integration" }),
+            { status: 403, headers: { "Content-Type": "application/json" } },
+          );
+        }
+        if (String(url).includes("/check-runs")) {
+          return Response.json({
+            check_runs: [{ status: "completed", conclusion: "success" }],
+          });
+        }
+        return Response.json({
+          id: 778,
+          html_url: "https://github.com/valentinyeo/multiprompt/pull/778",
+          title: "Match the linked request",
+          state: "open",
+          merged_at: null,
+          updated_at: "2026-11-05T18:00:00Z",
+          base: { repo: { id: 99 } },
+          head: { sha: "abc123def" },
+        });
+      },
+      async () => {
+        const metadata = await fetchGithubPullRequest(parsed);
+        assert.equal(metadata.title, "Match the linked request");
+        assert.equal(metadata.pullRequestId, "778");
+        assert.equal(metadata.repositoryId, "99");
+        assert.equal(metadata.headSha, "abc123def");
+        assert.equal(metadata.checkState, "passing");
+      },
+    );
+  } finally {
+    if (previous === undefined) delete process.env.GITHUB_TOKEN;
+    else process.env.GITHUB_TOKEN = previous;
+  }
+  assert.deepEqual(calls.slice(0, 2), [
+    {
+      url: "https://api.github.com/repos/valentinyeo/multiprompt/pulls/778",
+      authorization: "Bearer scoped-token",
+    },
+    {
+      url: "https://api.github.com/repos/valentinyeo/multiprompt/pulls/778",
+      authorization: null,
+    },
+  ]);
+  assert.equal(calls[2].authorization, "Bearer scoped-token");
+  assert.equal(calls[3].authorization, null);
+  assert.match(calls[3].url, /\/commits\/abc123def\/check-runs/);
+});
+
 test("fetchGithubPullRequest reads the head check runs into the check state", async () => {
   const parsed = parseGithubPullRequestUrl(canonicalPullRequestUrl);
   const urls = [];
