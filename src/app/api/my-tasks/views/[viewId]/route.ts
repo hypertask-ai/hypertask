@@ -1,7 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { isFeatureEnabled, MY_TASKS_QUICK_ADD_FLAG } from "@/lib/flags";
 import { mergeMyTasksViewConfigUpdate } from "@/lib/myTasks/viewConfigMerge";
 import {
   myTasksViewSelect,
@@ -65,9 +64,6 @@ export async function PATCH(
           { error: "configPatch must be an object" },
           { status: 400 },
         );
-      }
-      if (!(await isFeatureEnabled(MY_TASKS_QUICK_ADD_FLAG, auth.userId))) {
-        return NextResponse.json({ error: "Feature disabled" }, { status: 403 });
       }
       configPatch = patch as Record<string, unknown>;
     }
