@@ -14,6 +14,7 @@ import {
   sortOrderSchema,
   createSearchPaginationSchema,
 } from './common/pagination';
+import { TASK_SEARCH_SORT_FIELDS } from '@/lib/mcp/listQuery';
 import { withListQuerySchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
@@ -321,13 +322,23 @@ const searchTasksBaseSchema = z
   })
   .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
 
-export function getSearchTasksInputSchema() {
-  return withListQuerySchema(searchTasksBaseSchema, { omitQuery: true }).strict()
+const searchSortField = z
+  .string()
+  .min(1)
+  .optional()
+  .describe(
+    `Sort as one of ${TASK_SEARCH_SORT_FIELDS.join(', ')}, or field:asc or field:desc. Example: updatedAt:desc.`,
+  )
+
+function finishSearchTasksSchema<T extends z.ZodObject<z.ZodRawShape>>(schema: T) {
+  return withListQuerySchema(schema, { omitQuery: true }).extend({ sort: searchSortField }).strict()
 }
 
-export const SearchTasksInputSchema = withListQuerySchema(searchTasksBaseSchema, {
-  omitQuery: true,
-}).strict()
+export function getSearchTasksInputSchema() {
+  return finishSearchTasksSchema(searchTasksBaseSchema)
+}
+
+export const SearchTasksInputSchema = finishSearchTasksSchema(searchTasksBaseSchema)
 export type SearchTasksInput = z.infer<typeof SearchTasksInputSchema>;
 
 const enhancedSearchTasksBaseSchema = z
@@ -346,13 +357,10 @@ const enhancedSearchTasksBaseSchema = z
   .merge(createSearchPaginationSchema(config.limits.searchLimitMax, config.limits.searchLimitDefault))
 
 export function getEnhancedSearchTasksInputSchema() {
-  return withListQuerySchema(enhancedSearchTasksBaseSchema, { omitQuery: true }).strict()
+  return finishSearchTasksSchema(enhancedSearchTasksBaseSchema)
 }
 
-export const EnhancedSearchTasksInputSchema = withListQuerySchema(
-  enhancedSearchTasksBaseSchema,
-  { omitQuery: true },
-).strict()
+export const EnhancedSearchTasksInputSchema = finishSearchTasksSchema(enhancedSearchTasksBaseSchema)
 export type EnhancedSearchTasksInput = z.infer<typeof EnhancedSearchTasksInputSchema>;
 
 export function getFindRelatedTasksInputSchema() {

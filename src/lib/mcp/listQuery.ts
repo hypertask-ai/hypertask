@@ -32,6 +32,8 @@ export type ParsedListQuery = {
   cursor?: string
 }
 
+export const TASK_SEARCH_SORT_FIELDS = ['id', 'createdAt', 'updatedAt', 'title', 'dueDate', 'ticketNumber'] as const
+
 export const HAS_PR_VALUES = [
   'red',
   'failing',
