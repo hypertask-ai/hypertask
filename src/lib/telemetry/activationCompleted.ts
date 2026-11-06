@@ -1,7 +1,7 @@
 import "server-only";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
-import { HTPR_7284_ACTIVATION_COMPLETED_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7293_ACTIVATION_METRIC_V1_FLAG } from "@/lib/flags/definitions/htpr-7293-activation-metric-v1";
 import { computeActivationForUser } from "@/lib/analytics/activationFacts";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
@@ -10,7 +10,6 @@ import { legacyAccountCategory } from "./savedWorkAnalytics";
 const ACTIVATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function captureActivationCompleted(userId: number, occurredAt = new Date()): Promise<void> {
-  if (!(await isFeatureEnabled(HTPR_7284_ACTIVATION_COMPLETED_FLAG, userId))) return;
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, uid: true, email: true, joinedAt: true },

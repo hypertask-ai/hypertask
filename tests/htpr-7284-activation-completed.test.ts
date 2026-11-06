@@ -4,15 +4,12 @@ import { activationHarness } from "./helpers/activation-harness";
 
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const FLAG = "htpr-7284-activation-completed";
 const SIGNUP = new Date("2026-10-10T12:00:00Z");
 const OCCURRED = new Date("2026-10-11T12:06:00Z");
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 function harness(taskCount = 3, occurredAt = OCCURRED) {
   const h = activationHarness();
-  h.mocks["@/lib/flags"].HTPR_7284_ACTIVATION_COMPLETED_FLAG = FLAG;
-  h.setFlagEnabled(FLAG, true);
   h.users.get(123).joinedAt = SIGNUP;
   Object.assign(h.projects.get(15), { seeded: false, status: "Normal" });
   h.tasks.clear();
@@ -53,7 +50,6 @@ test("third live task within seven days captures the owner activation contract",
     hours_since_signup: 24.1, task_count: 3, is_seeded: false,
   });
   assert.deepEqual(h.queries[0].select._count.select.tasks.where.createdAt, { lte: OCCURRED });
-  assert.deepEqual(h.flagChecks[0], { key: FLAG, userId: 123 });
 });
 
 test("second task does not activate; adding the third does", async () => {
@@ -121,15 +117,6 @@ test("guest and missing users never activate", async () => {
   assert.equal(h.queries.length, 0);
 });
 
-test("flag off never reads the user or boards or captures", async () => {
-  const h = harness();
-  h.setFlagEnabled(FLAG, false);
-  await h.capture();
-  assert.deepEqual(h.prismaCalls, []);
-  assert.equal(h.queries.length, 0);
-  assert.equal(h.captures.length, 0);
-});
-
 test("parallel and later replays deduplicate once per user with the activation marker", async () => {
   const h = harness(4);
   await Promise.all([h.capture(), h.capture(), h.capture()]);
@@ -165,8 +152,6 @@ test("a collaborator's task evaluates only the board owner for activation", asyn
   await h.load("src/lib/telemetry/savedWorkAnalytics.ts").captureTaskCreated(3, { userId: 123 }, "web");
   assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["task_created", "777"], ["activation_completed", "777"]]);
   assert.equal(h.queries[0].where.ownerId, 777);
-  assert.ok(h.flagChecks.some(({ key, userId }) => key === FLAG && userId === 777));
-  assert.ok(!h.flagChecks.some(({ key, userId }) => key === FLAG && userId === 123));
 });
 
 test("agent-created tasks count and activation follows task_created using task.createdAt", async () => {
@@ -176,13 +161,6 @@ test("agent-created tasks count and activation follows task_created using task.c
   assert.deepEqual(h.captures.map((capture) => capture.event), ["task_created", "activation_completed"]);
   assert.equal(h.captures[1].distinctId, "123");
   assert.equal(h.captures[1].properties.activated_at, OCCURRED.toISOString());
-});
-
-test("activation flag off keeps task_created without activation", async () => {
-  const h = harness();
-  h.setFlagEnabled(FLAG, false);
-  await h.load("src/lib/telemetry/savedWorkAnalytics.ts").captureTaskCreated(3, { userId: 123 }, "web");
-  assert.deepEqual(h.captures.map((capture) => capture.event), ["task_created"]);
 });
 
 test("the shared occurrence path uses user scope and a durable deduplicated outbox", async () => {
@@ -213,14 +191,4 @@ test("activation database failure is swallowed by the existing afterResponse bou
   savedWork.processAnalyticsIntentSoon(await savedWork.enqueueTaskCreated(h.prisma, 3, { userId: 123 }, "web"));
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => capture.event), ["task_created"]);
-});
-
-test("activation flag keeps the feature owner-and-QA default and release risk", () => {
-  const definition = harness().load("src/lib/flags/definitions/htpr-7284-activation-completed.ts").default;
-  assert.equal(definition.key, FLAG);
-  assert.equal(definition.kind, "feature");
-  assert.equal(definition.shippedOn, "2026-10-17");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
-  assert.equal(definition.releaseRisk.risk, "new");
-  assert.ok(definition.releaseRisk.reason);
 });

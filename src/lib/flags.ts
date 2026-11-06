@@ -78,6 +78,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-7269-signup-identity-link",
   "htpr-7273-column-events",
   "htpr-7278-memory-only-tracking",
+  "htpr-7284-activation-completed",
   "htpr-7367-server-description-first",
   "htpr-7133-mcp-ratelimit-fast",
 ]);
