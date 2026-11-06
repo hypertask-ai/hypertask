@@ -30,13 +30,11 @@ test('a board member keeps the hidden agent log post', async () => {
   assert.equal(h.calls.comments.length, 0)
 })
 
-test('a post the log cannot take names kind instead of promising a retry', async () => {
-  const h = setup({ runtime: false })
+test('without kind, agent progress stays in the log instead of asking for kind', async () => {
+  const h = setup()
   const response = await h.post({ text: note })
-  assert.equal(response.status, 400)
-  assert.equal(response.body.code, 'missing_field')
-  assert.equal(response.body.field, 'kind')
-  assert.match(response.body.error, /Choose kind \(question\|qa\|done\)/)
+  assert.equal(response.status, 201)
+  assert.equal(response.body.routedTo, 'log')
   assert.equal(h.calls.comments.length, 0)
 })
 
@@ -48,7 +46,7 @@ test('a people comment with kind still reaches the ticket thread', async () => {
 })
 
 test('neither refusal answers 5xx on the paths the caller can fix', async () => {
-  for (const options of [{ noRun: true, notMember: true }, { runtime: false }, {}]) {
+  for (const options of [{ noRun: true, notMember: true }, {}]) {
     const h = setup(options)
     const response = await h.post({ text: note })
     assert.ok(response.status < 500, `answered ${response.status}`)
