@@ -9,10 +9,10 @@ import {
 } from './common/task-identification';
 import {
   paginationSchema,
-  sortBySchema,
   sortOrderSchema,
   createSearchPaginationSchema,
 } from './common/pagination';
+import { VIEW_LIST_SORT_FIELDS } from '@/lib/mcp/views/viewRefusal';
 import {
   priorityFilterNoNoneSchema,
   priorityFilterSchema,
@@ -49,7 +49,7 @@ export function getListViewsInputSchema() {
       })
       .merge(paginationSchema)
       .extend({
-        sort_by: sortBySchema,
+        sort_by: z.enum(VIEW_LIST_SORT_FIELDS).optional(),
         sort_order: sortOrderSchema,
       })
       .strict()

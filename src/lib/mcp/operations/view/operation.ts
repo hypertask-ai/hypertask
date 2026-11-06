@@ -12,6 +12,7 @@ import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions'
 import { isSubtaskSetting } from '@/models/Views/model'
 import { sanitizeBoardFilters, projectVisibleViewRelations } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
+import { isViewCallerError, plainViewError, viewInputRefusal, viewListSortFields, viewMutationRefusal } from '@/lib/mcp/views/viewRefusal'
 
 
 type CreateViewRequestBody = Partial<
@@ -95,13 +96,29 @@ export async function GET(request: NextRequest) {
     const rawProjectId = searchParams.get('projectId')
     const projectId = rawProjectId === null ? undefined : Number(rawProjectId)
     if (projectId !== undefined && (!/^\d+$/.test(rawProjectId!) || !Number.isSafeInteger(projectId) || projectId <= 0)) {
-      return NextResponse.json({ success: false, error: 'Invalid projectId' }, { status: 400 })
+      return viewInputRefusal('project_id must be a positive integer', 'project_id', 'invalid_type')
     }
-    const visibility = searchParams.get('visibility') as ViewVisibility | null || undefined
+    const rawVisibility = searchParams.get('visibility')
+    const visibility = rawVisibility === null ? undefined : rawVisibility as ViewVisibility
+    if (rawVisibility !== null && visibility !== 'Public' && visibility !== 'Private') {
+      return viewInputRefusal('visibility must be Public or Private', 'visibility', 'invalid_value', ['Public', 'Private'])
+    }
     const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100)
     const offset = Math.max(parseInt(searchParams.get('offset') || '0'), 0)
+    const sortFields = viewListSortFields()
     const sortBy = searchParams.get('sort_by') || 'lastUsedAt'
-    const sortOrder = (searchParams.get('sort_order') || 'desc') as 'asc' | 'desc'
+    if (!sortFields.includes(sortBy as (typeof sortFields)[number])) {
+      return viewInputRefusal(
+        `sort_by must be one of ${sortFields.join(', ')}`,
+        'sort_by',
+        'invalid_value',
+        sortFields,
+      )
+    }
+    const sortOrder = searchParams.get('sort_order') || 'desc'
+    if (sortOrder !== 'asc' && sortOrder !== 'desc') {
+      return viewInputRefusal('sort_order must be asc or desc', 'sort_order', 'invalid_value', ['asc', 'desc'])
+    }
     const includeSettings = searchParams.get('include_settings') === 'true'
 
     const orderBy: any =
@@ -336,10 +353,7 @@ export async function POST(request: NextRequest) {
     } else {
       console.error('Error creating view:', error)
     }
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 400 }
-    )
+    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
   }
 
   })(request)
