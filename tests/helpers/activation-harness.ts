@@ -58,7 +58,12 @@ export function activationHarness() {
       update: async ({ where, data }: any) => { Object.assign(tasks.get(where.id), data, { updatedAt: new Date() }); return { ...tasks.get(where.id) }; },
     },
     section: {
-      findMany: async ({ where }: any) => sections.filter((section) => where.id.in.includes(section.id)),
+      findMany: async ({ where }: any) => sections.filter((section) => {
+        if (where.id?.in && !where.id.in.includes(section.id)) return false;
+        if (where.projectId !== undefined && section.projectId !== where.projectId) return false;
+        if (where.deleted !== undefined && (section.deleted ?? false) !== where.deleted) return false;
+        return true;
+      }),
       findFirst: async ({ where }: any) => sections.find((section) => section.id === where.id),
       create: async ({ data }: any) => ({ ...data, id: 1 }),
     },
