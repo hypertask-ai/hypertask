@@ -126,9 +126,8 @@ const ASSISTANT_ERROR_MESSAGES = [
 const isOwnKeyRejectedContent = (trimmed: string) =>
   /^Your (OpenAI|Claude|Google|DeepSeek|Moonshot|Z\.ai|Alibaba|OpenRouter|custom|Baseten) key was rejected\. Update it in Settings, AI, Bring your own key\.$/.test(trimmed);
 
-const isAssistantErrorContent = (trimmed: string, ownKeyRejected: boolean) =>
-  ASSISTANT_ERROR_MESSAGES.includes(trimmed as (typeof ASSISTANT_ERROR_MESSAGES)[number]) ||
-  (ownKeyRejected && isOwnKeyRejectedContent(trimmed));
+const isKnownAssistantError = (trimmed: string) =>
+  ASSISTANT_ERROR_MESSAGES.includes(trimmed as (typeof ASSISTANT_ERROR_MESSAGES)[number]);
 
 const handleActionKeyDown = (event: KeyboardEvent, action: () => void) => {
   if (event.keyCode === KeyCodes.ENTER) {
@@ -208,7 +207,8 @@ const DeliveredMessageActions: FC<DeliveredMessageActionsProps> = ({
   }
 
   if (message.role === "assistant") {
-    if (isAssistantErrorContent(message.content.trim(), ownKeyRejected)) {
+    const trimmed = message.content.trim();
+    if (isKnownAssistantError(trimmed) || (ownKeyRejected && isOwnKeyRejectedContent(trimmed))) {
       return (
         <div className={rowClass}>
           <ActionIcon
