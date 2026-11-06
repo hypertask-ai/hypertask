@@ -18,9 +18,9 @@ type CachedInstructionsArgs = {
   suffix?: string;
 };
 
-export function cachedInstructions(args: CachedInstructionsArgs & { enabled: boolean }): CachedInstructions {
+export function cachedInstructions(args: CachedInstructionsArgs): CachedInstructions {
   const suffix = args.suffix ?? "";
-  if (!args.enabled || !isClaudeModelId(args.modelId) || estimatePromptTokens(args.fixed) < PROMPT_CACHE_MIN_TOKENS) {
+  if (!isClaudeModelId(args.modelId) || estimatePromptTokens(args.fixed) < PROMPT_CACHE_MIN_TOKENS) {
     return `${args.fixed}${suffix}`;
   }
   const messages: SystemModelMessage[] = [
@@ -35,14 +35,8 @@ export function cachedInstructions(args: CachedInstructionsArgs & { enabled: boo
 }
 
 export async function cachedInstructionsForUser(
-  userId: number | null | undefined,
+  _userId: number | null | undefined,
   args: CachedInstructionsArgs,
 ): Promise<CachedInstructions> {
-  let enabled = false;
-  try {
-    const { promptCacheEnabled } = await import("@/app/api/ai/_lib/planGate");
-    enabled = await promptCacheEnabled(userId);
-  } catch {
-  }
-  return cachedInstructions({ ...args, enabled });
+  return cachedInstructions(args);
 }

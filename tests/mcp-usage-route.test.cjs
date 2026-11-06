@@ -50,11 +50,9 @@ function loadRoute({
   getProjectWhere = () => ({}),
   rateLimitResponse = null,
   authBoundary = false,
-  promptCache = false,
 }) {
   const stubbedModules = [
     "src/app/api/mcp/ai/usage/route.ts",
-    "src/app/api/ai/_lib/planGate.ts",
     "src/lib/mcp/auth.ts",
     "src/lib/telemetry/activationOccurrences.ts",
     "src/app/api/ai/_lib/byokKeys.ts",
@@ -135,9 +133,6 @@ function loadRoute({
       onGateway?.({ apiKey, requestPath, ...options });
       return gatewayResponse;
     },
-  });
-  stubModule("src/app/api/ai/_lib/planGate.ts", {
-    promptCacheEnabled: async () => promptCache,
   });
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
@@ -685,7 +680,7 @@ test("data-capable management keys retain the project-scoped route", async () =>
   }
 });
 
-test("HTPR-7076: cache token totals appear only with the prompt cache flag", async () => {
+test("HTPR-7076: cache token totals are always included in MCP usage", async () => {
   const prisma = prismaFixture({ expectedProjectAccess: { accessFor: 6 } });
   const { route, restore } = loadRoute({
     funding: null,
@@ -693,7 +688,6 @@ test("HTPR-7076: cache token totals appear only with the prompt cache flag", asy
     prisma,
     getProjectWhere: (userId) => ({ accessFor: userId }),
     authBoundary: true,
-    promptCache: true,
   });
 
   try {

@@ -322,7 +322,7 @@ test("chat uses one server-evaluated decision for prompt ordering and provider c
 test("legacy promptCache instructions retain their boundary and content on the auto path", async () => {
   const legacy = load("src/app/api/ai/_lib/promptCache.ts");
   const fixed = "Stable policy ".repeat(200);
-  const prompt = legacy.cachedInstructions({ modelId: "claude-fixture", fixed, suffix: "Variable tail", enabled: true });
+  const prompt = legacy.cachedInstructions({ modelId: "claude-fixture", fixed, suffix: "Variable tail" });
   const h = harness();
   const output = await h.resolve().transform({ prompt });
   assert.equal(output.providerOptions.gateway.caching, "auto");

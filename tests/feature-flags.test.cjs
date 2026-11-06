@@ -632,6 +632,22 @@ test("my tasks filter parity flag is retired after becoming permanent", async ()
   listedRows = [];
 });
 
+test("prompt cache flag is retired after becoming permanent", async () => {
+  const key = "htpr-7076-prompt-cache";
+  assert.equal(flags.HTPR_7076_PROMPT_CACHE_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_7076_prompt_cache_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
+});
+
 test("column analytics flag is retired and column events stay server-side", async () => {
   const key = "htpr-7273-column-events";
   assert.equal(flags.HTPR_7273_COLUMN_EVENTS_FLAG, undefined);

@@ -74,6 +74,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6268-agent-visibility",
   "htpr-6320-ai-observability",
   "htpr-6673-capture-user-signed-up-in-posthog",
+  "htpr-7076-prompt-cache",
   "htpr-7269-signup-identity-link",
   "htpr-7273-column-events",
   "htpr-7278-memory-only-tracking",
