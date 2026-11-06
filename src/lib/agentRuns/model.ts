@@ -151,6 +151,7 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
 
 export type RuntimeAgentRunInput = {
   taskId: number;
+  projectId?: number;
   title: string | null;
   source: "runtime";
 };
@@ -158,11 +159,18 @@ export type RuntimeAgentRunInput = {
 export function parseRuntimeAgentRunInput(value: unknown): RuntimeAgentRunInput {
   const body = objectRecord(value);
   if (!body) throw new AgentRunInputError("request body must be an object");
-  const allowedFields = new Set(["taskId", "title", "source"]);
+  const allowedFields = new Set(["taskId", "projectId", "title", "source"]);
   const unknownField = Object.keys(body).find((key) => !allowedFields.has(key));
   if (unknownField) throw new AgentRunInputError(`unknown field: ${unknownField}`);
   if (!Number.isSafeInteger(body.taskId) || Number(body.taskId) < 1) {
     throw new AgentRunInputError("taskId must be a positive integer");
+  }
+  let projectId: number | undefined;
+  if (body.projectId !== undefined && body.projectId !== null) {
+    if (!Number.isSafeInteger(body.projectId) || Number(body.projectId) < 1) {
+      throw new AgentRunInputError("projectId must be a positive integer");
+    }
+    projectId = Number(body.projectId);
   }
   if (body.source !== "runtime") {
     throw new AgentRunInputError('source must be "runtime"');
@@ -177,7 +185,12 @@ export function parseRuntimeAgentRunInput(value: unknown): RuntimeAgentRunInput 
       );
     }
   }
-  return { taskId: Number(body.taskId), title, source: "runtime" };
+  return {
+    taskId: Number(body.taskId),
+    title,
+    source: "runtime",
+    ...(projectId === undefined ? {} : { projectId }),
+  };
 }
 
 export function parseAgentRunStopInput(value: unknown): "DONE" | "STOPPED" {
