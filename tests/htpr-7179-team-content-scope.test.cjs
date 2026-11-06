@@ -131,7 +131,7 @@ for (const mode of ['WATCH', 'ENFORCE', 'FLAG_ERROR']) {
       for (const board of [15, 16, 25, 26]) {
         const sentinel = `${f.projects.find(p => p.id === board).name}-sentinel`;
         const before = f.writes.length;
-        const result = await route.POST(req('tasks/create', 'POST', { project_id: board, title: sentinel, description: 'fixture' }));
+        const result = await route.POST(req('tasks/create', 'POST', { project_id: board, title: sentinel, description: '<h2>Problem</h2><p>Scope fixture.</p><h2>Fix</h2><p>Keep the boundary.</p><h2>Done when</h2><p>The other board stays out.</p><h2>Risk</h2><p>Low.</p><h2>Decision</h2><p>None.</p>' }));
         await assertResult(result, actor !== 'bound' || board < 20, sentinel, f.writes, before);
       }
     });

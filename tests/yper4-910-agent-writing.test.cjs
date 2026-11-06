@@ -16,7 +16,8 @@ for (const text of [
   'One two three four five six seven eight nine ten eleven twelve.',
   '<p>Saved views stay unchanged.</p><p>Nothing to decide.</p>',
   '<a href="https://example.com/src/file.ts">Full proof</a>',
-  'Valentin said: “This original quote stays unchanged even though it contains more than twelve separate words.”',
+  '<p>Valentin said:</p><blockquote><p>This original quote stays unchanged even though it contains more than twelve separate words.</p></blockquote>',
+  'Ada said: “This original quote stays unchanged even though it contains more than twelve separate words.”',
   'Änderungen bleiben gespeichert.',
 ]) {
   test(`short text, links and original quotes remain allowed: ${text}`, () => {

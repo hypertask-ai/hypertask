@@ -448,7 +448,7 @@ export async function createTask(data: {
 }) {
     const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds, creationChannel, analyticsAgentId } = data;
 
-    await enforceAgentWriting(userId, agentId, { title, description });
+    await enforceAgentWriting(userId, agentId, { title, description }, {}, { create: true });
     if (!projectUniqueIdentifier) {
         throw new Error('Project identifier is required');
     }
