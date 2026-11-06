@@ -227,7 +227,7 @@ test("versioned outbox stores threshold business time and deduplicates delivery"
   const h = harness();
   const rows: any[] = [];
   const delivered: any[] = [];
-  Object.assign(h.load("src/lib/telemetry/analyticsOutbox.ts"), {
+  Object.assign(h.mocks["@/lib/telemetry/analyticsOutbox"], {
     isAnalyticsOutboxEnabled: async () => true,
     deliverAnalyticsOutbox: async (row: any) => { delivered.push(row); },
   });

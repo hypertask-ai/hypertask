@@ -189,7 +189,7 @@ test("the shared occurrence path uses user scope and a durable deduplicated outb
   const h = harness();
   const rows: any[] = [];
   const delivered: any[] = [];
-  Object.assign(h.load("src/lib/telemetry/analyticsOutbox.ts"), {
+  Object.assign(h.mocks["@/lib/telemetry/analyticsOutbox"], {
     isAnalyticsOutboxEnabled: async () => true,
     deliverAnalyticsOutbox: async (row: any) => { delivered.push(row); },
   });

@@ -11,6 +11,7 @@ const properties = { invoice_id: "in_paid", amount_paid: 1200, occurred_at: occu
 
 function harness(configure?: (h: ReturnType<typeof activationHarness>) => void) {
   const h = activationHarness();
+  delete h.mocks["@/lib/telemetry/analyticsOutbox"];
   configure?.(h);
   const rows: any[] = [];
   const phases: string[] = [];
