@@ -5,7 +5,6 @@ const path = require('node:path')
 const ts = require('typescript')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
-const fastFlagKey = 'htpr-7133-mcp-ratelimit-fast'
 const exactCountFlagKey = 'htpr-7462-mcp-ratelimit-exact-count'
 
 function load(file, stubs, extras = {}, append = '') {
@@ -50,15 +49,13 @@ function harness({ mode = 'EVERYONE', agent = false, redisFails = false, flagFai
     'next/server': { NextRequest, NextResponse },
     crypto: require('node:crypto'),
     '@/lib/flags/keys': {
-      HTPR_7133_MCP_RATELIMIT_FAST_FLAG: fastFlagKey,
       HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: exactCountFlagKey,
     },
     '@/lib/flags': { featureFlagCandidateUserIds: async (...args) => {
       assert.equal(args.length, 1, 'global selection must not use an identity')
       const [key] = args
-      assert.ok(key === fastFlagKey || key === exactCountFlagKey, 'only known flags are queried')
+      assert.equal(key, exactCountFlagKey, 'only exact-count flag is queried')
       flagCalls.push(key)
-      if (key === fastFlagKey) return null
       if (flagFails) throw new Error('Fixture flag lookup failure')
       if (flagLookup) await flagLookup()
       return mode === 'EVERYONE' ? null : mode === 'OFF' ? [] : [6, 985]

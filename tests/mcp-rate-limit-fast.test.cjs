@@ -5,7 +5,6 @@ const path = require('node:path')
 const ts = require('typescript')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
-const flagKey = 'htpr-7133-mcp-ratelimit-fast'
 const exactCountFlagKey = 'htpr-7462-mcp-ratelimit-exact-count'
 const tick = () => new Promise(resolve => setImmediate(resolve))
 
@@ -27,7 +26,7 @@ function load(file, stubs, extras = {}, append = '') {
 
 const decision = load('src/lib/mcp/rateLimitDecision.ts', {})
 
-function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store = new Map() } = {}) {
+function harness({ initial = 0, env = {}, agent = true, store = new Map() } = {}) {
   let now = 120_000
   let hold = false
   let checked = false
@@ -68,18 +67,13 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
     'next/server': { NextRequest, NextResponse },
     crypto: require('node:crypto'),
     '@/lib/flags/keys': {
-      HTPR_7133_MCP_RATELIMIT_FAST_FLAG: flagKey,
       HTPR_7462_MCP_RATELIMIT_EXACT_COUNT_FLAG: exactCountFlagKey,
     },
     '@/lib/flags': { featureFlagCandidateUserIds: async (...args) => {
-      if (args[0] === exactCountFlagKey) {
-        assert.deepEqual(args, [exactCountFlagKey], 'flag selection must not use an identity')
-        return []
-      }
-      assert.deepEqual(args, [flagKey], 'flag selection must not use an identity')
+      assert.deepEqual(args, [exactCountFlagKey], 'exact-count selection must not use an identity')
       flagCalls++
       if (flagFails) throw new Error('Flag lookup unavailable')
-      return mode === 'EVERYONE' ? null : mode === 'OFF' ? [] : [6, 985]
+      return []
     } },
     '@/lib/redis': { getRedis: async () => {
       const wait = connectionWait
@@ -112,7 +106,6 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
     advance: ms => { now += ms },
     jump: value => { store.set(increments[0].key, value) },
     count: () => store.get(increments[0].key),
-    setMode: value => { mode = value },
     failFlag: () => { flagFails = true },
     failExpiry: () => { expiryFails = true },
     failConnection: () => { connectionFails = true },
@@ -176,7 +169,7 @@ test('second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhausti
   assert.equal(h.increments[2].method, 'incrby')
   h.release()
   await allow(exhausted.result)
-  assert.equal(h.stats().flagCalls, 1, 'flag modes are cached off the hot path')
+  assert.equal(h.stats().flagCalls, 1, 'exact-count modes are cached off the hot path')
 })
 
 for (const leaseFirst of [true, false]) {
@@ -427,93 +420,19 @@ test('a lease recreating an expired Redis key sets expiry when returned count eq
   assert.deepEqual(state(h), { count: 10, reserved: 9, leasing: false })
 })
 
-for (const mode of ['OFF', 'OWNER_ONLY', 'OWNER_AND_QA']) {
-  test(`${mode} uses the legacy always-await plain INCR path without reservations`, async () => {
-    const h = harness({ mode })
-    await h.call()
-    h.hold()
-    for (let i = 0; i < 3; i++) {
-      const next = await observe(h.call())
-      assert.equal(next.settled, false)
-      assert.equal(h.increments.at(-1).method, 'incr')
-      assert.equal(h.rate.__counts.size, 0)
-      h.release()
-      assert.equal(await next.result, null)
-    }
-    assert.equal(h.increments.length, 4)
-  })
-}
-
-test('flag lookup failure uses always-await and rechecks after the cache expires', async () => {
+test('missing tokens and internally checked calls retain the existing no-increment exemption', async () => {
   const h = harness()
-  h.failFlag()
-  await h.call()
-  h.hold()
-  const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  h.release()
-  await next.result
-  assert.equal(h.stats().flagCalls, 1)
-  h.advance(30_001)
-  const retried = await observe(h.call())
-  assert.equal(retried.settled, false)
-  assert.equal(h.stats().flagCalls, 2)
-  h.release()
-  await retried.result
-  assert.ok(h.increments.every(write => write.method === 'incr'))
+  assert.equal(await h.call(null), null)
+  h.setChecked()
+  assert.equal(await h.call(), null)
+  assert.equal(h.increments.length, 0)
+  assert.equal(h.stats().flagCalls, 0)
 })
 
-test('turning the flag off clears reservations and turning it on awaits a fresh count', async () => {
-  const h = harness()
-  await h.call()
-  await h.call()
-  assert.equal(state(h).reserved, 9)
-  h.setMode('OFF')
-  h.advance(30_001)
-  await h.call()
-  assert.equal(h.increments.at(-1).method, 'incr')
-  assert.equal(h.rate.__counts.size, 0)
-  h.setMode('EVERYONE')
-  h.advance(30_001)
-  h.hold()
-  const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  assert.equal(h.increments.at(-1).method, 'incr')
-  h.release()
-  await next.result
+test('retired htpr-7133-mcp-ratelimit-fast flag is absent from definitions and production snapshot', () => {
+  assert.equal(fs.existsSync(path.join(root, 'src/lib/flags/definitions/htpr-7133-mcp-ratelimit-fast.ts')), false)
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'e2e/smoke/production-flag-modes.json'), 'utf8'), /7133-mcp-ratelimit-fast/)
 })
-
-for (const waitFor of ['connection', 'increment']) {
-  test(`turning the flag off during an awaited ${waitFor} prevents old calls repopulating the cache`, async () => {
-    const h = harness()
-    await h.call()
-    const entry = state(h)
-    const connect = waitFor === 'connection' ? h.holdConnection() : undefined
-    h.hold()
-    const old = await observe(h.call())
-    assert.equal(old.settled, false)
-    h.setMode('OFF')
-    h.advance(30_001)
-    const disabled = await observe(h.call())
-    assert.equal(h.rate.__counts.size, 0)
-    h.release(waitFor === 'increment' ? 1 : 0)
-    assert.equal(await disabled.result, null)
-    if (connect) {
-      connect()
-      await tick()
-      assert.equal(h.increments.at(-1).method, 'incr')
-    }
-    h.release()
-    assert.equal(await old.result, null)
-    assert.equal(entry.leasing, false)
-    assert.equal(h.rate.__counts.size, 0)
-    const next = await observe(h.call())
-    assert.equal(next.settled, false)
-    assert.equal(h.increments.at(-1).method, 'incr')
-    h.release()
-    assert.equal(await next.result, null)
-  })
-}
 
 test('a full map never evicts prepaid entries and never stores raw tokens', async () => {
   const h = harness()
@@ -560,34 +479,5 @@ test('anonymous-tier counts still resolve auth and enforce 120, while agents can
     const result = await h.call()
     assert.equal(result?.status === 429, limited)
     assert.equal(h.stats().authCalls, 1)
-  }
-})
-
-test('missing tokens and internally checked calls retain the existing no-increment exemption', async () => {
-  const h = harness()
-  assert.equal(await h.call(null), null)
-  h.setChecked()
-  assert.equal(await h.call(), null)
-  assert.equal(h.increments.length, 0)
-  assert.equal(h.stats().flagCalls, 0)
-})
-
-test('flag registry defaults to Owner + QA (off for this global gate) and the global helper evaluates without a user', async () => {
-  const definition = load('src/lib/flags/definitions/htpr-7133-mcp-ratelimit-fast.ts', {}).default
-  const flags = load('src/lib/flags.ts', {
-    '@/lib/prisma': {}, react: { cache: run => run },
-    '@/lib/auth/getSessionUser': {},
-    '@/lib/flags/definitions': { FEATURE_FLAG_DEFINITIONS: [definition] },
-    '@/lib/flags/keys': {},
-  })
-  assert.equal(definition.key, flagKey)
-  assert.equal(definition.kind, 'feature')
-  assert.ok(definition.releaseRisk.reason)
-  assert.equal(flags.defaultFeatureFlagMode(flagKey), 'OWNER_AND_QA')
-  for (const mode of ['EVERYONE', 'OFF', 'OWNER_ONLY', 'OWNER_AND_QA']) {
-    const db = { featureFlag: { findUnique: async () => ({ mode }) }, user: {
-      findUnique: () => { throw new Error('Global mode check must not read a user') },
-    } }
-    assert.equal(await flags.featureFlagCandidateUserIds(flagKey, db) === null, mode === 'EVERYONE')
   }
 })

@@ -83,7 +83,6 @@
     "htpr-7127-slack-summary-query": "EVERYONE",
     "htpr-7129-board-card-fresh-after-escape": "EVERYONE",
     "htpr-7131-index-new-tickets": "EVERYONE",
-    "htpr-7133-mcp-ratelimit-fast": "EVERYONE",
     "htpr-7137-bulk-archive-undo-all": "EVERYONE",
     "htpr-7141-demo-guest-retry": "EVERYONE",
     "htpr-7146-agent-scope-enforce": "OFF",
