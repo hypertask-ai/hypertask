@@ -94,7 +94,6 @@
     "htpr-7220-legacy-sse-keepalive": "EVERYONE",
     "htpr-7260-kanban-select-all": "EVERYONE",
     "htpr-7263-phone-hold-select": "EVERYONE",
-    "htpr-7278-memory-only-tracking": "EVERYONE",
     "htpr-7284-activation-completed": "EVERYONE",
     "htpr-7289-resume-signup-provisioning": "OWNER_AND_QA",
     "htpr-7290-durable-signup-identify": "EVERYONE",

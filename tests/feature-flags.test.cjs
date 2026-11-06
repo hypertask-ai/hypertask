@@ -675,6 +675,22 @@ test("server first-screen flag is retired and scoped flag seeds reuse server eva
   await assert.rejects(getFirstScreenFlagSeed(985, [active], "bad"), /scope/);
 });
 
+test("memory-only PostHog tracking flag is retired and persistence is always memory", async () => {
+  const key = "htpr-7278-memory-only-tracking";
+  assert.equal(flags.HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_7278_memory_only_tracking_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
+});
+
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();
