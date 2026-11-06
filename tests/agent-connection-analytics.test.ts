@@ -6,13 +6,10 @@ import { activationHarness } from "./helpers/activation-harness";
 
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const flag = "htpr-7272-payment-login-agent-events";
 const connectedAt = new Date("2026-10-16T12:00:00.000Z");
 
 function harness() {
   const h = activationHarness();
-  h.mocks["@/lib/flags"].HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG = flag;
-  h.setFlagEnabled(flag, true);
   h.mocks["@/lib/telemetry/analyticsOutbox"] = { isAnalyticsOutboxEnabled: async () => false };
   return h;
 }
@@ -188,22 +185,6 @@ for (const [name, agentType] of [["Claude Code", "claude_code"], ["Cursor", "cur
     assert.equal(h.captures[0].properties.connection_id, connectionId(`user_token:${transport}:${agentType}`));
   });
 }
-
-test("flag off preserves the exact fingerprint events and properties", async () => {
-  const h = harness();
-  h.setFlagEnabled(flag, false);
-  const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-  await h.connect(123, "old-credential-one", "mcp", "Cursor", connectedAt, "agent:same-agent");
-  await h.connect(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
-  await h.connect(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
-  await h.drain();
-  assert.ok(h.captures.every(({ timestamp }) => timestamp instanceof Date));
-  assert.deepEqual(h.captures.map(({ timestamp, ...capture }) => capture), [
-    { distinctId: "123", event: "agent_connected", properties: { client: "cursor", transport: "mcp", is_first: true } },
-    { distinctId: "123", event: "agent_connected", properties: { client: "cursor", transport: "mcp", is_first: false } },
-  ]);
-  assert.deepEqual(h.logs.map(({ log }) => log), ["old-credential-one", "old-credential-two"].map((token) => `activation:agent_connected:${createHash("sha256").update(token).digest("hex")}`));
-});
 
 for (const historical of ["mcp_connected", "cli_token_exchange", "activation:agent_connected:old-fingerprint"]) {
   test(`${historical} prevents a false first durable connection`, async () => {

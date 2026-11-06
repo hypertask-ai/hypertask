@@ -21,7 +21,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter } from "@/lib/fonts/inter";
 import { newsreader } from "@/lib/fonts/newsreader";
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -75,16 +75,7 @@ export default async function RootLayout(
     cookieStore.get(SESSION_COOKIE)?.value,
   );
   const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument(), getServerTicketShell()]);
-  let identifyEventIds = false;
-  if (analyticsSession) {
-    try {
-      const [enabled] = await Promise.all([
-        isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, analyticsSession.id),
-        firstScreenPromise,
-      ]);
-      if (enabled) identifyEventIds = true;
-    } catch {}
-  }
+  const identifyEventIds = Boolean(analyticsSession);
   const [device, boardDocument, inboxDocument] = await firstScreenPromise;
   const phoneZoom = device.isMobile && await isFeatureEnabled(HTPR_8145_PHONE_ZOOM_FLAG, analyticsSession?.id ?? -1);
   const ticketShellEnabled = await isFeatureEnabled(HTPR_7627_TICKET_FIRST_SCREEN_FLAG, analyticsSession?.id ?? -1);

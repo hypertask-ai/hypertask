@@ -6,16 +6,13 @@ import vm from "node:vm";
 import { randomUUID } from "node:crypto";
 import ts from "typescript";
 
-const flag = "htpr-7272-payment-login-agent-events";
-
 function harness() {
   const cache = new Map<string, any>();
   const refs: any[] = [];
   let refIndex = 0;
   let effects: (() => any)[] = [];
   const captures: any[] = [];
-  const state = { consent: "all", enabled: true, eligible: true, failure: "", session: null as { id: number } | null, candidates: [6, 985] as number[] | null };
-  const flagCalls: any[] = [];
+  const state = { consent: "all", eligible: true, failure: "", session: null as { id: number } | null };
   let config: any;
   let initialize: (() => any) | undefined;
   const window = {
@@ -47,12 +44,8 @@ function harness() {
     "next/navigation": { usePathname: () => "/login" },
     "next/headers": { cookies: async () => ({ get: () => ({ value: "session-token" }) }) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => state.session },
-    "@/lib/flags": {
-      HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: flag,
-      isFeatureEnabled: async (...args: any[]) => { flagCalls.push(args); if (state.failure === "flag") throw Error("flag lookup failed"); return state.enabled; },
-      featureFlagCandidateUserIds: async (key: string) => { flagCalls.push([key]); if (state.failure === "flag") throw Error("flag lookup failed"); return state.candidates; },
-    },
-    "@/lib/flags/keys": { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: flag, HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen" },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/keys": { HTPR_7627_TICKET_FIRST_SCREEN_FLAG: "htpr-7627-ticket-first-screen", HTPR_7278_MEMORY_ONLY_TRACKING_FLAG: "htpr-7278-memory-only-tracking", HTPR_7978_AI_CHIP_EVENTS_FLAG: "htpr-7978-ai-chip-events", HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme", HTPR_7560_FLAG_READER_SUBSCRIBE_FLAG: "htpr-7560-flag-reader-subscribe", HTPR_7530_KEEP_AI_CHAT_CLOSED_FLAG: "htpr-7530-keep-ai-chat-closed", HTPR_7615_SIDEBAR_FIRST_PAINT_FLAG: "htpr-7615-sidebar-first-paint" },
     "@/lib/telemetry/activationAnalytics": { isActivationEligible: async () => { if (state.failure === "eligibility") throw Error("eligibility lookup failed"); return state.eligible; } },
     "@/lib/cookieConsent": { getCookieConsent: () => state.consent, onCookieConsentChange: () => () => {} },
     "@/lib/analytics/productPerformance": { installProductPerformanceSink: () => () => {} },
@@ -118,7 +111,7 @@ function harness() {
     const result = Component(props);
     return { result, effects: [...effects] };
   }
-  return { load, render, state, mocks, captures, flagCalls, posthog, refs, get config() { return config; }, initialize: () => initialize?.() };
+  return { load, render, state, mocks, captures, posthog, refs, get config() { return config; }, initialize: () => initialize?.() };
 }
 
 function plain<T>(value: T): T {
@@ -127,7 +120,7 @@ function plain<T>(value: T): T {
 
 async function startAnalytics(h: ReturnType<typeof harness>, userId: number | null = null) {
   const Analytics = h.load("src/components/Analytics/PostHogAnalytics.tsx").default;
-  const rendered = h.render(Analytics, { authenticatedUserId: userId, authenticatedIsGuest: false, identifyEventIds: h.state.enabled });
+  const rendered = h.render(Analytics, { authenticatedUserId: userId, authenticatedIsGuest: false, identifyEventIds: Boolean(userId) });
   const cleanup = rendered.effects.map((effect) => effect()).filter((value) => typeof value === "function");
   await h.initialize();
   await new Promise((resolve) => setImmediate(resolve));
@@ -177,33 +170,26 @@ test("queue drains once, captures immediately afterward, and cleanup preserves t
   assert.deepEqual(second, [event]);
 });
 
-for (const candidates of [[6, 985], [], null]) {
-  test(`anonymous server gate only enables Everyone, candidates=${JSON.stringify(candidates)}`, async () => {
-    const h = harness();
-    h.state.candidates = candidates;
-    const page = await h.load("src/app/login/page.tsx").default();
-    const tracker = page.props.children[0];
-    assert.equal(tracker.props.enabled, candidates === null);
-    assert.equal(tracker.props.userId, null);
-    assert.deepEqual(h.flagCalls, [[flag]]);
-    h.render(tracker.type, tracker.props).effects.forEach((effect) => effect());
-    const received: any[] = [];
-    h.load("src/lib/analytics/browserCapture.ts").installBrowserCaptureSink((event: any) => received.push(event));
-    assert.equal(received.length, candidates === null ? 1 : 0);
-    assert.deepEqual(plain(page.props.children.slice(1).map((child: any) => child.type)), ["UTMCookieHandler", "LoginComponent"]);
-  });
-}
+test("anonymous visitors always enable signup tracking", async () => {
+  const h = harness();
+  const page = await h.load("src/app/login/page.tsx").default();
+  const tracker = page.props.children[0];
+  assert.equal(tracker.props.enabled, true);
+  assert.equal(tracker.props.userId, null);
+  h.render(tracker.type, tracker.props).effects.forEach((effect) => effect());
+  const received: any[] = [];
+  h.load("src/lib/analytics/browserCapture.ts").installBrowserCaptureSink((event: any) => received.push(event));
+  assert.equal(received.length, 1);
+  assert.deepEqual(plain(page.props.children.slice(1).map((child: any) => child.type)), ["UTMCookieHandler", "LoginComponent"]);
+});
 
-for (const enabled of [false, true]) {
-  for (const eligible of [false, true]) {
-    test(`signed-in server gate requires user flag=${enabled} and eligibility=${eligible}`, async () => {
-      const h = harness();
-      Object.assign(h.state, { enabled, eligible, session: { id: 123 } });
-      const page = await h.load("src/app/login/page.tsx").default();
-      assert.deepEqual(plain(page.props.children[0].props), { enabled: enabled && eligible, userId: 123 });
-      assert.deepEqual(h.flagCalls, [[flag, 123]]);
-    });
-  }
+for (const eligible of [false, true]) {
+  test(`signed-in server gate requires activation eligibility=${eligible}`, async () => {
+    const h = harness();
+    Object.assign(h.state, { eligible, session: { id: 123 } });
+    const page = await h.load("src/app/login/page.tsx").default();
+    assert.deepEqual(plain(page.props.children[0].props), { enabled: eligible, userId: 123 });
+  });
 }
 
 test("essential consent neither queues a signup event nor initializes PostHog", async () => {
@@ -245,29 +231,21 @@ test("queued events are discarded after an account change or consent withdrawal"
   }
 });
 
-test("identify receives event ID and source only with signed-in flag enabled, and reads flag changes at send time", async () => {
+test("identify receives event ID and source for every signed-in session", async () => {
   const h = harness();
-  h.state.enabled = false;
   const { Analytics } = await startAnalytics(h, 123);
   const beforeSend = h.config.before_send;
   const event = () => ({ event: "$identify", uuid: randomUUID(), properties: { preserved: true } });
-  const off = event();
-  assert.equal(beforeSend(off), off);
-  assert.deepEqual(off.properties, { preserved: true });
-  h.render(Analytics, { authenticatedUserId: 123, authenticatedIsGuest: false, identifyEventIds: true }).effects[0]();
   const on = event();
   assert.equal(beforeSend(on), on);
   assert.deepEqual(on.properties, { preserved: true, event_id: on.uuid, source: "web" });
-  const other = { ...event(), event: "$pageview" };
-  beforeSend(other);
-  assert.deepEqual(other.properties, { preserved: true });
   h.render(Analytics, { authenticatedUserId: 123, authenticatedIsGuest: false, identifyEventIds: false }).effects[0]();
-  const offAgain = event();
-  beforeSend(offAgain);
-  assert.deepEqual(offAgain.properties, { preserved: true });
+  const off = event();
+  beforeSend(off);
+  assert.deepEqual(off.properties, { preserved: true });
 });
 
-test("anonymous identify stays untouched even with the flag enabled", async () => {
+test("anonymous identify stays untouched", async () => {
   const h = harness();
   await startAnalytics(h);
   const event = { event: "$identify", uuid: randomUUID(), properties: {} };
@@ -286,11 +264,11 @@ test("identify prop defaults off for callers without the switch", async () => {
   assert.deepEqual(event.properties, {});
 });
 
-for (const failure of ["anonymous-flag", "signed-in-flag", "eligibility"]) {
+for (const failure of ["eligibility"]) {
   test(`analytics ${failure} failure does not prevent the existing login screen rendering`, async () => {
     const h = harness();
-    h.state.failure = failure === "eligibility" ? "eligibility" : "flag";
-    h.state.session = failure === "anonymous-flag" ? null : { id: 123 };
+    h.state.failure = "eligibility";
+    h.state.session = { id: 123 };
     const page = await h.load("src/app/login/page.tsx").default();
     assert.equal(page.props.children[0].props.enabled, false);
     assert.deepEqual(plain(page.props.children.slice(1).map((child: any) => child.type)), ["UTMCookieHandler", "LoginComponent"]);
@@ -298,42 +276,30 @@ for (const failure of ["anonymous-flag", "signed-in-flag", "eligibility"]) {
 }
 
 for (const session of [null, { id: 123 }]) {
-  for (const enabled of [false, true]) {
-    test(`layout passes server identify flag before the provider, user=${session?.id ?? "anonymous"}, enabled=${enabled}`, async () => {
-      const h = harness();
-      Object.assign(h.state, { session, enabled });
-      const layout = await h.load("src/app/layout.tsx").default({ children: "existing-content" });
-      const children = layout.props.children[1].props.children;
-      const analytics = children.find((child: any) => child?.type === "PostHogAnalytics");
-      assert.equal(analytics.props.identifyEventIds, session !== null && enabled);
-      assert.equal(analytics.props.authenticatedUserId, session?.id ?? null);
-      const provider = children.find((child: any) => child?.type === "Provider");
-      assert.equal(provider.props.children, "existing-content");
-      assert.ok(children.indexOf(analytics) < children.indexOf(provider));
-      assert.deepEqual(h.flagCalls.filter(([key]: [string]) => key === flag), session === null ? [] : [[flag, 123]]);
-    });
-  }
+  test(`layout passes server identify flag before the provider, user=${session?.id ?? "anonymous"}`, async () => {
+    const h = harness();
+    h.state.session = session;
+    const layout = await h.load("src/app/layout.tsx").default({ children: "existing-content" });
+    const children = layout.props.children[1].props.children;
+    const analytics = children.find((child: any) => child?.type === "PostHogAnalytics");
+    assert.equal(analytics.props.identifyEventIds, session !== null);
+    assert.equal(analytics.props.authenticatedUserId, session?.id ?? null);
+    const provider = children.find((child: any) => child?.type === "Provider");
+    assert.equal(provider.props.children, "existing-content");
+    assert.ok(children.indexOf(analytics) < children.indexOf(provider));
+  });
 }
 
-test("layout starts identify lookup concurrently and fails closed without blocking content", async () => {
+test("layout renders signed-in identify without a payment flag lookup", async () => {
   const h = harness();
   h.state.session = { id: 123 };
-  let rejectFlag!: (error: Error) => void;
   const started: string[] = [];
-  h.mocks["@/lib/flags"].isFeatureEnabled = (key: string) => {
-    if (key !== flag) return Promise.resolve(false);
-    started.push("flag");
-    return new Promise((_resolve, reject) => { rejectFlag = reject; });
-  };
   h.mocks["@/lib/firstScreen/serverBoardDocument"].getServerBoardDocument = async () => { started.push("board"); return null; };
   h.mocks["@/lib/firstScreen/serverInboxDocument"].getServerInboxDocument = async () => { started.push("inbox"); return null; };
-  const rendering = h.load("src/app/layout.tsx").default({ children: "existing-content" });
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(started, ["board", "inbox", "flag"]);
-  rejectFlag(Error("flag lookup failed"));
-  const layout = await rendering;
+  const layout = await h.load("src/app/layout.tsx").default({ children: "existing-content" });
+  assert.deepEqual(started, ["board", "inbox"]);
   const children = layout.props.children[1].props.children;
-  assert.equal(children.find((child: any) => child?.type === "PostHogAnalytics").props.identifyEventIds, false);
+  assert.equal(children.find((child: any) => child?.type === "PostHogAnalytics").props.identifyEventIds, true);
   assert.equal(children.find((child: any) => child?.type === "Provider").props.children, "existing-content");
 });
 

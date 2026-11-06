@@ -5,20 +5,17 @@ import { activationHarness } from "./helpers/activation-harness";
 
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const flag = "htpr-7272-payment-login-agent-events";
 const occurredAt = new Date("2026-10-16T12:00:00.000Z");
 const marker = "analytics:payment_succeeded:in_paid";
 const properties = { invoice_id: "in_paid", amount_paid: 1200, occurred_at: occurredAt.toISOString() };
 
 function harness(configure?: (h: ReturnType<typeof activationHarness>) => void) {
   const h = activationHarness();
-  h.setFlagEnabled(flag, true);
   configure?.(h);
   const rows: any[] = [];
   const phases: string[] = [];
   const locks: any[] = [];
   let inTransaction = false;
-  h.mocks["@/lib/flags"].HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG = flag;
   const matches = (row: any, where: any) => Object.entries(where).every(([key, value]: [string, any]) => {
     if (value instanceof Date) return row[key].getTime() === value.getTime();
     if (value && typeof value === "object") {
@@ -92,7 +89,11 @@ function harness(configure?: (h: ReturnType<typeof activationHarness>) => void) 
   return { ...h, rows, phases, locks, capture, api, outbox };
 }
 
-test("flag on commits marker and durable occurrence before delivery with stable UUID and business time", async () => {
+function makeIneligible(h: ReturnType<typeof harness>) {
+  h.users.get(123).uid = "guest_local";
+}
+
+test("eligible users commit marker and durable occurrence before delivery with stable UUID and business time", async () => {
   const h = harness();
   let computed = 0;
   await h.api.captureAnalyticsOccurrence(123, "payment_succeeded", marker, async (tx: any) => {
@@ -168,31 +169,11 @@ test("failed delivery stays pending; a due cron retries once with the original U
   assert.equal(h.captureAttempts.length, 2);
 });
 
-test("flag off preserves the exact inline envelope, ordering, and retry behavior with no outbox writes", async () => {
-  const h = harness();
-  h.setFlagEnabled(flag, false);
-  h.setFailure("capture");
-  await assert.rejects(h.capture(), /mock capture unavailable/);
-  assert.equal(h.rows.length, 0);
-  assert.equal(h.logs.length, 0);
-  const uuid = h.captureAttempts[0].uuid;
-  h.setFailure(null);
-  await h.capture();
-  await h.capture();
-  assert.equal(h.rows.length, 0);
-  assert.equal(h.logs.length, 1);
-  assert.equal(h.captures.length, 1);
-  assert.deepEqual(h.captureAttempts[1], { distinctId: "123", event: "payment_succeeded", uuid, properties, timestamp: occurredAt });
-  assert.equal(h.captureAttempts[0].timestamp, occurredAt);
-  assert.deepEqual(h.phases, ["inline-capture", "inline-capture", "commit", "commit"]);
-});
-
 const beforeMidnight = "2026-10-15T23:59:59.000Z";
 const afterMidnight = new Date("2026-10-16T00:00:05.000Z");
 
 for (const [mode, configure] of [
-  ["flag off", (h: any) => h.setFlagEnabled(flag, false)],
-  ["ineligible", (h: any) => h.setEnabled(false)],
+  ["ineligible", (h: any) => makeIneligible(h)],
   ["outbox", () => {}],
 ] as const) {
   test(`${mode}: a business time just before midnight keeps its UTC day when delivery runs after midnight`, async (t) => {
@@ -203,9 +184,9 @@ for (const [mode, configure] of [
   });
 }
 
-test("direct path: an explicit occurredAt wins over the property and createdAt", async () => {
+test("inline path: an explicit occurredAt wins over the property and createdAt", async () => {
   const h = harness();
-  h.setFlagEnabled(flag, false);
+  makeIneligible(h);
   const explicit = new Date(beforeMidnight);
   await h.api.captureAnalyticsOccurrence(123, "task_created", marker, async () => ({ ...properties, occurred_at: "2026-10-01T00:00:00.000Z" }), {
     occurredAt: explicit, createdAt: afterMidnight,
@@ -213,10 +194,10 @@ test("direct path: an explicit occurredAt wins over the property and createdAt",
   assert.equal(h.captureAttempts[0].timestamp, explicit);
 });
 
-test("direct path: a failed capture retries with the original business time, not the retry time", async (t) => {
+test("inline path: a failed capture retries with the original business time, not the retry time", async (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: afterMidnight });
   const h = harness();
-  h.setFlagEnabled(flag, false);
+  makeIneligible(h);
   h.setFailure("capture");
   const send = () => h.api.captureAnalyticsOccurrence(123, "task_created", marker, { ...properties, occurred_at: beforeMidnight });
   await assert.rejects(send(), /mock capture unavailable/);
@@ -226,7 +207,7 @@ test("direct path: a failed capture retries with the original business time, not
   assert.deepEqual(h.captureAttempts.map((attempt: any) => attempt.timestamp.toISOString()), [beforeMidnight, beforeMidnight]);
 });
 
-for (const [mode, configure] of [["flag off", (h: any) => h.setFlagEnabled(flag, false)], ["outbox", () => {}]] as const) {
+for (const [mode, configure] of [["ineligible", (h: any) => makeIneligible(h)], ["outbox", () => {}]] as const) {
   test(`${mode}: a malformed occurred_at falls back to createdAt, then to the capture time`, async (t) => {
     t.mock.timers.enable({ apis: ["Date"], now: afterMidnight });
     const withCreatedAt = harness(configure);
@@ -303,27 +284,23 @@ test("retry delays are 1m, 5m, 30m, 2h, then 12h and stop after ten failures", a
   assert.equal(h.captureAttempts.length, 10);
 });
 
-test("turning the flag off or losing eligibility pauses durable delivery", async () => {
+test("losing eligibility pauses durable delivery", async () => {
   const h = harness();
   h.setFailure("capture");
   await h.capture();
   h.setFailure(null);
   h.rows[0].nextAttemptAt = new Date(0);
-  h.setFlagEnabled(flag, false);
-  assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 1 });
-  h.setFlagEnabled(flag, true);
-  h.setEnabled(false);
-  h.rows[0].nextAttemptAt = new Date(0);
+  makeIneligible(h);
   assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 1 });
   assert.equal(h.captureAttempts.length, 1);
-  h.setEnabled(true);
+  h.users.get(123).uid = "real_123";
   h.rows[0].nextAttemptAt = new Date(0);
   assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 0 });
 });
 
 test("ineligible users keep the legacy inline behavior instead of creating an outbox", async () => {
   const h = harness();
-  h.setEnabled(false);
+  makeIneligible(h);
   await h.capture();
   assert.equal(h.rows.length, 0);
   assert.equal(h.captures.length, 1);
@@ -420,37 +397,29 @@ test("cron is scheduled every five minutes and considers at most 100 due records
   assert.deepEqual(config.crons.filter((cron: any) => cron.path === "/api/cron/analytics-outbox"), [{ path: "/api/cron/analytics-outbox", schedule: "*/5 * * * *" }]);
 });
 
-for (const reason of ["flag", "eligibility"]) {
-  test(`100+ ${reason}-paused rows yield to an eligible row on the next cron run without consuming attempts`, async () => {
-    let paused = false;
-    const h = harness((h) => {
-      const isFeatureEnabled = h.mocks["@/lib/flags"].isFeatureEnabled;
-      h.mocks["@/lib/flags"].isFeatureEnabled = async (key: string, userId: number) =>
-        !(paused && userId === 123 && reason === "flag" && key === flag) && await isFeatureEnabled(key, userId);
-    });
-    h.setFailure("capture");
-    await h.capture();
-    h.setFailure(null);
-    paused = true;
-    if (reason === "eligibility") h.users.get(123).uid = "guest_local";
-    const original = { ...h.rows[0], nextAttemptAt: new Date(0) };
-    h.rows.splice(0);
-    for (let i = 0; i < 101; i++) h.rows.push({ ...original, id: `paused-${i}`, key: `paused-${i}`, uuid: `paused-${i}` });
-    h.users.set(234, { id: 234, uid: "real_234", email: "other@example.test" });
-    h.rows.push({ ...original, id: "eligible", key: "eligible", uuid: "eligible", userId: 234, nextAttemptAt: new Date(1) });
-    const before = Date.now();
-    assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 100 });
-    for (const row of h.rows.slice(0, 100)) {
-      assert.ok(row.nextAttemptAt.getTime() >= before + 3600000);
-      assert.ok(row.nextAttemptAt.getTime() <= Date.now() + 3600000);
-      assert.equal(row.attempts, original.attempts);
-      assert.equal(row.lastError, original.lastError);
-      assert.equal(row.deliveredAt, null);
-    }
-    assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 1 });
-    assert.equal(h.captures.length, 1);
-    assert.equal(h.captures[0].distinctId, "234");
-    assert.equal(h.captureAttempts.length, 2);
-    assert.ok(h.rows[101].deliveredAt);
-  });
-}
+test("100+ ineligible-paused rows yield to an eligible row on the next cron run without consuming attempts", async () => {
+  const h = harness();
+  h.setFailure("capture");
+  await h.capture();
+  h.setFailure(null);
+  h.users.get(123).uid = "guest_local";
+  const original = { ...h.rows[0], nextAttemptAt: new Date(0) };
+  h.rows.splice(0);
+  for (let i = 0; i < 101; i++) h.rows.push({ ...original, id: `paused-${i}`, key: `paused-${i}`, uuid: `paused-${i}` });
+  h.users.set(234, { id: 234, uid: "real_234", email: "other@example.test" });
+  h.rows.push({ ...original, id: "eligible", key: "eligible", uuid: "eligible", userId: 234, nextAttemptAt: new Date(1) });
+  const before = Date.now();
+  assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 100 });
+  for (const row of h.rows.slice(0, 100)) {
+    assert.ok(row.nextAttemptAt.getTime() >= before + 3600000);
+    assert.ok(row.nextAttemptAt.getTime() <= Date.now() + 3600000);
+    assert.equal(row.attempts, original.attempts);
+    assert.equal(row.lastError, original.lastError);
+    assert.equal(row.deliveredAt, null);
+  }
+  assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 1 });
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].distinctId, "234");
+  assert.equal(h.captureAttempts.length, 2);
+  assert.ok(h.rows[101].deliveredAt);
+});

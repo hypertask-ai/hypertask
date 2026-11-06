@@ -140,17 +140,15 @@ test("PostHog failure retains signup identify for a successful cron retry", asyn
   assert.equal(h.captures.length, 1);
 });
 
-test("identify delivery uses only signup flags, not payment flags", async () => {
+test("identify delivery uses only signup flags for outbox gating", async () => {
   const h = harness();
-  h.setFlagEnabled("htpr-7272-payment-login-agent-events", false);
-  assert.equal(await h.outbox.isAnalyticsOutboxEnabled(123), false);
+  assert.equal(await h.outbox.isAnalyticsOutboxEnabled(123), true);
   h.flagChecks.length = 0;
   assert.equal(await h.outbox.isSignupIdentifyOutboxEnabled(123), true);
   assert.equal((await h.link()).link, true);
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.ok(h.rows[0].deliveredAt instanceof Date);
-  assert.equal(h.flagChecks.some(({ key }) => key === "htpr-7272-payment-login-agent-events"), false);
 });
 
 test("queued identify waits when durable flag is off and delivers when restored", async () => {
