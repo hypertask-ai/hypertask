@@ -98,7 +98,13 @@ test("CLI code exchange is consumed atomically and emits once, not on credential
   assert.equal((await POST(request())).status, 401);
     await h.authenticate(request(), 123, "mock-cli-credential");
   await h.drain();
-  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "agent_connected", properties: { client: "other", transport: "cli", is_first: true } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].distinctId, "123");
+  assert.equal(h.captures[0].event, "agent_connected");
+  assert.equal(h.captures[0].properties.client, "other");
+  assert.equal(h.captures[0].properties.transport, "cli");
+  assert.equal(h.captures[0].properties.is_first, true);
+  assert.equal(h.captures[0].properties.agent_type, "hypertask_cli");
   save(h);
 });
 
@@ -130,8 +136,8 @@ for (const [scenario, userId, enabled] of [["other-flags-off", 123, false], ["QA
     const statusRows = (h: ReturnType<typeof activationHarness>) => h.logs.filter((row) => row.log === "cli_token_exchange").map(({ id, ...row }) => row);
     assert.deepEqual(statusRows(current), statusRows(production));
     assert.deepEqual(statusRows(current).map(({ log, type, status, LoggedById }) => ({ log, type, status, LoggedById })), Array.from({ length: 2 }, () => ({ log: "cli_token_exchange", type: "Signup", status: "Normal", LoggedById: userId })));
-    assert.equal(current.captures.length, userId !== 985 ? 2 : 0);
-    if (current.captures.length) assert.deepEqual(current.captures.map((capture) => capture.properties.is_first), [true, false]);
+    assert.equal(current.captures.length, userId !== 985 ? 1 : 0);
+    if (current.captures.length) assert.deepEqual(current.captures.map((capture) => capture.properties.is_first), [true]);
   });
 
   for (const boundedLogging of [false, true]) {
@@ -178,7 +184,9 @@ test("durable connection claims survive cold starts and honor historical Logs", 
   await h.connect(123, "mock-mcp-credential", "mcp", "Claude Code");
   await h.connect(123, "mock-mcp-credential", "mcp", "Claude Code");
   await h.drain();
-  assert.deepEqual(h.captures[0].properties, { client: "claude_code", transport: "mcp", is_first: false });
+  assert.equal(h.captures[0].properties.client, "claude_code");
+  assert.equal(h.captures[0].properties.transport, "mcp");
+  assert.equal(h.captures[0].properties.is_first, false);
   const cold = activationHarness();
   cold.logs.push(...h.logs);
   await cold.connect(123, "mock-mcp-credential", "mcp", "Claude Code");
@@ -195,7 +203,7 @@ test("direct authenticated credentials classify MCP/API and ignore OAuth refresh
   const oauth = jwt.sign({ iss: contract.JWT_OAUTH_ISSUER, aud: contract.JWT_OAUTH_AUDIENCE }, "mock-local-signing");
   await h.authenticate(new Request("http://localhost/mcp"), 123, oauth);
   await h.drain();
-  assert.deepEqual(h.captures.map((event) => event.properties), [
+  assert.deepEqual(h.captures.map((event) => ({ client: event.properties.client, transport: event.properties.transport, is_first: event.properties.is_first })), [
     { client: "cursor", transport: "mcp", is_first: true },
     { client: "codex", transport: "api", is_first: false },
   ]);

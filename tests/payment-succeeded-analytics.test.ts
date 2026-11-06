@@ -5,13 +5,10 @@ import { activationHarness } from "./helpers/activation-harness";
 
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const paymentFlag = "htpr-7272-payment-login-agent-events";
 const paidAt = 1769999990;
 
 function harness() {
   const h = activationHarness();
-  h.mocks["@/lib/flags"].HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG = paymentFlag;
-  h.setFlagEnabled(paymentFlag, true);
   h.mocks["@/lib/telemetry/analyticsOutbox"] = { isAnalyticsOutboxEnabled: async () => false };
   h.prisma.team.findFirst = async ({ where }: any) => where.stripe_customer_id === "cus_stored"
     ? { id: "team", googleAccount: { userId: 123 } } : null;
@@ -83,7 +80,6 @@ test("renewals capture exact payment properties once per invoice, not per Stripe
   assert.equal(h.logs.length, 1);
   assert.equal(h.logs[0].log, "analytics:payment_succeeded:in_renewal");
   assert.match(h.captureAttempts[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-  assert.ok(h.flagChecks.some(({ key, userId }) => key === paymentFlag && userId === 123));
   await record(h, event(invoice({ id: "in_next_renewal" }), "evt_next"));
   await h.drain();
   assert.equal(payments(h).length, 2);
@@ -127,17 +123,13 @@ test("payment and seat paths share one stored customer lookup and never fall bac
   assert.deepEqual(payments(h), [expected()]);
 });
 
-test("payment flag is independent from subscription_started", async () => {
-  for (const paymentEnabled of [false, true]) {
-    const h = harness();
-    h.setFlagEnabled(paymentFlag, paymentEnabled);
-    const evt = event(invoice({ billing_reason: "subscription_create" }));
-    await record(h, evt, async () => subscription(), async () => ({ data: [], has_more: false }));
-    await h.drain();
-    assert.deepEqual(h.captures.map((capture) => capture.event).sort(),
-      [...(paymentEnabled ? ["payment_succeeded"] : []), "subscription_started"].sort());
-    if (paymentEnabled) assert.deepEqual(payments(h), [expected(evt)]);
-  }
+test("first paid invoice emits payment_succeeded with subscription_started", async () => {
+  const h = harness();
+  const evt = event(invoice({ billing_reason: "subscription_create" }));
+  await record(h, evt, async () => subscription(), async () => ({ data: [], has_more: false }));
+  await h.drain();
+  assert.deepEqual(h.captures.map((capture) => capture.event).sort(), ["payment_succeeded", "subscription_started"]);
+  assert.deepEqual(payments(h), [expected(evt)]);
 });
 
 test("payment eligibility excludes QA, guests, and missing users", async () => {

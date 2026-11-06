@@ -208,6 +208,8 @@ test("flagged Unreleased list and count exclude Off; legacy callers stay unchang
 });
 
 test("risk filters combine with types and all mode tabs; default risk sort is safe first then oldest", () => {
+  const olderNone = "htpr-8554-older-none";
+  risks[olderNone] = { risk: "none", reason: "Fixture so risk sort still has two safe flags." };
   const byRisk = value => Object.keys(risks).find(key => risks[key].risk === value);
   const rows = [
     fixture(byRisk("new"), "feature", "OWNER_AND_QA", "2026-09-01"),
@@ -215,7 +217,7 @@ test("risk filters combine with types and all mode tabs; default risk sort is sa
     fixture(byRisk("small"), "bugfix", "OFF", "2026-09-02"),
     fixture("no-risk", "feature", "OWNER_ONLY", "2026-08-01"),
   ];
-  const secondNone = Object.keys(risks).find(key => risks[key].risk === "none" && key !== byRisk("none"));
+  const secondNone = olderNone;
   rows.push(fixture(secondNone, "improvement", "OWNER_AND_QA", "2026-09-04"));
   assert.deepEqual(cluster(rows, parse("").sort, "ALL", { shippedOnly: true }).flatMap(([, rows]) => rows).map(row => row.key), [secondNone, byRisk("none"), byRisk("small"), byRisk("new"), "no-risk"]);
   for (const tab of tabs) {
@@ -226,6 +228,7 @@ test("risk filters combine with types and all mode tabs; default risk sort is sa
       assert.deepEqual(actual.map(row => row.key).sort(), expected.map(row => row.key).sort());
     }
   }
+  delete risks[olderNone];
 });
 
 test("a control change commits a pending search once before pushing the control", async () => {

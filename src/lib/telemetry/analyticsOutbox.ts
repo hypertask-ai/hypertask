@@ -1,6 +1,6 @@
 import type { AnalyticsOutbox } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG } from "@/lib/flags/definitions/htpr-7290-durable-signup-identify";
 import { isActivationEligible } from "./activationAnalytics";
 import { postHogClient } from "./signupAnalytics";
@@ -11,7 +11,7 @@ const LEASE_MS = 300000;
 type DeliveryResult = "delivered" | "failed" | "skipped";
 
 export async function isAnalyticsOutboxEnabled(userId: number): Promise<boolean> {
-  return await isActivationEligible(userId) && await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId);
+  return await isActivationEligible(userId);
 }
 
 export async function isSignupIdentifyOutboxEnabled(userId: number): Promise<boolean> {

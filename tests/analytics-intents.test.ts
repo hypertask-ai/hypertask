@@ -158,7 +158,6 @@ function subscription(): any {
 
 function stripeHarness(event = paidEvent()) {
   const h = harness();
-  h.setFlagEnabled("htpr-7272-payment-login-agent-events", true);
   h.prisma.team.findFirst = async ({ where }: any) => typeof where.stripe_customer_id === "string"
     ? { id: "team", googleAccount: { userId: 123 } } : null;
   const billing: string[] = [];

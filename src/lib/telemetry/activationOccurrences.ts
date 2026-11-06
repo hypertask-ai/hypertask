@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { isOAuthAccessTokenPayload, oauthClientIdFromPayload } from "@/lib/mcp/oauthTokenContract";
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { LogType, Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
@@ -114,25 +113,22 @@ export async function captureAgentConnection(payload: AgentConnectionPayload): P
   const connectedAt = new Date(payload.connectedAt);
   const { isActivationEligible } = await import("./activationAnalytics");
   if (!(await isActivationEligible(userId)) || !postHogClient()) throw new AnalyticsIntentDeferred("Agent connection analytics is not available yet");
-  const durable = await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId);
   const agentType = identifyMcpCli(clientName) ? "hypertask_cli" : activationClient(clientName);
-  const connectionId = durable ? createHash("sha256").update(`hypertask:connection:${userId}:${key}`).digest("hex").slice(0, 32) : null;
+  const connectionId = createHash("sha256").update(`hypertask:connection:${userId}:${key}`).digest("hex").slice(0, 32);
   const legacyMarker = `activation:agent_connected:${fingerprint}`;
-  const marker = connectionId ? `activation:agent_connected:connection:${connectionId}` : legacyMarker;
-  if (connectionId && await claimConnectionCountedBeforeRollout(userId, legacyMarker, marker)) return;
+  const marker = `activation:agent_connected:connection:${connectionId}`;
+  if (await claimConnectionCountedBeforeRollout(userId, legacyMarker, marker)) return;
   await captureAnalyticsOccurrence(userId, "agent_connected", marker, async (tx) => {
     const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
       { log: { startsWith: "activation:agent_connected:" } },
       { ...connectionHistory, createdAt: { lt: connectedAt } },
     ] } });
     return {
-      ...(connectionId ? {
-        ...serverAnalyticsProperties(userId, null, null, `agent_connected:${connectionId}`, connectedAt),
-        connection_id: connectionId, agent_type: agentType,
-      } : {}),
+      ...serverAnalyticsProperties(userId, null, null, `agent_connected:${connectionId}`, connectedAt),
+      connection_id: connectionId, agent_type: agentType,
       client: activationClient(clientName), transport, is_first: !previous,
     };
-  }, connectionId ? { occurredAt: connectedAt } : undefined);
+  }, { occurredAt: connectedAt });
 }
 
 async function claimConnectionCountedBeforeRollout(userId: number, legacyMarker: string, marker: string): Promise<boolean> {
