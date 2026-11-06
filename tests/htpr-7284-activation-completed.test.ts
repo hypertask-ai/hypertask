@@ -212,7 +212,7 @@ test("activation database failure is swallowed by the existing afterResponse bou
   const savedWork = h.load("src/lib/telemetry/savedWork.ts");
   savedWork.processAnalyticsIntentSoon(await savedWork.enqueueTaskCreated(h.prisma, 3, { userId: 123 }, "web"));
   await h.drain();
-  assert.equal(h.captures.length, 0);
+  assert.deepEqual(h.captures.map((capture) => capture.event), ["task_created"]);
 });
 
 test("activation flag keeps the feature owner-and-QA default and release risk", () => {
