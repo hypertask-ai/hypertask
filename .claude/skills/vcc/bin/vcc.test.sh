@@ -99,7 +99,14 @@ printf ' \n\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-co
 run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
 [ "$status" = 2 ] || fail 'empty board login was not refused'
 printf 'fixture-token\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-printf 'ok runner writes refused without its own board login\n'
+run env -u SHIP_SESSION_NAME HT_TOKEN=another-agent-token bash "$vcc" comment add X-1 --text hi
+[ "$status" = 2 ] || fail 'foreign supplied login silently replaced by default identity'
+[[ $(< "$T/err") == *'set SHIP_SESSION_NAME'* ]] || fail 'missing explicit-identity guidance'
+[[ $(< "$T/err") != *another-agent-token* ]] || fail 'identity refusal leaked supplied token'
+[[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'foreign login refusal reached the board'
+allowed env -u SHIP_SESSION_NAME HT_TOKEN=fixture-token bash "$vcc" comment add X-1 --text hi
+allowed env SHIP_SESSION_NAME=Fixture HT_TOKEN=another-agent-token bash "$vcc" comment add X-1 --text hi
+printf 'ok runner writes refused without its own board login; ambiguous supplied login fails closed\n'
 
 for command in get list search last; do
   allowed env VCC_HELPER=1 bash "$vcc" tasks "$command" X-1

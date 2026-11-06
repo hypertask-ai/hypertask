@@ -242,7 +242,13 @@ case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
     [ "$IDENTITY" = "${SHIP_SESSION_NAME%% | *}" ] \
       || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; } ;;
 esac
+caller_token=${HT_TOKEN:-}
 HT_TOKEN="$(cat "$TOKEN_FILE")"
+if [ -z "${SHIP_SESSION_NAME:-}" ] && [ -n "$caller_token" ] && [ "$caller_token" != "$HT_TOKEN" ]; then
+  printf '%s\n' 'vcc: supplied board login differs from the default; set SHIP_SESSION_NAME to your configured agent identity' >&2
+  exit 2
+fi
+unset caller_token
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
 completion_move "$@"
