@@ -201,7 +201,12 @@ exit 0
 EOF
 cat > "$D/hypertask" <<'EOF'
 #!/usr/bin/env bash
-if [ "$1 $2" = "tasks get" ]; then [ -n "${FAKE_TASK:-}" ] && cat "$FAKE_TASK"; exit; fi
+if [ "$1 $2" = "tasks get" ]; then
+  [ -z "${FAKE_TASK_FAIL:-}" ] || exit 1
+  if [ -n "${FAKE_TASK:-}" ]; then cat "$FAKE_TASK";
+  else printf '{"success":true,"tasks":[{"ticketNumber":"%s","projectId":4060,"section":"Todo","labels":[],"assignees":[]}]}' "$3"; fi
+  exit
+fi
 cat "$FAKE_COMMENTS"
 EOF
 cat > "$D/ht" <<'EOF'
@@ -378,6 +383,8 @@ if [ "$1 $2" = 'tasks list' ] && [[ " $* " != *' --status '* ]]; then
   exit
 fi
 if [ "$1 $2" = 'tasks get' ] && [ "$3" = 'YPER4-999' ]; then
+  [ -z "${FAKE_TASK_FAIL:-}" ] || exit 1
+  if [ -n "${FAKE_TASK:-}" ]; then cat "$FAKE_TASK"; exit; fi
   printf '{"success":true,"tasks":[{"ticketNumber":"YPER4-999","projectId":4060,"section":"Todo","labels":[],"assignees":[]}]}'
   exit
 fi
@@ -567,5 +574,59 @@ mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 eq "a runner claims a CI ticket" "$rc" 0
 [[ $out != *'Domain admission failed'* ]] && ok "a CI claim skips the working-area check" || bad "a CI claim hit the area check: $out"
 grep -q '^task move HYCI-30 --section In Progress' "$D/log" && ok "a runner's CI claim reaches the move" || bad "a runner's CI claim wrote nothing"
+
+# Ticket eligibility is checked before hold, domain admission, or board writes.
+export SHIP_CLAIM_HYPERTASK=$D/hold-ht
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
+eligible_task() {
+  jq -n --arg section "$1" --arg label "$2" '{success:true,tasks:[{ticketNumber:"YPER4-999",projectId:4060,section:$section,labels:[{name:$label}],assignees:[]}]}' > "$D/eligibility.json"
+}
+for ticket in HTPR-8264 HYFA-1 YPER4-999 HYCI-30; do
+  for section in 'In Progress' 'AI Review' Backlog; do
+    eligible_task "$section" design-pass
+    : > "$D/log"; : > "$HOLD_READS"
+    out=$(SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
+    eq "$ticket design-pass in $section refuses runner" "$rc" 4
+    [[ $out == *'HT Design Builder owns it outside QA'* ]] && ok 'refusal names Design Builder' || bad "unclear refusal: $out"
+    [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'refusal precedes writes and hold reads' || bad 'ineligible claim reached hold or writes'
+  done
+  eligible_task QA brain-extra-hard
+  : > "$D/log"; : > "$HOLD_READS"
+  out=$(SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim "$ticket" 2>&1); rc=$?
+  eq "$ticket extra-hard refuses runner even in QA" "$rc" 4
+  [[ $out == *'brain-extra-hard'* ]] && ok 'refusal explains brain restriction' || bad "unclear brain refusal: $out"
+  [ ! -s "$D/log" ] && [ ! -s "$HOLD_READS" ] && ok 'brain refusal precedes writes and hold reads' || bad 'extra-hard claim reached hold or writes'
+done
+for identity in 'RUNNER 6' 'HT Design Builder' 'Infra Runner 2'; do
+  for label in design-pass brain-extra-hard; do
+    eligible_task QA "$label"
+    [ "$identity" != 'RUNNER 6' ] || [ "$label" != brain-extra-hard ] || continue
+    : > "$D/log"
+    SHIP_SESSION_NAME="$identity" FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "$identity may claim QA $label" "$?" 0
+    grep -q '^task assign YPER4-999 --self' "$D/log" && ok 'allowed claim reaches assignment' || bad 'allowed claim did not assign'
+  done
+  if [ "$identity" != 'RUNNER 6' ]; then
+    eligible_task 'In Progress' design-pass
+    SHIP_SESSION_NAME="$identity" FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
+    eq "$identity may claim design-pass outside QA" "$?" 0
+  fi
+done
+for label in brain-medium brain-hard; do
+  eligible_task 'In Progress' "$label"
+  SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
+  eq "ordinary $label ticket remains claimable" "$?" 0
+done
+for payload in '{}' '{"success":true,"tasks":[]}' '{"success":true,"tasks":[{"section":"QA"}]}'; do
+  printf '%s' "$payload" > "$D/eligibility.json"
+  : > "$D/log"
+  SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/eligibility.json ./ship-claim YPER4-999 >/dev/null 2>&1
+  eq 'malformed eligibility fails closed' "$?" 2
+  [ ! -s "$D/log" ] && ok 'malformed eligibility writes nothing' || bad 'malformed eligibility wrote a claim'
+done
+: > "$D/log"
+SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK_FAIL=1 ./ship-claim YPER4-999 >/dev/null 2>&1
+eq 'failed eligibility read fails closed' "$?" 2
+[ ! -s "$D/log" ] && ok 'failed eligibility read writes nothing' || bad 'failed eligibility read wrote a claim'
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]

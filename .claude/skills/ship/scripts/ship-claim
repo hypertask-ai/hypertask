@@ -225,10 +225,27 @@ CSID=${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}
 # restart, so a restarted runner still owns the claim its previous session left.
 RID=$(printf '%s' "$RESUME" | tr -s '[:space:]' ' ' | sed 's/^ //; s/ $//')
 
+task=''
+if [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+  task=$("$HT" tasks get "$T" --json) || { echo "ship-claim: cannot read ticket eligibility before claiming" >&2; exit 2; }
+  jq -e '.success == true and (.tasks | length == 1) and (.tasks[0] |
+    (.section | type == "string") and (.labels | type == "array")
+    and all(.labels[]; .name | type == "string"))' <<< "$task" >/dev/null \
+    || { echo "ship-claim: cannot parse ticket eligibility before claiming" >&2; exit 2; }
+  if jq -e '.tasks[0].labels | any(.name == "brain-extra-hard")' <<< "$task" >/dev/null; then
+    echo "ship-claim: REFUSED. $T is brain-extra-hard; RUNNER n skips this ticket. Pick an eligible ticket." >&2
+    exit 4
+  fi
+  if jq -e '.tasks[0] | .section != "QA" and any(.labels[]; .name == "design-pass")' <<< "$task" >/dev/null; then
+    echo "ship-claim: REFUSED. $T is a design-pass ticket; HT Design Builder owns it outside QA. Pick a ticket without the design-pass label." >&2
+    exit 4
+  fi
+fi
+
 hold_check "$T" || exit $?
 
 if [[ $T == HTPR-* ]]; then
-  task=$("$HT" tasks get "$T" --json) || { echo "ship-claim: cannot read alert before claiming" >&2; exit 2; }
+  [ -n "$task" ] || task=$("$HT" tasks get "$T" --json) || { echo "ship-claim: cannot read alert before claiming" >&2; exit 2; }
   printf '%s' "$task" | node "$(dirname "$(readlink -f "$0")")/error-collector/claim-incident.mjs"
   rc=$?
   [ "$rc" = 0 ] || exit "$rc"
