@@ -15,6 +15,14 @@ Use `ship-claim` with your actual resume command before investigating. It assign
 
 Keep the ticket In Progress while actively working. Resume AI Review tickets there before fixing them. Use the shared `tickets` skill: human decisions and QA use their kinds; plans, tests, and progress go to agent activity. Keep technical status, session names, resume commands, and handoffs in agent activity only; people comments contain results and evidence links. Runners report on tickets, never through Valentin's browser or another session's chat.
 
+## Work notes
+
+- `vcc activity add <TICKET-or-task-ID> "<text>"` writes one agent note. Text is positional; `--kind` and `--text` are not supported here.
+- `vcc activity last <TICKET-or-task-ID>` prints the latest note's timestamp, author, and complete text as tab-separated fields. Tabs and newlines inside text are escaped.
+- `vcc activity list <TICKET-or-task-ID> [--json]` reads up to 100 recent notes as JSON, including full text and metadata. It never writes a note.
+- `vcc activity --help` and `vcc activity add <TICKET> --help` print usage without opening credentials or writing to the board.
+- Numeric references are immutable task IDs, not a board's ticket index.
+
 ## Before opening the PR
 
 Use your own worktree and the repository's correct base. Keep one ticket and one PR together. Recover the existing PR when present. Follow the current flag policy and release risk; do not widen an existing flag or introduce a new component without required approval.
