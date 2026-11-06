@@ -15,7 +15,7 @@ export function activationHarness() {
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
-  const disabledFlags = new Set<string>(["htpr-7292-shared-account-category", "htpr-7293-activation-metric-v1"]);
+  const disabledFlags = new Set<string>(["htpr-7292-shared-account-category"]);
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
   const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member", joinedAt: new Date(0) }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
