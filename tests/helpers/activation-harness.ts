@@ -15,7 +15,7 @@ export function activationHarness() {
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
-  const disabledFlags = new Set<string>(["htpr-7273-column-events", "htpr-7292-shared-account-category", "htpr-7293-activation-metric-v1"]);
+  const disabledFlags = new Set<string>(["htpr-7292-shared-account-category", "htpr-7293-activation-metric-v1"]);
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
   const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member", joinedAt: new Date(0) }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
@@ -149,7 +149,7 @@ export function activationHarness() {
     "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
       constructor() { if (failure === "constructor") throw Error("mock client unavailable"); }
