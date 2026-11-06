@@ -246,7 +246,7 @@ const Commands = (props: Props) => {
       return getHTCFrecencyScore(usage?.frequency, usage?.lastUsedAt, now);
     };
     const boardCommands = getBoardCommands({
-      projects, currentProject, onMyTasks,       myTasksViewsEnabled,
+      projects, currentProject, onMyTasks, myTasksViewsEnabled,
       myTasksScopesEnabled, columnArchiveEnabled,
       context: contextOptions?.context,
     });
