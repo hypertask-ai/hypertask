@@ -59,7 +59,7 @@ Saved tasks, boards, and columns record an ids-only analytics intent inside the 
 
 # Versioned activation metric (HTPR-7293)
 
-Flag `htpr-7293-activation-metric-v1` (https://app.hypertask.ai/admin/flags/htpr-7293-activation-metric-v1), default Owner + QA, selects `definition_version=board_3_tasks_7d_v1` for `activation_completed` when `htpr-7284-activation-completed` is also enabled. With the new flag off, the existing unversioned live-task rule is unchanged. Guests remain excluded.
+Flag `htpr-7293-activation-metric-v1` (https://app.hypertask.ai/admin/flags/htpr-7293-activation-metric-v1), default Owner + QA, selects `definition_version=board_3_tasks_7d_v1` for `activation_completed`. With that flag off, the unversioned live-task rule runs instead. Guests remain excluded.
 
 A user activates when one board they own (`Project.ownerId = User.id`, `Project.seeded = false`) was created in `[User.joinedAt, User.joinedAt + 7 days)` and three distinct task IDs on that same board have `Task.createdAt` in that window. Signup and the window start are inclusive; the end is exclusive. Tasks across boards never combine, and another owner's board never qualifies. Human- and agent-created tasks both count, with no creator filter.
 

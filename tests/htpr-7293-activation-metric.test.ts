@@ -6,7 +6,6 @@ import { activationHarness } from "./helpers/activation-harness";
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
 const FLAG = "htpr-7293-activation-metric-v1";
-const LEGACY_FLAG = "htpr-7284-activation-completed";
 const SIGNUP = new Date("2026-10-10T12:00:00Z");
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const at = (offset: number) => new Date(SIGNUP.getTime() + offset);
@@ -113,7 +112,6 @@ test("version string is board_3_tasks_7d_v1", () => {
 
 function harness() {
   const h = activationHarness();
-  h.mocks["@/lib/flags"].HTPR_7284_ACTIVATION_COMPLETED_FLAG = LEGACY_FLAG;
   h.setFlagEnabled(FLAG, true);
   h.users.get(123).joinedAt = SIGNUP;
   Object.assign(h.projects.get(15), facts().boards[0], { status: "Normal" });
@@ -271,15 +269,6 @@ for (const enabled of [false, true]) {
   });
 }
 
-test("legacy flag off avoids every database read even when v1 is on", async () => {
-  const h = harness();
-  h.setFlagEnabled(LEGACY_FLAG, false);
-  await h.capture();
-  assert.deepEqual(h.queries, []);
-  assert.deepEqual(h.prismaCalls, []);
-  assert.equal(h.captures.length, 0);
-});
-
 test("guest exclusion still precedes v1 fact loading", async () => {
   const h = harness();
   h.users.get(123).uid = "guest_local";
@@ -305,16 +294,6 @@ test("captureTaskCreated emits versioned activation once for human and agent rep
   assert.equal(activations[0].properties.definition_version, ACTIVATION_METRIC_VERSION);
   assert.equal(activations[0].properties.activated_at, THRESHOLD.toISOString());
   assert.deepEqual(h.logs.filter((row) => row.log === "analytics:activation_completed").map((row) => row.LoggedById), [123]);
-});
-
-test("legacy activation marker prevents re-emission after v1 rollout", async () => {
-  const h = harness();
-  h.setFlagEnabled(FLAG, false);
-  await h.capture();
-  h.setFlagEnabled(FLAG, true);
-  await h.capture();
-  assert.equal(h.captures.length, 1);
-  assert.equal(h.captures[0].properties.definition_version, undefined);
 });
 
 test("v1 flag has an honest Owner + QA feature definition and release risk", () => {
