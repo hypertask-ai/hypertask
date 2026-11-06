@@ -2,7 +2,6 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const yaml = require("js-yaml");
-const { loadModule } = require("./helpers/loadModule.cjs");
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const SHA = "b".repeat(40);
@@ -25,7 +24,9 @@ async function runMirror({
   issue = { number: 43, pull_request: { url: "https://api.github.com/repos/hypertask-ai/hypertask/pulls/43" } },
   inputs = {},
   pr = productionPr(),
-  postResponse = { status: 200, body: { success: true, url: "https://app.hypertask.ai/detail/project-15/1234" } },
+  postResponse = null,
+  failStage = "activity",
+  store = { activities: [], run: 0 },
   token = "test-token",
   rateLimitReads = 0,
   rateLimitCommentRead = false,
@@ -53,7 +54,35 @@ async function runMirror({
 
   const fetchStub = async (url, init = {}) => {
     calls.push({ url, method: init.method ?? "GET", init });
-    return { ok: postResponse.status < 400, status: postResponse.status, json: async () => postResponse.body };
+    const path = new URL(url).pathname;
+    let body;
+    let stage;
+    if (path === "/api/mcp/tasks") {
+      stage = "task";
+      body = { success: true, tasks: [{ id: 1234 }] };
+    } else if (path.endsWith("/agent-activity")) {
+      stage = "history";
+      const offset = Number(new URL(url).searchParams.get("offset"));
+      body = { success: true, activities: store.activities.slice(offset, offset + 100) };
+    } else if (path === "/api/mcp/agents/runs") {
+      stage = "run";
+      body = { success: true, run: { id: `run-${++store.run}` } };
+    } else if (/\/agents\/runs\/[^/]+\/activities$/.test(path)) {
+      stage = "activity";
+      assert.ok(!store.closedRuns?.includes(path.split("/")[5]), "cannot post to a closed run");
+      const data = JSON.parse(init.body);
+      const key = init.headers["Idempotency-Key"];
+      let activity = store.activities.find(item => item.runId === `run-${store.run}` && item.key === key);
+      if (!activity && !(postResponse && failStage === stage)) {
+        activity = { ...data, key, runId: `run-${store.run}`, id: `activity-${store.activities.length + 1}` };
+        store.activities.unshift(activity);
+      }
+      body = { success: true, activity };
+    } else {
+      throw new Error(`Unexpected request: ${url}`);
+    }
+    const response = postResponse && failStage === stage ? postResponse : { status: 200, body };
+    return { ok: response.status < 400, status: response.status, json: async () => response.body };
   };
 
   const github = {
@@ -98,7 +127,7 @@ async function runMirror({
   }
 
   assert.equal(refusedReads, 0, "every refused read must have been retried");
-  return { calls, failures, infos, warnings, posts: calls.filter(call => call.method === "POST") };
+  return { calls, failures, infos, warnings, posts: calls.filter(call => /\/activities$/.test(new URL(call.url).pathname) && call.method === "POST") };
 }
 
 function productionPr(overrides = {}) {
@@ -111,37 +140,79 @@ function productionPr(overrides = {}) {
   };
 }
 
-test("the review verdict lands in the ticket thread as one short plain line", async () => {
-  const { posts, failures } = await runMirror();
-
-  assert.deepEqual(failures, []);
-  assert.equal(posts.length, 1);
-  assert.match(posts[0].url, /\/api\/mcp\/comments$/);
-  assert.equal(posts[0].init.headers["Idempotency-Key"], `ai-review-mirror-43-${SHA}`);
-  const body = JSON.parse(posts[0].init.body);
-  assert.equal(body.ticket_number, "HTPR-1234");
-  assert.equal(body.kind, "qa");
-  assert.match(body.text, /APPROVE/);
-  assert.match(body.text, /pull request/);
-  assert.doesNotMatch(body.text, /MINOR/);
-  assert.ok(!body.text.includes(SHA), "no commit hash reaches the people thread");
+test("five reviews create agent thoughts and never people comments", async () => {
+  const store = { activities: [], run: 0 };
+  for (let number = 1; number <= 5; number++) {
+    const sha = String(number).repeat(40);
+    const review = REVIEW.replaceAll(SHA, sha);
+    const pr = productionPr({ head: { ...productionPr().head, sha }, comments: [{ user: REVIEWER, body: review }] });
+    const result = await runMirror({ pr, store });
+    assert.deepEqual(result.failures, []);
+    assert.equal(result.posts.length, 1);
+    assert.equal(result.calls.some(call => new URL(call.url).pathname === "/api/mcp/comments"), false);
+    assert.equal(JSON.parse(result.posts[0].init.body).type, "thought");
+  }
+  assert.equal(store.activities.length, 5);
+  assert.ok(store.activities.every(activity => activity.text.includes("APPROVE")));
 });
 
-test("the people line passes the board's voice guard, which the findings cannot (YPER4-910)", async () => {
-  const { posts } = await runMirror();
-  const { assertAgentWriting, AgentWritingError } = loadModule("src/lib/agents/writing.ts");
+test("unchanged deliveries deduplicate across runs, but a changed verdict arrives", async () => {
+  const store = { activities: [], run: 0 };
+  const first = await runMirror({ store });
+  const repeat = await runMirror({ store });
+  const changed = await runMirror({ store, pr: productionPr({ comments: [{ user: REVIEWER, body: REVIEW.replace("APPROVE", "CONCERNS") }] }) });
+  const changedBack = await runMirror({ store });
+  const repeatAgain = await runMirror({ store });
+  assert.deepEqual([...first.failures, ...repeat.failures, ...changed.failures, ...changedBack.failures, ...repeatAgain.failures], []);
+  assert.equal(repeat.posts.length, 0);
+  assert.equal(repeatAgain.posts.length, 0);
+  assert.equal(store.activities.length, 3);
+  assert.deepEqual(store.activities.map(activity => activity.text.match(/^AI review (APPROVE|CONCERNS)/)[1]), ["APPROVE", "CONCERNS", "APPROVE"]);
+  assert.match(first.posts[0].init.headers["Idempotency-Key"], new RegExp(`43-${SHA}-APPROVE$`));
+  assert.match(changed.posts[0].init.headers["Idempotency-Key"], new RegExp(`43-${SHA}-CONCERNS-activity-1$`));
+  assert.match(changedBack.posts[0].init.headers["Idempotency-Key"], new RegExp(`43-${SHA}-APPROVE-activity-2$`));
+  assert.equal(store.activities[0].text, store.activities[2].text);
+  assert.notEqual(store.activities[0].runId, store.activities[1].runId);
+});
 
-  assert.doesNotThrow(
-    () => assertAgentWriting("agent-id", { text: JSON.parse(posts[0].init.body).text }),
-    "the short plain verdict must survive the guard",
-  );
-  assert.throws(
-    () => assertAgentWriting("agent-id", {
-      text: `<p><strong>AI review:</strong> APPROVE (minors only: 1) — reviewed by **gpt-6.1-sol**</p>
-<pre>- **MINOR** — \`.github/scripts/pr-size.cjs:34\` hardcodes report-only, which is longer than twelve words</pre>`,
-    }),
-    AgentWritingError,
-  );
+test("a closed run remains deduplicated beyond the first history page", async () => {
+  const store = { activities: [], run: 0 };
+  const first = await runMirror({ store });
+  store.closedRuns = [store.activities[0].runId];
+  store.activities.unshift(...Array.from({ length: 105 }, (_, i) => ({ id: `other-${i}`, type: "thought", text: `unrelated ${i}` })));
+  const repeat = await runMirror({ store });
+  assert.deepEqual([...first.failures, ...repeat.failures], []);
+  assert.equal(repeat.posts.length, 0);
+  assert.equal(store.run, 1);
+  assert.equal(repeat.calls.filter(call => call.url.includes("/agent-activity")).length, 2);
+});
+
+test("only exact mirror thoughts determine history state", async () => {
+  const store = { activities: [], run: 0 };
+  await runMirror({ store });
+  const text = store.activities[0].text;
+  store.activities = [
+    { id: "other-1", type: "thought", text: `unrelated ${text}` },
+    { id: "other-2", type: "message", text },
+  ];
+  const result = await runMirror({ store });
+  assert.deepEqual(result.failures, []);
+  assert.equal(result.posts.length, 1);
+});
+
+test("malformed task and history responses fail closed", async () => {
+  for (const [failStage, body] of [
+    ["task", null],
+    ["task", { success: true, tasks: [] }],
+    ["history", { success: true, activities: null }],
+    ["history", { success: true, activities: [null] }],
+    ["history", { success: false, error: "unavailable" }],
+  ]) {
+    const result = await runMirror({ failStage, postResponse: { status: 200, body } });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.posts.length, 0);
+    assert.equal(result.calls.some(call => new URL(call.url).pathname === "/api/mcp/agents/runs"), false);
+  }
 });
 
 test("only the reviewer's comment wakes the mirror and only production PRs are mirrored", async () => {
@@ -199,7 +270,10 @@ test("YPER4 branches keep their own ticket and a missing marker is not guessed",
   const yper = await runMirror({
     pr: productionPr({ head: { sha: SHA, ref: "runner3/yper4-675-ticket-mirror", repo: { full_name: "hypertask-ai/hypertask" } } }),
   });
-  assert.equal(JSON.parse(yper.posts[0].init.body).ticket_number, "YPER4-675");
+  assert.match(yper.calls[0].url, /ticket_number=YPER4-675/);
+
+  const hyci = await runMirror({ pr: productionPr({ head: { ...productionPr().head, ref: "ci/hyci-133-fix" } }) });
+  assert.match(hyci.calls[0].url, /ticket_number=HYCI-133/);
 
   const unmarked = await runMirror({
     pr: productionPr({ comments: [{ user: REVIEWER, body: "APPROVE — no marker" }] }),
@@ -230,7 +304,7 @@ test("a PR with no verdict comment yet posts nothing", async () => {
   assert.deepEqual(failures, []);
 });
 
-test("no review text or markup is copied into the people thread", async () => {
+test("no review text or markup is copied into the agent activity", async () => {
   const { posts } = await runMirror({
     pr: productionPr({
       comments: [{
@@ -261,6 +335,14 @@ test("a post the app does not confirm fails the run", async () => {
   assert.match(failures[0], /HTTP 500/);
 });
 
+test("run and activity failures never fall back to people comments", async () => {
+  for (const failStage of ["run", "activity"]) {
+    const result = await runMirror({ failStage, postResponse: { status: 503, body: { success: false, error: "unavailable" } } });
+    assert.equal(result.failures.length, 1);
+    assert.equal(result.calls.some(call => new URL(call.url).pathname === "/api/mcp/comments"), false);
+  }
+});
+
 test("a missing board token fails the run, never a silent skip", async () => {
   const { failures, calls } = await runMirror({ token: null });
   assert.deepEqual(calls, []);
@@ -283,8 +365,11 @@ test("the workflow mirrors no candidate code into the run", async () => {
   }
   assert.deepEqual(workflow.on.issue_comment.types, ["created", "edited"]);
   assert.equal(workflow.on.workflow_dispatch.inputs.pr.required, true);
-  assert.equal(workflow.concurrency["cancel-in-progress"], false);
-  assert.match(workflow.concurrency.group, /github\.event\.comment\.user\.login/);
+  assert.equal(workflow.jobs.mirror.if, "github.event_name == 'workflow_dispatch' || (github.event.issue.pull_request && (github.event.comment.user.login == 'hypertask-ai-review' || github.event.comment.user.login == 'hypertask-ai-review[bot]'))");
+  assert.deepEqual(workflow.jobs.mirror.concurrency, {
+    group: "ai-review-mirror-${{ github.event.issue.number || inputs.pr }}",
+    queue: "max",
+  });
   assert.ok(script.env.REVIEW_COMMENT_AUTHOR);
 });
 
