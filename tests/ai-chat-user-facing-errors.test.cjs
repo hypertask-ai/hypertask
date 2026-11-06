@@ -29,12 +29,16 @@ function loadErrorFormatters(logs = []) {
   const javascript = ts.transpileModule(routeSource.slice(start, end), {
     compilerOptions: { target: ts.ScriptTarget.ES2020 },
   }).outputText;
-  const logger = { error: (...args) => logs.push(args), info: (...args) => logs.push(args) };
+  const logger = {
+    error: (...args) => logs.push(args),
+    info: (...args) => logs.push(args),
+    warn: (...args) => logs.push(args),
+  };
   return new Function(
     "console",
     "z",
     "toErrorMessage",
-    `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage };`
+    `${javascript}; return { errorMessage, userFacingErrorMessage, requestErrorMessage, ownKeyRejectedMessage, isOwnKeyAuthFailure };`
   )(logger, z, loadToErrorMessage());
 }
 
@@ -202,6 +206,75 @@ test("malformed JSON uses its own plain request-body message", () => {
   assert.deepEqual(logs[0], ["[ai/chat/stream] request-body refused: invalid JSON"]);
 });
 
+test("own-key 401 and 403 name the provider and hide the key and provider text", () => {
+  const logs = [];
+  const { userFacingErrorMessage, ownKeyRejectedMessage, isOwnKeyAuthFailure } = loadErrorFormatters(logs);
+  const secret = "sk-test-secret-do-not-show";
+  const deepseek = Object.assign(
+    new Error(`Authentication Fails, your api key is invalid ${secret}`),
+    {
+      statusCode: 401,
+      url: "https://api.deepseek.com/chat/completions",
+      responseBody: JSON.stringify({ error: { message: `invalid api key ${secret}` } }),
+    },
+  );
+
+  const message = userFacingErrorMessage(deepseek, "model-stream", "byok:deepseek");
+
+  assert.equal(
+    message,
+    "Your DeepSeek key was rejected. Update it in Settings, AI, Bring your own key.",
+  );
+  assert.equal(message.includes(secret), false);
+  assert.doesNotMatch(message, /Authentication|invalid api key|sk-test/);
+  assert.match(logs[0][0], /own provider key rejected/);
+  assert.equal(logs[0][1], undefined);
+  assert.equal(JSON.stringify(logs[0]).includes(secret), false);
+
+  const forbidden = new Error("provider refused", {
+    cause: { status: 403, responseBody: secret },
+  });
+  assert.equal(
+    userFacingErrorMessage(forbidden, "stream-handler", "byok:openai"),
+    "Your OpenAI key was rejected. Update it in Settings, AI, Bring your own key.",
+  );
+
+  const providers = {
+    "byok:openai": "OpenAI",
+    "byok:claude": "Claude",
+    "byok:google": "Google",
+    "byok:deepseek": "DeepSeek",
+    "byok:moonshot": "Moonshot",
+    "byok:zhipu": "Z.ai",
+    "byok:alibaba": "Alibaba",
+    "byok:openrouter": "OpenRouter",
+    "byok:custom": "custom",
+    "byok:baseten": "Baseten",
+  };
+  for (const [provider, name] of Object.entries(providers)) {
+    const failure = { response: { status: 401 }, message: secret };
+    assert.equal(isOwnKeyAuthFailure(provider, failure), true);
+    assert.equal(
+      ownKeyRejectedMessage(provider),
+      `Your ${name} key was rejected. Update it in Settings, AI, Bring your own key.`,
+    );
+    assert.equal(userFacingErrorMessage(failure, "model-stream", provider).includes(secret), false);
+  }
+
+  const paidKey = Object.assign(new Error(secret), { statusCode: 401 });
+  const generic = userFacingErrorMessage(paidKey, "model-stream", "openai");
+  assert.match(generic, /something went wrong/);
+  assert.equal(generic.includes(secret), false);
+  assert.equal(isOwnKeyAuthFailure("openai", paidKey), false);
+  assert.equal(ownKeyRejectedMessage("byok:gateway"), null);
+  assert.equal(ownKeyRejectedMessage(null), null);
+
+  const rateLimited = Object.assign(new Error(secret), { statusCode: 429 });
+  const rateLimitedMessage = userFacingErrorMessage(rateLimited, "model-stream", "byok:claude");
+  assert.match(rateLimitedMessage, /something went wrong/);
+  assert.equal(rateLimitedMessage.includes(secret), false);
+});
+
 test("expected plan-access guidance is not reported as a product bug", async () => {
   const reports = [];
   const { reportHandledChatError } = loadModule("src/lib/ai/chatStream/errors.ts", {
@@ -217,4 +290,22 @@ test("expected plan-access guidance is not reported as a product bug", async () 
   await reportHandledChatError(Object.assign(new Error("unexpected"), { statusCode: 500 }), "model-stream");
   assert.equal(reports.length, 1);
   assert.equal(reports[0].extra.statusCode, 500);
+});
+
+test("own-key auth failures are not filed as product bugs", async () => {
+  const reports = [];
+  const { reportHandledChatError } = loadModule("src/lib/ai/chatStream/errors.ts", {
+    "@/lib/api/errorMessage": { toErrorMessage: (_value, fallback) => fallback },
+    "@/lib/ai/tools/constants": { SSE_HEADERS: {} },
+    "@/lib/errors/reportError": { reportError: async report => reports.push(report) },
+  });
+  const secret = "sk-should-not-be-reported";
+  const rejected = Object.assign(new Error(secret), { statusCode: 403, responseBody: secret });
+
+  await reportHandledChatError(rejected, "model-stream", { provider: "byok:claude", model: "claude" });
+  assert.equal(reports.length, 0);
+
+  await reportHandledChatError(rejected, "model-stream", { provider: "openai" });
+  assert.equal(reports.length, 1);
+  assert.equal(JSON.stringify(reports[0]).includes(secret), false);
 });

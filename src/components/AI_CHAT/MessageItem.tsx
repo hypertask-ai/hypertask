@@ -3,6 +3,7 @@ import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-c
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
+import { HTPR_7751_OWN_KEY_REJECTED_FLAG } from "@/lib/flags/definitions/htpr-7751-own-key-rejected";
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -122,7 +123,10 @@ const ASSISTANT_ERROR_MESSAGES = [
   "Sorry, I'm having trouble responding right now.",
 ] as const;
 
-const isAssistantErrorContent = (trimmed: string) =>
+const isOwnKeyRejectedContent = (trimmed: string) =>
+  /^Your (OpenAI|Claude|Google|DeepSeek|Moonshot|Z\.ai|Alibaba|OpenRouter|custom|Baseten) key was rejected\. Update it in Settings, AI, Bring your own key\.$/.test(trimmed);
+
+const isKnownAssistantError = (trimmed: string) =>
   ASSISTANT_ERROR_MESSAGES.includes(trimmed as (typeof ASSISTANT_ERROR_MESSAGES)[number]);
 
 const handleActionKeyDown = (event: KeyboardEvent, action: () => void) => {
@@ -172,6 +176,7 @@ const DeliveredMessageActions: FC<DeliveredMessageActionsProps> = ({
   retryStream,
   editMessage,
 }) => {
+  const ownKeyRejected = useFlag(HTPR_7751_OWN_KEY_REJECTED_FLAG);
   const iconClass =
     message.role === "human" ? humanIconClass : assistantIconClass;
   const rowClass = "flex items-center gap-1 text-meta text-icon-dark-gray";
@@ -202,7 +207,8 @@ const DeliveredMessageActions: FC<DeliveredMessageActionsProps> = ({
   }
 
   if (message.role === "assistant") {
-    if (isAssistantErrorContent(message.content.trim())) {
+    const trimmed = message.content.trim();
+    if (isKnownAssistantError(trimmed) || (ownKeyRejected && isOwnKeyRejectedContent(trimmed))) {
       return (
         <div className={rowClass}>
           <ActionIcon
