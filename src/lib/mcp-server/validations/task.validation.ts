@@ -15,7 +15,7 @@ import {
   createSearchPaginationSchema,
 } from './common/pagination';
 import { TASK_SEARCH_SORT_FIELDS } from '@/lib/mcp/listQuery';
-import { withListQuerySchema } from './common/listQuery';
+import { listQueryToolSchema, withListQuerySchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
   priorityFilterSchema,
@@ -61,8 +61,13 @@ export const ShareTaskInputSchema = z.object({
 export const GetTaskShareInputSchema = z.object({
   taskId: z.number().int().positive().max(2_147_483_647).describe('Task database ID from get_tasks.'),
 }).strict();
+
+const taskGetFieldsSchema = listQueryToolSchema.shape.fields;
+
 export function getGetTasksInputSchema() {
-  return createTaskIdentificationArraySchema();
+  return createTaskIdentificationArraySchema().extend({
+    fields: taskGetFieldsSchema,
+  });
 }
 
 export const GetTaskInputSchema = getGetTasksInputSchema();
@@ -270,6 +275,7 @@ export function getGetTasksBaseSchema() {
   return createTaskIdentificationBaseSchema().extend({
     task_id: taskIdOneOrManySchema.optional(),
     ticket_number: ticketNumberOneOrManySchema.optional(),
+    fields: taskGetFieldsSchema,
   });
 }
 
