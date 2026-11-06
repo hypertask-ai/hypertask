@@ -104,13 +104,51 @@ export function toPublicTaskPullRequest(
   };
 }
 
-function githubHeaders(): HeadersInit {
-  const token = process.env.GITHUB_TOKEN;
+function configuredGithubToken(): string | undefined {
+  const token = process.env.GITHUB_TOKEN?.trim();
+  return token || undefined;
+}
+
+function githubHeaders(token: string | undefined): HeadersInit {
   return {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hypertask-Pull-Request-Linker",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+
+function isGithubRateLimit(response: Response): boolean {
+  return (
+    response.status === 429 ||
+    response.headers.get("x-ratelimit-remaining") === "0" ||
+    response.headers.has("retry-after")
+  );
+}
+
+async function fetchGithubResource(url: string): Promise<Response> {
+  const token = configuredGithubToken();
+  const request = (authorization: string | undefined) =>
+    fetch(url, {
+      headers: githubHeaders(authorization),
+      cache: "no-store",
+      signal: AbortSignal.timeout(3_000),
+    });
+  const response = await request(token);
+  if (!token || (response.status !== 401 && response.status !== 403 && response.status !== 429)) {
+    return response;
+  }
+  const rateLimited = isGithubRateLimit(response);
+  await response.body?.cancel().catch(() => undefined);
+  const anonymous = await request(undefined);
+  if (anonymous.status === 404 && rateLimited) {
+    await anonymous.body?.cancel().catch(() => undefined);
+    throw new PullRequestLinkError(
+      "GitHub could not verify this pull request",
+      502,
+      "github_unavailable",
+    );
+  }
+  return anonymous;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -132,13 +170,8 @@ async function fetchGithubCheckState(
   headSha: string,
 ): Promise<PullRequestCheckState | null> {
   try {
-    const response = await fetch(
+    const response = await fetchGithubResource(
       `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`,
-      {
-        headers: githubHeaders(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(3_000),
-      },
     );
     if (!response.ok) return null;
     const value = await response.json();
@@ -163,15 +196,11 @@ export async function fetchGithubPullRequest(
 ): Promise<GithubPullRequestMetadata> {
   let response: Response;
   try {
-    response = await fetch(
+    response = await fetchGithubResource(
       `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`,
-      {
-        headers: githubHeaders(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(3_000),
-      },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof PullRequestLinkError) throw error;
     throw new PullRequestLinkError(
       "GitHub could not verify this pull request",
       502,
