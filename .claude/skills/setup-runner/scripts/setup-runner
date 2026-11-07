@@ -2,6 +2,15 @@
 # Bootstrap a neutral runner without exposing or replacing its token.
 set +x
 set -euo pipefail
+for runner_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
+  [ -d "$runner_command_dir" ] || continue
+  case ":${PATH-}:" in
+    *":$runner_command_dir:"*) ;;
+    *) PATH="$runner_command_dir${PATH:+:$PATH}" ;;
+  esac
+done
+export PATH
+unset runner_command_dir
 umask 077
 SELF=$(readlink -f "$0")
 CREDS=$HOME/.config/hypertask-agents/credentials

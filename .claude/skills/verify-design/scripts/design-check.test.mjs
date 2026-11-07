@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { checklistFromBrief, isPurple, isRoundMarker, radiusVerdict } from './design-lib.mjs';
+import { spawnSync } from 'node:child_process';
+import { checklistFromBrief, failColumn, isPurple, isRoundMarker, radiusVerdict } from './design-lib.mjs';
 test('brief scope and fallback', () => {
   const x = checklistFromBrief('<h2>Change</h2><p>Show cards. Hide clutter.</p><h2>Not in scope</h2><p>Other work.</p>');
   assert.match(x, /^1\. \[ \] Show cards\.\n2\. \[ \] Hide clutter\./); assert.doesNotMatch(x, /Other work/);
@@ -20,4 +21,17 @@ test('radius', () => {
   assert.equal(radiusVerdict(4,2,100,100),'ok');
   assert.equal(radiusVerdict(4,16,32,32),'bad');
   for (const [names,v] of [['avatar',true],['user-avatar rounded-full',true],['status-dot',true],['avatar_img',true],['border-dotted',false],['dot',false],['rounded-full h-8 w-8',false],['',false],['avatars-list-dotted',false]]) assert.equal(isRoundMarker(names),v,names);
+});
+test('failed design review uses the intake column the board already has', () => {
+  assert.equal(failColumn(['Todo', 'Doing', 'AI Review', 'Valentin Review', 'Done']), 'Todo');
+  assert.equal(failColumn(['Bugs', 'Doing', 'Done']), 'Bugs');
+  assert.equal(failColumn(['Backlog', 'Todo', 'Doing', 'Done']), 'Backlog');
+  assert.equal(failColumn(['To Do', 'Doing', 'Done']), 'To Do');
+  assert.equal(failColumn(['Done', 'Shipped']), '');
+  const script = new URL('./design-check', import.meta.url);
+  const run = (...names) => spawnSync('bash', [script.pathname, 'fail-column', ...names], { encoding: 'utf8' });
+  const board = run('Todo', 'Doing', 'AI Review', 'Valentin Review', 'Done');
+  assert.equal(board.status, 0, board.stderr);
+  assert.equal(board.stdout, 'Todo\n');
+  assert.equal(run('Done').status, 1);
 });
