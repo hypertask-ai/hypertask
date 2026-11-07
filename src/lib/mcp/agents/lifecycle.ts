@@ -164,6 +164,15 @@ export async function launchOwnedAgent(
   return { status: 'ok', agent: current, token: revealed, alreadyRunning: false }
 }
 
+function ownedAgentWhere(
+  id: string,
+  userId: number,
+  scopeWhere: Prisma.AgentWhereInput
+): Prisma.AgentWhereUniqueInput {
+  if (Object.keys(scopeWhere).length === 0) return { id, userId }
+  return { id, userId, AND: scopeWhere }
+}
+
 export type ArchiveOwnedAgentResult =
   | { status: 'not_found' }
   | { status: 'ok'; agent: AgentLifecycleRow }
@@ -191,7 +200,7 @@ export async function archiveOwnedAgent(
 
   try {
     const agent = await database.agent.update({
-      where: { id: existing.id, userId, AND: scopeWhere },
+      where: ownedAgentWhere(existing.id, userId, scopeWhere),
       data: { archivedAt },
       select: LIFECYCLE_SELECT,
     })
@@ -225,7 +234,7 @@ export async function renameOwnedAgent(
 
   try {
     const agent = await database.agent.update({
-      where: { id: existing.id, userId, AND: scopeWhere },
+      where: ownedAgentWhere(existing.id, userId, scopeWhere),
       data: { displayName },
       select: LIFECYCLE_SELECT,
     })
