@@ -380,3 +380,40 @@ test('every shared login rejection names a recovery page and command', async () 
     assert.doesNotMatch(body.message, /create a new agent identity/)
   }
 })
+
+test('the real CLI status hello entry point preserves revoked reasons and still accepts valid callers', async () => {
+  const { load } = require('./task-route-loader.cjs')
+  const agentId = 'revoked-hello-agent'
+  const token = createMcpToken(USER.id, USER.email, undefined, agentId)
+  const { db } = lookup({ agent: { id: agentId, userId: USER.id, mcpTokenJti: null, revokedAt: new Date() } })
+  let ctx = null
+  let classifications = 0
+  const { handleHelloRequest } = load('src/lib/mcp/hello/getHelloPayload.ts', {
+    '@/lib/mcp/auth': {
+      checkMcpRateLimit: async () => null,
+      validateMcpAuth: async () => ctx,
+      mcpUnauthorizedResponse: async request => {
+        classifications += 1
+        return mcpUnauthorizedResponse(request, db)
+      },
+    },
+    '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
+    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
+  })
+  const response = await handleHelloRequest(requestWithToken(token))
+  const body = await response.json()
+  assert.equal(response.status, 401)
+  assert.equal(body.reason, 'agent_revoked')
+  assert.match(body.message, /hypertask agents rotate-token/)
+  assert.equal(classifications, 1)
+  for (const activeAgentId of [null, 'valid-agent']) {
+    ctx = { user: USER, agentId: activeAgentId }
+    const allowed = await handleHelloRequest(requestWithToken('valid-fixture-token'))
+    const hello = await allowed.json()
+    assert.equal(allowed.status, 200)
+    assert.equal(hello.success, true)
+    assert.equal(hello.user.id, USER.id)
+    assert.equal(classifications, 1)
+  }
+})
