@@ -37,7 +37,7 @@ export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRu
     }
 
     if (requestBody.status !== undefined && !VALID_STATUSES.includes(requestBody.status)) {
-        const done = String(requestBody.status).trim().toLowerCase() === 'done'
+        const done = String(requestBody.status).trim().toLowerCase() === 'done';
         return NextResponse.json(
             {
                 ...buildFieldError(
