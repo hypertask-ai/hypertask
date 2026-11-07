@@ -263,27 +263,72 @@ if [ "${1:-}" != activity ]; then
 fi
 
 fail() { echo "vcc activity: $*" >&2; exit 1; }
-[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> ["--text"] "<text>" | vcc activity list <TICKET> | vcc activity last <TICKET>'
-command=$2; ticket=$3
-[[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number'
-ticket=${ticket^^}
+activity_usage='usage: vcc activity add <TICKET> (--text|--body <note> | "<note>") | vcc activity list <TICKET> | vcc activity last <TICKET>'
+[ "$#" -ge 2 ] || fail "$activity_usage"
+command=$2
+case "$command" in
+  --help|-h|help) fail "$activity_usage" ;;
+esac
+args=("$@")
 text=''
+saw_text=false
+extra_option=''
+positional=()
+i=2
+while [ "$i" -lt "${#args[@]}" ]; do
+  arg=${args[$i]}
+  case "$arg" in
+    --help|-h) fail "$activity_usage" ;;
+    --text|--body)
+      i=$((i + 1))
+      [ "$i" -lt "${#args[@]}" ] || fail 'add needs one non-empty text argument'
+      [ "$saw_text" = false ] || fail 'add takes one note'
+      text=${args[$i]}
+      saw_text=true
+      ;;
+    --text=*|--body=*)
+      [ "$saw_text" = false ] || fail 'add takes one note'
+      text=${arg#*=}
+      saw_text=true
+      ;;
+    --)
+      i=$((i + 1))
+      while [ "$i" -lt "${#args[@]}" ]; do
+        positional+=("${args[$i]}")
+        i=$((i + 1))
+      done
+      break
+      ;;
+    --*)
+      [ -n "$extra_option" ] || extra_option=$arg
+      ;;
+    *)
+      positional+=("$arg")
+      ;;
+  esac
+  i=$((i + 1))
+done
 case "$command" in
   add)
-    if [ "$#" = 5 ] && [ "$4" = --text ]; then
-      text=$5
-    elif [ "$#" = 4 ] && [[ $4 == --text=* ]]; then
-      text=${4#--text=}
-    elif [ "$#" = 4 ]; then
-      text=$4
+    [ -z "$extra_option" ] || fail 'add needs one non-empty text argument'
+    if [ "$saw_text" = false ]; then
+      [ "${#positional[@]}" -eq 2 ] || fail 'add needs one non-empty text argument'
+      text=${positional[1]}
+      ticket=${positional[0]}
     else
-      fail 'add needs one non-empty text argument'
+      [ "${#positional[@]}" -eq 1 ] || fail 'add needs one non-empty text argument'
+      ticket=${positional[0]}
     fi
     [ -n "${text//[[:space:]]/}" ] || fail 'add needs one non-empty text argument'
     ;;
-  list|last) [ "$#" = 3 ] || fail "$command needs only a ticket number" ;;
+  list|last)
+    [ -z "$extra_option" ] && [ "$saw_text" = false ] && [ "${#positional[@]}" -eq 1 ] || fail "$command needs only a ticket number"
+    ticket=${positional[0]}
+    ;;
   *) fail "unknown activity command: $command" ;;
 esac
+[[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number'
+ticket=${ticket^^}
 
 body=$(mktemp)
 trap 'rm -f "$body"' EXIT

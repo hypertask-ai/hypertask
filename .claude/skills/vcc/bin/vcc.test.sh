@@ -640,4 +640,35 @@ run bash "$vcc" activity add HTPR-8740 --note hi
 [ "$status" = 1 ] || fail "unknown option was accepted"
 grep -q 'add needs one non-empty text argument' "$T/err" || fail "wrong rejection: $(cat "$T/err")"
 printf 'ok activity add accepts the documented text option\n'
+note_posted() {
+  local label=$1 expected=$2
+  shift 2
+  : > "$VCC_TEST_TRACE"
+  run bash "$vcc" "$@"
+  [ "$status" = 0 ] || fail "$label rejected: $(cat "$T/err")"
+  grep -F -q -- "$expected" "$VCC_TEST_TRACE" || fail "$label body was not posted: $(cat "$VCC_TEST_TRACE")"
+}
+note_posted 'HTPR-8899 --text' 'HTPR-8899 note' activity add HTPR-8899 --text 'HTPR-8899 note'
+note_posted 'HTPR-8897 positional' 'HTPR-8897 note' activity add HTPR-8897 'HTPR-8897 note'
+note_posted 'HTPR-8888 --text' 'HTPR-8888 note' activity add HTPR-8888 --text 'HTPR-8888 note'
+note_posted 'HTPR-8884 flag before ticket' 'HTPR-8884 note' activity add --text 'HTPR-8884 note' HTPR-8884
+note_posted 'HTPR-8865 --body' 'HTPR-8865 note' activity add HTPR-8865 --body 'HTPR-8865 note'
+note_posted 'HTPR-8864 --text before ticket' 'HTPR-8864 note' activity add --text 'HTPR-8864 note' HTPR-8864
+note_posted 'HTPR-8835 --body before ticket' 'HTPR-8835 note' activity add --body 'HTPR-8835 note' HTPR-8835
+note_posted 'HTPR-8834 --text=' 'HTPR-8834 note' activity add HTPR-8834 --text='HTPR-8834 note'
+note_posted 'HTPR-8831 --body=' 'HTPR-8831 note' activity add --body='HTPR-8831 note' HTPR-8831
+note_posted 'HTPR-8805 --body after ticket' 'HTPR-8805 note' activity add HTPR-8805 --body 'HTPR-8805 note'
+run bash "$vcc" activity add HTPR-8740 --text
+[ "$status" = 1 ] || fail "activity add posted a missing --text value"
+grep -q 'add needs one non-empty text argument' "$T/err" || fail "missing --text error changed: $(cat "$T/err")"
+run bash "$vcc" activity add HTPR-8740 'both notes' --text 'and a flag'
+[ "$status" = 1 ] || fail "activity add accepted two notes"
+grep -q 'add needs one non-empty text argument' "$T/err" || fail "two-note error changed: $(cat "$T/err")"
+run bash "$vcc" activity --help
+[ "$status" = 1 ] || fail "activity help should still be a usage error"
+grep -q -- '--text' "$T/err" && grep -q -- '--body' "$T/err" || fail "activity usage omitted the documented text options: $(cat "$T/err")"
+run bash "$vcc" activity list HTPR-8740 --text 'not a filter'
+[ "$status" = 1 ] || fail "activity list accepted a text option"
+grep -q 'list needs only a ticket number' "$T/err" || fail "list extra-arg error changed: $(cat "$T/err")"
+printf 'ok activity add accepts --text and --body in either order\n'
 printf 'vcc helper guard tests passed\n'
