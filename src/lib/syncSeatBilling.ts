@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
+import type Stripe from "stripe";
 
+import { clearStoredSubscriptionEntitlement } from "@/lib/clearStoredSubscriptionEntitlement";
 import prisma from "@/lib/prisma";
 import { completePendingStripeCancellation } from "@/lib/pendingStripeSubscriptionCancellation";
 import { stripe } from "@/lib/subscription";
@@ -10,6 +12,7 @@ import { isSubscriptionActive } from "@/lib/constants/constants";
 import { reportError } from "@/lib/errors/reportError";
 import { refreshStripeSubscriptionSnapshotWithLockHeld } from "@/lib/stripeSubscriptionSnapshot";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
+import { shouldClearTeamSubscriptionEntitlement } from "@/utils/controllers/stripe/webhook/subscriptionEntitlement";
 
 export type SeatBillingResult =
   "SEATED" | "RECONCILED" | "OK" | "SKIPPED" | "Error";
@@ -18,6 +21,7 @@ type SeatBillingTeam = {
   totalSeats: number;
   activeSubscriptionPlanId: string | null;
   activeSubscriptionPlanItemId: string | null;
+  stripe_customer_id: string | null;
   compedUntil: Date | null;
   subscriptionPlan: Array<{
     id: string;
@@ -43,6 +47,10 @@ export type SeatBillingAdapter = {
   retrieveSubscriptionItem: (
     itemId: string,
   ) => Promise<SeatBillingSubscriptionItem>;
+  retrieveSubscription?: (subscriptionId: string) => Promise<{
+    status: Stripe.Subscription.Status;
+    customer: string | { id: string };
+  }>;
   listSubscriptionItems?: (
     subscriptionId: string,
   ) => Promise<SeatBillingSubscriptionItem[]>;
@@ -84,6 +92,7 @@ const productionAdapter: SeatBillingAdapter = {
         totalSeats: true,
         activeSubscriptionPlanId: true,
         activeSubscriptionPlanItemId: true,
+        stripe_customer_id: true,
         compedUntil: true,
         subscriptionPlan: {
           select: {
@@ -100,6 +109,8 @@ const productionAdapter: SeatBillingAdapter = {
     }),
   resolveQuantity: resolveSeatQuantity,
   refreshSubscriptionSnapshot: refreshStripeSubscriptionSnapshotWithLockHeld,
+  retrieveSubscription: (subscriptionId) =>
+    stripe.subscriptions.retrieve(subscriptionId),
   retrieveSubscriptionItem: (itemId) =>
     stripe.subscriptionItems.retrieve(itemId).then((item) => ({
       id: item.id,
@@ -189,6 +200,42 @@ function isMissingSubscriptionItem(error: unknown): boolean {
       candidate.message,
     )
   );
+}
+
+async function skipBecauseStripeRevokedAccess(
+  teamId: string,
+  team: SeatBillingTeam,
+  subscriptionId: string,
+  adapter: SeatBillingAdapter,
+  assertHeld: () => void,
+): Promise<boolean> {
+  if (!adapter.retrieveSubscription) return false;
+  let subscription: Awaited<
+    ReturnType<NonNullable<SeatBillingAdapter["retrieveSubscription"]>>
+  >;
+  try {
+    subscription = await adapter.retrieveSubscription(subscriptionId);
+  } catch (error) {
+    if (isStripeResourceMissing(error)) return false;
+    throw error;
+  }
+  if (!shouldClearTeamSubscriptionEntitlement(subscription.status)) return false;
+  const customerId =
+    typeof subscription.customer === "string"
+      ? subscription.customer
+      : subscription.customer.id;
+  if (!team.stripe_customer_id || customerId !== team.stripe_customer_id) {
+    throw new Error(
+      "Stripe subscription does not match the saved active seat item",
+    );
+  }
+  assertHeld();
+  await clearStoredSubscriptionEntitlement(
+    teamId,
+    subscriptionId,
+    subscription.status,
+  );
+  return true;
 }
 
 function isStripeResourceMissing(error: unknown): boolean {
@@ -309,6 +356,18 @@ async function syncSeatBilling(
     if (!activePlan) return "SKIPPED";
     const itemId = activePlan.subscriptionItemId;
     if (!itemId) return "SKIPPED";
+
+    if (
+      await skipBecauseStripeRevokedAccess(
+        teamId,
+        team,
+        activePlan.subscriptionId,
+        adapter,
+        assertHeld,
+      )
+    ) {
+      return "SKIPPED";
+    }
 
     const desiredQuantity = await adapter.resolveQuantity(
       teamId,
