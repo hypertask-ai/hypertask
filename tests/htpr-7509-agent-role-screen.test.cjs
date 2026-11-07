@@ -180,12 +180,12 @@ test("a missing role shows no chip and no Current mark in the picker", () => {
   } finally { h.close(); }
 });
 
-test("agent role access flag ships to Everyone for the team owner", () => {
+test("agent role access flag defaults to Owner + QA with explicit high-risk access", () => {
   const definition = loader()("src/lib/flags/definitions/htpr-7509-agent-role-screen.ts").default;
   assert.equal(definition.key, flag);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
   assert.equal(definition.releaseRisk.risk, "new");
-  assert.equal(definition.releaseRisk.highRisk, undefined);
+  assert.equal(definition.releaseRisk.highRisk, "access");
   assert.ok(definition.releaseRisk.reason.trim());
 });

@@ -15,36 +15,35 @@ const RELEASED = [
   "htpr-6906-autocap-undo",
   "htpr-6921-slack-marketplace",
   "htpr-7363-chat-task-writer",
-  "htpr-7509-agent-role-screen",
-  "htpr-7509-write-agents-create-boards",
-  "htpr-7529-mcp-act-as-agent",
-  "htpr-7574-owned-unattached-agents",
-  "htpr-7577-add-existing-agent",
-  "htpr-7582-agent-access-request",
-  "htpr-7622-ai-settings",
-  "htpr-7663-scoped-agent-skills",
-  "htpr-7686-free-plan-copy",
-  "htpr-7799-project-entry",
-  "htpr-7854-ai-thinking-opt-in",
-  "htpr-7919-allowance-percent",
   "htpr-7977-short-task-writer",
-  "htpr-8084-cross-team-agents",
-  "htpr-8100-no-paid-fallback",
-  "htpr-8143-quiet-agent-updates",
-  "htpr-8215-agent-archive-delete",
-  "htpr-8231-agent-archive-done",
   "htpr-8716-quick-entry-focus",
   "htpr-8804-visible-links-first",
   "htpr-8826-blocked-by-me-list",
-  "htpr-8846-agent-lane-on-readable-board",
   "htpr-8881-board-view-filters",
-  "yper4-651-self-follow-quiet",
 ];
 
 const HELD = {
-  "htpr-7037-shared-email-layout": "customer-email",
+  "yper4-651-self-follow-quiet": "customer-email",
+  "htpr-8143-quiet-agent-updates": "customer-email",
+  "htpr-8215-agent-archive-delete": "data-deletion",
   "htpr-7575-phone-chat-delete": "data-deletion",
+  "htpr-7686-free-plan-copy": "money",
+  "htpr-7854-ai-thinking-opt-in": "money",
+  "htpr-7919-allowance-percent": "money",
+  "htpr-8100-no-paid-fallback": "money",
   "htpr-7730-deepseek-flash-fast": "money",
+  "htpr-7509-agent-role-screen": "access",
+  "htpr-7509-write-agents-create-boards": "access",
+  "htpr-7529-mcp-act-as-agent": "access",
+  "htpr-7574-owned-unattached-agents": "access",
+  "htpr-7577-add-existing-agent": "access",
+  "htpr-7582-agent-access-request": "access",
+  "htpr-7622-ai-settings": "access",
+  "htpr-7663-scoped-agent-skills": "access",
+  "htpr-7799-project-entry": "access",
+  "htpr-8084-cross-team-agents": "access",
+  "htpr-8231-agent-archive-done": "access",
+  "htpr-8846-agent-lane-on-readable-board": "access",
   "htpr-8216-agent-task-share": "access",
   "htpr-7328-rounded-theme": undefined,
   "htpr-7549-first-task-pointer": undefined,
@@ -84,6 +83,7 @@ test("reversible flags ship to everyone and the release migration names each one
     const definition = byKey.get(key);
     assert.notEqual(modeOf(definition), "EVERYONE", key);
     assert.equal(definition.releaseRisk?.highRisk, risk, key);
+    assert.equal(migration.includes(`'${key}'`), false, key);
     assert.equal(definition.releaseRisk.reason.trim().length > 0, true, key);
   }
 

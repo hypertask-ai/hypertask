@@ -7,12 +7,11 @@ const { default: definition, HTPR_8231_AGENT_ARCHIVE_DONE_FLAG } = load(
   {},
 );
 
-test("agent archive of Done tickets ships to Everyone and still refuses deletion", () => {
+test("agent archive of Done tickets ships as a high-risk owner and QA flag", () => {
   assert.equal(HTPR_8231_AGENT_ARCHIVE_DONE_FLAG, "htpr-8231-agent-archive-done");
   assert.equal(definition.key, HTPR_8231_AGENT_ARCHIVE_DONE_FLAG);
   assert.equal(definition.kind, "improvement");
-  assert.equal(definition.defaultMode, "EVERYONE");
-  assert.equal(definition.releaseRisk.highRisk, undefined);
-  assert.match(definition.releaseRisk.reason, /cannot delete/);
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.releaseRisk.highRisk, "access");
   assert.match(definition.description, /archive/i);
 });

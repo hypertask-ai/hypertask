@@ -236,22 +236,22 @@ for (const scenario of ['no-board-grants', 'invalid-team-scope', 'revoked']) {
   });
 }
 
-test('scoped discovery ships to Everyone inside the agent team and can be switched off', async () => {
+test('scoped discovery is an access-risk feature restricted to Owner + QA by default and can be switched off', async () => {
   const f = fixture('ENFORCE');
   const { default: definition } = f.load('src/lib/flags/definitions/htpr-7663-scoped-agent-skills.ts');
   assert.equal(definition.key, scopedSkillsFlag);
   assert.equal(definition.kind, 'feature');
-  assert.equal(definition.releaseRisk.highRisk, undefined);
-  assert.equal(definition.defaultMode, 'EVERYONE');
+  assert.equal(definition.releaseRisk.highRisk, 'access');
+  assert.equal(definition.defaultMode, 'OWNER_AND_QA');
   const { defaultFeatureFlagMode, isFeatureEnabled } = f.load('src/lib/flags.ts');
-  assert.equal(defaultFeatureFlagMode(scopedSkillsFlag), 'EVERYONE');
+  assert.equal(defaultFeatureFlagMode(scopedSkillsFlag), 'OWNER_AND_QA');
   for (const mode of [null, 'OWNER_AND_QA', 'OFF', 'EVERYONE']) {
     for (const [userId, email, ownerOrQa] of [[6, 'valentin.yeo@gmail.com', true], [985, 'valentin@hypertask.ai', true], [7, 'member@example.invalid', false], [6, 'not-owner@example.invalid', false]]) {
       const db = {
         featureFlag: { findUnique: async () => mode ? { mode } : null },
         user: { findUnique: async () => ({ email }) },
       };
-      assert.equal(await isFeatureEnabled(scopedSkillsFlag, userId, db), mode === 'EVERYONE' || mode === null || mode === 'OWNER_AND_QA' && ownerOrQa);
+      assert.equal(await isFeatureEnabled(scopedSkillsFlag, userId, db), mode === 'EVERYONE' || (mode === null || mode === 'OWNER_AND_QA') && ownerOrQa);
     }
   }
 });

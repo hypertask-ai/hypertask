@@ -28,7 +28,7 @@ HTTP and existing legacy SSE share the permanent consolidated catalog and output
 
 ## Scope-limited agent skills
 
-A team-bound agent sees only skills on boards readable within its credential's team. With `htpr-7663-scoped-agent-skills` enabled server-side (Everyone by default), MCP and app-chat skill lists without `project_id` return those readable board skills; flag off or a flag lookup failure refuses unfiltered team-bound discovery without weakening scope restrictions. With either flag state, a supplied `project_id` narrows the list and must be accessible. Account-wide personal skills remain unavailable for reads, writes, imports and prompt resolution. App chat applies the same scope to skill discovery and slash-skill resolution. Human sessions and credentials without a team binding retain personal-skill access. Built-in formatting skills remain available.
+A team-bound agent sees only skills on boards readable within its credential's team. With `htpr-7663-scoped-agent-skills` enabled server-side (Owner + QA by default), MCP and app-chat skill lists without `project_id` return those readable board skills; flag off or a flag lookup failure refuses unfiltered team-bound discovery without weakening scope restrictions. With either flag state, a supplied `project_id` narrows the list and must be accessible. Account-wide personal skills remain unavailable for reads, writes, imports and prompt resolution. App chat applies the same scope to skill discovery and slash-skill resolution. Human sessions and credentials without a team binding retain personal-skill access. Built-in formatting skills remain available.
 
 ## Comment timestamps
 
@@ -67,7 +67,7 @@ Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST
 
 ## Acting as an owned agent
 
-A person's MCP connection (OAuth or account token, not an agent token or management key) can talk on a board as one of their agents without holding its token. This is behind `htpr-7529-mcp-act-as-agent` (Everyone by default); with it off, `as_agent` is not advertised and is refused, and `ensure` on create is refused.
+A person's MCP connection (OAuth or account token, not an agent token or management key) can talk on a board as one of their agents without holding its token. This is behind `htpr-7529-mcp-act-as-agent` (Owner + QA); with it off, `as_agent` is not advertised and is refused, and `ensure` on create is refused.
 
 1. `hypertask_agents create {display_name, project_ids, role, ensure: true}` returns the caller's active agent with that display name (case-insensitive), adding any missing boards, or creates it. Calling it again returns the same id. It never returns a token.
 2. `as_agent: <agent UUID>` inside `input` on `hypertask_tasks` create/update/move/assign, `hypertask_comments` list/add/update/delete and `hypertask_decisions` create/list/get/cancel runs the action with the agent's identity. The server checks that the caller owns the agent, that it is not revoked or archived, that it is an Accepted member of the ticket's board (and of `target_project_id` on move), and that a read-role agent does not write.
@@ -114,9 +114,9 @@ This is the app repository's API/MCP contract; native CLI argument parsing lives
 
 Archive does the same write as Archive in the app: the ticket leaves the board and stays in Archive. Delete does the same write as Delete in the app: the ticket and its sub-tasks move to Trash, `permanentlyDeleteAt` is 30 days out, and the ticket can be restored from Trash until then. Both answer `{ "success": true, "task": { "id", "ticketNumber", "projectId", "status", "archivedAt", "permanentlyDeleteAt" } }`.
 
-A read-only agent, or an agent without write access to the ticket's board, is refused; a ticket on another board answers 404. The ticket switch `htpr-8215-agent-archive-delete` defaults to Everyone. Trash keeps the ticket for 30 days and it can be restored. Switching the flag off makes both endpoints answer 404 without changing archive or delete in the app. The native CLI commands live in the separate CLI repository.
+A read-only agent, or an agent without write access to the ticket's board, is refused; a ticket on another board answers 404. The ticket switch `htpr-8215-agent-archive-delete` defaults to Owner + QA because it can move a ticket to Trash. Switching it off makes both endpoints answer 404 without changing archive or delete in the app. The native CLI commands live in the separate CLI repository.
 
-A ticket that already sits in a Done column is refused to Delete for every agent. The ticket owner's own agents may archive it while `htpr-8231-agent-archive-done` is on, which is the default. The archive records which agent did it and when. Switching that flag off refuses the archive.
+A ticket that already sits in a Done column is refused to Delete for every agent. Archiving one is refused while the ticket switch `htpr-8231-agent-archive-done` is off; with it on, the ticket owner's own agents may archive it, and the archive records which agent did it and when.
 
 ## Connected-agent skill templates
 

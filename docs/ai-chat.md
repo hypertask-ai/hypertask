@@ -2,7 +2,7 @@
 
 Ticket: https://app.hypertask.ai/detail/project-15/7622
 
-`htpr-7622-ai-settings` defaults to Everyone. With it on, the existing chat works beside Settings on desktop and in its existing phone sheet. Ctrl+J opens that chat while Settings is open; phones reuse the existing AI button.
+`htpr-7622-ai-settings` starts at Owner + QA because it includes access changes. With it on, the existing chat works beside Settings on desktop and in its existing phone sheet. Ctrl+J opens that chat while Settings is open; phones reuse the existing AI button.
 
 Open Appearance to ask for a theme, Notifications to change one category's email or push preference, or Board → Members to change an accepted human member's board role. Team → Members also supports the selected board's roles. Read the single From/To card, then Apply or Cancel. Applied changes offer Undo for 15 minutes. The board owner is the only person who can change roles, exactly as with the existing manual app action. Neither AI nor an agent receives extra permission.
 

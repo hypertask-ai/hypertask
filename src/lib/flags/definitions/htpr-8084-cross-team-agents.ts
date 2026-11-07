@@ -7,9 +7,10 @@ export default {
   shippedOn: "2026-10-27",
   description: "One owned agent joins boards across its owner's teams; cross-team conversations stay private to owner and agent.",
   kind: "improvement",
-  defaultMode: "EVERYONE",
+  defaultMode: "OWNER_AND_QA",
   releaseRisk: {
     risk: "new",
     reason: "Extends explicit agent board grants across the owner's teams.",
+    highRisk: "access",
   },
 } as const satisfies FeatureFlagDefinition;

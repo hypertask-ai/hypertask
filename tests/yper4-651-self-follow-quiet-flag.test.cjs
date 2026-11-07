@@ -9,15 +9,15 @@ const SELF_FOLLOW_FLAG = "yper4-651-self-follow-quiet";
 const filename = `src/lib/flags/definitions/${SELF_FOLLOW_FLAG}.ts`;
 const source = fs.readFileSync(path.join(__dirname, "..", filename), "utf8");
 
-test("self-follow quiet bugfix suppresses notifications and defaults to Everyone", async () => {
+test("self-follow quiet customer-email bugfix is classified and defaults to Owner + QA", async () => {
   const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
   const { definition } = parseFlagFile(source, filename);
   const flag = load(filename, {});
   assert.equal(flag.YPER4_651_SELF_FOLLOW_QUIET_FLAG, SELF_FOLLOW_FLAG);
   assert.equal(definition.key, SELF_FOLLOW_FLAG);
   assert.equal(definition.kind, "bugfix");
-  assert.equal(definition.releaseRisk.highRisk, undefined);
-  assert.equal(definition.defaultMode, "EVERYONE");
+  assert.equal(definition.releaseRisk.highRisk, "customer-email");
+  assert.equal(definition.defaultMode, "OWNER_AND_QA");
   assert.equal(definition.shippedOn, "2026-10-24");
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason.trim());
