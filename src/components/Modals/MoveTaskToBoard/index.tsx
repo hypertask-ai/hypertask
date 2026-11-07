@@ -14,6 +14,7 @@ import { useRecoilState, useRecoilValue } from '@/lib/state';
 import { moveTaskToDifferentBoardAPI } from '@/lib/constants/APIRouteConstants';
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_8014_COMPOSE_BOARD_ORDER_FLAG } from '@/lib/flags/keys';
+import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from '@/lib/flags/definitions/htpr-8737-bulk-move-board';
 
 interface ICreateTask {
     projectId: number;
@@ -37,7 +38,8 @@ type IProps = {
 }
 const MoveTaskGlobal = (props: IProps) => {
     const composeBoardPicker = Boolean(props.onSelectBoard);
-    const bulkMove = useRef(Boolean(props.onBulkMove)).current;
+    const bulkBoardMoveEnabled = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
+    const bulkMove = useRef(Boolean(props.onBulkMove) && bulkBoardMoveEnabled).current;
     const projects = useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, { enabled: !composeBoardPicker });
     const usageOrderEnabled = useFlag(HTPR_8014_COMPOSE_BOARD_ORDER_FLAG);
     const lastUsedBoards = useRecoilValue(lastUsedBoardsAtom);
@@ -92,6 +94,7 @@ const MoveTaskGlobal = (props: IProps) => {
         try {
             console.log('Submitting...', values);
             setRedirectingToTask(true)
+            if (props.onBulkMove && !bulkBoardMoveEnabled) return;
             if (bulkMove) {
                 await props.onBulkMove?.(values.projectId, values.sectionId);
                 return;

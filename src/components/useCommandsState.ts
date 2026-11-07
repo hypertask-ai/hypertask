@@ -28,11 +28,13 @@ import { INBOX_ZERO_PRESETS } from "@/lib/inboxZero";
 import { useGlobalUIState } from "./ProviderGlobal/useGlobalUIState";
 import { useUndoContext } from "@/hooks/General/useUndo";
 import { useKanbanBulkSelectionOptional } from "@/lib/contexts/Kanban/BulkSelectionContext";
+import { getBulkTaskCommands } from "@/components/Modals/commands/HTC/navigationCommands";
 import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSelectionContext";
 import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection";
 import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
+import { HTPR_8737_BULK_MOVE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8737-bulk-move-board";
 import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
@@ -48,6 +50,7 @@ export function useCommandsState(context: Context) {
 
   const queryClient = useQueryClient();
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
+  const bulkMoveBoardFlag = useFlag(HTPR_8737_BULK_MOVE_BOARD_FLAG);
   const myTasksViewsEnabled = true;
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
@@ -87,6 +90,12 @@ export function useCommandsState(context: Context) {
   const hasBulkSelection = (bulkSelection?.selectedCount ?? 0) > 0;
   const bulkTasks = bulkSelection?.selectedTasks ?? [];
   const bulkProjectId = sharedProjectId(bulkTasks);
+  const bulkBoardCommands = getBulkTaskCommands({
+    context: "Kanban",
+    bulkSelectionCount: hasBulkSelection ? bulkSelection?.selectedCount : 0,
+    kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!kanbanBulkSelection,
+    bulkMoveBoardEnabled: bulkMoveBoardFlag && !!kanbanBulkSelection?.bulkMoveBoardEnabled,
+  });
   const paletteContextOptions = hasBulkSelection
     ? {
         ...contextOptions,
@@ -94,7 +103,7 @@ export function useCommandsState(context: Context) {
         task: undefined,
         taskOptions: undefined,
         bulkSelectionCount: bulkSelection?.selectedCount,
-        bulkMoveBoardEnabled: !!kanbanBulkSelection?.bulkMoveBoardEnabled,
+        bulkMoveBoardEnabled: !!bulkBoardCommands?.commandLists.some((command) => command.key === "bulkMoveToBoard"),
         kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!kanbanBulkSelection,
       }
     : contextOptions && {

@@ -175,7 +175,7 @@ test('an open bulk board picker never moves the focused ticket after selection d
     '@/lib/state': { useRecoilState: () => [{ taskId: 999, taskProjectId: 10 }, () => {}], useRecoilValue: () => ({}) },
     '@/utils/helperFunctions/multiPages': { returnActiveOrDefaultColumnSections: () => [] },
     '@/lib/constants/APIRouteConstants': { moveTaskToDifferentBoardAPI: '/single-move' },
-    '@/hooks/useFlag': { useFlag: () => false },
+    '@/hooks/useFlag': { useFlag: () => true },
     '@/lib/flags/keys': {},
     'next/navigation': { usePathname: () => '/', useRouter: () => ({}) },
     formik: { useFormik: options => { submit = options.onSubmit; return { values: { projectId: 20, sectionId: 30 } }; } },
