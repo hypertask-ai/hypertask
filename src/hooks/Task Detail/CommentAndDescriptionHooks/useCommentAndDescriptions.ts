@@ -1,6 +1,5 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { IAttachment, IComment } from "@/models/model";
@@ -182,7 +181,7 @@ const useDescriptionAndCommentsStates = () => {
     request: null,
   });
   const [allStacked, setAllStacked] = useState<boolean>(true);
-  const collapseAgentLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
+  const collapseAgentLane = useFlag("htpr-8262-agent-lane-collapse");
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();

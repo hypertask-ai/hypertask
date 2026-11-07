@@ -18,7 +18,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { safeAgentRunActivityLink } from "@/lib/agentRuns/taskActivityFeed";
-import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8846-agent-lane-on-readable-board";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -40,7 +39,7 @@ const AgentRunActivityRow = ({
   const queryClient = useQueryClient();
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const selectionLocked = activity.selectedOption !== null || pendingValue !== null;
-  const collapseLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
+  const collapseLane = useFlag("htpr-8262-agent-lane-collapse");
   const showLaneAuthor = useFlag(HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG);
   const { agentLaneFold } = useTaskContext();
   const laneCollapsed = agentLaneFold.taskId === taskId && agentLaneFold.collapsed;
@@ -152,7 +151,7 @@ const AgentRunActivityRow = ({
         aria-label={`Agent ${activity.type}, collapsed`}
         onClick={toggleRow}
         onKeyDown={rowKeyDown}
-        className="my-[8px] flex h-[29px] min-w-0 cursor-pointer items-center gap-2 rounded-[4px] border-l-4 border-transparent px-4 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
+        className="my-[4px] flex h-[29px] min-w-0 cursor-pointer items-center gap-2 rounded-[4px] border-l-4 border-transparent px-4 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
       >
         {icon}
         {laneAuthor}
