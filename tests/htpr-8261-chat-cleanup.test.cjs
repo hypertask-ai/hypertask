@@ -35,7 +35,7 @@ test("the floating and sidebar chat Send is the word, not the paper plane", () =
   assert.match(button, /label && \(!mobile \|\| textOnMobile\)/);
   assert.doesNotMatch(button, /HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG/);
   const composer = read("src/components/AI_CHAT/AI_Tiptap_Container.tsx");
-  assert.match(composer, /label=\{fullScreenCleanup \|\| chatCleanupEnabled \? "Send" : undefined\}/);
+  assert.match(composer, /label=\{plusLayout \|\| fullScreenCleanup \|\| chatCleanupEnabled \? "Send" : undefined\}/);
 });
 
 test("the chat composer turns the pill on for desktop and mobile", () => {
