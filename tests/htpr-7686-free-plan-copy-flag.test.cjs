@@ -11,5 +11,12 @@ test("free plan copy bugfix stays Owner + QA because it changes billing wording"
   assert.equal(definition.releaseRisk.highRisk, "money");
   assert.equal(definition.releaseRisk.risk, "small");
   assert.ok(definition.releaseRisk.reason);
-  assert.deepEqual(definition.related, ["htpr-7686-free-plan-limits", "htpr-7923-unlimited-free-tickets"]);
+  assert.deepEqual(definition.related, [
+    "htpr-7686-free-plan-limits",
+    "htpr-7922-unlimited-free-boards",
+    "htpr-7923-unlimited-free-tickets",
+    "htpr-7924-free-file-25mb",
+    "htpr-7924-free-storage-2gb",
+    "htpr-7919-allowance-percent",
+  ]);
 });
