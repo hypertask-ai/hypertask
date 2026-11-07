@@ -183,6 +183,12 @@ function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents =
     if (request === '@/lib/flags/definitions/htpr-8738-picker-skips-parked') {
       return { HTPR_8738_PICKER_SKIPS_PARKED_FLAG: 'htpr-8738-picker-skips-parked' }
     }
+    if (request === '@/lib/flags/definitions/htpr-8896-skip-taken-work') {
+      return { HTPR_8896_SKIP_TAKEN_WORK_FLAG: 'htpr-8896-skip-taken-work' }
+    }
+    if (request === '@/lib/mcp/tasks/takenWork') {
+      return jiti(path.join(root, 'src/lib/mcp/tasks/takenWork.ts'))
+    }
     if (request === '@/lib/mcp/tasks/otherAgentAssignee') {
       return jiti(path.join(root, 'src/lib/mcp/tasks/otherAgentAssignee.ts'))
     }

@@ -4,7 +4,9 @@ import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
 import { Prisma } from "@prisma/client";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
-import { mapRelatedTaskContext, relatedTaskContextSelect } from "@/lib/mcp/tasks/relatedTaskContext";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8896_SKIP_TAKEN_WORK_FLAG } from "@/lib/flags/definitions/htpr-8896-skip-taken-work";
+import { loadTaskAgentActivities, mapRelatedTaskContext, relatedTaskContextSelect } from "@/lib/mcp/tasks/relatedTaskContext";
 import { taskMcpGetInclude } from "@/lib/mcp/tasks/mappers";
 import { mcpVisibleAgentSelect, mapVisibleMcpAgent } from "@/lib/mcp/agents";
 import { resolvePublicAgentDisplayName } from "@/lib/agents/publicAgent";
@@ -155,6 +157,21 @@ export function createTaskContextTool(context: ToolContext) {
           mappedTask.description,
           ...prComments.flatMap((comment) => [comment.text, comment.commentText])
         );
+        const showActiveLog = await isFeatureEnabled(
+          HTPR_8896_SKIP_TAKEN_WORK_FLAG,
+          user.id,
+        );
+        const agentActivities = showActiveLog
+          ? (await loadTaskAgentActivities(
+              { id: resolvedTask.id, projectId: input.project_id },
+              user.id,
+              relatedTaskAccess,
+              true,
+            )).map((activity) => ({
+              ...activity,
+              text: stripInlineDataUris(activity.text),
+            }))
+          : undefined;
 
         return sanitizeForJson({
           success: true,
@@ -173,6 +190,7 @@ export function createTaskContextTool(context: ToolContext) {
           subtasks: mappedTask.sub_tasks,
           relatedTasks,
           comments,
+          ...(agentActivities ? { agentActivities } : {}),
           linkedPRs,
           commentCount,
           truncated: commentCount > commentLimit,

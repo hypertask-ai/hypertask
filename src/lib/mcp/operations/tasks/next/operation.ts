@@ -7,9 +7,10 @@ import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from '@/lib/flags/definitions/htpr-8786-picker-skips-other-agents'
 import { HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/definitions/htpr-8738-picker-skips-parked'
+import { HTPR_8896_SKIP_TAKEN_WORK_FLAG } from '@/lib/flags/definitions/htpr-8896-skip-taken-work'
 import { priorityScore } from '@/lib/mcp/tasks/priorityScore'
 import { otherAgentAssigneeWhere } from '@/lib/mcp/tasks/otherAgentAssignee'
-import { blockerStillOpen } from '@/lib/mcp/tasks/blockerStillOpen'
+import { hasOpenRecordedBlocker, takenWorkWhere } from '@/lib/mcp/tasks/takenWork'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
@@ -145,6 +146,10 @@ export async function GET(request: NextRequest) {
         HTPR_8738_PICKER_SKIPS_PARKED_FLAG,
         ctx.user.id,
       ))
+    const skipTaken = await isFeatureEnabled(
+      HTPR_8896_SKIP_TAKEN_WORK_FLAG,
+      ctx.user.id,
+    )
     const doneTitlesByProject = await loadDoneTitlesByProject(
       [projectId],
       mcpDoneNameFallback
@@ -219,6 +224,7 @@ export async function GET(request: NextRequest) {
             blockerCommentId: null,
           }
         : {}),
+      ...(skipTaken ? takenWorkWhere(ctx.agentId ?? null) : {}),
     }
 
     const tasks = await prisma.task.findMany({
@@ -269,7 +275,8 @@ export async function GET(request: NextRequest) {
       ...task.relatedFromTasks.map((relation) => relation.targetTask.projectId),
       ...task.relatedToTasks.map((relation) => relation.sourceTask.projectId),
     ])
-    if (excludeBlocked) {
+    const leaveOutBlockers = excludeBlocked || skipTaken
+    if (leaveOutBlockers) {
       const blockerDoneTitlesByProject = await loadDoneTitlesByProject(
         blockerProjectIds.filter(
           (blockerProjectId) => !doneTitlesByProject.has(blockerProjectId)
@@ -281,16 +288,8 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    const candidates = excludeBlocked
-      ? tasks.filter((task) => {
-          const blockers = [
-            ...task.relatedFromTasks.map((r) => r.targetTask),
-            ...task.relatedToTasks.map((r) => r.sourceTask),
-          ]
-          return !blockers.some((blocker) =>
-            blockerStillOpen(blocker, doneTitlesByProject.get(blocker.projectId))
-          )
-        })
+    const candidates = leaveOutBlockers
+      ? tasks.filter((task) => !hasOpenRecordedBlocker(task, doneTitlesByProject))
       : tasks
 
     const rankedTasks = candidates

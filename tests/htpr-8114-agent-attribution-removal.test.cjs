@@ -54,6 +54,7 @@ test("AI task context returns permanent attribution through the tool executor", 
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}) },
     "@/lib/mcp/tasks/extractPrLinks": { extractPrLinks: () => [] },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/ai/tools/execution": { withToolErrors: (execute) => execute },
     "@/lib/ai/tools/helpers": {
       mapTaskToMcpGetResponse: () => ({ id: 42 }),

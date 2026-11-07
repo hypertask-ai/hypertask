@@ -1,9 +1,46 @@
 import { Prisma } from '@prisma/client';
+import { NONTERMINAL_AGENT_RUN_STATUSES } from '@/lib/agentRuns/model';
 import { accessibleAgentWhere } from '@/lib/agents/visibility';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { mapTaskAssignees } from '@/lib/mcp/tasks/mappers';
 import prisma from '@/lib/prisma';
+
+export async function loadTaskAgentActivities(
+  task: { id: number; projectId: number },
+  userId: number,
+  access: Prisma.TaskWhereInput,
+  activeOnly = false,
+) {
+  const activities = await prisma.agentRunActivity.findMany({
+    where: {
+      run: {
+        taskId: task.id,
+        task: access,
+        ...(activeOnly ? { status: { in: NONTERMINAL_AGENT_RUN_STATUSES } } : {}),
+      },
+    },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: 5,
+    select: {
+      id: true,
+      type: true,
+      text: true,
+      createdAt: true,
+      run: { select: { agent: { select: mcpVisibleAgentSelect(userId) } } },
+    },
+  });
+  return activities.map((activity) => ({
+    id: activity.id,
+    agentName: resolvePublicAgentDisplayName({
+      hasAgentRow: true,
+      visibleAgent: mapVisibleMcpAgent(activity.run.agent, userId, task.projectId),
+    }),
+    type: activity.type.toLowerCase(),
+    text: activity.text,
+    createdAt: activity.createdAt.toISOString(),
+  }));
+}
 
 export function relatedTaskContextSelect(userId: number) {
   return {
@@ -27,18 +64,6 @@ export function relatedTaskContextSelect(userId: number) {
 type RelatedTask = Prisma.TaskGetPayload<{ select: ReturnType<typeof relatedTaskContextSelect> }>;
 
 export async function mapRelatedTaskContext(task: RelatedTask, userId: number, access: Prisma.TaskWhereInput) {
-  const activities = await prisma.agentRunActivity.findMany({
-    where: { run: { taskId: task.id, task: access } },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: 5,
-    select: {
-      id: true,
-      type: true,
-      text: true,
-      createdAt: true,
-      run: { select: { agent: { select: mcpVisibleAgentSelect(userId) } } },
-    },
-  });
   return {
     id: task.id,
     ticketNumber: task.ticketNumber || undefined,
@@ -46,15 +71,6 @@ export async function mapRelatedTaskContext(task: RelatedTask, userId: number, a
     uniqueIndex: task.uniqueIndex,
     section: task.section,
     assignees: mapTaskAssignees(task.assignees, userId, task.projectId),
-    agentActivities: activities.map((activity) => ({
-      id: activity.id,
-      agentName: resolvePublicAgentDisplayName({
-        hasAgentRow: true,
-        visibleAgent: mapVisibleMcpAgent(activity.run.agent, userId, task.projectId),
-      }),
-      type: activity.type.toLowerCase(),
-      text: activity.text,
-      createdAt: activity.createdAt.toISOString(),
-    })),
+    agentActivities: await loadTaskAgentActivities(task, userId, access),
   };
 }
