@@ -24,6 +24,11 @@
 # Resume command: 2nd argument (or --resume <cmd>), else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
 # SHIP_CLAIM_PICKED=1 (set by fleet/pick, which already chose the ticket and the order): skips the infra-first check only.
+# SHIP_CLAIM_INCIDENT=1 (set by fleet/pick for an open board 15 ticket labelled incident, YPER4-1375): skips the open-PR hold,
+#   the unfinished-merged-work hold, the queue brake, infra first and the working-area check, because a live outage outranks
+#   the work a runner already holds. The flag counts only when the ticket is an HTPR ticket that really carries the incident
+#   label and is not Done or archived (re-read here, so a stray flag does nothing). The brain-extra-hard and design-pass
+#   refusals, the related-alert check and the claim race check all still apply.
 set -uo pipefail
 
 # decide <claim-id> <comments.json> [idle-ids] [assigned-ids] [self-resume]
@@ -104,10 +109,22 @@ infra_free() {
   read -ra found <<<"$found"; echo "${found[*]:0:3}"
 }
 
+# incident_ok <TICKET>: SHIP_CLAIM_INCIDENT=1 is honoured only for an open HTPR ticket that carries the incident label.
+incident_ok() {
+  [ -n "${SHIP_CLAIM_INCIDENT:-}" ] && [[ $1 == HTPR-* ]] || return 1
+  local got=${task:-}
+  [ -n "$got" ] || got=$("${SHIP_CLAIM_HYPERTASK:-hypertask}" tasks get "$1" --json 2>/dev/null) || return 1
+  jq -e '.success == true and (.tasks | length == 1) and (.tasks[0]
+    | ((.labels // []) | any((.name // "") | ascii_downcase == "incident"))
+    and ((.status // "Normal") == "Normal") and (.sectionIsDone != true)
+    and ((.section // "") | IN("Done", "Archive", "Archived") | not))' <<<"$got" >/dev/null 2>&1
+}
+
 hold_check() {
   local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
+  if incident_ok "$t"; then echo "ship-claim: INCIDENT lane. Holds, queue brake and infra first skipped for $t."; return 0; fi
   open=$(${SHIP_CLAIM_GH:-gh} pr list -R hypertask-ai/hypertask --state open --limit 300 --json number,headRefName,title,isDraft) \
     || { echo "ship-claim: HOLD. Cannot read open PRs, so no new claim for RUNNER $rn. Retry later." >&2; return 4; }
   jq -e 'type == "array" and length < 300 and all(.[];
@@ -262,7 +279,7 @@ if [[ $T == HTPR-* ]]; then
 fi
 
 # A CI ticket has no working area; its board (11514) decides who joins (YPER4-980).
-if [[ $T != HYCI-* && ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]]; then
+if [[ $T != HYCI-* && ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] && ! incident_ok "$T"; then
   python3 "$(dirname "$(readlink -f "$0")")/runner-domain-admit.py" "${BASH_REMATCH[1]}" "$T" \
     || { echo "ship-claim: HOLD. Domain admission failed." >&2; exit 4; }
 fi
