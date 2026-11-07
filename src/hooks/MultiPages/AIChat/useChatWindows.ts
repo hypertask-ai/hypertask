@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
-import { useRecoilState } from "@/lib/state";
-import { aiChatWindowsAtom, currentUserAtom } from "@/store";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { aiChatWindowsAtom, currentUserAtom, isAiChatSidebarModeAtom } from "@/store";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 import {
   CHAT_WINDOW_MAX,
@@ -11,6 +11,7 @@ import {
   chatWindowForSession,
   closeChatWindow,
   moveChatWindowToFront,
+  multiChatWindowsAvailable,
   openChatWindowForUser,
   readChatWindows,
   setChatWindowMinimized,
@@ -33,6 +34,7 @@ export function useChatWindows(verifiedUserId?: number | null) {
   const enabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const [currentUser] = useRecoilState(currentUserAtom);
   const [stored, setStored] = useRecoilState(aiChatWindowsAtom);
+  const sidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
   const [viewport, setViewport] = useState<ChatWindowViewport>({ width: 0, height: 0 });
   const storedUserId = currentUser?.id ?? 0;
   let userId = storedUserId;
@@ -47,10 +49,11 @@ export function useChatWindows(verifiedUserId?: number | null) {
   }, [enabled]);
 
   const desktop = viewport.width >= MOBILE_VIEWPORT_MAX_PX;
+  const floating = multiChatWindowsAvailable({ enabled, desktop, sidebarMode });
   const windows = useMemo(() => {
-    if (!desktop || viewport.width < CHAT_WINDOW_MIN_WIDTH || userId <= 0) return [];
-    return enabled ? readChatWindows(stored, viewport, userId) : [];
-  }, [desktop, enabled, stored, userId, viewport]);
+    if (!floating || viewport.width < CHAT_WINDOW_MIN_WIDTH || userId <= 0) return [];
+    return readChatWindows(stored, viewport, userId);
+  }, [floating, stored, userId, viewport]);
 
   const focus = useCallback(
     (id: string) => setStored((previous) => moveChatWindowToFront(previous, id)),
@@ -76,7 +79,7 @@ export function useChatWindows(verifiedUserId?: number | null) {
 
   const open = useCallback(
     (sessionId: string | null) => {
-      if (!enabled || !desktop || userId <= 0) return false;
+      if (!floating || userId <= 0) return false;
       if (sessionId && focusOpenSession(sessionId)) return true;
       if (windows.length >= CHAT_WINDOW_MAX) return false;
       setStored((previous) =>
@@ -84,7 +87,7 @@ export function useChatWindows(verifiedUserId?: number | null) {
       );
       return true;
     },
-    [desktop, enabled, focusOpenSession, setStored, userId, windows],
+    [floating, focusOpenSession, setStored, userId, windows],
   );
 
   const close = useCallback(
@@ -119,7 +122,7 @@ export function useChatWindows(verifiedUserId?: number | null) {
   );
 
   return {
-    enabled: enabled && desktop,
+    enabled: floating,
     windows,
     atCapacity: windows.length >= CHAT_WINDOW_MAX,
     viewport,

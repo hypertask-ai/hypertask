@@ -17,8 +17,10 @@ const {
   chatWindowForSession,
   clampChatWindowRect,
   closeChatWindow,
+  closeChatWindowsForUser,
   createChatWindow,
   moveChatWindowToFront,
+  multiChatWindowsAvailable,
   openChatWindowForUser,
   readChatWindows,
   setChatWindowMinimized,
@@ -39,12 +41,23 @@ test("multi chat windows: the flag ships on for everyone with a fallback to one 
   assert.match(read("src/components/ProviderGlobal/GloablProviders.tsx"), /HTPR_8334_MULTI_CHAT_WINDOWS|ChatWindowStack/);
 });
 
-test("multi chat windows: the runtime reads the flag before drawing a second window", () => {
-  const source = read("src/hooks/MultiPages/AIChat/useChatWindows.ts");
-  assert.match(source, /HTPR_8334_MULTI_CHAT_WINDOWS_FLAG/);
-  assert.match(source, /useFlag\(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG\)/);
-  assert.match(source, /enabled && desktop/);
-  assert.match(source, /MOBILE_VIEWPORT_MAX_PX/);
+test("multi chat windows: windows are available only on desktop, with the flag on, while floating", () => {
+  const ok = { enabled: true, desktop: true, sidebarMode: false };
+  assert.equal(multiChatWindowsAvailable(ok), true);
+  assert.equal(multiChatWindowsAvailable({ ...ok, sidebarMode: true }), false);
+  assert.equal(multiChatWindowsAvailable({ ...ok, enabled: false }), false);
+  assert.equal(multiChatWindowsAvailable({ ...ok, desktop: false }), false);
+});
+
+test("multi chat windows: docking the chat closes every other window and keeps the chats", () => {
+  const mine = [window(0, "chat-a"), window(1, "chat-b")];
+  const foreign = { ...window(2, "chat-c"), userId: user + 1 };
+  const docked = closeChatWindowsForUser([...mine, foreign], user);
+  assert.deepEqual(docked.map((entry) => entry.id), ["window-2"]);
+  assert.equal(closeChatWindowsForUser([foreign], user)[0], foreign);
+  const none = [foreign];
+  assert.equal(closeChatWindowsForUser(none, user), none);
+  assert.deepEqual(closeChatWindowsForUser([], user), []);
 });
 
 test("multi chat windows: a new window never replaces one that is already open", () => {
