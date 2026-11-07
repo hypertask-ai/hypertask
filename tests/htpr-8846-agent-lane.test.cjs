@@ -1,32 +1,24 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const path = require("node:path");
-const { createJiti } = require("jiti");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
-const root = path.resolve(__dirname, "..");
-let loadId = 0;
+const tasks = {
+  1854: { id: 1854, projectId: 339, readable: true, member: false },
+  77: { id: 77, projectId: 4060, readable: false, member: false },
+  42: { id: 42, projectId: 15, readable: true, member: true },
+};
 
-function stub(relativePath, exports) {
-  const filename = path.join(root, relativePath);
-  require.cache[filename] = {
-    id: filename,
-    filename,
-    loaded: true,
-    exports,
-  };
-}
+const chief = {
+  userId: 6,
+  agentId: "chief-of-staff",
+  displayName: "Valentin",
+  source: "agent",
+};
 
-function loadService({ laneEnabled = false, activities = [] } = {}) {
-  const servicePath = path.join(root, "src/lib/agentRuns/service.ts");
-  delete require.cache[servicePath];
+function openLane({ laneEnabled = false, activities = [] } = {}) {
   const queries = [];
   const runs = [];
   const comments = [];
-  const tasks = {
-    1854: { id: 1854, projectId: 339, readable: true, member: false },
-    77: { id: 77, projectId: 4060, readable: false, member: false },
-    42: { id: 42, projectId: 15, readable: true, member: true },
-  };
   const prisma = {
     $transaction: async (callback) => callback(prisma),
     task: {
@@ -58,76 +50,48 @@ function loadService({ laneEnabled = false, activities = [] } = {}) {
       },
     },
   };
-  stub("src/lib/prisma.ts", { default: prisma });
-  stub("src/lib/flags.ts", {
-    isFeatureEnabled: async () => laneEnabled,
-  });
-  stub("src/lib/auth/agentScope.ts", {
-    agentScopeEnforced: () => false,
-    recordAgentBoardScopeMiss: () => {},
-    withAgentScopeRequest: (_request, run) => run(),
-    prepareAgentScope: async () => {},
-  });
-  stub("src/lib/mcp/tasks/agentMutationFence.ts", {
-    lockTaskTeamScope: async () => {},
-    TaskTeamScopeError: class TaskTeamScopeError extends Error {},
-  });
-  stub("src/lib/realtime/server.ts", {
-    AGENT_CHAT_EVENT: "agent-chat:changed",
-    broadcast: async () => {},
-    broadcastTaskComment: async () => {},
-    userChannel: (id) => `user-${id}`,
-  });
-  stub("src/lib/agentStatus/boardRefresh.ts", {
-    refreshBoardForAgentRun: async () => {},
-  });
-  stub("src/lib/agents/chatContentScope.ts", {
-    chatContentScopeWhere: async () => ({}),
-  });
-  stub("src/lib/auth/getSessionUser.ts", {
-    getSessionUser: async () => null,
-  });
-  stub("src/lib/agentWebhooks/outbox.ts", {
-    persistAgentRunStoppedWebhook: async () => {},
-    persistAgentWebhookEvent: async () => {},
-    publishAgentWebhookDeliveries: async () => {},
-  });
-  stub("src/lib/agents/chatBroadcast.ts", {
-    broadcastChatSession: async () => {},
-  });
-  stub("src/lib/mcp/auth.ts", {
-    validateMcpAuth: async () => null,
-  });
-  stub("src/lib/agentRuns/persistence.ts", {
-    persistAgentRunActivity: async () => {
-      throw new Error("people path");
+  const service = loadModule("src/lib/agentRuns/service.ts", {
+    "@/lib/prisma": { default: prisma },
+    "@/lib/flags": { isFeatureEnabled: async () => laneEnabled },
+    "@/lib/auth/agentScope": {
+      agentScopeEnforced: () => false,
+      recordAgentBoardScopeMiss: () => {},
     },
-    persistAgentRunSelection: async () => {
-      throw new Error("people path");
+    "@/lib/mcp/tasks/agentMutationFence": { lockTaskTeamScope: async () => {} },
+    "@/lib/realtime/server": {
+      AGENT_CHAT_EVENT: "agent-chat:changed",
+      broadcast: async () => {},
+      broadcastTaskComment: async () => {},
+      userChannel: (id) => `user-${id}`,
+    },
+    "@/lib/agentStatus/boardRefresh": { refreshBoardForAgentRun: async () => {} },
+    "@/lib/agents/chatContentScope": { chatContentScopeWhere: async () => ({}) },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
+    "@/lib/agentWebhooks/outbox": {
+      persistAgentRunStoppedWebhook: async () => {},
+      persistAgentWebhookEvent: async () => {},
+      publishAgentWebhookDeliveries: async () => {},
+    },
+    "@/lib/agents/chatBroadcast": { broadcastChatSession: async () => {} },
+    "@/lib/mcp/auth": { validateMcpAuth: async () => null },
+    "@/lib/agentRuns/persistence": {
+      persistAgentRunActivity: async () => {
+        throw new Error("people path");
+      },
+      persistAgentRunSelection: async () => {
+        throw new Error("people path");
+      },
+    },
+    "@/utils/helperFunctions/toStoredHtml": { toStoredHtml: (value) => value },
+    "@/utils/controllers/projects/getAllIncludes": {
+      projectContentAccessWhere: () => ({ access: "readable-board" }),
     },
   });
-  stub("src/utils/helperFunctions/toStoredHtml.ts", {
-    toStoredHtml: (value) => value,
-  });
-  stub("src/utils/controllers/projects/getAllIncludes.ts", {
-    projectContentAccessWhere: () => ({ access: "readable-board" }),
-  });
-  const jiti = createJiti(path.join(root, `tests/htpr-8846-lane-${++loadId}.cjs`), {
-    alias: { "@": path.join(root, "src") },
-    interopDefault: true,
-  });
-  return { service: jiti(servicePath), queries, runs, comments };
+  return { service, queries, runs, comments };
 }
 
-const chief = {
-  userId: 6,
-  agentId: "chief-of-staff",
-  displayName: "Valentin",
-  source: "agent",
-};
-
 test("a human login cannot open an agent log note", async () => {
-  const { service, queries, comments } = loadService({ laneEnabled: true });
+  const { service, queries, comments } = openLane({ laneEnabled: true });
   const run = await service.createRuntimeAgentRun(
     { userId: 6, agentId: null, displayName: "Valentin", source: "browser" },
     { taskId: 1854, title: null, source: "runtime" },
@@ -138,7 +102,7 @@ test("a human login cannot open an agent log note", async () => {
 });
 
 test("an agent log note on a readable board uses the agent, not the human", async () => {
-  const off = loadService({ laneEnabled: false });
+  const off = openLane({ laneEnabled: false });
   const denied = await off.service.createRuntimeAgentRun(chief, {
     taskId: 1854,
     title: null,
@@ -149,7 +113,7 @@ test("an agent log note on a readable board uses the agent, not the human", asyn
   assert.equal(off.queries.at(-1).project.members.some.agentId, "chief-of-staff");
   assert.equal(off.comments.length, 0);
 
-  const on = loadService({ laneEnabled: true });
+  const on = openLane({ laneEnabled: true });
   const run = await on.service.createRuntimeAgentRun(chief, {
     taskId: 1854,
     title: null,
@@ -165,7 +129,7 @@ test("an agent log note on a readable board uses the agent, not the human", asyn
 });
 
 test("a board the agent cannot read stays closed", async () => {
-  const { service, queries, comments } = loadService({ laneEnabled: true });
+  const { service, queries, comments } = openLane({ laneEnabled: true });
   const run = await service.createRuntimeAgentRun(chief, {
     taskId: 77,
     title: null,
@@ -178,7 +142,7 @@ test("a board the agent cannot read stays closed", async () => {
 });
 
 test("a board member can still open a note when the fix is off", async () => {
-  const { service, comments } = loadService({ laneEnabled: false });
+  const { service, comments } = openLane({ laneEnabled: false });
   const run = await service.createRuntimeAgentRun(chief, {
     taskId: 42,
     title: null,
@@ -190,7 +154,7 @@ test("a board member can still open a note when the fix is off", async () => {
 });
 
 test("the saved note names Chief Of Staff", async () => {
-  const { service } = loadService({
+  const { service } = openLane({
     laneEnabled: true,
     activities: [{
       id: "activity-1",
@@ -213,12 +177,8 @@ test("the saved note names Chief Of Staff", async () => {
   assert.equal(Object.hasOwn(note, "displayName"), false);
 });
 
-test("a person's ordinary comment is not routed into the agent log", async () => {
-  const jiti = createJiti(path.join(root, `tests/htpr-8846-route-${++loadId}.cjs`), {
-    alias: { "@": path.join(root, "src") },
-    interopDefault: true,
-  });
-  const routing = jiti(path.join(root, "src/lib/mcp/operations/comments/agentChatterRouting.ts"));
+test("a person's ordinary comment is not routed into the agent log", () => {
+  const routing = loadModule("src/lib/mcp/operations/comments/agentChatterRouting.ts");
   assert.equal(routing.routeComment({ agentId: null }), "comments");
   assert.equal(routing.routeComment({ agentId: "chief-of-staff", kind: "question" }), "comments");
   assert.equal(routing.routeComment({ agentId: "chief-of-staff" }), "log");
