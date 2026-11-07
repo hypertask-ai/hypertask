@@ -74,6 +74,12 @@ test("production build heap cap leaves half the build machine for native memory"
       "or the parent Next process, native webpack memory and the page worker run the container out of memory " +
       "(YPER4-957)",
   );
+  const MEASURED_SAFE_HEAP_MB = 3072;
+  assert.ok(
+    Number(cap[1]) <= MEASURED_SAFE_HEAP_MB,
+    `heap cap ${cap[1]} MB must stay at or below ${MEASURED_SAFE_HEAP_MB}: ` +
+      "4096 MB still OOM-killed the 8 GB build machine on 2026-11-07 while webpack parallelism was already 1 (HYCI-177)",
+  );
 });
 
 test("production build names the builder the heap cap bounds", () => {

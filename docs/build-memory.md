@@ -180,3 +180,23 @@ Both confirmed kills are the same signature as the 4 cap: `SIGKILL` with no "Rea
 The build script now sets `NEXT_WEBPACK_PARALLELISM=1`: one module build at a time, so the native side of the compile no longer adds a second SWC transform's AST on top of the first. `tests/build-memory-config.test.cjs` fails if the cap goes above 1 or is dropped. The expected cost is build wall-clock only. The margin is real but not unlimited: green builds measured 11 min 40 s to 17 min 42 s at the 2 cap, and if serialising the compile roughly doubles its share the build lands in the low thirties, still inside the 45 minute timeout. A build that does time out fails differently from these (a cancelled or timed-out deployment, not `SIGKILL` 117 s in), so the two are told apart from the deployment status.
 
 If one module build at a time still reports `out_of_memory`, the same ceiling is being reached from a single module and the remaining lever without money is the heap cap below. After that the compiler needs more than an 8 GB machine, which is the paid Enhanced Build Machine and Valentin's decision.
+
+## Heap cap 3072 MB (2026-11-07, HYCI-177)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/177
+
+Parallelism was already 1. Four production deployments in a row were still killed the same way. The last green deployment was `bfd983c551` (`dpl_47MRwndU1miPr2qUxUDRm8aPLo6h`, 8192 MiB, 6m 32s). The first red one was `62545b20f2`, the merge of pull request 3044 (`dpl_GLxbLvxn5sV2YiHX8CJoDWUw7z1x`). The same kill then hit `ad8563f804`, `c15c1aa1d7` and `4b88cc8821` (`dpl_6UGLqqvaf3r6FmYBanTMxF3RNrRC`).
+
+The failing log names the phase and rules out a V8 heap overflow:
+
+```
+✓ webpackBuildWorker
+✓ webpackMemoryOptimizations
+  Creating an optimized production build ...
+Next.js build worker exited with code: null and signal: SIGKILL
+• At least one "Out of Memory" ("OOM") event was detected during the build.
+```
+
+The kill lands about 130 seconds into the compile. There is no "Reached heap limit". The 4096 MB cap was still in the build script, so the worker could hold a 4 GB heap on an 8 GB machine while native SWC memory sat outside that cap. Pull request 3044 added no dependency and no build setting. It is the straw. The tree diff from the last green commit is about 1555 lines.
+
+The build script now sets `--max-old-space-size=3072`. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`. `tests/build-memory-config.test.cjs` fails if the cap rises above 3072. If the next production build says "Reached heap limit", 3072 MB is too small for the compiler and the next step is the paid Enhanced Build Machine, which is Valentin's decision. A silent SIGKILL at 3072 means the native side still does not fit, and that is the same decision.
