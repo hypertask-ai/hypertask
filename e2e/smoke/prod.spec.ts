@@ -352,7 +352,7 @@ test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-co
   await page.route('**/api/flags', async route => {
     const response = await route.fetch()
     const body = await response.json()
-    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8334-multi-chat-windows': true } } })
+    await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8334-multi-chat-windows': true, 'htpr-8054-graphite-2': true } } })
   })
   await page.addInitScript(() => {
     const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
@@ -369,6 +369,22 @@ test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-co
   await expect(frame).toBeVisible()
   for (const corner of ['border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius']) {
     await expect(frame).toHaveCSS(corner, '4px')
+  }
+  const title = frame.locator('button[aria-controls="ai-chat-session-history"]')
+  const suggestions = frame.locator('button.bg-kanban-active-cardbg')
+  await expect(title).toBeVisible()
+  for (const theme of ['porcelain', 'graphite-2', 'amoled']) {
+    await page.evaluate((name) => {
+      document.cookie = `theme=${name}; path=/`
+      document.documentElement.removeAttribute('data-theme')
+    }, theme)
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    await expect(title, `${theme} multi-chat title corners`).toHaveCSS('border-radius', '4px')
+    await expect.poll(() => suggestions.count(), { message: `${theme} multi-chat suggestions` }).toBeGreaterThan(0)
+    const count = await suggestions.count()
+    for (let i = 0; i < count; i++) {
+      await expect(suggestions.nth(i), `${theme} multi-chat suggestion ${i} corners`).toHaveCSS('border-radius', '4px')
+    }
   }
 })
 
