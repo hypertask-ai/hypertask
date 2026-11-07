@@ -30,7 +30,7 @@ Every access or security fix adds a "still allowed" test next to its "now refuse
 - Branch from `origin/production` in your own worktree. Target `production`; `main` is frozen rollback history. Never base work on or push to archived `hypertask-ai/hypertasks`.
 - One ticket, one PR. Recover an existing PR instead of duplicating it. Titles use a real HTPR, HYFA, or YPER4 ticket and an accepted type. Leave auto-merge off.
 - Inspect existing worktree changes before committing. Never stash, discard, reset, or revert another session's work.
-- Merge only after required checks pass on the current head. Resolve conflicts before diagnosing checks. Protected Agent Kit changes require HT Product Lead review and merge; see /ship.
+- Merge only after required checks pass on the current head. Resolve conflicts before diagnosing checks. Protected Agent Kit changes require Chief Of Staff review and merge; see /ship.
 - Production is Vercel `hypertasks-prod`, deploying `production` to `app.hypertask.ai`. Require successful deployment for the merge SHA, then live QA.
 - Previews share production data and are visual-only. Use them only when requested or justified by runtime risk. Never create extra previews or treat them as a merge gate. Check readiness headlessly, never with repeated browser reloads.
 - After Done, remove only this session's clean, unused worktree and merged branch from another directory. Keep dirty worktrees, open-PR branches, and other sessions' work. Follow [clean-up](../../.claude/skills/clean-up/SKILL.md).
