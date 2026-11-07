@@ -69,9 +69,7 @@ for (const appShellRail of [true, false]) {
     assert.ok(icons[0].split(/\s+/).includes("text-hypertasks-ai-purple"));
   });
 
-  test(`${where}: smart split icon takes the tab text colour with the cleanup on`, () => {
-    const icons = render(true, appShellRail);
-    assert.equal(icons.length, 1);
-    assert.ok(!icons[0].includes("purple"));
+  test(`${where}: no smart split sparkle with the cleanup on`, () => {
+    assert.deepEqual(render(true, appShellRail), []);
   });
 }
