@@ -192,8 +192,45 @@ people_content() {
     house_lint 'Ticket description' "$text" --shape
   fi
 }
+BRAIN_RULES=${VCC_BRAIN_RULES:-$HOME/projects/poteto-2-advisor/brain-rules.md}
+brain_label_check() {
+  local -a args=("$@")
+  while [ "${#args[@]}" -gt 0 ]; do
+    case "${args[0]}" in
+      --project|--team) args=("${args[@]:2}") ;;
+      --project=*|--team=*|--json|--human) args=("${args[@]:1}") ;;
+      *) break ;;
+    esac
+  done
+  case "${args[0]:-} ${args[1]:-}" in 'task create'|'tasks create') ;; *) return 0 ;; esac
+  local arg label labels='' other_brain=0
+  local -a brain=()
+  set -- "${args[@]:2}"
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    case "$arg" in
+      --help|-h) return 0 ;;
+      --labels) labels+=",${2:-}"; [ "$#" -ge 2 ] && shift ;;
+      --labels=*) labels+=",${arg#*=}" ;;
+    esac
+    shift
+  done
+  local IFS=,
+  for label in $labels; do
+    label=${label#"${label%%[![:space:]]*}"}
+    label=${label%"${label##*[![:space:]]}"}
+    case "${label,,}" in
+      brain-light|brain-medium|brain-hard|brain-extra-hard) brain+=("$label") ;;
+      brain-*) other_brain=1 ;;
+    esac
+  done
+  [ "${#brain[@]}" -eq 1 ] && [ "$other_brain" = 0 ] && return 0
+  printf 'vcc: task create refused: set exactly one of brain-light, brain-medium, brain-hard or brain-extra-hard in --labels (by name), the cheapest level that can do the work well; unsure between medium and hard, pick medium. How to choose: %s\n' "$BRAIN_RULES" >&2
+  exit 5
+}
 people_content "$@"
 question_comment "$@"
+brain_label_check "$@"
 
 completion_move() {
   local section='' project='' destination='' target_section='' out arg checker="$HOME/.agents/skills/ship/scripts/ship-check"
