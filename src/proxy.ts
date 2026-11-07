@@ -253,6 +253,7 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
 
     const loginUrl = new URL(login, request.url);
     if (
+      currentPath === '/login/agent' ||
       currentPath === '/cli-auth' ||
       currentPath.startsWith('/cli-auth/') ||
       currentPath === '/settings/slack/link'

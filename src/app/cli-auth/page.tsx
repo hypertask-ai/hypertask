@@ -1,6 +1,10 @@
 'use client';
 
-import { Suspense, useState, useCallback, useRef } from 'react';
+import { Suspense, useState, useCallback, useRef, useEffect } from 'react';
+import Link from 'next/link';
+import { z } from 'zod';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7552_AGENT_CODE_SIGNIN_FLAG } from '@/lib/flags/definitions/htpr-7552-agent-code-signin';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies';
@@ -42,7 +46,7 @@ function CliAuthCard({ children }: { children: React.ReactNode }) {
   return (
     <div
       className={cn(
-        'w-full max-w-md rounded-xl px-8 py-8 sm:py-10',
+        'w-full max-w-md rounded px-8 py-8 sm:py-10',
         'border border-[#262626] bg-black shadow-lg'
       )}
     >
@@ -112,6 +116,7 @@ function CliAuthContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const currentUser = useCurrentUser();
+  const agentCodeSignIn = useFlag(HTPR_7552_AGENT_CODE_SIGNIN_FLAG);
   const [step, setStep] = useState<CliStep>('consent');
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState<ConnectedPayload | null>(null);
@@ -201,6 +206,8 @@ function CliAuthContent() {
       router.push('/');
     }
   };
+
+  if (agentCodeSignIn && searchParams?.get('agent') === '1') return <AgentSignIn />;
 
   if (!currentUser) {
     return (
@@ -386,5 +393,125 @@ export default function CliAuthPage() {
     >
       <CliAuthContent />
     </Suspense>
+  );
+}
+
+const resultSchema = z.object({
+  id: z.string().uuid(),
+  state: z.enum(["PENDING", "CLAIMED", "APPROVED", "DELIVERED", "CONNECTED", "DENIED", "EXPIRED"]),
+  expiresAt: z.string().datetime(),
+  clientName: z.string().nullable(),
+  boardUrl: z.string().regex(/^\/projects\/project-\d+$/).optional(),
+});
+const startSchema = z.object({ id: z.string().uuid(), code: z.string(), expiresAt: z.string().datetime() });
+type Flow = z.infer<typeof resultSchema>;
+const PRIMARY = "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded transition-colors";
+const SECONDARY = "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded transition-colors";
+
+async function request(action: string, body: object): Promise<unknown> {
+  const response = await fetch(`/api/cli/device/${action}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error("Could not complete agent sign-in. Try again.");
+  return response.json();
+}
+
+function AgentSignIn() {
+  const [flow, setFlow] = useState<Flow | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [remaining, setRemaining] = useState(0);
+
+  useEffect(() => {
+    if (!flow || ["CONNECTED", "DENIED", "EXPIRED"].includes(flow.state)) return;
+    const id = flow.id;
+    let disposed = false;
+    let timeout: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        if (document.visibilityState === "visible") {
+          const next = resultSchema.parse(await request("status", { id }));
+          if (!disposed) setFlow(next);
+        }
+      } catch {
+        if (!disposed) setError("Connection check failed. Try again.");
+      } finally {
+        if (!disposed) timeout = setTimeout(poll, 5000);
+      }
+    };
+    timeout = setTimeout(poll, 5000);
+    return () => { disposed = true; clearTimeout(timeout); };
+  }, [flow?.id, flow?.state]);
+
+  useEffect(() => {
+    if (!flow) return;
+    const update = () => setRemaining(Math.max(0, Math.ceil((Date.parse(flow.expiresAt) - Date.now()) / 1000)));
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [flow?.expiresAt]);
+
+  async function start() {
+    setBusy(true); setError(null);
+    try {
+      const next = startSchema.parse(await request("start", {}));
+      setCode(next.code);
+      setRemaining(300);
+      setFlow({ id: next.id, expiresAt: next.expiresAt, state: "PENDING", clientName: null });
+    } catch {
+      setError("Could not start agent sign-in. Try again.");
+    } finally { setBusy(false); }
+  }
+
+  async function decide(action: "approve" | "deny") {
+    if (!flow) return;
+    setBusy(true); setError(null);
+    try {
+      await request(action, { id: flow.id });
+      setFlow(resultSchema.parse(await request("status", { id: flow.id })));
+    } catch {
+      setError("Could not complete agent sign-in. Try again.");
+    } finally { setBusy(false); }
+  }
+
+  const expired = flow !== null && ["PENDING", "CLAIMED", "APPROVED", "EXPIRED"].includes(flow.state) && remaining === 0;
+  return (
+    <CliAuthShell>
+      <CliAuthCard>
+        <div className="flex flex-col items-center text-center">
+          <Image src={logo} alt="Hypertask logo" width={48} height={48} className="object-contain mb-3" />
+          <h1 className="text-heading font-semibold mb-2">Sign in an agent</h1>
+          <p className="text-content text-text-light-gray mb-6">Create a free board for your agent.</p>
+          {error && <p role="alert" className="text-content text-text-light-gray mb-4">{error}</p>}
+          {!flow || expired || flow.state === "DENIED" ? (
+            <>
+              {flow && <p className="text-content text-text-light-gray mb-4">{expired ? "This code expired." : "Connection declined."}</p>}
+              <button type="button" className={PRIMARY} disabled={busy} onClick={start}>{busy ? "Starting…" : "Get a five-minute code"}</button>
+            </>
+          ) : flow.state === "CONNECTED" ? (
+            <>
+              <p role="status" className="text-content mb-4">Your agent is connected.</p>
+              {flow.boardUrl && <Link href={flow.boardUrl} className={PRIMARY}>Open your agent’s board</Link>}
+            </>
+          ) : (
+            <>
+              {code && <div className="w-full mb-4"><CopyableField id="agent-login-command" label="Run this with your agent" value={`hypertask login --code ${code}`} copyLabel="Sign-in command" /></div>}
+              <div className="w-full mb-4"><CopyableField id="agent-mcp-server" label="Or add this MCP server, then approve its new board" value="https://mcp.hypertask.ai/mcp" copyLabel="MCP server" /></div>
+              <p className="text-meta text-text-light-gray mb-4" role="status">Expires in {Math.floor(remaining / 60)}:{String(remaining % 60).padStart(2, "0")}</p>
+              {flow.state === "CLAIMED" ? (
+                <>
+                  <p className="text-content mb-4">{flow.clientName} is asking to connect.</p>
+                  <p className="text-content text-text-light-gray mb-4">Approve only the agent you just started. It can read and change its new board only.</p>
+                  <button type="button" className={PRIMARY} disabled={busy} onClick={() => decide("approve")}>{busy ? "Connecting…" : "Approve and connect"}</button>
+                  <button type="button" className={SECONDARY} disabled={busy} onClick={() => decide("deny")}>Decline</button>
+                </>
+              ) : <p className="text-content text-text-light-gray mb-4">{flow.state === "PENDING" ? "Waiting for your agent…" : flow.state === "DELIVERED" && remaining === 0 ? "Credential issued. Run hypertask project list to finish connecting." : "Waiting for your agent to finish…"}</p>}
+            </>
+          )}
+          <Link href="/" className={SECONDARY}>Return to Hypertask</Link>
+        </div>
+      </CliAuthCard>
+    </CliAuthShell>
   );
 }

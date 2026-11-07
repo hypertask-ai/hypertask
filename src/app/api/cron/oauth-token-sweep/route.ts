@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { hasValidCronAuthorization } from '@/lib/cronAuthorization'
 import { sweepOAuthTokens, verifyOAuthTokens } from '@/lib/auth/oauthTokenSweep'
 import prisma from '@/lib/prisma'
+import { cleanupDevicePairings } from '@/lib/auth/devicePairingCleanup'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest) {
   }
   try {
     const sweep = await sweepOAuthTokens(prisma)
-    console.log('oauth_token_sweep', JSON.stringify({ ...sweep, verify: await verifyWhenSwept(sweep.remaining) }))
+    const devicePairings = await cleanupDevicePairings()
+    console.log('oauth_token_sweep', JSON.stringify({ ...sweep, devicePairings, verify: await verifyWhenSwept(sweep.remaining) }))
     return NextResponse.json(sweep, { headers })
   } catch {
     console.log('oauth_token_sweep', JSON.stringify({ error: 'oauth_token_sweep_failed' }))

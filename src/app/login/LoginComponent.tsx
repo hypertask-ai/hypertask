@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/General/useAuth";
 import { ibmPlexMono } from "@/lib/fonts/ibmPlexMono";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import Image from "next/image";
+import Link from "next/link";
 import { Newsreader } from "next/font/google";
 import { useSearchParams } from "next/navigation";
 import { MouseEvent } from "react";
@@ -64,7 +65,7 @@ const plans = [
   },
 ] as const;
 
-const LoginComponent = ({ invite = false }: { invite?: boolean }) => {
+const LoginComponent = ({ invite = false, agentSignInEnabled = false }: { invite?: boolean; agentSignInEnabled?: boolean }) => {
   const searchParams = useSearchParams();
   const isMinimal = searchParams?.get("var") === "minimal";
   const { isAuthenticating } = useAuth();
@@ -119,7 +120,10 @@ const LoginComponent = ({ invite = false }: { invite?: boolean }) => {
                   <span className="text-[15px]">Signing you in…</span>
                 </div>
               ) : (
-                <LoginMiddle invite={invite} serifClassName={newsreader.className} />
+                <>
+                  <LoginMiddle invite={invite} serifClassName={newsreader.className} />
+                  {agentSignInEnabled && <Link href="/login/agent" className="text-content text-white underline mt-4">Sign in an agent</Link>}
+                </>
               )}
             </div>
           </div>

@@ -342,7 +342,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (authCode.used) {
+    if (authCode.used && !authCode.devicePairingId) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'Authorization code has already been used' },
         { status: 400 }
@@ -442,6 +442,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (authCode.devicePairingId && (!agentId || !agentTokenJti)) {
+      return NextResponse.json({ error: 'invalid_grant', error_description: 'Invalid paired agent' }, { status: 400 });
+    }
+
     const isRefreshCapableMobile =
       authCode.redirect_uri === MOBILE_REDIRECT_URI &&
       !agentId &&
@@ -452,6 +456,10 @@ export async function POST(request: NextRequest) {
     let session: { accessToken: string; refreshToken?: string; analyticsKey?: string | null } | null = null
 
     try {
+      if (authCode.devicePairingId && authCode.used && agentTokenJti) {
+        const { replayDeviceOAuthCredential } = await import('@/lib/auth/devicePairingOAuth');
+        return tokenResponse(await replayDeviceOAuthCredential(authCode, agentTokenJti));
+      }
       for (let attempt = 0; attempt < SERIALIZABLE_ATTEMPTS; attempt += 1) {
         try {
           session = await prisma.$transaction(async (tx) => {
@@ -532,6 +540,11 @@ export async function POST(request: NextRequest) {
                 agentTokenJti,
                 agentTeamScope
               )
+              if (authCode.devicePairingId) {
+                if (!agentTokenJti) throw new OAuthAgentGrantError();
+                const { deliverDeviceOAuthCredential } = await import('@/lib/auth/devicePairingOAuth');
+                await deliverDeviceOAuthCredential(tx, authCode, agentTokenJti, accessToken);
+              }
               if (!isRefreshCapableMobile) {
                 const analyticsKey = authCode.redirect_uri !== MOBILE_REDIRECT_URI
                   ? await enqueueAgentConnection(tx, authCode.user.id, accessToken, "mcp", client.client_name) : null
@@ -576,6 +589,9 @@ export async function POST(request: NextRequest) {
         )
       }
     } catch (error) {
+      if (authCode.devicePairingId) {
+        return NextResponse.json({ error: 'invalid_grant', error_description: 'Device pairing expired, stopped or already completed' }, { status: 400 });
+      }
       if (error instanceof OAuthTokenSigningError) throw error.originalError
       if (error instanceof OAuthAgentFeatureDisabledError) {
         return NextResponse.json(
