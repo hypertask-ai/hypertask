@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, SubscriptionPlanStatus } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
 import { stripe } from "@/lib/subscription";
@@ -7,6 +7,15 @@ import {
   pendingStripeCancellationId,
   subscriptionObjectWithPendingCancellation,
 } from "@/lib/pendingStripeSubscriptionCancellation";
+
+const NON_ENTITLING_LOCAL_STATUS: Partial<Record<string, SubscriptionPlanStatus>> = {
+  canceled: "canceled",
+  unpaid: "unpaid",
+  incomplete: "incomplete",
+  incomplete_expired: "incomplete_expired",
+  paused: "paused",
+  ended: "ended",
+};
 
 export async function refreshStripeSubscriptionSnapshotWithLockHeld(
   teamId: string,
@@ -26,9 +35,33 @@ export async function refreshStripeSubscriptionSnapshotWithLockHeld(
   }
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+  if (subscription.id !== subscriptionId || customerId !== plan.team.stripe_customer_id) {
+    throw new Error("Stripe subscription does not match the saved active seat item");
+  }
+  const localStatus = NON_ENTITLING_LOCAL_STATUS[subscription.status];
+  if (!subscriptionStatusGrantsAccess(subscription.status)) {
+    if (!localStatus) throw new Error("Stripe subscription does not match the saved active seat item");
+    if (apply) {
+      assertHeld();
+      const saved = await prisma.subscriptionPlan.updateMany({
+        where: {
+          id: plan.id, teamId, subscriptionId,
+          subscriptionStatus: plan.subscriptionStatus,
+        },
+        data: { subscriptionStatus: localStatus },
+      });
+      if (saved.count !== 1) throw new Error("Subscription snapshot changed during refresh");
+    }
+    return {
+      subscriptionObject: plan.subscriptionObject,
+      applied: apply,
+      previousQuantity: null,
+      quantity: null,
+      statusSynced: localStatus,
+    };
+  }
   const item = subscription.items.data.find((candidate) => candidate.id === plan.subscriptionItemId);
-  if (subscription.id !== subscriptionId || customerId !== plan.team.stripe_customer_id ||
-    !subscriptionStatusGrantsAccess(subscription.status) || !item || item.price.id !== plan.priceId ||
+  if (!item || item.price.id !== plan.priceId ||
     !Number.isSafeInteger(item.quantity) || item.quantity! < 1) {
     throw new Error("Stripe subscription does not match the saved active seat item");
   }
