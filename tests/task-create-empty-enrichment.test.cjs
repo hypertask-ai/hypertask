@@ -23,7 +23,7 @@ function compile(relativePath) {
 }
 
 function execute(javascript, stubs) {
-  stubs = withStubs({ "@/lib/planLimits": { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {} }, "@/lib/storage/verifyTaskAttachmentLinks": { verifyTaskAttachmentLinks: async () => new Map() } }, stubs);
+  stubs = withStubs({ "@/lib/agents/writing": { AgentWritingError: class extends Error {}, assertAgentWriting() {} }, "@/lib/planLimits": { isPlanLimitReachedError: () => false, isPlanLimitsEnabled: async () => false, assertTaskCountTransition: async () => {}, assertProjectTicketRoom: async () => {} }, "@/lib/storage/verifyTaskAttachmentLinks": { verifyTaskAttachmentLinks: async () => new Map() } }, stubs);
   stubs = withStubs({ "@/lib/media/inlineAgentImages.server": { inlineAgentImagesForUser: async (html) => html } }, stubs);
   stubs = withStubs({ "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope }, stubs);
   const originalLoad = Module._load;
