@@ -10,6 +10,8 @@ import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constant
 import { sendEmail } from '@/lib/email/sendEmail'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { SESSION_COOKIE } from '@/lib/auth/session'
+import { storeProbeVerificationLink } from '@/lib/funnelProbe/inbox'
+import { isProbeRecipientEmail } from '@/lib/funnelProbe/probeEmail'
 
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
@@ -45,6 +47,11 @@ async function sendVerificationEmail(to: string, link: string) {
   if (!RESEND_API_KEY) {
     console.log('🔗 Verification link (no Resend configured):', link)
     return
+  }
+
+  if (isProbeRecipientEmail(to)) {
+    const runId = to.split('@')[0] ?? 'probe'
+    await storeProbeVerificationLink(to, runId, link)
   }
 
   await sendEmail({
