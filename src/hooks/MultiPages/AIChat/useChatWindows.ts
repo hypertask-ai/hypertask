@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8334_MULTI_CHAT_WINDOWS_FLAG } from "@/lib/flags/definitions/htpr-8334-multi-chat-windows";
-import { useRecoilState, useRecoilValue } from "@/lib/state";
+import { useRecoilState } from "@/lib/state";
 import { aiChatWindowsAtom, currentUserAtom, isAiChatSidebarModeAtom } from "@/store";
 import { MOBILE_VIEWPORT_MAX_PX } from "./aiChatShared";
 import {
@@ -34,7 +34,7 @@ export function useChatWindows(verifiedUserId?: number | null) {
   const enabled = useFlag(HTPR_8334_MULTI_CHAT_WINDOWS_FLAG);
   const [currentUser] = useRecoilState(currentUserAtom);
   const [stored, setStored] = useRecoilState(aiChatWindowsAtom);
-  const sidebarMode = useRecoilValue(isAiChatSidebarModeAtom);
+  const [sidebarMode] = useRecoilState(isAiChatSidebarModeAtom);
   const [viewport, setViewport] = useState<ChatWindowViewport>({ width: 0, height: 0 });
   const storedUserId = currentUser?.id ?? 0;
   let userId = storedUserId;
