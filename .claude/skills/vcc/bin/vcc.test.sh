@@ -535,4 +535,42 @@ mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
 printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
 completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done
 printf 'ok real checker requires merged PR, successful deploy, and app QA proof\n'
+printf '%s\n' '{"tasks":[{"id":42}]}' > "$T/task.json"
+export VCC_TEST_TASK="$T/task.json"
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+url="${*: -1}"
+data="" out="" prev=""
+for arg in "$@"; do
+  [ "$prev" = --data ] && data=$arg
+  [ "$prev" = --output ] && out=$arg
+  prev=$arg
+done
+printf 'curl %s %s\n' "$url" "$data" >> "$VCC_TEST_TRACE"
+if [[ $url == *"/activities" ]]; then
+  printf '%s' '{"success":true,"activity":{"id":"act-1"}}' > "$out"
+elif [[ $url == */agents/runs/run-1 ]]; then
+  printf '%s' '{"success":true,"run":{"id":"run-1","status":"active"}}' > "$out"
+elif [[ $url == */agents/runs ]]; then
+  printf '%s' '{"success":true,"run":{"id":"run-1","status":"active"}}' > "$out"
+else
+  printf 'unexpected %s\n' "$url" >&2
+  exit 92
+fi
+printf '200'
+STUB
+chmod +x "$T/bin/curl"
+run bash "$vcc" activity add HTPR-8740 --text 'parked note'
+[ "$status" = 0 ] || fail "documented --text was rejected: $(cat "$T/err")"
+[ "$(cat "$T/out")" = act-1 ] || fail "activity id missing"
+grep -q 'parked note' "$VCC_TEST_TRACE" || fail '--text body was not posted'
+run bash "$vcc" activity add HTPR-8740 --text='second note'
+[ "$status" = 0 ] || fail "--text= was rejected: $(cat "$T/err")"
+grep -q 'second note' "$VCC_TEST_TRACE" || fail '--text= body was not posted'
+run bash "$vcc" activity add HTPR-8740 'positional note'
+[ "$status" = 0 ] || fail "positional text broke: $(cat "$T/err")"
+run bash "$vcc" activity add HTPR-8740 --note hi
+[ "$status" = 1 ] || fail "unknown option was accepted"
+grep -q 'add needs one non-empty text argument' "$T/err" || fail "wrong rejection: $(cat "$T/err")"
+printf 'ok activity add accepts the documented text option\n'
 printf 'vcc helper guard tests passed\n'

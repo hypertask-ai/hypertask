@@ -258,12 +258,24 @@ if [ "${1:-}" != activity ]; then
 fi
 
 fail() { echo "vcc activity: $*" >&2; exit 1; }
-[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> "<text>" | vcc activity list <TICKET> | vcc activity last <TICKET>'
+[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> ["--text"] "<text>" | vcc activity list <TICKET> | vcc activity last <TICKET>'
 command=$2; ticket=$3
 [[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number'
 ticket=${ticket^^}
+text=''
 case "$command" in
-  add) [ "$#" = 4 ] && [ -n "${4//[[:space:]]/}" ] || fail 'add needs one non-empty text argument' ;;
+  add)
+    if [ "$#" = 5 ] && [ "$4" = --text ]; then
+      text=$5
+    elif [ "$#" = 4 ] && [[ $4 == --text=* ]]; then
+      text=${4#--text=}
+    elif [ "$#" = 4 ]; then
+      text=$4
+    else
+      fail 'add needs one non-empty text argument'
+    fi
+    [ -n "${text//[[:space:]]/}" ] || fail 'add needs one non-empty text argument'
+    ;;
   list|last) [ "$#" = 3 ] || fail "$command needs only a ticket number" ;;
   *) fail "unknown activity command: $command" ;;
 esac
@@ -339,7 +351,7 @@ if [ -n "$run" ]; then
 fi
 [ -n "$run" ] || open_run
 activity_key=$(cat /proc/sys/kernel/random/uuid)
-data=$(jq -nc --arg text "$4" '{type:"thought",text:$text}')
+data=$(jq -nc --arg text "$text" '{type:"thought",text:$text}')
 request POST "agents/runs/$run/activities" "$data"
 # A cached run can be stopped/deleted between the read and the write.
 if [ "$code" = 404 ] || { [ "$code" = 409 ] && jq -e '.error | test("(not|no longer) active"; "i")' "$body" >/dev/null; }; then
