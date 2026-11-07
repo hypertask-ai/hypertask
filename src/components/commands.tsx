@@ -106,6 +106,14 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     contextOptions, callbackHandler,
     ...(kanbanSelectAllEnabled ? { kanbanSelectAllEnabled: true } : {}),
   });
+  let gatedKanbanBulkSelection = kanbanBulkSelection;
+  if (!bulkMoveBoardFlag && gatedKanbanBulkSelection) {
+    gatedKanbanBulkSelection = {
+      ...gatedKanbanBulkSelection,
+      bulkMoveBoardEnabled: false,
+      moveSelectedToBoard: async () => {},
+    };
+  }
   const columnArchive = useArchiveColumn({ enabled: columnArchiveEnabled, active: columnArchiveEnabled && showCommands.show && commandMode === CommandMode.ArchiveColumn, projectId: _currentProject?.id, userId: currentUser.id, onClose: boardCloseHandler });
   const {
   setRecurrenceHandler, saveTaskTemplateHandler, openTaskTemplateHandler, generateStatusUpdateHandler, toggleStalenessHandler,
@@ -240,11 +248,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
         confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
         _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
         hasBulkSelection,
-        kanbanBulkSelection: !kanbanBulkSelection || bulkMoveBoardFlag ? kanbanBulkSelection : {
-          ...kanbanBulkSelection,
-          bulkMoveBoardEnabled: false,
-          moveSelectedToBoard: async () => {},
-        },
+        kanbanBulkSelection: gatedKanbanBulkSelection,
         bulkSelection, bulkTasks, bulkActionProjectId,
         _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
         createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
