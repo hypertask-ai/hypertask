@@ -75,6 +75,68 @@ class DispatchTests(unittest.TestCase):
         self.metrics_reader = m.session_metrics
         self.metrics = patch.object(m, "session_metrics", return_value=None).start()
 
+    def test_blocked_holdings_require_checkpoints_and_appear_in_resume(self):
+        row = self.safe_runner()
+        self.boards[15][0]["section"] = "Agent Blocked (Infra)"
+        self.boards[15][1]["section"] = "Done"
+        self.boards[15][2]["section"] = "Done"
+        self.boards[4060][0]["section"] = "Agent Blocked"
+        self.comments["YPER4-1"] = list(self.comments["HTPR-1"])
+        for ticket in ("HTPR-1", "YPER4-1"):
+            with self.subTest(ticket=ticket):
+                checkpoint = self.comments[ticket].pop()
+                self.dispatch([row], go=True)
+                self.assertEqual(self.sent_texts(), [])
+                self.comments[ticket].append(checkpoint)
+        self.dispatch([row], go=True)
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, YPER4-1"])
+
+    def test_blocked_comments_are_read_for_checkpoint_protection(self):
+        self.boards[15][0]["section"] = "Agent Blocked (Infra)"
+        self.boards[4060][0]["section"] = "Agent Blocked"
+        with patch.object(m, "pages", return_value=[]) as pages:
+            comments = m.read_comments(self.boards)
+        for ticket in ("HTPR-1", "YPER4-1"):
+            self.assertIn(ticket, comments)
+            self.assertTrue(any(ticket in call.args[0] for call in pages.call_args_list))
+
+    def test_blocked_tickets_never_reenter_the_free_queue(self):
+        for column in ("Agent Blocked", "Agent Blocked (Infra)"):
+            with self.subTest(column=column):
+                self.boards[15][0]["section"] = column
+                self.boards[4060][0]["section"] = column
+                self.assertEqual(m.free_tickets(self.boards, self.comments, self.claim_dir), ["HTPR-2", "HTPR-3"])
+
+    def test_marked_blockers_wait_until_both_fields_are_cleared(self):
+        for field in ("waitingOnUserId", "blockerCommentId"):
+            with self.subTest(field=field):
+                for task in (self.boards[15][0], self.boards[4060][0]):
+                    task[field] = 6
+                self.assertEqual(m.free_tickets(self.boards, self.comments, self.claim_dir), ["HTPR-2", "HTPR-3"])
+                for task in (self.boards[15][0], self.boards[4060][0]):
+                    task[field] = None
+                self.assertEqual(m.free_tickets(self.boards, self.comments, self.claim_dir),
+                                 ["HTPR-1", "HTPR-2", "HTPR-3", "YPER4-1"])
+
+    def test_runner_skills_keep_handoffs_on_tickets(self):
+        skills = Path(__file__).resolve().parents[2]
+        ship = (skills / "ship/SKILL.md").read_text()
+        reflect = (skills / "reflect/SKILL.md").read_text()
+        qa = (skills / "verify-qa/SKILL.md").read_text()
+        synthesizer = (skills / "reflect/references/synthesizer.md").read_text()
+        self.assertNotIn("with SendMessage", reflect)
+        self.assertIn("Do not send a session message or wait for a lead response", reflect)
+        self.assertIn("vcc activity add", reflect)
+        self.assertIn("Accepted findings become their own tickets and normal reviewed PRs", reflect)
+        self.assertIn("never waits for a session-message approval", synthesizer)
+        self.assertIn("Agent-to-agent session messaging is closed by default", ship)
+        self.assertIn("do not self-merge protected changes", ship)
+        self.assertIn('vcc task move T --section "Agent Blocked (Infra)"', ship)
+        self.assertIn('vcc task move T --section "Agent Blocked"', ship)
+        self.assertIn("Never put user 6 in the blocker field", ship)
+        self.assertIn("ticket-only handoff; do not message a lead", qa)
+        self.assertNotIn("switch flagged failure Off", qa)
+
     def test_backlog_rename_keeps_free_product_work_and_excludes_claimed_work(self):
         self.boards[15][0]["section"] = "Backlog"
         self.boards[15][1]["section"] = "Backlog"
