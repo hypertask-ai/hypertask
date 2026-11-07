@@ -604,6 +604,35 @@ test("subtask-link is absent from the registry after becoming permanent", async 
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6972-subtask-link"), false);
 });
 
+test("the retired My Tasks table columns flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6456-my-tasks-table-columns";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106123700_drop_htpr_6456_my_tasks_table_columns_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(2343))[key], true);
+});
+
 test("inbox next-open no longer has a feature flag", async () => {
   assert.equal(flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, undefined);
   assert.equal(definitions.some(entry => entry.key === "htpr-7000-inbox-next-open"), false);

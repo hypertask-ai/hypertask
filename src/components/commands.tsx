@@ -77,7 +77,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const newTaskWindow = true;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, myTasksViewsEnabled,
   myTasksSnoozeEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
@@ -162,7 +162,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
     setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
     callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-    myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+    myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
     goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
     markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
     saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
@@ -244,7 +244,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
         callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
         setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
         toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-        myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+        toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
       })}
 </>
   );

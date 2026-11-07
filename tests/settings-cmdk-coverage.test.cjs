@@ -289,7 +289,7 @@ for (const { keys, flag, dependency = flag, file, uiFlag } of gatedCommands) {
     const bindings = {
       CommandMode: new Proxy({}, { get: (_, key) => key }), showByokApiKeys: true,
       isTicketPrefixCommandVisible: () => true, currentProject: {}, boardLayout: "table",
-      onMyTasks: false, myTasksViewsEnabled: false, myTasksTableColumnsEnabled: false,
+      onMyTasks: false, myTasksViewsEnabled: false,
       onCalendar: false,
       ...Object.fromEntries(gatedCommands.map((item) => [item.flag, false])),
     };

@@ -13,7 +13,6 @@ import {
   MY_TASKS_PRIORITY_FILTER_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
-  MY_TASKS_TABLE_COLUMNS_FLAG,
   MY_TASKS_OVERDUE_BADGES_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -164,11 +163,10 @@ const MyTasks = ({
   }, []);
   const splitIndex = boardTabsHidden ? 0 : activeSplit;
 
-  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const overdueBadgesEnabled = useFlag(MY_TASKS_OVERDUE_BADGES_FLAG);
-  const tableColumnsFeatureEnabled = myTasksTableColumnsEnabled;
+  const tableColumnsFeatureEnabled = true;
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = useState(false);
   const { data: runningTimerEntries } = useRunningTimers();
   const viewParam = searchParams?.get("view") ?? null;
@@ -866,13 +864,6 @@ const MyTasks = ({
     setColumnsPickerOpen(true);
   }, [columnsPickerRequest, tableColumnsFeatureEnabled]);
 
-  useEffect(() => {
-    if (tableColumnsFeatureEnabled) return;
-    if (columnsPickerRequest === 0) return;
-    setColumnsPickerRequest(0);
-    lastColumnsPickerRequest.current = 0;
-  }, [columnsPickerRequest, setColumnsPickerRequest, tableColumnsFeatureEnabled]);
-
 const boardTabCounts = useMemo(() => {
     const counts = new Map<number, number>();
     for (const task of allTasksForBoardTabs) {
@@ -1068,7 +1059,7 @@ const boardTabCounts = useMemo(() => {
           {splitTitles}
         </div>
       )}
-      {myTasksTableColumnsEnabled && tableColumnsFeatureEnabled && columnsPickerOpen ? (
+      {tableColumnsFeatureEnabled && columnsPickerOpen ? (
         <TableColumnsPicker
           closeHandler={() => setColumnsPickerOpen(false)}
           availableColumns={MY_TASKS_TABLE_COLUMN_KEYS}

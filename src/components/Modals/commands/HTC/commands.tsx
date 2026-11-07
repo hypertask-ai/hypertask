@@ -80,7 +80,6 @@ import {
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   MY_TASKS_SCOPES_FLAG,
-  MY_TASKS_TABLE_COLUMNS_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
 import Tooltip from "@/components/Common/Tooltip";
@@ -219,7 +218,6 @@ const Commands = (props: Props) => {
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
-  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
   const pageActions = isMobile && currentPageActions &&
     pathname === `/page/${currentPageActions.publicId}`
@@ -277,7 +275,7 @@ const Commands = (props: Props) => {
               !!currentProject) &&
             (command.commandMode !== CommandMode.ConfigureTableColumns ||
               boardLayout === "table" ||
-              (onMyTasks && myTasksTableColumnsEnabled)) &&
+              onMyTasks) &&
             (![
               CommandMode.ToggleCalendarWeekends,
               CommandMode.CalendarWeekStartsMonday,
@@ -432,7 +430,6 @@ const Commands = (props: Props) => {
     onCalendar,
     onMyTasks,
     myTasksScopesEnabled,
-    myTasksTableColumnsEnabled,
     projects,
     showByokApiKeys,
     isTicketPrefixCommandVisible,
