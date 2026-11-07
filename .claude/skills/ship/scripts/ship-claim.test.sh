@@ -421,6 +421,13 @@ jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 3' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a runner slot resumes past its own old claim" "$?" 0
 mk "$(c 10 2026-10-11T09:50:00.000Z a7 'CI Runner 4' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
 : > "$D/log"; SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a CI runner slot resumes past its own fresh claim" "$?" 0
+mk "$(c 10 2026-10-11T09:50:00.000Z a7 'CI Runner 4' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
+jq -n --arg at "$(date -u -d '-20 minutes' +%FT%TZ)" --arg text "$(claim other-sess)" '{success:true,activities:[{id:"live-claim",createdAt:$at,agentId:"a7",agentName:"CI Runner 4",text:$text},{id:"live-beat",createdAt:$at,agentId:"a7",agentName:"CI Runner 4",text:"Working the ticket."}]}' > "$D/ci-live.json"
+: > "$D/log"
+FAKE_AGENT_LOG=$D/ci-live.json SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1
+eq "flow: a CI runner steps back from its own live session" "$?" 3
+grep -q unassign "$D/log" && bad "live CI session was unassigned" || ok "live CI session stays assigned"
+unset FAKE_AGENT_LOG
 mk "$(c 10 2026-10-11T09:50:00.000Z a8 'CI Runner 2' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
 : > "$D/log"; SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a CI runner slot still steps back for another runner" "$?" 3
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
