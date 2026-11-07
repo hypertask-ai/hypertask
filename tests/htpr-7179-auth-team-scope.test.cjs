@@ -206,6 +206,7 @@ test('owner CLI recovery retains team scope and invalidates the prior credential
     '@/lib/mcp/auth': {
       ...f.auth,
       checkMcpRateLimit: async () => null,
+      managementAgentTokenScope: () => null,
       validateMcpAuth: async () => ({ user: f.user, agentId: null }),
     },
   });
