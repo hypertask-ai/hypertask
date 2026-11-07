@@ -112,6 +112,16 @@ else:
         self.assertIn('unfinished full-day observation gate', self.check(
             'done', 'HTPR-8872', success=False, SECTION='Done',
             ACCEPTANCE='An explicit unfinished full-day observation gate remains.'))
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed',
+            ACCEPTANCE='Report: unfinished'), 'done ok\n')
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed; report unfinished'), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: unfinished; report passed'))
 
     def test_killed_local_check_refuses_blocked_handoff_by_title_and_id(self):
         for section in ['Agent Blocked (Infra)', '5']:

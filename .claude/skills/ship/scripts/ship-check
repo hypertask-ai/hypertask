@@ -743,7 +743,7 @@ try:
 except json.JSONDecodeError:
     sys.exit(1)
 task=(payload.get("tasks") or [{}])[0]
-text=" ".join(str(task.get(key) or "") for key in ("description","acceptanceCriteria","title"))
+text="\n".join(str(task.get(key) or "") for key in ("description","acceptanceCriteria","title"))
 text=re.sub(r"<\s*br\s*/?\s*>", "\n", text, flags=re.I)
 text=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", "\n", text, flags=re.I)
 text=re.sub(r"<[^>]+>"," ",text)
@@ -753,9 +753,9 @@ def line_open(line):
     line=re.sub(r"\s+"," ",line).strip()
     if not line:
         return False
-    if re.search(rf"\b{open_word}\b[^.]{{0,80}}\bfull[- ]day observation\b", line, re.I):
+    if re.search(rf"\b{open_word}\b[^.;]{{0,80}}\bfull[- ]day observation\b", line, re.I):
         return True
-    spans=re.findall(r"\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}", line, re.I)
+    spans=re.findall(r"\bfull[- ]day observation(?:\s+gate)?\b[^.;]{0,80}", line, re.I)
     return any(re.search(rf"\b{open_word}\b", span, re.I) for span in spans)
 sys.exit(0 if any(line_open(line) for line in text.splitlines()) else 1)
 '

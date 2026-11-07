@@ -103,8 +103,8 @@ export function hasUnfinishedFullDayObservation(text: string): boolean {
     .replace(/<[^>]+>/g, " ")
     .replace(/&(?:nbsp|#160);/gi, " ")
     .split(/\n/);
-  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.]{0,80}\\bfull[- ]day observation\\b`, "i");
-  const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}/gi;
+  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.;]{0,80}\\bfull[- ]day observation\\b`, "i");
+  const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.;]{0,80}/gi;
   return lines.some((line) => {
     const plain = line.replace(/\s+/g, " ").trim();
     if (!plain) return false;
@@ -434,6 +434,21 @@ export async function updateTaskSingle(
             destinationSection = targetSection;
             updateData.section = targetSection.section_title;
           }
+        }
+        if (
+          !destinationSection &&
+          sectionNameChanged &&
+          typeof requestedSectionName === "string" &&
+          requestedSectionName !== ""
+        ) {
+          const namedSections = await tx.section.findMany({
+            where: {
+              section_title: requestedSectionName,
+              projectId: requestedMutation.projectId ?? currentState.projectId,
+            },
+            select: { section_title: true, isDone: true },
+          });
+          if (namedSections.length === 1) destinationSection = namedSections[0];
         }
         if (sectionChanged && targetProject === 15 && updateData.section === "Flag: Everyone") {
           const { listFeatureFlagModes } = await import("@/lib/flags");

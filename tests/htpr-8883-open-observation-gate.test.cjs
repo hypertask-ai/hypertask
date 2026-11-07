@@ -44,7 +44,7 @@ test("a completion heading that names the observation gate is accepted", () => {
   assert.throws(() => assertAgentWriting("agent", { text: "<p>Helpers: none.</p>" }), /Robot status/);
 });
 
-function moveFixture({ section = "Done", isDone = true, description = "", acceptanceCriteria = "" } = {}) {
+function moveFixture({ section = "Done", isDone = true, description = "", acceptanceCriteria = "", byName = false } = {}) {
   const before = {
     id: 1,
     projectId: 15,
@@ -72,7 +72,7 @@ function moveFixture({ section = "Done", isDone = true, description = "", accept
     },
     section: {
       findFirst: async () => ({ section_title: section, isDone }),
-      findMany: async () => [],
+      findMany: async () => (byName ? [{ section_title: section, isDone }] : []),
     },
     taskSectionEvent: { create: noop },
     drafts: { deleteMany: noop },
@@ -122,7 +122,7 @@ function moveFixture({ section = "Done", isDone = true, description = "", accept
     hasUnfinishedFullDayObservation: controller.hasUnfinishedFullDayObservation,
     saved: () => saved,
     update: () => controller.updateTaskSingle(
-      { id: 1, sectionId: 11, section },
+      byName ? { id: 1, section } : { id: 1, sectionId: 11, section },
       { id: 985 },
       null,
       { skipAutoAssign: true, taskMovedActivity: { fromAgent: null } },
@@ -140,6 +140,8 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: unfinished</p><p>Report: passed</p>"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed\nReport: unfinished"), false);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished\nReport: passed"), true);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed; report unfinished"), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished; report passed"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Search now finds reminders."), false);
   const refused = await open.update();
   assert.equal(refused.status, 409);
@@ -173,4 +175,22 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   });
   assert.equal((await beside.update()).status, 200);
   assert.equal(beside.saved().sectionId, 11);
+
+  const namedWorking = moveFixture({
+    section: "Not done",
+    isDone: false,
+    byName: true,
+    description: "<p>Full-day observation gate: still unfinished.</p>",
+  });
+  assert.equal((await namedWorking.update()).status, 200);
+  assert.equal(namedWorking.saved().section, "Not done");
+
+  const namedDone = moveFixture({
+    section: "Flag: Everyone",
+    isDone: true,
+    byName: true,
+    description: "<p>Full-day observation gate: still unfinished.</p>",
+  });
+  assert.equal((await namedDone.update()).status, 409);
+  assert.equal(namedDone.saved().sectionId, 10);
 });
