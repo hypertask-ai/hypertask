@@ -1,4 +1,5 @@
 import { parse } from 'node-html-parser'
+import { FLAG_CHAT_RECORD, normalizeVisibleText } from '@/lib/flags/approvalWords'
 
 const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
 const FEEDBACK_TALLY_LINE = /^(?:AI feedback tally|Fingerprint): ai-fb-[0-9a-f]{12}$/
@@ -88,7 +89,15 @@ function ruleById(id: string): AgentWritingRule {
   return rule
 }
 
+const FLAG_RECORD_RULES = new Set(['dashed-code-name', 'plain-valentin-quote'])
+
+function isFlagSwitchRecord(line: string): boolean {
+  const words = normalizeVisibleText(line)
+  return FLAG_CHAT_RECORD.test(words) && /\bswitch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s/.test(words)
+}
+
 function lineHit(id: string, line: string): Hit | null {
+  if (FLAG_RECORD_RULES.has(id) && isFlagSwitchRecord(line)) return null
   const plain = line.replace(/https?:\/\/\S+/g, 'LINK')
   if (id === 'robot-status') {
     const status = plain.match(ROBOT_STATUS)
