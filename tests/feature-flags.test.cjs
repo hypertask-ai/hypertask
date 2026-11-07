@@ -1083,7 +1083,7 @@ test("the retired My Tasks overdue badges flag is hidden, immutable and enabled 
   }
   await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
   await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
-  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6459_my_tasks_overdue_badges_flag/migration.sql"), "utf8"),
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261107120000_drop_htpr_6459_my_tasks_overdue_badges_flag/migration.sql"), "utf8"),
     `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
   assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
   assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
