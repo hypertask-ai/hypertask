@@ -182,11 +182,8 @@ const useDescriptionAndCommentsStates = () => {
   });
   const [allStacked, setAllStacked] = useState<boolean>(true);
   const collapseAgentLaneFlag = useFlag("htpr-8262-agent-lane-collapse");
-  const readLaneCollapse = () => {
-    if (!collapseAgentLaneFlag) return false;
-    return true;
-  };
-  const collapseAgentLane = readLaneCollapse();
+  let collapseAgentLane = false;
+  if (collapseAgentLaneFlag) collapseAgentLane = true;
   const [allCommentsSignal] = useRecoilState(toggleAllCommentsSignalAtom);
   const allCommentsSignalRef = useRef(allCommentsSignal);
   const [showCommentOptions, setShowCommentOptions] = useState<IShow>();
