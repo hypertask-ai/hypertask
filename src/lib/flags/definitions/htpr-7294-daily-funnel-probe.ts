@@ -11,9 +11,9 @@ export default {
   description:
     "Daily isolated signup probe: capture verification links for funnel-probe mail, expose the ops inbox reader, and enable the scheduled funnel walk.",
   releaseRisk: {
-    risk: "medium",
+    risk: "small",
     highRisk: "customer-email",
     reason:
-      "Creates real probe accounts and sends verification mail on a schedule; probe addresses stay out of customer analytics.",
+      "Creates probe accounts and sends scheduled verification mail; probe addresses stay excluded from customer analytics.",
   },
 } as const satisfies FeatureFlagDefinition;
