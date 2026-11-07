@@ -70,10 +70,16 @@ const OFF_VERB = /^(?:turn|turning|switch|toggle|flip|disable|kill)$/;
 const OFF_BLOCKER = /^(?:no|not|never|cannot|\p{L}+n't|dont|cant|wont|didnt|doesnt|isnt|wasnt|shouldnt|mustnt|neednt|couldnt|wouldnt|havent|hasnt|wait|later|cancel|stop|hold|unless|if|instead|except|maybe|tomorrow|until|on|but|only|after|when|once|before|while)$/u;
 const OFF_REACH = 4;
 
+const BARE_OFF = /^(?:please |just )?(?:turn|switch|toggle|flip|disable|kill)(?: it| the flag)? off$/;
+
 export function isOffOrder(text: string): boolean {
   const words = text.normalize("NFKC").replace(/[‘’]/g, "'").toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [];
   if (words.some((word) => OFF_BLOCKER.test(word))) return false;
   return words.some((word, index) => OFF_VERB.test(word) && words.slice(index + 1, index + 1 + OFF_REACH).includes("off"));
+}
+
+export function isBareOffOrder(quote: string): boolean {
+  return BARE_OFF.test(quote);
 }
 
 const TEMPLATE_LABEL = /(what this is|question|my recommendation|why|yes|no)\s*:/gi;

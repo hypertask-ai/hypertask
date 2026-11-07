@@ -654,6 +654,12 @@ test("PATCH refuses a conditional off order in a quote block", async () => {
   await assertRefused(approvalRequired, "OFF");
 });
 
+test("PATCH refuses an off order that is only provided QA passes", async () => {
+  quoteBlockRecord("turn it off provided QA passes", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
 test("PATCH refuses an off order that waits until QA passes", async () => {
   quoteBlockRecord("turn it off when QA passes", `<p>Switch ${key} to Off</p>`);
   ticketComments = [];

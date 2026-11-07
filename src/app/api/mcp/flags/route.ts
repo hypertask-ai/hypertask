@@ -6,7 +6,7 @@ import { parse } from "node-html-parser";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseFlagChatRecord, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isBareOffOrder, isOffOrder, normalizeVisibleText, parseFlagChatRecord, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_KEYS,
@@ -227,6 +227,7 @@ export async function PATCH(request: NextRequest) {
         if (!plainYesAllowed) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         const fresh = comment.createdAt.getTime() >= now - week;
         let chatSwitchText = "";
+        let chatQuote = "";
         let chatTail = "";
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
@@ -248,12 +249,17 @@ export async function PATCH(request: NextRequest) {
           }
           kind = "chat-record";
           approvedAt = new Date(recordDate);
+          chatQuote = record.quote;
           chatTail = record.tail;
           chatSwitchText = `${record.quote} ${record.tail}`.trim();
         }
         if (/^[\s\p{P}]*$/u.test(chatTail)) chatTail = "";
         if (kind === "chat-record" && chatSwitchText) {
-          switches = parseSwitchQuestion(chatSwitchText, false);
+          const parsed = parseSwitchQuestion(chatSwitchText, false);
+          if (parsed && classifyAnswer(chatQuote) !== "yes" && !isBareOffOrder(chatQuote)) {
+            throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+          }
+          switches = parsed;
           if (!switches && chatTail) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         }
         if (kind !== "chat-record" || !switches) {
