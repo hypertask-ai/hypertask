@@ -31,7 +31,7 @@ https://app.hypertask.ai/detail/project-15/7976#comment-314535.
 
 ## Short task-writer rollout
 
-Flag `htpr-7977-short-task-writer` defaults to Owner + QA. QA account 985 sees it.
+Flag `htpr-7977-short-task-writer` defaults to Everyone. QA account 985 sees it.
 Ordinary drafts stay under 240 visible words and skip experiment headings.
 A/B sections appear only when the ticket is an A/B test and board instructions
 or a matching template request that layout. Flag off keeps the previous prompt.
