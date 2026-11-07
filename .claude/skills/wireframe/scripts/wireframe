@@ -225,7 +225,8 @@ def main():
         url = put(sh, t, body, title, turl, opts.status if cmd == "status" else "waiting", verify=comment)
         if comment:
             png = screenshot(t, f)
-            text = (f"<p><strong>Wireframe ready for {html.escape(title)}.</strong></p>"
+            text = (f"<p><strong>What this is:</strong> a picture of {html.escape(title)}, before any code is written.</p>"
+                    f"<p><strong>Wireframe ready for {html.escape(title)}.</strong></p>"
                     f'<p><a href="{html.escape(url, quote=True)}">{html.escape(url)}</a></p>'
                     f"<p>Requested by Valentin in a Claude session, {date.today().isoformat()}."
                     + (f" claude --resume {html.escape(os.environ['CLAUDE_CODE_SESSION_ID'])}" if os.environ.get("CLAUDE_CODE_SESSION_ID") else "")

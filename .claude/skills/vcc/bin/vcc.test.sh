@@ -199,7 +199,7 @@ printf 'unexpected network request\n' >&2
 exit 92
 STUB
 chmod +x "$T/bin/curl"
-question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
+question='<p><strong>What this is:</strong> the row of board tabs above your task list.</p><p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
 export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
 task_fixture() { jq -n --arg d "$1" '{tasks:[{id:1,description:$d}]}' > "$VCC_TEST_TASK"; }
 task_fixture '<p>Problem</p><p>Fix</p><p>Done when</p><p>Risk: low.</p><p>Decision: none.</p>'
@@ -225,7 +225,7 @@ allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'review move skipped comments'
 allowed bash "$vcc" tasks move YPER4-512 '--section=  vAlEnTiN ReViEw  '
 [[ $(< "$T/out") == 'stub: <tasks> <move> <YPER4-512> <--section=  vAlEnTiN ReViEw  >' ]] || fail 'equals section arguments changed'
-fixture '<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+fixture '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
 allowed bash "$vcc" task move --section 'Valentin Review' YPER4-512
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'section before ticket skipped comments'
@@ -247,13 +247,13 @@ review_refused '' task move YPER4-512 --section 'Valentin Review'
 printf 'ok newest status note refuses even with an older Question\n'
 
 for text in \
-  '<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p>' \
-  '<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p>' \
-  '<p>Question: <strong>Keep it?</strong></p><p>No: remove it.</p>' \
-  '<p>Question: Keep it?</p><p>Yes: keep it.</p><p>No: remove it.</p>' \
-  '<p>Question: <strong>Keep it.</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
-  '<p>Status: Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
-  '<p>Question: note. Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>'; do
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: Keep it?</p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it.</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Status: Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: note. Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>'; do
   fixture "$text"
   review_refused '' task move YPER4-512 --section 'Valentin Review'
 done
@@ -279,8 +279,8 @@ question_refused() {
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
 }
-plain='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
-inline_why='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+plain='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
+inline_why='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
 for text in "$plain" "$inline_why" "$question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
@@ -295,6 +295,47 @@ for part in 'Yes:' 'No:' 'My recommendation:' 'Why:'; do
 done
 question_refused 'Question:' comment add X-1 --kind question --text "${plain/Keep it?/Keep it.}"
 printf 'ok required Question parts and shared review validation\n'
+
+label='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p>'
+shape='<strong>What this is:</strong>'
+no_label="${plain/$label/}"
+question_refused 'What this is:' comment add X-1 --kind question --text "$no_label"
+fixture "$no_label"
+review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>"
+question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
+empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
+question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
+for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;' '&#9;' '&#10;' '&#11;' '&#12;' '&#13;' '&#00009;' '&#00010;' '&#x000A;' '&#X000d;' '&#9&#xA' '&#8192;&#x200A;&#8239;&#xFEFF;' '&#8203;' '&#x200B;' '&Tab;&NewLine;&ensp;&emsp;&thinsp;&ZeroWidthSpace;'; do
+  text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+for context in $'\u200b' $'\u00a0\u1680\u2000\u200a\u202f\u3000\ufeff' $'\u0085\u200b\u2028\u2029\u205f'; do
+  text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+context=$'\u200b<strong>設定を確認。</strong>'
+text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+fixture "$text"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+context='&#0009;the&#X000A;setting&#160;works'
+text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+fixture "$text"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+for prefix in 'Leading text' '<div>Leading text</div>' '<p></p>Leading text'; do
+  text="$prefix$plain"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+allowed bash "$vcc" comment add X-1 --kind question --text "  <div><p></p>$plain</div>"
+printf 'ok a Question needs What this is: first, with words after it\n'
 
 for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
   text="$plain<p>$word</p>"
@@ -333,14 +374,31 @@ question_refused 'My recommendation:' comment add X-1 --kind question --file "$T
 question_refused 'My recommendation:' comments add X-1 --kind=question "--file=$T/question.html"
 run bash "$vcc" comment add X-1 --kind question --file "$T/missing.html"
 [ "$status" = 5 ] || fail 'missing Question file must fail closed'
-markdown='Question: **Keep it?**
+markdown='What this is: the setting that keeps the board tidy.
+
+Question: **Keep it?**
 
 Yes: keep it.
 No: remove it.
 My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
+for context in $'\u200b' $'\u00a0\u200b\u3000\ufeff' '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '`' '```' '* _ ` **' '[*](https://example.test)' '<em>_</em>'; do
+  text="${markdown/the setting that keeps the board tidy./"$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
+done
+for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
+  text="${markdown/the setting that keeps the board tidy./"$context"}"
+  allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+done
+context='&#9;See [the setting](https://example.test)&#x20;here.'
+text="${markdown/the setting that keeps the board tidy./"$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
+question_refused '#123' comment add X-1 --kind question --markdown --text "$text #123"
+question_refused '#35' comment add X-1 --kind question --markdown --text "$text &#35;123"
 printf '%s\n' "$markdown" > "$T/question.md"
+question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
 question_refused 'My recommendation:' comment add X-1 --kind question --markdown --body "${markdown/My recommendation:/Suggestion:}"
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
@@ -408,7 +466,7 @@ FIXTURE
 )
 
 rewrite_7508_303933=$(cat <<'FIXTURE'
-<p><strong>Plain version: this ticket makes sure an AI agent only sees the boards it was given, not every board its owner can see.</strong></p>
+<p><strong>What this is:</strong> this ticket makes sure an AI agent only sees the boards it was given, not every board its owner can see.</p>
 <p>What it is about: there are 81 places in the app where an agent reads board content. Each one should check &quot;is this agent allowed on this board?&quot;. Many already check it a few lines earlier, so they are safe today and only need to be marked as checked. The others need a real fix.</p>
 <p>Why it needs you: a real fix can make something disappear for someone, for example a board an agent could see by mistake. Taking access away is your call. Marking already-safe places as checked changes nothing anyone sees.</p>
 <p>Question: <strong>Can I (HT Product Lead) sign off the places that are already safe, so you only decide the fixes that take access away from someone?</strong></p>

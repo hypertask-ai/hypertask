@@ -34,7 +34,8 @@ fi
 question_check() {
   jq -nr --arg text "$1" --arg markdown "${2:-false}" '
     def visible:
-      gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") |
+      gsub("<[^>]*>"; "") | gsub("&(?:nbsp|Tab|NewLine|ensp|emsp|emsp13|emsp14|numsp|puncsp|thinsp|hairsp|VeryThinSpace|ThickSpace|MediumSpace|NegativeMediumSpace|NegativeThickSpace|NegativeThinSpace|NegativeVeryThinSpace|ZeroWidthSpace);|&#0*(?:9|1[0-3]|32|133|160|5760|819[2-9]|820[0-3]|823[239]|8287|12288|65279)(?![0-9]);?|&#x0*(?:[9-d]|20|85|a0|1680|200[0-9ab]|202[89f]|205f|3000|feff)(?![0-9a-f]);?"; " "; "i") |
+      gsub("[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
     def unmention:
       sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
@@ -44,9 +45,13 @@ question_check() {
     ($paragraphs | map(if $md then gsub("\\*\\*"; "") else visible end)) as $plain |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
      else $text | visible end) as $visible |
-    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
+    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "") | visible
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
+    (($paragraphs | map(if $md then gsub("\\*\\*"; "") | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)") | visible else unmention | visible end) | map(select(length > 0)) | .[0]) // "") as $first |
     [
+      (if ($first | (if $md then gsub("[*_`]"; "") else . end) | test("^What this is:\\s*\\S")) and
+          ($md or ($text | unmention | visible | test("^What this is:\\s*\\S")))
+       then empty else "What this is: <what he is deciding, in his words> first (Markdown: What this is: ...)" end),
       (if any($paragraphs[];
         (if $md then . else unmention end) |
         [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
@@ -220,7 +225,7 @@ HT_TOKEN="$(cat "$TOKEN_FILE")"
 export HT_TOKEN
 completion_move "$@"
 review_refuse() {
-  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
+  printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
 }
 review_move() {
