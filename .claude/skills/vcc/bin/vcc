@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 # vcc: Hypertask CLI as "Valentins Claude Code" (Valentin's hand-run sessions).
 set -euo pipefail
+for runner_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
+  [ -d "$runner_command_dir" ] || continue
+  case ":${PATH-}:" in
+    *":$runner_command_dir:"*) ;;
+    *) PATH="$runner_command_dir${PATH:+:$PATH}" ;;
+  esac
+done
+export PATH
+unset runner_command_dir
 
 helper_run() {
   [ "${VCC_HELPER:-}" = 1 ] && return 0

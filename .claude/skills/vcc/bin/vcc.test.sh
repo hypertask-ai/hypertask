@@ -671,4 +671,30 @@ run bash "$vcc" activity list HTPR-8740 --text 'not a filter'
 [ "$status" = 1 ] || fail "activity list accepted a text option"
 grep -q 'list needs only a ticket number' "$T/err" || fail "list extra-arg error changed: $(cat "$T/err")"
 printf 'ok activity add accepts --text and --body in either order\n'
+(
+  set -euo pipefail
+  home="$T/local-shell"
+  mkdir -p "$home/.local/bin" "$home/.config/hypertask-agents/credentials" "$home/.agents/skills/ship/scripts" "$T/decoy"
+  printf 'fixture-token\n' > "$home/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+  cat > "$home/.agents/skills/ship/scripts/ship-identity" <<'STUB'
+#!/bin/sh
+printf 'Fixture\t%s/.config/hypertask-agents/credentials/valentins-claude-code-agent-token\n' "$HOME"
+STUB
+  chmod +x "$home/.agents/skills/ship/scripts/ship-identity"
+  cat > "$home/.local/bin/hypertask" <<'STUB'
+#!/bin/sh
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+printf 'local %s\n' "$*"
+STUB
+  chmod +x "$home/.local/bin/hypertask"
+  cat > "$T/decoy/hypertask" <<'STUB'
+#!/bin/sh
+printf 'decoy %s\n' "$*"
+exit 9
+STUB
+  chmod +x "$T/decoy/hypertask"
+  out=$(env -u SHIP_SESSION_NAME HOME="$home" PATH="$T/decoy:/usr/bin:/bin" bash "$vcc" projects list)
+  [ "$out" = 'local projects list' ]
+)
+printf 'ok board wrapper finds hypertask in the local command folder\n'
 printf 'vcc helper guard tests passed\n'

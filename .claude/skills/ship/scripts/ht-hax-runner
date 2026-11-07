@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 set -u
+for runner_command_dir in "$HOME/.local/bin" "$HOME/.npm-global/bin"; do
+  [ -d "$runner_command_dir" ] || continue
+  case ":${PATH-}:" in
+    *":$runner_command_dir:"*) ;;
+    *) PATH="$runner_command_dir${PATH:+:$PATH}" ;;
+  esac
+done
+export PATH
+unset runner_command_dir
 STATE=$HOME/.local/state/ht-hax-runners
 REPO=$HOME/projects/hypertask
 FIRST=6
