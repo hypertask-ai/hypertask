@@ -49,6 +49,7 @@ function harness({ settings = {}, rows = {}, enabled = true, paid = true, owner 
     "@/lib/flags/definitions/htpr-7741-byok-enables-provider": flag,
     "@/lib/flags/definitions/htpr-7732-baseten-byok": { HTPR_7732_BASETEN_BYOK_FLAG: "htpr-7732-baseten-byok" },
     "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
+    "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")),
     "@/utils/controllers/teams/updateTeamAiSettingsAtomically": {
       withLockedTeamAiSettings: async (teamId, run) => {
         assert.equal(teamId, "fixture-team");

@@ -263,9 +263,25 @@ export async function resolveForcedTeamKey(lookup?: ByokLookupContext): Promise<
   return { provider: row.provider, apiKey: apiKey ?? "" };
 }
 
-function forcedKeyOrThrow(forced: ForcedTeamKey, matches: boolean) {
-  if (!matches || !forced.apiKey) throw new ForcedTeamKeyError(forced.provider);
-  return forced.apiKey;
+async function forcedKeyEligible(forced: ForcedTeamKey, lookup?: ByokLookupContext) {
+  const plan = await resolveLookupPlan(lookup);
+  if (!plan || plan === "Free") return false;
+  if (forced.provider !== "baseten") return true;
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, lookup?.userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+function forcedServesProvider(forced: ForcedTeamKey, provider: TByokProviderKey) {
+  if (!forced.apiKey) return false;
+  if (forced.provider === provider) return true;
+  return forced.provider === "gateway"
+    && isVercelAiGatewayKey(forced.apiKey)
+    && provider !== "custom"
+    && provider !== "baseten";
 }
 
 export async function resolveTeamByokApiKey(
@@ -327,7 +343,10 @@ export async function getByokApiKeyForProvider(
   }
 ) {
   const forced = await resolveForcedTeamKey(lookup);
-  if (forced) return forced.provider === provider && forced.apiKey ? forced.apiKey : undefined;
+  if (forced) {
+    if (!(await forcedKeyEligible(forced, lookup))) return undefined;
+    return forced.provider === provider && forced.apiKey ? forced.apiKey : undefined;
+  }
 
   if (provider === "baseten") {
     const { isFeatureEnabled } = await import("@/lib/flags");
@@ -414,7 +433,7 @@ export async function getTeamGatewayFunding(
 ): Promise<TeamGatewayFunding | undefined> {
   const forced = await resolveForcedTeamKey(lookup);
   if (forced) {
-    if (forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey)) {
+    if (await forcedKeyEligible(forced, lookup) && forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey)) {
       return { apiKey: forced.apiKey, source: "customer" };
     }
     return undefined;
@@ -462,7 +481,7 @@ export async function getTeamGatewayFunding(
 
 export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
   const forced = await resolveForcedTeamKey(lookup);
-  if (forced && !(forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey))) {
+  if (forced && !(await forcedKeyEligible(forced, lookup) && forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey))) {
     throw new ForcedTeamKeyError(forced.provider);
   }
   return (await getTeamGatewayFunding(lookup))?.apiKey;
@@ -489,7 +508,12 @@ export async function getByokOrTeamGatewayApiKey(
   options?: { resolveOpenRouterWithoutFlag?: boolean }
 ) {
   const forced = await resolveForcedTeamKey(lookup);
-  if (forced) return forcedKeyOrThrow(forced, forced.provider === provider);
+  if (forced) {
+    if (!(await forcedKeyEligible(forced, lookup)) || !forcedServesProvider(forced, provider)) {
+      throw new ForcedTeamKeyError(forced.provider);
+    }
+    return forced.apiKey;
+  }
 
   if (!(await isByokProviderAllowedForLookup(provider, lookup))) {
     return undefined;
@@ -522,7 +546,7 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
 ): Promise<AiModelCredential | undefined> {
   const forced = await resolveForcedTeamKey(lookup);
   if (forced) {
-    if (!forced.apiKey || !modelOptionMatchesForcedKey(option, forced.provider)) {
+    if (!(await forcedKeyEligible(forced, lookup)) || !forced.apiKey || !modelOptionMatchesForcedKey(option, forced.provider)) {
       throw new ForcedTeamKeyError(forced.provider);
     }
     if (forced.provider === "custom") {
@@ -643,7 +667,12 @@ export async function getOpenAiOnlyDefaultContext(lookup: ByokLookupContext, pla
     (Boolean(await requestKey("openrouter")) && await teamOpenRouterEnabled(lookup)) ||
     isVercelAiGatewayKey(storedTeamKey) ||
     isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, teamLookup));
-  const lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  let lunaCredential: AiModelCredential | undefined;
+  try {
+    lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  } catch (error) {
+    if (!(error instanceof ForcedTeamKeyError)) throw error;
+  }
   const lunaRunsOnStoredDirectTeamKey = typeof storedTeamKey === "string" && !isVercelAiGatewayKey(storedTeamKey) && lunaCredential === storedTeamKey;
   return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: lunaRunsOnStoredDirectTeamKey, hasClaudeRoute };
 }

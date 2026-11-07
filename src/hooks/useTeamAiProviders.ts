@@ -18,6 +18,7 @@ export type TeamAiProviderRow = {
 type TeamAiProvidersResponse = {
   defaultModelContext?: Pick<AiDefaultModelContext, "openaiOnlyDefaultEnabled" | "hasDirectOpenAiKey" | "hasClaudeRoute">;
   gdprSafeMode: boolean;
+  ownKeyOnly?: boolean;
   providers: TeamAiProviderRow[];
 };
 
@@ -58,6 +59,7 @@ export function useTeamAiProviders(teamId: string | null | undefined) {
       : enabledProvidersForTeam(undefined),
     isLoading: Boolean(teamId) && query.isLoading,
     gdprSafeMode: query.data?.gdprSafeMode ?? false,
+    ownKeyOnly: query.data?.ownKeyOnly === true,
     providers,
     refetch: query.refetch,
   };

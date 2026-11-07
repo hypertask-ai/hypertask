@@ -103,6 +103,7 @@ function settingsHarness({ enabled = true, paid = true, gdpr = false, allowed = 
     "@/lib/flags/definitions/htpr-7741-byok-enables-provider": providerSyncFlag,
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
     "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
+    "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")),
     "@/lib/prisma": { default: {
       user: { findUnique: async () => ({ id: 985 }) },
       team: { findUnique: async () => ({ googleAccount: { userId: allowed ? 985 : 1 }, members: [] }) },
