@@ -104,6 +104,8 @@ The CLI-facing `POST /api/mcp/tasks/waiting-on` endpoint and MCP `hypertask_set_
 { "taskId": 42, "userId": 7, "blockerCommentId": 101 }
 ```
 
+Send `agentId` (an agent UUID that is a member of the board) instead of `userId` to wait on an agent. The ticket switch `htpr-8917-agent-waiting-person` defaults to Everyone. Off refuses that write, hides the agent in the waiting field, and leaves person writes unchanged. A person set, or `userId: null`, clears a stored agent. The agent then sees the ticket in `GET /api/mcp/inbox/list?waiting_on=me` and in the inbox tab Blocked by you.
+
 Both fields are updated atomically. The person must be a board member, and the comment must belong to that ticket and not be an activity entry. Omit either field to preserve it; send both as `null` to clear both. A comment-only update or clear leaves the blocking person unchanged. Task reads and marker-write receipts expose `blockerCommentId`. Deleting the marked comment clears the marker automatically.
 
 This is the app repository's API/MCP contract; native CLI argument parsing lives in the separate CLI repository. The ticket switch `htpr-7724-blocker-comment` defaults to Owner + QA because it can move a ticket to Trash. Switching it off hides the new action/frame and refuses marker writes, without changing existing person-only app writes or the separate `htpr-7723-task-waiting-on` switch.
@@ -128,6 +130,6 @@ Matching is request-local: ticket get examines its title, description and latest
 
 ### List blockers
 
-`GET /api/mcp/inbox/list?waiting_on=me` lists normal tickets on accessible boards waiting on the authenticated person. Use `waiting_on=<positive user ID>` to select another person. Repeat `projectId=<board ID>` or `project=<board ID>` to combine board filters. `state=waiting|answered|no-question` filters the result. Omit `state` for all states.
+`GET /api/mcp/inbox/list?waiting_on=me` lists normal tickets on accessible boards waiting on the authenticated person. An agent caller also sees tickets waiting on that agent. Use `waiting_on=<positive user ID>` to select another person, or `waiting_on=<agent UUID>` while `htpr-8917-agent-waiting-person` is on. Repeat `projectId=<board ID>` or `project=<board ID>` to combine board filters. `state=waiting|answered|no-question` filters the result. Omit `state` for all states.
 
 The response is `{ "success": true, "blockers": [...], "total": 1 }`. Each row has `id`, `ticketNumber`, `url`, `title`, `projectId`, `boardTitle`, `section`, `priority`, `waitingSince`, `blockerCommentId`, `question`, `recommendation`, and `state`. `total` is the number of returned rows after filtering. Missing values are null. `answered` requires a later task comment or non-deleted reaction to the marked Question, by the target person rather than an agent; `no-question` means the marked comment is missing or not a Question. Invalid filters return 400; management tokens return 403; the disabled feature returns 404. Results never include boards outside the caller's access.

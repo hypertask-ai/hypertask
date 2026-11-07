@@ -15,6 +15,8 @@ export interface TaskDetail {
     id: number;
     blockerCommentId?: number | null;
     waitingOnUserId?: number | null;
+    waitingOnAgentId?: string | null;
+    waitingOnAgent?: { id: string; displayName: string | null; photoURL: string | null } | null;
     waitingOnSetAt?: string | null;
     ticketNumber?: string;
     title: string;
