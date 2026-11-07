@@ -2,6 +2,7 @@
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 
 import type { CSSProperties } from "react";
@@ -43,6 +44,7 @@ const modelChipClass =
 
 type ServerRow = {
   enabled: boolean;
+  alwaysUse?: boolean;
   hasSecret: boolean;
   maskedKey: string | null;
   baseUrl?: string | null;
@@ -162,6 +164,7 @@ function testResultCopy(state: TestState | undefined) {
 }
 
 const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: ProviderRow[] }) => {
+  const alwaysUseThisKey = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId } = useSettingsTeam();
@@ -352,6 +355,25 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
       teamId,
     ],
   );
+
+  const persistAlwaysUse = async (source: TByokProviderKey, alwaysUse: boolean) => {
+    if (!canManage || !alwaysUseThisKey) return;
+
+    try {
+      await axios.post("/api/teams/byokKeys", {
+        alwaysUse,
+        provider: source,
+        teamId,
+      });
+      await fetchKeys();
+      invalidateTeamQueries();
+    } catch (error) {
+      const message = axios.isAxiosError(error)
+        ? error.response?.data?.message
+        : null;
+      toast.error(message || "Could not update API key");
+    }
+  };
 
   const persistEnabled = async (source: TByokProviderKey, enabled: boolean) => {
     if (!canManage) return;
@@ -741,6 +763,28 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
     );
   };
 
+  const providerKeyRows = [];
+  const listedProviderRows = visibleProviderRows.filter((row) => !gdprSafeMode || !isByokProviderRestrictedInGdprSafeMode(row.source));
+  for (const row of listedProviderRows) {
+    const saved = serverRows[row.source];
+    providerKeyRows.push(
+      <div key={row.source}>
+        {renderRow(row)}
+        {alwaysUseThisKey && canManage && saved?.hasSecret && saved.enabled ? (
+          <SettingsToggle
+            checked={saved.alwaysUse === true}
+            disabled={!canManage}
+            inputId={`settings-byok-always-${row.source}`}
+            label="Always use this key"
+            onChange={() => persistAlwaysUse(row.source, saved.alwaysUse !== true)}
+          />
+        ) : null}
+      </div>,
+    );
+  }
+  const gatewaySaved = serverRows.gateway;
+  const customSaved = serverRows.custom;
+
   return (
     <SettingsSectionShell title="Bring your own key">
       <div className="-mt-4 flex max-w-[760px] flex-col gap-4">
@@ -773,15 +817,33 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
         </p>
       ) : (
         <>
-          <SettingsCard title="Gateway">{renderRow(gatewayRow)}</SettingsCard>
-          <SettingsCard title="Providers">
-            <div className="flex flex-col">
-              {visibleProviderRows
-                .filter((row) => !gdprSafeMode || !isByokProviderRestrictedInGdprSafeMode(row.source))
-                .map(renderRow)}
-            </div>
+          <SettingsCard title="Gateway">
+            {renderRow(gatewayRow)}
+            {alwaysUseThisKey && canManage && gatewaySaved?.hasSecret && gatewaySaved.enabled ? (
+              <SettingsToggle
+                checked={gatewaySaved.alwaysUse === true}
+                disabled={!canManage}
+                inputId="settings-byok-always-gateway"
+                label="Always use this key"
+                onChange={() => persistAlwaysUse("gateway", gatewaySaved.alwaysUse !== true)}
+              />
+            ) : null}
           </SettingsCard>
-          <SettingsCard title="Advanced">{renderCustomRow()}</SettingsCard>
+          <SettingsCard title="Providers">
+            <div className="flex flex-col">{providerKeyRows}</div>
+          </SettingsCard>
+          <SettingsCard title="Advanced">
+            {renderCustomRow()}
+            {alwaysUseThisKey && canManage && customSaved?.hasSecret && customSaved.enabled ? (
+              <SettingsToggle
+                checked={customSaved.alwaysUse === true}
+                disabled={!canManage}
+                inputId="settings-byok-always-custom"
+                label="Always use this key"
+                onChange={() => persistAlwaysUse("custom", customSaved.alwaysUse !== true)}
+              />
+            ) : null}
+          </SettingsCard>
         </>
       )}
     </SettingsSectionShell>

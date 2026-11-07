@@ -2,7 +2,13 @@ import { wrapLanguageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7634-openai-only-default";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_8100_NO_PAID_FALLBACK_FLAG } from "@/lib/flags/definitions/htpr-8100-no-paid-fallback";
+import {
+  forcedTeamKeyPauseMessage,
+  isOwnKeyOnlySettings,
+  modelOptionMatchesForcedKey,
+} from "@/lib/ai/forcedTeamKey";
 import { fallbackRunsOnOurOwnGatewayKey } from "@/lib/ai/modelFundingGuard";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -29,6 +35,7 @@ import {
 import {
   BASETEN_MODEL_SLUGS,
   getAiProviderInfo,
+  isByokProviderKey,
   isByokProviderRestrictedInGdprSafeMode,
   isGdprSafeModeEnabled,
   resolveTeamProviderEnabled,
@@ -220,6 +227,47 @@ export async function resolveAiFallbackCredential(
   }
 }
 
+export class ForcedTeamKeyError extends Error {
+  constructor(provider: TByokProviderKey) {
+    super(forcedTeamKeyPauseMessage(provider));
+    this.name = "ForcedTeamKeyError";
+  }
+}
+
+export type ForcedTeamKey = { provider: TByokProviderKey; apiKey: string };
+
+async function alwaysUseThisKeyEnabled(userId: number | null | undefined) {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+export async function resolveForcedTeamKey(lookup?: ByokLookupContext): Promise<ForcedTeamKey | null> {
+  if (!(await alwaysUseThisKeyEnabled(lookup?.userId))) return null;
+  const teamId = await resolveLookupTeamId(lookup);
+  if (!teamId) return null;
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { aiProviderSettings: true },
+  });
+  if (isOwnKeyOnlySettings(team?.aiProviderSettings)) return null;
+  const row = await prisma.teamByokApiKey.findFirst({
+    where: { teamId, alwaysUse: true, enabled: true },
+    select: { provider: true },
+  });
+  if (!row || !isByokProviderKey(row.provider)) return null;
+  const apiKey = await resolveTeamByokApiKey(row.provider, lookup);
+  return { provider: row.provider, apiKey: apiKey ?? "" };
+}
+
+function forcedKeyOrThrow(forced: ForcedTeamKey, matches: boolean) {
+  if (!matches || !forced.apiKey) throw new ForcedTeamKeyError(forced.provider);
+  return forced.apiKey;
+}
+
 export async function resolveTeamByokApiKey(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext,
@@ -278,6 +326,9 @@ export async function getByokApiKeyForProvider(
     resolveWithoutFlag?: boolean;
   }
 ) {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) return forced.provider === provider && forced.apiKey ? forced.apiKey : undefined;
+
   if (provider === "baseten") {
     const { isFeatureEnabled } = await import("@/lib/flags");
     if (!(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, lookup?.userId ?? 0))) return undefined;
@@ -361,6 +412,14 @@ export async function getTeamGatewayFunding(
   lookup?: ByokLookupContext,
   options?: { includeProvenance?: boolean },
 ): Promise<TeamGatewayFunding | undefined> {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) {
+    if (forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey)) {
+      return { apiKey: forced.apiKey, source: "customer" };
+    }
+    return undefined;
+  }
+
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
@@ -402,6 +461,10 @@ export async function getTeamGatewayFunding(
 }
 
 export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced && !(forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey))) {
+    throw new ForcedTeamKeyError(forced.provider);
+  }
   return (await getTeamGatewayFunding(lookup))?.apiKey;
 }
 
@@ -425,6 +488,9 @@ export async function getByokOrTeamGatewayApiKey(
   lookup?: ByokLookupContext,
   options?: { resolveOpenRouterWithoutFlag?: boolean }
 ) {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) return forcedKeyOrThrow(forced, forced.provider === provider);
+
   if (!(await isByokProviderAllowedForLookup(provider, lookup))) {
     return undefined;
   }
@@ -454,6 +520,26 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   flags?: ByokProviderFlag[] | null,
   lookup?: ByokLookupContext
 ): Promise<AiModelCredential | undefined> {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) {
+    if (!forced.apiKey || !modelOptionMatchesForcedKey(option, forced.provider)) {
+      throw new ForcedTeamKeyError(forced.provider);
+    }
+    if (forced.provider === "custom") {
+      const config = await resolveTeamCustomEndpoint(lookup);
+      if (!config) throw new ForcedTeamKeyError(forced.provider);
+      return config;
+    }
+    if (forced.provider === "baseten") {
+      return {
+        kind: "baseten",
+        apiKey: forced.apiKey,
+        modelKey: option.modelKey as keyof typeof BASETEN_MODEL_SLUGS,
+      };
+    }
+    return forced.apiKey;
+  }
+
   if (option.source === "custom") {
     const plan = await resolveLookupPlan(lookup);
     if (!plan || plan === "Free") return undefined;
@@ -617,6 +703,8 @@ export function resolveAutomaticAiModel(
             select: { aiProviderSettings: true },
           });
           if (!team || !resolveTeamProviderEnabled(team.aiProviderSettings, "openai")) throw error;
+          const forced = await resolveForcedTeamKey(context.lookup);
+          if (forced) throw new ForcedTeamKeyError(forced.provider);
           const option = getAiModelOptionById("gpt-6-luna")!;
           const fallbackCredential = await resolveAiFallbackCredential(
             () => getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup), error,
