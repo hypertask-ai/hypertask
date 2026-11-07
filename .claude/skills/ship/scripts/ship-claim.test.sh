@@ -216,7 +216,7 @@ EOF
 cat > "$D/ht" <<'EOF'
 #!/usr/bin/env bash
 if [[ "$2" == /mcp/tasks\?* ]] && [ -n "${FAKE_RELATED:-}" ]; then cat "$FAKE_RELATED"; exit; fi
-[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HYCI-30/agent-activity?limit=100'* ]] || exit 1
+[[ "$1 $2" == 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HTPR-5000/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100'* || "$1 $2" == 'GET /mcp/tasks/HYCI-30/agent-activity?limit=100'* ]] || exit 1
 if [ -n "${FAKE_AGENT_LOG:-}" ]; then
   offset=0; [[ "$2" == *'&offset='* ]] && offset=${2##*&offset=}
   [ -z "${FAKE_REPEAT_ACTIVITY:-}" ] || offset=0
@@ -586,6 +586,35 @@ prs 5; free_infra YPER4-4 free
 eq "picked by the launcher, free infra waits -> app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
 eq "picked by the launcher, board 4060 unreadable -> app claim still held" "$(SHIP_CLAIM_PICKED=1 SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
 prs 21; eq "picked by the launcher, queue full -> app claim still held" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 4
+# Incident lane (YPER4-1375): SHIP_CLAIM_INCIDENT=1 skips every hold, but only for a real open incident ticket.
+inc_task() { jq -n --arg l "$1" --arg s "${2:-Bugs}" --argjson done "${3:-false}" \
+  '{success:true,tasks:[{ticketNumber:"HTPR-5000",projectId:15,section:$s,status:"Normal",sectionIsDone:$done,labels:[{name:$l}],assignees:[]}]}' > "$D/inc.json"; }
+inc_task incident
+prs_own 21 runner6/htpr-7-x HTPR-7; free_infra YPER4-4 free
+eq "own open PR, full queue, free infra, no flag -> held" "$(FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+eq "incident flag, own open PR, full queue, free infra -> no hold" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 0
+inc_task Incident
+eq "incident label is case-insensitive" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 0
+inc_task Bug
+eq "flag without the incident label -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+inc_task incident Done true
+eq "flag on a Done incident -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+inc_task incident
+eq "flag on a Fleet Infra ticket -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' YPER4-2)" 4
+eq "flag, ticket read fails -> still held" "$(SHIP_CLAIM_INCIDENT=1 FAKE_TASK_FAIL=1 holdrc 'RUNNER 6' HTPR-5000)" 4
+eq "empty flag value -> still held" "$(SHIP_CLAIM_INCIDENT= FAKE_TASK=$D/inc.json holdrc 'RUNNER 6' HTPR-5000)" 4
+mk "$(c 12 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='RUNNER 6' FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 >/dev/null 2>&1
+eq "full claim, own open PR, no flag -> hold" "$?" 4
+: > "$D/log"; out=$(SHIP_SESSION_NAME='RUNNER 6' SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 2>&1); rc=$?
+eq "full claim, own open PR, incident flag -> claimed" "$rc" 0
+grep -q '^task move HTPR-5000 --section In Progress' "$D/log" && ok "incident claim reaches the move" || bad "incident claim wrote no move: $out"
+[[ $out != *'Domain admission failed'* ]] && ok "incident claim skips the working-area check" || bad "incident claim hit the area check: $out"
+inc_task brain-extra-hard
+jq '.tasks[0].labels += [{name:"incident"}]' "$D/inc.json" > "$D/next"; mv "$D/next" "$D/inc.json"
+SHIP_SESSION_NAME='RUNNER 6' SHIP_CLAIM_INCIDENT=1 FAKE_TASK=$D/inc.json ./ship-claim HTPR-5000 >/dev/null 2>&1
+eq "incident flag never overrides brain-extra-hard" "$?" 4
+prs 5; empty_infra
 prs 5; empty_infra
 prs 5; eq "PR read fails -> hold" "$(HOLD_OPEN_FAIL=1 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
 prs_own 21 runner6/htpr-7-x HTPR-7
