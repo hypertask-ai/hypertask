@@ -21,7 +21,7 @@ original reason, expiry and notification. Request and notification retention is
 30 days after resolution; the authenticated hourly cron processes bounded batches.
 Every read/mutation enforces expiry and current authority independently of cron.
 
-The access-risk flag `htpr-7582-agent-access-request` defaults to Owner + QA.
+The flag `htpr-7582-agent-access-request` defaults to Everyone. Human owner approval is still required.
 Switching it Off cancels pending requests in the flag transition transaction.
 Re-enable does not revive them. Approved memberships are not revoked by rollback.
 Keep the additive schema on rollback. Generic task Inbox readers never receive

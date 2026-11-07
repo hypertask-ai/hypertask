@@ -3,7 +3,7 @@
 ## How a customer reaches it
 
 - Open `/add-to-slack` to read the install overview and requested scopes. The `htpr-4857-add-to-slack` flag gates this page; a disabled flag returns 404.
-- Open `/slack/support`, or click Slack app support on the install page. The `htpr-6921-slack-marketplace` flag gates the support page and the install page's Privacy policy, Terms, and Slack app support links. A disabled support flag returns 404, including signed-out visitors until Everyone is enabled.
+- Open `/slack/support`, or click Slack app support on the install page. The `htpr-6921-slack-marketplace` flag gates the support page and the install page's Privacy policy, Terms, and Slack app support links. The support flag defaults to Everyone. Switching it Off returns 404, including signed-out visitors.
 - Sign in and open Settings > Slack (`/settings/slack`), select an accessible Hypertask team, and choose Connect Slack. This uses `/api/slack/install?teamId=<team-id>` to redirect to Slack OAuth. The install overview also offers an Add to Slack authorization link.
 
 ## How to drive it
@@ -12,7 +12,7 @@
 2. Open `/add-to-slack`. Check the scopes describe `/ht`, not `/hypertask`, and the marketplace links appear for user 985. Click Privacy policy and Terms, checking final `hypertask.ai` destinations and HTTP 200. Click Slack app support and check `/slack/support` renders.
 3. On support, check app capabilities, personal linking and disconnect, team disconnect versus uninstall, data retained and its expiry, uninstall behavior, and `help@hypertask.ai`. Reload to verify the server still serves the same content. Follow the Add to Slack return link without completing OAuth.
 4. Set the `theme` cookie on `app.hypertask.ai` to `porcelain`, `graphite`, `amoled`, and `dia` before each load. Capture support and the changed install page at desktop 1440x900 and phone 390x844; scroll to check lower content and horizontal overflow.
-5. Repeat both page routes with plain user 2343 (`storageState-qa-normal.json`) and a fresh signed-out context. Record HTTP statuses and absence of the new marketplace links. Do not infer a working login from a 404 alone; confirm the plain account independently. Flag-off accounts should not see the gated support page.
+5. Repeat both page routes with plain user 2343 (`storageState-qa-normal.json`) and a fresh signed-out context. Both should see the support page and marketplace links. Switching the support flag Off returns 404. Do not infer a working login from a 404 alone; confirm the plain account independently.
 6. Check `/api/slack/install` with redirects disabled. Signed out should redirect to `/login?returnTo=/settings/slack`. Signed in without an unambiguous accessible team redirects to Slack settings with `missing_team`; an inaccessible `teamId` yields `team_access_denied`. An authorized team redirects to Slack OAuth when configured, otherwise settings with `not_configured`. Record status and destination host/path only; never expose OAuth state, client identifiers, tokens, or cookies. Do not follow Slack redirects in a read-only run.
 7. Inspect `origin/production:docs/slack-app-manifest.json` for `app_uninstalled` and `tokens_revoked`. This proves the declared event subscriptions, not delivery or cleanup in a real workspace.
 8. Record a short WebM of `/add-to-slack`, clicking Slack app support, then scrolling the support page. Keep it under 3 MB.

@@ -5,7 +5,7 @@ export const HTPR_7977_SHORT_TASK_WRITER_FLAG = "htpr-7977-short-task-writer";
 export default {
   key: HTPR_7977_SHORT_TASK_WRITER_FLAG,
   kind: "bugfix",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-07",
   description:
     "Task writer keeps ordinary tickets short and uses experiment sections only for A/B tickets whose board rules or matching template request them.",

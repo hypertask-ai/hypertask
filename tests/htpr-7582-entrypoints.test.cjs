@@ -167,7 +167,8 @@ test('manual addAgent endpoint refuses agent sessions while human owner still su
   await route(req, response); assert.equal(response.code, 403); assert.equal(f.state.grants, 0);
   actor = session(); await route(req, response); assert.equal(response.code, 200); assert.equal(f.state.grants, 1);
 });
-test('ticket flag is one access-risk Owner + QA feature definition', () => {
+test('ticket flag ships to Everyone and still needs the human owner to approve access', () => {
   const definition = loader()('src/lib/flags/definitions/' + FLAG + '.ts').default;
-  assert.equal(definition.key, FLAG); assert.equal(definition.kind, 'feature'); assert.equal(definition.defaultMode, 'OWNER_AND_QA'); assert.equal(definition.releaseRisk.highRisk, 'access');
+  assert.equal(definition.key, FLAG); assert.equal(definition.kind, 'feature'); assert.equal(definition.defaultMode, 'EVERYONE'); assert.equal(definition.releaseRisk.highRisk, undefined);
+  assert.match(definition.releaseRisk.reason, /Human owner approval/);
 });

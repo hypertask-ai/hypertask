@@ -5,7 +5,7 @@ export const HTPR_8804_VISIBLE_LINKS_FIRST_FLAG = "htpr-8804-visible-links-first
 export default {
   key: HTPR_8804_VISIBLE_LINKS_FIRST_FLAG,
   kind: "improvement",
-  defaultMode: "OWNER_AND_QA",
+  defaultMode: "EVERYONE",
   shippedOn: "2026-11-05",
   description: "Lists visible ticket links first in Ctrl+O.",
   releaseRisk: {

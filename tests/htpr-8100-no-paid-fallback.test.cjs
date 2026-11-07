@@ -10,13 +10,13 @@ function guardWithFunding(fundingFor) {
   });
 }
 
-test("the flag is a bugfix money flag that starts at Owner and QA with a release-risk entry", () => {
+test("the flag is a bugfix that ships to Everyone and stops a paid fallback", () => {
   assert.equal(definition.HTPR_8100_NO_PAID_FALLBACK_FLAG, "htpr-8100-no-paid-fallback");
   assert.equal(definition.default.key, "htpr-8100-no-paid-fallback");
   assert.equal(definition.default.kind, "bugfix");
-  assert.equal(definition.default.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.default.defaultMode, "EVERYONE");
   assert.equal(definition.default.shippedOn, "2026-11-03");
-  assert.equal(definition.default.releaseRisk.highRisk, "money");
+  assert.equal(definition.default.releaseRisk.highRisk, undefined);
   assert.equal(definition.default.releaseRisk.risk, "small");
   assert.ok(definition.default.releaseRisk.reason.trim().length > 0);
   assert.deepEqual(Array.from(definition.default.related), ["htpr-7075-background-claude"]);

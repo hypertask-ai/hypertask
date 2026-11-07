@@ -10,6 +10,7 @@ export default {
   description: "Uses the shared onboarding email design for agent connection and first completed task emails.",
   releaseRisk: {
     "risk": "small",
-    "reason": "Agent connection and first-task emails use the existing onboarding email design."
+    "highRisk": "customer-email",
+    "reason": "Agent connection and first completed task emails use the shared design. A sent customer email cannot be recalled."
   },
 } as const satisfies FeatureFlagDefinition;

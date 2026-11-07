@@ -234,14 +234,14 @@ test("grouping: a board without a team cannot offer agents for attachment", () =
   assert.deepEqual(result.unavailable, [{ agent: unattached, reason: "Board does not belong to a team" }]);
 });
 
-test("flag: access-risk feature is limited to owner and QA by default", () => {
+test("flag: adding an agent the viewer owns ships to Everyone", () => {
   const definition = load("src/lib/flags/definitions/htpr-7577-add-existing-agent.ts", {}).default;
   assert.equal(definition.key, flag);
   assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.shippedOn, "2026-10-22");
   assert.equal(definition.releaseRisk.risk, "small");
-  assert.equal(definition.releaseRisk.highRisk, "access");
+  assert.equal(definition.releaseRisk.highRisk, undefined);
 });
 
 async function withPicker({ agents, addError } = {}, run) {

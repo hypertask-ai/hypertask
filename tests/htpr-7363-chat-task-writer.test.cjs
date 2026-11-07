@@ -335,11 +335,11 @@ test("CLI validation, empty-draft failure, typed permission errors and provider 
   }
 });
 
-test("new feature flag is registered as Owner + QA; ordinary tool contexts default off", () => {
+test("new feature flag ships to Everyone; ordinary tool contexts default off", () => {
   const definition = load(path.join(root, "src/lib/flags/definitions/htpr-7363-chat-task-writer.ts"));
   assert.equal(definition.default.key, keys.HTPR_7363_CHAT_TASK_WRITER_FLAG);
   assert.equal(definition.default.kind, "feature");
-  assert.equal(definition.default.defaultMode, "OWNER_AND_QA");
+  assert.equal(definition.default.defaultMode, "EVERYONE");
   const { createToolContext } = moduleWithStubs("src/lib/ai/tools/context.ts", {
     "next/server": {}, "@/lib/mcp/agents/create": {}, "@/lib/mcp/agents/revoke": {},
     "@/lib/ai/bulkConfirmation": {}, "@/lib/ai/tools/metadata": {}, "@/lib/ai/tools/helpers": {},

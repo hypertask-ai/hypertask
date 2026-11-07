@@ -75,10 +75,11 @@ for (const type of ["TaskArchived", "TaskDueDate"]) {
   });
 }
 
-test("flag limits changed delivery to reviewed accounts", () => {
+test("quiet agent updates ship to Everyone and can restore delivery when off", () => {
   const { default: flag } = loadModule("src/lib/flags/definitions/htpr-8143-quiet-agent-updates.ts");
   assert.equal(flag.key, "htpr-8143-quiet-agent-updates");
-  assert.equal(flag.defaultMode, "OWNER_AND_QA");
+  assert.equal(flag.defaultMode, "EVERYONE");
   assert.equal(flag.kind, "bugfix");
-  assert.equal(flag.releaseRisk.highRisk, "customer-email");
+  assert.equal(flag.releaseRisk.highRisk, undefined);
+  assert.match(flag.releaseRisk.reason, /Suppresses/);
 });
