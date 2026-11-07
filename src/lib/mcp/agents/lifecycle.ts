@@ -189,17 +189,18 @@ export async function archiveOwnedAgent(
     return { status: 'ok', agent: existing }
   }
 
-  try {
-    const agent = await database.agent.update({
-      where: { id: existing.id },
-      data: { archivedAt },
-      select: LIFECYCLE_SELECT,
-    })
-    return { status: 'ok', agent }
-  } catch (error) {
-    if (isRecordNotFoundError(error)) return { status: 'not_found' }
-    throw error
-  }
+  const transition = await database.agent.updateMany({
+    where: { ...scopeWhere, id: existing.id, userId },
+    data: { archivedAt },
+  })
+  if (transition.count !== 1) return { status: 'not_found' }
+
+  const agent = await database.agent.findFirst({
+    where: { ...scopeWhere, id: existing.id, userId },
+    select: LIFECYCLE_SELECT,
+  })
+  if (!agent) return { status: 'not_found' }
+  return { status: 'ok', agent }
 }
 
 export type RenameOwnedAgentResult =
@@ -223,15 +224,16 @@ export async function renameOwnedAgent(
     return { status: 'ok', agent: existing }
   }
 
-  try {
-    const agent = await database.agent.update({
-      where: { id: existing.id },
-      data: { displayName },
-      select: LIFECYCLE_SELECT,
-    })
-    return { status: 'ok', agent }
-  } catch (error) {
-    if (isRecordNotFoundError(error)) return { status: 'not_found' }
-    throw error
-  }
+  const transition = await database.agent.updateMany({
+    where: { ...scopeWhere, id: existing.id, userId },
+    data: { displayName },
+  })
+  if (transition.count !== 1) return { status: 'not_found' }
+
+  const agent = await database.agent.findFirst({
+    where: { ...scopeWhere, id: existing.id, userId },
+    select: LIFECYCLE_SELECT,
+  })
+  if (!agent) return { status: 'not_found' }
+  return { status: 'ok', agent }
 }
