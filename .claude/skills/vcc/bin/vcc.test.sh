@@ -540,7 +540,7 @@ cat > "$T/bin/hypertask" <<'STUB'
 printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
 [ "${HT_TOKEN:-}" = fixture-token ] || exit 91
 if [ "${1:-} ${2:-}" = 'tasks get' ]; then
-  printf '%s\n' '{"tasks":[{"id":42}]}'
+  printf '%s\n' '{"tasks":[{"id":42,"projectId":15,"uniqueIndex":8740}]}'
   exit 0
 fi
 printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
