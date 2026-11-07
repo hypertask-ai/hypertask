@@ -12,7 +12,10 @@ import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
 import { Prisma } from "@prisma/client";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
+import { AgentWritingError } from "@/lib/agents/writing";
+import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8905_SHARED_TICKET_WRITING_FLAG } from "@/lib/flags/definitions/htpr-8905-shared-ticket-writing";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { getNextUniqueTaskIndex } from "@/utils/controllers/tasks/getNextUniqueTaskIndex";
@@ -192,6 +195,24 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       const { broadcastBoardChange, broadcastTaskChange } = await import("@/lib/realtime/server");
       await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
       return NextResponse.json({ newTask: result.json }, { status: 200, headers: responseHeaders });
+    }
+    let sharedWriting = false;
+    if (agentId) {
+      try {
+        sharedWriting = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+      } catch {
+        sharedWriting = true;
+      }
+    }
+    if (sharedWriting) {
+      try {
+        await enforceAgentWriting(userId, agentId, { title, description: storedDescription }, {}, { create: true });
+      } catch (error) {
+        if (error instanceof AgentWritingError) {
+          return NextResponse.json({ message: error.message, code: error.code, field: error.field }, { status: 400, headers: responseHeaders });
+        }
+        throw error;
+      }
     }
     let tagIds: string[] = [];
     if (tags != null && !Array.isArray(tags)) {
