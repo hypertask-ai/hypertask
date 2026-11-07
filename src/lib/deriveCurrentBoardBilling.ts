@@ -32,9 +32,10 @@ export function deriveTeamBilling(
   const storePlanId =
     !savedPlanOnly && isInternalCompTeam(team.id) ? "Pro" : paidStorePlanId;
   const byokProviderFlags =
-    team.byokApiKeys?.map(({ enabled, provider }) => ({
+    team.byokApiKeys?.map(({ enabled, provider, alwaysUse }) => ({
       enabled,
       provider,
+      alwaysUse: alwaysUse === true,
     })) ?? [];
 
   return {

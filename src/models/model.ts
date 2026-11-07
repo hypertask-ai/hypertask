@@ -252,6 +252,7 @@ export interface TaskSections {
 export interface ITeamByokApiKey {
   provider: TByokProviderKey;
   enabled: boolean;
+  alwaysUse?: boolean;
   ciphertext?: string;
 }
 

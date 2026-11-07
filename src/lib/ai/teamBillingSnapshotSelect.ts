@@ -20,6 +20,7 @@ export const teamBillingSnapshotSelect = {
     select: {
       provider: true,
       enabled: true,
+      alwaysUse: true,
     },
   },
 } satisfies Prisma.TeamSelect;

@@ -108,5 +108,20 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7980: Requests a Checkout session through the same-origin route. Session creation submits no payment; later completed payments may incur Stripe fees, not per-request fees.",
     "source": "https://stripe.com/pricing"
+  },
+  "src/components/Modals/Settings/ApiKeysSection.tsx:d81492e3ad427ad3c756a6a9df025a18ce34c8bf15e826af7843ac301b086548": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8049 saves the Always use this key switch through Hypertask's own same-origin team keys route. The browser call pays nothing and does not start an AI request.",
+    "source": "https://app.hypertask.ai/detail/project-15/8049"
+  },
+  "src/components/Modals/Settings/ApiKeysSection.tsx:f3674c8615f24685280d686182c0eb898a780fd28735c7d75799b7fbd532482c": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8049 checks whether a failed same-origin save is an Axios error so the settings toast can show the server message. It sends no request.",
+    "source": "https://app.hypertask.ai/detail/project-15/8049"
+  },
+  "src/lib/ai/chatStream/modelReply.ts:a49fc1e3b28bb1d506a8a82c571bc80bca283bd028ef2062539e1b307774bfe4": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-8049 keeps the existing chat streamText call. The error callback now pauses when a team key is forced, instead of starting another model request. No new model, retry, or token budget.",
+    "source": "https://app.hypertask.ai/detail/project-15/8049"
   }
 }

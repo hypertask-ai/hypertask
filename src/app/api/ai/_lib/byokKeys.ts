@@ -2,7 +2,13 @@ import { wrapLanguageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
 import { HTPR_7634_OPENAI_ONLY_DEFAULT_FLAG } from "@/lib/flags/definitions/htpr-7634-openai-only-default";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_8100_NO_PAID_FALLBACK_FLAG } from "@/lib/flags/definitions/htpr-8100-no-paid-fallback";
+import {
+  forcedTeamKeyPauseMessage,
+  isOwnKeyOnlySettings,
+  modelOptionMatchesForcedKey,
+} from "@/lib/ai/forcedTeamKey";
 import { fallbackRunsOnOurOwnGatewayKey } from "@/lib/ai/modelFundingGuard";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -24,11 +30,13 @@ import {
   getAiModelOptionById,
   isHaiku55Model,
   type AiDefaultModelContext,
+  type TAiModelKey,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import {
   BASETEN_MODEL_SLUGS,
   getAiProviderInfo,
+  isByokProviderKey,
   isByokProviderRestrictedInGdprSafeMode,
   isGdprSafeModeEnabled,
   resolveTeamProviderEnabled,
@@ -220,6 +228,70 @@ export async function resolveAiFallbackCredential(
   }
 }
 
+export class ForcedTeamKeyError extends Error {
+  constructor(provider: TByokProviderKey) {
+    super(forcedTeamKeyPauseMessage(provider));
+    this.name = "ForcedTeamKeyError";
+  }
+}
+
+export type ForcedTeamKey = { provider: TByokProviderKey; apiKey: string };
+
+async function alwaysUseThisKeyEnabled(userId: number | null | undefined) {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+export async function resolveForcedTeamKey(lookup?: ByokLookupContext): Promise<ForcedTeamKey | null> {
+  if (!(await alwaysUseThisKeyEnabled(lookup?.userId))) return null;
+  const teamId = await resolveLookupTeamId(lookup);
+  if (!teamId) return null;
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+    select: { aiProviderSettings: true },
+  });
+  if (isOwnKeyOnlySettings(team?.aiProviderSettings)) return null;
+  const row = await prisma.teamByokApiKey.findFirst({
+    where: { teamId, alwaysUse: true, enabled: true },
+    select: { provider: true },
+  });
+  if (!row || !isByokProviderKey(row.provider)) return null;
+  const apiKey = await resolveTeamByokApiKey(row.provider, lookup);
+  return { provider: row.provider, apiKey: apiKey ?? "" };
+}
+
+async function forcedKeyEligible(forced: ForcedTeamKey, lookup?: ByokLookupContext) {
+  const plan = await resolveLookupPlan(lookup);
+  if (!plan || plan === "Free") return false;
+  if (forced.provider !== "baseten") return true;
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, lookup?.userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+function forcedServesProvider(forced: ForcedTeamKey, provider: TByokProviderKey) {
+  if (!forced.apiKey) return false;
+  if (forced.provider === provider) return true;
+  return forced.provider === "gateway"
+    && isVercelAiGatewayKey(forced.apiKey)
+    && provider !== "custom"
+    && provider !== "baseten";
+}
+
+function modelByokProvider(option: { modelKey: string; source?: string }) {
+  if (option.source === "custom" || option.modelKey === "custom") return "custom" as const;
+  const definition = getAiModelDefinition(option.modelKey as TAiModelKey);
+  if (!definition || definition.provider === "custom") return null;
+  return getAiProviderInfo(definition.provider)?.byokKey ?? null;
+}
+
 export async function resolveTeamByokApiKey(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext,
@@ -278,6 +350,12 @@ export async function getByokApiKeyForProvider(
     resolveWithoutFlag?: boolean;
   }
 ) {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) {
+    if (!(await forcedKeyEligible(forced, lookup))) return undefined;
+    return forced.provider === provider && forced.apiKey ? forced.apiKey : undefined;
+  }
+
   if (provider === "baseten") {
     const { isFeatureEnabled } = await import("@/lib/flags");
     if (!(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, lookup?.userId ?? 0))) return undefined;
@@ -361,6 +439,14 @@ export async function getTeamGatewayFunding(
   lookup?: ByokLookupContext,
   options?: { includeProvenance?: boolean },
 ): Promise<TeamGatewayFunding | undefined> {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) {
+    if (await forcedKeyEligible(forced, lookup) && forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey)) {
+      return { apiKey: forced.apiKey, source: "customer" };
+    }
+    return undefined;
+  }
+
   const plan = await resolveLookupPlan(lookup);
   if (!plan) return undefined;
 
@@ -402,6 +488,10 @@ export async function getTeamGatewayFunding(
 }
 
 export async function getTeamGatewayApiKey(lookup?: ByokLookupContext) {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced && !(await forcedKeyEligible(forced, lookup) && forced.provider === "gateway" && isVercelAiGatewayKey(forced.apiKey))) {
+    throw new ForcedTeamKeyError(forced.provider);
+  }
   return (await getTeamGatewayFunding(lookup))?.apiKey;
 }
 
@@ -425,6 +515,15 @@ export async function getByokOrTeamGatewayApiKey(
   lookup?: ByokLookupContext,
   options?: { resolveOpenRouterWithoutFlag?: boolean }
 ) {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) {
+    if (!(await forcedKeyEligible(forced, lookup)) || !forcedServesProvider(forced, provider) ||
+        !(await isByokProviderAllowedForLookup(provider, lookup))) {
+      throw new ForcedTeamKeyError(forced.provider);
+    }
+    return forced.apiKey;
+  }
+
   if (!(await isByokProviderAllowedForLookup(provider, lookup))) {
     return undefined;
   }
@@ -454,6 +553,28 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   flags?: ByokProviderFlag[] | null,
   lookup?: ByokLookupContext
 ): Promise<AiModelCredential | undefined> {
+  const forced = await resolveForcedTeamKey(lookup);
+  if (forced) {
+    const servedProvider = modelByokProvider(option);
+    if (!(await forcedKeyEligible(forced, lookup)) || !forced.apiKey || !modelOptionMatchesForcedKey(option, forced.provider) ||
+        (servedProvider && !(await isByokProviderAllowedForLookup(servedProvider, lookup)))) {
+      throw new ForcedTeamKeyError(forced.provider);
+    }
+    if (forced.provider === "custom") {
+      const config = await resolveTeamCustomEndpoint(lookup);
+      if (!config) throw new ForcedTeamKeyError(forced.provider);
+      return config;
+    }
+    if (forced.provider === "baseten") {
+      return {
+        kind: "baseten",
+        apiKey: forced.apiKey,
+        modelKey: option.modelKey as keyof typeof BASETEN_MODEL_SLUGS,
+      };
+    }
+    return forced.apiKey;
+  }
+
   if (option.source === "custom") {
     const plan = await resolveLookupPlan(lookup);
     if (!plan || plan === "Free") return undefined;
@@ -557,7 +678,12 @@ export async function getOpenAiOnlyDefaultContext(lookup: ByokLookupContext, pla
     (Boolean(await requestKey("openrouter")) && await teamOpenRouterEnabled(lookup)) ||
     isVercelAiGatewayKey(storedTeamKey) ||
     isVercelAiGatewayKey(await resolveTeamByokSecret(MANAGED_TEAM_GATEWAY_PROVIDER, teamLookup));
-  const lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  let lunaCredential: AiModelCredential | undefined;
+  try {
+    lunaCredential = await getByokOrTeamGatewayApiKeyForModelOption(getAiModelOptionById("gpt-6-luna")!, suppliedFlags, lookup);
+  } catch (error) {
+    if (!(error instanceof ForcedTeamKeyError)) throw error;
+  }
   const lunaRunsOnStoredDirectTeamKey = typeof storedTeamKey === "string" && !isVercelAiGatewayKey(storedTeamKey) && lunaCredential === storedTeamKey;
   return { openaiOnlyDefaultEnabled: true, hasDirectOpenAiKey: lunaRunsOnStoredDirectTeamKey, hasClaudeRoute };
 }
@@ -617,6 +743,8 @@ export function resolveAutomaticAiModel(
             select: { aiProviderSettings: true },
           });
           if (!team || !resolveTeamProviderEnabled(team.aiProviderSettings, "openai")) throw error;
+          const forced = await resolveForcedTeamKey(context.lookup);
+          if (forced) throw new ForcedTeamKeyError(forced.provider);
           const option = getAiModelOptionById("gpt-6-luna")!;
           const fallbackCredential = await resolveAiFallbackCredential(
             () => getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup), error,

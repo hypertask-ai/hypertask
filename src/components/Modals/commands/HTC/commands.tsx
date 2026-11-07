@@ -64,6 +64,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { HTPR_7732_BASETEN_BYOK_FLAG } from "@/lib/flags/definitions/htpr-7732-baseten-byok";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
@@ -208,6 +209,9 @@ const Commands = (props: Props) => {
   const basetenByokEnabled = useFlag(HTPR_7732_BASETEN_BYOK_FLAG);
   let hiddenBasetenCommandKey: string | undefined;
   if (!basetenByokEnabled) hiddenBasetenCommandKey = "settingsApiKeysBasetenApiKey";
+  const alwaysUseThisKeyEnabled = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
+  let hiddenAlwaysUseCommandKey: string | undefined;
+  if (!alwaysUseThisKeyEnabled) hiddenAlwaysUseCommandKey = "settingsApiKeysAlwaysUseThisKey";
   const grokGemini4Enabled = useFlag(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   let hiddenXaiCommandKeys = "";
   if (!grokGemini4Enabled) hiddenXaiCommandKeys = "settingsApiKeysXaiApiKey settingsAiModelsXai";
@@ -264,6 +268,7 @@ const Commands = (props: Props) => {
             (command.commandMode !== CommandMode.ManageTeamAIAPIKeys ||
               showByokApiKeys) &&
             command.key !== hiddenBasetenCommandKey &&
+            command.key !== hiddenAlwaysUseCommandKey &&
             !hiddenXaiCommandKeys.split(" ").includes(command.key) &&
             command.key !== hiddenGithubCommandKey &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
@@ -419,6 +424,7 @@ const Commands = (props: Props) => {
     hiddenGithubCommandKey,
     googleCalendarSettingsEnabled,
     hiddenBasetenCommandKey,
+    hiddenAlwaysUseCommandKey,
     hiddenXaiCommandKeys,
     autoTaskDescriptionsEnabled,
     currentProject,

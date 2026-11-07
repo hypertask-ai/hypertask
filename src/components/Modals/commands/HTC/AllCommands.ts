@@ -682,6 +682,13 @@ const settings: CommandGroup = {
       keywords: "settings vercel ai gateway api key use byok",
     },
     {
+      key: "settingsApiKeysAlwaysUseThisKey",
+      name: "Settings: Always use this key",
+      commandMode: CommandMode.Setting,
+      payload: "apiKeys",
+      keywords: "settings always use this key byok",
+    },
+    {
       key: "settingsApiKeysCustomEndpointOperatesUnderAnEuUsDataAgreement",
       name: "Settings: Custom endpoint EU/US agreement",
       commandMode: CommandMode.Setting,
