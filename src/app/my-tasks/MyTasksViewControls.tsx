@@ -10,10 +10,7 @@ import AssignModal from "@/components/Modals/AssignToUser/AssignToUser";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
 import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
-import {
-  HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
-  MY_TASKS_SNOOZE_FLAG,
-} from "@/lib/flags/keys";
+import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import {
   MY_TASKS_SCOPE_VALUES,
   normalizeMyTasksScopes,
@@ -32,7 +29,6 @@ import { Check, ArrowUpDown, Columns3, Layers, LayoutGrid, SlidersHorizontal, Us
 import { useEffect, useMemo, useRef, useState } from "react";
 
 interface Props {
-  variant?: "icons" | "labels";
   boards: MyTasksBoardMetadata[];
   config: MyTasksViewConfig;
   onChange: (config: MyTasksViewConfig) => void;
@@ -83,7 +79,6 @@ export const CheckRow = ({
 
 
 const MyTasksViewControls = ({
-  variant = "labels",
   boards,
   config,
   onChange,
@@ -92,8 +87,6 @@ const MyTasksViewControls = ({
   onOpenTableColumns,
   snoozeEnabled: snoozeEnabledProp = false,
 }: Props) => {
-  const iconControlsFlag = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
-  const iconControlsEnabled = iconControlsFlag && variant === "icons";
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
   const myTasksScopesEnabled = true;
@@ -207,14 +200,13 @@ const MyTasksViewControls = ({
     <div
       className={
         myTasksScopesEnabled
-          ? `ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end ${iconControlsEnabled ? "gap-2" : "gap-1"}`
-          : `ml-auto flex shrink-0 items-center ${iconControlsEnabled ? "gap-2" : "gap-1"}`
+          ? "ml-auto flex min-w-0 max-w-full flex-1 flex-wrap items-center justify-end gap-2"
+          : "ml-auto flex shrink-0 items-center gap-2"
       }
     >
       {myTasksScopesEnabled ? (
         <div ref={involvementRef} className="relative">
-          {iconControlsEnabled ? (
-            <ViewControlButton
+          <ViewControlButton
               label="My Tasks involvement"
               tooltipText="Involvement"
               tooltipLeft={-72}
@@ -233,37 +225,12 @@ const MyTasksViewControls = ({
                 <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{involvementCount}</span>
               )}
             </ViewControlButton>
-          ) : (
-          <button
-            type="button"
-            aria-label="My Tasks involvement"
-            aria-expanded={involvementOpen}
-            onClick={() => {
-              setInvolvementOpen((open) => !open);
-              setScopeOpen(false);
-              setSortOpen(false);
-              setGroupOpen(false);
-                    }}
-            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
-              involvementCount > 0
-                ? "text-shadcn-primary"
-                : "text-text-light-gray hover:text-white-black"
-            }`}
-          >
-            <UserRound size={16} strokeWidth={1.5} />
-            <span className="hidden @md:inline">Involvement</span>
-            {involvementCount > 0 && (
-              <span className="text-meta font-semibold">{involvementCount}</span>
-            )}
-          </button>
-          )}
           {involvementOpen && (
             <MyTasksInvolvementPicker scopes={scopes} onToggle={toggleScope} onClose={() => setInvolvementOpen(false)} />
           )}
         </div>
       ) : null}
       {tableColumnsEnabled && onOpenTableColumns ? (
-        iconControlsEnabled ? (
             <ViewControlButton
               label="Configure table columns"
               tooltipText="Columns"
@@ -277,24 +244,9 @@ const MyTasksViewControls = ({
             >
               <Columns3 size={18} strokeWidth={1.75} />
             </ViewControlButton>
-          ) : (
-          <button
-          type="button"
-          aria-label="Configure table columns"
-          onClick={() => {
-            closeOtherMenus();
-            onOpenTableColumns();
-          }}
-          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black @md:min-h-0 @md:min-w-0`}
-        >
-          <Columns3 size={16} strokeWidth={1.5} />
-          <span className="hidden @md:inline">Columns</span>
-        </button>
-        )
-      ) : null}
+          ) : null}
         <>
           <div ref={scopeRef} className="relative">
-            {iconControlsEnabled ? (
             <ViewControlButton
               label="My Tasks scope"
               tooltipText="Scope"
@@ -314,31 +266,7 @@ const MyTasksViewControls = ({
                 <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{scopeCount}</span>
               )}
             </ViewControlButton>
-          ) : (
-          <button
-              type="button"
-              aria-label="My Tasks scope"
-              aria-expanded={scopeOpen}
-              onClick={() => {
-                setScopeOpen((open) => !open);
-                setInvolvementOpen(false);
-                setSortOpen(false);
-                setGroupOpen(false);
-              }}
-              className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
-                scopeCount > 0
-                  ? "text-shadcn-primary"
-                  : "text-text-light-gray hover:text-white-black"
-              }`}
-            >
-              <LayoutGrid size={16} strokeWidth={1.5} />
-              <span className="hidden @md:inline">Scope</span>
-              {scopeCount > 0 && (
-                <span className="text-meta font-semibold">{scopeCount}</span>
-              )}
-            </button>
-          )}
-            {scopeOpen && (
+          {scopeOpen && (
               <AssignModal
                 assignees={[]}
                 title="Scope"
@@ -354,8 +282,7 @@ const MyTasksViewControls = ({
             )}
           </div>
 
-          {iconControlsEnabled ? (
-            <ViewControlButton
+          <ViewControlButton
               label="Filter My Tasks"
               tooltipText="Filters"
               tooltipLeft={-72}
@@ -374,35 +301,11 @@ const MyTasksViewControls = ({
                 <span className="absolute -right-0.5 -top-0.5 text-micro font-semibold leading-none">{kanbanFilterCount}</span>
               )}
             </ViewControlButton>
-          ) : (
-          <button
-            type="button"
-            aria-label="Filter My Tasks"
-            onClick={() => {
-              setScopeOpen(false);
-              setInvolvementOpen(false);
-              setSortOpen(false);
-              setGroupOpen(false);
-              onOpenKanbanFilters?.();
-            }}
-            className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
-              kanbanFilterCount > 0
-                ? "text-shadcn-primary"
-                : "text-text-light-gray hover:text-white-black"
-            }`}
-          >
-            <SlidersHorizontal size={16} strokeWidth={1.5} />
-            <span className="hidden @md:inline">Filters</span>
-            {kanbanFilterCount > 0 && (
-              <span className="text-meta font-semibold">{kanbanFilterCount}</span>
-            )}
-          </button>
-          )}
-        </>
+          </>
       <div ref={sortRef} className="relative">
         <ViewControlButton
           label="Sort My Tasks"
-          tooltipText={iconControlsEnabled ? "Sort" : "Sort My Tasks"}
+          tooltipText="Sort"
           tooltipLeft={-72}
           className={`${MOBILE_TARGET} @md:min-h-0 @md:min-w-0`}
           active={
@@ -423,8 +326,7 @@ const MyTasksViewControls = ({
       </div>
 
       <div ref={groupRef} className="relative hidden @md:block">
-        {iconControlsEnabled ? (
-          <ViewControlButton
+        <ViewControlButton
             label="Group My Tasks"
             tooltipText={`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
             tooltipLeft={-72}
@@ -440,29 +342,6 @@ const MyTasksViewControls = ({
           >
             <Layers size={18} strokeWidth={1.75} />
           </ViewControlButton>
-        ) : (
-        <button
-          type="button"
-          aria-label="Group My Tasks"
-          aria-expanded={groupOpen}
-          onClick={() => {
-            setGroupOpen((open) => !open);
-                  setScopeOpen(false);
-            setInvolvementOpen(false);
-            setSortOpen(false);
-          }}
-          className={`${MOBILE_TARGET} h-8 gap-1.5 rounded-[4px] px-2 text-content transition-colors hover:bg-hover-active @md:min-h-0 @md:min-w-0 ${
-            groupBy === "time"
-              ? "text-shadcn-primary"
-              : "text-text-light-gray hover:text-white-black"
-          }`}
-        >
-          <Layers size={16} strokeWidth={1.5} />
-          <span className="hidden @md:inline">
-            {`Group: ${groupBy === "time" ? "Due date" : "Board"}`}
-          </span>
-        </button>
-        )}
         {groupOpen && (
           <MyTasksGroupPicker groupBy={groupBy} onChange={(next) => onChange({ ...config, groupBy: next })} onClose={() => setGroupOpen(false)} />
         )}

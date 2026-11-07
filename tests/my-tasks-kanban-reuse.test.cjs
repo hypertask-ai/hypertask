@@ -159,7 +159,7 @@ const box = ({ children }) => React.createElement("div", null, children);
 const overrides = {
   "react": React,
   "reactstrap": { ModalBody: box },
-  "@/hooks/useFlag": { useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" },
+  "@/hooks/useFlag": { useFlag: () => true },
   "@/hooks/MultiPages/useClickOutside": { default: noop },
   "@/hooks/General/useHandleMouse": { default: ({ setSelectedIndex }) => ({ handleMouseEnter: setSelectedIndex, handleMouseLeave: noop, handleMouseMove: noop, elRef: React.useRef(null) }) },
   "@/hooks/General/useHandleKeydownBasic": { default: () => { const [selectedIndex, setSelectedIndex] = React.useState(0); return { selectedIndex, setSelectedIndex, handleKeydown: noop }; } },
@@ -284,14 +284,15 @@ test("involvement picker stays open, shows Check membership and falls back to as
 
 test("HTPR-6958 keeps Group by in phone Commands and the desktop toolbar without adding a phone row", (context) => {
   render(Harness);
-  assert.ok(button("Group: Due date"));
-  assert.equal(document.querySelector('[aria-label="Group My Tasks"]').parentElement.className, "relative hidden @md:block");
+  const group = () => document.querySelector('[aria-label="Group My Tasks"]');
+  assert.ok(group());
+  assert.equal(group().parentElement.className, "relative hidden @md:block");
   act(() => window.dispatchEvent(new Event("my-tasks-group-picker")));
   assert.ok(button("Due dateOverdue, Later, No due date").querySelector("svg"));
   click(button("Board")); act(() => context.mock.timers.tick(1));
   assert.equal(config.groupBy, "board");
   assert.equal(document.querySelector("h2"), null);
-  assert.ok(button("Group: Board"));
+  assert.ok(group());
 });
 
 test("controlled single-level sort replaces the field and never writes a board", async () => {

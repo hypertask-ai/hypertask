@@ -17,7 +17,7 @@ let changeBoardSearch;
 const noop = () => {};
 const box = ({ children }) => React.createElement("div", null, children);
 const members = { members: [], owner: null };
-stub("src/hooks/useFlag.tsx", { useFlagLoaded: () => true, useFlag: (key) => key !== "htpr-6938-my-tasks-icon-controls" });
+stub("src/hooks/useFlag.tsx", { useFlagLoaded: () => true, useFlag: () => true });
 stub("src/lib/state.tsx", {
   useRecoilValue: (atom) => atom?.default ?? null,
   useSetRecoilState: () => noop,
@@ -171,7 +171,7 @@ test("Filters has Columns, Completed tasks and snoozed controls tied to current 
   click(rows[0]); assert.deepEqual(config.filters.sectionIds, [11]);
   click(rows[2]); assert.equal(config.filters.showDone, true);
   click(rows[3]); assert.equal(config.filters.showSnoozed, true);
-  assert.equal(document.querySelector('[aria-label="Filter My Tasks"]').textContent, "Filters3");
+  assert.equal(document.querySelector('[aria-label="Filter My Tasks"]').textContent, "3");
 });
 
 test("shared Assign picker keeps assignee mode when no boardPicker is supplied", () => {
