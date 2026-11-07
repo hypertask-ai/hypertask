@@ -171,7 +171,6 @@ export async function POST(request: NextRequest) {
     console.log('✅ User updated successfully:', {
       id: userData!.id,
       email: userData!.email,
-      displayName: userData!.displayName,
       onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
       trialStatus: (userData as any).UserSetting?.trialStatus
     })

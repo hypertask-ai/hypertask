@@ -1,4 +1,6 @@
 import prisma from '@/lib/prisma';
+import { logRecord } from '@/lib/logging/safeLog';
+import { logRecord } from "@/lib/logging/safeLog";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { json } from "@/utils/helperFunctions/helperFunctions";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -52,7 +54,15 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
           `;
           
           
-            console.log("🚀 ~ consthandler:NextApiHandler= ~ result:", result)
+            const rows = Array.isArray(result) ? result : []
+            logRecord("dashboard teams", {
+              count: rows.length,
+              teamIds: rows.flatMap((row) => {
+                if (!row || typeof row !== "object" || !("team_id" in row)) return []
+                const id = (row as { team_id: unknown }).team_id
+                return typeof id === "string" || typeof id === "number" ? [id] : []
+              }),
+            }, result)
             return res.status(200).send(json(result))
 
         } catch (error) {

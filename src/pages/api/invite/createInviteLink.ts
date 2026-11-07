@@ -239,7 +239,7 @@ export const createNotification = async (
   const invitedUser = await prisma.user.findFirst({
     where: { email: email },
   });
-  console.log("🚀 ~ createNotification ~ invitedUser:", invitedUser);
+  console.log("createNotification invitedUser", { userId: invitedUser?.id ?? null, email: invitedUser?.email ?? null });
   if (!invitedUser) return false;
 
   const notification = await prisma.notification.create({

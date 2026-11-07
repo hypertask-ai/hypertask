@@ -229,7 +229,7 @@ export async function POST(request: NextRequest) {
     }
 
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('📊 UTM Data for instant signup:', utmParams)
+    console.log('instant signup', { userId: userData?.id ?? null, outcome: 'created' })
 
     const verificationToken = createVerificationToken(normalizedEmail)
 

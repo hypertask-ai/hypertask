@@ -2,6 +2,7 @@ import { stripe } from "@/lib/subscription";
 import { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { logRecord } from "@/lib/logging/safeLog";
 
 export default async function checkoutsSessionHandler(
     req: NextApiRequest,
@@ -25,7 +26,11 @@ export default async function checkoutsSessionHandler(
     if (!team) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    console.log("🚀 ~ file: checkout.ts:9 ~ req.body:", req.body)
+    logRecord("cancelSubscription", {
+      userId: session.userId,
+      teamId: team.id,
+      outcome: "received",
+    }, req.body)
    
     try {
         const monthlySubscription = await stripe.subscriptions.list({

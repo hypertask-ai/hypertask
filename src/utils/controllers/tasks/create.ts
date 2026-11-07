@@ -7,6 +7,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
 import upsertTaskDescription from "../description/common-description-create";
 import prisma from "@/lib/prisma";
+import { logRecord } from "@/lib/logging/safeLog";
 import { isFeatureEnabled } from "@/lib/flags";
 import { waitUntil } from "@vercel/functions";
 import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7131-index-new-tickets";
@@ -133,7 +134,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 projectId,
                 sectionId,
                 updatedAt: currentDate,}
-            console.log("🚀 ~ create ~ body:", body)
+            logRecord("create task", { projectId, sectionId, outcome: "started" })
             const taskCreatedActor = {
                 userId: currentUser.id,
                 agentId: agentId ?? null,
@@ -212,6 +213,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     }
                 })
             }
+            logRecord("create task", { projectId, sectionId, taskId: task.id, outcome: "created" }, body)
             await publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
             
             await Promise.all([

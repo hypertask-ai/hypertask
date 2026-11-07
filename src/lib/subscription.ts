@@ -9,6 +9,7 @@ import {
 import { allMonthlyPrices, allYearlyPrices } from "./subscriptionPlans";
 import { planKindFromStripePriceId } from "./planFromStripePriceId";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
+import { logRecord, recordId } from "@/lib/logging/safeLog";
 
 export const stripe = new Stripe(String(process.env.STRIPE_SECRET_KEY), {
   apiVersion: "2023-08-16" as typeof Stripe.API_VERSION,
@@ -40,7 +41,11 @@ export async function getUpcomingInvoice(
       "GET",
       `/v1/invoices/upcoming?customer=${encodeURIComponent(customerId)}`
     )) as Stripe.Response<UpcomingInvoice>;
-    console.log("🚀 ~ getUpcomingInvoice ~ upcomingInvoice:", upcomingInvoice);
+    logRecord("upcoming invoice", {
+      invoiceId: recordId(upcomingInvoice?.id),
+      customerId: recordId(upcomingInvoice?.customer),
+      outcome: "retrieved",
+    }, upcomingInvoice);
     return upcomingInvoice;
   } catch (error) {
     return null;
@@ -179,7 +184,11 @@ export async function checkSubscriptionPlan(sessionId: string) {
       const subscription = await stripe.subscriptions.retrieve(
         session.subscription
       );
-      console.log("🚀 ~ checkSubscriptionPlan ~ subscription:", session);
+      logRecord("checkSubscriptionPlan", {
+        sessionId,
+        subscriptionId: recordId(session.subscription),
+        outcome: "retrieved",
+      }, session);
       return subscription;
     }
     return undefined
@@ -192,12 +201,19 @@ export async function checkSubscriptionPlan(sessionId: string) {
 export async function checkTrialSuccess(sessionId: string) {
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    console.log("🚀 ~ checkTrialSuccess ~ session:", session);
+    logRecord("checkTrialSuccess session", {
+      sessionId: recordId(session?.id),
+      customerId: recordId(session?.customer),
+      outcome: "retrieved",
+    }, session);
     const customer = (await stripe.customers.retrieve(
       session?.customer as string
     )) as Stripe.Customer;
 
-    console.log("🚀 ~ checkTrialSuccess ~ customer:", customer);
+    logRecord("checkTrialSuccess customer", {
+      customerId: recordId(customer?.id),
+      outcome: "retrieved",
+    }, customer);
     return customer.id;
   } catch (error: any) {
     console.log("🚀 ~ checkTrialSuccess ~ error:", error);
@@ -282,7 +298,11 @@ export async function createInvoiceAndPay(
       collection_method: "charge_automatically",
       description: `Billed for ${interval}ly subscription`,
     });
-    console.log("🚀 ~ createInvoiceAndPay ~ invoice:", invoice);
+    logRecord("createInvoiceAndPay invoice", {
+      invoiceId: recordId(invoice?.id),
+      customerId: recordId(invoice?.customer),
+      outcome: "created",
+    }, invoice);
 
     const amountToCharge =
       interval === "month"
@@ -314,7 +334,10 @@ export async function createInvoiceAndPay(
     const payment = await stripe.invoices.pay(invoice.id, {
       payment_method: paymentMethods.data[0].id,
     });
-    console.log("🚀 ~ createInvoiceAndPay ~ payment:", payment);
+    logRecord("createInvoiceAndPay payment", {
+      paymentId: recordId(payment?.id),
+      outcome: recordId(payment?.status) ?? "unknown",
+    }, payment);
     if (payment.status === "paid") {
       return "SEATED";
     }

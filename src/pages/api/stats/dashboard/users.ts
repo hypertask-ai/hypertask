@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { logRecord } from "@/lib/logging/safeLog";
 import { json } from "@/utils/helperFunctions/helperFunctions";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -61,7 +62,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
         });
         
-        console.log("🚀 ~ consthandler:NextApiHandler= ~ usersAll:", usersAll[0])
+        logRecord("dashboard users", { count: usersAll.length }, usersAll[0])
 
       return res.status(200).json(usersAll)
     } catch (error) {

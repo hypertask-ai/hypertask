@@ -6,6 +6,7 @@ import onSubscriptionUpdated from "@/utils/controllers/stripe/webhook/onSubscrip
 import prisma from "@/lib/prisma";
 import { enqueueAnalyticsIntent, processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
+import { logRecord, recordId } from "@/lib/logging/safeLog";
 
 export const config = {
   api: {
@@ -65,7 +66,11 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.SubscriptionCreated: {
           const subscription = await getSubscription(event);
-          console.log("🚀 ~ file: webhook.ts:54 ~ subscription:", subscription )
+          logRecord("stripe webhook subscription", {
+            subscriptionId: recordId(subscription?.id),
+            customerId: recordId(subscription?.customer),
+            outcome: "created",
+          }, subscription)
           await sessionOnSuccess(subscription, subscription.plan);
           return res.status(200).json({ message: "success" });
           break;
@@ -73,7 +78,12 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.Completed: {
           const session = event.data.object as Stripe.Checkout.Session;
-          console.log("🚀 ~ file: webhook.ts:64 ~ session:", session)
+          logRecord("stripe webhook session", {
+            sessionId: recordId(session?.id),
+            customerId: recordId(session?.customer),
+            subscriptionId: recordId(session?.subscription),
+            outcome: "completed",
+          }, session)
           const subscriptionId = await getSubscriptionIdFromSession(event);
           const subscription: any = await stripe.subscriptions.retrieve(
             subscriptionId
@@ -92,7 +102,11 @@ export default async function checkoutsWebhooksHandler(
         case StripeWebhooks.SubscriptionDeleted: {
           const subscription = event.data
             .object as PinnedApiVersionSubscription;
-          console.log("🚀 ~ subscription:", subscription);
+          logRecord("stripe webhook subscription", {
+            subscriptionId: recordId(subscription?.id),
+            customerId: recordId(subscription?.customer),
+            outcome: "deleted",
+          }, subscription);
           await onSubscriptionUpdated(subscription);
           try {
             const key = await enqueueAnalyticsIntent(prisma, { kind: "stripe_event", payload: { eventId: event.id } });
@@ -105,7 +119,11 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.SubscriptionUpdated: {
           const subscription = await getSubscription(event);
-          console.log("🚀 ~ subscription:", subscription);
+          logRecord("stripe webhook subscription", {
+            subscriptionId: recordId(subscription?.id),
+            customerId: recordId(subscription?.customer),
+            outcome: "updated",
+          }, subscription);
           await onSubscriptionUpdated(subscription, subscription.plan);
           try {
             const key = await enqueueAnalyticsIntent(prisma, { kind: "stripe_event", payload: { eventId: event.id } });
@@ -120,7 +138,12 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.PaymentFailed: {
           const session = event.data.object as Stripe.Checkout.Session;
-          console.log("🚀 ~ file: webhook.ts:87 ~ session:", session);
+          logRecord("stripe webhook session", {
+            sessionId: recordId(session?.id),
+            customerId: recordId(session?.customer),
+            subscriptionId: recordId(session?.subscription),
+            outcome: "payment-failed",
+          }, session);
 
 
           break;
@@ -138,14 +161,22 @@ export default async function checkoutsWebhooksHandler(
 
   async function getSubscription(event: Stripe.Event) {
     const session = event.data.object as Stripe.Checkout.Session;
-    console.log("🚀 ~ file: webhook.ts:57 ~ session:", session);
+    logRecord("stripe webhook session", {
+      sessionId: recordId(session?.id),
+      customerId: recordId(session?.customer),
+      outcome: "subscription-lookup",
+    }, session);
     const subscriptionId = session.id as string;
     console.log("🚀 ~ getSubscription ~ subscriptionId:", subscriptionId);
 
     const subscription: any = await stripe.subscriptions.retrieve(
       subscriptionId
     );
-    console.log("🚀 ~ getSubscription ~ subscription:", subscription);
+    logRecord("stripe webhook subscription", {
+      subscriptionId: recordId(subscription?.id),
+      customerId: recordId(subscription?.customer),
+      outcome: "retrieved",
+    }, subscription);
     return subscription;
   }
 

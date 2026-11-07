@@ -11,6 +11,7 @@ import { createProvisionedProjectWithStableName } from "../projects/createProjec
 import { createProvisionedTaskCore } from "../tasks/createTaskCore";
 import assigneesAssign from "../assignees/assign";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
+import { logRecord, recordId } from "@/lib/logging/safeLog";
 import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, HTPR_7549_FIRST_TASK_POINTER_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE } from "@/lib/onboarding/installCommands";
 import { isPlanLimitsEnabled, isPlanLimitReachedError } from "@/lib/planLimits";
@@ -54,10 +55,10 @@ const completeOnboardingFirstStep = async (
       googleAccount.id
     );
 
-    console.log(
-      "============= google Account and stripe customer account ========= ",
-      customer
-    );
+    logRecord("onboarding stripe customer", {
+      customerId: recordId(customer?.id),
+      outcome: "ready",
+    }, customer);
     console.log("++++++++++++++++++++++++");
 
     console.log("-------- Creating a team ----------");

@@ -264,9 +264,10 @@ export const sendDataOnlyFcm = async (
       deliveryResolved = true;
     } catch (error) {
       if (isUnregisteredTokenError(error)) {
-        console.log(
-          `🚀 ~ sendDataOnlyFcm ~ dropping unregistered device token ${device.firebaseId.slice(0, 12)}`
-        );
+        console.log("sendDataOnlyFcm dropping unregistered device", {
+          deviceId: device.id ?? null,
+          userId: device.userId ?? null,
+        });
         await removeDeadDeviceToken(device.firebaseId);
         deliveryResolved = true;
       } else {
@@ -288,10 +289,17 @@ export const sendDataOnlyFcm = async (
 
 const removeDeadDeviceToken = async (firebaseId: string) => {
   try {
+    const rows = await prisma.subscribedDevices.findMany({
+      where: { firebaseId },
+      select: { id: true, userId: true },
+    });
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
-    console.log("🚀 ~ removed dead device token", firebaseId.slice(0, 12));
-  } catch (cleanupError) {
-    console.log("🚀 ~ dead token cleanup failed:", cleanupError);
+    console.log("removed dead device", {
+      deviceIds: rows.map((row) => row.id),
+      userIds: rows.map((row) => row.userId),
+    });
+  } catch {
+    console.log("dead token cleanup failed", { outcome: "failed" });
   }
 };
 
@@ -339,7 +347,7 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
     const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
 
     for (const device of validDevices){
-        console.log("🚀 ~ sendDataNewCommentFCM ~ device:", device.firebaseId)
+        console.log("sendDataNewCommentFCM device", { deviceId: device.id, userId: device.userId })
         
         if (!device.sendNotifications) {
             continue;

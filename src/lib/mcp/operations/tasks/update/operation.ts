@@ -13,6 +13,7 @@ import {
   withIdempotency,
 } from '@/lib/mcp/idempotency/idempotencyStore'
 import prisma from '@/lib/prisma'
+import { logRecord } from '@/lib/logging/safeLog'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
 import {
   executeTaskUpdate,
@@ -44,7 +45,12 @@ export async function POST(request: NextRequest) {
   const parsedBody = await readJsonBody<UpdateTaskBody>(request)
   if (!parsedBody.ok) return parsedBody.response
   const requestBody = parsedBody.body
-  console.log('🚀 ~ POST ~ requestBody:', requestBody)
+  const taskIds = requestBody.task_id
+  logRecord('[MCP Update Task] request', {
+    actorId: ctx.user.id,
+    taskId: Array.isArray(taskIds) ? taskIds : taskIds ?? null,
+    outcome: 'received',
+  }, requestBody)
 
   if (
     requestBody.dry_run !== undefined &&

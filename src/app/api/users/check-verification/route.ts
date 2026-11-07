@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
       where: { id: parseInt(userId) },
       include: { UserSetting: true },
     })
-    console.log('user', user)
+    console.log('check-verification user', { userId: user?.id ?? null, email: user?.email ?? null })
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'User not found' },
