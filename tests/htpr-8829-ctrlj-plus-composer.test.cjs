@@ -14,15 +14,20 @@ test('HTPR-8829 flag stays at Owner + QA until independent design QA', () => {
   assert.equal(flag.releaseRisk.risk, 'small');
 });
 
-test('HTPR-8829 Ctrl+J keeps + attach, mic and text Send in the box, pickers below, no shortcut row', async (t) => {
-  await withPalette(t, { tab: 'compose', boards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
+test('HTPR-8829 Ctrl+J keeps + menu, mic and text Send in the box, pickers below, no shortcut row', async (t) => {
+  await withPalette(t, { tab: 'compose', boards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, input }) => {
     flags['htpr-8829-ctrlj-plus-composer'] = true;
     flags['htpr-8260-ctrlj-composer-keys'] = true;
     await rerender();
     const writer = document.querySelector('[data-compose-task-writer]');
     const row = writer.querySelector('[data-compose-plus-row]');
     assert.ok(row, 'the + row renders inside the box');
-    assert.ok(row.querySelector('[aria-label="Attach files"]'), '+ opens the file picker');
+    assert.ok(row.querySelector('summary[aria-label="Add"]'), 'the + sits in the box');
+    const menu = row.querySelector('[role="group"][aria-label="Add"]');
+    assert.match(menu.textContent, /Attach file/);
+    assert.match(menu.textContent, /Add context/);
+    menu.querySelector('[aria-label="Add context"]').click();
+    assert.match(input().value, /@/);
     assert.ok(row.querySelector('[aria-label="Start dictation"]'), 'the mic sits in the box');
     assert.match(row.textContent, /Send/);
     assert.equal(writer.querySelector('[aria-label="Create task"]'), null);

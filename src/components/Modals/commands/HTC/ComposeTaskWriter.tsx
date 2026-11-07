@@ -42,7 +42,7 @@ import { HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr
 import { composeWriterFooterKeys } from "@/lib/configs/composeWriterFooterKeys";
 import { resolveComposeBoardTarget } from "./composeBoardTarget";
 import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { TaskWriterModelPicker, useTaskWriterModel } from "@/components/Global/ModelSelectorDropdown";
 import { HTPR_8265_TASK_SHORTCUTS_WRITER_MODEL_FLAG } from "@/lib/flags/definitions/htpr-8265-task-shortcuts-writer-model";
@@ -97,6 +97,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
   const [boardPickerOpen, setBoardPickerOpen] = useState(false);
   const boardChip = useRef<HTMLButtonElement>(null);
+  const plusMenu = useRef<HTMLDetailsElement>(null);
   const caret = useRef<{ start: number; end: number; direction: "forward" | "backward" | "none" } | null>(null);
   const showProgress = newTaskWindow;
   const taskContext = useContext(TaskContext);
@@ -171,6 +172,28 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
   const skillMenu = useSkillSlashMenu({ textAreaRef: input, setValue: setText });
   const skillMenuConsumedKey = useRef(false);
   const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
+  const closePlusMenu = () => {
+    if (plusMenu.current) plusMenu.current.open = false;
+  };
+  const insertContextMark = () => {
+    const field = input.current;
+    const current = field?.value ?? text;
+    const start = field?.selectionStart ?? current.length;
+    const end = field?.selectionEnd ?? start;
+    const previous = current[start - 1];
+    const mark = start > 0 && previous !== " " && previous !== "\n" ? " @" : "@";
+    const next = current.slice(0, start) + mark + current.slice(end);
+    typedTextNotRendered.current = next;
+    textHeldUntilRendered.current = null;
+    setText(next);
+    const caretAt = start + mark.length;
+    requestAnimationFrame(() => {
+      const nextField = input.current;
+      if (!nextField) return;
+      nextField.focus();
+      nextField.setSelectionRange(caretAt, caretAt);
+    });
+  };
   const openBoardPicker = () => {
     if (writing || dictating) return;
     const field = input.current;
@@ -178,8 +201,30 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
     setBoardPickerOpen(true);
   };
   useEffect(() => {
-    if (!active) setBoardPickerOpen(false);
+    if (!active) {
+      setBoardPickerOpen(false);
+      closePlusMenu();
+    }
   }, [active]);
+  useEffect(() => {
+    if (!plusLayout) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const menu = plusMenu.current;
+      if (menu?.open && !menu.contains(event.target as Node)) menu.open = false;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !plusMenu.current?.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      closePlusMenu();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  }, [plusLayout]);
 
   useEffect(() => {
     if (!newTaskWindow || !active || !input.current) return;
@@ -571,7 +616,34 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
             {!newTaskWindow && !phoneTaskWriterSheet && attachments}
             {plusLayout ? (
               <div data-compose-plus-row className="flex w-full items-center justify-between pt-2">
-                <AttachmentButton plus disabled={addingImages || dictating} onClick={handleAttachmentClick} />
+                <details ref={plusMenu} className="relative">
+                  <summary
+                    aria-label="Add"
+                    aria-disabled={addingImages || dictating}
+                    onClick={(event) => {
+                      if (addingImages || dictating) event.preventDefault();
+                    }}
+                    className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
+                  >
+                    <Plus size={18} strokeWidth={1.75} aria-hidden />
+                  </summary>
+                  <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
+                    <button type="button" aria-label="Attach file" disabled={addingImages || dictating}
+                      className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => { closePlusMenu(); handleAttachmentClick(); }}>
+                      <span>Attach file</span>
+                      <span className="text-text-light-gray">{getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+")}</span>
+                    </button>
+                    <button type="button" aria-label="Add context" disabled={addingImages || dictating}
+                      className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => { closePlusMenu(); insertContextMark(); }}>
+                      <span>Add context</span>
+                      <span className="text-text-light-gray">@</span>
+                    </button>
+                  </div>
+                </details>
                 <div className="flex shrink-0 items-center gap-2">
                   {dictationControl}
                   <SendMessageButton label="Send" textButton disabled={addingImages || waitingForBoards || dictating || !text.trim()} mobile={false} onClick={() => void send()} />

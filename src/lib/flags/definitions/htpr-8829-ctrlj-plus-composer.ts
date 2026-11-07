@@ -8,7 +8,7 @@ export default {
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-05",
   description:
-    "Ctrl+J New Task keeps only a + attach button, the white mic and a text Send inside the box, moves the board and model pickers below it, dims the placeholder and drops the shortcut row.",
+    "Ctrl+J New Task puts a + menu, the white mic and a text Send inside the box. The menu attaches a file or inserts @ context. Board and model pickers sit below the box.",
   releaseRisk: {
     risk: "small",
     reason:
