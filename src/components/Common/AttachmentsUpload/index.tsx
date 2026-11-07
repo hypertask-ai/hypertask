@@ -22,6 +22,8 @@ import { AtSign, Image as ImageIcon, Paperclip, PencilSparkles, Plus, Slash, Tra
 
 
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8926_COMMENT_MIC_PATTERN_FLAG } from "@/lib/flags/definitions/htpr-8926-comment-mic-pattern";
 import { mobileCommentMicWrapperClass } from "./mobileCommentComposer";
 
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -47,6 +49,7 @@ const AttachmentsUpload = (props: IProps) => {
   } = useAttachmentUploadState({
     props,
   });
+  const micPattern = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
   if (_mbl && mobileExistingEdit) return renderMobileAttachmentEdit({
     _mbl, mobileExistingEdit, isRecording, audioProcessing, fileItems,
     mobileEditSaving, setMobileUploadPending, removeFile, setMobileAttachmentBridgePending, mobileEditBridgeAttachmentCountsRef,
@@ -298,6 +301,7 @@ const AttachmentsUpload = (props: IProps) => {
             isRecording={isRecording}
             hideComposerDictation={hideComposerDictation}
             dictationCoordinator={dictationCoordinator}
+            canSend={micPattern ? hasText || fileItems.length > 0 : undefined}
           />
         )
       }

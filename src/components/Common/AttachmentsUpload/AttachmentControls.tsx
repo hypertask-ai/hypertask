@@ -13,6 +13,8 @@ import { SendArrow } from "@/components/Common/SendArrow";
 import type { DictationCoordinator } from "@/lib/dictationCoordinator";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8054_GRAPHITE_2_FLAG } from "@/lib/flags/definitions/htpr-8054-graphite-2";
+import { HTPR_8926_COMMENT_MIC_PATTERN_FLAG } from "@/lib/flags/definitions/htpr-8926-comment-mic-pattern";
+import { SendMessageButton } from "@/components/AI_CHAT/SendMessageButton";
 
 export interface IPropsSaveButtonMobile {
   sendOnClick: any;
@@ -301,6 +303,7 @@ export const DesktopAttachment = ({
   isRecording,
   hideComposerDictation,
   dictationCoordinator,
+  canSend = false,
 }: {
   sendOnClick?: TSendBackAttachmentButton;
   mode: RedirectMode;
@@ -324,11 +327,15 @@ export const DesktopAttachment = ({
   isRecording?: boolean;
   hideComposerDictation?: boolean;
   dictationCoordinator?: DictationCoordinator;
+  canSend?: boolean;
 }) => {
   const graphite2Enabled = useFlag(HTPR_8054_GRAPHITE_2_FLAG);
+  const micPatternFlag = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
   const isApple = useDeviceContext();
   const ctrlCmd = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
+  const commentMode = mode === "create-comment" || mode === "read-edit-comments";
+  const micPattern = micPatternFlag && (commentMode || mode === "read-edit-description");
 
   return (
     <div
@@ -347,7 +354,7 @@ export const DesktopAttachment = ({
       )}
       <div
         className={`flex gap-2 items-center ${
-          isRecording ? "flex-1 w-full" : ""
+          micPattern ? "ml-auto" : isRecording ? "flex-1 w-full" : ""
         }`}
       >
         {!isRecording && mode !== "read-edit-comments" && (
@@ -393,7 +400,19 @@ export const DesktopAttachment = ({
             id={mode + "-audio-button"}
             toggleRecording={toggleRecording!}
             dictationCoordinator={dictationCoordinator}
+            {...(micPattern ? { compactListeningPill: true, primaryMic: true, hideDevicePicker: true, ariaLabel: "Start dictation", wrapperClassName: "order-1" } : {})}
           />
+        )}
+        {micPatternFlag && commentMode && (
+          <span className="order-2">
+            <SendMessageButton
+              label="Send"
+              textButton
+              mobile={false}
+              disabled={!canSend || Boolean(isRecording)}
+              onClick={() => sendOnClick && sendOnClick()}
+            />
+          </span>
         )}
         {!isRecording &&
           mode !== "read-edit-comments" &&
@@ -471,6 +490,8 @@ export const BottomButtons = ({
   altOptions,
   status,
 }: IBottomButtonProps) => {
+  const micPatternFlag = useFlag(HTPR_8926_COMMENT_MIC_PATTERN_FLAG);
+  const commentMode = mode === "create-comment" || mode === "read-edit-comments";
   const spanClassName =
     "text-content text-icon-dark-gray hover:text-white-black  cursor-pointer font-semibold relative group whitespace-nowrap";
   const advanceOnSend = useGetUserPreferences().data.inboxAdvanceOnSend ?? true;
@@ -605,7 +626,7 @@ export const BottomButtons = ({
         ) : (
           <></>
         )}
-        <span
+        {micPatternFlag && commentMode ? null : <span
           onClick={() => sendOnClick && sendOnClick()}
           className={spanClassName}
         >
@@ -626,7 +647,7 @@ export const BottomButtons = ({
               />
             </>
           )}
-        </span>
+        </span>}
       </div>
     );
 };
