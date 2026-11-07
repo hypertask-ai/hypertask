@@ -290,14 +290,9 @@ export const sendDataOnlyFcm = async (
 
 const removeDeadDeviceToken = async (firebaseId: string) => {
   try {
-    const rows = await prisma.subscribedDevices.findMany({
-      where: { firebaseId },
-      select: { id: true, userId: true },
-    });
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
-    await logPersonal(rows[0]?.userId ?? null, "removed dead device", {
-      deviceIds: rows.map((row) => row.id),
-      userIds: rows.map((row) => row.userId),
+    await logPersonal(null, "removed dead device", {
+      outcome: "removed",
     }, firebaseId);
   } catch {
     console.log("dead token cleanup failed", { outcome: "failed" });

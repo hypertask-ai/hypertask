@@ -6,8 +6,7 @@ import onSubscriptionUpdated from "@/utils/controllers/stripe/webhook/onSubscrip
 import prisma from "@/lib/prisma";
 import { enqueueAnalyticsIntent, processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
-import { recordId } from "@/lib/logging/safeLog"
-import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
+import { logPersonal, recordId } from "@/utils/controllers/logs/quietPersonalLog";
 
 export const config = {
   api: {

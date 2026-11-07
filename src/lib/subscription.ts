@@ -9,8 +9,7 @@ import {
 import { allMonthlyPrices, allYearlyPrices } from "./subscriptionPlans";
 import { planKindFromStripePriceId } from "./planFromStripePriceId";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
-import { recordId } from "@/lib/logging/safeLog"
-import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
+import { logPersonal, recordId } from "@/utils/controllers/logs/quietPersonalLog";
 
 export const stripe = new Stripe(String(process.env.STRIPE_SECRET_KEY), {
   apiVersion: "2023-08-16" as typeof Stripe.API_VERSION,
