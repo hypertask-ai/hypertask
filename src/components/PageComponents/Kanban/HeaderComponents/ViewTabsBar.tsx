@@ -186,7 +186,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                                 className="shrink-0 self-center"
                               />
                             )}
-                            {smartLabel && (
+                            {smartLabel && !cleanup && (
                               <Sparkles
                                 size={13}
                                 strokeWidth={1.75}
@@ -222,7 +222,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                         ) : (
                           <>
                             {isDefault && <House size={12}  strokeWidth={1.75}/>}
-                            {smartLabel && (
+                            {smartLabel && !cleanup && (
                               <Sparkles
                                 size={12}
                                 strokeWidth={1.75}
