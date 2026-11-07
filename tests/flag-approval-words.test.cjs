@@ -44,6 +44,9 @@ test("a quote block after the chat header is the approval and adjacent prose is 
     date: "2026-11-07", quote: "yes, ship it", tail: "switch htpr-3533-google-calendar to off",
   });
   assert.deepEqual([...(parseSwitchQuestion(record.tail) || [])], [["htpr-3533-google-calendar", "Off"]]);
+  const conditional = parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><blockquote><p>turn it off but only after QA</p></blockquote><p>Switch htpr-3533-google-calendar to Off</p>');
+  assert.equal(isOffOrder(conditional.quote), true);
+  assert.equal(parseSwitchQuestion(`${conditional.quote} ${conditional.tail}`), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><p>yes, ship it</p>'), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07): he meant</p><blockquote><p>yes, ship it</p></blockquote>'), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><blockquote><p>yes, ship it</p></blockquote><p>Thanks</p>'), null);

@@ -648,6 +648,12 @@ test("PATCH accepts a quote-block off order only when the mode is Off", async ()
   await assertAllowed("chat-record", key, "OFF", [123]);
 });
 
+test("PATCH refuses a conditional off order in a quote block", async () => {
+  quoteBlockRecord("turn it off but only after QA", `<p>Switch ${key} to Off</p>`);
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
 test("PATCH refuses a quote-block off order for Everyone", async () => {
   quoteBlockRecord("turn it off");
   await assertRefused();
