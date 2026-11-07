@@ -3,7 +3,6 @@ const assert = require("node:assert/strict");
 const { load } = require("./task-route-loader.cjs");
 
 const { assertAgentWriting } = load("src/lib/agents/writing.ts", {});
-const { hasUnfinishedFullDayObservation } = load("src/lib/tasks/observationGate.ts", {});
 
 const phoneUnlock = `<p><strong>What this is:</strong> Observation gate: the phone stays locked.</p>
 <ul>
@@ -43,13 +42,6 @@ test("a completion heading that names the observation gate is accepted", () => {
   assert.throws(() => assertAgentWriting("agent", { text: "<p>Gate: still running.</p>" }), /Robot status/);
   assert.throws(() => assertAgentWriting("agent", { text: "<p>Next: wait for checks.</p>" }), /Robot status/);
   assert.throws(() => assertAgentWriting("agent", { text: "<p>Helpers: none.</p>" }), /Robot status/);
-});
-
-test("an explicit unfinished full-day observation gate stays open", () => {
-  assert.equal(hasUnfinishedFullDayObservation("<p>Full-day observation gate: still unfinished.</p>"), true);
-  assert.equal(hasUnfinishedFullDayObservation("An explicit unfinished full-day observation gate remains."), true);
-  assert.equal(hasUnfinishedFullDayObservation("Full-day observation gate: passed."), false);
-  assert.equal(hasUnfinishedFullDayObservation("Search now finds reminders."), false);
 });
 
 function moveFixture({ section = "Done", isDone = true, description = "", acceptanceCriteria = "" } = {}) {
@@ -127,6 +119,7 @@ function moveFixture({ section = "Done", isDone = true, description = "", accept
   });
   return {
     calls,
+    hasUnfinishedFullDayObservation: controller.hasUnfinishedFullDayObservation,
     saved: () => saved,
     update: () => controller.updateTaskSingle(
       { id: 1, sectionId: 11, section },
@@ -139,6 +132,10 @@ function moveFixture({ section = "Done", isDone = true, description = "", accept
 
 test("a done move keeps a ticket with an unfinished full-day observation gate", async () => {
   const open = moveFixture({ description: "<p>Full-day observation gate: still unfinished.</p>" });
+  assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: still unfinished.</p>"), true);
+  assert.equal(open.hasUnfinishedFullDayObservation("An explicit unfinished full-day observation gate remains."), true);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed."), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("Search now finds reminders."), false);
   const refused = await open.update();
   assert.equal(refused.status, 409);
   assert.equal(refused.json.code, "OPEN_OBSERVATION_GATE");

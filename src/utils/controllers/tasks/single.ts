@@ -63,8 +63,6 @@ import {
   assertCycleAssignable,
   CycleAssignmentError,
 } from "@/lib/cycleService";
-import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
-import { hasUnfinishedFullDayObservation } from "@/lib/tasks/observationGate";
 
 type UpdateTaskSingleOptions = {
   teamScope?: AgentTokenTeamScope | null;
@@ -95,6 +93,21 @@ class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
 class FlagColumnMismatchError extends Error {}
 class OpenObservationGateError extends Error {}
+
+const OPEN_OBSERVATION = /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/i;
+
+export function hasUnfinishedFullDayObservation(text: string): boolean {
+  const plain = text.replace(/<[^>]+>/g, " ").replace(/&(?:nbsp|#160);/gi, " ").replace(/\s+/g, " ");
+  if (new RegExp(`${OPEN_OBSERVATION.source}[^.]{0,80}\\bfull[- ]day observation\\b`, "i").test(plain)) return true;
+  return [...plain.matchAll(/\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}/gi)].some((match) => OPEN_OBSERVATION.test(match[0]));
+}
+
+function destinationIsDone(section: { section_title: string; isDone?: boolean | null } | null, title: string): boolean {
+  if (section?.isDone === true) return true;
+  if (section?.isDone === false) return false;
+  const name = ` ${(section?.section_title ?? title).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
+  return ["done", "complete", "shipped"].some((keyword) => name.includes(` ${keyword} `));
+}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -433,7 +446,7 @@ export async function updateTaskSingle(
         ].join("\n");
         if (
           sectionChanged &&
-          columnRoleFor(destinationSection ?? { section_title: destinationTitle, isDone: null }) === "done" &&
+          destinationIsDone(destinationSection, destinationTitle) &&
           hasUnfinishedFullDayObservation(gateText)
         ) {
           throw new OpenObservationGateError("Cannot mark this ticket done. The full-day observation gate is still unfinished.");
