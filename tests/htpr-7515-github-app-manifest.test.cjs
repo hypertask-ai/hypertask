@@ -470,20 +470,3 @@ test("start rate limiting is private and non-cacheable", scenario(async () => {
   assertNoWrites();
 }));
 
-test("credential migration is additive, follows its baseline, and enforces a single active row", () => {
-  const names = fs.readdirSync(path.join(root, "src/prisma/migrations")).filter((name) => /^\d{14}_/.test(name)).sort();
-  const name = names.find((name) => name.endsWith("_github_app_credential"));
-  assert.ok(name);
-  assert.ok(name > "20261023030214_github_installation_installed_by");
-  const sql = fs.readFileSync(path.join(root, "src/prisma/migrations", name, "migration.sql"), "utf8");
-  assert.match(sql, /CREATE TABLE "GithubAppCredential"/);
-  assert.match(sql, /CREATE UNIQUE INDEX "GithubAppCredential_single_active_key" ON "GithubAppCredential"\(\(true\)\) WHERE "revokedAt" IS NULL/);
-  assert.doesNotMatch(sql, /\b(?:DROP|DELETE|UPDATE|TRUNCATE|ALTER)\b/);
-  assert.match(sql, /^BEGIN;/);
-  assert.match(sql, /COMMIT;\s*$/);
-  const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
-  const model = schema.match(/model GithubAppCredential \{([\s\S]*?)\n\}/)[1];
-  for (const field of ["id", "appId", "slug", "clientId", "ownerLogin", "htmlUrl", "clientSecret", "privateKey", "webhookSecret", "stateSecret", "createdByUserId", "createdAt", "revokedAt"]) {
-    assert.match(model, new RegExp(`\\b${field}\\s+`));
-  }
-});

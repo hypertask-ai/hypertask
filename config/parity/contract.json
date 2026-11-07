@@ -298,7 +298,7 @@
       "id": "boards.read",
       "title": "List boards, teams, members, manifests, and playbooks",
       "matches": {
-        "api": ["^GET /api/mcp/(projects|teams/\\[teamId\\]/boards|projects/\\[projectId\\]/(members|manifest|playbook|github))$"],
+        "api": ["^GET /api/mcp/(projects|teams/\\[teamId\\]/boards|projects/\\[projectId\\]/(members|manifest|playbook))$"],
         "mcp": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"],
         "cli": ["^(teams list|project (list|show|members|manifest|playbook|sections|labels))$"],
         "ai_chat": ["^hypertask_(list_projects|list_project_members|board_manifest|get_board_playbook)$"],
@@ -309,7 +309,7 @@
       "id": "boards.manage",
       "title": "Create, archive, invite to, and configure boards",
       "matches": {
-        "api": ["^(POST|PATCH) /api/mcp/projects$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^PUT /api/mcp/projects/\\[projectId\\]/github$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
+        "api": ["^(POST|PATCH) /api/mcp/projects$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
         "mcp": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
         "cli": ["^project (create-board|archive|invite|instructions)( |$)", "^project delete$", "^project update$"],
         "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],

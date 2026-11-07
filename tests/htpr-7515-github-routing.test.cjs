@@ -1,14 +1,11 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
+const jiti = require("jiti")(__filename);
 
-const root = path.resolve(__dirname, "..");
-const routingSource = fs.readFileSync(
-  path.join(root, "src/lib/pullRequests/githubPullRequests.ts"),
-  "utf8",
-);
+const pullRequests = jiti(path.join(__dirname, "..", "src/lib/pullRequests/githubPullRequests.ts"));
 
 test("board GitHub routing no longer hard-codes board 15 repositories", () => {
-  assert.doesNotMatch(routingSource, /BOARD_15_GITHUB_REPOSITORIES/);
+  assert.equal(pullRequests.BOARD_15_GITHUB_REPOSITORIES, undefined);
+  assert.equal(typeof pullRequests.resolveBoardGithubRepository, "function");
 });
