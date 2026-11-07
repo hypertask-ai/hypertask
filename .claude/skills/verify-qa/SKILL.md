@@ -35,4 +35,4 @@ Push the candidate, then run `scripts/verify-qa <branch> inbox-cycle`. This uses
    ```
 
 7. Run `.claude/skills/ship/scripts/ship-check proof <TICKET>`. Require `proof ok`; it checks merge SHA, format, run files and screenshots. A FAIL case cannot pass. This validates records, not behavior.
-8. Publish the self-contained HTML QA report as a ticket page through `vcc pages create`. Post one `--kind qa` verdict using `verify-qa`, report link, proof and key attachments. Read back. PASS: explain what changed, then Done. FAIL: keep In Progress; follow [ship](../ship/SKILL.md) for flagged failures. Repair and repeat. After two failed repairs, use its ticket-only handoff; do not message a lead. Never invent a pass.
+8. Publish the self-contained HTML QA report as a ticket page through `vcc pages create`. Post one `--kind qa` verdict with report link, proof and attachments. Read back. PASS: explain what changed, then Done. FAIL: keep In Progress; follow [ship](../ship/SKILL.md) for flagged failures. Repair and repeat. After two failed repairs, use its ticket-only handoff; do not message a lead. Never invent a pass.
