@@ -68,6 +68,8 @@ import {
   hasPlainLanguageTicketBlock,
   isInternalAgentTicketBoard,
 } from "@/lib/tickets/plainLanguageTicketEnforcement";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template";
 
 type UpdateTaskSingleOptions = {
   teamScope?: AgentTokenTeamScope | null;

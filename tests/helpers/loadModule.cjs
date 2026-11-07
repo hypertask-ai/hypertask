@@ -29,7 +29,7 @@ function loadModule(file, stubs = {}) {
         }
         if (!specifier.startsWith("@/") && !specifier.startsWith(".") && !path.isAbsolute(specifier)) return localRequire(specifier);
         const base = specifier.startsWith("@/") ? path.join(root, "src", specifier.slice(2)) : path.resolve(path.dirname(filename), specifier);
-        const target = [base, ...[".ts", ".tsx", ".js", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.js"].map(ext => base + ext)]
+        const target = [base, ...[".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", "/index.ts", "/index.tsx", "/index.js", "/index.mjs"].map(ext => base + ext)]
           .find(candidate => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
         if (!target) throw new Error(`Missing module: ${specifier} from ${filename}`);
         if (/src[\\/]lib[\\/]flags[\\/](?:keys|definitions|definitions[\\/]index\.generated)\.ts$/.test(target)) return require("./flag-files.cjs").load(target);
