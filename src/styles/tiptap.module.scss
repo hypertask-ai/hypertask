@@ -193,6 +193,10 @@
       pointer-events: none;
     }
 
+    &[data-chat-quiet-placeholder] .is_editor_empty:first-child::before {
+      opacity: 0.5;
+    }
+
     .is_editor_empty:first-child:focus-within::before {
       display: none;
     }

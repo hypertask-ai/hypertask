@@ -1,4 +1,5 @@
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
+import { HTPR_8830_CHAT_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8830-chat-plus-composer";
 import { useFlag } from "@/hooks/useFlag";
 import { Plus } from "lucide-react";
 import React, { type ReactNode, useEffect, useRef } from "react";
@@ -19,6 +20,7 @@ type AiChatComposerActionRowProps = {
   recorder: ReactNode;
   streamControl: ReactNode;
   sendControl: ReactNode;
+  plusLayout?: boolean;
 };
 
 export function AiChatComposerActionRow({
@@ -34,9 +36,12 @@ export function AiChatComposerActionRow({
   recorder,
   streamControl,
   sendControl,
+  plusLayout = false,
 }: AiChatComposerActionRowProps) {
   const overflowRef = useRef<HTMLDetailsElement>(null);
   const cleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
+  const plusComposer = useFlag(HTPR_8830_CHAT_PLUS_COMPOSER_FLAG);
+  const plusRow = plusLayout && plusComposer;
 
   useEffect(() => {
     if (!mobile) return;
@@ -148,6 +153,12 @@ export function AiChatComposerActionRow({
                 {sendControl}
               </div>
             ) : null}
+          </>
+        ) : plusRow ? (
+          <>
+            {streamControl}
+            {recorder}
+            {sendControl}
           </>
         ) : chatCleanup ? (
           <>

@@ -57,7 +57,7 @@ test('the text Send button keeps the mobile arrow and an icon fallback', () => {
   assert.match(button, /: mobile \? \(\s*<SendArrow size=\{22\} \/>/, 'mobile keeps the arrow button');
   assert.match(button, /<Send size=\{16\} strokeWidth=\{1\.75\} \/>/, 'callers without a label keep the paper plane');
   const composer = read('src/components/AI_CHAT/AI_Tiptap_Container.tsx');
-  assert.match(composer, /label=\{fullScreenCleanup \|\| chatCleanupEnabled \? "Send" : undefined\}/);
+  assert.match(composer, /label=\{plusLayout \|\| fullScreenCleanup \|\| chatCleanupEnabled \? "Send" : undefined\}/);
   assert.match(composer, /const fullScreenCleanup = cleanupFlag && \(pathname\?\.startsWith\("\/chat"\) \?\? false\)/);
 });
 

@@ -14,6 +14,7 @@ import {
   Clipboard,
   Image as ImageIcon,
   ListTodo,
+  Plus,
   Square,
   User,
   X,
@@ -57,6 +58,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7734_AGENT_CHAT_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_8830_CHAT_PLUS_COMPOSER_FLAG } from "@/lib/flags/definitions/htpr-8830-chat-plus-composer";
 import { HTPR_7316_CHAT_SCOPE_TICKET_FLAG } from "@/lib/flags/keys";
 import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
@@ -119,9 +121,11 @@ export function AI_Tiptap_Container({
   const pathname = usePathname();
   const fullScreenCleanup = cleanupFlag && (pathname?.startsWith("/chat") ?? false);
   const chatCleanupEnabled = chatCleanupFlag && !pathname?.startsWith("/chat");
-  let hideMicrophonePicker = fullScreenCleanup;
-  if (chatCleanupEnabled) hideMicrophonePicker = true;
+  const plusComposer = useFlag(HTPR_8830_CHAT_PLUS_COMPOSER_FLAG);
   const isMbl = useContext(MobileViewContext);
+  const plusLayout = plusComposer && !isMbl && !controlledComposer && !pathname?.startsWith("/chat");
+  let hideMicrophonePicker = fullScreenCleanup;
+  if (chatCleanupEnabled || plusLayout) hideMicrophonePicker = true;
   const [controlledEditor, setControlledEditor] = useState<Editor | null>(null);
   const {
     tiptapKeydown,
@@ -270,7 +274,7 @@ export function AI_Tiptap_Container({
 
   let composerClassName = "!rounded-lg p-2";
   if (isMbl) composerClassName = `${chatCleanupEnabled ? "!rounded-[4px]" : "!rounded-[5px]"} px-3 pb-2 pt-3`;
-  else if (fullScreenCleanup || chatCleanupEnabled) composerClassName = "!rounded-[4px] p-2";
+  else if (fullScreenCleanup || chatCleanupEnabled || plusLayout) composerClassName = "!rounded-[4px] p-2";
 
   return (
     <div className={`p-2 relative`} ref={focusRootRef} data-ai-chat-composer-root inert={disabled || !active || undefined}
@@ -356,6 +360,7 @@ export function AI_Tiptap_Container({
               ? "agent-chat-composer-editor"
               : "ai-chat-tiptap-editor"
           }
+          data-chat-quiet-placeholder={plusLayout ? "" : undefined}
           title={
             (fullScreenCleanup || chatCleanupEnabled) && sharedShortcuts
               ? `Focus · ${chatShortcutHint("focus")}`
@@ -400,10 +405,17 @@ export function AI_Tiptap_Container({
         <AiChatComposerActionRow
           mobile={Boolean(isMbl)}
           chatCleanup={chatCleanupEnabled}
+          plusLayout={plusLayout}
           mobileDictating={mobileDictating}
           hasText={hasComposerText}
           leadingControls={
-            controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
+            plusLayout ? (
+              <ChatPlusMenu
+                disabled={isRecording || audioProcessing}
+                onAttach={handleAttachmentClick}
+                onAddContext={handleAddContext}
+              />
+            ) : controlledComposer ? (agentContextFlag && agentContextEnabled ? <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} /> : null) : (
               <>
                 <AIModelDropDownButton
                   keyboardNavigation={sharedShortcuts}
@@ -437,7 +449,7 @@ export function AI_Tiptap_Container({
             )
           }
           attachmentControl={
-            controlledComposer ? null : (
+            plusLayout || controlledComposer ? null : (
               <AttachmentButton
                 disabled={false}
                 onClick={handleAttachmentClick}
@@ -445,7 +457,7 @@ export function AI_Tiptap_Container({
             )
           }
           contextControl={
-            controlledComposer ? null : (
+            plusLayout || controlledComposer ? null : (
               <AddContextButton onClick={handleAddContext} />
             )
           }
@@ -512,7 +524,7 @@ export function AI_Tiptap_Container({
                 onProcessingChange={setAudioProcessing}
                 ariaLabel="Start dictation"
                 wrapperClassName={recorderWrapperClassName}
-                compactListeningPill={chatCleanupEnabled}
+                compactListeningPill={chatCleanupEnabled || plusLayout}
                 visualizerClassName={
                   mobileDictating ? "!mb-0 min-w-0 w-full" : undefined
                 }
@@ -531,8 +543,8 @@ export function AI_Tiptap_Container({
                 queueMode={controlledComposer.queueMode}
                 mobile={Boolean(isMbl)}
                 textOnMobile={chatCleanupEnabled}
-                label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
-                textButton={chatCleanupEnabled && !isMbl}
+                label={plusLayout || fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
+                textButton={(plusLayout || chatCleanupEnabled) && !isMbl}
                 onClick={controlledComposer.onSend}
               />
             ) : !isTyping || !isEditorEmpty ? (
@@ -542,8 +554,8 @@ export function AI_Tiptap_Container({
                 queueMode={isTyping}
                 mobile={Boolean(isMbl)}
                 textOnMobile={chatCleanupEnabled}
-                label={fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
-                textButton={chatCleanupEnabled && !isMbl}
+                label={plusLayout || fullScreenCleanup || chatCleanupEnabled ? "Send" : undefined}
+                textButton={(plusLayout || chatCleanupEnabled) && !isMbl}
                 onClick={() => handleSendMessage()}
               />
             ) : null
@@ -572,7 +584,101 @@ export function AI_Tiptap_Container({
           />
         )}
       </div>
+      {plusLayout && (
+        <div data-ai-chat-below-row className="flex w-full items-center justify-between gap-2 pt-2">
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown onRestoreFocus={restoreComposerFocus} ticketScopeEnabled={ticketScopeEnabled} />}
+          <AIModelDropDownButton
+            keyboardNavigation={sharedShortcuts}
+            shortcutHint={sharedShortcuts ? chatShortcutHint("model") : undefined}
+            onKeyboardClose={() => editor?.commands.focus("end")}
+            optionCallback={dropDownButtonAICallback}
+            aiSelected={currentAiOption}
+            modelTeamId={modelTeamId}
+            modelBilling={modelBilling}
+            currentOptions={displayAiOptions}
+            className="bottom-[110%] top-auto"
+            stackSubmenus
+          />
+        </div>
+      )}
     </div>
+  );
+}
+
+function ChatPlusMenu({
+  disabled,
+  onAttach,
+  onAddContext,
+}: {
+  disabled: boolean;
+  onAttach: () => void;
+  onAddContext: () => void;
+}) {
+  const enabled = useFlag(HTPR_8830_CHAT_PLUS_COMPOSER_FLAG);
+  const isApple = useDeviceContext();
+  const menu = useRef<HTMLDetailsElement>(null);
+  useEffect(enabled ? () => {
+    const onPointerDown = (event: PointerEvent) => {
+      const node = menu.current;
+      if (node?.open && !node.contains(event.target as Node)) node.open = false;
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !menu.current?.open) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (menu.current) menu.current.open = false;
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
+    };
+  } : () => {}, [enabled]);
+  if (!enabled) return null;
+  return (
+    <details ref={menu} className="relative">
+      <summary
+        aria-label="Add"
+        aria-disabled={disabled}
+        onClick={(event) => {
+          if (disabled) event.preventDefault();
+        }}
+        className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-[4px] text-icon-dark-gray hover:bg-hover-active hover:text-white-black [&::-webkit-details-marker]:hidden"
+      >
+        <Plus size={18} strokeWidth={1.75} aria-hidden />
+      </summary>
+      <div role="group" aria-label="Add" className="absolute bottom-[calc(100%+0.25rem)] left-0 z-popup flex min-w-44 flex-col rounded-[4px] bg-modalBackground p-1 shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
+        <button
+          type="button"
+          aria-label="Attach file"
+          disabled={disabled}
+          className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (menu.current) menu.current.open = false;
+            onAttach();
+          }}
+        >
+          <span>Attach file</span>
+          <span className="text-text-light-gray">{chatShortcutHint("attach", isApple)}</span>
+        </button>
+        <button
+          type="button"
+          aria-label="Add context"
+          disabled={disabled}
+          className="flex items-center justify-between gap-6 rounded-[4px] px-2 py-1.5 text-left text-meta text-white-black hover:bg-hover-active disabled:opacity-50"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            if (menu.current) menu.current.open = false;
+            onAddContext();
+          }}
+        >
+          <span>Add context</span>
+          <span className="text-text-light-gray">@</span>
+        </button>
+      </div>
+    </details>
   );
 }
 
