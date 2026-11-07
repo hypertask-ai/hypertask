@@ -37,12 +37,15 @@ export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRu
     }
 
     if (requestBody.status !== undefined && !VALID_STATUSES.includes(requestBody.status)) {
+        const done = String(requestBody.status).trim().toLowerCase() === 'done'
         return NextResponse.json(
             {
                 ...buildFieldError(
                     'invalid_field',
                     'status',
-                    `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`,
+                    done
+                        ? `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}. Done is a column: set section or section_id to the Done column.`
+                        : `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`,
                     VALID_STATUSES
                 ),
                 ...(dryRun && { valid: false })

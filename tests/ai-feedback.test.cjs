@@ -26,6 +26,12 @@ test('validation rejects unknown content fields, malformed structured fields and
   assert.equal(aiFeedbackSchema.safeParse(base).success, true)
   for (const patch of [{ surface: 'browser' }, { client: 'email@example.test' }, { client: 'a'.repeat(41) }, { tool: '<script>' }, { tool: 'a'.repeat(81) }, { status: 503.5 }, { status: 99 }, { status: 600 }, { errorCode: 'a b' }, { error: 'a'.repeat(5001) }, { note: 42 }, { arguments: { title: 'Private content' } }, { body: 'Private content' }]) assert.equal(aiFeedbackSchema.safeParse({ ...base, ...patch }).success, false, JSON.stringify(patch))
   for (const surface of ['mcp', 'cli', 'api', 'agent']) assert.equal(aiFeedbackSchema.safeParse({ surface }).success, true)
+  for (const tool of ['task update', 'task edit', 'task link', 'task relations', 'task update done', 'vcc task link', 'hypertask task-link', 'ceo-ht task link']) {
+    assert.equal(aiFeedbackSchema.safeParse({ surface: 'cli', tool }).success, true, tool)
+  }
+  for (const tool of [' task update', 'task update ', 'task\tupdate']) {
+    assert.equal(aiFeedbackSchema.safeParse({ surface: 'cli', tool }).success, false, tool)
+  }
   assert.equal(aiFeedbackSchema.safeParse(null).success, false)
 })
 

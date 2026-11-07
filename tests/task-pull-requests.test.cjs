@@ -477,29 +477,21 @@ test("linkTaskPullRequest rejects an inaccessible task without writing", async (
   assert.equal(calls.activities.length, 0);
 });
 
-test("linkTaskPullRequest rejects a pull request already linked to another task", async () => {
-  const createError = new Prisma.PrismaClientKnownRequestError("unique", {
-    code: "P2002",
-    clientVersion: "7.9.1",
-  });
+test("linkTaskPullRequest links the same pull request onto a second task", async () => {
   const { db, calls } = fakeLinkDb({
     globalExisting: { id: "linked-elsewhere" },
-    createError,
   });
-  await assert.rejects(
-    linkTaskPullRequest({
-      taskId: 36202,
-      userId: 6,
-      url: canonicalPullRequestUrl,
-      fetchMetadata: async () => githubMetadata,
-      db,
-    }),
-    (error) =>
-      error instanceof PullRequestLinkError &&
-      error.status === 409 &&
-      error.code === "pr_already_linked",
-  );
-  assert.equal(calls.pullRequestCreates.length, 0);
+  const result = await linkTaskPullRequest({
+    taskId: 36202,
+    userId: 6,
+    url: canonicalPullRequestUrl,
+    fetchMetadata: async () => githubMetadata,
+    db,
+  });
+  assert.equal(result.created, true);
+  assert.equal(calls.pullRequestCreates.length, 1);
+  assert.equal(calls.pullRequestCreates[0].taskId, 36202);
+  assert.equal(calls.pullRequestCreates[0].number, 110);
 });
 
 test("linkTaskPullRequest is idempotent and does not duplicate activity", async () => {
@@ -543,10 +535,11 @@ test("webhook does not fall back to an unrelated ticket when the pull request is
       callback({
         taskPullRequest: {
           findMany: async () => [],
-          findUnique: async ({ where }) =>
-            where.repositoryOwner_repositoryName_number
+          findFirst: async ({ where }) =>
+            where.repositoryOwner === "hypertask-ai" && where.number === 110
               ? { id: "linked-on-another-board" }
               : null,
+          findUnique: async () => null,
         },
         task: {
           findFirst: async () => {
@@ -609,6 +602,7 @@ test("webhook does not return a fallback task after a concurrent global link win
       callback({
         taskPullRequest: {
           findMany: async () => [],
+          findFirst: async () => null,
           findUnique: async () => null,
           createMany: async () => ({ count: 0 }),
         },

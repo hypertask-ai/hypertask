@@ -101,13 +101,11 @@ export async function syncPullRequestFromWebhook(
     let taskIds = [...new Set(existingLinks.map((link) => link.taskId))];
     const affectedTaskIds: number[] = [];
     if (taskIds.length === 0) {
-      const globallyLinked = await transaction.taskPullRequest.findUnique({
+      const globallyLinked = await transaction.taskPullRequest.findFirst({
         where: {
-          repositoryOwner_repositoryName_number: {
-            repositoryOwner: input.repositoryOwner,
-            repositoryName: input.repositoryName,
-            number: input.number,
-          },
+          repositoryOwner: input.repositoryOwner,
+          repositoryName: input.repositoryName,
+          number: input.number,
         },
         select: { id: true },
       });

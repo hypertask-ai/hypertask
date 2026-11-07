@@ -13,7 +13,7 @@ export const aiFeedbackSchema = z.object({
   kind: z.enum(FEEDBACK_KINDS).optional()
     .describe("What the reporter saw: bug, friction, missing or idea. Our own team's agents only; kept on the ticket."),
   client: slug.optional(),
-  tool: z.string().regex(/^[a-z0-9_.:\/-]{1,80}$/i)
+  tool: z.string().regex(/^[a-z0-9_.:\/-](?:[a-z0-9_.:\/ -]{0,78}[a-z0-9_.:\/-])?$/i)
     .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed').optional(),
   status: z.number().int().min(100).max(599).optional(),
   errorCode: slug.optional(),
