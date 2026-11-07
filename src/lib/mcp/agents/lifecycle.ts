@@ -38,21 +38,8 @@ export type AgentLifecycleDatabase = {
     }): Promise<AgentLifecycleRow | null>
     updateMany(args: {
       where: Prisma.AgentWhereInput
-      data: {
-        revokedAt: null
-        mcpTokenHash: string | null
-        mcpTokenJti: string | null
-        mcpTokenExpiresAt: null
-        credentialTeamId: string | null
-        credentialTeamAccessBinding: string | null
-        runtimeGeneration: { increment: number }
-      }
+      data: Prisma.AgentUpdateManyMutationInput
     }): Promise<{ count: number }>
-    update(args: {
-      where: Prisma.AgentWhereUniqueInput
-      data: { archivedAt?: Date | null; displayName?: string }
-      select: typeof LIFECYCLE_SELECT
-    }): Promise<AgentLifecycleRow>
   }
   user: {
     findUnique(args: {
