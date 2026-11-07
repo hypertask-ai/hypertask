@@ -25,8 +25,6 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | reuse-existing-ui | Before UI code | .claude/skills/reuse-existing-ui/SKILL.md |
 | fix-bug | The fix, when it restores behaviour that used to work | .claude/skills/fix-bug/SKILL.md |
 | fix-slow-page | The fix, for a speed ticket: reproduce, trace, smallest fix, before/after proof | .claude/skills/fix-slow-page/SKILL.md |
-| principle-explain-the-number | Before reporting any measured number, inside fix-slow-page and speed-analyst: name the limiter and rule out that it measured something else (pstack by Lauren Tan, MIT) | .claude/skills/principle-explain-the-number/SKILL.md |
-| benchmark-checklist | Before reporting any speed number, inside fix-slow-page and speed-analyst: seven questions from limiter to "did the work happen" (pstack by Lauren Tan, MIT) | .claude/skills/benchmark-checklist/SKILL.md |
 | speed-analyst | SPEED RUNNER only: takes speed work only, reads daily measurements, investigates one bottleneck, updates its playbook and researches performance weekly | .claude/skills/speed-analyst/SKILL.md |
 | ship-feature-behind-flag | The fix, when it adds behaviour the user has not seen | .claude/skills/ship-feature-behind-flag/SKILL.md |
 | interrogate | Before coding, only for `valentin-review`: money, login and access, security, data that cannot be undone, approval readers and merge or release gates; never for ordinary `ai-review` | .claude/skills/interrogate/SKILL.md |
@@ -40,6 +38,8 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 | verify-visual | Before merging a UI PR: did it move a main screen? Read the GitHub Visual Regression result and diff PNGs; no heavy VPS runs | .claude/skills/verify-visual/SKILL.md |
 | verify-qa | After deploy | .claude/skills/verify-qa/SKILL.md |
 | verify-design | Design QA for design-pass, Figma or visible UI tickets: live screen next to the frame per theme, scored, reviewer checklist | .claude/skills/verify-design/SKILL.md |
+
+Performance reviews use the official shared pstack installation, not repository copies. Before reporting measurements, load `~/.agents/skills/principle-explain-the-number/SKILL.md` and `~/.agents/skills/benchmark-checklist/SKILL.md`. Install or repair pstack from its official source if either path is missing; never copy its contents into this repository.
 
 Design work uses the shared `figma-design` skill in `~/.agents/skills/figma-design/SKILL.md`. When a change touches auth, billing, or user data, `fix-bug` also reads `.claude/skills/fix-bug/reference/security-findings.md`.
 
