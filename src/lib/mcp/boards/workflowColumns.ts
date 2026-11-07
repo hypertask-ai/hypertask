@@ -1,6 +1,7 @@
 import { HTPR_8900_CI_BLOCKER_WRITE_FLAG } from "@/lib/flags/definitions/htpr-8900-ci-blocker-write";
 import { isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
+import { enqueueColumnCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { missingWorkflowColumns } from "./columnRole";
 
 const FLEET_CI_PROJECT_ID = 11514;
@@ -28,7 +29,7 @@ export async function ensureFleetCiWorkflowColumns(projectId: number, userId: nu
   });
   const missing = missingWorkflowColumns(existing.map((section) => section.section_title));
   for (const title of missing) {
-    await db.section.create({
+    const section = await db.section.create({
       data: {
         section_title: title,
         projectId,
@@ -38,5 +39,10 @@ export async function ensureFleetCiWorkflowColumns(projectId: number, userId: nu
         isDone: false,
       },
     });
+    try {
+      processAnalyticsIntentSoon(await enqueueColumnCreated(db, section.id, { userId }));
+    } catch {
+      continue;
+    }
   }
 }
