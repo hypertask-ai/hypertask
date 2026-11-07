@@ -650,7 +650,7 @@ test("PATCH accepts a quote-block off order only when the mode is Off", async ()
 
 test("PATCH refuses a conditional off order in a quote block", async () => {
   quoteBlockRecord("turn it off but only after QA", `<p>Switch ${key} to Off</p>`);
-  ticketComments = [];
+  ticketComments = [ticketComment(100, `Question: Switch ${key} to Off?`)];
   await assertRefused(approvalRequired, "OFF");
 });
 
