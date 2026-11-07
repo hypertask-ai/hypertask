@@ -121,7 +121,7 @@ incident_ok() {
 }
 
 hold_check() {
-  local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished=''
+  local t=$1 rn open n free board page total offset count expected_total candidates ticket project number merged matches seen unfinished='' known='' mine=''
   [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || return 0
   rn=${BASH_REMATCH[1]}
   if incident_ok "$t"; then echo "ship-claim: INCIDENT lane. Holds, queue brake and infra first skipped for $t."; return 0; fi
@@ -155,6 +155,11 @@ hold_check() {
       if [ "$(printf '%s' "$seen" | sed '/^$/d' | sort -u | wc -l)" -ne "$((offset + count))" ]; then
         echo "ship-claim: HOLD. Board $board repeated a ticket while paging." >&2; return 4
       fi
+      known+=$(jq -r '.tasks[].ticketNumber' <<<"$page"); known+=$'\n'
+      mine+=$(jq -r --arg runner "runner $rn" '.tasks[]
+        | select(.section | IN("In Progress", "AI Review", "QA"))
+        | select(any(.assignees[]; (.agent.displayName // "" | ascii_downcase) == $runner))
+        | .ticketNumber' <<<"$page"); mine+=$'\n'
       candidates=$(jq -r --arg runner "runner $rn" '.tasks[]
         | select(.section | IN("In Progress", "AI Review"))
         | select(any(.assignees[]; (.agent.displayName // "" | ascii_downcase) == $runner))
@@ -177,6 +182,17 @@ hold_check() {
       [ "$offset" -lt "$total" ] || break
     done
   done
+  # A parked ticket (fleet/park: back in its home column and unassigned, or in Valentin Review) no longer holds its runner,
+  # even though its PR is still open. A PR whose ticket is not on boards 15 and 4060, or has no ticket in its title, still holds.
+  if [ -n "$HELD" ]; then
+    HELD=$(jq -r --arg n "$rn" --arg known "$known" --arg mine "$mine" '
+      ($known | split("\n")) as $k | ($mine | split("\n")) as $m
+      | [.[] | select(.headRefName | test("^runner-?" + $n + "($|[/_-])"; "i"))
+        | select(((.title | ascii_upcase | capture("^(?<t>[A-Z0-9]+-[0-9]+) ").t?) // "") as $t
+            | $t == "" or (any($k[]; . == $t) | not) or any($m[]; . == $t))
+        | "https://github.com/hypertask-ai/hypertask/pull/\(.number)"] | join(" ")' <<<"$open") \
+      || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
+  fi
   if [ -n "$HELD" ]; then
     echo "ship-claim: HOLD. RUNNER $rn still has open PRs: $HELD"
     echo "ship-claim: do NOT claim $t or any other ticket. Drive one of these PRs to merged, live and Done first."

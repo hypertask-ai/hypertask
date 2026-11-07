@@ -457,6 +457,24 @@ printf '[{"number":99,"headRefName":"runner6/htpr-456","title":"HTPR-456 [BUGFIX
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-456 >/dev/null; eq "open PR resumption survives other merged work" "$?" 0
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-123 >/dev/null; eq "merged work resumption survives another open PR" "$?" 0
 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "mixed open and merged work still holds new claims" "$?" 4
+cp "$HOLD_BOARD" "$D/keep-board"; cp "$HOLD_OPEN" "$D/keep-open"; cp "$HOLD_MERGED" "$D/keep-merged"
+printf '[]' > "$HOLD_MERGED"
+printf '[{"number":61,"headRefName":"runner-6/htpr-789","title":"HTPR-789 [BUGFIX] Parked work","isDraft":false}]' > "$HOLD_OPEN"
+parked() { jq -n --arg s "$1" --argjson a "$2" '{success:true,total:1,tasks:[{ticketNumber:"HTPR-789",projectId:15,uniqueIndex:789,section:$s,assignees:(if $a then [{agent:{id:"r6",displayName:"Runner 6"}}] else [] end)}]}' > "$HOLD_BOARD"; }
+parked "In Progress" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket the runner still builds holds" "$?" 4
+parked "AI Review" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket in AI Review holds" "$?" 4
+parked "QA" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket in QA holds" "$?" 4
+parked "Bugs" false; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a parked ticket (home column, unassigned) does not hold" "$?" 0
+parked "Valentin Review" true; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket parked in Valentin Review does not hold" "$?" 0
+parked "In Progress" false; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on an unassigned ticket in a building column does not hold" "$?" 0
+jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"; SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR on a ticket missing from boards 15 and 4060 still holds" "$?" 4
+parked "Bugs" false
+printf '[{"number":61,"headRefName":"runner-6/htpr-789","title":"No ticket in this title","isDraft":false}]' > "$HOLD_OPEN"
+SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 >/dev/null; eq "open PR with no ticket in its title still holds" "$?" 4
+printf '[{"number":61,"headRefName":"runner-6/htpr-789","title":"HTPR-789 [BUGFIX] Parked work","isDraft":false},{"number":62,"headRefName":"runner-6/htpr-790","title":"HTPR-790 [BUGFIX] Other work","isDraft":false}]' > "$HOLD_OPEN"
+out=$(SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-999 2>&1); rc=$?
+[[ $rc = 4 && $out == *'/pull/62'* && $out != *'/pull/61'* ]] && ok "only the parked ticket's PR is dropped from the hold" || bad "mixed parked and live PRs: rc=$rc $out"
+cp "$D/keep-board" "$HOLD_BOARD"; cp "$D/keep-open" "$HOLD_OPEN"; cp "$D/keep-merged" "$HOLD_MERGED"
 printf '[]' > "$HOLD_OPEN"
 jq '.tasks=[.tasks[0]] | .total=1' "$HOLD_BOARD" > "$D/next"; mv "$D/next" "$HOLD_BOARD"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
