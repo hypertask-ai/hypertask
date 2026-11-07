@@ -2454,6 +2454,8 @@ model OAuthClientGrant {
 }
 
 model OAuthAuthorizationCode {
+  devicePairingId String?
+  devicePairing   DevicePairing? @relation(fields: [devicePairingId], references: [id], onDelete: Cascade)
   code          String   @id @db.VarChar(64)
   client_id     String   @db.VarChar(64)
   client        OAuthClient @relation(fields: [client_id], references: [client_id], onDelete: Cascade)
@@ -2744,6 +2746,9 @@ model Agent {
   // Monotonic credential/runtime generation. Heartbeats from a destroyed or
   // rotated token can never replace state from a newer generation.
   runtimeGeneration         Int       @default(1)
+  devicePairingId           String? @unique
+  devicePairing             DevicePairing? @relation("AgentPendingPairing", fields: [devicePairingId], references: [id], onDelete: SetNull)
+  issuedDevicePairing       DevicePairing? @relation("DevicePairingAgent")
 
   runtimeType               AgentRuntimeType @default(EXTERNAL)
   prompt                    String?   @db.Text
@@ -3021,4 +3026,42 @@ model AiLabelClassification {
 
   @@id([taskId, labelId])
   @@index([labelId])
+}
+
+enum DevicePairingState {
+  PENDING
+  CLAIMED
+  APPROVED
+  DELIVERED
+  CONNECTED
+  DENIED
+}
+
+model DevicePairing {
+  id                 String @id @default(uuid())
+  ownerId            Int
+  codeHash           String @unique @db.VarChar(64)
+  browserHash        String @db.VarChar(64)
+  state              DevicePairingState @default(PENDING)
+  expiresAt          DateTime
+  createdAt          DateTime @default(now())
+  challenge          String? @db.VarChar(43)
+  claimantHash       String? @db.VarChar(64)
+  clientName         String? @db.VarChar(60)
+  oauthClientId      String? @db.VarChar(64)
+  oauthRedirectUri   String? @db.VarChar(512)
+  oauthCodeHash      String? @db.VarChar(64)
+  agentId            String? @unique
+  agent              Agent? @relation("DevicePairingAgent", fields: [agentId], references: [id], onDelete: SetNull)
+  pairedFromAgent    Agent? @relation("AgentPendingPairing")
+  teamId             String?
+  projectId          Int?
+  tokenGeneration    String?
+  credential         String? @db.Text
+  deliveryResult     String? @db.Text
+  deliveryRetryUntil DateTime?
+  authorizationCodes OAuthAuthorizationCode[]
+
+  @@index([ownerId, browserHash, expiresAt])
+  @@index([expiresAt])
 }

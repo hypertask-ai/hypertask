@@ -4,7 +4,9 @@ import { cookies } from "next/headers";
 import { Metadata } from "next";
 import prisma from "@/lib/prisma";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
-import { verifyConsentToken } from "@/lib/oauth/consent";
+import { signConsentToken, verifyConsentToken } from "@/lib/oauth/consent";
+import { DEVICE_PAIRING_COOKIE } from "@/lib/auth/devicePairingCookie";
+import { HTPR_7552_AGENT_CODE_SIGNIN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
 export const metadata: Metadata = {
@@ -17,9 +19,9 @@ export const dynamic = "force-dynamic";
 const PANEL =
   "min-h-[100svh] w-full flex items-center justify-center bg-pageBackground text-white-black p-8";
 const PRIMARY_BUTTON =
-  "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded-[5px] transition-colors";
+  "w-full py-3 px-6 mb-3 bg-shadcn-primary text-primary-foreground font-medium rounded transition-colors";
 const SECONDARY_BUTTON =
-  "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded-[5px] transition-colors";
+  "block w-full py-3 px-6 text-text-light-gray hover:bg-hover-active hover:text-white-black font-medium rounded transition-colors";
 
 function safeClientName(name: string | null | undefined): string {
   if (!name) return "An unnamed app";
@@ -110,6 +112,11 @@ export default async function OAuthConsentPage(props: {
   }
 
   const clientName = safeClientName(client.client_name);
+  const browserSecret = cookieStore.get(DEVICE_PAIRING_COOKIE)?.value;
+  let pairing = null;
+  if (!session.agentId && !agentId && browserSecret && await isFeatureEnabled(HTPR_7552_AGENT_CODE_SIGNIN_FLAG, session.id)) {
+    pairing = await (await import("@/lib/auth/devicePairingOAuth")).pendingBrowserDevicePairing(session.id, browserSecret);
+  }
 
   return (
     <div className={cn(PANEL)}>
@@ -138,6 +145,21 @@ export default async function OAuthConsentPage(props: {
             Hypertask has not verified this app. Only approve it if you just asked it to connect.
           </p>
         </div>
+
+        {pairing && (
+          <form method="post" action="/oauth/authorize" className="w-full">
+            <input type="hidden" name="response_type" value="code" />
+            <input type="hidden" name="client_id" value={clientId} />
+            <input type="hidden" name="redirect_uri" value={redirectUri} />
+            <input type="hidden" name="code_challenge" value={codeChallenge} />
+            <input type="hidden" name="code_challenge_method" value="S256" />
+            <input type="hidden" name="state" value={single("state")} />
+            <input type="hidden" name="device_pairing_id" value={pairing.id} />
+            <input type="hidden" name="consent_token" value={signConsentToken({ userId: session.id, clientId, redirectUri, codeChallenge, agentId: null, devicePairingId: pairing.id })} />
+            <p className="text-text-light-gray text-content mb-4">Or create a free board for this agent. It can read and change that board only.</p>
+            <button type="submit" className={cn(SECONDARY_BUTTON)}>Approve a new agent board only</button>
+          </form>
+        )}
 
         <form method="post" action="/oauth/authorize" className="w-full">
           <input type="hidden" name="response_type" value="code" />

@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma'
 import { generateAuthCode } from '@/lib/oauth/pkce'
 import { buildRedirectUrl } from '@/lib/oauth/redirect-uri'
 import { signConsentToken, verifyConsentToken } from '@/lib/oauth/consent'
+import { DEVICE_PAIRING_COOKIE } from '@/lib/auth/devicePairingCookie'
 
 
 type AuthorizationRequest = {
@@ -111,12 +112,14 @@ async function issueCodeAndRedirect(
   validated: ValidatedRequest,
   user: { id: number; uid: string | null },
   agentIdToStore: string | null,
-  redirectStatus: 303 | 307
+  redirectStatus: 303 | 307,
+  pairing?: { id: string; expiresAt: Date }
 ) {
   const authCode = generateAuthCode()
 
   const expiresAt = new Date()
   expiresAt.setMinutes(expiresAt.getMinutes() + 10)
+  if (pairing && pairing.expiresAt < expiresAt) expiresAt.setTime(pairing.expiresAt.getTime())
 
   try {
     await prisma.oAuthAuthorizationCode.create({
@@ -128,6 +131,7 @@ async function issueCodeAndRedirect(
         firebase_uid: user.uid || String(user.id),
         user_id: user.id,
         agent_id: agentIdToStore,
+        ...(pairing ? { devicePairingId: pairing.id } : {}),
         expires_at: expiresAt,
         used: false,
       },
@@ -174,7 +178,7 @@ async function currentSessionUser() {
   })
 
   if (!dbUser) return null
-  return { id: session.id, uid: dbUser.uid }
+  return { id: session.id, uid: dbUser.uid, agentId: session.agentId }
 }
 
 export async function GET(request: NextRequest) {
@@ -198,12 +202,16 @@ export async function GET(request: NextRequest) {
     const agent = await resolveAgentId(validated.agentIdParam, user.id)
     if (!agent.ok) return agent.response
 
+    const browserSecret = request.cookies.get(DEVICE_PAIRING_COOKIE)?.value;
+    const pairing = browserSecret && !user.agentId && !validated.agentIdParam
+      ? await (await import('@/lib/auth/devicePairingOAuth')).pendingBrowserDevicePairing(user.id, browserSecret)
+      : null;
     const alreadyApproved = await prisma.oAuthClientGrant.findUnique({
       where: { user_id_client_id: { user_id: user.id, client_id: validated.clientId } },
       select: { id: true },
     })
 
-    if (!alreadyApproved) {
+    if (!alreadyApproved || pairing) {
       const consentUrl = new URL('/oauth/consent', request.url)
       searchParams.forEach((value, key) => {
         consentUrl.searchParams.set(key, value)
@@ -255,6 +263,8 @@ export async function POST(request: NextRequest) {
     if (!agent.ok) return agent.response
 
     const consentToken = form.get('consent_token')
+    const pairingValue = form.get('device_pairing_id');
+    const devicePairingId = typeof pairingValue === 'string' && pairingValue ? pairingValue : null;
     const approved = verifyConsentToken(
       typeof consentToken === 'string' ? consentToken : null,
       {
@@ -263,6 +273,7 @@ export async function POST(request: NextRequest) {
         redirectUri: validated.redirectUri,
         codeChallenge: validated.codeChallenge,
         agentId: agent.agentId,
+        ...(devicePairingId ? { devicePairingId } : {}),
       }
     )
 
@@ -271,6 +282,25 @@ export async function POST(request: NextRequest) {
       copyFormParams(form, consentUrl)
 
       return NextResponse.redirect(consentUrl.toString(), 303)
+    }
+
+    if (devicePairingId) {
+      if (user.agentId || validated.agentIdParam || request.headers.get('origin') !== request.nextUrl.origin) {
+        return invalid('Device pairing requires its original human browser', 'access_denied', 403);
+      }
+      const browserSecret = request.cookies.get(DEVICE_PAIRING_COOKIE)?.value;
+      if (!browserSecret) return invalid('Device pairing is not available', 'invalid_grant');
+      try {
+        const client = await prisma.oAuthClient.findUnique({ where: { client_id: validated.clientId }, select: { client_name: true } });
+        const { approveOAuthDevicePairing } = await import('@/lib/auth/devicePairingOAuth');
+        const pairing = await approveOAuthDevicePairing({
+          ownerId: user.id, browserSecret, flowId: devicePairingId, clientId: validated.clientId,
+          redirectUri: validated.redirectUri, challenge: validated.codeChallenge, clientName: client?.client_name ?? 'MCP client',
+        });
+        return await issueCodeAndRedirect(request, validated, { id: user.id, uid: user.uid }, pairing.agentId, 303, pairing);
+      } catch {
+        return invalid('Device pairing is not available', 'invalid_grant');
+      }
     }
 
     await prisma.oAuthClientGrant.upsert({

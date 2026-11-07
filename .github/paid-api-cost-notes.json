@@ -108,5 +108,10 @@
     "maxUsdPerDay": 0,
     "reason": "HTPR-7980: Requests a Checkout session through the same-origin route. Session creation submits no payment; later completed payments may incur Stripe fees, not per-request fees.",
     "source": "https://stripe.com/pricing"
+  },
+  "src/app/cli-auth/page.tsx:349b7ad490423bc9bfbe0cf0d0c07c72f76533bf11e19bc7867042faea732f3a": {
+    "maxUsdPerDay": 0,
+    "reason": "HTPR-7552 posts agent sign-in start, status, approve and deny to Hypertask's own same-origin /api/cli/device route. The browser call pays nothing.",
+    "source": "https://app.hypertask.ai/detail/project-15/7552"
   }
 }

@@ -253,6 +253,7 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
 
     const loginUrl = new URL(login, request.url);
     if (
+      currentPath === '/login/agent' ||
       currentPath === '/cli-auth' ||
       currentPath.startsWith('/cli-auth/') ||
       currentPath === '/settings/slack/link'
@@ -282,6 +283,11 @@ async function authMiddleware(request: NextRequest, session: Awaited<ReturnType<
     if (hasOAuthParams) {
       console.log('🔐 OAuth params detected, allowing login page access for OAuth flow');
       return NextResponse.next();
+    }
+
+    const agentReturn = parseSafeReturnTo(request.nextUrl.searchParams.get('returnTo'));
+    if (agentReturn === '/login/agent' || agentReturn?.startsWith('/cli-auth')) {
+      return NextResponse.redirect(new URL(agentReturn, request.url));
     }
     
     if (previousBoard?.value && checkIfOnboarded(user)) {
