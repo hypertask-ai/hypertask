@@ -37,3 +37,19 @@ test('HTPR-8829 Ctrl+J keeps + attach, mic and text Send in the box, pickers bel
   });
 });
 
+
+test('HTPR-8829 Tab leaves the textarea and the board chip to the browser so Send stays reachable', async (t) => {
+  await withPalette(t, { tab: 'compose', boards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender, press, input }) => {
+    flags['htpr-8829-ctrlj-plus-composer'] = true;
+    await rerender();
+    const tabFromTextarea = await press('Tab', {}, input());
+    assert.equal(tabFromTextarea.defaultPrevented, false, 'Tab from the textarea is not redirected to the board chip');
+    const chip = document.querySelector('[data-compose-board-chip]');
+    const shiftTabFromChip = await press('Tab', { shiftKey: true }, chip);
+    assert.equal(shiftTabFromChip.defaultPrevented, false, 'Shift+Tab from the board chip is not redirected to the textarea');
+    flags['htpr-8829-ctrlj-plus-composer'] = false;
+    await rerender();
+    const legacyTab = await press('Tab', {}, input());
+    assert.equal(legacyTab.defaultPrevented, true, 'flag off keeps the old textarea to chip jump');
+  });
+});

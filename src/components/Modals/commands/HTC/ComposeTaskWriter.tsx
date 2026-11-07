@@ -472,7 +472,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
       aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
       disabled={dictating} onClick={openBoardPicker}
       onKeyDown={(event) => {
-        if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        if (!plusLayout && event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
           event.preventDefault();
           event.stopPropagation();
           input.current?.focus({ preventScroll: true });
@@ -547,7 +547,7 @@ export default function ComposeTaskWriter({ active, focusProxy, destinationProje
               onKeyDown={(event) => {
                 skillMenuConsumedKey.current = skillMenuEnabled && !event.nativeEvent.isComposing && skillMenu.onKeyDown(event);
                 if (skillMenuConsumedKey.current) return;
-                if (showBoardChip && event.key === "Tab" && !event.shiftKey &&
+                if (showBoardChip && !plusLayout && event.key === "Tab" && !event.shiftKey &&
                     !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.stopPropagation();
