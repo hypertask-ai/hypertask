@@ -63,6 +63,8 @@ import {
   assertCycleAssignable,
   CycleAssignmentError,
 } from "@/lib/cycleService";
+import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
+import { hasUnfinishedFullDayObservation } from "@/lib/tasks/observationGate";
 
 type UpdateTaskSingleOptions = {
   teamScope?: AgentTokenTeamScope | null;
@@ -92,6 +94,7 @@ class TaskDescriptionChangedError extends Error {}
 class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
 class FlagColumnMismatchError extends Error {}
+class OpenObservationGateError extends Error {}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -366,6 +369,7 @@ export async function updateTaskSingle(
         ) {
           await assertParentTaskOnBoard(tx, updateData.parentTaskId, targetProject);
         }
+        let destinationSection: { section_title: string; isDone: boolean | null } | null = null;
         const requestedSectionId = requestedMutation.sectionId;
         const requestedSectionName = requestedMutation.section;
         sectionIdChanged =
@@ -394,7 +398,7 @@ export async function updateTaskSingle(
                 projectId:
                   requestedMutation.projectId ?? currentState.projectId,
               },
-              select: { section_title: true },
+              select: { section_title: true, isDone: true },
             });
             if (!targetSection) throw new Error("Section not found");
             if (
@@ -403,6 +407,7 @@ export async function updateTaskSingle(
             ) {
               throw new Error("Section does not match sectionId");
             }
+            destinationSection = targetSection;
             updateData.section = targetSection.section_title;
           }
         }
@@ -418,6 +423,20 @@ export async function updateTaskSingle(
           if (blocked.length) {
             throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
           }
+        }
+        const destinationTitle = typeof updateData.section === "string" ? updateData.section : "";
+        const gateText = [
+          typeof requestedMutation.description === "string"
+            ? requestedMutation.description
+            : currentState.description_?.content ?? currentState.description ?? "",
+          currentState.acceptanceCriteria ?? "",
+        ].join("\n");
+        if (
+          sectionChanged &&
+          columnRoleFor(destinationSection ?? { section_title: destinationTitle, isDone: null }) === "done" &&
+          hasUnfinishedFullDayObservation(gateText)
+        ) {
+          throw new OpenObservationGateError("Cannot mark this ticket done. The full-day observation gate is still unfinished.");
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
@@ -787,6 +806,9 @@ export async function updateTaskSingle(
     }
     if (error instanceof FlagColumnMismatchError) {
       return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
+    }
+    if (error instanceof OpenObservationGateError) {
+      return { status: 409, json: { message: error.message, code: "OPEN_OBSERVATION_GATE" } };
     }
     if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {
