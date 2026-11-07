@@ -258,13 +258,13 @@ if [ "${1:-}" != activity ]; then
 fi
 
 fail() { echo "vcc activity: $*" >&2; exit 1; }
-[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> "<text>" | vcc activity last <TICKET>'
+[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> "<text>" | vcc activity list <TICKET> | vcc activity last <TICKET>'
 command=$2; ticket=$3
 [[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number'
 ticket=${ticket^^}
 case "$command" in
   add) [ "$#" = 4 ] && [ -n "${4//[[:space:]]/}" ] || fail 'add needs one non-empty text argument' ;;
-  last) [ "$#" = 3 ] || fail 'last needs only a ticket number' ;;
+  list|last) [ "$#" = 3 ] || fail "$command needs only a ticket number" ;;
   *) fail "unknown activity command: $command" ;;
 esac
 
@@ -285,19 +285,25 @@ success() {
     || fail "HTTP $code: $(jq -r '.error // .message // "request failed"' "$body" 2>/dev/null || echo 'request failed')"
 }
 
-if [ "$command" = last ]; then
-  path="tasks/$ticket/agent-activity?limit=1"
+if [ "$command" = last ] || [ "$command" = list ]; then
+  limit=1
+  [ "$command" = list ] && limit=20
+  path="tasks/$ticket/agent-activity?limit=$limit"
   # Board checks use the immutable claimant id; normal last reads every agent.
   if [ -n "${VCC_ACTIVITY_AGENT_ID:-}" ]; then
     path+="&agent_id=$(jq -rn --arg id "$VCC_ACTIVITY_AGENT_ID" '$id | @uri')"
   fi
   request GET "$path"
   if [ "$code" = 404 ]; then
-    echo 'vcc activity last: ticket activity route is not deployed yet (HTTP 404), or is unavailable for this ticket/caller.' >&2
+    echo "vcc activity $command: ticket activity route is not deployed yet (HTTP 404), or is unavailable for this ticket/caller." >&2
     exit 4
   fi
   success
-  jq -er '.activities | if length == 0 then "" else .[0] | [.createdAt, .agentName] | @tsv end' "$body" | sed '/^$/d'
+  if [ "$command" = list ]; then
+    jq -r 'if (.activities | length) == 0 then "" else .activities[] | [.createdAt, .agentName, ((.text // "") | gsub("[[:space:]]+"; " "))] | @tsv end' "$body"
+  else
+    jq -er '.activities | if length == 0 then "" else .[0] | [.createdAt, .agentName] | @tsv end' "$body" | sed '/^$/d'
+  fi
   exit 0
 fi
 

@@ -161,7 +161,7 @@ allowed launch_hax interactive comment add X-1 --text hi
 printf 'ok hax without an exact prompt argument remains a runner\n'
 
 # Unknown activity subcommands stop in vcc with its usage, never reach the CLI.
-for args in "activity" "activity --help" "activity list X-1"; do
+for args in "activity" "activity --help" "activity bogus X-1"; do
   run bash "$vcc" $args
   [ "$status" = 1 ] || fail "expected exit 1, got $status: vcc $args"
   [[ $(< "$T/err") == "vcc activity: "* ]] || fail "missing vcc activity error: vcc $args"
@@ -169,6 +169,36 @@ for args in "activity" "activity --help" "activity list X-1"; do
 done
 allowed bash "$vcc" tasks get X-1
 printf 'ok unknown activity subcommands fail in vcc\n'
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+url= out=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) out=$2; shift 2 ;;
+    https://*) url=$1; shift ;;
+    *) shift ;;
+  esac
+done
+printf 'curl %s\n' "$url" >> "$VCC_TEST_TRACE"
+printf '%s\n' '{"success":true,"activities":[{"createdAt":"2026-11-07T00:00:00Z","agentName":"Runner 12","text":"older note"},{"createdAt":"2026-11-07T01:00:00Z","agentName":"Runner 12","text":"newer\nnote"}]}' > "$out"
+printf '200'
+STUB
+chmod +x "$T/bin/curl"
+run bash "$vcc" activity list X-1
+[ "$status" = 0 ] || fail "activity list failed: $(cat "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=20'* ]] || fail "activity list used the wrong limit"
+[[ $(< "$T/out") == *'older note'* && $(< "$T/out") == *'newer note'* ]] || fail "activity list dropped a row: $(cat "$T/out")"
+run bash "$vcc" activity last X-1
+[ "$status" = 0 ] || fail "activity last failed: $(cat "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=1'* ]] || fail "activity last stopped using limit 1"
+printf 'ok activity list returns every note and last stays the newest read\n'
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+printf 'unexpected network request\n' >&2
+exit 92
+STUB
+chmod +x "$T/bin/curl"
 question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
 export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
 task_fixture() { jq -n --arg d "$1" '{tasks:[{id:1,description:$d}]}' > "$VCC_TEST_TASK"; }
