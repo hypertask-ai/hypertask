@@ -313,7 +313,7 @@ export function taskDetailInclude(userId: number, projectId: number) {
               },
               orderBy: { subscriptionStaretdAt: "desc" },
             },
-            byokApiKeys: { select: { provider: true, enabled: true } },
+            byokApiKeys: { select: { provider: true, enabled: true, alwaysUse: true } },
           },
         },
         uniqueIdentifier: true,
