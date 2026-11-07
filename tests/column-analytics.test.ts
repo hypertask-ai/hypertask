@@ -154,6 +154,7 @@ test("every column row is created where column analytics can see it", () => {
   assert.deepEqual(sites, [
     "src/lib/demo/provisionGuest.ts",
     "src/lib/mcp/boards/createBoardFromManifest.ts",
+    "src/lib/mcp/boards/workflowColumns.ts",
     "src/utils/controllers/projects/create.ts",
     "src/utils/controllers/section/sectionService.ts",
     "src/utils/controllers/users/completeOnboardingStep.ts",

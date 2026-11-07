@@ -23,8 +23,16 @@ import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
 import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules';
 import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
-import { ciBlockerWriteOpen } from '@/lib/mcp/boards/workflowColumns';
+import { HTPR_8900_CI_BLOCKER_WRITE_FLAG } from '@/lib/flags/definitions/htpr-8900-ci-blocker-write';
 import prisma from '@/lib/prisma';
+
+async function ciBlockerWriteOpen(userId: number): Promise<boolean> {
+    try {
+        return await isFeatureEnabled(HTPR_8900_CI_BLOCKER_WRITE_FLAG, userId);
+    } catch {
+        return false;
+    }
+}
 
 export interface CreateTaskResponse {
     success: boolean;
