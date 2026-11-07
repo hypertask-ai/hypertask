@@ -168,7 +168,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId } = useSettingsTeam();
-  const { gdprSafeMode } = useTeamAiProviders(teamId);
+  const { gdprSafeMode, ownKeyOnly } = useTeamAiProviders(teamId);
   const [clearingKey, setClearingKey] = useState<Record<string, boolean>>({});
   const [customInputs, setCustomInputs] = useState<CustomInputs>({
     apiKey: "",
@@ -770,7 +770,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
     providerKeyRows.push(
       <div key={row.source}>
         {renderRow(row)}
-        {alwaysUseThisKey && canManage && saved?.hasSecret && saved.enabled ? (
+        {alwaysUseThisKey && canManage && !ownKeyOnly && saved?.hasSecret && saved.enabled ? (
           <SettingsToggle
             checked={saved.alwaysUse === true}
             disabled={!canManage}
@@ -819,7 +819,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
         <>
           <SettingsCard title="Gateway">
             {renderRow(gatewayRow)}
-            {alwaysUseThisKey && canManage && gatewaySaved?.hasSecret && gatewaySaved.enabled ? (
+            {alwaysUseThisKey && canManage && !ownKeyOnly && gatewaySaved?.hasSecret && gatewaySaved.enabled ? (
               <SettingsToggle
                 checked={gatewaySaved.alwaysUse === true}
                 disabled={!canManage}
@@ -834,7 +834,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
           </SettingsCard>
           <SettingsCard title="Advanced">
             {renderCustomRow()}
-            {alwaysUseThisKey && canManage && customSaved?.hasSecret && customSaved.enabled ? (
+            {alwaysUseThisKey && canManage && !ownKeyOnly && customSaved?.hasSecret && customSaved.enabled ? (
               <SettingsToggle
                 checked={customSaved.alwaysUse === true}
                 disabled={!canManage}

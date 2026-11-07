@@ -1,50 +1,28 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const vm = require("node:vm");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
-const providers = load(path.join(root, "src/lib/aiProviders.ts"));
 const catalog = load(path.join(root, "src/lib/aiModelOptions.ts"));
-const customEndpoint = load(path.join(root, "src/lib/ai/customEndpoint.ts"));
 const forced = load(path.join(root, "src/lib/ai/forcedTeamKey.ts"));
 const flag = load(path.join(root, "src/lib/flags/definitions/htpr-8049-always-use-this-key.ts"));
-const basetenFlag = load(path.join(root, "src/lib/flags/definitions/htpr-7732-baseten-byok.ts"));
-const providerSyncFlag = load(path.join(root, "src/lib/flags/definitions/htpr-7741-byok-enables-provider.ts"));
 const flagKey = "htpr-8049-always-use-this-key";
+const basetenFlagKey = "htpr-7732-baseten-byok";
 const lookup = { trustedTeamId: "fixture-team", userId: 985 };
 const managedKey = "vck_fake-managed";
 
-function loadModule(relativePath, stubs) {
-  const filename = path.join(root, relativePath);
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: false },
-  }).outputText;
-  const loadedModule = { exports: {} };
-  vm.runInNewContext(code, {
-    module: loadedModule, exports: loadedModule.exports,
-    require: (id) => {
-      assert.ok(Object.hasOwn(stubs, id), `Unexpected dependency: ${id}`);
-      return stubs[id];
-    },
-    Headers, AbortController, setTimeout, clearTimeout, Date, console,
-    process: { env: { AI_GATEWAY_API_KEY: "vck_fake-shared" } },
-  }, { filename });
-  return loadedModule.exports;
-}
-
-function routingHarness({ enabled = true, forcedProvider = "baseten", ownKeyOnly = false, secrets = {} } = {}) {
+function routingHarness({ enabled = true, forcedProvider = "baseten", ownKeyOnly = false, plan = "Pro", basetenEnabled = true, secrets = {} } = {}) {
   const settings = ownKeyOnly ? { ownKeyOnly: true } : {};
   const stored = {
     baseten: "team-baseten-secret",
     deepseek: "team-deepseek-secret",
     managed_gateway: managedKey,
+    ...(forcedProvider === "gateway" ? { gateway: "vck_team-gateway" } : {}),
     ...secrets,
   };
-  const api = loadModule("src/app/api/ai/_lib/byokKeys.ts", {
+  return loadModule("src/app/api/ai/_lib/byokKeys.ts", {
     ai: {},
     "@/lib/prisma": { default: {
       team: {
@@ -62,40 +40,32 @@ function routingHarness({ enabled = true, forcedProvider = "baseten", ownKeyOnly
       },
       agentByokApiKey: { findUnique: async () => ({ enabled: true, ciphertext: "agent-secret" }) },
     } },
-    "@/lib/flags/definitions/htpr-7732-baseten-byok": basetenFlag,
-    "@/lib/flags/definitions/htpr-7634-openai-only-default": {},
-    "@/lib/flags/definitions/htpr-8049-always-use-this-key": flag,
-    "@/lib/flags/definitions/htpr-8100-no-paid-fallback": { HTPR_8100_NO_PAID_FALLBACK_FLAG: "htpr-8100-no-paid-fallback" },
-    "@/lib/ai/forcedTeamKey": forced,
-    "@/lib/flags": { isFeatureEnabled: async (key) => key === flagKey ? enabled : true },
+    "@/lib/flags": { isFeatureEnabled: async (key) => {
+      if (key === flagKey) return enabled;
+      if (key === basetenFlagKey) return basetenEnabled;
+      return false;
+    } },
     "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => value },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/app/api/ai/_lib/modelProvider": {
       isVercelAiGatewayKey: (key) => typeof key === "string" && key.startsWith("vck_"),
       registerManagedGatewayKey: () => {},
     },
-    "@/lib/aiModelOptions": catalog,
-    "@/lib/aiProviders": providers,
-    "@/lib/ai/customEndpoint": customEndpoint,
-    "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Pro", backgroundClaudeModelEnabled: async () => false },
-    "@/app/api/ai/chat/stream/modelFallback": {},
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, backgroundClaudeModelEnabled: async () => false, haiku55ModelEnabled: async () => false },
+    "@/app/api/ai/chat/stream/modelFallback": { previousModelForFailedStream: () => null },
     "@/lib/ai/modelFundingGuard": { fallbackRunsOnOurOwnGatewayKey: () => false },
   });
-  return api;
 }
 
-function settingsHarness({ enabled = true, allowed = true, paid = true } = {}) {
+function settingsHarness({ enabled = true, allowed = true, paid = true, basetenEnabled = true, ownKeyOnly = false } = {}) {
   const rows = {
     baseten: { enabled: true, ciphertext: "team-baseten-secret", alwaysUse: false },
     deepseek: { enabled: true, ciphertext: "team-deepseek-secret", alwaysUse: true },
   };
-  const writes = [];
   const transaction = { teamByokApiKey: {
     findMany: async () => Object.entries(rows).map(([provider, row]) => ({ provider, ...row })),
     findUnique: async ({ where }) => rows[where.teamId_provider.provider] ?? null,
     updateMany: async ({ where, data }) => {
-      writes.push({ updateMany: { where, data } });
       for (const [provider, row] of Object.entries(rows)) {
         const providerMatch = where.provider ? where.provider === provider : where.NOT?.provider !== provider;
         if (where.teamId === "fixture-team" && providerMatch && (where.alwaysUse === undefined || row.alwaysUse === where.alwaysUse)) {
@@ -104,35 +74,32 @@ function settingsHarness({ enabled = true, allowed = true, paid = true } = {}) {
       }
     },
     update: async ({ where, data }) => {
-      writes.push({ update: { where, data } });
       Object.assign(rows[where.teamId_provider.provider], data);
     },
-    upsert: async ({ where, create, update }) => {
-      writes.push({ upsert: { where, create, update } });
+    upsert: async ({ where, update, create }) => {
       const provider = where.teamId_provider.provider;
       rows[provider] = rows[provider] ? { ...rows[provider], ...update } : { ...create };
     },
-    deleteMany: async (value) => writes.push({ deleteMany: value }),
+    deleteMany: async () => {},
   }, team: { update: async () => {} } };
   const api = loadModule("src/pages/api/teams/byokKeys.ts", {
-    "@/lib/flags": { isFeatureEnabled: async (key) => key === flagKey ? enabled : true },
-    "@/lib/flags/definitions/htpr-7741-byok-enables-provider": providerSyncFlag,
-    "@/lib/flags/definitions/htpr-7732-baseten-byok": basetenFlag,
-    "@/lib/flags/definitions/htpr-8049-always-use-this-key": flag,
+    "@/lib/flags": { isFeatureEnabled: async (key) => {
+      if (key === flagKey) return enabled;
+      if (key === basetenFlagKey) return basetenEnabled;
+      return true;
+    } },
     "@/lib/prisma": { default: {
       user: { findUnique: async () => ({ id: 985 }) },
       team: { findUnique: async () => ({ googleAccount: { userId: allowed ? 985 : 1 }, members: [] }) },
     } },
     "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => value, encryptByokSecret: (value) => value },
     "@/lib/crypto/maskByokSecret": { maskByokSecret: (value) => `masked:${value.slice(-4)}` },
-    "@/lib/aiProviders": providers,
     "@/utils/controllers/teams/assertTeamByokAccess": { assertUserCanManageTeamByok: async () => allowed ? { ok: true } : { ok: false, status: 403, message: "Forbidden" } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/freeTier": { isPaidTeam: async () => paid },
-    "@/utils/controllers/teams/updateTeamAiSettingsAtomically": { withLockedTeamAiSettings: async (_teamId, update) => update(transaction, {}) },
-    "@/lib/ai/customEndpoint": customEndpoint,
+    "@/utils/controllers/teams/updateTeamAiSettingsAtomically": { withLockedTeamAiSettings: async (_teamId, update) => update(transaction, ownKeyOnly ? { ownKeyOnly: true } : {}) },
   }).default;
-  return { rows, writes, request: async (method, body = {}) => {
+  return { rows, request: async (method, body = {}) => {
     let status, result;
     await api({ method, headers: {}, query: { teamId: "fixture-team" }, body: { teamId: "fixture-team", ...body } }, {
       status(code) { status = code; return this; },
@@ -194,6 +161,38 @@ test("flag on uses the forced Baseten key and refuses allowance for other models
   );
   assert.equal(await api.getTeamGatewayFunding(lookup), undefined);
   assert.equal(await api.getByokApiKeyForProvider("openai", [{ provider: "openai", enabled: true, ciphertext: "request-key" }], lookup), undefined);
+  const context = await api.getOpenAiOnlyDefaultContext(lookup);
+  assert.equal(context.hasDirectOpenAiKey, false);
+});
+
+test("a forced gateway key serves the provider models it can run", async () => {
+  const api = routingHarness({ forcedProvider: "gateway" });
+  const credential = await api.getByokOrTeamGatewayApiKey("claude", [], lookup);
+  assert.equal(credential, "vck_team-gateway");
+  assert.equal(await api.getByokOrTeamGatewayApiKeyForModelOption(catalog.getAiModelOptionById("gpt-6-luna"), [], lookup), "vck_team-gateway");
+  await assert.rejects(
+    () => api.getByokOrTeamGatewayApiKey("custom", [], lookup),
+    (error) => error.name === "ForcedTeamKeyError",
+  );
+});
+
+test("a forced key on a free plan pauses instead of using the key or the allowance", async () => {
+  const api = routingHarness({ forcedProvider: "baseten", plan: "Free" });
+  await assert.rejects(
+    () => api.getByokOrTeamGatewayApiKeyForModelOption(catalog.getAiModelOptionById("deepseek-v4.1-flash"), [], lookup),
+    (error) => error.name === "ForcedTeamKeyError",
+  );
+  assert.equal(await api.getTeamGatewayFunding(lookup), undefined);
+  assert.equal(await api.getByokApiKeyForProvider("baseten", [], lookup), undefined);
+});
+
+test("a forced Baseten key pauses when the Baseten flag is off", async () => {
+  const api = routingHarness({ forcedProvider: "baseten", basetenEnabled: false });
+  await assert.rejects(
+    () => api.getByokOrTeamGatewayApiKeyForModelOption(catalog.getAiModelOptionById("deepseek-v4.1-flash"), [], lookup),
+    (error) => error.name === "ForcedTeamKeyError",
+  );
+  assert.equal(await api.getTeamGatewayFunding(lookup), undefined);
 });
 
 test("a forced DeepSeek key serves its fast model instead of the allowance", async () => {
@@ -219,6 +218,17 @@ test("the settings switch is owner-only, one key at a time, and hidden from the 
 
   const missing = settingsHarness();
   assert.equal((await missing.request("POST", { provider: "openai", alwaysUse: true })).status, 400);
+
+  const unpaid = settingsHarness({ paid: false });
+  assert.equal((await unpaid.request("POST", { provider: "baseten", alwaysUse: true })).status, 402);
+  assert.equal((await unpaid.request("POST", { provider: "deepseek", alwaysUse: false })).status, 200);
+  assert.equal(unpaid.rows.deepseek.alwaysUse, false);
+
+  const exempt = settingsHarness({ ownKeyOnly: true });
+  assert.equal((await exempt.request("POST", { provider: "baseten", alwaysUse: true })).status, 400);
+
+  const hiddenBaseten = settingsHarness({ basetenEnabled: false });
+  assert.equal((await hiddenBaseten.request("POST", { provider: "baseten", alwaysUse: true })).status, 403);
 
   const on = settingsHarness();
   assert.equal((await on.request("POST", { provider: "baseten", alwaysUse: true })).status, 200);

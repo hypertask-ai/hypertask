@@ -137,15 +137,15 @@ const AIModelDropDownList = ({
     resolvedTeamId == null || billing?.teamId === String(resolvedTeamId)
       ? billing
       : null;
-  const forcedProvider = alwaysUseThisKey ? forcedByokProvider(scopedBilling?.byokProviderFlags) : null;
+  const { enabledProviders, isLoading: providerSettingsLoading, ownKeyOnly } =
+    useTeamAiProviders(resolvedTeamId);
+  const forcedProvider = alwaysUseThisKey && !ownKeyOnly ? forcedByokProvider(scopedBilling?.byokProviderFlags) : null;
   const menuModelOptions: TAiModelOption[] = [];
   for (const option of visibleModelOptions) {
     if (!forcedProvider || modelOptionMatchesForcedKey(option, forcedProvider)) {
       menuModelOptions.push(option);
     }
   }
-  const { enabledProviders, isLoading: providerSettingsLoading } =
-    useTeamAiProviders(resolvedTeamId);
   const customEndpoint = useTeamCustomEndpoint(resolvedTeamId);
   const enabledProviderSet = useMemo(
     () => new Set(enabledProviders),
@@ -473,6 +473,7 @@ const AIModelDropDownList = ({
             {quickModelIds.map((quickModelId) => {
               const catalogOption = getAiModelOptionById(quickModelId);
               if (!catalogOption) return null;
+              if (forcedProvider && !modelOptionMatchesForcedKey(catalogOption, forcedProvider)) return null;
               const option = availableOptions.find(
                 (candidate) => candidate.id === catalogOption.id,
               );

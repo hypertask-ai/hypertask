@@ -18,6 +18,7 @@ import { isPaidTeam } from "@/lib/freeTier";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG } from "@/lib/flags/definitions/htpr-7741-byok-enables-provider";
 import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
+import { isOwnKeyOnlySettings } from "@/lib/ai/forcedTeamKey";
 import { withLockedTeamAiSettings } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import type { Prisma } from "@prisma/client";
 import {
@@ -267,7 +268,10 @@ const handler: NextApiHandler = async (
       if (!(await isFeatureEnabled(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG, user.id))) {
         return res.status(403).json({ message: "Always use this key is unavailable" });
       }
-      if (!(await isPaidTeam(teamId))) {
+      if (alwaysUse && provider === "baseten" && !(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, user.id))) {
+        return res.status(403).json({ message: "Always use this key is unavailable" });
+      }
+      if (alwaysUse && !(await isPaidTeam(teamId))) {
         return res.status(402).json({
           message: "Adding your own API key requires a paid plan.",
           code: "UPGRADE_REQUIRED",
@@ -278,7 +282,10 @@ const handler: NextApiHandler = async (
           teamId,
           provider,
           alwaysUse === false || !isByokProviderRestrictedInGdprSafeMode(provider),
-          async (transaction) => {
+          async (transaction, currentSettings) => {
+            if (isOwnKeyOnlySettings(currentSettings)) {
+              throw new AlwaysUseKeyError("This team already runs only on its own keys");
+            }
             if (!alwaysUse) {
               await transaction.teamByokApiKey.updateMany({
                 where: { teamId, provider },
