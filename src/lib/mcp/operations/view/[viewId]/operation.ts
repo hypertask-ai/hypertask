@@ -17,6 +17,7 @@ import { ListViewItem } from "@/lib/mcp/operations/view/operation";
 import { TBoardSortingLevel } from "@/models/Views/model";
 import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { getViewUrl } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
+import { isViewCallerError, plainViewError, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
 import { isSubtaskSetting } from "@/models/Views/model";
 
 export interface AppliedViewItem extends ListViewItem {
@@ -273,10 +274,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
     return NextResponse.json({ success: true, view: updated })
   } catch (error) {
     console.error('Error updating view:', error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 400 }
-    )
+    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
   }
 
   })(request)
@@ -302,10 +300,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ vi
     return NextResponse.json({ success: true, view: deleted })
   } catch (error) {
     console.error('Error deleting view:', error)
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 400 }
-    )
+    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error)
   }
 
   })(request)

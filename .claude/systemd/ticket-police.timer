@@ -1,0 +1,10 @@
+[Unit]
+Description=YPER4-1348 remaining six daily observations
+
+[Timer]
+OnCalendar=2026-11-07..12 09:13:00 UTC
+Persistent=true
+Unit=ticket-police.service
+
+[Install]
+WantedBy=timers.target

@@ -292,7 +292,7 @@ function renderTaskTitle(task, { descriptionStart, onSizing = noop } = {}) {
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
     "@/hooks/useFlag": { useFlag: () => false },
     "@/lib/flags/definitions/htpr-8255-kanban-cleanup": { HTPR_8255_KANBAN_CLEANUP_FLAG: "htpr-8255-kanban-cleanup" },
-    "@/lib/flags/keys": { HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "htpr-7367-server-description-first" },
+    "@/lib/flags/keys": {},
     "@/models/enums": { CommandMode: {} },
     react: React,
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ parsedTask: JSON.stringify(task), currentTask: task, descriptionStart }) },
@@ -330,8 +330,6 @@ test("a server-rendered description gets a title already at its autosized height
   const style = (descriptionStart) => new JSDOM(renderTaskTitle(task, { descriptionStart })).window.document.querySelector("textarea").style;
   assert.equal(style("server").minHeight, "37px", "the autosize hook never sizes the title below 37px");
   assert.match(style("server").cssText, /field-sizing:\s*content/, "multi-line titles wrap to their full height before the hook runs");
-  assert.equal(style("live").minHeight, "", "flag off keeps today's one-row title until hydration");
-  assert.equal(style(undefined).minHeight, "");
 });
 
 test("an unset priority stays null while its background query loads, keeping the No Priority row height", () => {
@@ -447,7 +445,6 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
 
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
-    HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG: "server-description",
     HTPR_7318_TICKET_CHAT_REMINDER_FLAG: "ticket-chat-reminder",
     useThreadSettled: () => ({ settled: true, slotRef: () => {} }),
     SettledComposerSlot: ({ children }) => children,

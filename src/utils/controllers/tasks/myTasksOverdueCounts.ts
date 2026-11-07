@@ -8,7 +8,6 @@ import {
 import {
   MY_TASKS_SCOPE_VALUES,
   buildMyTasksScopeOr,
-  DEFAULT_MY_TASKS_SCOPES,
   type MyTasksScope,
 } from "@/lib/myTasksScopes";
 import { listRunning } from "@/lib/timeTracking";
@@ -34,9 +33,8 @@ const taskIdsForScope = async (
 export async function loadMyTasksScopeMembership(
   userId: number,
   taskIds: number[],
-  scopesEnabled: boolean,
 ): Promise<MyTasksScopeMembership> {
-  if (!scopesEnabled || taskIds.length === 0) {
+  if (taskIds.length === 0) {
     return {
       userId,
       watchingIds: new Set<number>(),
@@ -53,16 +51,13 @@ export async function loadMyTasksScopeMembership(
 export async function getMyTasksOverdueCounts(args: {
   userId: number;
   views: MyTasksSavedView[];
-  scopesEnabled: boolean;
   snoozeEnabled: boolean;
   applyFilterSettings: boolean;
   now?: Date;
   timeZone?: string;
 }): Promise<MyTasksViewOverdueCounts> {
   const now = args.now ?? new Date();
-  const queryScopes = args.scopesEnabled
-    ? [...MY_TASKS_SCOPE_VALUES]
-    : [...DEFAULT_MY_TASKS_SCOPES];
+  const queryScopes = [...MY_TASKS_SCOPE_VALUES];
   const [myTasks, running] = await Promise.all([
     getMyTasks(args.userId, true, queryScopes, {
       throwOnError: true,
@@ -77,7 +72,6 @@ export async function getMyTasksOverdueCounts(args: {
   const membership = await loadMyTasksScopeMembership(
     args.userId,
     tasks.map((task) => task.id),
-    args.scopesEnabled,
   );
   const runtimeContext: IFilterRuntimeContext = {
     runningTaskIds: new Set(running.map((entry) => entry.taskId)),
@@ -93,6 +87,5 @@ export async function getMyTasksOverdueCounts(args: {
     membership,
     now,
     options,
-    args.scopesEnabled,
   );
 }

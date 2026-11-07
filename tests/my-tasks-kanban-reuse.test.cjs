@@ -36,6 +36,7 @@ function declaration(file, name) {
 
 test("retired kanban reuse key is absent from the registry and controls are permanent", () => {
   assert.equal(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === "htpr-6930-my-tasks-kanban-reuse"), false, "retired key is absent from registry");
+  assert.equal(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === "htpr-6422-my-tasks-views"), false, "retired views key is absent from registry");
   for (const file of [controlsFile, tabsFile, sortFile, saveFile, modalFile, commandsFile,
     "src/app/my-tasks/MyTasksInvolvementPicker.tsx", "src/app/my-tasks/MyTasksGroupPicker.tsx",
     "src/app/my-tasks/MyTasksSortPicker.tsx",
@@ -47,13 +48,11 @@ test("retired kanban reuse key is absent from the registry and controls are perm
   }
 });
 
-test("All boards toggles through setBoards in AssignModal and the legacy filter row", () => {
+test("All boards toggles through setBoards in AssignModal scope picker", () => {
   const source = read(controlsFile);
   const toggle = /setBoards\(config\.boardIds === null \? \[\] : null\)/g;
-  assert.equal([...source.matchAll(toggle)].length, 2);
+  assert.equal([...source.matchAll(toggle)].length, 1);
   assert.match(source, /onSelect: \(id\) => id === null \? setBoards\(config\.boardIds === null/);
-  assert.match(source, /sectionIds: config\.filters\.sectionIds\.filter/);
-  assert.match(source, /labelIds: config\.filters\.labelIds\.filter/);
   assert.match(read("src/components/Modals/AssignToUser/AssignToUser.tsx"), /\{boardPicker \? \(/);
 });
 
@@ -90,11 +89,11 @@ test("Commands uses board picker commands and dispatches matching local events",
   const memo = declaration(commandsFile, "allCommands_");
   assert.match(memo, /getBoardCommands\(\{[\s\S]*?onMyTasks[\s\S]*?myTasksViewsEnabled[\s\S]*?myTasksScopesEnabled/);
   assert.match(memo, /group: "Boards", commandLists: boardCommands/);
-  const options = { projects: [], onMyTasks: true, myTasksViewsEnabled: true, myTasksFilterParityEnabled: true, myTasksScopesEnabled: true, columnArchiveEnabled: false };
+  const options = { projects: [], onMyTasks: true, myTasksViewsEnabled: true, myTasksScopesEnabled: true, columnArchiveEnabled: false };
   const keys = (changes) => boardCommands({ ...options, ...changes }).map(({ key }) => key);
   assert.deepEqual(keys({}), ["myTasksScope", "myTasksInvolvement", "myTasksSort", "myTasksGroup"]);
   assert.deepEqual(keys({ onMyTasks: false }), []);
-  assert.deepEqual(keys({ myTasksViewsEnabled: false, myTasksScopesEnabled: false }), ["myTasksGroup"]);
+  assert.deepEqual(keys({ myTasksViewsEnabled: false, myTasksScopesEnabled: false }), ["myTasksScope", "myTasksSort", "myTasksGroup"]);
   for (const [key, event] of Object.entries({ myTasksInvolvement: "my-tasks-involvement-picker", myTasksSort: "my-tasks-sort-picker", myTasksGroup: "my-tasks-group-picker" })) {
     assert.match(read(commandsFile), new RegExp(`${key}: "${event}"`));
     assert.match(read(controlsFile), new RegExp(`addEventListener\\("${event}"`));
@@ -225,7 +224,7 @@ const render = (component, props) => act(() => reactRoot.render(React.createElem
 function Harness() {
   const [value, setValue] = React.useState(config);
   config = value;
-  return React.createElement(Controls, { boards, config: value, onChange: setValue, scopesEnabled: true });
+  return React.createElement(Controls, { boards, config: value, onChange: setValue });
 }
 test.beforeEach((context) => {
   boardHookCalls = 0;

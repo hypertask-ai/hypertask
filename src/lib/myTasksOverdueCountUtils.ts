@@ -38,7 +38,6 @@ export function taskMatchesMyTasksScopes(
 ): boolean {
   for (const scope of effectiveMyTasksScopes(
     scopes ?? DEFAULT_MY_TASKS_SCOPES,
-    true,
   )) {
     if (scope === "assigned") {
       const assigned = (task.assignees ?? []).some(

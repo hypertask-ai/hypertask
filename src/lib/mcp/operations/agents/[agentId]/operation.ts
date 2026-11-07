@@ -8,12 +8,12 @@ import { handlePatchAgentRequest } from '@/lib/mcp/agents/lifecycleRequests'
 import {
   authenticateAgentRunRequest,
   createRuntimeAgentRun,
-  runtimeAgentRunsEnabledFor,
 } from '@/lib/agentRuns/service'
 import {
   AgentRunInputError,
   parseRuntimeAgentRunInput,
 } from '@/lib/agentRuns/model'
+import { resolveRuntimeActivityTaskId } from '@/lib/mcp/tasks/resolveActivityBoardNumber'
 import { checkMcpRateLimit } from '@/lib/mcp/auth'
 
 const noStore = (body: Record<string, unknown>, status = 200) =>
@@ -59,14 +59,16 @@ export async function POST(
         403
       )
     }
-    if (!(await runtimeAgentRunsEnabledFor(principal))) {
-      return noStore({ success: false, error: 'Not found' }, 404)
-    }
-
     const input = parseRuntimeAgentRunInput(
       await request.json().catch(() => null)
     )
-    const run = await createRuntimeAgentRun(principal, input)
+    const taskId = await resolveRuntimeActivityTaskId(principal, input)
+    if (taskId == null) return noStore({ success: false, error: 'Task not found' }, 404)
+    const run = await createRuntimeAgentRun(principal, {
+      taskId,
+      title: input.title,
+      source: input.source,
+    })
     if (!run) return noStore({ success: false, error: 'Task not found' }, 404)
     return noStore({ success: true, run }, 201)
   } catch (error) {

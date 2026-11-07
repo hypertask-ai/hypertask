@@ -32,6 +32,8 @@ p = pathlib.Path(os.environ['FIXTURE'])
 with (p / 'calls').open('a') as f: f.write(json.dumps(sys.argv[1:]) + '\\n')
 if sys.argv[1:3] == ['pr', 'view']:
     print(json.dumps({'headRefName': 'branch', 'headRefOid': os.environ['INITIAL']}))
+elif sys.argv[1:3] == ['api', '--paginate'] and any('/actions/runs?' in arg for arg in sys.argv):
+    print(json.dumps([{'workflow_runs': []}]))
 else:
     n = int((p / 'count').read_text()) if (p / 'count').exists() else 0
     (p / 'count').write_text(str(n + 1))
@@ -104,11 +106,15 @@ printf '%s' x > "$GH_NOTIFY_DIR/owner__repo/branch.json"
                 self.assertEqual(self.run_waiter([], '--head', head).returncode, 3)
         self.assertFalse((self.root / 'calls').exists())
         self.assertEqual(self.run_waiter([response(head=B, oid=B, nodes=[GREEN])], '--head', B.upper()).returncode, 0)
-        calls = [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
+        calls = [call for line in (self.root / 'calls').read_text().splitlines()
+                 if (call := json.loads(line))[:2] == ['api', 'graphql']]
+        self.assertTrue(calls)
         self.assertIn('head=' + B, calls[-1])
         (self.root / 'calls').unlink()
         self.assertEqual(self.run_waiter([response(nodes=[GREEN])], initial=A).returncode, 0)
-        calls = [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
+        calls = [call for line in (self.root / 'calls').read_text().splitlines()
+                 if (call := json.loads(line))[:2] == ['api', 'graphql']]
+        self.assertTrue(calls)
         self.assertIn('head=' + A, calls[-1])
 
     def test_head_change_does_not_adopt_new_commit(self):

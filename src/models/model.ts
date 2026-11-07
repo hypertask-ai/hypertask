@@ -26,6 +26,7 @@ import {
   ITaskPriorityActivity,
   ITaskPullRequestActivity,
   ITaskUpdateDescriptionActivity,
+  IAiFeedbackLogActivity,
   ITaskWaitingOnActivity,
 } from "./ActivityModels.ts";
 import { IFilter, IFilterSettings } from "@/models/Filters/model.js";
@@ -494,7 +495,8 @@ export interface IComment {
     | ITaskDueDateActivity
     | ITaskPullRequestActivity
     | ITaskUpdateDescriptionActivity
-    | ITaskWaitingOnActivity;
+    | ITaskWaitingOnActivity
+    | IAiFeedbackLogActivity;
 }
 
 export type TRemoveFromInboxMode = "Task" | "Notification" | "Remind";

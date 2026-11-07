@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import {
   checkMcpRateLimit,
-  createUnauthorizedResponse,
+  mcpUnauthorizedResponse,
   validateMcpAuth,
   type McpAuthContext,
 } from '@/lib/mcp/auth'
@@ -35,7 +35,7 @@ export const HELLO_CAPABILITIES = {
   batch:
     'Read or update up to 100 tasks in one request through POST /api/mcp/tasks/batch.',
   comments:
-    'Without a kind, agent text goes only to the hidden ticket agent log, which people do not see, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments.',
+    'Without a kind, agent text goes only to the hidden ticket agent log, which people do not see, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
   pages:
     'Create, read, update, list, and search task-attached pages, with markdown as the default format.',
   leases:
@@ -50,12 +50,6 @@ export const HELLO_CAPABILITIES = {
     'Pick the next eligible task from accessible boards through /api/mcp/tasks/next.',
   webhooks:
     'Use signed per-agent webhooks to wake an agent on mentions and assignments, or SSE streams for board events. Setup and verification: https://docs.hypertask.ai/mcp/agent-webhooks/',
-} as const
-
-export const HTPR_7122_HELLO_CAPABILITIES = {
-  ...HELLO_CAPABILITIES,
-  comments:
-    'Without a kind, agent text goes only to the hidden ticket agent log, which people do not see, even for replies or mentions. Attachments require an explicit kind. People comments use short plain sentences, without technical details or status lines. To post for people, pass kind: question for a decision by a person, qa for a QA verdict, or done for the closing summary. Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
   reactions:
     'React to a person\'s comment with a thumbs up or any emoji through POST /api/mcp/comments/{comment_id}/reactions with {"emoji":"👍","active":true} (active false removes it), or `hypertask comment react <comment_id> --emoji 👍`. Post a comment only when you have something new to say. Your reaction is saved and shown as you, the agent. An agent\'s reaction never counts as an approval or decision; only a person\'s own reaction does.',
   abilities:
@@ -87,16 +81,12 @@ async function helloGuidedStart(
 }
 
 async function helloCapabilities(userId: number) {
-  const [{ isFeatureEnabled }, { HTPR_7122_AGENT_REACTIONS_FLAG }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }] = await Promise.all([
+  const [{ isFeatureEnabled }, { HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG }] = await Promise.all([
     import('@/lib/flags'),
-    import('@/lib/flags/definitions/htpr-7122-agent-reactions'),
     import('@/lib/flags/definitions/htpr-7322-agent-feature-discovery'),
   ])
-  const capabilities = (await isFeatureEnabled(HTPR_7122_AGENT_REACTIONS_FLAG, userId))
-    ? HTPR_7122_HELLO_CAPABILITIES
-    : HELLO_CAPABILITIES
   return {
-    ...capabilities,
+    ...HELLO_CAPABILITIES,
     ...(await isFeatureEnabled(HTPR_7322_AGENT_FEATURE_DISCOVERY_FLAG, userId) ? {
       features:
         'List every enabled feature-kind flag and core product destinations for the authenticated user, with registry descriptions, shipped dates and verified URLs where known, through hypertask_list_features (hypertask_user_context action features) or GET /api/mcp/features. Non-feature kinds and unavailable features are omitted.',
@@ -241,7 +231,7 @@ export async function handleHelloRequest(request: NextRequest) {
     if (rateLimited) return rateLimited
 
     const ctx = await validateMcpAuth(request)
-    if (!ctx) return createUnauthorizedResponse()
+    if (!ctx) return mcpUnauthorizedResponse(request)
 
     const payload = await getHelloPayload(ctx)
     return NextResponse.json({ success: true, ...payload })

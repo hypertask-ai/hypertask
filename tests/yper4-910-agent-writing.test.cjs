@@ -16,7 +16,8 @@ for (const text of [
   'One two three four five six seven eight nine ten eleven twelve.',
   '<p>Saved views stay unchanged.</p><p>Nothing to decide.</p>',
   '<a href="https://example.com/src/file.ts">Full proof</a>',
-  'Valentin said: “This original quote stays unchanged even though it contains more than twelve separate words.”',
+  '<p>Valentin said:</p><blockquote><p>This original quote stays unchanged even though it contains more than twelve separate words.</p></blockquote>',
+  'Ada said: “This original quote stays unchanged even though it contains more than twelve separate words.”',
   'Änderungen bleiben gespeichert.',
 ]) {
   test(`short text, links and original quotes remain allowed: ${text}`, () => {
@@ -87,12 +88,11 @@ for (const body of [{}, { reply_to_comment_id: 12 }, { reply_to_invocation_id: 1
   })
 }
 
-test('a board without the agent log asks for a kind instead of a retry that never works', async () => {
-  const h = setup({ runtime: false })
+test('without kind, agent progress stays in the log', async () => {
+  const h = setup()
   const response = await h.post({ text: 'Next: release checks.' })
-  assert.equal(response.status, 400)
-  assert.equal(response.body.code, 'missing_field')
-  assert.equal(response.body.field, 'kind')
+  assert.equal(response.status, 201)
+  assert.equal(response.body.routedTo, 'log')
   assert.equal(h.calls.comments.length + h.calls.broadcasts.length, 0)
 })
 
@@ -170,6 +170,29 @@ for (const field of ['title', 'description']) {
   })
 }
 
+test('create task names a file in the description and marks it caller-fixable', async () => {
+  const description = 'See proposals/notes.md for the quote.'
+  const h = taskRoutes()
+  const response = await h.create({ description })
+  const body = await response.json()
+  assert.equal(response.status, 400)
+  assert.equal(body.code, 'invalid_field')
+  assert.equal(body.field, 'description')
+  assert.equal(body.details.code, 'agent_writing')
+  assert.equal(body.details.field, 'description')
+  assert.match(body.error, /description: Technical details belong in the agent log: a file name \("proposals\/notes\.md"\)/)
+  assert.equal(h.calls.writes, 0)
+  const human = taskRoutes({ human: true })
+  assert.equal((await human.create({ description, dry_run: true })).status, 200)
+  const errors = load('src/lib/mcp-server/utils/errors.ts', {})
+  const fixable = load('src/lib/aiFeedback/callerFixable.ts', {})
+  const mapped = errors.mapHttpErrorToMcpError(400, body.error, undefined, body)
+  assert.equal(mapped.details.code, 'agent_writing')
+  assert.equal(fixable.callerCanFixRefusal({ code: mapped.details.code, field: mapped.details.field }, 400), true)
+  assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'agent_writing', field: 'description' }), true)
+  assert.equal(fixable.quietInputRefusal({ status: 400, errorCode: 'invalid_field', field: 'description' }), false)
+})
+
 test('task update permits preserved legacy lines and short agent changes', async () => {
   const h = taskRoutes({ previous: { description_: { content: `<p>${long}</p>` } } })
   assert.equal((await h.update({ description: `<p>${long}</p><p>Now saved.</p>`, dry_run: true })).status, 200)
@@ -192,7 +215,7 @@ test('failed logging releases the idempotency claim so the same request can reco
 
 
 test('untyped embedded images require a people kind instead of losing their source', async () => {
-  const h = setup({ formattedText: '<p>Evidence</p><img src="https://example.com/proof.png">' })
+  const h = setup({ imageNoteLinks: false, formattedText: '<p>Evidence</p><img src="https://example.com/proof.png">' })
   const response = await h.post()
   assert.equal(response.status, 400)
   assert.equal(response.body.field, 'kind')

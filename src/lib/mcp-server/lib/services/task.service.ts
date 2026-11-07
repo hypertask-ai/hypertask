@@ -509,6 +509,11 @@ export class TaskService {
         queryParams.append('project_id', String(validatedInput.project_id));
       }
 
+      const fieldList = validatedInput.fields === undefined
+        ? ''
+        : (Array.isArray(validatedInput.fields) ? validatedInput.fields.join(',') : validatedInput.fields).trim();
+      if (fieldList) queryParams.append('fields', fieldList);
+
       const response = await this.apiClient.makeRequest<GetTaskResponse>(
         `/mcp/tasks?${queryParams.toString()}`,
         {
@@ -518,6 +523,12 @@ export class TaskService {
       );
 
       const tasks = response.tasks || [];
+      if (fieldList) {
+        return {
+          success: true,
+          tasks,
+        };
+      }
 
       const normalizedTasks = tasks.map((task) => {
         const normalizedTask = { ...task };

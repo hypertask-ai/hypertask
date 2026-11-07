@@ -3,6 +3,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from "next/server";
 
 import { applyView } from "@/lib/mcp/views/services";
+import { isViewCallerError, plainViewError, viewMutationRefusal } from "@/lib/mcp/views/viewRefusal";
 
 export async function POST(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
@@ -24,10 +25,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ view
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Error switching view:", error);
-    return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Internal server error" },
-      { status: 400 },
-    );
+    return isViewCallerError(error) ? viewMutationRefusal(error) : plainViewError(error);
   }
 
   })(request)

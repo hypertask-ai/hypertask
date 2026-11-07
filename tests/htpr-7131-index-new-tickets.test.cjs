@@ -41,6 +41,7 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
       if (key === "htpr-7740-create-response") return true;
       if (key === "yper4-910-agent-writing") return true;
+      if (key === "htpr-8798-writing-house-rules") return false;
       flags.push([key, userId]);
       assert.equal(key, flagKey);
       return enabled;

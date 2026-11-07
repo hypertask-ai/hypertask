@@ -10,8 +10,6 @@ type Column = { id: number; projectId: number; section_title: string; ranking: s
 
 function harness(columns: Column[] = []) {
   const h = activationHarness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
-  h.setFlagEnabled("htpr-7273-column-events", true);
   h.prisma.project_View = { upsert: async () => ({ default_view_id: 1 }) };
   h.projects.get(15).seeded = false;
   const rows = [...columns];
@@ -145,17 +143,6 @@ test("guest boards send no column events", async () => {
   await h.drain();
   assert.equal(h.captures.filter((capture) => capture.event.startsWith("column_")).length, 0);
 });
-
-test("with the column flag off, no column events are sent and board_created is unchanged", async () => {
-  const { h, service } = harness([column(1, "Todo")]);
-  h.setFlagEnabled("htpr-7273-column-events", false);
-  await service().createSection({ projectId: 15, title: "Review", userId: 123 });
-  await service().updateSection({ sectionId: 1, section_title: "Backlog", userId: 123 });
-  h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, "manual", { userId: 123 }));
-  await h.drain();
-  assert.deepEqual(h.captures.map((capture) => capture.event), ["board_created"]);
-});
-
 test("every column row is created where column analytics can see it", () => {
   const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);

@@ -6,7 +6,7 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7395_CACHED_STATIC_FIRST_FLAG } from "@/lib/flags/keys";
 import { getTiptapEditorForMode } from "@/lib/snippets";
 function deferredDescriptionEditorSettled(scope: ParentNode) {
   const editor = getTiptapEditorForMode("read-edit-description");
@@ -18,11 +18,10 @@ const deferredEditorReadyCheck = (applies: boolean | undefined) => applies ? def
 export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
   const cachedStaticFirst = useFlag(HTPR_7395_CACHED_STATIC_FIRST_FLAG);
   const { cachedLayout, cachedEditorAfterPaint, newCommentsLastReadAt, liveRowsPendingFor, descriptionStart } = useTaskContext();
   const deferredEditorReady = deferredEditorReadyCheck(cachedStaticFirst && cachedEditorAfterPaint && !cachedLayout);
-  const waitsForLiveRows = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
+  const waitsForLiveRows = liveRowsPendingFor(descriptionStart === "server");
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
 

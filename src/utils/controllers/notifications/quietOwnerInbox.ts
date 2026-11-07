@@ -1,12 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
 import { eventKeepsImportant, isQuietAgentMention } from "@/lib/inboxQuietAgents";
-import { HTPR_7096_QUIET_OWNER_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7096-quiet-owner-inbox";
-
-export async function isQuietOwnerInboxOn(ownerUserId: number): Promise<boolean> {
-  const { isFeatureEnabled } = await import("@/lib/flags");
-  return isFeatureEnabled(HTPR_7096_QUIET_OWNER_INBOX_FLAG, ownerUserId);
-}
 
 type QuietCandidate = {
   type: string;
@@ -27,7 +21,7 @@ export async function markQuietAgentMentions<T extends QuietCandidate>(
   rows: T[],
 ): Promise<T[]> {
   const agentMentions = rows.filter((row) => row.type === "Mentioned" && row.fromAgentId);
-  if (agentMentions.length === 0 || !(await isQuietOwnerInboxOn(viewerId))) return rows;
+  if (agentMentions.length === 0) return rows;
   const taskIds = Array.from(
     new Set(agentMentions.flatMap((row) => (row.taskId == null ? [] : [row.taskId]))),
   );

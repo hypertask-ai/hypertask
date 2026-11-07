@@ -155,5 +155,15 @@ print(markers[sys.argv[1]])
         assert r.returncode != 0 and len(calls()) == count and not (p/'bad').exists(), r.stderr
     cfile.write_text(before)
     print('ok an altered env prefix is never auto-approved')
+
+    source = ledger(session).read_text()
+    r = run('HTPR-6819', CLAUDE_CODE_SESSION_ID='sessionB-full-id')
+    copied = ledger('sessionB-full-id')
+    assert r.returncode == 0, r.stderr
+    assert '- [x] HTPR-6819.ticket:' in source and '- [x] HTPR-6819.ticket:' in copied.read_text()
+    assert '- [ ] HTPR-6819.done:' in copied.read_text()
+    assert 'YPER4-123' not in copied.read_text()
+    assert ids(copied) == ['HTPR-6819.'+g for g in ['ticket','deeper','pr','merged','deployed','proof','docs','done','cleaned']]
+    print('ok a later session finds the earlier proof gates for the same ticket')
     print('ship-gates regression passed')
 PY

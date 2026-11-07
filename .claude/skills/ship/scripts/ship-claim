@@ -14,6 +14,8 @@
 # last`); if that read fails the old claim counts. Losing to the same agent identity (another
 # session) never unassigns, because that would remove the winner.
 # A RUNNER n slot runs one session at a time, so its own claims older than 6 h from another session never count.
+# A CI Runner n or Infra Runner n slot resumes a quiet same-agent claim at any age.
+# A same-agent session with activity in the last 6 h still owns the ticket, so a second dispatch steps back.
 # A claim also stops counting (YPER4-269) when (a) its agent is no longer assigned to the ticket (read once
 # with `hypertask tasks get`; skipped if that read fails, if no agent is assigned, or if the claim is within
 # 5 min of ours, because a claimer may not have assigned itself yet), or (b) the same agent later posted a
@@ -29,7 +31,8 @@ set -uo pipefail
 # assigned-ids-file: agent ids (one per line) now assigned; empty or missing = unknown, rule (a) is skipped.
 decide() {
   local idle=${3:-/dev/null} asg=${4:-/dev/null} self=${5:-}
-  jq -r --arg rid "$1" --arg self "$self" --rawfile idle "$idle" --rawfile asg "$asg" '
+  local slot=0; [[ ${SHIP_SESSION_NAME:-} =~ ^(CI|Infra)\ Runner\ [1-9][0-9]*$ ]] && slot=1
+  jq -r --arg rid "$1" --arg self "$self" --arg slot "$slot" --rawfile idle "$idle" --rawfile asg "$asg" '
     def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
     def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
     def name: (.agent.displayName // .agent_display_name // key | tostring);
@@ -40,7 +43,7 @@ decide() {
       // ($t | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s?) // "");
     def legacy: ((txt | test("[Cc]laim id:")) | not);
     def resume: (txt as $t | ($t | capture("[Rr]esume( this [Cc]laude session)?:[[:space:]]*(?<r>[^<]*)").r?) // "");
-    def ours: (sess == $rid) or ($self != "" and legacy and (txt | contains($self)));
+    def own: (sess == $rid) or ($self != "" and legacy and (txt | contains($self)));
     def norm: (gsub("[[:space:]]+"; " ") | sub("^ "; "") | sub(" $"; ""));
     def retires($k; $r): (sess != "" and sess == ($k | sess))
       or ((legacy or ($k | legacy))
@@ -49,7 +52,9 @@ decide() {
     ($idle | split("\n") | map(select(. != ""))) as $idle
     | ($asg | split("\n") | map(select(. != ""))) as $asg
     | [(.comments[], (.activities[]? | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
-    | [$c[] | select(txt | test("Stepping back"))] as $back
+    | ([$c[] | select(txt | contains("Claimed.")) | select(own) | key] | first // "") as $mine_agent
+    | def ours: own;
+      [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(handover)] as $gone
     | ([$c[] | select(ours) | secs] | min // 0) as $mine
     | [$c[] | select(txt | contains("Claimed.")) | select(sess | startswith("-") | not)
@@ -62,7 +67,8 @@ decide() {
       else ($ours | sort_by(at) | first) as $me
         | ([$claims[] | select((ours | not)
               and at < ($me | at)
-              and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not)))]
+              and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not))
+              and ($slot != "1" or key != ($me | key) or (key as $k | $idle | index($k) | not)))]
             | sort_by(at) | first // null) as $other
         | if $other == null then "WIN"
           else "LOSE\t" + ($other | name) + "\t" + ($other | key) + "\t"
@@ -108,8 +114,7 @@ hold_check() {
     and (.isDraft | type == "boolean"))' <<<"$open" >/dev/null \
     || { echo "ship-claim: HOLD. Open PR read is malformed or incomplete for RUNNER $rn." >&2; return 4; }
   HELD=$(jq -r --arg n "$rn" --arg t "$t" '
-    [.[] | select(.headRefName | test("(^|[/_-])runner-?" + $n + "($|[/_-])"; "i"))
-      | select(.headRefName | test("^ci-runner-"; "i") | not)] as $m
+    [.[] | select(.headRefName | test("^runner-?" + $n + "($|[/_-])"; "i"))] as $m
     | if any($m[]; (.title | ascii_upcase | startswith($t + " ")) or (.headRefName | ascii_upcase | test("(^|[^0-9A-Z])" + $t + "($|[^0-9])")))
       then "RESUME" else ($m | map("https://github.com/hypertask-ai/hypertask/pull/\(.number)") | join(" ")) end' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot parse open PRs for RUNNER $rn." >&2; return 4; }
@@ -174,7 +179,7 @@ hold_check() {
   [[ $t == YPER4-* || $t == HYCI-* ]] && return 0  # Fleet Infra and CI work are never braked (Valentin, 2026-10-31: "CI work only, so CI gets fixed first")
   n=$(jq -e '[.[] | select((.isDraft | not)
       and (.title | test("^(YPER4|HYCI)-") | not)
-      and (.headRefName | test("^(ci-runner-[0-9]+|ci-boss|infra-lead|dependabot)/") | not))] | length' <<<"$open") \
+      and (.headRefName | test("^(ci-runner-[0-9]+|ci-boss|infra-lead|dependabot|cursor)/") | not))] | length' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot count open PRs for RUNNER $rn." >&2; return 4; }
   if [ "$n" -gt "$QUEUE_MAX" ]; then
     echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) or HYCI (CI) ticket, or nothing."
@@ -319,7 +324,8 @@ for _ in 1 2 3 4 5 6 7 8; do
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
-      if [ "$old" = 1 ] && { { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ [1-9][0-9]*$ ]]; } || agent_idle "$oid" "$same"; }; then echo "$oid" >> "$IDLE"; continue; fi ;;
+      if { [ "$old" = 1 ] && { { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ [1-9][0-9]*$ ]]; } || agent_idle "$oid" "$same"; }; } \
+        || { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^(CI|Infra)\ Runner\ [1-9][0-9]*$ ]] && agent_idle "$oid" "$same"; }; then echo "$oid" >> "$IDLE"; continue; fi ;;
   esac
   break
 done

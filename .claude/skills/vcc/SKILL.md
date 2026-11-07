@@ -19,9 +19,9 @@ Keep the ticket In Progress while actively working. Resume AI Review tickets the
 
 ## Work notes
 
-- `vcc activity add <TICKET-or-task-ID> "<text>"` writes one agent note. Text is positional; `--kind` and `--text` are not supported here.
+- `vcc activity add <TICKET-or-task-ID> "<text>"` writes one agent note. Text may be positional or use `--text` / `--text=`. `--kind` is not supported here.
 - `vcc activity last <TICKET-or-task-ID>` prints the latest note's timestamp, author, and complete text as tab-separated fields. Tabs and newlines inside text are escaped.
-- `vcc activity list <TICKET-or-task-ID> [--json]` reads up to 100 recent notes as JSON, including full text and metadata. It never writes a note.
+- `vcc activity list <TICKET-or-task-ID> [--json]` reads up to 100 recent notes as tab-separated rows; `--json` preserves full text and metadata. It never writes a note.
 - `vcc activity --help` and `vcc activity add <TICKET> --help` print usage without opening credentials or writing to the board.
 - Numeric references are immutable task IDs, not a board's ticket index.
 
@@ -50,4 +50,4 @@ Store proof, checklist, captures, and the self-contained HTML report in the tick
 - PASS: explain what changed for the user, link the merged PR and report, and move to Done only after the gates pass. Give the exact place and short steps to try it.
 - FAIL: keep In Progress. For flagged behavior, use the emergency failure path to hold it at Owner + QA before repairs. Re-run deployment and live verification after repair. After two failed attempts, record the blocker and hand off; do not claim completion.
 
-A real human decision uses one Question in the house-rules tickets skill format: max 3 plain bullets, then Question, My recommendation, Why, Yes, No. No outside links or product precedents. Never use Valentin Review simply to ask for a flag switch. Keep decisions, flags, and follow-up work on their existing product surfaces; never build another decision inbox. Finish with /ship's session-scoped cleanup and proof.
+A real human decision uses one Question in the house-rules tickets skill format: a leading "What this is:" paragraph in his words, then Question, My recommendation, Why, Yes, No. `vcc` refuses a Question without it. No outside links or product precedents. Never use Valentin Review simply to ask for a flag switch. Keep decisions, flags, and follow-up work on their existing product surfaces; never build another decision inbox. Finish with /ship's session-scoped cleanup and proof.

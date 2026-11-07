@@ -3,8 +3,6 @@ import UTMCookieHandler from "@/components/analytics/StoreUTM";
 import LoginComponent from "./LoginComponent";
 import { cookies } from "next/headers";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { featureFlagCandidateUserIds, HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { isActivationEligible } from "@/lib/telemetry/activationAnalytics";
 import SignupPageViewed from "./SignupPageViewed";
 
@@ -34,11 +32,7 @@ const Login = async () => {
 	const userId = analyticsSession?.id ?? null;
 	let enabled = false;
 	try {
-		if (userId === null) {
-			enabled = await featureFlagCandidateUserIds(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG) === null;
-		} else if (await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId) && await isActivationEligible(userId)) {
-			enabled = true;
-		}
+		enabled = userId === null ? true : await isActivationEligible(userId);
 	} catch {
 		enabled = false;
 	}

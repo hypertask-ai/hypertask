@@ -17,14 +17,16 @@ export type McpUnauthorizedReason =
   | 'agent_revoked'
   | 'agent_token_superseded'
 
+export const MCP_LOGIN_RECOVERY_MESSAGE =
+  'Open https://app.hypertask.ai/agents. An owner can renew the same agent: hypertask agents rotate-token --id <agent-id> --management-key <owner-management-key>. The old token stops working. Then run: hypertask login --token <new-token>. Replace environment or explicit tokens at their source. Revoked tokens cannot be refreshed. Do not create another identity. Older CLI? Update available: https://github.com/hypertask-ai/cli/releases/latest; run: curl -fsSL https://raw.githubusercontent.com/hypertask-ai/cli/main/scripts/install.sh | bash'
 export const MCP_LEGACY_TOKEN_MESSAGE =
-  'This token predates refresh support and cannot be refreshed. Run `hypertask login` to replace it.'
+  `This token predates refresh support and cannot be refreshed. ${MCP_LOGIN_RECOVERY_MESSAGE}`
 export const MCP_AGENT_REVOKED_MESSAGE =
-  'This agent has been revoked. Ask the board owner to create a new agent identity.'
+  `This agent login has been revoked. ${MCP_LOGIN_RECOVERY_MESSAGE}`
 export const MCP_AGENT_TOKEN_SUPERSEDED_MESSAGE =
-  "This agent's token was replaced by a newer one. Use the current token, or rotate it with POST /api/mcp/agents/rotate-token using the owner's token."
+  `This agent's token was replaced by a newer one. Use the current token. ${MCP_LOGIN_RECOVERY_MESSAGE}`
 export const MCP_AGENT_TOKEN_REFRESH_MESSAGE =
-  "Agent tokens do not expire and cannot be refreshed. To replace this token, call POST /api/mcp/agents/rotate-token with the owner's token. Rotating immediately invalidates the current token."
+  `Agent tokens do not expire and cannot be refreshed. ${MCP_LOGIN_RECOVERY_MESSAGE}`
 
 export function createUnauthorizedResponse(message?: string, reason?: McpUnauthorizedReason) {
   const errorMessage = message || 'Unauthorized. Invalid or missing authentication token.'
@@ -33,18 +35,18 @@ export function createUnauthorizedResponse(message?: string, reason?: McpUnautho
     error: errorMessage,
     reason: reason || 'invalid_token',
     message: reason === 'token_revoked' 
-      ? 'Your token has been revoked. Please generate a new token and reconnect.'
+      ? `Your token has been revoked. ${MCP_LOGIN_RECOVERY_MESSAGE}`
       : reason === 'token_expired'
-      ? 'Your token has expired. Please generate a new token and reconnect.'
+      ? `Your token has expired. ${MCP_LOGIN_RECOVERY_MESSAGE}`
       : reason === 'insufficient_scope'
-      ? 'This management key does not grant access to MCP data endpoints.'
+      ? 'This management key does not grant access to MCP data endpoints. Open https://app.hypertask.ai/agents and select an agent with board access, then run: hypertask login --token <agent-token>. Keep the management key for owner management commands.'
       : reason === 'legacy_token'
       ? MCP_LEGACY_TOKEN_MESSAGE
       : reason === 'agent_revoked'
       ? MCP_AGENT_REVOKED_MESSAGE
       : reason === 'agent_token_superseded'
       ? MCP_AGENT_TOKEN_SUPERSEDED_MESSAGE
-      : 'Authentication required. Please check your token and try again.',
+      : `Authentication required. ${MCP_LOGIN_RECOVERY_MESSAGE}`,
   }
   
   return NextResponse.json(response, {

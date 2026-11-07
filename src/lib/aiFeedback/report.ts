@@ -1,6 +1,6 @@
 import prisma from '@/lib/prisma'
-import { aiFeedbackEnabled } from './enabled'
 import { HTPR_7536_PLAIN_AI_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-7536-plain-ai-feedback'
+import { HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG } from '@/lib/flags/definitions/htpr-8797-feedback-house-parts'
 import { HTPR_8197_NO_EVIDENCE_FEEDBACK_FLAG } from '@/lib/flags/definitions/htpr-8197-no-evidence-feedback'
 import { HTPR_8275_AGENT_FEEDBACK_NOTE_FLAG } from '@/lib/flags/definitions/htpr-8275-agent-feedback-note'
 import { accountCategory } from '@/lib/telemetry/accountCategory'
@@ -12,8 +12,6 @@ import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
-
-export { aiFeedbackEnabled } from './enabled'
 
 const PROJECT_ID = 15
 const MAX_REPORTERS = 10
@@ -63,6 +61,18 @@ function description(input: AutomaticFeedbackInput, fingerprint: string, display
     reporterLine('Clients', input.client ? [input.client] : [])
 }
 
+function preservedDiagnostics(content: string): string {
+  const labels = ['Surface', 'Tool', 'HTTP status', 'Error code', 'Field', 'Category', 'Kind', 'Note']
+  const rows = labels.flatMap((label) => {
+    const match = content.match(new RegExp(`<p>${label}: [^<]*</p>`))
+    return match ? [match[0]] : []
+  })
+  if (content.includes('<p>Free text was supplied and not stored, for privacy.</p>')) {
+    rows.push('<p>Free text was supplied and not stored, for privacy.</p>')
+  }
+  return rows.join('')
+}
+
 function membershipRefusal(input: AiFeedbackInput): boolean {
   const code = input.errorCode?.toLowerCase().replace(/[._-]+/g, ' ') ?? ''
   return /\bnot a member\b/i.test(code) || /\bnot a member of (?:this|that|the) (?:board|project|team)\b/i.test(input.error ?? '')
@@ -108,27 +118,55 @@ function shortNote(note: string): string {
   return note.length <= 64 ? note : `${note.slice(0, 61).replace(/\s\S*$/, '')}...`
 }
 
+function houseReading(reading: string) {
+  if (reading.includes('wrong or expired key')) return 'This usually means a wrong or expired key.'
+  if (reading.includes('may have used a board')) return 'The agent may not use that board or action.'
+  if (reading.includes("can't tell")) return 'There are no details, so we cannot tell yet.'
+  return reading
+}
+
+function houseSubject(input: AutomaticFeedbackInput, surface: string) {
+  return input.surface === 'agent' ? 'An agent connection' : `An agent's ${surface} call`
+}
+
+function feedbackLogActivity(text: string) {
+  const plain = text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#0?39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { type: 'AiFeedbackLog' as const, data: { text: plain } }
+}
+
 function withCommand(note: string, command?: string): string {
   const short = shortNote(note)
   return !command || short.toLowerCase().includes(command.toLowerCase()) ? short : `${short} (${command})`
 }
 
-export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote) {
+export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string, reporter?: { agentName?: string; ownerName?: string; origin?: 'agent' | 'automatic' }, stored?: StoredNote, shape: 'plain' | 'house' = 'plain') {
   const surface = { mcp: 'MCP', cli: 'CLI', api: 'API', agent: 'agent connection' }[input.surface]
   const call = `An agent's ${surface} call${input.tool && input.tool !== input.surface ? ` to ${input.tool}` : ''}`
   const failureKind = input.category ?? 'other'
   const noDetails = (failureKind === 'call_failed' || failureKind === 'other') &&
     input.status === undefined && !input.errorCode && !input.error && !input.note
   let happened: string
+  let problem: string
   let reading: string
   let action: string
+  const subject = houseSubject(input, surface)
   if (reporter?.origin !== 'automatic' && scopeRefusal(input)) {
     const signIn = !membershipRefusal(input) && (input.status === 401 || input.errorCode?.toLowerCase() === 'unauthorized' || input.category === 'auth_failed')
     happened = signIn ? `An agent was refused when it signed in through ${surface}` : `${call} was refused because the agent may not use that board or action`
+    problem = signIn ? happened : `${subject} was refused`
     reading = signIn ? 'This usually means the agent used a wrong or expired key, not a Hypertask bug.' : 'The agent may have used a board or action it is not allowed to use; this is usually not a Hypertask bug.'
     action = "Tell the agent's owner to check its key and board permissions."
   } else if (input.status !== undefined && input.status >= 500) {
     happened = `${call} failed because Hypertask returned a server error`
+    problem = `${subject} failed on the server`
     reading = 'This is likely a Hypertask bug.'
     action = 'An engineer should look.'
   } else {
@@ -137,6 +175,7 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
       slow: 'was slow', user_reported_broken: 'was reported as broken', other: 'had a problem', auth_failed: 'was refused',
     }[input.category ?? 'other']
     happened = `${call} ${failure}${noDetails ? ' with no details' : ''}`
+    problem = `${subject} ${failure}${noDetails ? ' with no details' : ''}`
     reading = noDetails ? "There are no details, so we can't tell whether this is a Hypertask bug." : "The report alone does not show whether this is a Hypertask bug."
     action = noDetails ? 'Nothing for now; wait for a report with details.' : 'An engineer should look.'
   }
@@ -146,18 +185,40 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
     : reporter?.ownerName ? `an agent owned by ${reporter.ownerName}` : 'unknown agent'
   const command = input.tool && input.tool !== input.surface ? input.tool : undefined
   const note = shortNote(stored?.note ?? happened)
+  const title = stored?.kind ? `Agent feedback, ${stored.kind}: ${stored.kind === 'missing' ? withCommand(note, command) : note}` : `${happened} (${date})`
+  if (shape !== 'house') {
+    return {
+      title,
+      description: `<p><strong>What happened</strong>: ${escapeHtml(happened)}.</p>` +
+        `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
+        `<p><strong>Is it a real bug?</strong> ${escapeHtml(reading)}</p>` +
+        `<p><strong>What to do</strong>: ${escapeHtml(action)}</p>` +
+        '<h2>Details for engineers</h2>' + description(input, fingerprint, reporter?.ownerName, stored),
+    }
+  }
+  const kept = (stored?.kind ? `<p>Kind: ${escapeHtml(stored.kind)}</p>` : '') +
+    (stored?.note ? `<p>Note: ${escapeHtml(stored.note)}</p>` : '') +
+    (input.error !== undefined || (input.note !== undefined && !stored?.note) ? '<p>Free text was supplied and not stored, for privacy.</p>' : '')
   return {
-    title: stored?.kind ? `Agent feedback, ${stored.kind}: ${stored.kind === 'missing' ? withCommand(note, command) : note}` : `${happened} (${date})`,
-    description: `<p><strong>What happened</strong>: ${escapeHtml(happened)}.</p>` +
+    title,
+    description: '<h2>Problem</h2>' +
+      `<p>${escapeHtml(problem)}.</p>` +
       `<p><strong>Who hit it</strong>: ${escapeHtml(who)}.</p>` +
-      `<p><strong>Is it a real bug?</strong> ${escapeHtml(reading)}</p>` +
-      `<p><strong>What to do</strong>: ${escapeHtml(action)}</p>` +
-      '<h2>Details for engineers</h2>' + description(input, fingerprint, reporter?.ownerName, stored),
+      `<p>${escapeHtml(houseReading(reading))}</p>` +
+      kept +
+      '<h2>Fix</h2>' +
+      `<p>${escapeHtml(action)}</p>` +
+      '<h2>Done when</h2>' +
+      '<p>A repeat report joins this same ticket.</p>' +
+      '<p>The description has no error code.</p>' +
+      '<h2>Risk</h2>' +
+      '<p>A repeat could open another ticket.</p>' +
+      '<h2>Decision</h2>' +
+      '<p>None.</p>',
   }
 }
 
 export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
-  if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = (reporter.origin === 'automatic' ? automaticFeedbackSchema : aiFeedbackSchema).safeParse(raw)
   if (!parsed.success) {
     throw new AiFeedbackError(400, parsed.error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; '))
@@ -167,11 +228,17 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
   if (!Number.isSafeInteger(reporterId) || reporterId <= 0) return
   const input: AutomaticFeedbackInput = { ...parsed.data, client: parsed.data.client?.toLowerCase() }
   let plain = false
+  let house = false
   try {
     const { featureFlagCandidateUserIds, isFeatureEnabled } = await import('@/lib/flags')
     plain = userId === undefined
       ? await featureFlagCandidateUserIds(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG) === null
       : await isFeatureEnabled(HTPR_7536_PLAIN_AI_FEEDBACK_FLAG, userId)
+    if (plain) {
+      house = userId === undefined
+        ? await featureFlagCandidateUserIds(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG) === null
+        : await isFeatureEnabled(HTPR_8797_FEEDBACK_HOUSE_PARTS_FLAG, userId)
+    }
   } catch {}
   const noteAllowed = reporter.origin === 'agent' && (input.kind !== undefined || input.note !== undefined) && await agentNoteAllowed(userId)
   const stored: StoredNote | undefined = noteAllowed
@@ -180,13 +247,17 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
   const fingerprint = feedbackFingerprint(input, stored)
   const marker = `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p>`
   const doneSections = await prisma.section.findMany({ where: { projectId: PROJECT_ID, OR: [{ isDone: true }, { section_title: { equals: 'Done', mode: 'insensitive' } }] }, select: { id: true, section_title: true } })
-  const where = {
+  const openWhere = {
     projectId: PROJECT_ID, status: 'Normal' as const,
     AND: [
       { OR: [{ sectionId: null }, { sectionId: { notIn: doneSections.map((item) => item.id) } }] },
       { section: { notIn: doneSections.map((item) => item.section_title) } },
     ],
-    description_: { is: { content: { contains: marker } } },
+  }
+  const where = { ...openWhere, description_: { is: { content: { contains: marker } } } }
+  const closedWhere = {
+    projectId: PROJECT_ID, status: 'Normal' as const,
+    OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
   }
   const key = BigInt.asIntN(64, BigInt(`0x${fingerprint.slice(0, 16)}`))
   let changedTaskId: number | undefined
@@ -209,9 +280,15 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const section = project?.section[0]
         if (!project?.uniqueIdentifier || !section) throw new AiFeedbackError(503, 'Feedback destination is not configured')
         const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
-        const existing = await tx.task.findFirst({
-          where, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true },
-        })
+        const ticketSelect = { id: true, userId: true, ticketNumber: true, uniqueIndex: true }
+        let existing = await tx.task.findFirst({ where, select: ticketSelect })
+        if (!existing && tx.comment?.findFirst) {
+          const logged = await tx.comment.findFirst({
+            where: { agentId: null, text: { contains: marker }, task: openWhere },
+            select: { task: { select: ticketSelect } },
+          })
+          existing = logged?.task ?? null
+        }
         if (plain && reporter.origin === 'agent' && scopeRefusal(input) && !existing) {
           console.info('AI feedback not filed: normal access refusal', { surface: input.surface, fingerprint: `ai-fb-${fingerprint.slice(0, 12)}` })
           return { success: false as const, filed: false as const, reason: 'access_refused' as const, error: 'Normal access refusal; no new ticket was filed.' }
@@ -231,34 +308,51 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
         const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
         const comment = existing ? await tx.comment.findFirst({
           where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
-          orderBy: { id: 'asc' }, select: { id: true, text: true },
+          orderBy: { id: 'asc' }, select: { id: true, text: true, activity: true },
         }) : null
         const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
+        const keptMarker = Boolean(comment?.text.includes(marker))
+        const logText = (text: string) => {
+          const logged = house
+            ? text + description(input, fingerprint, displayName, stored)
+            : text + preservedDiagnostics(comment?.text ?? '')
+          return keptMarker && !logged.includes(marker) ? logged + marker : logged
+        }
         if (existing) {
           const count = storedCount + 1
-          const text = tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client)
+          const text = logText(tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client))
+          const previous = comment?.activity
+          const hadLog = Boolean(previous && typeof previous === 'object' && !Array.isArray(previous) && previous.type === 'AiFeedbackLog')
+          const activity = house || hadLog ? feedbackLogActivity(text) : undefined
           if (comment) {
-            await tx.comment.update({ where: { id: comment.id }, data: { text, summary: null } })
+            await tx.comment.update({ where: { id: comment.id }, data: { text, summary: null, ...(activity ? { activity } : {}) } })
           } else {
-            await createCommentService({
+            const created = await createCommentService({
               taskId: existing.id, text, creatorId: actorId, ownerId: existing.userId,
               currentUser: { id: actorId }, processTaskReferences: false, trustedCaller: true,
             })
+            if (activity && created?.id) {
+              await tx.comment.update({ where: { id: created.id }, data: { text, summary: null, activity } })
+            }
           }
           changedTaskId = existing.id
           return receipt(existing, true, count, project.uniqueIdentifier)
         }
         const quietFixable = reporter.origin === 'automatic' ? await quietFixableReports(userId) : false
-        const recentlyClosed = quietFixable
+        const closedSelect = { id: true, userId: true, ticketNumber: true, uniqueIndex: true, createdAt: true }
+        let recentlyClosed = quietFixable
           ? await tx.task.findFirst({
-            where: {
-              projectId: PROJECT_ID, status: 'Normal',
-              OR: [{ sectionId: { in: doneSections.map((item) => item.id) } }, { section: { in: doneSections.map((item) => item.section_title) } }],
-              description_: { is: { content: { contains: marker } } },
-            },
-            orderBy: { id: 'desc' }, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true, createdAt: true },
+            where: { ...closedWhere, description_: { is: { content: { contains: marker } } } },
+            orderBy: { id: 'desc' }, select: closedSelect,
           })
           : null
+        if (quietFixable && !recentlyClosed && tx.comment?.findFirst) {
+          const logged = await tx.comment.findFirst({
+            where: { agentId: null, text: { contains: marker }, task: closedWhere },
+            orderBy: { id: 'desc' }, select: { task: { select: closedSelect } },
+          })
+          recentlyClosed = logged?.task ?? null
+        }
         if (filedRecently(recentlyClosed)) {
           console.info('AI feedback not filed: the same fingerprint was filed in the last day', { fingerprint: `ai-fb-${fingerprint.slice(0, 12)}`, ticket: recentlyClosed.ticketNumber })
           return receipt(recentlyClosed, true, 0, project.uniqueIdentifier)
@@ -277,7 +371,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           agentName: scrubFeedbackText(reporter?.agentName ?? '').slice(0, 60) || undefined,
           ownerName: displayName,
           origin: reporter.origin,
-        }, stored) : undefined
+        }, stored, house ? 'house' : 'plain') : undefined
         const { task } = await createProvisionedTaskCore({
           creationChannel: "agent",
           title: readable?.title ?? `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
@@ -286,11 +380,14 @@ export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { 
           projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
           priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,
         })
-        await createCommentService({
-          taskId: task.id, text: tallyComment('', tallyMarker, count, displayName, input.client),
-          creatorId: actorId, ownerId: actorId, currentUser: { id: actorId },
-          processTaskReferences: false, trustedCaller: true,
+        const text = logText(tallyComment('', tallyMarker, count, displayName, input.client))
+        const created = await createCommentService({
+          taskId: task.id, text, creatorId: actorId, ownerId: actorId,
+          currentUser: { id: actorId }, processTaskReferences: false, trustedCaller: true,
         })
+        if (house && created?.id) {
+          await tx.comment.update({ where: { id: created.id }, data: { text, summary: null, activity: feedbackLogActivity(text) } })
+        }
         return receipt(task, false, count, project.uniqueIdentifier)
       }, { timeout: 30000, maxWait: Math.max(1, deadline - Date.now()) })
       if (result) {

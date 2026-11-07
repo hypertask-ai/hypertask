@@ -99,7 +99,7 @@ for (const args of [[], ['-X', 'GET'], ['--method', 'GET'], ['-XGET'], ['--metho
   });
 }
 
-for (const status of [403, 404, 500]) {
+for (const status of [400, 401, 403, 404, 422]) {
   for (const method of ['GET', 'POST']) {
     test(`non-rate-limit ${method} HTTP ${status} still refused next to rate-limit recovery now allowed`, async () => {
       const { ghApi } = await gate;
@@ -112,6 +112,91 @@ for (const status of [403, 404, 500]) {
     });
   }
 }
+
+test('status publication retries the same input after HTTP 500', async () => {
+  const { ghApi } = await gate;
+  const args = ['-X', 'POST', 'repos/fixture/repo/statuses/sha', '--input', 'payload.json'];
+  const waits = [];
+  let calls = 0;
+  assert.equal(await ghApi(args, {
+    env: {}, sleep: async (ms) => waits.push(ms),
+    exec: (command, actual) => {
+      assert.equal(command, 'gh');
+      assert.deepEqual(actual, ['api', '--include', ...args]);
+      return ++calls === 1 ? http(500) : http(201, '', '{"state":"success"}');
+    },
+  }), '{"state":"success"}');
+  assert.equal(calls, 2);
+  assert.deepEqual(waits, [1000]);
+});
+
+for (const status of [500, 502, 503, 504]) {
+  for (const args of [
+    ['repos/fixture/repo/pulls'],
+    ['repos/fixture/repo/statuses/sha', '-X', 'POST', '-f', 'state=success', '-f', 'description=approved'],
+  ]) {
+    test(`HTTP ${status} retries ${args.join(' ')} without changing the request`, async () => {
+      const { ghApi } = await gate;
+      const waits = [];
+      let calls = 0;
+      assert.equal(await ghApi(args, {
+        env: { GH_API_NO_WAIT: '1' },
+        sleep: async (ms) => waits.push(ms),
+        save: () => assert.fail('server retries must not spend the rate-limit budget'),
+        exec: (command, actual) => {
+          assert.equal(command, 'gh');
+          assert.deepEqual(actual, ['api', '--include', ...args]);
+          return ++calls < 3 ? http(status) : http(200, '', '{"ok":true}');
+        },
+      }), '{"ok":true}');
+      assert.equal(calls, 3);
+      assert.deepEqual(waits, [1000, 2000]);
+    });
+  }
+  for (const args of [
+    ['repos/fixture/repo/pulls'],
+    ['-X', 'POST', 'repos/fixture/repo/statuses/sha', '--input', 'payload.json'],
+  ]) {
+    test(`persistent HTTP ${status} stops after two retries for ${args.join(' ')}`, async () => {
+      const { ghApi } = await gate;
+      const waits = [];
+      let calls = 0;
+      await assert.rejects(ghApi(args, {
+        env: {}, sleep: async (ms) => waits.push(ms),
+        exec: (_, actual) => {
+          assert.deepEqual(actual, ['api', '--include', ...args]);
+          calls++;
+          return http(status);
+        },
+      }), new RegExp(`HTTP ${status}`));
+      assert.equal(calls, 3);
+      assert.deepEqual(waits, [1000, 2000]);
+    });
+  }
+}
+
+test('unknown and network failures do not receive server retries', async () => {
+  const { ghApi } = await gate;
+  let calls = 0;
+  await assert.rejects(ghApi(['repos/fixture/repo/pulls'], {
+    env: {}, sleep: () => assert.fail('unknown failure must not sleep'),
+    exec: () => { calls++; return { status: 1, stderr: 'network error' }; },
+  }), /HTTP unknown/);
+  assert.equal(calls, 1);
+});
+
+test('read-token fallback remains bounded before server retries', async () => {
+  const { ghApi } = await gate;
+  const tokens = [];
+  const waits = [];
+  await assert.rejects(ghApi(['repos/fixture/repo/pulls'], {
+    env: { GH_READ_TOKEN: 'ci-app' }, log: () => {},
+    sleep: async (ms) => waits.push(ms),
+    exec: (_, args, options) => { tokens.push(options.env?.GH_TOKEN ?? 'base'); return http(500); },
+  }), /HTTP 500/);
+  assert.deepEqual(tokens, ['ci-app', 'base', 'base', 'base']);
+  assert.deepEqual(waits, [1000, 2000]);
+});
 
 test('rate-limit detection requires 403/429 and a rate-limit signal for 403', async () => {
   const { rateLimitWait } = await gate;

@@ -88,15 +88,13 @@ test.beforeEach(() => {
   ]);
 });
 
-test("Flags dropdown filters default to Owner + QA as a feature and respect OFF", async () => {
-  const key = flags.HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG;
-  assert.equal(key, "htpr-7069-flags-dropdown-filters");
-  const entry = (await flags.listFeatureFlagModes()).find(flag => flag.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(key, userId))), [true, true, false]);
-  row = { mode: "OFF" };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+test("flags page dropdown filters are permanent and no longer registered", async () => {
+  const key = "htpr-7069-flags-dropdown-filters";
+  assert.equal(flags.HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
 test("Ctrl+J split tasks are permanent and their flag is gone", async () => {
@@ -411,6 +409,26 @@ test("the compose task writer is permanent and no longer registered", async () =
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });
 
+test("agent reactions guidance is permanent and no longer registered", async () => {
+  const key = ["htpr", "7122", "agent", "reactions"].join("-");
+  const identifier = ["HTPR", "7122", "AGENT", "REACTIONS", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
+test("AI feedback is permanent and no longer registered", async () => {
+  const key = ["htpr", "7195", "ai", "feedback"].join("-");
+  const identifier = ["HTPR", "7195", "AI", "FEEDBACK", "FLAG"].join("_");
+  assert.equal(flags[identifier], undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
 test("demo login own-board bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG;
   assert.equal(key, "htpr-7035-demo-login-own-board");
@@ -586,6 +604,35 @@ test("subtask-link is absent from the registry after becoming permanent", async 
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6972-subtask-link"), false);
 });
 
+test("the retired My Tasks table columns flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6456-my-tasks-table-columns";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106123700_drop_htpr_6456_my_tasks_table_columns_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(2343))[key], true);
+});
+
 test("inbox next-open no longer has a feature flag", async () => {
   assert.equal(flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, undefined);
   assert.equal(definitions.some(entry => entry.key === "htpr-7000-inbox-next-open"), false);
@@ -596,6 +643,54 @@ test("size label clicks no longer have a feature flag", async () => {
   assert.equal(flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, undefined);
   assert.equal(definitions.some(entry => entry.key === "htpr-6978-size-label-click"), false);
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === "htpr-6978-size-label-click"), false);
+});
+
+test("my tasks filter parity flag is retired after becoming permanent", async () => {
+  const key = "htpr-6447-my-tasks-filter-parity";
+  assert.equal(flags.MY_TASKS_FILTER_PARITY_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6447_my_tasks_filter_parity_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
+});
+
+test("prompt cache flag is retired after becoming permanent", async () => {
+  const key = "htpr-7076-prompt-cache";
+  assert.equal(flags.HTPR_7076_PROMPT_CACHE_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_7076_prompt_cache_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
+});
+
+test("column analytics flag is retired and column events stay server-side", async () => {
+  const key = "htpr-7273-column-events";
+  assert.equal(flags.HTPR_7273_COLUMN_EVENTS_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_7273_column_events_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
 });
 
 test("server first-screen flag is retired and scoped flag seeds reuse server evaluation", async () => {
@@ -623,6 +718,22 @@ test("server first-screen flag is retired and scoped flag seeds reuse server eva
   });
   await assert.rejects(getFirstScreenFlagSeed(0, [active], clock), /scope/);
   await assert.rejects(getFirstScreenFlagSeed(985, [active], "bad"), /scope/);
+});
+
+test("memory-only PostHog tracking flag is retired and persistence is always memory", async () => {
+  const key = "htpr-7278-memory-only-tracking";
+  assert.equal(flags.HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, undefined);
+  assert.equal(definitions.some(entry => entry.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_7278_memory_only_tracking_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+  listedRows = [{ key, mode: "EVERYONE", updatedAt: new Date() }];
+  assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  assert.equal((await flags.featureFlagsForUser(985))[key], undefined);
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  listedRows = [];
 });
 
 test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
@@ -824,11 +935,11 @@ test("the retired mobile Agent Chat viewport flag is hidden, immutable and enabl
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7058-flags-page-url-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -848,11 +959,11 @@ test("the retired lazy emoji list flag is hidden, immutable and enabled for old 
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7058-flags-page-url-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -872,11 +983,11 @@ test("the retired comment shortcuts flag is hidden, immutable and enabled for ol
   for (const mode of flags.FEATURE_FLAG_MODES) {
     listedRows = [
       { key, mode, updatedAt: new Date() },
-      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
     ];
     row = { mode, updatedAt: new Date() };
     const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
-    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+    assert.ok(listedKeys.has("htpr-7058-flags-page-url-filters"), "positive control remains listed");
     assert.equal(listedKeys.has(key), false);
     for (const userId of [6, 985, 2343]) {
       assert.equal((await flags.featureFlagsForUser(userId))[key], true);
@@ -936,10 +1047,10 @@ const retiredInfraKeys = [
 
 test("the 19 retired infra flags are hidden, immutable and enabled for old tabs", async () => {
   listedRows = retiredInfraKeys.map((key) => ({ key, mode: "OFF", updatedAt: new Date() }));
-  listedRows.push({ key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null });
+  listedRows.push({ key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null });
   const listed = await flags.listFeatureFlagModes();
   const listedKeys = new Set(listed.map(({ key }) => key));
-  assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+  assert.ok(listedKeys.has("htpr-7058-flags-page-url-filters"), "positive control remains listed");
   for (const key of retiredInfraKeys) {
     assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false, key);
     assert.equal(listedKeys.has(key), false, key);
@@ -952,14 +1063,53 @@ test("the 19 retired infra flags are hidden, immutable and enabled for old tabs"
   }
 });
 
+test("the retired My Tasks overdue badges flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6459-my-tasks-overdue-badges";
+  assert.equal(flags.MY_TASKS_OVERDUE_BADGES_FLAG, undefined);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261107120000_drop_htpr_6459_my_tasks_overdue_badges_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+});
+
+test("the retired My Tasks scopes flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6457-my-tasks-scopes";
+  listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((flag) => flag.key === key), false);
+  for (const userId of [985, 42]) {
+    assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+});
+
 test("the retired scoped refetch flag is hidden, immutable and enabled for old tabs", async () => {
   const key = "htpr-6166-scoped-board-refetch";
   listedRows = [
     { key, mode: "OFF", updatedAt: new Date() },
-    { key: "htpr-7069-flags-dropdown-filters", mode: "OWNER_AND_QA", updatedAt: null },
+    { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
   ];
   const listedKeys = new Set((await flags.listFeatureFlagModes()).map(({ key }) => key));
-  assert.ok(listedKeys.has("htpr-7069-flags-dropdown-filters"), "positive control remains listed");
+  assert.ok(listedKeys.has("htpr-7058-flags-page-url-filters"), "positive control remains listed");
   assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
   assert.equal(listedKeys.has(key), false);
   for (const userId of [985, 42]) {
@@ -1006,11 +1156,11 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
-  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6444-my-tasks-bulk-selection" ? { ...definition, kind: "bugfix" } : definition))};`);
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6461-my-tasks-snooze" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
     .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
-  const key = "htpr-6444-my-tasks-bulk-selection";
+  const key = "htpr-6461-my-tasks-snooze";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
@@ -1036,7 +1186,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "explicit-bugfix-flags-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
-  const key = "htpr-6444-my-tasks-bulk-selection";
+  const key = "htpr-6461-my-tasks-snooze";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
     fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);
@@ -1059,6 +1209,17 @@ test("listed related keys cannot mutate registered flag metadata", async () => {
   assert.notEqual(second.related, first.related);
 });
 
+test("flags page type search no longer has a feature flag", async () => {
+  const key = "htpr-6964-flags-page-type-search";
+  assert.equal(flags.HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, undefined);
+  assert.equal(definitions.some((entry) => entry.key === key), false);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
+  assert.equal(fs.readFileSync(path.join(root, "src/prisma/migrations/20261106120000_drop_htpr_6964_flags_page_type_search_flag/migration.sql"), "utf8"),
+    `DELETE FROM "FeatureFlag" WHERE "key" = '${key}';\n`);
+  assert.equal(fs.existsSync(path.join(root, "e2e/smoke/flag-modes", `${key}.json`)), false);
+  assert.equal(Object.hasOwn(require("../e2e/smoke/production-flag-modes.json").modes, key), false);
+});
+
 test("every registered flag has a valid kind and only registered explicit related keys", async () => {
   const rows = await flags.listFeatureFlagModes();
   assert.equal(rows.length, flags.FEATURE_FLAG_KEYS.length);
@@ -1069,13 +1230,6 @@ test("every registered flag has a valid kind and only registered explicit relate
       assert.notEqual(entry.key, key);
     }
   }
-  const entry = rows.find(({ key }) => key === flags.HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(entry.ticketId, "HTPR-6964");
-  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(entry.key, id))), [true, true, false]);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
 test("typed property writes are no longer listed as a rollout", async () => {
@@ -1152,20 +1306,6 @@ test("Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF", 
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
 });
 
-test("flags page URL filters are an Owner + QA feature and respect Off", async () => {
-  const key = flags.HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG;
-  assert.equal(key, "htpr-7058-flags-page-url-filters");
-  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
-  assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "OWNER_AND_QA");
-  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled(key, 6), true);
-  assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), false);
-  assert.equal(await flags.isFeatureEnabled(key, 0), false);
-  row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(key, 6), false);
-});
 
 test("owner userId check requires both the owner id and registered email", async () => {
   assert.equal(await flags.isFeatureFlagOwnerUserId(6), true);
@@ -1323,6 +1463,16 @@ test("agent nudge is permanent and no longer registered", async () => {
   assert.equal(flags[identifier], undefined);
   assert.equal(definitions.some(definition => definition.key === key), false);
   assert.equal((await flags.listFeatureFlagModes()).some(entry => entry.key === key), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(Object.hasOwn(snapshot.modes, key), false);
+});
+
+test("server description in the first page load is permanent and no longer registered", async () => {
+  const key = "htpr-7367-server-description-first";
+  assert.equal(flags.HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, undefined);
+  assert.equal(definitions.some((definition) => definition.key === key), false);
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal((await flags.listFeatureFlagModes()).some((entry) => entry.key === key), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
   assert.equal(Object.hasOwn(snapshot.modes, key), false);
 });

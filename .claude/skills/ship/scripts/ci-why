@@ -9,6 +9,7 @@ import re
 import runpy
 import subprocess
 import sys
+from urllib.parse import quote
 
 
 ADVICE = "Fix the failed step above; a credential or secret is only the cause if the failed step's own error names it."
@@ -162,14 +163,108 @@ def diagnose(run, repo):
     return findings
 
 
+def release_checks(target, repo):
+    if not target.isdecimal() or int(target) < 1:
+        raise ReadError('--release expects a PR number')
+    pr = gh_api(f'repos/{repo}/pulls/{target}')
+    sha = pr['head']['sha']
+    branch = quote(pr['base']['ref'], safe='')
+    base = f'repos/{repo}'
+    branch_data = gh_api(f'{base}/branches/{branch}')
+    required = []
+    protection = branch_data.get('protection') or {}
+    classic_known = protection.get('enabled') is False
+    if protection.get('enabled') is True:
+        checks = protection.get('required_status_checks') or {}
+        if isinstance(checks.get('checks'), list):
+            required.extend(checks['checks'])
+            classic_known = True
+        elif isinstance(checks.get('contexts'), list):
+            required.extend({'context': name} for name in checks['contexts'])
+            classic_known = True
+    rules = []
+    page = 1
+    while True:
+        batch = gh_api(f'{base}/rules/branches/{branch}?per_page=100&page={page}')
+        if not isinstance(batch, list):
+            raise ReadError('invalid branch rules')
+        rules.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    for rule in rules:
+        if rule['type'] == 'required_status_checks':
+            required.extend(rule['parameters']['required_status_checks'])
+    statuses = []
+    page = 1
+    while True:
+        batch = gh_api(f'{base}/commits/{sha}/statuses?per_page=100&page={page}')
+        if not isinstance(batch, list):
+            raise ReadError('invalid commit statuses')
+        statuses.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    runs = pages(f'{base}/commits/{sha}/check-runs?filter=all', 'check_runs')
+    results = []
+    for name, app_id in sorted({(check['context'], check.get('app_id') or check.get('integration_id') or -1)
+                                for check in required}):
+        matches = []
+        for kind, rows, field in (('status', statuses, 'context'), ('check_run', runs, 'name')):
+            candidates = [row for row in rows if row[field] == name and
+                          (not row.get('head_sha') or row['head_sha'] == sha)]
+            if app_id != -1:
+                candidates = [row for row in candidates if (row.get('app') or {}).get('id') in (None, app_id)]
+            if candidates:
+                row = max(candidates, key=lambda item: item['id'])
+                state = row['state'] if kind == 'status' else (row.get('conclusion') if row['status'] == 'completed' else row['status'])
+                app_verified = None if app_id == -1 else (row.get('app') or {}).get('id') == app_id
+                matches.append({'name': name, 'app_id': None if app_id == -1 else app_id,
+                                'app_verified': app_verified, 'kind': kind, 'state': state,
+                                'url': row.get('target_url') if kind == 'status' else row.get('html_url')})
+        results.extend(matches or [{'name': name, 'app_id': None if app_id == -1 else app_id,
+                                   'app_verified': None if app_id == -1 else False,
+                                   'kind': None, 'state': 'missing', 'url': None}])
+    latest = gh_api(f'{base}/pulls/{target}')
+    changed = (latest['head']['sha'] != sha or latest['base']['ref'] != pr['base']['ref']
+               or latest['base'].get('sha') != pr['base'].get('sha'))
+    warnings = []
+    if not classic_known:
+        warnings.append('classic protection requirements unknown; results incomplete')
+    if changed:
+        warnings.append('PR head or base changed during reads; results are stale')
+    return {'head': sha, 'base': pr['base']['ref'], 'checks': results, 'warnings': warnings}
+
+
 def main():
     parser = argparse.ArgumentParser(description='Name the failed CI step before diagnosing its cause.')
     parser.add_argument('target', help='PR number, run id or run URL')
     parser.add_argument('--repo', default='hypertask-ai/hypertask')
     parser.add_argument('--json', action='store_true')
+    parser.add_argument('--release', action='store_true', help='diagnose required checks on the PR head')
     args = parser.parse_args()
     if not re.fullmatch(r'[\w.-]+/[\w.-]+', args.repo):
         parser.error('--repo must be owner/repo')
+    if args.release:
+        try:
+            result = release_checks(args.target, args.repo)
+        except (ReadError, KeyError, TypeError, ValueError) as error:
+            print(f'ci-why: cannot diagnose required checks: {error}', file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f'PR head {result["head"]} -> {result["base"]}')
+            for warning in result['warnings']:
+                print(f'WARNING: {warning}')
+            if not result['checks'] and not result['warnings']:
+                print('no required checks')
+            for check in result['checks']:
+                app = f' app_id={check["app_id"]}' if check['app_id'] is not None else ''
+                kind = f' {check["kind"]}' if check['kind'] else ''
+                unverified = ' (app pin unverified)' if check['app_verified'] is False and check['kind'] else ''
+                print(f'{check["name"]}{app}{kind}: {check["state"]} {check["url"] or "(no link)"}{unverified}')
+        return 0
     try:
         findings = [finding for run in resolve_runs(args.target, args.repo) for finding in diagnose(run, args.repo)]
     except (ReadError, KeyError, TypeError, ValueError, subprocess.TimeoutExpired) as error:

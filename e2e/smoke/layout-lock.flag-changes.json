@@ -7,29 +7,6 @@
     "reason": "The ticket asks instantly opened tickets to stop scrolling after load. Cached phone opens now remain at the top instead of automatically scrolling properties above the title and moving comments past the fixed composer; direct opens and flag-off retain production positioning. Independent composer and title hit-target invariants still apply."
   },
   {
-    "flag": "htpr-6422-my-tasks-views",
-    "ticket": "https://app.hypertask.ai/detail/project-15/6422",
-    "screen": "my-tasks/Desktop",
-    "landmarks": [
-      "title",
-      "toolbar",
-      "list"
-    ],
-    "reason": "The ticket asks for 'view tabs on top', above the existing My Tasks heading, controls, board splits and task list.",
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/6940"
-  },
-  {
-    "flag": "htpr-6422-my-tasks-views",
-    "ticket": "https://app.hypertask.ai/detail/project-15/6422",
-    "screen": "my-tasks/Mobile",
-    "landmarks": [
-      "title",
-      "toolbar",
-      "list"
-    ],
-    "reason": "The ticket asks for 'view tabs on top', which moves the heading, controls and list down on phone too. The time-group drift that this entry used to leave exposed is fixed in PR 1100."
-  },
-  {
     "flag": "htpr-6556-mobile-description-first",
     "ticket": "https://app.hypertask.ai/detail/project-15/6556",
     "screen": "new-task/Mobile",

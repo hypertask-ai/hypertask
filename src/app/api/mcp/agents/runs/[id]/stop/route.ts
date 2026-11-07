@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   authenticateAgentRunRequest,
   browserMutationIsSameOrigin,
-  runtimeAgentRunsEnabledFor,
   stopAgentRun,
 } from "@/lib/agentRuns/service";
 import {
@@ -53,9 +52,6 @@ export async function POST(
         body = JSON.parse(rawBody);
       } catch {
         throw new AgentRunInputError("Invalid JSON request body");
-      }
-      if (!(await runtimeAgentRunsEnabledFor(principal))) {
-        return noStore({ success: false, error: "Run not found" }, 404);
       }
     }
     const finalStatus = parseAgentRunStopInput(body);

@@ -2,6 +2,8 @@
 
 import { cn } from "@/utils/undoActions/helperFuncs";
 import toast from "react-hot-toast";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_8861_AGENT_LOGIN_RECOVERY_FLAG } from "@/lib/flags/definitions/htpr-8861-agent-login-recovery";
 import { PROMPT_MAX, PROMPT_WARN } from "./agentDetailTypes";
 import type { useAgentConfig } from "./useAgentConfig";
 import type { useAgentDetailLifecycle } from "./useAgentDetailLifecycle";
@@ -31,6 +33,7 @@ export function AgentInstructions({
   agent, editingPrompt, setPromptDraft, setEditingPrompt, promptDraft, savingPrompt,
   handleSavePrompt, tokenBusy, handleGenerateToken, handleRevokeToken,
 }: Props) {
+  const loginRecovery = useFlag(HTPR_8861_AGENT_LOGIN_RECOVERY_FLAG);
   return (
     <>
                 {agent.runtimeType === "NATIVE" && (
@@ -178,12 +181,14 @@ export function AgentInstructions({
                       <div className="mt-3">
                         <p className="text-[13px] text-text-light-gray">
                           {agent.revokedAt
-                            ? "No key. Turn the agent on, then generate one."
+                            ? loginRecovery
+                              ? "No key. Generate one to reconnect this agent."
+                              : "No key. Turn the agent on, then generate one."
                             : "No key yet."}
                         </p>
                         <button
                           type="button"
-                          disabled={tokenBusy || Boolean(agent.revokedAt)}
+                          disabled={tokenBusy || (Boolean(agent.revokedAt) && !loginRecovery)}
                           className="mt-2 text-[13px] text-hypertasks-purple disabled:opacity-50"
                           onClick={() => void handleGenerateToken()}
                         >

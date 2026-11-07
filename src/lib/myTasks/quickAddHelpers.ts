@@ -43,7 +43,6 @@ export function myTasksQuickAddLikelyVisible(
 type QuickAddVisibilityOptions = {
   viewConfig: MyTasksViewConfig;
   viewsFeatureEnabled: boolean;
-  filterParityEnabled: boolean;
   groupBy: string;
   activeSplit: number;
   prioritySelection: readonly IPrioritiesConstants[];
@@ -91,7 +90,7 @@ export function myTasksQuickAddTaskVisibleInPayload(
       )
       .flatMap((section) => (section.items ?? []) as MyTasksTask[]);
     const filtered = applyMyTasksView(flat, options.viewConfig, now, {
-      applyFilterSettings: options.filterParityEnabled,
+      applyFilterSettings: true,
       runtimeContext: options.runtimeContext,
     });
     const selectedBoardId =
@@ -120,7 +119,7 @@ export function myTasksQuickAddTaskVisibleInPayload(
         options.viewConfig,
         now,
         {
-          applyFilterSettings: options.filterParityEnabled,
+          applyFilterSettings: true,
           runtimeContext: options.runtimeContext,
         },
       ),

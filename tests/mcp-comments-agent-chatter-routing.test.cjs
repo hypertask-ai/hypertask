@@ -101,12 +101,11 @@ for (const options of [{ noRun: true }, { noActivity: true }]) {
   })
 }
 
-test('a board without the agent log asks for a kind, not a retry', async () => {
-  const { post, calls } = setup({ runtime: false })
+test('without kind, agent progress stays in the log', async () => {
+  const { post, calls } = setup()
   const response = await post()
-  assert.equal(response.status, 400)
-  assert.equal(response.body.field, 'kind')
-  assert.equal(response.body.code, 'missing_field')
+  assert.equal(response.status, 201)
+  assert.equal(response.body.routedTo, 'log')
   assert.equal(calls.comments.length, 0)
 })
 

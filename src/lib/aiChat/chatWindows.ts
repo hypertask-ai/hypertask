@@ -99,6 +99,15 @@ export function closeChatWindow(windows: ChatWindowState[], id: string): ChatWin
   return windows.filter((window) => window.id !== id);
 }
 
+export function closeChatWindowsForUser(windows: ChatWindowState[], userId: number): ChatWindowState[] {
+  if (!Array.isArray(windows)) return windows;
+  const remaining = windows.filter((window) => window.userId !== userId);
+  return remaining.length === windows.length ? windows : remaining;
+}
+
+export const multiChatWindowsAvailable = (state: { enabled: boolean; desktop: boolean; sidebarMode: boolean }) =>
+  state.enabled && state.desktop && !state.sidebarMode;
+
 export function updateChatWindow(
   windows: ChatWindowState[],
   id: string,

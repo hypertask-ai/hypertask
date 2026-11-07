@@ -173,7 +173,7 @@ for args in 'activity --help' 'activity add --help' 'activity add X-1 --help' 'a
   [[ $(< "$T/out") == 'usage: vcc activity '* ]] || fail "missing activity help: vcc $args"
   [ ! -s "$VCC_TEST_TRACE" ] || fail "help accessed credentials or board: vcc $args"
 done
-for args in 'activity' 'activity unknown X-1' 'activity add X-1 --text note' 'activity add X-1 --typo' 'activity list X-1 --bad'; do
+for args in 'activity' 'activity unknown X-1' 'activity add X-1 --text' 'activity add X-1 --typo' 'activity list X-1 --bad'; do
   run bash "$vcc" $args
   [ "$status" = 1 ] || fail "expected exit 1, got $status: vcc $args"
   [[ $(< "$T/err") == 'usage: vcc activity '* ]] || fail "missing activity usage: vcc $args"
@@ -181,7 +181,37 @@ for args in 'activity' 'activity unknown X-1' 'activity add X-1 --text note' 'ac
 done
 allowed bash "$vcc" tasks get X-1
 printf 'ok activity help and invalid options never access credentials or board\n'
-question='<p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+cat >/dev/null
+url= out=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) out=$2; shift 2 ;;
+    https://*) url=$1; shift ;;
+    *) shift ;;
+  esac
+done
+printf 'curl %s\n' "$url" >> "$VCC_TEST_TRACE"
+printf '%s\n' '{"success":true,"activities":[{"createdAt":"2026-11-07T00:00:00Z","agentName":"Runner 12","text":"older note"},{"createdAt":"2026-11-07T01:00:00Z","agentName":"Runner 12","text":"newer\nnote"}]}' > "$out"
+printf '200'
+STUB
+chmod +x "$T/bin/curl"
+run bash "$vcc" activity list X-1
+[ "$status" = 0 ] || fail "activity list failed: $(cat "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=100'* ]] || fail "activity list used the wrong limit"
+[[ $(< "$T/out") == *'older note'* && $(< "$T/out") == *'newer note'* ]] || fail "activity list dropped a row: $(cat "$T/out")"
+run bash "$vcc" activity last X-1
+[ "$status" = 0 ] || fail "activity last failed: $(cat "$T/err")"
+[[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=1'* ]] || fail "activity last stopped using limit 1"
+printf 'ok activity list returns every note and last stays the newest read\n'
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+printf 'unexpected network request\n' >&2
+exit 92
+STUB
+chmod +x "$T/bin/curl"
+question='<p><strong>What this is:</strong> the row of board tabs above your task list.</p><p><span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> Question: <strong>Remove the board tab row from My Tasks?</strong></p><p>My recommendation: yes.</p><p>Why: two rows of tabs confuse you.</p><p>Yes: a runner builds it behind a flag.</p><p>No: both rows stay.</p>'
 export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
 task_fixture() { jq -n --arg d "$1" '{tasks:[{id:1,description:$d}]}' > "$VCC_TEST_TASK"; }
 task_fixture '<p>Problem</p><p>Fix</p><p>Done when</p><p>Risk: low.</p><p>Decision: none.</p>'
@@ -207,7 +237,7 @@ allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'review move skipped comments'
 allowed bash "$vcc" tasks move YPER4-512 '--section=  vAlEnTiN ReViEw  '
 [[ $(< "$T/out") == 'stub: <tasks> <move> <YPER4-512> <--section=  vAlEnTiN ReViEw  >' ]] || fail 'equals section arguments changed'
-fixture '<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+fixture '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 allowed bash "$vcc" task move YPER4-512 --section 'Valentin Review'
 allowed bash "$vcc" task move --section 'Valentin Review' YPER4-512
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask comments list'* ]] || fail 'section before ticket skipped comments'
@@ -229,13 +259,13 @@ review_refused '' task move YPER4-512 --section 'Valentin Review'
 printf 'ok newest status note refuses even with an older Question\n'
 
 for text in \
-  '<p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p>' \
-  '<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p>' \
-  '<p>Question: <strong>Keep it?</strong></p><p>No: remove it.</p>' \
-  '<p>Question: Keep it?</p><p>Yes: keep it.</p><p>No: remove it.</p>' \
-  '<p>Question: <strong>Keep it.</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
-  '<p>Status: Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
-  '<p>Question: note. Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>'; do
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: Keep it?</p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it.</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Status: Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>' \
+  '<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: note. Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p>'; do
   fixture "$text"
   review_refused '' task move YPER4-512 --section 'Valentin Review'
 done
@@ -261,8 +291,8 @@ question_refused() {
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
 }
-plain='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
-inline_why='<p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+plain='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
+inline_why='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
 for text in "$plain" "$inline_why" "$question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
@@ -277,6 +307,47 @@ for part in 'Yes:' 'No:' 'My recommendation:' 'Why:'; do
 done
 question_refused 'Question:' comment add X-1 --kind question --text "${plain/Keep it?/Keep it.}"
 printf 'ok required Question parts and shared review validation\n'
+
+label='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p>'
+shape='<strong>What this is:</strong>'
+no_label="${plain/$label/}"
+question_refused 'What this is:' comment add X-1 --kind question --text "$no_label"
+fixture "$no_label"
+review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+late_label="${plain/$label/}<p>$shape the setting that keeps the board tidy.</p>"
+question_refused 'What this is:' comment add X-1 --kind question --text "$late_label"
+empty_label="${plain/$shape the setting that keeps the board tidy./$shape}"
+question_refused 'What this is:' comment add X-1 --kind question --text "$empty_label"
+for context in '&#32;' '&#x20;' '&#X20;' '&#160;' '&#32;&#x20;&#160;' '&#9;' '&#10;' '&#11;' '&#12;' '&#13;' '&#00009;' '&#00010;' '&#x000A;' '&#X000d;' '&#9&#xA' '&#8192;&#x200A;&#8239;&#xFEFF;' '&#8203;' '&#x200B;' '&Tab;&NewLine;&ensp;&emsp;&thinsp;&ZeroWidthSpace;'; do
+  text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+for context in $'\u200b' $'\u00a0\u1680\u2000\u200a\u202f\u3000\ufeff' $'\u0085\u200b\u2028\u2029\u205f'; do
+  text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+context=$'\u200b<strong>設定を確認。</strong>'
+text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+fixture "$text"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+context='&#0009;the&#X000A;setting&#160;works'
+text="${plain/$shape the setting that keeps the board tidy./"$shape$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+fixture "$text"
+allowed bash "$vcc" task move X-1 --section 'Valentin Review'
+for prefix in 'Leading text' '<div>Leading text</div>' '<p></p>Leading text'; do
+  text="$prefix$plain"
+  question_refused 'What this is:' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'What this is:' task move X-1 --section 'Valentin Review'
+done
+allowed bash "$vcc" comment add X-1 --kind question --text "  <div><p></p>$plain</div>"
+printf 'ok a Question needs What this is: first, with words after it\n'
 
 for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.js' 'NOTES.md' endpoint ROUTE bearer OAuth prefilter regex schema migration CodeQL 'token audience' CI 'PR #123' PR123 '#123'; do
   text="$plain<p>$word</p>"
@@ -315,14 +386,31 @@ question_refused 'My recommendation:' comment add X-1 --kind question --file "$T
 question_refused 'My recommendation:' comments add X-1 --kind=question "--file=$T/question.html"
 run bash "$vcc" comment add X-1 --kind question --file "$T/missing.html"
 [ "$status" = 5 ] || fail 'missing Question file must fail closed'
-markdown='Question: **Keep it?**
+markdown='What this is: the setting that keeps the board tidy.
+
+Question: **Keep it?**
 
 Yes: keep it.
 No: remove it.
 My recommendation: yes. Why: less work.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
+for context in $'\u200b' $'\u00a0\u200b\u3000\ufeff' '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '`' '```' '* _ ` **' '[*](https://example.test)' '<em>_</em>'; do
+  text="${markdown/the setting that keeps the board tidy./"$context"}"
+  question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
+done
+for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
+  text="${markdown/the setting that keeps the board tidy./"$context"}"
+  allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+done
+context='&#9;See [the setting](https://example.test)&#x20;here.'
+text="${markdown/the setting that keeps the board tidy./"$context"}"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
+question_refused '#123' comment add X-1 --kind question --markdown --text "$text #123"
+question_refused '#35' comment add X-1 --kind question --markdown --text "$text &#35;123"
 printf '%s\n' "$markdown" > "$T/question.md"
+question_refused 'What this is:' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./Question: **Keep it?**}"
 allowed bash "$vcc" comments add X-1 --kind=question --markdown "--file=$T/question.md"
 question_refused 'My recommendation:' comment add X-1 --kind question --markdown --body "${markdown/My recommendation:/Suggestion:}"
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
@@ -390,7 +478,7 @@ FIXTURE
 )
 
 rewrite_7508_303933=$(cat <<'FIXTURE'
-<p><strong>Plain version: this ticket makes sure an AI agent only sees the boards it was given, not every board its owner can see.</strong></p>
+<p><strong>What this is:</strong> this ticket makes sure an AI agent only sees the boards it was given, not every board its owner can see.</p>
 <p>What it is about: there are 81 places in the app where an agent reads board content. Each one should check &quot;is this agent allowed on this board?&quot;. Many already check it a few lines earlier, so they are safe today and only need to be marked as checked. The others need a real fix.</p>
 <p>Why it needs you: a real fix can make something disappear for someone, for example a board an agent could see by mistake. Taking access away is your call. Marking already-safe places as checked changes nothing anyone sees.</p>
 <p>Question: <strong>Can I (HT Product Lead) sign off the places that are already safe, so you only decide the fixes that take access away from someone?</strong></p>
@@ -548,7 +636,7 @@ case "$url" in
   */agent-activity\?*)
     printf '%s' "${VCC_TEST_ACTIVITY_RESPONSE:-}" > "$output" ;;
   */agents/runs)
-    [ "$method" = POST ] && [ "$data" = '{"taskId":42,"source":"runtime"}' ] || exit 93
+    [ "$method" = POST ] && [ "$data" = '{"taskId":42,"projectId":15,"boardNumber":1,"source":"runtime"}' ] || exit 93
     printf '%s' '{"success":true,"run":{"id":"fixture-run"}}' > "$output" ;;
   */agents/runs/fixture-run)
     [ "$method" = GET ] || exit 94
@@ -571,7 +659,11 @@ run bash "$vcc" activity last X-1
 for suffix in '' '--json'; do
   run bash "$vcc" activity list X-1 $suffix
   [ "$status" = 0 ] || fail "list failed: $(cat "$T/err")"
-  jq -e '.activities[0].text == "Full note\nNext step" and .activities[0].id == "note-1"' "$T/out" >/dev/null || fail 'list lost note content or metadata'
+  if [ "$suffix" = --json ]; then
+    jq -e '.activities[0].text == "Full note\nNext step" and .activities[0].id == "note-1"' "$T/out" >/dev/null || fail 'list lost note content or metadata'
+  else
+    [[ $(< "$T/out") == *$'Fixture Agent\tFull note Next step'* ]] || fail 'list lost note text'
+  fi
   [[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=100'* ]] || fail 'list did not request history'
   [[ $(< "$VCC_TEST_TRACE") != *POST* ]] || fail 'list wrote to the board'
 done
@@ -588,7 +680,7 @@ run env VCC_TEST_ACTIVITY_CODE=404 bash "$vcc" activity last X-1
 [ "$status" = 4 ] || fail 'last lost the unavailable-route exit contract'
 printf 'ok activity reads preserve text, history, caller filters and denied access\n'
 
-printf '%s' '{"tasks":[{"id":42,"ticketNumber":"X-1"}]}' > "$VCC_TEST_TASK"
+printf '%s' '{"tasks":[{"id":42,"ticketNumber":"X-1","projectId":15,"uniqueIndex":1}]}' > "$VCC_TEST_TASK"
 run bash "$vcc" activity list 42 --json
 [ "$status" = 0 ] || fail 'numeric task history failed'
 [[ $(< "$VCC_TEST_TRACE") == *'hypertask tasks get'* && $(< "$VCC_TEST_TRACE") == *'/tasks/X-1/agent-activity?'* ]] || fail 'numeric task reference did not resolve'
@@ -604,4 +696,51 @@ run bash "$vcc" activity add 99 'Fixture note'
 [ "$status" != 0 ] || fail 'unresolved numeric task was accepted'
 [[ $(< "$VCC_TEST_TRACE") != *POST* ]] || fail 'unresolved numeric task wrote a note'
 printf 'ok numeric task references resolve for reads and writes and fail closed\n'
+cat > "$T/bin/hypertask" <<'STUB'
+#!/usr/bin/env bash
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+if [ "${1:-} ${2:-}" = 'tasks get' ]; then
+  printf '%s\n' '{"tasks":[{"id":42,"projectId":15,"uniqueIndex":8740}]}'
+  exit 0
+fi
+printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
+STUB
+chmod +x "$T/bin/hypertask"
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+url="${*: -1}"
+data="" out="" prev=""
+for arg in "$@"; do
+  [ "$prev" = --data ] && data=$arg
+  [ "$prev" = --output ] && out=$arg
+  prev=$arg
+done
+printf 'curl %s %s\n' "$url" "$data" >> "$VCC_TEST_TRACE"
+if [[ $url == *"/activities" ]]; then
+  printf '%s' '{"success":true,"activity":{"id":"act-1"}}' > "$out"
+elif [[ $url == */agents/runs/run-1 ]]; then
+  printf '%s' '{"success":true,"run":{"id":"run-1","status":"active"}}' > "$out"
+elif [[ $url == */agents/runs ]]; then
+  printf '%s' '{"success":true,"run":{"id":"run-1","status":"active"}}' > "$out"
+else
+  printf 'unexpected %s\n' "$url" >&2
+  exit 92
+fi
+printf '200'
+STUB
+chmod +x "$T/bin/curl"
+run bash "$vcc" activity add HTPR-8740 --text 'parked note'
+[ "$status" = 0 ] || fail "documented --text was rejected: $(cat "$T/err")"
+[ "$(cat "$T/out")" = act-1 ] || fail "activity id missing"
+grep -q 'parked note' "$VCC_TEST_TRACE" || fail '--text body was not posted'
+run bash "$vcc" activity add HTPR-8740 --text='second note'
+[ "$status" = 0 ] || fail "--text= was rejected: $(cat "$T/err")"
+grep -q 'second note' "$VCC_TEST_TRACE" || fail '--text= body was not posted'
+run bash "$vcc" activity add HTPR-8740 'positional note'
+[ "$status" = 0 ] || fail "positional text broke: $(cat "$T/err")"
+run bash "$vcc" activity add HTPR-8740 --note hi
+[ "$status" = 1 ] || fail "unknown option was accepted"
+grep -q 'usage: vcc activity' "$T/err" || fail "wrong rejection: $(cat "$T/err")"
+printf 'ok activity add accepts the documented text option\n'
 printf 'vcc helper guard tests passed\n'

@@ -439,5 +439,12 @@
     "version": "1",
     "partsHash": "4ea669a2a70c15a4afdf8618490359bfb4e959969bb4441a786a32a0af0207da",
     "expressionsHash": "3ead76a9f1cfe988067596cc44cd63f40b9e17ecb740e65133eee88d31189d2b"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterRun.ts",
+    "id": "task-writer-short-style-rule",
+    "version": "1",
+    "partsHash": "238c034e5dd0382d82d74c8f9afa56b0051cca3582cdb947497139c8626ac273",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   }
 ]

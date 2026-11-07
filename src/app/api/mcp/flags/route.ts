@@ -6,7 +6,7 @@ import { parse } from "node-html-parser";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_KEYS,
@@ -229,7 +229,7 @@ export async function PATCH(request: NextRequest) {
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
         } else {
-          const record = /^(?:@(?:valentin yeo|ht product lead)\b[\s,:-]*)?valentin said in chat \((\d{4}-\d{2}-\d{2})\):\s*"([^"]*)"(?:(?:[\s\p{P}]+switch\s+[a-z0-9]+(?:-[a-z0-9]+)*\s+to\s+(?:only\s+me|owner\s*\+\s*qa|everyone|off)(?![\w-]))+[\s\p{P}]*|\.)?$/u.exec(words);
+          const record = FLAG_CHAT_RECORD.exec(words);
           const recordDate = record ? Date.parse(`${record[1]}T00:00:00.000Z`) : NaN;
           if (!unedited || !fresh || comment.creatorId !== FEATURE_FLAG_OWNER_USER_ID
             || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)

@@ -1,6 +1,5 @@
 import type Stripe from "stripe";
 import prisma from "@/lib/prisma";
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { isActivationEligible } from "./activationAnalytics";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 
@@ -186,7 +185,7 @@ export async function captureStripeInvoicePaid(
     const team = await (teamLookup ??= billedTeam(customerId));
     if (!team || !customerId) return;
     const userId = team.googleAccount.userId;
-    if (!(await isActivationEligible(userId)) || !(await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId))) return;
+    if (!(await isActivationEligible(userId))) return;
     const eventId = `payment_succeeded:${invoice.id}`;
     const paidAt = invoice.status_transitions?.paid_at ?? null;
     const occurredAt = new Date((paidAt ?? event.created) * 1000);

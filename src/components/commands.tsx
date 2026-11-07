@@ -77,8 +77,8 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const newTaskWindow = true;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
-  myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
+  queryClient, myTasksViewsEnabled,
+  myTasksSnoozeEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
   showCommands, setShowCommands, setBoardZoomedOutByProject, showAiChatInterface, setShowAiChatInterface,
@@ -162,7 +162,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
     setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
     callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-    myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+    myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
     goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
     markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
     saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
@@ -236,7 +236,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
         appShellRailOn, showCommands, currentUser, boardCloseHandler, _currentProject,
         refreshRowTaskList, relationPicker, activeTaskId, callbackHandler, archiveHandler,
         confirmDelete, DeleteMessageHandler, setDueDateCallback, queryClient, inViewObject,
-        _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler, myTasksBulkSelectionEnabled,
+        _activeTask, setRecurrenceHandler, taskTemplatePickerForCurrentProject, openTaskTemplateHandler,
         hasBulkSelection, kanbanBulkSelection, bulkSelection, bulkTasks, bulkActionProjectId,
         _activeTaskAssignees, toggleAssignModal, taskProject, updateAutoAssignHandler, createBoard,
         createColumn, contextOptions, toggleManageColumns, updateBoard, reSendInvite,
@@ -244,7 +244,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
         callbackProjectId, toggleBoardSortingHandler, togglePriorityModal, toggleEstimateModal, setShowCommands,
         setCommandMode, toggleLabelModal, myTasksSnoozeEnabled, togglRemindMeModal, toggleSubTaskSettingsHandler,
         toggleManageViewsHandler, toggleBoardViewsHandler, toggleSubtaskLinkingHandler, onMyTasks, myTasksViewsEnabled,
-        myTasksTableColumnsEnabled, toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
+        toggleRenameTaskModal, agentToEdit, closeCallbackCreateAgent, inboxZeroRules,
       })}
 </>
   );

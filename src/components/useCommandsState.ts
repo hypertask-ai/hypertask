@@ -33,7 +33,7 @@ import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection
 import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
-import { MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
@@ -48,10 +48,8 @@ export function useCommandsState(context: Context) {
 
   const queryClient = useQueryClient();
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
-  const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
-  const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
+  const myTasksViewsEnabled = true;
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,
@@ -84,9 +82,7 @@ export function useCommandsState(context: Context) {
   const { undoLatest } = useUndoContext();
   const kanbanBulkSelection = useKanbanBulkSelectionOptional();
   const myTasksBulkFromContext = useMyTasksBulkSelectionOptional();
-  const myTasksBulkSelection = myTasksBulkSelectionEnabled
-    ? myTasksBulkFromContext
-    : undefined;
+  const myTasksBulkSelection = myTasksBulkFromContext;
   const bulkSelection = kanbanBulkSelection ?? myTasksBulkSelection;
   const hasBulkSelection = (bulkSelection?.selectedCount ?? 0) > 0;
   const bulkTasks = bulkSelection?.selectedTasks ?? [];
@@ -348,8 +344,8 @@ export function useCommandsState(context: Context) {
     };
   }, [commandMode, _currentProject?.id]);
   return {
-  queryClient, myTasksViewsEnabled, myTasksTableColumnsEnabled,
-  myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
+  queryClient, myTasksViewsEnabled,
+  myTasksSnoozeEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
   showCommands, setShowCommands, setBoardZoomedOutByProject, showAiChatInterface, setShowAiChatInterface,

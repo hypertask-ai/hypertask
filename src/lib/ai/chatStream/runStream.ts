@@ -239,8 +239,10 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     });
     if (!state.errorSent) {
       state.errorSent = true;
+      const ownKeyProvider = state.selected.usageProvider === "byok:deepseek" ? undefined : state.selected.usageProvider;
+      const nameOwnKey = Boolean(ownKeyProvider) && await isFeatureEnabled("htpr-7751-own-key-rejected", dbUser.id);
       state.send("error", {
-        content: userFacingErrorMessage(error, "stream-handler"),
+        content: userFacingErrorMessage(error, "stream-handler", nameOwnKey ? ownKeyProvider : undefined),
         ...userFacingErrorDetails(error, gatewayTags.teamId ?? null),
       });
       state.finish("error");

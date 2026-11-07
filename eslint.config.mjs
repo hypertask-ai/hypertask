@@ -69,7 +69,7 @@ export default defineConfig([
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
       "src/app/\\[...boardURL\\]/page.tsx",
-      // HTPR-7278: server root layout; reads the memory-only tracking flag for PostHog.
+      // Server root layout reads feature flags during SSR.
       "src/app/layout.tsx",
     ],
     rules: {

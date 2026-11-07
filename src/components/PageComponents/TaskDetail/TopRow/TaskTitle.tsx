@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useRef, useState } from "react";
 import { updateTask } from "@/utils/api/Task Detail";
@@ -35,7 +35,6 @@ const TaskTitle = () => {
     setCurrentTask,
     descriptionStart,
   } = useTaskContext();
-  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
   const _parsedTask = JSON.parse(parsed_task);
   const _mbl = useContext(MobileViewContext);
@@ -198,7 +197,7 @@ const TaskTitle = () => {
             return shouldConfirmAction();
         }}
         className="font-bold"
-        style={descriptionFirstFlag || descriptionStart === "server" ? { ...titleStyle, fieldSizing: "content", minHeight: 37 } : titleStyle}
+        style={descriptionStart === "server" ? { ...titleStyle, fieldSizing: "content", minHeight: 37 } : titleStyle}
       />
       {currentTask?.id && currentTask.id > 0 && currentTask.project?.timeTrackingEnabled ? (
         <RunningTimerIndicator taskId={currentTask.id} />

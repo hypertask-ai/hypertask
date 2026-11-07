@@ -160,3 +160,49 @@ test("HTPR-8340: search refuses an assignee name and honours a comma list", asyn
   assert.equal(list.response.status, 200);
   assert.deepEqual(list.taskQueries[0].where.assignees, { some: { userId: { in: [6, 7] } } });
 });
+
+test("HTPR-8847: an unsupported search sort names the sort field and a supported sort still orders", async () => {
+  const invalid = await search({ sort: "priority:desc" });
+  assert.equal(invalid.response.status, 400);
+  assert.equal(invalid.taskQueries.length, 0);
+  assert.equal(invalid.response.body.message, "sort must be one of id, createdAt, updatedAt, title, dueDate, ticketNumber");
+  assert.deepEqual(invalid.response.body.details, {
+    field: "sort",
+    code: "invalid_value",
+    allowed_values: ["id", "createdAt", "updatedAt", "title", "dueDate", "ticketNumber"],
+  });
+
+  const errors = loadModule("src/lib/mcp-server/utils/errors.ts");
+  const { actionableToolError } = loadModule("src/lib/mcp-server/tool-response.ts");
+  const { callerCanFixRefusal } = loadModule("src/lib/aiFeedback/callerFixable.ts");
+  const error = errors.mapHttpErrorToMcpError(400, invalid.response.body.message, "corr", invalid.response.body);
+  assert.equal(
+    actionableToolError(error),
+    "sort must be one of id, createdAt, updatedAt, title, dueDate, ticketNumber. Check the action's required parameters and permissions before retrying.",
+  );
+  assert.equal(callerCanFixRefusal({ code: error.details.code, field: error.details.field }, 400), true);
+
+  const ok = await search({ sort: "updatedAt:desc" });
+  assert.equal(ok.response.status, 200);
+  assert.deepEqual(ok.taskQueries[0].orderBy, [{ updatedAt: "desc" }, { id: "asc" }]);
+});
+
+test("HTPR-8847: the sort refusal is a field the caller can fix, not a tool exception", async () => {
+  const invalid = await search({ sort: "lastUsedAt" });
+  const errors = loadModule("src/lib/mcp-server/utils/errors.ts");
+  const error = errors.mapHttpErrorToMcpError(400, invalid.response.body.message, "corr", invalid.response.body);
+  const filed = [];
+  const pending = [];
+  const { observeFeedbackTools } = loadModule("src/lib/aiFeedback/automatic.ts", {
+    "@vercel/functions": { waitUntil: (work) => pending.push(work) },
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "./report": { fileAiFeedback: async (input) => { filed.push(input); } },
+  });
+  const [tool] = observeFeedbackTools([{ name: "hypertask_search", execute: async () => { throw error; } }], 6);
+  await assert.rejects(tool.execute({}, "token"), (thrown) => thrown === error);
+  await Promise.all(pending);
+  assert.equal(filed.length, 1);
+  assert.equal(filed[0].errorCode, "invalid_value");
+  assert.equal(filed[0].field, "sort");
+  assert.equal(filed[0].status, 400);
+});

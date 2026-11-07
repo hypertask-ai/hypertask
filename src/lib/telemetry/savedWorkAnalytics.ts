@@ -1,14 +1,11 @@
 import "server-only";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
-import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, HTPR_7271_SAVED_WORK_EVENTS_FLAG, HTPR_7273_COLUMN_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import type { AccountCategory } from "./accountCategory";
-import { captureActivationOccurrence } from "./activationOccurrences";
 import { captureActivationCompleted } from "./activationCompleted";
 import type { BoardCreationMethod, ColumnCreationMethod, CreationChannel, SavedWorkActor } from "./savedWork";
-
-const LEGACY_BOARD_SOURCES: ReadonlySet<BoardCreationMethod> = new Set(["manual", "seeded", "adopted_demo"]);
 
 export function legacyAccountCategory(user: { id: number; uid?: string | null; email: string }): AccountCategory {
   if (isGuestUser(user)) return "guest";
@@ -70,11 +67,7 @@ export async function captureBoardCreated(
 ): Promise<void> {
   const board = await loadBoard(boardId);
   if (!board) return;
-  if (!(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id))) {
-    if (LEGACY_BOARD_SOURCES.has(method)) {
-      await captureActivationOccurrence(board.owner.id, "board_created", String(board.id), { source: method });
-    }
-  } else if (!isGuestUser(board.owner)) {
+  if (!isGuestUser(board.owner)) {
     await captureAnalyticsOccurrence(
       board.owner.id,
       "board_created",
@@ -87,7 +80,7 @@ export async function captureBoardCreated(
 }
 
 async function captureBoardColumns(board: Board, method: BoardCreationMethod, actor: SavedWorkActor, occurredAt: Date): Promise<void> {
-  if (isGuestUser(board.owner) || !(await isFeatureEnabled(HTPR_7273_COLUMN_EVENTS_FLAG, actor.userId ?? board.owner.id))) return;
+  if (isGuestUser(board.owner)) return;
   const columns = await prisma.section.findMany({ where: { projectId: board.id, deleted: false }, select: { id: true }, orderBy: { ranking: "asc" } });
   const columnMethod: ColumnCreationMethod = board.seeded || method === "seeded" || method === "adopted_demo" ? "seeded" : "default";
   for (const column of columns) {
@@ -131,7 +124,6 @@ async function loadColumnBoard(columnId: number, actor: SavedWorkActor) {
   if (!column) return null;
   const board = await loadBoard(column.projectId);
   if (!board || isGuestUser(board.owner)) return null;
-  if (!(await isFeatureEnabled(HTPR_7273_COLUMN_EVENTS_FLAG, actor.userId ?? board.owner.id))) return null;
   return board;
 }
 
@@ -152,14 +144,12 @@ export async function captureTaskCreated(taskId: number, actor: SavedWorkActor, 
   if (!task) return;
   const board = await loadBoard(task.projectId);
   if (!board) return;
-  if (await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id)) {
-    await captureAnalyticsOccurrence(
-      board.owner.id,
-      "task_created",
-      `analytics:task_created:${task.id}`,
-      buildTaskCreatedProperties(board, task, actor, channel),
-      { scope: "business" },
-    );
-  }
+  await captureAnalyticsOccurrence(
+    board.owner.id,
+    "task_created",
+    `analytics:task_created:${task.id}`,
+    buildTaskCreatedProperties(board, task, actor, channel),
+    { scope: "business" },
+  );
   await captureActivationCompleted(board.owner.id, task.createdAt);
 }

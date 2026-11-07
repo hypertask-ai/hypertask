@@ -17,7 +17,7 @@ import type { createGeneralCommandActions } from "./generalCommandActions";
 import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
 type Context = { newTaskWindow?: boolean; agentSidebarChatsEnabled: boolean } & Pick<IHTCProps, "callbackHandler"> &
-  Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
+  Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
   Pick<ReturnType<typeof createBoardCommandActions>, "acceptTaskHandler" | "saveTaskTemplateHandler" | "generateStatusUpdateHandler" | "toggleStalenessHandler" | "toggleStalenessViewHandler" | "toggleAutoArchiveHandler" | "sortByStalenessHandler"> &
   Pick<ReturnType<typeof createGeneralCommandActions>, "hideActiveColumn" | "markUnread" | "GoToHandler" | "toggleBoardTimeTrackingHandler" | "redirectToTrash" | "GoToOnboarding" | "copyCurrentPageURL" | "subscribeGoogleCalendar" | "copyBranchNameHandler" | "assignToMeHandler" | "deleteAllChats"> &
   Pick<ReturnType<typeof createCommandModalCallbacks>, "redirectToManageSubscriptions">;
@@ -30,7 +30,7 @@ export function createCommandDispatcher(context: Context) {
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
   setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
   callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-  myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+  myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
   goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
   markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
   saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
@@ -252,7 +252,7 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
   setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
   callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-  myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+  myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
   goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
   markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
   saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
@@ -444,7 +444,7 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
         boardCloseHandler();
         break;
       case CommandMode.ConfigureTableColumns:
-        if (onMyTasks && myTasksViewsEnabled && myTasksTableColumnsEnabled) {
+        if (onMyTasks && myTasksViewsEnabled) {
           setMyTasksColumnsPickerRequest((current) => current + 1);
           boardCloseHandler();
         }
@@ -481,7 +481,7 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
   setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
   callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-  myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+  myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
   goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
   markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
   saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
@@ -685,7 +685,7 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
   setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
   callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-  myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+  myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
   goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
   markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
   saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,
@@ -901,7 +901,7 @@ function dispatchCommandGroup4(context: Context, mode?: CommandMode, action?: st
   archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
   setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
   callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,
-  myTasksViewsEnabled, myTasksTableColumnsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
+  myTasksViewsEnabled, setMyTasksColumnsPickerRequest, changeBoardLayout, pathname,
   goToProjectShortcut, router, setRailExpanded, setAppShellRail, redirectToManageSubscriptions,
   markUnread, GoToHandler, inViewObject, toggleBoardTimeTrackingHandler, redirectToTrash,
   saveTaskTemplateHandler, generateStatusUpdateHandler, toggleCreateTaskGlobally, duplicateTaskHandler, openAiWriterHandler,

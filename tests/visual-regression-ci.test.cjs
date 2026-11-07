@@ -5,13 +5,15 @@ const { EventEmitter } = require("node:events");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 
-function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseDependenciesCached, headDependenciesCached, baseOnly = false, corruptBaseline = false, webpackBase = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
+function fixture({ fail, builds = {}, summaryOnly = false, summaryPath = "/summary.md", cachedBase = false, baseDependenciesCached, headDependenciesCached, baseOnly = false, corruptBaseline = false, webpackBase = false, playwrightVersions = { base: "1.64.1", head: "1.64.1" }, lockVersions = playwrightVersions } = {}) {
   const filename = path.join(__dirname, "../scripts/visual-regression-ci.mjs");
   const code = readFileSync(filename, "utf8").replace(/^import .*;\n/gm, "").replace(/^export /gm, "").replaceAll("import.meta.url", JSON.stringify(pathToFileURL(filename).href));
   const calls = [];
   const logs = [];
   const files = new Map();
   const children = new Map();
+  const output = [];
+  const attempts = { base: 0, head: 0 };
   let elapsed = 0;
   let pid = 100;
   const env = { GITHUB_ACTIONS: "true", GITHUB_WORKSPACE: "/workspace", RUNNER_TEMP: "/temp", DATABASE_URL: "postgresql://127.0.0.1/fixture", REDIS_URL: "redis://localhost", GITHUB_STEP_SUMMARY: summaryPath };
@@ -24,6 +26,7 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
     performance: { now: () => elapsed },
     process: {
       env, argv: ["node", "fixture", ...(summaryOnly ? ["--summary"] : [])], execPath: "node",
+      stdout: { write: chunk => output.push(chunk.toString()) }, stderr: { write: chunk => output.push(chunk.toString()) },
       kill(childPid, signal) {
         elapsed += 100;
         calls.push(`stop ${signal}`);
@@ -67,7 +70,27 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
       else elapsed += 2000;
       return { status: command === fail ? 1 : 0 };
     },
-    spawn: () => {
+    spawn: (bin, args, options) => {
+      if (args[0] === "next" && args[1] === "build") {
+        const phase = path.basename(options.cwd);
+        const command = `${phase}: ${[bin, ...args].join(" ")}`;
+        calls.push(command);
+        elapsed += phase === "base" ? 60_000 : 120_000;
+        const result = builds[phase]?.[attempts[phase]++] ?? { status: command === fail ? 1 : 0 };
+        const child = new EventEmitter();
+        child.stdout = new EventEmitter();
+        child.stderr = new EventEmitter();
+        for (const stream of [child.stdout, child.stderr]) {
+          stream.pipe = destination => stream.on("data", chunk => destination.write(chunk));
+        }
+        queueMicrotask(() => {
+          for (const chunk of result.stdout ?? []) child.stdout.emit("data", Buffer.from(chunk));
+          for (const chunk of result.stderr ?? []) child.stderr.emit("data", Buffer.from(chunk));
+          if (result.error) child.emit("error", new Error(result.error));
+          else child.emit("close", result.status, result.signal ?? null);
+        });
+        return child;
+      }
       elapsed += 300;
       const child = new EventEmitter();
       child.pid = ++pid;
@@ -80,7 +103,7 @@ function fixture({ fail, summaryOnly = false, summaryPath = "/summary.md", cache
     delay: () => new Promise(() => {}),
   };
   const main = new Function(...Object.keys(context), `${code}\nreturn main;`)(...Object.values(context));
-  return { main, calls, logs, files, elapsed: () => elapsed };
+  return { main, calls, logs, files, output, elapsed: () => elapsed };
 }
 
 const commands = phase => [
@@ -124,6 +147,50 @@ test("an older baseline build command keeps webpack while the migrated head buil
     "base: npx next build --webpack",
     "head: npx next build",
   ]);
+});
+
+test("font failures retry once in both phases and preserve webpack arguments and output", async () => {
+  const run = fixture({ webpackBase: true, builds: {
+    base: [{ status: 1, stderr: ["An error occurred in `next/", "font`\nTypeError: Cannot read properties of null (reading '1')\n"] }, { status: 0, stdout: ["base built\n"] }],
+    head: [{ status: 1, stdout: ["@next/font/dist/google/loader.js\n"] }, { status: 0, stderr: ["head built\n"] }],
+  } });
+  await run.main();
+  assert.deepEqual(run.calls.filter(call => call.includes(": npx next build")), [
+    "base: npx next build --webpack", "base: npx next build --webpack",
+    "head: npx next build", "head: npx next build",
+  ]);
+  assert.match(run.output.join(""), /An error occurred in `next\/font`\nTypeError/);
+  assert.match(run.output.join(""), /@next\/font\/dist\/google\/loader\.js/);
+  assert.match(run.output.join(""), /base built\n.*head built/s);
+});
+
+test("unrelated build failures do not retry, even with large output", async () => {
+  const run = fixture({ builds: { base: [{ status: 1, stderr: ["unrelated error\n" + "x".repeat(100000)] }] } });
+  await assert.rejects(run.main(), /base: npx next build failed/);
+  assert.equal(run.calls.filter(call => call.includes(": npx next build")).length, 1);
+  assert.match(run.output.join(""), /^unrelated error/);
+});
+
+test("two font failures remain fatal without a third attempt", async () => {
+  const run = fixture({ builds: { base: [
+    { status: 1, stderr: ["next/font` error: first\n"] },
+    { status: 1, stderr: ["next/font` error: second\n"] },
+    { status: 0 },
+  ] } });
+  await assert.rejects(run.main(), /base: npx next build failed/);
+  assert.equal(run.calls.filter(call => call.includes(": npx next build")).length, 2);
+  assert.match(run.output.join(""), /first\nnext\/font` error: second/);
+});
+
+test("spawn errors and signals never retry even with font output", async () => {
+  for (const result of [
+    { error: "spawn failed", stderr: ["An error occurred in `next/font`"] },
+    { status: null, signal: "SIGTERM", stderr: ["An error occurred in `next/font`"] },
+  ]) {
+    const run = fixture({ builds: { base: [result, { status: 0 }] } });
+    await assert.rejects(run.main(), /spawn failed|base: npx next build failed/);
+    assert.equal(run.calls.filter(call => call.includes(": npx next build")).length, 1);
+  }
 });
 
 test("a failed base build still reports elapsed work, distinguishes unreached phases, and remains a failure", async () => {

@@ -104,13 +104,30 @@ export function toPublicTaskPullRequest(
   };
 }
 
-function githubHeaders(): HeadersInit {
+function githubHeaders(): Record<string, string> {
   const token = process.env.GITHUB_TOKEN;
   return {
     Accept: "application/vnd.github+json",
     "User-Agent": "Hypertask-Pull-Request-Linker",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+
+async function fetchGithub(url: string): Promise<Response> {
+  const headers = githubHeaders();
+  const send = (requestHeaders: Record<string, string>) =>
+    fetch(url, {
+      headers: requestHeaders,
+      cache: "no-store",
+      signal: AbortSignal.timeout(3_000),
+    });
+  const response = await send(headers);
+  if (response.status !== 401 && response.status !== 403) return response;
+  if (!headers.Authorization) return response;
+  await response.body?.cancel().catch(() => undefined);
+  const publicHeaders = { ...headers };
+  delete publicHeaders.Authorization;
+  return send(publicHeaders);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -132,13 +149,8 @@ async function fetchGithubCheckState(
   headSha: string,
 ): Promise<PullRequestCheckState | null> {
   try {
-    const response = await fetch(
+    const response = await fetchGithub(
       `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(headSha)}/check-runs?per_page=100`,
-      {
-        headers: githubHeaders(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(3_000),
-      },
     );
     if (!response.ok) return null;
     const value = await response.json();
@@ -163,13 +175,8 @@ export async function fetchGithubPullRequest(
 ): Promise<GithubPullRequestMetadata> {
   let response: Response;
   try {
-    response = await fetch(
+    response = await fetchGithub(
       `https://api.github.com/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/pulls/${parsed.number}`,
-      {
-        headers: githubHeaders(),
-        cache: "no-store",
-        signal: AbortSignal.timeout(3_000),
-      },
     );
   } catch {
     throw new PullRequestLinkError(

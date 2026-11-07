@@ -47,6 +47,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6059-lazy-emoji-list",
   "htpr-6322-agent-chat-parked-reply",
+  "htpr-6447-my-tasks-filter-parity",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
   "htpr-6254-heic-heif-attachments",
@@ -73,7 +74,16 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6268-agent-visibility",
   "htpr-6320-ai-observability",
   "htpr-6673-capture-user-signed-up-in-posthog",
+  "htpr-7076-prompt-cache",
   "htpr-7269-signup-identity-link",
+  "htpr-7273-column-events",
+  "htpr-7278-memory-only-tracking",
+  "htpr-7284-activation-completed",
+  "htpr-7367-server-description-first",
+  "htpr-7133-mcp-ratelimit-fast",
+  "htpr-6456-my-tasks-table-columns",
+  "htpr-6457-my-tasks-scopes",
+  "htpr-6459-my-tasks-overdue-badges",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,
@@ -102,6 +112,9 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6166-scoped-board-refetch": true,
   "htpr-6129-mobile-agent-chat-viewport": true,
   "htpr-6059-lazy-emoji-list": true,
+  "htpr-6456-my-tasks-table-columns": true,
+  "htpr-6457-my-tasks-scopes": true,
+  "htpr-6459-my-tasks-overdue-badges": true,
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);

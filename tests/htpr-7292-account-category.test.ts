@@ -102,7 +102,6 @@ test("legacy activation events gain the shared category", async () => {
 test("saved-work board_created labels the smoke QA owner qa instead of customer", async () => {
   for (const [shared, expected] of [[true, "qa"], [false, "customer"]] as const) {
     const h = harness(shared);
-    h.setFlagEnabled("htpr-7271-saved-work-events", true);
     ownBoard(h, SMOKE_QA);
     await h.load("src/lib/telemetry/savedWorkAnalytics.ts").captureBoardCreated(15, "manual", { userId: SMOKE_QA }, new Date("2026-10-17T12:00:00Z"));
     await h.drain();

@@ -402,10 +402,34 @@ chmod +x "$D/hold-gh" "$D/hold-ht"
 export RUNNER_INBOX_DIR=$D/inbox
 export HOLD_READS=$D/hold-reads HOLD_OPEN=$D/open.json HOLD_MERGED=$D/merged.json HOLD_BOARD=$D/board.json HOLD_BOARD_PAGE2=$D/page2.json HOLD_ORIGINAL_HT=$D/hypertask
 export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUME="claude --resume $ME"
+jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"
+pool_hold() {
+  jq -n --arg b "$2" '[{number:7,headRefName:$b,title:"YPER4-998 [BUGFIX] Other work",isDraft:false}]' > "$HOLD_OPEN"
+  SHIP_SESSION_NAME="RUNNER $1" ./ship-claim hold YPER4-999 >/dev/null 2>&1; echo $?
+}
+for branch in runner1/yper4-998 runner-1/yper4-998; do
+  eq "open PR on $branch holds RUNNER 1" "$(pool_hold 1 "$branch")" 4
+done
+eq "open PR on runner10/yper4-998 does not hold RUNNER 1" "$(pool_hold 1 runner10/yper4-998)" 0
+eq "open PR on runner10/yper4-998 holds RUNNER 10" "$(pool_hold 10 runner10/yper4-998)" 4
+for branch in infra-runner-1/yper4-998 ci-runner-1/yper4-998 ceo-runner-1/yper4-998 hax-runner-1/yper4-998 cursor/runner-1/yper4-998 lead/runner1-yper4-998; do
+  eq "open PR on $branch never holds RUNNER 1" "$(pool_hold 1 "$branch")" 0
+done
 mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"
 jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"
 : > "$D/log"; SHIP_SESSION_NAME='RUNNER 3' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a runner slot resumes past its own old claim" "$?" 0
+mk "$(c 10 2026-10-11T09:50:00.000Z a7 'CI Runner 4' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a CI runner slot resumes past its own fresh claim" "$?" 0
+mk "$(c 10 2026-10-11T09:50:00.000Z a7 'CI Runner 4' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
+jq -n --arg at "$(date -u -d '-20 minutes' +%FT%TZ)" --arg text "$(claim other-sess)" '{success:true,activities:[{id:"live-claim",createdAt:$at,agentId:"a7",agentName:"CI Runner 4",text:$text},{id:"live-beat",createdAt:$at,agentId:"a7",agentName:"CI Runner 4",text:"Working the ticket."}]}' > "$D/ci-live.json"
+: > "$D/log"
+FAKE_AGENT_LOG=$D/ci-live.json SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1
+eq "flow: a CI runner steps back from its own live session" "$?" 3
+grep -q unassign "$D/log" && bad "live CI session was unassigned" || ok "live CI session stays assigned"
+unset FAKE_AGENT_LOG
+mk "$(c 10 2026-10-11T09:50:00.000Z a8 'CI Runner 2' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a7 'CI Runner 4' "$(claim $ME)")"
+: > "$D/log"; SHIP_SESSION_NAME='CI Runner 4' ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: a CI runner slot still steps back for another runner" "$?" 3
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 6' "$(claim $ME)")"
 printf '[]' > "$HOLD_OPEN"
 printf '[{"number":42,"title":"HTPR-123 [BUGFIX] Existing work"}]' > "$HOLD_MERGED"
@@ -506,15 +530,15 @@ if [ "$fails" = 0 ]; then echo 'ship-claim completion-hold ok'; fi
 # Queue brake and infra first (YPER4-880), on the same hold stubs.
 export HOLD_INFRA=$D/infra.json
 prs() { jq -n --argjson n "$1" --argjson d "${2:-0}" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
 prs_own() { jq -n --argjson n "$1" --arg own "$2" --arg tk "$3" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: $own, title: "\($tk) [INFRA] own open work", isDraft: false}]' > "$HOLD_OPEN"; }
 free_infra() { jq -n --arg tk "$1" --arg ti "$2" \
   '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:4060,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
 empty_infra() { printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_INFRA"; }
 prs_adopt() { jq -n --argjson n "$1" --arg tk "$2" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: ("cursor/" + ($tk | ascii_downcase) + "-adopt"), title: "\($tk) [BUGFIX] Adopted work", isDraft: false}]' > "$HOLD_OPEN"; }
 holdrc() { SHIP_SESSION_NAME="$1" ./ship-claim hold "$2" >"$D/hold-out" 2>&1; echo $?; }
 printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"; printf '[]' > "$HOLD_OPEN"
@@ -531,6 +555,8 @@ jq -n '[range(30) | {number: ., headRefName: "ci-runner-2/hyci-\(.)", title: "HY
   + [range(5) | {number: (100 + .), headRefName: "dependabot/npm/x\(.)", title: "Bump x", isDraft: false}]
   + [range(5) | {number: (200 + .), headRefName: "infra-lead/yper4-\(.)", title: "YPER4-\(.) [INFRA] tool", isDraft: false}]' > "$HOLD_OPEN"
 eq "30 CI, 5 dependency and 5 infra PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+jq -n '[range(25) | {number: (300 + .), headRefName: "cursor/cloud-fix-\(.)", title: "HTPR-\(900 + .) [BUGFIX] Cloud fix", isDraft: false}]' > "$HOLD_OPEN"
+eq "25 cloud agent PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
 prs 21; eq "queue 21, CI ticket -> allowed" "$(holdrc 'RUNNER 6' HYCI-30)" 0
 prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0

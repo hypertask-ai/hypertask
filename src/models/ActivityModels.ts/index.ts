@@ -57,6 +57,11 @@ export interface ITaskPullRequestActivity {
   };
 }
 
+export interface IAiFeedbackLogActivity {
+  type: "AiFeedbackLog";
+  data: { text: string };
+}
+
 export interface ITaskWaitingOnActivity {
   type: "TaskWaitingOn";
   data: {

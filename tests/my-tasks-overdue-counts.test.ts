@@ -72,7 +72,6 @@ test("overdueCountsFromAuthorizedTasks does not reuse the active view's dataset"
     membership,
     NOW,
     {},
-    true,
   );
 
   assert.equal(counts.all, 1);
@@ -108,7 +107,6 @@ test("overdueCountsFromAuthorizedTasks uses the supplied time zone day start", (
     membership,
     now,
     { timeZone: "UTC" },
-    false,
   );
   const tokyoCounts = overdueCountsFromAuthorizedTasks(
     [dueYesterdayInTokyo],
@@ -116,7 +114,6 @@ test("overdueCountsFromAuthorizedTasks uses the supplied time zone day start", (
     membership,
     now,
     { timeZone: "Asia/Tokyo" },
-    false,
   );
   assert.equal(utcCounts.all, 0);
   assert.equal(tokyoCounts.all, 1);
@@ -207,7 +204,6 @@ test("overdueCountsFromAuthorizedTasks honors running-timer runtime context", ()
     membership,
     NOW,
     { applyFilterSettings: true },
-    false,
   );
   const withRuntime = overdueCountsFromAuthorizedTasks(
     [running, idle],
@@ -218,7 +214,6 @@ test("overdueCountsFromAuthorizedTasks honors running-timer runtime context", ()
       applyFilterSettings: true,
       runtimeContext: { runningTaskIds: new Set([4]) },
     },
-    false,
   );
   assert.equal(withoutRuntime.byViewId[12], 0);
   assert.equal(withRuntime.byViewId[12], 1);

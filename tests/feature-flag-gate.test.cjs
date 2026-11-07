@@ -2131,6 +2131,62 @@ export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture",
   assert.equal(result.pass, true, result.reason);
 });
 
+test("new UI flags accept Owner and QA without bypassing registry or runtime checks", async (t) => {
+  for (const [kind, mode, risk, gated, ui, pass, message] of [
+    ["feature", 'defaultMode: "OWNER_AND_QA",', '', true, true, true],
+    ["improvement", 'defaultMode: "OWNER_AND_QA",', '', true, true, true],
+    ["feature", 'defaultMode: "EVERYONE",', '', true, true, true],
+    ["improvement", 'defaultMode: "EVERYONE",', '', true, true, true],
+    ["feature", '', '', true, true, false, /must set defaultMode: "EVERYONE"/],
+    ["feature", 'defaultMode: "OFF",', '', true, true, false, /must set defaultMode: "EVERYONE"/],
+    ["feature", 'defaultMode: "UNKNOWN",', '', true, true, false, /defaultMode/],
+    ["feature", 'defaultMode: "OWNER_AND_QA",', '', false, true, false, /must set defaultMode: "EVERYONE"/],
+    ["feature", 'defaultMode: "EVERYONE",', ', highRisk: "access"', true, true, false, /releaseRisk\.highRisk may not default to Everyone/],
+    ["feature", 'defaultMode: "OWNER_AND_QA",', '', false, false, false, /must set defaultMode: "EVERYONE"/],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "${kind}", ${mode} shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture"${risk} } } as const;`);
+    if (ui) writeFile(dir, "src/components/Widget.tsx", gated
+      ? 'import { NEW_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(NEW_FLAG) ? <div /> : null;\n'
+      : 'export const Widget = () => <div />;\n');
+    const result = await evaluate(`HTPR-2 [${kind === "improvement" ? "IMPROVE" : "FEATURE"}] Widget`, base, commit(git, "new flag"), dir);
+    assert.equal(result.pass, pass, `${kind} ${mode} ${risk}: ${result.reason}`);
+    if (pass) assert.equal(result.ownerReview, "feature-gated-ui");
+    if (message) assert.match(result.reason, message);
+  }
+});
+
+test("new Owner and QA flag can gate UI through its API", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "feature", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture" } } as const;`);
+  writeFile(dir, "src/components/Widget.tsx", 'export async function loadWidget() { return fetch("/api/widget"); }\nexport const Widget = () => <div />;\n');
+  writeFile(dir, "src/app/api/widget/route.ts", 'import { isFeatureEnabled } from "@/lib/flags";\nimport { NEW_FLAG } from "@/lib/flags/keys";\nexport async function GET() { if (await isFeatureEnabled(NEW_FLAG, 6)) return new Response("on"); return new Response("off"); }\n');
+  const result = await evaluate("HTPR-2 [FEATURE] Widget", base, commit(git, "server-gated UI"), dir);
+  assert.equal(result.pass, true, result.reason);
+});
+
+test("unrelated or deleted UI cannot qualify an Owner and QA flag", async (t) => {
+  for (const [title, deleted] of [["FEATURE", false], ["BUGFIX", false], ["FEATURE", true]]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    if (deleted) writeFile(dir, "src/components/Widget.tsx", 'export const Widget = () => <div />;\n');
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, kind: "feature", defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture" } } as const;`);
+    if (deleted) fs.unlinkSync(path.join(dir, "src/components/Widget.tsx"));
+    else writeFile(dir, "src/components/Widget.tsx", 'export const Widget = () => <div />;\n');
+    const result = await evaluate(`HTPR-2 [${title}] Widget`, base, commit(git, "new flag"), dir);
+    assert.equal(result.pass, false, result.reason);
+    assert.match(result.reason, /must set defaultMode: "EVERYONE"/);
+  }
+});
+
 test("sidebar lazy-runtime gating is visible at the exported entry, not hidden inside an effect callback", async (t) => {
   const provider = fs.readFileSync(path.join(root, "src/components/ProviderGlobal/GloablProviders.tsx"), "utf8");
   const effect = provider.slice(provider.indexOf("  useEffect(agentSidebarChatsEnabled ?"), provider.indexOf("  const [chatRuntimeMounted"));

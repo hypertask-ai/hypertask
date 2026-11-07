@@ -5,8 +5,6 @@ import { activationHarness } from "./helpers/activation-harness";
 
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const FLAG = "htpr-7293-activation-metric-v1";
-const LEGACY_FLAG = "htpr-7284-activation-completed";
 const SIGNUP = new Date("2026-10-10T12:00:00Z");
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const at = (offset: number) => new Date(SIGNUP.getTime() + offset);
@@ -113,8 +111,6 @@ test("version string is board_3_tasks_7d_v1", () => {
 
 function harness() {
   const h = activationHarness();
-  h.mocks["@/lib/flags"].HTPR_7284_ACTIVATION_COMPLETED_FLAG = LEGACY_FLAG;
-  h.setFlagEnabled(FLAG, true);
   h.users.get(123).joinedAt = SIGNUP;
   Object.assign(h.projects.get(15), facts().boards[0], { status: "Normal" });
   h.tasks.clear();
@@ -227,7 +223,7 @@ test("versioned outbox stores threshold business time and deduplicates delivery"
   const h = harness();
   const rows: any[] = [];
   const delivered: any[] = [];
-  Object.assign(h.load("src/lib/telemetry/analyticsOutbox.ts"), {
+  Object.assign(h.mocks["@/lib/telemetry/analyticsOutbox"], {
     isAnalyticsOutboxEnabled: async () => true,
     deliverAnalyticsOutbox: async (row: any) => { delivered.push(row); },
   });
@@ -244,43 +240,15 @@ test("versioned outbox stores threshold business time and deduplicates delivery"
   assert.equal(rows[0].properties.activated_at, THRESHOLD.toISOString());
 });
 
-test("flag off keeps the unversioned live-task contract unchanged", async () => {
+test("expired triggering time avoids all fact reads beyond user signup lookup", async () => {
   const h = harness();
-  h.setFlagEnabled(FLAG, false);
-  h.projects.get(15).createdAt = at(-1);
-  h.tasks.set(4, { ...h.tasks.get(3), id: 4 });
-  await h.capture();
-  const occurrences = h.load("src/lib/telemetry/analyticsOccurrences.ts");
-  assert.deepEqual(h.captures[0].properties, {
-    ...occurrences.serverAnalyticsProperties(123, "team", 15, "activation_completed:123", LATER),
-    account_category: "customer", signup_at: SIGNUP.toISOString(), activated_at: LATER.toISOString(),
-    hours_since_signup: 5, task_count: 4, is_seeded: false,
-  });
-  assert.deepEqual(h.queries.map(({ model }) => model), ["user", "project", "user"]);
-});
-
-for (const enabled of [false, true]) {
-  test(`expired triggering time avoids all fact reads beyond user signup lookup with v1=${enabled}`, async () => {
-    const h = harness();
-    h.setFlagEnabled(FLAG, enabled);
-    await h.capture(at(WEEK_MS));
-    await h.capture(at(WEEK_MS + 1));
-    assert.deepEqual(h.queries.map(({ model }) => model), ["user", "user"]);
-    assert.equal(h.captures.length, 0);
-    assert.ok(!h.flagChecks.some(({ key }) => key === FLAG));
-  });
-}
-
-test("legacy flag off avoids every database read even when v1 is on", async () => {
-  const h = harness();
-  h.setFlagEnabled(LEGACY_FLAG, false);
-  await h.capture();
-  assert.deepEqual(h.queries, []);
-  assert.deepEqual(h.prismaCalls, []);
+  await h.capture(at(WEEK_MS));
+  await h.capture(at(WEEK_MS + 1));
+  assert.deepEqual(h.queries.map(({ model }) => model), ["user", "user"]);
   assert.equal(h.captures.length, 0);
 });
 
-test("guest exclusion still precedes v1 fact loading", async () => {
+test("guest exclusion still precedes activation fact loading", async () => {
   const h = harness();
   h.users.get(123).uid = "guest_local";
   await h.capture();
@@ -290,7 +258,6 @@ test("guest exclusion still precedes v1 fact loading", async () => {
 
 test("captureTaskCreated emits versioned activation once for human and agent replays", async () => {
   const h = harness();
-  h.setFlagEnabled("htpr-7271-saved-work-events", true);
   h.projects.get(15).status = "Archive";
   h.tasks.get(1).deletedAt = LATER;
   h.tasks.get(2).status = "Archive";
@@ -306,24 +273,4 @@ test("captureTaskCreated emits versioned activation once for human and agent rep
   assert.equal(activations[0].properties.definition_version, ACTIVATION_METRIC_VERSION);
   assert.equal(activations[0].properties.activated_at, THRESHOLD.toISOString());
   assert.deepEqual(h.logs.filter((row) => row.log === "analytics:activation_completed").map((row) => row.LoggedById), [123]);
-});
-
-test("legacy activation marker prevents re-emission after v1 rollout", async () => {
-  const h = harness();
-  h.setFlagEnabled(FLAG, false);
-  await h.capture();
-  h.setFlagEnabled(FLAG, true);
-  await h.capture();
-  assert.equal(h.captures.length, 1);
-  assert.equal(h.captures[0].properties.definition_version, undefined);
-});
-
-test("v1 flag has an honest Owner + QA feature definition and release risk", () => {
-  const definition = activationHarness().load("src/lib/flags/definitions/htpr-7293-activation-metric-v1.ts").default;
-  assert.equal(definition.key, FLAG);
-  assert.equal(definition.kind, "feature");
-  assert.equal(definition.defaultMode, "OWNER_AND_QA");
-  assert.equal(definition.shippedOn, "2026-10-17");
-  assert.equal(definition.releaseRisk.risk, "new");
-  assert.ok(definition.releaseRisk.reason);
 });

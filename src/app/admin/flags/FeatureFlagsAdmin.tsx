@@ -6,12 +6,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ADMIN_FEATURE_FLAGS_QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX,
-  useFlag,
 } from "@/hooks/useFlag";
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG, HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
@@ -137,11 +135,7 @@ export default function FeatureFlagsAdmin({
   flagKey?: string;
 }) {
   const queryClient = useQueryClient();
-  const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
-  const dropdownFiltersEnabled = useFlag(HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG);
-  const existingUrlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
-  const urlFiltersEnabled = existingUrlFiltersEnabled || dropdownFiltersEnabled;
-  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, dropdownFiltersEnabled);
+  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(!flagKey, true);
   const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
   const setAudienceFilter = (audience: FeatureFlagAudienceFilter) => change({ ...filters, audience });
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
@@ -185,8 +179,8 @@ export default function FeatureFlagsAdmin({
   });
 
   const counts = useMemo(
-    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], urlFiltersEnabled),
-    [flags.data?.flags, urlFiltersEnabled],
+    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], true),
+    [flags.data?.flags],
   );
   const clusters = useMemo(
     () => {
@@ -196,15 +190,16 @@ export default function FeatureFlagsAdmin({
       const rows = flags.data?.flags ?? [];
       return clusterFeatureFlagsByReleaseDate(
         rows.filter((flag) => (
-          (!(discoveryEnabled || urlFiltersEnabled) || matchesFeatureFlagSearch(flag, search))
-          && (!urlFiltersEnabled || (matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)))
+          matchesFeatureFlagSearch(flag, search)
+          && matchesFlagKind(flag, kinds)
+          && matchesFlagRisk(flag, risk)
         )),
         sortDirection,
         audienceFilter,
-        { shippedOnly: urlFiltersEnabled && sortDirection !== "desc", unreleasedOnly: urlFiltersEnabled },
+        { shippedOnly: sortDirection !== "desc", unreleasedOnly: true },
       );
     },
-    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter, search, kinds, risk],
   );
 
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
@@ -212,10 +207,10 @@ export default function FeatureFlagsAdmin({
   const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
   const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
   const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
-    : audienceFilter === "UNRELEASED" ? (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")
+    : audienceFilter === "UNRELEASED" ? isUnreleasedFeatureFlag(flag)
       : flag.mode === audienceFilter;
   const statusCounts = countFeatureFlagsByAudience(
-    searchedRows.filter((flag) => matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)), urlFiltersEnabled,
+    searchedRows.filter((flag) => matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)), true,
   );
   const dropdowns = [
     {
@@ -253,17 +248,17 @@ export default function FeatureFlagsAdmin({
   ];
 
   useEffect(() => {
-    if (!discoveryEnabled || flagKey) return;
+    if (flagKey) return;
     const hash = window.location.hash;
     if (hash.startsWith("#flag-")) setHighlightedKey(hash.slice(6));
-  }, [discoveryEnabled, flagKey]);
+  }, [flagKey]);
 
   useEffect(() => {
-    if (!discoveryEnabled || !highlightedKey) return;
+    if (!highlightedKey) return;
     const card = document.getElementById(`flag-${highlightedKey}`);
     card?.scrollIntoView({ behavior: "smooth", block: "start" });
     card?.focus({ preventScroll: true });
-  }, [discoveryEnabled, highlightedKey, flags.isLoading]);
+  }, [highlightedKey, flags.isLoading]);
 
   const searchInput = (
     <>
@@ -271,7 +266,7 @@ export default function FeatureFlagsAdmin({
       <ModalInput
         id="flag-search"
         autofocus={false}
-        onBlur={urlFiltersEnabled ? commitSearch : undefined}
+        onBlur={commitSearch}
         className="rounded-sm bg-comment-description px-3"
         placeholder="Search by ticket ID or words…"
         value={search}
@@ -309,96 +304,18 @@ export default function FeatureFlagsAdmin({
           </p>
         )}
 
-        {(discoveryEnabled || urlFiltersEnabled) && !flagKey && (
+        {!flagKey && (
           <div className="sticky top-0 z-10 mt-6 bg-pageBackground py-3">
-            {dropdownFiltersEnabled ? (
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-0 flex-1">{searchInput}</div>
-                <p role="status" className="text-content text-text-light-gray">Showing {shownCount} of {allRows.length} flags</p>
-              </div>
-            ) : searchInput}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-0 flex-1">{searchInput}</div>
+              <p role="status" className="text-content text-text-light-gray">Showing {shownCount} of {allRows.length} flags</p>
+            </div>
           </div>
         )}
 
-        {dropdownFiltersEnabled && !flagKey && (
+        {!flagKey && (
           <div className="mt-6 flex flex-wrap gap-3" aria-label="Flag filters">
             {dropdowns.map((dropdown) => <FlagFilterPicker key={dropdown.label} {...dropdown} />)}
-          </div>
-        )}
-
-        {!dropdownFiltersEnabled && !flagKey && (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-            <div
-              className="flex flex-wrap gap-1 rounded-sm bg-comment-description p-1"
-              role="group"
-              aria-label="Filter by audience"
-            >
-              {AUDIENCE_FILTERS.map((filter) => (
-                <button
-                  key={filter.mode}
-                  type="button"
-                  aria-pressed={audienceFilter === filter.mode}
-                  onClick={() => setAudienceFilter(filter.mode)}
-                  className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
-                    audienceFilter === filter.mode
-                      ? "bg-shadcn-primary text-primary-foreground"
-                      : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
-                  }`}
-                >
-                  {filter.label} {counts[filter.mode]}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => change({ ...filters, sort: sortDirection === "risk" ? "desc" : sortDirection === "desc" ? "asc" : urlFiltersEnabled ? "risk" : "desc" })}
-              className="rounded-sm border border-border-light-gray-thin px-3 py-1.5 text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
-            >
-              {sortDirection === "risk" ? "Release risk first" : sortDirection === "desc" ? "Newest first" : "Oldest first"}
-            </button>
-          </div>
-        )}
-
-        {urlFiltersEnabled && !dropdownFiltersEnabled && !flagKey && (
-          <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by type">
-            {FLAG_FILTER_KINDS.map((kind) => (
-              <button
-                key={kind}
-                type="button"
-                aria-pressed={kinds.includes(kind)}
-                onClick={() => change({
-                  ...filters,
-                  kinds: kinds.includes(kind) ? kinds.filter((selected) => selected !== kind) : [...kinds, kind],
-                })}
-                className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
-                  kinds.includes(kind)
-                    ? "bg-hover-active text-white-black"
-                    : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
-                }`}
-              >
-                {KIND_LABELS[kind]}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {urlFiltersEnabled && !dropdownFiltersEnabled && !flagKey && (
-          <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by release risk">
-            {[null, ...RELEASE_RISK_ORDER].map((value) => (
-              <button
-                key={value ?? "all"}
-                type="button"
-                aria-pressed={risk === value}
-                onClick={() => change({ ...filters, risk: value })}
-                className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
-                  risk === value
-                    ? "bg-shadcn-primary text-primary-foreground"
-                    : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
-                }`}
-              >
-                {value ? RELEASE_RISK_LABELS[value] : "All risks"}
-              </button>
-            ))}
           </div>
         )}
 
@@ -421,23 +338,20 @@ export default function FeatureFlagsAdmin({
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
           {rows.map((flag) => {
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
-            const releaseRisk = urlFiltersEnabled ? FEATURE_FLAG_RELEASE_RISKS[flag.key] : undefined;
-            const daysWaiting = urlFiltersEnabled ? flagDaysWaiting(flag) : null;
-            const related = discoveryEnabled ? relatedFeatureFlags(flag, flags.data?.flags ?? []) : [];
-            let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between";
-            if (discoveryEnabled) cardClassName += " scroll-mt-24";
-            if (discoveryEnabled && highlightedKey === flag.key) cardClassName += " bg-hover-active";
+            const releaseRisk = FEATURE_FLAG_RELEASE_RISKS[flag.key];
+            const daysWaiting = flagDaysWaiting(flag);
+            const related = relatedFeatureFlags(flag, flags.data?.flags ?? []);
+            let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between scroll-mt-24";
+            if (highlightedKey === flag.key) cardClassName += " bg-hover-active";
             return (
             <div
               key={flag.key}
-              id={discoveryEnabled ? `flag-${flag.key}` : undefined}
-              tabIndex={discoveryEnabled ? -1 : undefined}
+              id={`flag-${flag.key}`}
+              tabIndex={-1}
               className={cardClassName}
             >
               <div className="min-w-0 sm:max-w-lg">
-                {(discoveryEnabled || urlFiltersEnabled) && (
-                  <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
-                )}
+                <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
                 {flagKey ? (
                   <>
                     <code className="break-all text-dense text-white-black">{flag.key}</code>

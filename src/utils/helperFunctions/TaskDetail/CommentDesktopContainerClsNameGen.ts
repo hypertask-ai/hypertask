@@ -8,6 +8,7 @@ import {
   ITaskMoveActivity,
   ITaskPriorityActivity,
   ITaskPullRequestActivity,
+  IAiFeedbackLogActivity,
   ITaskUpdateDescriptionActivity,
   ITaskWaitingOnActivity,
 } from "@/models/ActivityModels.ts";
@@ -31,7 +32,8 @@ export function desktopCommentContainerClassname({
     | ITaskDueDateActivity
     | ITaskPullRequestActivity
     | ITaskUpdateDescriptionActivity
-    | ITaskWaitingOnActivity;
+    | ITaskWaitingOnActivity
+    | IAiFeedbackLogActivity;
   currentId?: string | null;
   commentId: string;
   editState?: number | null;

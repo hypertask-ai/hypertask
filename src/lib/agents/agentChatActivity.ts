@@ -5,10 +5,6 @@ import prisma from "@/lib/prisma";
 import { serializeAgentRunActivity } from "@/lib/agentRuns/model";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
-  HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
-  isFeatureEnabled,
-} from "@/lib/flags";
-import {
   compareAgentChatFeedItems,
   type AgentChatActivity,
 } from "./chatActivityFeed";
@@ -304,10 +300,6 @@ export async function listAgentChatActivity(
   },
   db: AgentChatActivityDatabase = prisma,
 ): Promise<AgentChatActivity[]> {
-  const runtimeTitlesEnabled = await isFeatureEnabled(
-    HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
-    input.userId,
-  );
   const requestedLimit = input.limit ?? MAX_AGENT_CHAT_ACTIVITY;
   const limit = Number.isFinite(requestedLimit)
     ? Math.min(
@@ -433,9 +425,7 @@ export async function listAgentChatActivity(
             id: `run-${run.id}`,
             kind: "event" as const,
             type: "action" as const,
-            text:
-              (runtimeTitlesEnabled && run.title?.trim()) ||
-              `Started ${task.ticketNumber}`,
+            text: run.title?.trim() || `Started ${task.ticketNumber}`,
             link: null,
             createdAt: run.createdAt.toISOString(),
             task,

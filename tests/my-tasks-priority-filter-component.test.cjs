@@ -39,6 +39,16 @@ stubSourceModule("src/hooks/Task Detail/useTimeTracking.ts", {
 stubSourceModule("src/lib/state.tsx", {
   useRecoilValue: () => false,
   useRecoilState: () => [0, () => {}],
+  useSetRecoilState: () => () => {},
+});
+stubSourceModule("src/hooks/General/useUndo.tsx", {
+  useUndoContext: () => ({ performActionAndStoreUndoData: async () => {} }),
+});
+stubSourceModule("src/hooks/Task Detail/useAssignTaskUser.ts", {
+  useAssignTaskUser: () => async () => {},
+});
+stubSourceModule("src/hooks/MultiPages/useMoveTaskToSection.ts", {
+  default: () => ({ mutateAsync: async () => {} }),
 });
 stubSourceModule("src/store/index.ts", {
   appShellRailAtom: {},
@@ -103,7 +113,6 @@ stubSourceModule("src/utils/undoActions/helperFuncs.ts", {
 global.React = React;
 
 const MyTasks = jiti(path.join(root, "src/app/my-tasks/MyTasks.tsx")).default;
-const { PriorityConstants } = jiti(path.join(root, "src/lib/constants/constants.ts"));
 
 const sections = [
   {
@@ -138,11 +147,6 @@ const renderMyTasks = (dom) => {
   return reactRoot;
 };
 
-const click = (element, dom) =>
-  act(() => {
-    element.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-  });
-
 test("flag off: no filter control and no filtering", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
@@ -160,7 +164,7 @@ test("flag off: no filter control and no filtering", () => {
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("flag on: picking priorities filters, updates counts, and toggles off", () => {
+test("views on: legacy priority button stays hidden", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -168,26 +172,8 @@ test("flag on: picking priorities filters, updates counts, and toggles off", () 
   flagValues["htpr-6312-my-tasks-priority-filter"] = true;
   const reactRoot = renderMyTasks(dom);
 
-  const filterButton = dom.window.document.getElementById('my-tasks-priority-filter');
-  assert.ok(filterButton, "filter button must render with the flag on");
-  click(filterButton, dom);
-
-  const menu = dom.window.document.querySelector("[role='menu']");
-  assert.ok(menu, "priority menu must open");
-  assert.equal(menu.querySelectorAll("[role='menuitemcheckbox']").length, PriorityConstants.length);
-
-  const rows = [...menu.querySelectorAll("[role='menuitemcheckbox']")];
-  click(rows.find((row) => row.textContent.includes("Urgent")), dom);
-  assert.deepEqual(lastViewItems(), [1], "only the Urgent task stays visible");
-  const headerCount = dom.window.document.querySelector(".text-content.font-normal");
-  assert.equal(headerCount.textContent, "1", "header count must reflect the filter");
-  assert.equal(filterButton.getAttribute("aria-expanded"), "true", "menu stays open while picking");
-
-  click(menu.querySelector("[aria-checked='true']"), dom);
+  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "legacy priority button stays hidden");
   assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
-
-  click(rows.find((row) => row.textContent.includes("No Priority")), dom);
-  assert.deepEqual(lastViewItems(), [4]);
 
   act(() => { reactRoot.unmount(); });
   delete global.window;
@@ -195,7 +181,7 @@ test("flag on: picking priorities filters, updates counts, and toggles off", () 
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
-test("flag turning off mid-session stops filtering and hides the control", () => {
+test("flag turning off mid-session keeps the legacy control hidden", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -203,18 +189,15 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
   flagValues["htpr-6312-my-tasks-priority-filter"] = true;
   const reactRoot = renderMyTasks(dom);
 
-  click(dom.window.document.getElementById('my-tasks-priority-filter'), dom);
-  const menu = dom.window.document.querySelector("[role='menu']");
-  const rows = [...menu.querySelectorAll("[role='menuitemcheckbox']")];
-  click(rows.find((row) => row.textContent.includes("Urgent")), dom);
-  assert.deepEqual(lastViewItems(), [1], "filter active before the flag flips");
+  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'));
+  assert.deepEqual(lastViewItems(), [1, 2, 3, 4]);
 
   flagValues["htpr-6312-my-tasks-priority-filter"] = false;
   act(() => {
     reactRoot.render(React.createElement(MyTasks, { sections, tabs: ["All", "Board A", "Board B"], currentUser: { id: 6 } }));
   });
   assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'), "control hidden after flag off");
-  assert.deepEqual(lastViewItems(), [1, 2, 3, 4], "filtering stops when the flag goes off");
+  assert.deepEqual(lastViewItems(), [1, 2, 3, 4], "list stays unfiltered");
 
   act(() => { reactRoot.unmount(); });
   delete global.window;
@@ -223,13 +206,12 @@ test("flag turning off mid-session stops filtering and hides the control", () =>
 });
 
 for (const savedBoardGroup of [false, true]) {
-  test(`My Tasks preserves ${savedBoardGroup ? "saved board" : "default time"} grouping without the retired flag`, () => {
+  test(`My Tasks preserves ${savedBoardGroup ? "saved board" : "default time"} grouping`, () => {
     const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: `https://app.hypertask.ai/my-tasks${savedBoardGroup ? "?view=1" : ""}` });
     global.window = dom.window;
     global.document = dom.window.document;
     global.IS_REACT_ACT_ENVIRONMENT = true;
     for (const key of Object.keys(flagValues)) flagValues[key] = false;
-    flagValues["htpr-6422-my-tasks-views"] = savedBoardGroup;
     const dated = [
       {
         id: 100,
@@ -248,7 +230,6 @@ for (const savedBoardGroup of [false, true]) {
         sections: dated,
         tabs: ["All", "MyBoard"],
         currentUser: { id: 6 },
-        viewsEnabled: savedBoardGroup,
         initialViewId: savedBoardGroup ? 1 : null,
         initialViews: savedBoardGroup ? [{ id: 1, name: "By board", config: { groupBy: "board" } }] : [],
       }));
@@ -258,7 +239,6 @@ for (const savedBoardGroup of [false, true]) {
     );
     assert.deepEqual(titles, savedBoardGroup ? ["MyBoard"] : ["Overdue", "Today"]);
 
-    flagValues["htpr-6422-my-tasks-views"] = false;
     act(() => { reactRoot.unmount(); });
     delete global.window;
     delete global.document;
@@ -267,7 +247,7 @@ for (const savedBoardGroup of [false, true]) {
 
 }
 
-test("Escape closes the menu instead of navigating back", () => {
+test("Escape with no priority menu navigates back", () => {
   const dom = new JSDOM("<!doctype html><html><body><div id='root'></div></body></html>", { url: "https://app.hypertask.ai/" });
   global.window = dom.window;
   global.document = dom.window.document;
@@ -275,16 +255,15 @@ test("Escape closes the menu instead of navigating back", () => {
   flagValues["htpr-6312-my-tasks-priority-filter"] = true;
   const reactRoot = renderMyTasks(dom);
 
-  click(dom.window.document.getElementById('my-tasks-priority-filter'), dom);
-  assert.ok(dom.window.document.querySelector("[role='menu']"), "menu open before Escape");
+  assert.ok(!dom.window.document.getElementById('my-tasks-priority-filter'));
+  assert.ok(!dom.window.document.querySelector("[role='menu']"));
 
   act(() => {
     dom.window.document.dispatchEvent(
       new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
   });
-  assert.ok(!dom.window.document.querySelector("[role='menu']"), "menu closed by Escape");
-  assert.equal(backCalls, 0, "Escape on the menu must not navigate back");
+  assert.equal(backCalls, 1, "Escape with no menu navigates back");
 
   act(() => { reactRoot.unmount(); });
   delete global.window;
@@ -292,15 +271,13 @@ test("Escape closes the menu instead of navigating back", () => {
   delete global.IS_REACT_ACT_ENVIRONMENT;
 });
 
-for (const viewsEnabled of [false, true]) {
-  for (const groupBy of ["board", "time"]) {
-  test(`${groupBy} grouping counts every Tab before a render (saved views ${viewsEnabled})`, () => {
+for (const groupBy of ["board", "time"]) {
+  test(`${groupBy} grouping counts every Tab before a render`, () => {
     const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/my-tasks?view=1&board=10" });
     global.window = dom.window;
     global.document = dom.window.document;
     global.IS_REACT_ACT_ENVIRONMENT = true;
     flagValues["htpr-6312-my-tasks-priority-filter"] = false;
-    flagValues["htpr-6422-my-tasks-views"] = viewsEnabled;
     const boardSections = [10, 20, 30, 40].map((projectId) => ({
       id: projectId, projectId, section_title: `Board ${projectId}`,
       items: [{ id: projectId, projectId }],
@@ -312,7 +289,7 @@ for (const viewsEnabled of [false, true]) {
     try {
       act(() => reactRoot.render(React.createElement(MyTasks, {
         sections: boardSections, tabs: ["All", ...boardSections.map((section) => section.section_title)],
-        currentUser: { id: 6 }, viewsEnabled,
+        currentUser: { id: 6 },
         initialViewId: 1,
         initialViews: [{ id: 1, name: "Navigation", config: { groupBy } }],
         boards: boardSections.map(({ projectId, section_title }) => ({
@@ -339,14 +316,12 @@ for (const viewsEnabled of [false, true]) {
       }
     } finally {
       act(() => reactRoot.unmount());
-      flagValues["htpr-6422-my-tasks-views"] = false;
       dom.window.close();
       delete global.window;
       delete global.document;
       delete global.IS_REACT_ACT_ENVIRONMENT;
     }
   });
-}
 }
 
 test("live updates stay active without a feature flag", () => {

@@ -14,9 +14,7 @@ new Function("exports", ts.transpileModule(
 const scopes = scopesModule.exports;
 const keys = {
   MY_TASKS_LIVE_UPDATES_FLAG: "htpr-6458-my-tasks-live-updates",
-  MY_TASKS_SCOPES_FLAG: "scopes",
   MY_TASKS_SNOOZE_FLAG: "snooze",
-  MY_TASKS_VIEWS_FLAG: "views",
 };
 
 function fixture(userId = 985) {
@@ -60,6 +58,7 @@ test("My Tasks GET always returns authorized realtime boards without the retired
   assert.deepEqual(await response.json(), { ...f.payload, accessibleProjectIds: [7049, 7283] });
   assert.deepEqual(f.calls.filter(([kind]) => kind === "projects"), [["projects", 985, "Calendar", false]]);
   assert.ok(f.calls.every(([kind, key]) => kind !== "flag" || key !== "htpr-6458-my-tasks-live-updates"));
+  assert.ok(f.calls.every(([kind, key]) => kind !== "flag" || key !== "views"));
 });
 
 test("My Tasks GET still refuses unauthenticated callers before loading boards", async () => {

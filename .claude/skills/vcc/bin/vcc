@@ -33,10 +33,10 @@ fi
 
 activity_usage() {
   printf '%s\n' \
-    'usage: vcc activity add <TICKET-or-task-ID> "<text>"' \
+    'usage: vcc activity add <TICKET-or-task-ID> [--text] "<text>"' \
     '       vcc activity last <TICKET-or-task-ID>' \
     '       vcc activity list <TICKET-or-task-ID> [--json]' \
-    'last prints timestamp, author and text; list returns up to 100 recent notes as JSON.'
+    'last prints timestamp, author and text; list returns up to 100 notes as TSV or --json.'
 }
 if [ "${1:-}" = activity ]; then
   for arg in "$@"; do
@@ -45,8 +45,15 @@ if [ "${1:-}" = activity ]; then
   [ "$#" -ge 3 ] || { activity_usage >&2; exit 1; }
   case "$2" in
     add)
-      [ "$#" = 4 ] && [ -n "${4//[[:space:]]/}" ] && [[ $4 != --* ]] \
-        || { activity_usage >&2; exit 1; } ;;
+      text=''
+      if [ "$#" = 5 ] && [ "$4" = --text ]; then
+        text=$5
+      elif [ "$#" = 4 ] && [[ $4 == --text=* ]]; then
+        text=${4#--text=}
+      elif [ "$#" = 4 ] && [[ $4 != --* ]]; then
+        text=$4
+      fi
+      [ -n "${text//[[:space:]]/}" ] || { activity_usage >&2; exit 1; } ;;
     last) [ "$#" = 3 ] || { activity_usage >&2; exit 1; } ;;
     list) [ "$#" = 3 ] || { [ "$#" = 4 ] && [ "$4" = --json ]; } \
         || { activity_usage >&2; exit 1; } ;;
@@ -61,7 +68,8 @@ fi
 question_check() {
   jq -nr --arg text "$1" --arg markdown "${2:-false}" '
     def visible:
-      gsub("<[^>]*>"; "") | gsub("&nbsp;|&#160;"; " ") |
+      gsub("<[^>]*>"; "") | gsub("&(?:nbsp|Tab|NewLine|ensp|emsp|emsp13|emsp14|numsp|puncsp|thinsp|hairsp|VeryThinSpace|ThickSpace|MediumSpace|NegativeMediumSpace|NegativeThickSpace|NegativeThinSpace|NegativeVeryThinSpace|ZeroWidthSpace);|&#0*(?:9|1[0-3]|32|133|160|5760|819[2-9]|820[0-3]|823[239]|8287|12288|65279)(?![0-9]);?|&#x0*(?:[9-d]|20|85|a0|1680|200[0-9ab]|202[89f]|205f|3000|feff)(?![0-9a-f]);?"; " "; "i") |
+      gsub("[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
     def unmention:
       sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
@@ -71,9 +79,13 @@ question_check() {
     ($paragraphs | map(if $md then gsub("\\*\\*"; "") else visible end)) as $plain |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
      else $text | visible end) as $visible |
-    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "")
+    (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "") | visible
      else $text | gsub("<a\\b[^>]*>.*?</a>"; ""; "is") | visible end) as $unlinked |
+    (($paragraphs | map(if $md then gsub("\\*\\*"; "") | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)") | visible else unmention | visible end) | map(select(length > 0)) | .[0]) // "") as $first |
     [
+      (if ($first | (if $md then gsub("[*_`]"; "") else . end) | test("^What this is:\\s*\\S")) and
+          ($md or ($text | unmention | visible | test("^What this is:\\s*\\S")))
+       then empty else "What this is: <what he is deciding, in his words> first (Markdown: What this is: ...)" end),
       (if any($paragraphs[];
         (if $md then . else unmention end) |
         [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
@@ -253,7 +265,7 @@ unset caller_token
 export HT_TOKEN
 completion_move "$@"
 review_refuse() {
-  printf 'vcc: Valentin Review needs one plain Question comment first: "Question: <strong>yes/no question?</strong>", "Yes:", "No:", "My recommendation:" and "Why:" paragraphs. Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
+  printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
 }
 review_move() {
@@ -326,12 +338,16 @@ if [ "$command" = last ] || [ "$command" = list ]; then
   fi
   request GET "$path"
   if [ "$code" = 404 ]; then
-    echo 'vcc activity last: ticket activity route is not deployed yet (HTTP 404), or is unavailable for this ticket/caller.' >&2
+    echo "vcc activity $command: ticket activity route is not deployed yet (HTTP 404), or is unavailable for this ticket/caller." >&2
     exit 4
   fi
   success
   if [ "$command" = list ]; then
-    jq . "$body"
+    if [ "${4:-}" = --json ]; then
+      jq . "$body"
+    else
+      jq -r 'if (.activities | length) == 0 then "" else .activities[] | [.createdAt, .agentName, ((.text // "") | gsub("[[:space:]]+"; " "))] | @tsv end' "$body"
+    fi
   else
     jq -er '.activities | if length == 0 then "" else .[0] | [.createdAt, .agentName, .text] | @tsv end' "$body" | sed '/^$/d'
   fi
@@ -349,9 +365,12 @@ if [ -s "$cache" ]; then
   [[ $run =~ ^[A-Za-z0-9-]+$ ]] || fail 'invalid cached run id'
 fi
 open_run() {
-  local task_id
-  task_id=$(hypertask tasks get "$ticket" --json | jq -er '.tasks[0].id') || fail "cannot read $ticket"
-  request POST agents/runs "$(jq -nc --argjson id "$task_id" '{taskId:$id,source:"runtime"}')"
+  local task_json task_id project_id board_number
+  task_json=$(hypertask tasks get "$ticket" --json) || fail "cannot read $ticket"
+  task_id=$(jq -er '.tasks[0].id' <<<"$task_json") || fail "cannot read $ticket"
+  project_id=$(jq -er '.tasks[0].projectId' <<<"$task_json") || fail "cannot read $ticket"
+  board_number=$(jq -er '.tasks[0].uniqueIndex' <<<"$task_json") || fail "cannot read $ticket"
+  request POST agents/runs "$(jq -nc --argjson id "$task_id" --argjson project "$project_id" --argjson board "$board_number" '{taskId:$id,projectId:$project,boardNumber:$board,source:"runtime"}')"
   success
   run=$(jq -er '.run.id | select(type == "string" and test("^[A-Za-z0-9-]+$"))' "$body") || fail 'open returned no run id'
   printf '%s\n' "$run" > "$cache"
@@ -367,7 +386,7 @@ if [ -n "$run" ]; then
 fi
 [ -n "$run" ] || open_run
 activity_key=$(cat /proc/sys/kernel/random/uuid)
-data=$(jq -nc --arg text "$4" '{type:"thought",text:$text}')
+data=$(jq -nc --arg text "$text" '{type:"thought",text:$text}')
 request POST "agents/runs/$run/activities" "$data"
 # A cached run can be stopped/deleted between the read and the write.
 if [ "$code" = 404 ] || { [ "$code" = 409 ] && jq -e '.error | test("(not|no longer) active"; "i")' "$body" >/dev/null; }; then

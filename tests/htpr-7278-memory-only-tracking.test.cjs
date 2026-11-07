@@ -6,17 +6,11 @@ const path = require("node:path");
 const source = (file) => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
 const analytics = source("src/components/Analytics/PostHogAnalytics.tsx");
 const layout = source("src/app/layout.tsx");
-const definition = source("src/lib/flags/definitions/htpr-7278-memory-only-tracking.ts");
 
-test("the flag is an honest improvement flag on the repo default", () => {
-  assert.match(definition, /key: HTPR_7278_MEMORY_ONLY_TRACKING_FLAG/);
-  assert.match(definition, /kind: "improvement"/);
-  assert.doesNotMatch(definition, /defaultMode/);
-});
-
-test("the layout reads the flag on the server for signed-in and signed-out visitors", () => {
-  assert.match(layout, /const memoryOnlyTracking = await isFeatureEnabled\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession\?\.id \?\? -1\);/);
-  assert.match(layout, /trackingPersistence=\{memoryOnlyTracking \? "memory" : "localStorage\+cookie"\}/);
+test("the layout always uses memory-only PostHog persistence", () => {
+  assert.doesNotMatch(layout, /HTPR_7278_MEMORY_ONLY_TRACKING_FLAG/);
+  assert.doesNotMatch(layout, /memoryOnlyTracking/);
+  assert.match(layout, /trackingPersistence="memory"/);
 });
 
 test("PostHog stores exactly where the server said", () => {

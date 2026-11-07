@@ -10,8 +10,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
 const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
-const mappedKey = 'htpr-6422-my-tasks-views'
-const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6422-my-tasks-views', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze']
+const mappedKey = 'htpr-6461-my-tasks-snooze'
+const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', mappedKey]
 const definitions = definitionKeys.map((key) => ({
   key,
   kind: key === 'htpr-7064-inbox-remind-returns' ? 'bugfix' : 'feature',
@@ -67,7 +67,7 @@ test('catalog includes every enabled feature kind without requiring a destinatio
   const mod = catalog({ [decisionsKey]: false, [mappedKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
   const rows = await mod.getFeatureCatalog(reader.user.id)
   assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
-    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'My Tasks views', url: 'https://app.hypertask.ai/my-tasks' },
+    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'My Tasks snooze', url: 'https://app.hypertask.ai/my-tasks' },
     { key: 'htpr-998-unmapped-product', name: 'unmapped product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
   ])
   for (const key of [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {
@@ -228,7 +228,7 @@ test('hello and tool guidance explain the actual Decisions workflow, not structu
   })
   const { capabilities } = await hello.getHelloPayload(reader)
   assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
-  assert.equal(hello.HTPR_7122_HELLO_CAPABILITIES.decisions, DECISIONS_GUIDANCE)
+  assert.equal(hello.HELLO_CAPABILITIES.decisions, DECISIONS_GUIDANCE)
   const descriptionMocks = Object.fromEntries(
     fs.readdirSync(path.join(root, 'src/lib/mcp-server/config/descriptions'))
       .filter((file) => file.endsWith('.json'))
@@ -247,24 +247,22 @@ test('hello and tool guidance explain the actual Decisions workflow, not structu
   assert.match(capabilities.features, /GET \/api\/mcp\/features/)
 })
 
-test('hello advertises feature discovery only when its flag is enabled, independently of reaction guidance', async () => {
+test('hello advertises feature discovery only when its flag is enabled, and always includes reaction guidance', async () => {
   for (const discoveryEnabled of [false, true]) {
-    for (const reactionsEnabled of [false, true]) {
-      const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
-        '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
-        '@/lib/mcp/auth': {},
-        '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
-          assert.equal(userId, reader.user.id)
-          if (key === 'htpr-7519-login-guided-start') return false
-          return key === discoveryKey ? discoveryEnabled : reactionsEnabled
-        } },
-        '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
-      })
-      const { capabilities } = await hello.getHelloPayload(reader)
-      assert.equal('features' in capabilities, discoveryEnabled)
-      assert.equal('reactions' in capabilities, reactionsEnabled)
-      assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
-    }
+    const hello = load('src/lib/mcp/hello/getHelloPayload.ts', {
+      '@/lib/prisma': { default: { project: { findMany: async () => [] } } },
+      '@/lib/mcp/auth': {},
+      '@/lib/flags': { isFeatureEnabled: async (key, userId) => {
+        assert.equal(userId, reader.user.id)
+        if (key === 'htpr-7519-login-guided-start') return false
+        return key === discoveryKey ? discoveryEnabled : false
+      } },
+      '@/utils/controllers/projects/getAllIncludes': { getProjectListingWhere: () => ({}) },
+    })
+    const { capabilities } = await hello.getHelloPayload(reader)
+    assert.equal('features' in capabilities, discoveryEnabled)
+    assert.match(capabilities.reactions, /POST \/api\/mcp\/comments\/\{comment_id\}\/reactions/)
+    assert.equal(capabilities.decisions, DECISIONS_GUIDANCE)
   }
 })
 

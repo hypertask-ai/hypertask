@@ -20,14 +20,13 @@ function isWithinDomain(domain: string, parent: string): boolean {
 
 export function accountCategory(
   user: { id: number; uid?: string | null; email: string },
-  { probeDomain = false }: { probeDomain?: boolean } = {},
 ): AccountCategory {
   const email = user.email.trim().toLowerCase();
   const domain = emailDomain(email);
   if (isGuestUser(user) || isWithinDomain(domain, GUEST_DOMAIN)) return "guest";
   const qaEmail = process.env.QA_LOGIN_EMAIL?.trim().toLowerCase();
   if (QA_USER_IDS.has(user.id) || (qaEmail && email === qaEmail)) return "qa";
-  if (probeDomain && isWithinDomain(domain, PROBE_DOMAIN)) return "probe";
+  if (isWithinDomain(domain, PROBE_DOMAIN)) return "probe";
   if (INTERNAL_USER_IDS.has(user.id) || isWithinDomain(domain, INTERNAL_DOMAIN)) return "internal";
   return "customer";
 }

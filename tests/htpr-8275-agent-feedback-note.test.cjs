@@ -21,7 +21,14 @@ function setup({ enabled = true, user = internalAgent, flagError = false } = {})
     label: { findFirst: async () => ({ id: 'ai-feedback' }) },
     task: { findFirst: async ({ where }) => rows.find(row => row.section !== 'Done' && row.description.includes(where.description_.is.content.contains)) ?? null },
     comment: {
-      findFirst: async ({ where }) => comments.find(comment => comment.taskId === where.taskId && comment.text.includes(where.text.contains)) ?? null,
+      findFirst: async ({ where }) => {
+        if (where.task) {
+          const comment = comments.find(comment => comment.text.includes(where.text.contains))
+          const task = comment && rows.find(row => row.id === comment.taskId && row.section !== 'Done')
+          return task ? { task: { id: task.id, userId: task.userId, ticketNumber: task.ticketNumber, uniqueIndex: task.uniqueIndex, createdAt: task.createdAt } } : null
+        }
+        return comments.find(comment => comment.taskId === where.taskId && comment.text.includes(where.text.contains)) ?? null
+      },
       update: async ({ where, data }) => Object.assign(comments.find(comment => comment.id === where.id), data),
     },
     $queryRaw: async () => [{ locked: true }],
@@ -30,7 +37,6 @@ function setup({ enabled = true, user = internalAgent, flagError = false } = {})
   const load = loader({
     '@vercel/functions': { waitUntil: work => work },
     '@/lib/prisma': { __esModule: true, default: db },
-    './enabled': { aiFeedbackEnabled: async () => true },
     './rateLimit': { reserveFeedbackAttempt: async () => true, reserveFeedbackQuota: async () => true },
     '@/lib/flags': {
       isFeatureEnabled: on,

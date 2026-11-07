@@ -15,7 +15,7 @@ export function activationHarness() {
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
-  const disabledFlags = new Set<string>(["htpr-7271-saved-work-events", "htpr-7272-payment-login-agent-events", "htpr-7273-column-events", "htpr-7292-shared-account-category", "htpr-7293-activation-metric-v1"]);
+  const disabledFlags = new Set<string>(["htpr-7292-shared-account-category"]);
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
   const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member", joinedAt: new Date(0) }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
@@ -58,7 +58,12 @@ export function activationHarness() {
       update: async ({ where, data }: any) => { Object.assign(tasks.get(where.id), data, { updatedAt: new Date() }); return { ...tasks.get(where.id) }; },
     },
     section: {
-      findMany: async ({ where }: any) => sections.filter((section) => where.id.in.includes(section.id)),
+      findMany: async ({ where }: any) => sections.filter((section: any) => {
+        if (where.id?.in && !where.id.in.includes(section.id)) return false;
+        if (where.projectId !== undefined && section.projectId !== where.projectId) return false;
+        if (where.deleted !== undefined && (section.deleted ?? false) !== where.deleted) return false;
+        return true;
+      }),
       findFirst: async ({ where }: any) => sections.find((section) => section.id === where.id),
       create: async ({ data }: any) => ({ ...data, id: 1 }),
     },
@@ -149,7 +154,7 @@ export function activationHarness() {
     "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
       constructor() { if (failure === "constructor") throw Error("mock client unavailable"); }
@@ -200,9 +205,14 @@ export function activationHarness() {
     const requireMock = (name: string) => {
       let key = name;
       if (name.startsWith(".")) key = "@/" + path.relative(path.join(root, "src"), path.resolve(path.dirname(absolute), name)).replace(/\.ts$/, "");
-      if (key in mocks) return { __esModule: true, ...mocks[key] };
+      if (key in mocks) {
+        const mocked = mocks[key];
+        const descriptor = mocked && typeof mocked === "object" ? Object.getOwnPropertyDescriptor(mocked, "__esModule") : undefined;
+        if (mocked && typeof mocked === "object" && (!descriptor || descriptor.writable || descriptor.set)) mocked.__esModule = true;
+        return mocked;
+      }
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/api/contracts/sectionWrites", "@/lib/flags/approvalWords", "@/lib/auth/crossTeamContext", "@/lib/mcp/agents/delegatedAccess", "@/lib/mcp/agents/scopes", "@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
         return load(`src/${key.slice(2)}.ts`);
       }
@@ -235,5 +245,12 @@ export function activationHarness() {
     return key;
   }
   async function drain() { for (let index = 0; index < jobs.length; index++) await jobs[index]; }
+  const outbox = () => load("src/lib/telemetry/analyticsOutbox.ts");
+  mocks["@/lib/telemetry/analyticsOutbox"] = {
+    isAnalyticsOutboxEnabled: async () => false,
+    isSignupIdentifyOutboxEnabled: (userId: number) => outbox().isSignupIdentifyOutboxEnabled(userId),
+    deliverAnalyticsOutbox: (row: any) => outbox().deliverAnalyticsOutbox(row),
+    retryAnalyticsOutbox: () => outbox().retryAnalyticsOutbox(),
+  };
   return { capture, connect, authenticate, intentRows, captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFlagEnabled: (key: string, value: boolean) => { if (value) disabledFlags.delete(key); else disabledFlags.add(key); }, setFailure: (value: typeof failure) => { failure = value; } };
 }

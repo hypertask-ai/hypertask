@@ -521,7 +521,8 @@ feature_flag_gate:
   # the title alone is not proof of cleanup, and new behavior still needs a flag.
   refactor_risky_new_ui_line_limit: 150
   default_mode_for_new_flags: EVERYONE
-  new_flag_default_mode_exceptions: [bugfix, internal, releaseRisk.highRisk]
+  new_flag_default_mode_exceptions: [bugfix, internal, releaseRisk.highRisk, owner_only_with_owner_request, owner_and_qa_with_same_flag_runtime_covered_extant_ui]
+  ui_flag_widening_to_everyone: independent_review_through_flag_switch_boundary
   everyone_default_forbidden_for: [internal, releaseRisk.highRisk]
   new_money_flag_default_mode: OWNER_AND_QA
   existing_money_flag_modes: unchanged

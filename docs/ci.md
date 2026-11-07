@@ -74,6 +74,7 @@ Small guards share scanner work and trusted metadata:
 - The trusted guard publishes one existing required `pr-title` context for outside, size and title results. Before publication, including after quota waits, it rechecks the open PR, production base, head and evaluated title.
 - Node guard stays separate: the Vercel secret must never share a runner with candidate scripts. Parity stays read-only and separate because it checks out candidate data; it cannot share the trusted job's write token.
 - `feature-flag-gate.yml` evaluates only the changed PR on pull-request events. All-open reconciliation runs every 15 minutes, not on PR events or production pushes. PR runs and fleet sweeps share the non-cancelling `feature-flag-gate-production` group, so an old sweep cannot overwrite a newer PR verdict. The shared group uses `queue: max`, preserving up to 100 pending runs instead of replacing the previous pending PR event. GitHub cancels new arrivals beyond that documented limit; scheduled sweeps recover missed events. See [GitHub concurrency syntax](https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency). The single-PR path still lists open heads to reject shared commits, but never reads or posts unrelated verdicts. Policy changes and closed/shared-head recovery reach other PRs at the next scheduled sweep; GitHub scheduling can delay that sweep.
+  The gate's `ghApi` retries HTTP 500, 502, 503, and 504 up to twice, after one and two seconds, including status posts. `GH_API_NO_WAIT` still skips rate-limit waits but does not disable these server-error retries. Read-token fallback remains separate and happens first.
 - `ux-signoff-gate.yml` evaluates only the event PR on `pull_request_target`; the hourly chain dispatches `workflow_dispatch` sweeps of all open PRs. Both share the same non-cancelling serialization group.
 - Feature-flag reconciliation batches status reads by GraphQL page. Failed batches fall back to per-commit reads. Rate limits skip the pass.
 - Push secret scans and manual outside-PR dry runs keep their workflows. Per-PR test and smoke guards cancel superseded runs, but the trusted guard no longer cancels: it publishes a required status, so it serializes per pull request with `queue: max` (HYCI-29). The Dependabot lane (label plus ticket in one run) shares one non-cancelling line across its PR events and its sweep, so two runs can never file a ticket each, and the shared auto-merge sweeper stays non-cancelling. App Smoke cancels superseded production-cache work; workflow_run validation and reporting use a per-run group, and only validated current-head builds enter the cancellable head-repository/branch group, so old request reruns cannot cancel the current smoke.
@@ -369,7 +370,7 @@ settings, runners, or required checks.
 
 [AI review verdict to ticket](../.github/workflows/ai-review-mirror.yml) copies
 the current GitHub AI Review verdict onto the ticket named by the branch, so the
-review reaches the people reading the board and not only the pull request. It
+review reaches the ticket agent activity and not only the pull request. It
 runs here, not in the private reviewer repository: this repository already owns
 the board token that binds titles and files tickets, while the reviewer's own
 copy was rejected ("Unauthorized") and the failure was hidden by
@@ -386,17 +387,15 @@ copy was rejected ("Unauthorized") and the failure was hidden by
   for what will merge.
 - The concurrency group carries the comment author and never cancels, so an
   ordinary comment on the same PR cannot cancel the reviewer's delivery.
-- Posts one comment with `kind: qa`, because an agent comment without a kind is
-  filed in the hidden agent log instead of the ticket thread. The text is one
-  short plain line naming the verdict and pointing at the pull request, never the
-  findings: the board refuses technical text in a people comment, and the
-  YPER4-910 voice guard answers it with `HTTP 400`. That guard broke five real
-  mirrors between 18:46 and 19:18 UTC on 2026-10-31 while the skip runs stayed
-  green, and the agent log refuses this token (`HTTP 503`), so the findings stay
-  on the pull request (YPER4-978).
-- Skips a commit the ticket already carries and sends an `Idempotency-Key` of
-  `ai-review-mirror-<pr>-<sha>`, so a re-run or an edited verdict never doubles
-  the comment.
+- Resolves the branch ticket through MCP tasks, then opens a runtime agent run
+  and posts a `thought` activity. It never posts people comments or falls back
+  to them. Findings remain on the pull request.
+- Identifies each mirrored thought by repository, PR, head, and verdict.
+  It searches newest-first paginated ticket activity before posting, because
+  activity idempotency keys are scoped to a run. An unchanged latest verdict
+  is skipped even after its run closes. Changed verdicts include the previous
+  mirror activity ID in the delivery key, so APPROVE → CONCERNS → APPROVE
+  delivers all three transitions. Concurrent deliveries in one run share the key.
 - A rejected read or post fails the run. A silent skip is exactly the failure
   this replaces.
 - Both GitHub reads use the same reset-aware retry as the other trusted
@@ -427,7 +426,7 @@ entry for live QA and recovery. Delayed runs can link merged PRs.
 
 `premerge-evidence` passes every open `production` PR with the exact description `test click removed (Valentin 2026-10-21)`. No screen-path, flag-removal, live-mode, browser-click, `premerge.md` or recording evaluation remains. Valentin removed the test click on 2026-10-21 because it was not helping.
 
-New flag definitions that break the default-mode rules still block merge through the separate required `feature-flag-gate`, not `premerge-evidence`. Before any UI, title or label exemption, `.github/scripts/feature-flag-gate.mjs` requires explicit `defaultMode: "EVERYONE"` for new definitions unless their kind is `bugfix` or `internal`, or they declare `releaseRisk.highRisk`. Its trusted registry parser rejects internal flags and high-risk flags whose effective default is Everyone, including bugfix flags with an implicit Everyone default. Eligible new flags defaulting to Everyone remain allowed; high-risk flags defaulting to Owner + QA remain allowed. GitHub reads, commit fetches and parsing failures fail closed in that gate.
+New flag definitions that break the default-mode rules still block merge through the separate required `feature-flag-gate`, not `premerge-evidence`. Before any UI, title or label exemption, `.github/scripts/feature-flag-gate.mjs` requires explicit `defaultMode: "EVERYONE"` for new definitions unless their kind is `bugfix` or `internal`, they declare `releaseRisk.highRisk`, they use `OWNER_ONLY` with a valid `releaseRisk.ownerRequest`, or the definition explicitly uses `OWNER_AND_QA` and that same new flag controls at least one extant changed UI entry through the existing runtime coverage logic. Unrelated or deleted UI files do not qualify. Whole-PR runtime coverage rules still apply. The 2026-11-04 house rule requires visible UI to ship at Owner + QA until independent side-by-side Figma QA passes, before widening the flag to Everyone. The flag-switch API enforces a separate agent and evidence, not automatic validation of Figma screenshots. The gate's trusted registry parser rejects internal flags and high-risk flags whose effective default is Everyone, including bugfix flags with an implicit Everyone default. Eligible new flags defaulting to Everyone remain allowed; high-risk flags defaulting to Owner + QA remain allowed. GitHub reads, commit fetches and parsing failures fail closed in that gate.
 
 The publisher still holds its shared lock from validation through the status post, requires a full 40-character head SHA, and re-reads the open PR's production base and head before posting. A closed PR, non-production base, unreadable or incomplete head, changed head/base, lock error or status-write error cannot publish success. The safety net is feature flags, revert, live QA after release, and screenshot comparison tracked in https://app.hypertask.ai/detail/project-4060/550.
 
@@ -523,6 +522,15 @@ job requests only `contents: read`.
 The light gate dependency contract accepts a dynamic `import(pathToFileURL(..))`
 target, which loads a local file and therefore no package, and still fails
 closed on every other non-literal dynamic load.
+
+Run `.claude/skills/ship/scripts/ci-why <PR> --release` to inspect required
+checks on the current PR head. Add `--json` for structured output. Requirements
+come from embedded classic branch protection and effective rules. Warnings flag
+unknown classic requirements or a head/base change during reads. Check states
+are preserved when app metadata is missing. `app_verified` is true for a
+matching app, false when a pin cannot be verified (including missing checks),
+and null for unpinned checks. Text marks observed checks with unknown apps as
+`app pin unverified`; their state alone does not establish release safety.
 
 ## Feature-map citation check (YPER4-610)
 

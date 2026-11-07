@@ -23,7 +23,14 @@ function setup({ mode = null, name = 'Robin', flagError = false, auth, pending =
     label: { findFirst: async () => ({ id: 'ai-feedback' }) },
     task: { findFirst: async ({ where }) => rows.find(row => row.section !== 'Done' && row.description.includes(where.description_.is.content.contains)) ?? null },
     comment: {
-      findFirst: async ({ where }) => comments.find(comment => comment.taskId === where.taskId && comment.text.includes(where.text.contains)) ?? null,
+      findFirst: async ({ where }) => {
+        if (where.task) {
+          const comment = comments.find(comment => comment.text.includes(where.text.contains))
+          const task = comment && rows.find(row => row.id === comment.taskId && row.section !== 'Done')
+          return task ? { task: { id: task.id, userId: task.userId, ticketNumber: task.ticketNumber, uniqueIndex: task.uniqueIndex, createdAt: task.createdAt } } : null
+        }
+        return comments.find(comment => comment.taskId === where.taskId && comment.text.includes(where.text.contains)) ?? null
+      },
       update: async ({ where, data }) => Object.assign(comments.find(comment => comment.id === where.id), data),
     },
     $queryRaw: async () => [{ locked: true }],
@@ -38,7 +45,6 @@ function setup({ mode = null, name = 'Robin', flagError = false, auth, pending =
     '@/lib/mcp/operationContext': { getMcpExecutionContext: () => auth, withMcpExecutionContext: (t, a, fn) => fn() },
     '@/lib/aiFeedback/clientInfo': { getFeedbackClient: async () => undefined },
     '../config/tool-metadata': { TOOL_METADATA: { REPORT_FEEDBACK: { name: 'hypertask_report_feedback' } } },
-    './enabled': { aiFeedbackEnabled: async () => true },
     '@/lib/flags': {
       isFeatureEnabled: enabled,
       featureFlagCandidateUserIds: async flag => await enabled(flag) ? null : [],
@@ -107,13 +113,16 @@ test('flag On renders the four plain sections followed by unchanged engineer fie
   const input = { ...serverError, tool: 'tasks', errorCode: 'server_error', client: 'claude', note: 'customer secret' }
   await f.fileAiFeedback(input, 42)
   const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(input)
-  const expected = '<p><strong>What happened</strong>: An agent&#39;s API call to tasks failed because Hypertask returned a server error.</p>' +
-    '<p><strong>Who hit it</strong>: an agent owned by Robin.</p>' +
-    '<p><strong>Is it a real bug?</strong> This is likely a Hypertask bug.</p>' +
-    '<p><strong>What to do</strong>: An engineer should look.</p><h2>Details for engineers</h2>' + legacyDescription(input, fingerprint)
   assert.equal(f.created[0].title, "An agent's API call to tasks failed because Hypertask returned a server error (21 Oct)")
-  assert.equal(f.created[0].description, expected)
-  assert.equal(expected.includes('customer secret'), false)
+  assert.match(f.created[0].description, /<h2>Problem<\/h2>/)
+  assert.match(f.created[0].description, /<h2>Fix<\/h2>/)
+  assert.match(f.created[0].description, /<h2>Done when<\/h2>/)
+  assert.match(f.created[0].description, /<h2>Risk<\/h2>/)
+  assert.match(f.created[0].description, /<h2>Decision<\/h2>/)
+  assert.match(f.created[0].description, /Who hit it<\/strong>: an agent owned by Robin\./)
+  assert.doesNotMatch(f.created[0].description, /Fingerprint:|Error code:|HTTP status:|customer secret/)
+  assert.match(f.comments[0].text, new RegExp(`Fingerprint: ai-fb-${fingerprint.slice(0, 12)}`))
+  assert.match(f.comments[0].text, /Error code: server_error/)
   assert.deepEqual(f.userQueries.map(query => query.select), [{ id: true, email: true }, { displayName: true }])
 })
 
@@ -127,8 +136,9 @@ for (const [agentName, ownerName, expected] of [
     await f.fileAiFeedback(serverError, 42, { origin: 'agent', agentName })
     const fingerprint = f.load('src/lib/aiFeedback/input.ts').feedbackFingerprint(serverError)
     assert.ok(f.created[0].description.includes(`<p><strong>Who hit it</strong>: ${expected}.</p>`))
-    assert.ok(f.created[0].description.endsWith(legacyDescription(serverError, fingerprint, ownerName)))
+    assert.doesNotMatch(f.created[0].description, /Fingerprint:|Error code:/)
     assert.match(f.comments[0].text, new RegExp(`Reporting display names: ${ownerName}</p>`))
+    assert.match(f.comments[0].text, /Fingerprint: ai-fb-/)
     t.diagnostic(`Who hit it: ${expected}.`)
   })
 }
@@ -137,7 +147,8 @@ test('reporter names are scrubbed and HTML-escaped without changing reporting di
   const f = setup({ name: 'Robin & Co' })
   await f.fileAiFeedback(serverError, 42, { origin: 'agent', agentName: ' <b>Fable</b> & Team ' })
   assert.match(f.created[0].description, /Who hit it<\/strong>: Fable &amp; Team, owned by Robin &amp; Co\./)
-  assert.match(f.created[0].description, /Reporting display names: Robin &amp; Co<\/p>/)
+  assert.match(f.comments[0].text, /Reporting display names: Robin &amp; Co<\/p>/)
+  assert.doesNotMatch(f.created[0].description, /Reporting display names:/)
   const rendered = f.plainFeedback(serverError, 'a'.repeat(64), { agentName: '<Fable>', ownerName: '<Robin>' })
   assert.match(rendered.description, /Who hit it<\/strong>: &lt;Fable&gt;, owned by &lt;Robin&gt;\./)
 })
@@ -269,8 +280,10 @@ for (const reason of ['invalid_token', 'insufficient_scope', new Error('Classifi
       f.load('src/lib/aiFeedback/automatic.ts').queueMcpAuthFailure(new Request('https://app.hypertask.ai/mcp'))
       await Promise.all(pending)
       assert.equal(f.created.length, 1)
-      assert.match(f.created[0].description, /HTTP status: 401/)
-      assert.doesNotMatch(f.created[0].description, /usually means the agent used/)
+      assert.doesNotMatch(f.created[0].description, /HTTP status:|Error code:|Fingerprint:/)
+      assert.match(f.created[0].description, /<h2>Problem<\/h2>/)
+      assert.match(f.comments[0].text, /HTTP status: 401/)
+      assert.match(f.comments[0].text, /Fingerprint: ai-fb-/)
     } finally {
       if (previous === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
       else process.env.AI_FEEDBACK_AGENT_USER_ID = previous
@@ -327,9 +340,11 @@ test('bare call_failed fingerprint is sha256(cli||||call_failed) and all reporte
   assert.equal(result.deduped, true)
   assert.equal(result.count, 2)
   assert.equal(f.created[0].title, "An agent's CLI call failed with no details (21 Oct)")
+  assert.match(f.created[0].description, /<h2>Problem<\/h2>/)
   assert.match(f.created[0].description, /Who hit it<\/strong>: unknown agent\./)
-  assert.match(f.created[0].description, /There are no details, so we can&#39;t tell/)
+  assert.match(f.created[0].description, /There are no details, so we cannot tell yet/)
   assert.match(f.created[0].description, /Nothing for now/)
+  assert.doesNotMatch(f.created[0].description, /Fingerprint:|Error code:/)
 })
 
 test('plain tickets retain parsable fingerprint and tally markers across repeat reports', async () => {
@@ -340,7 +355,9 @@ test('plain tickets retain parsable fingerprint and tally markers across repeat 
   assert.equal(result.count, 2)
   assert.equal(f.created.length, 1)
   assert.equal(f.created[0].description, original)
-  assert.match(original, /<p>Fingerprint: ai-fb-[a-f0-9]{12}<\/p>/)
+  assert.doesNotMatch(original, /Fingerprint:|Error code:|HTTP status:/)
+  for (const heading of ['Problem', 'Fix', 'Done when', 'Risk', 'Decision']) assert.match(original, new RegExp(`<h2>${heading}</h2>`))
+  assert.match(f.comments[0].text, /<p>Fingerprint: ai-fb-[a-f0-9]{12}<\/p>/)
   assert.match(f.comments[0].text, /<p>AI feedback tally: ai-fb-[a-f0-9]{12}<\/p><p>Seen 2 times<\/p>/)
   assert.match(f.comments[0].text, /<p>Last seen: 2026-10-21T12:00:00.000Z<\/p>/)
   assert.match(f.comments[0].text, /<p>Clients: claude, cursor<\/p>/)
@@ -374,7 +391,8 @@ for (const [mode, expectedPlain] of [['EVERYONE', true], ['OFF', false]]) {
       const f = setup({ mode })
       await f.fileAiFeedback(serverError, undefined, { origin: 'automatic' })
       assert.equal(f.created[0].title.startsWith('AI feedback:'), !expectedPlain)
-      assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }, { flag: 'htpr-7941-quiet-fixable-reports', userId: 42 }])
+      const houseLookups = expectedPlain ? [{ flag: 'htpr-8797-feedback-house-parts', userId: undefined }] : []
+      assert.deepEqual(f.lookups, [{ flag: key, userId: undefined }, ...houseLookups, { flag: 'htpr-7941-quiet-fixable-reports', userId: 42 }])
     } finally {
       if (previous === undefined) delete process.env.AI_FEEDBACK_AGENT_USER_ID
       else process.env.AI_FEEDBACK_AGENT_USER_ID = previous

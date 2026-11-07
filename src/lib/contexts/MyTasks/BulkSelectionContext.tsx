@@ -55,7 +55,6 @@ interface MyTasksBulkSelectionContextValue {
 
 interface MyTasksBulkSelectionProviderProps {
   children: ReactNode;
-  enabled?: boolean;
   resetSelectionKey?: string;
   onAfterMutation: () => void;
 }
@@ -65,27 +64,22 @@ const MyTasksBulkSelectionContext =
 
 export const MyTasksBulkSelectionProvider = ({
   children,
-  enabled = true,
   resetSelectionKey,
   onAfterMutation,
-}: MyTasksBulkSelectionProviderProps) => {
-  if (!enabled) return children;
-
-  return (
-    <MyTasksBulkSelectionProviderInner
-      resetSelectionKey={resetSelectionKey}
-      onAfterMutation={onAfterMutation}
-    >
-      {children}
-    </MyTasksBulkSelectionProviderInner>
-  );
-};
+}: MyTasksBulkSelectionProviderProps) => (
+  <MyTasksBulkSelectionProviderInner
+    resetSelectionKey={resetSelectionKey}
+    onAfterMutation={onAfterMutation}
+  >
+    {children}
+  </MyTasksBulkSelectionProviderInner>
+);
 
 const MyTasksBulkSelectionProviderInner = ({
   children,
   resetSelectionKey,
   onAfterMutation,
-}: Omit<MyTasksBulkSelectionProviderProps, "enabled">) => {
+}: MyTasksBulkSelectionProviderProps) => {
   const [items, setItems] = useState<ITask[]>([]);
   const itemsRef = useRef<ITask[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());

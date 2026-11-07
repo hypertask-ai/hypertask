@@ -1,6 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const root = path.resolve(__dirname, '..')
 const jiti = require('jiti')(__filename, { alias: { '@': path.resolve(__dirname, '../src') }, cache: false })
 const { aiFeedbackSchema, scrubFeedbackText, feedbackFingerprint, feedbackClient } = jiti('../src/lib/aiFeedback/input.ts')
 
@@ -47,32 +48,17 @@ test('MCP clientInfo produces a validated bounded slug', () => {
 })
 
 
-test('ticket flag defaults to Owner + QA as a feature, supports Off and permits anonymous filing only in Everyone', async () => {
-  const { load } = require('./task-route-loader.cjs')
-  const { default: definition, HTPR_7195_AI_FEEDBACK_FLAG: key } = jiti('../src/lib/flags/definitions/htpr-7195-ai-feedback.ts')
-  assert.equal(key, 'htpr-7195-ai-feedback')
-  assert.equal(definition.kind, 'feature')
-  assert.equal(definition.defaultMode, undefined)
-  assert.ok(definition.releaseRisk.reason)
-  let mode = null
-  const db = {
-    featureFlag: { findUnique: async () => mode ? { mode } : null },
-    user: { findUnique: async ({ where }) => ({ email: where.id === 6 ? 'valentin.yeo@gmail.com' : where.id === 985 ? 'valentin@hypertask.ai' : 'member@example.test' }) },
+test('htpr-7195-ai-feedback flag removal is permanent', () => {
+  const fs = require('node:fs')
+  const retiredKey = 'htpr-7195-ai-feedback'
+  const flagDirectory = path.join(root, 'src/lib/flags')
+  for (const file of fs.readdirSync(flagDirectory, { recursive: true })) {
+    const fullPath = path.join(flagDirectory, file)
+    assert.equal(String(file).includes(retiredKey), false, file)
+    if (fs.statSync(fullPath).isFile()) assert.equal(fs.readFileSync(fullPath, 'utf8').includes(retiredKey), false, file)
   }
-  const flags = load('src/lib/flags.ts', { '@/lib/prisma': { default: {} } })
-  assert.equal(flags.defaultFeatureFlagMode(key), 'OWNER_AND_QA')
-  assert.equal(await flags.isFeatureEnabled(key, 6, db), true)
-  assert.equal(await flags.isFeatureEnabled(key, 985, db), true)
-  assert.equal(await flags.isFeatureEnabled(key, 42, db), false)
-  assert.deepEqual(await flags.featureFlagCandidateUserIds(key, db), [6, 985])
-  mode = 'OFF'
-  assert.equal(await flags.isFeatureEnabled(key, 985, db), false)
-  assert.deepEqual(await flags.featureFlagCandidateUserIds(key, db), [])
-  mode = 'EVERYONE'
-  assert.equal(await flags.isFeatureEnabled(key, 42, db), true)
-  assert.equal(await flags.featureFlagCandidateUserIds(key, db), null)
+  assert.equal(fs.existsSync(path.join(root, 'src/lib/aiFeedback/enabled.ts')), false)
 })
-
 
 test('structured fields reject token prefixes, JWTs, long runs and numeric identifiers while legitimate slugs still work', () => {
   const secrets = ['vck_secret123', 'httk_secret123', 'abc_x7Yz9QwE', 'abc_x7.Yz9QwE', 'abcdef_x7Yz9QwE', 'ab_x7Yz9QwE', 'tool-abc_x7Yz9QwE', 'htk_secret123', 'htmk_' + 'secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'sk-secret', 'sk_secret', 'ghp_secret', 'gho_secret', 'github_pat_secret', 'xoxb-secret', 'Bearer-secret', 'error-123456', 'aB7cD9eF2g' + 'H4jK6mN8pQ', 'tool-htk_secret123', 'tool-sk_secret']

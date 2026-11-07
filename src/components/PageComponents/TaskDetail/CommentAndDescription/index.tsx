@@ -1,7 +1,7 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import React, { Suspense, useEffect, useMemo } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -81,7 +81,6 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     newCommentsSnapshotReady,
     showLiveRows,
   } = useTaskContext();
-  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
   const ticketChatReminder = useFlag(HTPR_7318_TICKET_CHAT_REMINDER_FLAG);
   let ticketChatSessionsReminder: React.ReactNode = null;
   if (ticketChatReminder) {
@@ -89,7 +88,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       ? <TicketChatSessionsReminder taskId={currentTask.id} />
       : null;
   }
-  const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
+  const serverRowsShown = liveRowsPendingFor(descriptionStart === "server");
 
   const {
     taskInfoVirtualIndex,
