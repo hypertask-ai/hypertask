@@ -354,6 +354,10 @@ test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-co
     const body = await response.json()
     await route.fulfill({ response, json: { ...body, flags: { ...body.flags, 'htpr-8334-multi-chat-windows': true } } })
   })
+  await page.addInitScript(() => {
+    const saved = JSON.parse(localStorage.getItem('recoil-persist') || '{}')
+    localStorage.setItem('recoil-persist', JSON.stringify({ ...saved, isAiChatSidebarMode: false, aiChatPinned: false, aiChatAutoOpenSuppressed: true, aiChatAutoOpenPreferences: {} }))
+  })
   await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
   await page.locator('[data-ai-chat-ready="true"]').waitFor({ state: 'attached' })
   await page.getByRole('button', { name: 'Open AI chat', exact: true }).click()
