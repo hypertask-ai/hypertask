@@ -44,6 +44,7 @@ function moduleWithStubs(file, stubs) {
       if (id === "@/app/api/ai/_lib/skillAccess") return { AccountSkillAccessError: class extends Error {} };
       if (id === "@/lib/auth/agentScope") return require("./helpers/agent-board-scope.cjs").enforcedScope;
       if (["@/lib/ai/taskWriterSkills", "./taskWriterSkills"].includes(id)) return load(path.join(root, "src/lib/ai/taskWriterSkills.ts"));
+      if (id === "@/lib/agents/writing" || id === "@/lib/agents/writingEnforcement") return { AgentWritingError: class extends Error {}, assertAgentWriting() {}, enforceAgentWriting: async () => {} };
       if (id === "@/lib/media/inlineAgentImages.server") return { inlineAgentImagesForUser: async (html) => html };
       if (id === "@/lib/media/inlineAgentImages") return load(path.join(root, "src/lib/media/inlineAgentImages.ts"));
       if (id === "@/lib/ai/prompts/registry") return load(path.join(root, "src/lib/ai/prompts/registry.ts"));

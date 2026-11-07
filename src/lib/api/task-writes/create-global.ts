@@ -12,6 +12,8 @@ import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
 import { Prisma } from "@prisma/client";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
+import { AgentWritingError } from "@/lib/agents/writing";
+import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
@@ -202,8 +204,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       }
     }
     if (sharedWriting) {
-      const { enforceAgentWriting } = require("@/lib/agents/writingEnforcement") as typeof import("@/lib/agents/writingEnforcement");
-      const { AgentWritingError } = require("@/lib/agents/writing") as typeof import("@/lib/agents/writing");
       try {
         await enforceAgentWriting(userId, agentId, { title, description: storedDescription }, {}, { create: true });
       } catch (error) {
