@@ -81,10 +81,15 @@ test("the comment microphone records the graph stream on a timeslice", async () 
     dom.window.cancelAnimationFrame = global.cancelAnimationFrame;
 
     const mic = { id: "mic", getTracks: () => [{ stop() {} }] };
-    dom.window.navigator.mediaDevices = {
+    const mediaDevices = {
       getUserMedia: async () => mic,
       enumerateDevices: async () => [],
     };
+    Object.defineProperty(globalThis.navigator, "mediaDevices", {
+      configurable: true,
+      writable: true,
+      value: mediaDevices,
+    });
 
     class AudioContext {
       constructor() { this.state = "running"; }
