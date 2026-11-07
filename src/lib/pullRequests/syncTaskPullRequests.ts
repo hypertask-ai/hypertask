@@ -10,6 +10,7 @@ import {
   type PullRequestDisplayState,
   type PullRequestLifecycle,
 } from "./githubPullRequests";
+import { lockPullRequestIdentity } from "./taskPullRequests";
 
 interface PullRequestWebhookUpdate {
   boardId: number;
@@ -85,6 +86,12 @@ export async function syncPullRequestFromWebhook(
   input: PullRequestWebhookUpdate,
 ): Promise<{ linked: number; updated: number; taskIds: number[] }> {
   return prisma.$transaction(async (transaction) => {
+    await lockPullRequestIdentity(
+      transaction,
+      input.repositoryOwner,
+      input.repositoryName,
+      input.number,
+    )
     const existingLinks = await transaction.taskPullRequest.findMany({
       where: {
         repositoryOwner: input.repositoryOwner,

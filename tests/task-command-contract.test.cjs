@@ -1,6 +1,5 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
 const path = require('node:path')
 const root = path.resolve(__dirname, '..')
 const jiti = require('jiti')(__filename, { alias: { '@': path.resolve(root, 'src') }, cache: false })
@@ -9,7 +8,7 @@ const parameters = require('../src/lib/mcp-server/config/descriptions/parameters
 const { invalidTaskRelationTypeBody, normalizeTaskRelationType, taskRelationTypeHelp } = jiti('../src/lib/mcp/tasks/relationType.ts')
 const { LinkTasksInputSchema } = jiti('../src/lib/mcp-server/validations/task.validation.ts')
 const { validateTaskUpdateIdentifiers } = jiti('../src/lib/mcp/tasks/fields/validateIdentifiers.ts')
-const toolMetadata = fs.readFileSync(path.join(root, 'src/lib/mcp-server/config/tool-metadata.ts'), 'utf8')
+const { TOOL_METADATA } = jiti('../src/lib/mcp-server/config/tool-metadata.ts')
 
 test('edit updates a ticket and relations lists its links', () => {
   assert.equal(tasks.actions.edit.tool, tasks.actions.update.tool)
@@ -36,7 +35,9 @@ test('link help names RelatedTo, BlockedBy and BlockedTo', () => {
   assert.match(JSON.stringify(missing.error.issues), /RelatedTo, BlockedBy or BlockedTo/)
   assert.equal(normalizeTaskRelationType('blockedby'), null)
   assert.equal(normalizeTaskRelationType('BlockedBy'), 'BlockedBy')
-  assert.match(toolMetadata, /RelatedTo is neutral, BlockedBy means the source is blocked by the target, and BlockedTo means the source blocks the target/)
+  assert.match(TOOL_METADATA.LINK_TASKS.description, /RelatedTo is neutral/)
+  assert.match(TOOL_METADATA.LINK_TASKS.description, /BlockedBy means the source is blocked by the target/)
+  assert.match(TOOL_METADATA.LINK_TASKS.description, /BlockedTo means the source blocks the target/)
 })
 
 test('marking a ticket done is a column move, not a status', async () => {
@@ -53,7 +54,7 @@ test('marking a ticket done is a column move, not a status', async () => {
   assert.doesNotMatch(other.error, /Done is a column/)
   assert.match(parameters.status, /Done is a column/)
   assert.match(tasks.parameters_and_caveats, /Done column/)
-  assert.match(toolMetadata, /edit is another name for this update/)
-  assert.match(toolMetadata, /set section or section_id to the Done column/)
-  assert.doesNotMatch(toolMetadata, /status\(column\/section\)/)
+  assert.match(TOOL_METADATA.UPDATE_TASK.description, /edit is another name for this update/)
+  assert.match(TOOL_METADATA.UPDATE_TASK.description, /set section or section_id to the Done column/)
+  assert.doesNotMatch(TOOL_METADATA.UPDATE_TASK.description, /status\(column\/section\)/)
 })

@@ -16,6 +16,18 @@ import {
   type PullRequestLifecycle,
 } from "./githubPullRequests";
 
+const PULL_REQUEST_LINK_LOCK_CLASS = 8801
+
+export async function lockPullRequestIdentity(
+  db: { $executeRaw: Prisma.TransactionClient["$executeRaw"] },
+  repositoryOwner: string,
+  repositoryName: string,
+  number: number,
+) {
+  const key = `${repositoryOwner}/${repositoryName}#${number}`
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(${PULL_REQUEST_LINK_LOCK_CLASS}::int, hashtext(${key}))`
+}
+
 export class PullRequestLinkError extends Error {
   constructor(
     message: string,
@@ -378,6 +390,7 @@ export async function linkTaskPullRequest({
 
   try {
     return await db.$transaction(async (transaction) => {
+      await lockPullRequestIdentity(transaction, parsed.owner, parsed.repository, parsed.number)
       if (teamScope != null) await transaction.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`;
       const task = await transaction.task.findFirst({
         where: {

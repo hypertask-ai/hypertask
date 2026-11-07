@@ -533,6 +533,7 @@ test("webhook does not fall back to an unrelated ticket when the pull request is
   const prisma = {
     $transaction: async (callback) =>
       callback({
+        $executeRaw: async () => 0,
         taskPullRequest: {
           findMany: async () => [],
           findFirst: async ({ where }) =>
@@ -588,7 +589,7 @@ test("webhook does not fall back to an unrelated ticket when the pull request is
   }
 });
 
-test("webhook does not return a fallback task after a concurrent global link wins", async () => {
+test("webhook locks the pull request before it can fall back to a ticket", async () => {
   const prismaPath = path.join(root, "src/lib/prisma.ts");
   const syncPath = path.join(
     root,
@@ -597,14 +598,25 @@ test("webhook does not return a fallback task after a concurrent global link win
   const previousPrisma = require.cache[prismaPath];
   const previousSync = require.cache[syncPath];
   let taskFallbackLookups = 0;
+  let creates = 0;
+  const order = [];
   const prisma = {
     $transaction: async (callback) =>
       callback({
+        $executeRaw: async () => {
+          order.push("lock");
+        },
         taskPullRequest: {
           findMany: async () => [],
-          findFirst: async () => null,
+          findFirst: async () => {
+            order.push("global");
+            return order[0] === "lock" ? { id: "linked-while-waiting" } : null;
+          },
           findUnique: async () => null,
-          createMany: async () => ({ count: 0 }),
+          createMany: async () => {
+            creates += 1;
+            return { count: 1 };
+          },
         },
         task: {
           findFirst: async () => {
@@ -646,7 +658,9 @@ test("webhook does not return a fallback task after a concurrent global link win
     });
 
     assert.deepEqual(result, { linked: 0, updated: 0, taskIds: [] });
-    assert.equal(taskFallbackLookups, 1);
+    assert.deepEqual(order, ["lock", "global"]);
+    assert.equal(taskFallbackLookups, 0);
+    assert.equal(creates, 0);
   } finally {
     if (previousPrisma) require.cache[prismaPath] = previousPrisma;
     else delete require.cache[prismaPath];

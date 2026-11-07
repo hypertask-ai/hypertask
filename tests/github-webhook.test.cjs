@@ -959,6 +959,7 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
   const transaction = {
     taskPullRequest: {
       findMany: read("links", link ? [{ taskId: task.id }] : []),
+      findFirst: async () => null,
       findUnique: async () => link,
       createMany: async ({ data }) => {
         writes.push("link.createMany");
@@ -975,6 +976,7 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
     task: { findFirst: read("sync.task", task) },
     user: { findUnique: read("sync.actor", bot) },
     comment: { create: write("activity.create", {}) },
+    $executeRaw: write("pull-request-lock", 0),
     $queryRaw: write("row-lock", []),
   };
   const prisma = {
