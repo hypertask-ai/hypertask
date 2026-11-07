@@ -248,13 +248,47 @@ function withFreeLimits(plan: ISubscriptionPlan, flags: FreePlanLimitFlags): ISu
   return { ...plan, perks };
 }
 
-export function subscriptionPlansFor(flags: FreePlanLimitFlags, percentageAllowance = false): ISubscriptionPlan[] {
+function withGenerousPositioning(plan: ISubscriptionPlan, correctedCopy: boolean): ISubscriptionPlan {
+  if (!correctedCopy) return plan;
+  if (plan.id === "Free") {
+    return {
+      ...plan,
+      perks: plan.perks.map((perk) => {
+        if (perk.titlePrefix === "AI") {
+          return { ...perk, amount: "Included allowance", unlimited: false };
+        }
+        if (perk.title === "LLM billing") {
+          return { ...perk, amount: "Included AI allowance", unlimited: false };
+        }
+        return perk;
+      }),
+    };
+  }
+  if (plan.id === "Pro") {
+    return {
+      ...plan,
+      perks: plan.perks.map((perk) => (
+        perk.title === "LLM billing" && perk.amount.includes("$15")
+          ? { ...perk, amount: "More included AI", unlimited: true }
+          : perk
+      )),
+    };
+  }
+  return plan;
+}
+
+export function subscriptionPlansFor(
+  flags: FreePlanLimitFlags,
+  percentageAllowance = false,
+  correctedCopy = false,
+): ISubscriptionPlan[] {
   return subscriptionPlanTemplates.map((plan) => {
     const limitedPlan = withFreeLimits(plan, flags);
-    if (!percentageAllowance || limitedPlan.id !== "Pro") return limitedPlan;
+    const positionedPlan = withGenerousPositioning(limitedPlan, correctedCopy);
+    if (!percentageAllowance || positionedPlan.id !== "Pro") return positionedPlan;
     return {
-      ...limitedPlan,
-      perks: limitedPlan.perks.map((perk) => perk.title === "LLM billing"
+      ...positionedPlan,
+      perks: positionedPlan.perks.map((perk) => perk.title === "LLM billing"
         ? { ...perk, amount: "Included AI; add your own key for more" }
         : perk),
     };
@@ -264,9 +298,10 @@ export function subscriptionPlansFor(flags: FreePlanLimitFlags, percentageAllowa
 export const storeSubscriptionPlans = subscriptionPlansFor(legacyFreePlan);
 
 const productionTrialBlurb = "Use Hypertask as much as you want with no board or task amount limitations with unlimited AI. Risk free, cancel anytime.";
+const correctedTrialBlurb = "Upgrade to Pro for more included AI. Integrations stay included on every plan. Risk free, cancel anytime.";
 
 export function trialPlanBlurb(corrected: boolean): string {
-  return corrected ? "Risk free, cancel anytime." : productionTrialBlurb;
+  return corrected ? correctedTrialBlurb : productionTrialBlurb;
 }
 
 export function trialComparisonColumns(corrected: boolean, plans: ISubscriptionPlan[] = storeSubscriptionPlans) {
