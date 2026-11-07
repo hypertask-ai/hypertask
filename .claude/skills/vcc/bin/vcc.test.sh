@@ -36,7 +36,7 @@ mkdir -p "$HOME/.agents/skills/ship/scripts"
 cat > "$HOME/.agents/skills/ship/scripts/ship-identity" <<'STUB'
 #!/usr/bin/env bash
 printf 'identity lookup\n' >> "$VCC_TEST_TRACE"
-printf 'Fixture\t%s\n' "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
+printf '%s\t%s\n' "${VCC_TEST_IDENTITY:-Fixture}" "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
 STUB
 chmod +x "$T/bin/"* "$HOME/.agents/skills/ship/scripts/ship-identity"
 printf '%s\n' 'vcc: helpers never write to the board; report to your runner' > "$T/refusal"
@@ -52,6 +52,22 @@ if /bin/cat | grep -q LINTFAIL; then printf 'ticket-lint: rejected.\n  - LINTFAI
 STUB
 chmod +x "$T/bin/ticket-lint"
 export VCC_TICKET_LINT="$T/bin/ticket-lint"
+cat > "$T/bin/blocker-review" <<'STUB'
+#!/usr/bin/env bash
+# Stand-in for the shared gate: runners are refused, Chief Of Staff and leads pass.
+[ "${1:-}" = --gate ] || exit 64
+who=''; board=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in --who) who=$2; shift ;; --board) board=$2; shift ;; esac
+  shift
+done
+printf 'gate who=%s board=%s\n' "$who" "$board" >> "$VCC_TEST_TRACE"
+case "$who" in
+  Runner*) printf 'blocker-review gate: %s may not make Valentin the blocker.\n' "$who" >&2; exit 3 ;;
+esac
+STUB
+chmod +x "$T/bin/blocker-review"
+export VCC_BLOCKER_REVIEW="$T/bin/blocker-review"
 
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -734,4 +750,64 @@ STUB
   [ "$out" = 'local projects list' ]
 )
 printf 'ok board wrapper finds hypertask in the local command folder\n'
-printf 'vcc helper guard tests passed\n'
+# Only Chief Of Staff and the board lead may make Valentin the blocker (YPER4-1376).
+export VCC_TEST_COMMENTS="$T/comments.json" VCC_TEST_TASK="$T/task.json"
+rm -f "$HOME/.agents/skills/ship/scripts/ship-check"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$HOME/.agents/skills/ship/scripts/ship-check"
+chmod +x "$HOME/.agents/skills/ship/scripts/ship-check"
+cat > "$T/bin/hypertask" <<'STUB'
+#!/usr/bin/env bash
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+case "${1:-} ${2:-}" in
+  'section list') printf '{"sections":[{"id":31019,"section_title":"Agent Blocked"},{"id":10412,"section_title":"Valentin Review"}]}\n'; exit 0 ;;
+  'comments list') exec /bin/cat "$VCC_TEST_COMMENTS" ;;
+  'tasks get') exec /bin/cat "$VCC_TEST_TASK" ;;
+esac
+printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
+STUB
+gate_refused() {
+  run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" "$@"
+  [ "$status" = 5 ] || fail "runner was not refused (status $status): $*"
+  [[ $(< "$T/err") == 'vcc: '*' refused'* ]] || fail "wrong gate refusal: $*: $(cat "$T/err")"
+  [[ $(< "$T/err") == *'may not make Valentin the blocker'* ]] || fail "gate reason missing: $*"
+  [[ $(< "$VCC_TEST_TRACE") != *waiting-on* && $(< "$VCC_TEST_TRACE") != *' add'* && $(< "$VCC_TEST_TRACE") != *' move'* && $(< "$VCC_TEST_TRACE") != *' update'* && $(< "$VCC_TEST_TRACE") != *' create'* ]] || fail "refused gate reached the write: $*"
+}
+gate_allowed() {
+  run env VCC_TEST_IDENTITY="$1" bash "$vcc" "${@:2}"
+  [ "$status" = 0 ] || fail "$1 refused ($status): ${*:2}: $(cat "$T/err")"
+  [[ $(< "$VCC_TEST_TRACE") == *"gate who=$1"* ]] || fail "gate not asked for $1: ${*:2}"
+}
+fixture "$question"
+task_fixture '<p>Problem</p><p>Fix</p><p>Done when</p><p>Risk: low.</p><p>Decision: none.</p>'
+jq '.tasks[0].boardId = 15' "$VCC_TEST_TASK" > "$T/task15.json"
+mv "$T/task15.json" "$VCC_TEST_TASK"
+gate_refused comment add X-1 --kind question --text "$question"
+gate_refused --project 15 --json comment add X-1 --kind=question --text="$question"
+gate_refused tasks waiting-on X-1 --user 6
+gate_refused task waiting-on X-1 --user me
+gate_refused task move X-1 --section 'Valentin Review'
+gate_refused task move X-1 'valentin review'
+gate_refused task update X-1 --section='Valentin Review'
+gate_refused task create --project 15 --title 'x' --section 'Valentin Review'
+for who in 'Chief Of Staff' 'HT Product Lead'; do
+  gate_allowed "$who" comment add X-1 --kind question --text "$question"
+  gate_allowed "$who" task waiting-on X-1 --user 6
+  gate_allowed "$who" task move X-1 --section 'Valentin Review'
+  [[ $(< "$VCC_TEST_TRACE") == *'board=15'* ]] || fail 'gate did not look up the ticket board'
+done
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task waiting-on X-1 --user none --reason 'not his'
+[ "$status" = 0 ] || fail 'a runner clearing the blocker was refused'
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" comment add X-1 --text 'agent lane note'
+[ "$status" = 0 ] || fail 'a plain note was refused'
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task move X-1 --section 'In Progress'
+[ "$status" = 0 ] || fail 'a normal move was refused'
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task waiting-on X-1 --user 123
+[ "$status" = 0 ] || fail 'handing a ticket to another person was refused'
+# A section id is looked up by name first.
+gate_refused task update X-1 --section 10412
+run env VCC_TEST_IDENTITY='Runner 3' bash "$vcc" task update X-1 --section 31019
+[ "$status" = 0 ] || fail 'a move by section id to another column was refused'
+gate_allowed 'Chief Of Staff' task update X-1 --section 10412
+printf 'ok only Chief Of Staff and the board lead make Valentin the blocker\n'
+printf 'vcc helper guard tests passed\n' 
