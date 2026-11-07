@@ -760,6 +760,7 @@ export async function updateTaskSingle(
     scheduleTaskSummaryGeneration({
       taskId: newTask.id,
       agentId: agentId ?? null,
+      ownerUserId: taskBeforeWrite.userId,
       activityOnlyOwnerId:
         !titleChanged &&
         !descriptionChanged &&
@@ -769,7 +770,7 @@ export async function updateTaskSingle(
           : null,
     });
     if (titleChanged || descriptionChanged) {
-      scheduleClassifyTaskAiLabels(task.id, task.projectId);
+      scheduleClassifyTaskAiLabels(task.id, task.projectId, agentId);
     }
 
     return {
