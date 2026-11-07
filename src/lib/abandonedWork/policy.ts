@@ -119,7 +119,7 @@ function maxTime(values: Array<string | null | undefined>): number | null {
 
 function isQuestion(value: string | null | undefined): boolean {
   const text = (value ?? "").replace(/<\/?(?:p|div|li|h[1-6]|blockquote)\b[^>]*>|<br\s*\/?>/gi, "\n");
-  return text.split("\n").some((line) => /^question:/i.test(line.trim()));
+  return /(?:^|\n)\s*(?:<[^>\n]*>\s*)*question:/i.test(text);
 }
 
 function humanAssignees(row: AbandonedRow): AssigneeFact[] {
@@ -137,6 +137,7 @@ function lifeMs(row: AbandonedRow): number {
     row.lastCommentAt,
     row.lastRunAt,
     ...row.assignees.map((assignee) => assignee.assignedAt),
+    ...openPullRequests(row).map((pullRequest) => pullRequest.updatedAt),
   ]) ?? 0;
 }
 
@@ -147,6 +148,9 @@ function manualQuietMs(row: AbandonedRow, nowMs: number): number {
     row.lastCommentAt,
     row.lastRunAt,
     ...row.assignees.map((assignee) => assignee.assignedAt),
+    ...row.pullRequests
+      .filter((pullRequest) => pullRequest.lifecycle.toLowerCase() === "open")
+      .map((pullRequest) => pullRequest.updatedAt),
   ];
   let latest = 0;
   for (const stamp of stamps) {

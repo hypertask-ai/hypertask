@@ -36,6 +36,9 @@ async function recordRunHeartbeat(
     access?: BoardKnowledgePrincipal;
   },
 ) {
+  if (input.context.taskId != null) {
+    await lockAgentMutationFence(tx, input.context.taskId);
+  }
   if (input.access?.teamScope != null) {
     if (input.context.taskId != null) {
       await lockTaskTeamScope(tx as Prisma.TransactionClient, input.context.taskId, input.access.userId, input.access.agentId, input.access.teamScope);
@@ -74,9 +77,6 @@ export async function persistAgentRunActivity(
   tx: AgentRunActivityTransaction,
   input: AgentRunActivityPersistenceInput,
 ) {
-  if (input.context.taskId != null) {
-    await lockAgentMutationFence(tx, input.context.taskId);
-  }
   await recordRunHeartbeat(tx, {
     runId: input.runId,
     agentId: input.agentId,

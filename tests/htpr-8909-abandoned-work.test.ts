@@ -95,6 +95,42 @@ test("an open change protects an active owner and expires after twenty-four quie
   assert.match(releaseNote(expired.toSection, expired.pullRequestUrls), new RegExp(url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
+test("a fresh open change keeps a ticket whose owner has been quiet", () => {
+  const row = sampleRow({
+    sectionChangedAt: DAY,
+    assignees: [agent(DAY)],
+    pullRequests: [{
+      url: "https://github.com/hypertask-ai/hypertask/pull/11",
+      lifecycle: "open",
+      updatedAt: "2026-11-07T02:00:00.000Z",
+    }],
+  });
+  assert.deepEqual(decideAbandoned(row, NOW, board), { action: "keep", reason: "open change still active" });
+  assert.equal(handCount([row], NOW, board), 0);
+});
+
+test("a formatted question still reaches Valentin Review", () => {
+  const decision = decideAbandoned(sampleRow({
+    projectId: 4060,
+    sectionChangedAt: QUIET,
+    assignees: [agent()],
+    comments: [{
+      id: 9,
+      createdAt: QUIET,
+      text: "<p><strong>Question:</strong> Ship?</p>",
+      commentText: "",
+      creatorId: 9,
+      agentId: "runner-13",
+      agentDisplayName: "Runner 13",
+      kind: null,
+      reactions: [],
+    }],
+  }), NOW, infra);
+  assert.equal(decision.action, "release");
+  if (decision.action !== "release") return;
+  assert.equal(decision.toSection, "Valentin Review");
+});
+
 test("an unanswered owner question goes to Valentin Review", () => {
   const decision = decideAbandoned(sampleRow({
     projectId: 4060,
