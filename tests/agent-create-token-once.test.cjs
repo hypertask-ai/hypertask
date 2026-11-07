@@ -134,6 +134,9 @@ test("a duplicate display name is rejected with a rotate-token pointer, not sile
   assert.equal(res.status, 409);
   const data = await res.json();
   assert.match(data.error, /rotate/i);
+  assert.equal(data.recoveryUrl, "https://app.hypertask.ai/agents");
+  assert.equal(data.command, "hypertask agents rotate-token --id existing-agent");
+  assert.match(data.message, /same identity/);
 });
 
 test("a successful create returns the token exactly once, alongside the agent", async () => {
