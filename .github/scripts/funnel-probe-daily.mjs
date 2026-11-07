@@ -44,13 +44,18 @@ async function postReport(passed) {
   if (!REPORT_TOKEN) return;
   const lines = steps.map((s) => `<li><p>${s.ok ? "PASS" : "FAIL"}: ${s.step} — ${s.detail}</p></li>`).join("");
   const body = `<p><strong>${passed ? "PASS" : "FAIL"}: daily funnel probe signup</strong></p><ul>${lines}</ul>`;
-  await fetch(`${BASE}/api/mcp/tasks/${encodeURIComponent(PARENT_TICKET)}/comments`, {
+  await fetch(`${BASE}/api/mcp/comments`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${REPORT_TOKEN}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ text: body, kind: "qa" }),
+    body: JSON.stringify({
+      ticket_number: PARENT_TICKET,
+      project_id: MARK_PROJECT_ID,
+      text: body,
+      content_type: "html",
+    }),
     signal: AbortSignal.timeout(30_000),
   }).catch(() => {});
 }

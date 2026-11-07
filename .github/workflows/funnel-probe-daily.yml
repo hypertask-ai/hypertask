@@ -24,8 +24,10 @@ jobs:
           node-version: "^24.22.1"
           check-latest: true
 
-      - name: Install Playwright chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install dependencies and Playwright
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
 
       - name: Run daily isolated signup probe
         env:

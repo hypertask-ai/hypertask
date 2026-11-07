@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import test from "node:test";
-import vercel from "../vercel.json" with { type: "json" };
 import { activationHarness } from "./helpers/activation-harness";
+
+const root = path.resolve(import.meta.dirname, "..");
+const vercel = JSON.parse(fs.readFileSync(path.join(root, "vercel.json"), "utf8")) as {
+  crons: { path: string }[];
+};
 
 test("probe recipient detection accepts daily addresses on the probe domain", () => {
   const { isProbeRecipientEmail, makeDailyProbeEmail } = activationHarness().load(
@@ -19,6 +25,7 @@ test("probe recipient detection accepts daily addresses on the probe domain", ()
 test("probe inbox stores and reads verification links only for probe mail", async () => {
   const store = new Map<string, { value: string; ttl: number }>();
   const h = activationHarness();
+  h.setFlagEnabled("htpr-7294-daily-funnel-probe", true);
   h.mocks["@/lib/redis"] = {
     getRedis: async () => ({
       set: async (key: string, value: string, _ex: string, ttl: number) => {
@@ -46,4 +53,12 @@ test("funnel probe cron route is registered in vercel.json", () => {
   assert.ok(
     vercel.crons.some((cron) => cron.path === "/api/cron/funnel-probe-signup"),
   );
+});
+
+test("the daily funnel probe flag is registered with owner-only rollout", () => {
+  const def = activationHarness().load(
+    "src/lib/flags/definitions/htpr-7294-daily-funnel-probe.ts",
+  ).default;
+  assert.equal(def.key, "htpr-7294-daily-funnel-probe");
+  assert.equal(def.defaultMode, "OWNER_AND_QA");
 });
