@@ -6,7 +6,7 @@ import { parse } from "node-html-parser";
 import { createHash } from "node:crypto";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { classifyAnswer, FLAG_CHAT_RECORD, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
+import { classifyAnswer, FLAG_CHAT_RECORD_AGENT_ID, isOffOrder, normalizeVisibleText, parseFlagChatRecord, parseSwitchQuestion, strictSwitchRequest } from "@/lib/flags/approvalWords";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_KEYS,
@@ -229,13 +229,13 @@ export async function PATCH(request: NextRequest) {
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
         } else {
-          const record = FLAG_CHAT_RECORD.exec(words);
-          const recordDate = record ? Date.parse(`${record[1]}T00:00:00.000Z`) : NaN;
+          const record = parseFlagChatRecord(comment.text || comment.commentText || "");
+          const recordDate = record ? Date.parse(`${record.date}T00:00:00.000Z`) : NaN;
           if (!unedited || !fresh || comment.creatorId !== FEATURE_FLAG_OWNER_USER_ID
             || comment.agentId !== FLAG_CHAT_RECORD_AGENT_ID || !record || !Number.isFinite(recordDate)
-            || new Date(recordDate).toISOString().slice(0, 10) !== record[1]
+            || new Date(recordDate).toISOString().slice(0, 10) !== record.date
             || recordDate > now || recordDate < now - week
-            || (words.match(/"/g) ?? []).length !== 2 || (classifyAnswer(record[2]) !== "yes" && !(body.mode === "OFF" && isOffOrder(record[2])))) {
+            || (classifyAnswer(record.quote) !== "yes" && !(body.mode === "OFF" && isOffOrder(record.quote)))) {
             throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
           }
           const lead = await tx.agent.findUnique({
