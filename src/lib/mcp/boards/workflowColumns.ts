@@ -23,26 +23,31 @@ export async function ciBlockerWriteOpen(userId: number): Promise<boolean> {
 export async function ensureFleetCiWorkflowColumns(projectId: number, userId: number, db = prisma): Promise<void> {
   if (projectId !== FLEET_CI_PROJECT_ID) return;
   if (!(await ciBlockerWriteOpen(userId))) return;
-  const existing = await db.section.findMany({
-    where: { projectId, deleted: false },
-    select: { section_title: true },
-  });
-  const missing = missingWorkflowColumns(existing.map((section) => section.section_title));
-  for (const title of missing) {
-    const section = await db.section.create({
-      data: {
-        section_title: title,
-        projectId,
-        visibility: true,
-        deleted: false,
-        ranking: WORKFLOW_RANKING[title],
-        isDone: false,
-      },
+  try {
+    const recorded = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Project" WHERE id = ${projectId} FOR UPDATE`;
+      const existing = await tx.section.findMany({
+        where: { projectId, deleted: false },
+        select: { section_title: true },
+      });
+      const keys: string[] = [];
+      for (const title of missingWorkflowColumns(existing.map((section) => section.section_title))) {
+        const section = await tx.section.create({
+          data: {
+            section_title: title,
+            projectId,
+            visibility: true,
+            deleted: false,
+            ranking: WORKFLOW_RANKING[title],
+            isDone: false,
+          },
+        });
+        keys.push(await enqueueColumnCreated(tx, section.id, { userId }));
+      }
+      return keys;
     });
-    try {
-      processAnalyticsIntentSoon(await enqueueColumnCreated(db, section.id, { userId }));
-    } catch {
-      continue;
-    }
+    for (const key of recorded) processAnalyticsIntentSoon(key);
+  } catch {
+    return;
   }
 }

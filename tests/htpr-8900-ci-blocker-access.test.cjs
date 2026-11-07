@@ -497,18 +497,35 @@ test("a column list finds QA and Release by role", async () => {
 test("workflow columns are added only on Fleet CI while the write is open", async () => {
   const created = [];
   const titles = [...fleetCiColumns];
+  const steps = [];
   let open = false;
   let flagThrows = false;
+  let createThrows = false;
+  const db = {
+    $queryRaw: async () => { steps.push("lock"); return []; },
+    section: {
+      findMany: async () => { steps.push("read"); return titles.map((section_title) => ({ section_title })); },
+      create: async ({ data }) => {
+        if (createThrows) throw new Error("column insert failed");
+        steps.push("create");
+        created.push(data);
+        titles.push(data.section_title);
+        return { ...data, id: created.length };
+      },
+    },
+  };
+  db.$transaction = async (fn) => fn(db);
   const { ensureFleetCiWorkflowColumns } = load("src/lib/mcp/boards/workflowColumns.ts", {
     "@/lib/flags": { isFeatureEnabled: async (key) => {
       if (flagThrows) throw new Error("flag unavailable");
       if (key !== FLAG) throw new Error(key);
       return open;
     } },
-    "@/lib/prisma": { default: { section: {
-      findMany: async () => titles.map((section_title) => ({ section_title })),
-      create: async ({ data }) => { created.push(data); titles.push(data.section_title); return data; },
-    } } },
+    "@/lib/telemetry/savedWork": {
+      enqueueColumnCreated: async () => "column-created",
+      processAnalyticsIntentSoon: () => {},
+    },
+    "@/lib/prisma": { default: db },
   });
   await ensureFleetCiWorkflowColumns(11514, 6);
   assert.deepEqual(created, []);
@@ -517,6 +534,7 @@ test("workflow columns are added only on Fleet CI while the write is open", asyn
   assert.deepEqual(created, []);
   await ensureFleetCiWorkflowColumns(11514, 6);
   assert.deepEqual(created.map((column) => [column.section_title, column.ranking]), [["QA", "A0505"], ["Release", "A0525"]]);
+  assert.deepEqual(steps.slice(0, 3), ["lock", "read", "create"]);
   created.length = 0;
   titles.splice(0, titles.length, ...fiveColumns);
   await ensureFleetCiWorkflowColumns(11514, 6);
@@ -525,5 +543,9 @@ test("workflow columns are added only on Fleet CI while the write is open", asyn
   flagThrows = true;
   titles.splice(0, titles.length, ...fiveColumns);
   await ensureFleetCiWorkflowColumns(11514, 6);
+  assert.deepEqual(created, []);
+  flagThrows = false;
+  createThrows = true;
+  await assert.doesNotReject(ensureFleetCiWorkflowColumns(11514, 6));
   assert.deepEqual(created, []);
 });
