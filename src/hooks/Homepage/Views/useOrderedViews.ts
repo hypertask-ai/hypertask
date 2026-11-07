@@ -8,12 +8,13 @@ import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, buildBuiltinViewContext, type BoardVie
 import { useRouter } from 'next/navigation'
 import { getActiveBoardLayoutPreferenceFromProject, replaceProjectSurface, savedBoardLayoutToClient } from '@/utils/helperFunctions/Views/ViewsHelperFunctions'
 import { useFlag, useFlagLoaded } from '@/hooks/useFlag'
-import { HTPR_7092_DECISIONS_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/keys'
+import { HTPR_7092_DECISIONS_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 
 const useOrderedViews = (project: IProject | null): BoardView[] => {
   const blockedByMeEnabled = useFlag(HTPR_7804_BLOCKED_BY_ME_FLAG)
+  const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG)
   const blockedByMeLoaded = useFlagLoaded(HTPR_7804_BLOCKED_BY_ME_FLAG)
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom)
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom)
@@ -70,11 +71,15 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     const all = project?.project_view?.allViews ?? []
     const context = buildBuiltinViewContext(project)
     const views: BoardView[] = [
-      ...all.filter((view) => view.id !== unsavedViewId),
+      ...all.filter((view) => view.id !== unsavedViewId).map((view) =>
+        boardViewFiltersEnabled && !view.title?.trim()
+          ? { ...view, title: 'Untitled view' }
+          : view,
+      ),
       ...BUILTIN_VIEWS.filter((view) => !view.available || view.available(context)),
     ]
     return sortViewsByOrder(views, effectiveOrder, defaultViewId)
-  }, [project, defaultViewId, unsavedViewId, effectiveOrder])
+  }, [project, defaultViewId, unsavedViewId, effectiveOrder, boardViewFiltersEnabled])
   const viewsWithoutBlockedByMe = useMemo(
     () => availableViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.blockedByMe),
     [availableViews],

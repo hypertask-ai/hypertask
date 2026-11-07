@@ -40,6 +40,7 @@ import {
   getActiveSubtaskSettingFromProject,
   getActiveTableSortFromProject,
   getViewFromProject,
+  getProjectForViewMutation,
   enqueueBoardViewMutation,
   patchProjectViewBoardLayout,
   patchProjectViewEmptySections,
@@ -63,7 +64,7 @@ import {
 } from "@/lib/constants/builtinViews";
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from "@/lib/flags/keys";
 import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 let emptySectionMutationId = 0
@@ -76,6 +77,7 @@ const useKanbanViews = (project: IProject | null) => {
     UpdateKanban();
   const queryClient = useQueryClient();
   const deletedViewLeavesTabs = useFlag(HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG);
+  const boardViewFiltersEnabled = useFlag(HTPR_8881_BOARD_VIEW_FILTERS_FLAG);
   const router = useRouter();
   const setActiveBuiltinViews = useSetRecoilState(activeBuiltinViewsAtom);
   const activeBuiltinViews = useRecoilValue(activeBuiltinViewsAtom);
@@ -204,9 +206,12 @@ const useKanbanViews = (project: IProject | null) => {
         const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(
           baseProject.id,
         );
-        const queuedProject = deepCopy(
+        const cachedProject = deepCopy(
           allData?.updatedProjects[projectToUpdateIndex],
         ) ?? baseProject;
+        const queuedProject = boardViewFiltersEnabled
+          ? getProjectForViewMutation(cachedProject, baseProject)
+          : cachedProject;
         const requestBody = typeof body === "function" ? body(queuedProject) : body;
         const activeView = getViewFromProject(queuedProject)
         const baseViewId = activeView?.type === "Default"
