@@ -63,6 +63,12 @@ attachments keep their labels and destinations. Check after reload and at
 The `htpr-8096-ctrl-o-ticket-titles` bugfix flag defaults to Everyone. Off
 preserves the old link labels; test Off only in an isolated route test.
 
+With `htpr-8804-visible-links-first` at Owner + QA, open Ctrl+O on a ticket
+with visible and offscreen saved links, including in an embedded ticket panel.
+Visible links come first; both groups retain their previous order. A draft
+comment must not promote a matching offscreen saved link. With the flag Off,
+all links retain their previous order. The flag defaults to Owner + QA.
+
 ## Background smart labels
 
 Creating a task schedules `scheduleClassifyNewTaskAiLabels`; changing its title

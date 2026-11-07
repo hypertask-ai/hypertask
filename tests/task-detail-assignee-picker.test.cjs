@@ -132,6 +132,8 @@ async function withPicker(t, { initialAssignees = [], rejectSave = false, holdSa
     ...common, "@prisma/client": {}, "@/utils/helperFunctions/hasFigmaEmbed": { hasFigmaEmbed: () => false },
     "axios": { default: { post: async () => assert.fail("Unexpected blocker write") } },
     "@/lib/flags/definitions/htpr-7724-blocker-comment": { HTPR_7724_BLOCKER_COMMENT_FLAG: "htpr-7724-blocker-comment" },
+    "@/lib/flags/definitions/htpr-8804-visible-links-first": { HTPR_8804_VISIBLE_LINKS_FIRST_FLAG: "htpr-8804-visible-links-first" },
+    "@/components/Modals/LinksModal/visibleLinks": {},
   }, "useTaskDetailCommentActions");
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
     ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": {}, "@/lib/api/typedClient": {},
