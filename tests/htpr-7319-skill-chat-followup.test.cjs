@@ -330,6 +330,7 @@ async function withCompose(options, check) {
     "@/utils/generateTime": { default: () => "now" },
     "./taskSummaryAction": { taskSummaryActionFor: () => ({ label: "Summarize the current task", prompt: "Summarize" }) },
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
+    "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
   });
   const Compose = load("src/components/Modals/commands/HTC/ComposeTaskWriter.tsx", {
     ...basic,

@@ -189,6 +189,7 @@ function FullScreenChatBoardSelector({
   onScopeChange: (scope: FullScreenChatScope) => void;
 }) {
   const sharedShortcuts = useFlag(HTPR_7766_CHAT_SHORTCUTS_FLAG);
+  const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const { editor } = useAiChatContext();
   const currentUser = useRecoilValue(currentUserAtom);
   const [recentChatBoardIds, setRecentChatBoardIds] = useRecoilState<number[]>(
@@ -261,7 +262,7 @@ function FullScreenChatBoardSelector({
         title={sharedShortcuts ? chatShortcutHint("scope") : undefined}
         aria-haspopup={sharedShortcuts ? "dialog" : "menu"}
         aria-expanded={isOpen}
-        className="flex w-full items-center justify-between gap-2 rounded bg-kanban-active-cardbg px-3 py-2 text-left text-content transition-colors hover:bg-hover-active"
+        className={`flex w-full items-center justify-between gap-2 ${cleanupEnabled ? "rounded-[4px]" : "rounded"} bg-kanban-active-cardbg px-3 py-2 text-left text-content transition-colors hover:bg-hover-active`}
         onClick={() => setIsOpen((open) => !open)}
       >
         <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
@@ -644,7 +645,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
             type="button"
             onClick={handleStartNewSession}
             title={shortcuts.enabled ? chatShortcutHint("new") : undefined}
-            className="flex w-full items-center gap-2 rounded bg-kanban-active-cardbg px-3 py-2 text-left text-content transition-colors hover:bg-hover-active"
+            className={`flex w-full items-center gap-2 ${cleanupEnabled ? "rounded-[4px]" : "rounded"} bg-kanban-active-cardbg px-3 py-2 text-left text-content transition-colors hover:bg-hover-active`}
           >
             <SquarePen
               size={16}
@@ -722,7 +723,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
               </p>
             ) : (
               displayedSessionGroups.map((group) => (
-                <section key={group.title} className={cleanupEnabled ? "mb-4" : "mb-3"}>
+                <section key={group.title} className={cleanupEnabled ? "mb-[16px]" : "mb-3"}>
                   <h2 className={`pb-1 pt-2 text-micro font-medium text-icon-dark-gray ${cleanupEnabled ? "px-1" : "px-3"}`}>
                     {group.title}
                   </h2>
@@ -735,7 +736,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
                       return (
                         <li key={session.id}>
                           <div
-                            className={`group relative flex w-full items-center rounded transition-colors hover:bg-hover-active ${
+                            className={`group relative flex w-full items-center ${cleanupEnabled ? "rounded-[4px]" : "rounded"} transition-colors hover:bg-hover-active ${
                               isActive || (shortcuts.enabled && searchQuery && displayedSessions[searchIndex]?.id === session.id) ? "bg-kanban-active-cardbg" : ""
                             }`}
                           >
@@ -766,7 +767,8 @@ export default function Chat({ initialSessionId }: ChatProps) {
                                   handleTogglePinnedSession(event, session.id)
                                 }
                                 className={cn(
-                                  "rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black",
+                                  cleanupEnabled ? "rounded-[4px]" : "rounded",
+                                  "p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black",
                                   isPinned && "text-white-black"
                                 )}
                               >
@@ -783,7 +785,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
                                 onClick={(event) =>
                                   handleDeleteSession(event, session.id)
                                 }
-                                className="rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black"
+                                className={`${cleanupEnabled ? "rounded-[4px]" : "rounded"} p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black`}
                               >
                                 <Trash2 size={16} strokeWidth={1.75} />
                               </button>
@@ -821,7 +823,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
             onClick={switchToDocked}
             aria-label="Exit full-screen AI chat"
             title="Exit full screen"
-            className="rounded p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black"
+            className={`${cleanupEnabled ? "rounded-[4px]" : "rounded"} p-1 text-icon-dark-gray transition-colors hover:bg-hover-active hover:text-white-black`}
           >
             <Minimize2 size={16} strokeWidth={1.75} />
           </button>

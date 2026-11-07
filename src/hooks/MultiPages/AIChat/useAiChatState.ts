@@ -228,8 +228,9 @@ export function useAiChatState(parallelChatsEnabled = false, windowScope?: AiCha
       contextCallback: stableContextCallback,
       projectId: scopedProjectId,
       onEditor: setEditor,
+      listening: isRecording,
     }),
-    [stableContextCallback, scopedProjectId]
+    [stableContextCallback, scopedProjectId, isRecording]
   );
   useEffect(() => {
     if (showAiChatInterface || isFullScreenChat) setEditorEnabled(true);

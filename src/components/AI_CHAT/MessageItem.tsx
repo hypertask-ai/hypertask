@@ -1,5 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup";
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup";
 import AiChatTicketRows from "./AiChatTicketRows";
 import { HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG } from "@/lib/flags/definitions/htpr-7683-ai-chat-ticket-rows";
 import { HTPR_7772_FULLSCREEN_CHAT_HANDOFF_FLAG } from "@/lib/flags/definitions/htpr-7772-fullscreen-chat-handoff";
@@ -48,6 +49,7 @@ export const MessageItem: FC<IMessageItemProps> = ({
   editMessage,
 }) => {
   const ticketRowsEnabled = useFlag(HTPR_7683_AI_CHAT_TICKET_ROWS_FLAG);
+  const cleanupEnabled = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const [carouselItems, setCarouselItems] = useState<TCarousalItems>(undefined);
   const attachments = message.attachments;
   const hasAttachments = Boolean(attachments?.length);
@@ -78,7 +80,7 @@ export const MessageItem: FC<IMessageItemProps> = ({
           </div>
         )}
         <div
-          className={`flex flex-col min-w-0 max-w-full py-1 px-2 rounded gap-2 w-full ${
+          className={`flex flex-col min-w-0 max-w-full py-1 px-2 ${cleanupEnabled ? "rounded-[4px]" : "rounded"} gap-2 w-full ${
             message.role === "human"
               ? "bg-ai-tiptap text-white-black"
               : " text-white-black w-full "

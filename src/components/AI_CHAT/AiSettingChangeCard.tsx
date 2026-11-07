@@ -63,7 +63,7 @@ export function AiSettingChangeCard({ id }: { id: string }) {
   if (!enabled) return null;
   const buttonClass = cn(settingsActionButtonClass, MOBILE_TARGET, "text-text-light-gray");
   return (
-    <div className="rounded-[5px] bg-modalBackground p-3" aria-busy={busy}>
+    <div className="rounded-[4px] bg-modalBackground p-3" aria-busy={busy}>
       <SettingsCard title="Setting change">
         {proposal ? <>
           <p className="break-words font-medium">{proposal.label}</p>

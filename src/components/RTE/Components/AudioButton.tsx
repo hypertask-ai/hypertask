@@ -50,6 +50,7 @@ interface IProp {
   stopButtonId?: string;
   cancelButtonId?: string;
   compactListeningPill?: boolean;
+  compactRecordingPill?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -86,7 +87,9 @@ export const AudioButton = ({
   stopButtonId,
   cancelButtonId,
   compactListeningPill = false,
+  compactRecordingPill = false,
 }: IProp) => {
+  const showCompactPill = compactListeningPill || compactRecordingPill;
   const activeRef = useRef(active);
   activeRef.current = active;
   const [recording, setRecording] = useState(false);
@@ -646,7 +649,7 @@ export const AudioButton = ({
   }
 
   return (
-    <div className={cn("audio-recorder", recording && !compactListeningPill && "w-full", wrapperClassName)}>
+    <div className={cn("audio-recorder", recording && !showCompactPill && "w-full", wrapperClassName)}>
       {!recording ? (
         <div
           ref={menuWrapRef}
@@ -858,7 +861,7 @@ export const AudioButton = ({
             </div>
           )}
         </div>
-      ) : compactListeningPill ? (
+      ) : showCompactPill ? (
         <div
           data-ai-chat-dictation-pill
           className={cn(

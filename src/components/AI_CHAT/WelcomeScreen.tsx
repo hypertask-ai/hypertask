@@ -14,6 +14,7 @@ import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
 import { HTPR_8261_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8261-chat-cleanup"
 import { useFlag } from "@/hooks/useFlag"
+import { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG } from "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup"
 import { HTPR_7586_ONE_QUESTIONS_CALL_FLAG, HTPR_7319_SKILL_CHAT_FOLLOWUP_FLAG, HTPR_7978_AI_CHIP_EVENTS_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
@@ -124,6 +125,7 @@ export const WelcomeScreen = () => {
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
   const chipEventsEnabled = useFlag(HTPR_7978_AI_CHIP_EVENTS_FLAG);
   const chatCleanupEnabled = useFlag(HTPR_8261_CHAT_CLEANUP_FLAG);
+  const fullScreenCleanup = useFlag(HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
   const isEditMode = Boolean(taskId) && editTaskId === taskId;
   const taskSummaryAction = taskSummaryActionFor(taskId);
@@ -387,7 +389,7 @@ export const WelcomeScreen = () => {
           {BOARD_BUILD_EXAMPLES.map((example, index) => (
             <button
               key={example}
-              className="bg-kanban-active-cardbg hover:bg-hover-active rounded text-white-black p-2 text-meta text-left w-full"
+              className={`bg-kanban-active-cardbg hover:bg-hover-active ${fullScreenCleanup ? "rounded-[4px]" : "rounded"} text-white-black p-2 text-meta text-left w-full`}
               onClick={() => clickChip(example, index, "board-example")}
             >
               {example}
@@ -404,7 +406,7 @@ export const WelcomeScreen = () => {
         {suggestions.map((suggestion, index) => (
           <button
             key={suggestion}
-            className="bg-kanban-active-cardbg hover:bg-hover-active rounded text-white-black p-2 text-meta text-left w-full"
+            className={`bg-kanban-active-cardbg hover:bg-hover-active ${fullScreenCleanup ? "rounded-[4px]" : "rounded"} text-white-black p-2 text-meta text-left w-full`}
             onClick={() => clickChip(suggestion, index, shownType)}
           >
             {suggestion}
