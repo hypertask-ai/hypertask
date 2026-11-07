@@ -2,6 +2,7 @@ import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import { notificationWriteJson } from "./response";
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const postRoute = taskWriteRoute({
@@ -15,7 +16,11 @@ const postRoute = taskWriteRoute({
         where: { firebaseId, userId: session.userId },
         select: { id: true },
     })
-    console.log("push status", { userId: session.userId, deviceId: ownedDevice?.id ?? null, outcome: "update" })
+    await logPersonal(session.userId, "push status", {
+        userId: session.userId,
+        deviceId: ownedDevice?.id ?? null,
+        outcome: "update",
+    }, { firebaseId })
 
     const deviceStatus = await prisma.subscribedDevices.updateMany({
         where:{

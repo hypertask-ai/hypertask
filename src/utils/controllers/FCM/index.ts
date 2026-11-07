@@ -1,6 +1,7 @@
 import { FCMDeviceInfo } from "@/models/model";
 import type { Message } from "firebase-admin/messaging";
 import prisma from "@/lib/prisma";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { filterTaskReadersNow } from "@/lib/access/canReadTaskNow";
 import { resolveNotificationChannelPreference } from "@/utils/controllers/notifications/shouldNotify";
 import { NotificationType } from "@prisma/client";
@@ -264,10 +265,10 @@ export const sendDataOnlyFcm = async (
       deliveryResolved = true;
     } catch (error) {
       if (isUnregisteredTokenError(error)) {
-        console.log("sendDataOnlyFcm dropping unregistered device", {
+        await logPersonal(device.userId ?? null, "sendDataOnlyFcm dropping unregistered device", {
           deviceId: device.id ?? null,
           userId: device.userId ?? null,
-        });
+        }, device.firebaseId);
         await removeDeadDeviceToken(device.firebaseId);
         deliveryResolved = true;
       } else {
@@ -294,10 +295,10 @@ const removeDeadDeviceToken = async (firebaseId: string) => {
       select: { id: true, userId: true },
     });
     await prisma.subscribedDevices.deleteMany({ where: { firebaseId } });
-    console.log("removed dead device", {
+    await logPersonal(rows[0]?.userId ?? null, "removed dead device", {
       deviceIds: rows.map((row) => row.id),
       userIds: rows.map((row) => row.userId),
-    });
+    }, firebaseId);
   } catch {
     console.log("dead token cleanup failed", { outcome: "failed" });
   }
@@ -347,7 +348,10 @@ export const sendDataNewCommentFCM = async(props:newCommentFCM) => {
     const validDevices = props.devices.filter(device => allowedUserIds.has(device.userId));
 
     for (const device of validDevices){
-        console.log("sendDataNewCommentFCM device", { deviceId: device.id, userId: device.userId })
+        await logPersonal(device.userId, "sendDataNewCommentFCM device", {
+            deviceId: device.id,
+            userId: device.userId,
+        }, device.firebaseId)
         
         if (!device.sendNotifications) {
             continue;

@@ -11,6 +11,7 @@ import autoJoinByEmailDomain from '@/utils/controllers/users/autoJoinByEmailDoma
 import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import prisma from '@/lib/prisma'
+import { logPersonal } from '@/utils/controllers/logs/quietPersonalLog'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, clearBetterAuthSessionCookies, sessionCookieOptions, signSession } from '@/lib/auth/session'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
@@ -168,12 +169,17 @@ export async function POST(request: NextRequest) {
       console.log('🔐 Login token - preserving existing verification status')
     }
 
-    console.log('✅ User updated successfully (email link):', {
+    await logPersonal(userData!.id, '✅ User updated successfully (email link):', {
+      id: userData!.id,
+      email: userData!.email,
+      outcome: 'signed-in',
+    }, {
       id: userData!.id,
       email: userData!.email,
       onboardingTutorialStatus: (userData as any).UserSetting?.onboardingTutorialStatus,
       onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
-      trialStatus: (userData as any).UserSetting?.trialStatus
+      trialStatus: (userData as any).UserSetting?.trialStatus,
+      displayName: userData!.displayName,
     })
 
     let welcomeBoardId: number | undefined

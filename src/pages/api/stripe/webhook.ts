@@ -6,7 +6,8 @@ import onSubscriptionUpdated from "@/utils/controllers/stripe/webhook/onSubscrip
 import prisma from "@/lib/prisma";
 import { enqueueAnalyticsIntent, processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
-import { logRecord, recordId } from "@/lib/logging/safeLog";
+import { recordId } from "@/lib/logging/safeLog"
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 export const config = {
   api: {
@@ -66,7 +67,7 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.SubscriptionCreated: {
           const subscription = await getSubscription(event);
-          logRecord("stripe webhook subscription", {
+          await logPersonal(null, "stripe webhook subscription", {
             subscriptionId: recordId(subscription?.id),
             customerId: recordId(subscription?.customer),
             outcome: "created",
@@ -78,7 +79,7 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.Completed: {
           const session = event.data.object as Stripe.Checkout.Session;
-          logRecord("stripe webhook session", {
+          await logPersonal(null, "stripe webhook session", {
             sessionId: recordId(session?.id),
             customerId: recordId(session?.customer),
             subscriptionId: recordId(session?.subscription),
@@ -102,7 +103,7 @@ export default async function checkoutsWebhooksHandler(
         case StripeWebhooks.SubscriptionDeleted: {
           const subscription = event.data
             .object as PinnedApiVersionSubscription;
-          logRecord("stripe webhook subscription", {
+          await logPersonal(null, "stripe webhook subscription", {
             subscriptionId: recordId(subscription?.id),
             customerId: recordId(subscription?.customer),
             outcome: "deleted",
@@ -119,7 +120,7 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.SubscriptionUpdated: {
           const subscription = await getSubscription(event);
-          logRecord("stripe webhook subscription", {
+          await logPersonal(null, "stripe webhook subscription", {
             subscriptionId: recordId(subscription?.id),
             customerId: recordId(subscription?.customer),
             outcome: "updated",
@@ -138,7 +139,7 @@ export default async function checkoutsWebhooksHandler(
 
         case StripeWebhooks.PaymentFailed: {
           const session = event.data.object as Stripe.Checkout.Session;
-          logRecord("stripe webhook session", {
+          await logPersonal(null, "stripe webhook session", {
             sessionId: recordId(session?.id),
             customerId: recordId(session?.customer),
             subscriptionId: recordId(session?.subscription),
@@ -161,7 +162,7 @@ export default async function checkoutsWebhooksHandler(
 
   async function getSubscription(event: Stripe.Event) {
     const session = event.data.object as Stripe.Checkout.Session;
-    logRecord("stripe webhook session", {
+    await logPersonal(null, "stripe webhook session", {
       sessionId: recordId(session?.id),
       customerId: recordId(session?.customer),
       outcome: "subscription-lookup",
@@ -172,7 +173,7 @@ export default async function checkoutsWebhooksHandler(
     const subscription: any = await stripe.subscriptions.retrieve(
       subscriptionId
     );
-    logRecord("stripe webhook subscription", {
+    await logPersonal(null, "stripe webhook subscription", {
       subscriptionId: recordId(subscription?.id),
       customerId: recordId(subscription?.customer),
       outcome: "retrieved",

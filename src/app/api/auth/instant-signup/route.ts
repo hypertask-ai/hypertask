@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { findUserByEmail } from '@/utils/controllers/users/findUserByEmail'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
+import { FEATURE_FLAG_OWNER_USER_ID, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7786_QUIET_PERSONAL_LOGS_FLAG } from '@/lib/flags/definitions/htpr-7786-quiet-personal-logs'
 import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import { sendEmail } from '@/lib/email/sendEmail'
@@ -229,7 +231,11 @@ export async function POST(request: NextRequest) {
     }
 
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('instant signup', { userId: userData?.id ?? null, outcome: 'created' })
+    if (await isFeatureEnabled(HTPR_7786_QUIET_PERSONAL_LOGS_FLAG, userData?.id ?? FEATURE_FLAG_OWNER_USER_ID)) {
+      console.log('instant signup', { userId: userData?.id ?? null, outcome: 'created' })
+    } else {
+      console.log('instant signup', utmParams)
+    }
 
     const verificationToken = createVerificationToken(normalizedEmail)
 

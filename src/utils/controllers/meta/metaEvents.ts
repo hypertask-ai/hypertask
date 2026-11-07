@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 export async function sendMetaCAPIEvent(
   user_email: string,
@@ -42,7 +42,7 @@ export async function sendMetaCAPIEvent(
       },
     },
   ];
-  logRecord("sendMetaCAPIEvent", {
+  await logPersonal(null, "sendMetaCAPIEvent", {
     eventId: eventsData[0]?.event_id ?? null,
     eventType: eventsData[0]?.event_name ?? null,
     count: eventsData.length,

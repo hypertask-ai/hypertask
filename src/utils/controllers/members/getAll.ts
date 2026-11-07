@@ -1,7 +1,7 @@
 
 
 import prisma from "@/lib/prisma";
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
@@ -36,7 +36,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
             const boardAgents = boardAgentMembers
                 .filter((m) => m.agent != null)
                 .map((m) => m.agent!)
-            logRecord("membersGetAll members", {
+            await logPersonal(user.id, "membersGetAll members", {
                 count: members.length,
                 memberIds: members.map((member) => member.id),
                 userIds: members.map((member) => member.userId),
@@ -65,7 +65,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 }})
                 console.log("🚀 ~ membersGetAll ~ project:", project)
                 const teamOwner = await prisma.user.findUnique({where:{id:team?.googleAccount.userId}})
-                logRecord("membersGetAll teamOwner", { userId: teamOwner?.id ?? null }, teamOwner)
+                await logPersonal(user.id, "membersGetAll teamOwner", { userId: teamOwner?.id ?? null }, teamOwner)
                 
                 
                 team_members = await prisma.member_Team.findMany({
@@ -98,7 +98,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                         user:true,
                     },
                 })
-                logRecord("membersGetAll team_members", {
+                await logPersonal(user.id, "membersGetAll team_members", {
                     count: team_members.length,
                     memberIds: team_members.map((member) => member.id),
                 }, team_members)
@@ -106,7 +106,7 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 console.log("🚀 ~ membersGetAll ~ project?.ownerId!==teamOwner.id:", project?.ownerId)
                 if (teamOwner&&teamOwner?.id !== user.id && !members.map(m=>m.userId).includes(teamOwner?.id) && project?.ownerId!==teamOwner.id ) {
                     team_members.push({ id: -1, user: teamOwner });
-                    logRecord("membersGetAll team_members", {
+                    await logPersonal(user.id, "membersGetAll team_members", {
                         count: team_members.length,
                         memberIds: team_members.map((member) => member.id),
                     }, team_members)

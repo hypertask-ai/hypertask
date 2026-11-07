@@ -15,7 +15,7 @@ import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
 import { isFeatureEnabled } from "@/lib/flags";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { getNextUniqueTaskIndex } from "@/utils/controllers/tasks/getNextUniqueTaskIndex";
 import generateRank from "@/utils/generateRank";
 import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
@@ -57,7 +57,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       createTaskFromComment,
       agentId: requestedAgentId,
     } = body;
-    logRecord("creating task", {
+    await logPersonal(session.userId, "creating task", {
       projectId: Number(requestedProjectId) || null,
       actorId: session.userId,
       outcome: "started",
@@ -596,7 +596,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       "🚀 ~ consthandler:NextApiHandler= ~ tagsCreated:",
       tagsCreated
     );
-    logRecord("task description", { taskId: newTask.id }, description);
+    await logPersonal(session.userId, "task description", { taskId: newTask.id }, description);
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
     schedulePostCreateWork({
       task: newTask,

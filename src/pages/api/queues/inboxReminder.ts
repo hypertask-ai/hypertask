@@ -16,7 +16,7 @@ import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
 import { isFeatureEnabled, MY_TASKS_SNOOZE_FLAG } from "@/lib/flags";
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 const REMINDER_LOCK_CLASS = 1_446_420_610
 
@@ -25,7 +25,7 @@ export default  async function handler(
   res: NextApiResponse
 ) {
   const reminderBody = req.body ?? {}
-  logRecord("inboxReminder", {
+  await logPersonal(null, "inboxReminder", {
     taskId: reminderBody.taskId ?? null,
     userId: reminderBody.userId ?? null,
     outcome: "received",

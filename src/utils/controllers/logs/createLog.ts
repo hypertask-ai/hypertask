@@ -3,7 +3,7 @@ import {  CreateLogInput } from "@/models/model";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 
 const createLog = async (data: CreateLogInput): Promise<any> => {
@@ -18,7 +18,7 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
 
                 }
             })
-            logRecord("createLog", {
+            await logPersonal(data.LoggedById ?? null, "createLog", {
                 logId: allLogs.id,
                 type: String(data.type),
                 status: String(data.status),

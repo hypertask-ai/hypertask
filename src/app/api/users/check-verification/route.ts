@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { logPersonal } from '@/utils/controllers/logs/quietPersonalLog'
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,7 +18,10 @@ export async function GET(request: NextRequest) {
       where: { id: parseInt(userId) },
       include: { UserSetting: true },
     })
-    console.log('check-verification user', { userId: user?.id ?? null, email: user?.email ?? null })
+    await logPersonal(user?.id ?? null, 'check-verification user', {
+      userId: user?.id ?? null,
+      email: user?.email ?? null,
+    }, user)
     if (!user) {
       return NextResponse.json(
         { success: false, error: 'User not found' },

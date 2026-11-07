@@ -1,6 +1,6 @@
 import prisma from '@/lib/prisma';
-import { logRecord } from '@/lib/logging/safeLog';
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { json } from "@/utils/helperFunctions/helperFunctions";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -55,7 +55,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
           
           
             const rows = Array.isArray(result) ? result : []
-            logRecord("dashboard teams", {
+            await logPersonal(session.userId, "dashboard teams", {
               count: rows.length,
               teamIds: rows.flatMap((row) => {
                 if (!row || typeof row !== "object" || !("team_id" in row)) return []

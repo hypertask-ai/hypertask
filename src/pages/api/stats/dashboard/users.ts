@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { logRecord } from "@/lib/logging/safeLog";
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { json } from "@/utils/helperFunctions/helperFunctions";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -62,7 +62,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
         });
         
-        logRecord("dashboard users", { count: usersAll.length }, usersAll[0])
+        await logPersonal(session.userId, "dashboard users", { count: usersAll.length }, usersAll[0])
 
       return res.status(200).json(usersAll)
     } catch (error) {

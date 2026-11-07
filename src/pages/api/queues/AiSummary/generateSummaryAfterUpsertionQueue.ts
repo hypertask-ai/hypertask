@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import prisma from "@/lib/prisma"
-import { logRecord } from "@/lib/logging/safeLog"
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog"
 import {
   generateAndStoreTaskSummary,
   SummaryRetryableError,
@@ -75,7 +75,7 @@ export const generateSummariesByTeamIdHandler = async(teamId:string)=>{
 
 
 async function generateBatchSummaries(tasksBatch:ITaskLocal[]) {
-    logRecord("processBatch", {
+    await logPersonal(null, "processBatch", {
         count: tasksBatch.length,
         taskIds: tasksBatch.map((task) => task.id),
     }, tasksBatch)

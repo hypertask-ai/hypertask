@@ -5,6 +5,7 @@ import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
 import { takeSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
+import { logPersonal } from '@/utils/controllers/logs/quietPersonalLog'
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
 import { IProject, ITaskShare } from '@/models/model'
 import authConfig from '@/lib/configs/auth.config'
@@ -168,11 +169,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log('✅ User updated successfully:', {
+    await logPersonal(userData!.id, '✅ User updated successfully:', {
+      id: userData!.id,
+      email: userData!.email,
+      outcome: 'signed-in',
+    }, {
       id: userData!.id,
       email: userData!.email,
       onboardingTourStatus: (userData as any).UserSetting?.onboardingTourStatus,
-      trialStatus: (userData as any).UserSetting?.trialStatus
+      trialStatus: (userData as any).UserSetting?.trialStatus,
+      displayName: userData!.displayName,
     })
 
     let welcomeBoardId: number | undefined

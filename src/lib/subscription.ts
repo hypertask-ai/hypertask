@@ -9,7 +9,8 @@ import {
 import { allMonthlyPrices, allYearlyPrices } from "./subscriptionPlans";
 import { planKindFromStripePriceId } from "./planFromStripePriceId";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
-import { logRecord, recordId } from "@/lib/logging/safeLog";
+import { recordId } from "@/lib/logging/safeLog"
+import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 
 export const stripe = new Stripe(String(process.env.STRIPE_SECRET_KEY), {
   apiVersion: "2023-08-16" as typeof Stripe.API_VERSION,
@@ -41,7 +42,7 @@ export async function getUpcomingInvoice(
       "GET",
       `/v1/invoices/upcoming?customer=${encodeURIComponent(customerId)}`
     )) as Stripe.Response<UpcomingInvoice>;
-    logRecord("upcoming invoice", {
+    await logPersonal(null, "upcoming invoice", {
       invoiceId: recordId(upcomingInvoice?.id),
       customerId: recordId(upcomingInvoice?.customer),
       outcome: "retrieved",
@@ -184,7 +185,7 @@ export async function checkSubscriptionPlan(sessionId: string) {
       const subscription = await stripe.subscriptions.retrieve(
         session.subscription
       );
-      logRecord("checkSubscriptionPlan", {
+      await logPersonal(null, "checkSubscriptionPlan", {
         sessionId,
         subscriptionId: recordId(session.subscription),
         outcome: "retrieved",
@@ -201,7 +202,7 @@ export async function checkSubscriptionPlan(sessionId: string) {
 export async function checkTrialSuccess(sessionId: string) {
   try {
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    logRecord("checkTrialSuccess session", {
+    await logPersonal(null, "checkTrialSuccess session", {
       sessionId: recordId(session?.id),
       customerId: recordId(session?.customer),
       outcome: "retrieved",
@@ -210,7 +211,7 @@ export async function checkTrialSuccess(sessionId: string) {
       session?.customer as string
     )) as Stripe.Customer;
 
-    logRecord("checkTrialSuccess customer", {
+    await logPersonal(null, "checkTrialSuccess customer", {
       customerId: recordId(customer?.id),
       outcome: "retrieved",
     }, customer);
@@ -298,7 +299,7 @@ export async function createInvoiceAndPay(
       collection_method: "charge_automatically",
       description: `Billed for ${interval}ly subscription`,
     });
-    logRecord("createInvoiceAndPay invoice", {
+    await logPersonal(null, "createInvoiceAndPay invoice", {
       invoiceId: recordId(invoice?.id),
       customerId: recordId(invoice?.customer),
       outcome: "created",
@@ -334,7 +335,7 @@ export async function createInvoiceAndPay(
     const payment = await stripe.invoices.pay(invoice.id, {
       payment_method: paymentMethods.data[0].id,
     });
-    logRecord("createInvoiceAndPay payment", {
+    await logPersonal(null, "createInvoiceAndPay payment", {
       paymentId: recordId(payment?.id),
       outcome: recordId(payment?.status) ?? "unknown",
     }, payment);
