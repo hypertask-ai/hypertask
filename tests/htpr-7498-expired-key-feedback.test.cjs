@@ -208,8 +208,12 @@ test('valid bearer still initializes normally without classification or feedback
 test('automatic feedback keeps shared category defaults and field sanitising', async () => {
   const fixture = setup()
   const { queueAiFeedback } = fixture.load('src/lib/aiFeedback/automatic.ts')
-  queueAiFeedback({ surface: 'mcp', tool: 'bad tool', client: 'bad client', status: 401, errorCode: 'bad error' })
+  queueAiFeedback({ surface: 'mcp', tool: 'bad tool!', client: 'bad client', status: 401, errorCode: 'bad error' })
+  queueAiFeedback({ surface: 'cli', tool: 'task update', status: 400, errorCode: 'invalid_field' })
   await fixture.flush()
-  assert.deepEqual(fixture.feedback, [{ surface: 'mcp', status: 401, category: 'auth_failed' }])
-  assert.equal(fixture.pending.length, 1)
+  assert.deepEqual(fixture.feedback, [
+    { surface: 'mcp', status: 401, category: 'auth_failed' },
+    { surface: 'cli', tool: 'task update', status: 400, errorCode: 'invalid_field', category: 'call_failed' },
+  ])
+  assert.equal(fixture.pending.length, 2)
 })
