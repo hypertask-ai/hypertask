@@ -1,6 +1,5 @@
 import prisma from '@/lib/prisma';
 import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
-import { logPersonal } from "@/utils/controllers/logs/quietPersonalLog";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import { json } from "@/utils/helperFunctions/helperFunctions";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
