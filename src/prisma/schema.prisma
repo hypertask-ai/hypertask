@@ -1229,6 +1229,8 @@ model Task {
   blockerCommentId    Int?            @unique
   blockerComment      Comment?        @relation("TaskBlockerComment", fields: [blockerCommentId], references: [id], onDelete: SetNull)
   waitingOnUserId     Int?
+  waitingOnAgentId    String?
+  waitingOnAgent      Agent?          @relation("TaskWaitingOnAgent", fields: [waitingOnAgentId], references: [id], onDelete: SetNull)
   waitingOnSetById    Int?
   waitingOnSetAt      DateTime?
   dueDate             DateTime?
@@ -1322,6 +1324,7 @@ model Task {
   // MCP my-tasks orders undated work by updatedAt before applying its row cap.
   @@index([dueDate, updatedAt(sort: Desc)])
   @@index([waitingOnUserId])
+  @@index([waitingOnAgentId])
   @@index([agentTaskCreatedPendingAt, agentTaskCreatedReadyAt, agentTaskCreatedEmittedAt])
   // Backs the ticketNumber lookup in linkifyTicketRefs.ts (AI responses linkify
   // ticket refs on most turns); applied to prod Neon via CREATE INDEX CONCURRENTLY.
@@ -2764,6 +2767,7 @@ model Agent {
   user                      User @relation(fields: [userId], references: [id])
 
   tasks                     Task[]
+  waitingTasks              Task[]         @relation("TaskWaitingOnAgent")
   comments                  Comment[]
   pages                     Page[]
   reports                   Report[]

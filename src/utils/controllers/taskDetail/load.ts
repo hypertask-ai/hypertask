@@ -17,6 +17,7 @@ import {
 } from "@/lib/agents/publicAgent";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6868_TICKET_PREFIX_FLAG } from "@/lib/flags/keys";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -240,6 +241,7 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
 export function taskDetailInclude(userId: number, projectId: number) {
   return {
     user: { select: userSelect },
+    waitingOnAgent: { select: { id: true, displayName: true, photoURL: true } },
     description_: {
       select: {
         id: true,
@@ -492,8 +494,11 @@ export async function fetchTaskDetail(
   }
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
+  const showWaitingAgent = await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, userId);
   return {
     ...stripForeignTaskRelations(task),
+    waitingOnAgentId: showWaitingAgent ? task.waitingOnAgentId : null,
+    waitingOnAgent: showWaitingAgent ? task.waitingOnAgent : null,
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
     description_: task.description_

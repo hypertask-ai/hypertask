@@ -550,6 +550,12 @@ export interface ITask {
   staleNudgedAt?: string | null;
   blockerCommentId?: number | null;
   waitingOnUserId?: number | null;
+  waitingOnAgentId?: string | null;
+  waitingOnAgent?: {
+    id: string;
+    displayName: string | null;
+    photoURL: string | null;
+  } | null;
   waitingOnUser?: {
     id: number;
     displayName: string | null;

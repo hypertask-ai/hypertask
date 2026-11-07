@@ -115,6 +115,9 @@ export function taskDetailInclude(userId: number) {
     agent: {
         select: mcpVisibleAgentSelect(userId),
     },
+    waitingOnAgent: {
+        select: { id: true, displayName: true, photoURL: true },
+    },
     assignees: {
         where: {
             OR: [
@@ -237,10 +240,27 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null, teamS
     };
 }
 
-export function mapTaskWaitingOn(task: { waitingOnUserId?: number | null; waitingOnSetAt?: Date | string | null }) {
-    return {
+export function mapTaskWaitingOn(task: {
+    waitingOnUserId?: number | null;
+    waitingOnSetAt?: Date | string | null;
+    waitingOnAgentId?: string | null;
+    waitingOnAgent?: { id: string; displayName?: string | null; photoURL?: string | null } | null;
+}) {
+    const mapped = {
         waitingOnUserId: task.waitingOnUserId ?? null,
         waitingOnSetAt: task.waitingOnSetAt ? new Date(task.waitingOnSetAt).toISOString() : null,
+    };
+    if (!task.waitingOnAgentId) return mapped;
+    return {
+        ...mapped,
+        waitingOnAgentId: task.waitingOnAgentId,
+        waitingOnAgent: task.waitingOnAgent
+            ? {
+                id: task.waitingOnAgent.id,
+                displayName: task.waitingOnAgent.displayName ?? null,
+                photoURL: task.waitingOnAgent.photoURL ?? null,
+            }
+            : null,
     };
 }
 

@@ -3,9 +3,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { isQuestionComment, toLines } from '@/lib/inboxDecisions'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8200_BLOCKER_LIST_FLAG } from '@/lib/flags/definitions/htpr-8200-blocker-list'
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from '@/lib/flags/definitions/htpr-8917-agent-waiting-person'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
+
+const AGENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function positiveId(value: string): number | null {
   if (!/^[1-9]\d*$/.test(value)) return null
@@ -24,16 +27,28 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
   const states = params.getAll('state')
   const rawProjects = [...params.getAll('projectId'), ...params.getAll('project')]
   const projects = rawProjects.map(positiveId)
-  const target = users.length === 0 || users[0] === 'me' ? ctx.user.id : positiveId(users[0])
-  if (users.length > 1 || target === null || states.length > 1 ||
+  const mine = users.length === 0 || users[0] === 'me'
+  const agentUuid = !mine && users.length === 1 && AGENT_UUID.test(users[0]) ? users[0] : null
+  const agentList = Boolean(ctx.agentId) && await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, ctx.user.id)
+  if (agentUuid && !agentList) {
+    return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
+  }
+  const target = mine ? ctx.user.id : agentUuid ? null : positiveId(users[0])
+  if (users.length > 1 || (target === null && !agentUuid) || states.length > 1 ||
       (states.length && !['waiting', 'answered', 'no-question'].includes(states[0])) ||
       projects.some((id) => id === null)) {
     return NextResponse.json({ success: false, error: 'Invalid waiting_on, projectId, project, or state.' }, { status: 400 })
   }
+  const personId = target ?? ctx.user.id
   const projectIds = projects.filter((id): id is number => id !== null)
   const tasks = await prisma.task.findMany({
     where: {
-      status: 'Normal', waitingOnUserId: target,
+      status: 'Normal',
+      ...(agentUuid
+        ? { waitingOnAgentId: agentUuid }
+        : mine && agentList && ctx.agentId
+          ? { OR: [{ waitingOnUserId: target }, { waitingOnAgentId: ctx.agentId }] }
+          : { waitingOnUserId: target }),
       project: getProjectListingWhere(ctx.user.id, ctx.agentId, ctx.teamScope),
       ...(projectIds.length ? { projectId: { in: projectIds } } : {}),
     },
@@ -43,9 +58,9 @@ export async function getBlockers(request: NextRequest, ctx: McpAuthContext) {
       project: { select: { title: true, name: true } },
       priority: { select: { Priority_Value: true } },
       blockerComment: { select: { id: true, taskId: true, text: true, commentText: true, activity: true, createdAt: true,
-        reactions: { where: { userId: target, agentId: null, agentDisplayName: null, isDeleted: false }, select: { createdAt: true } },
+        reactions: { where: { userId: personId, agentId: null, agentDisplayName: null, isDeleted: false }, select: { createdAt: true } },
       } },
-      comments: { where: { creatorId: target, agentId: null, agentDisplayName: null, activity: { equals: Prisma.DbNull } }, select: { createdAt: true } },
+      comments: { where: { creatorId: personId, agentId: null, agentDisplayName: null, activity: { equals: Prisma.DbNull } }, select: { createdAt: true } },
     },
     orderBy: { id: 'asc' },
   })

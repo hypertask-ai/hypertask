@@ -1,6 +1,7 @@
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7840_BLOCKED_INBOX_ARCHIVE_FLAG } from "@/lib/flags/definitions/htpr-7840-blocked-inbox-archive";
 import { HTPR_8090_ASSIGNEE_INBOX_FLAG } from "@/lib/flags/definitions/htpr-8090-assignee-inbox";
+import { HTPR_8917_AGENT_WAITING_PERSON_FLAG } from "@/lib/flags/definitions/htpr-8917-agent-waiting-person";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
 import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
@@ -228,6 +229,7 @@ const notificationGetAll = async (
     const inboxWhere: Prisma.NotificationWhereInput = agentId || teamScope != null
       ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId, teamScope)] }
       : visibleUserInboxWhere(parsedUserId);
+    const includeAgentWaiting = Boolean(agentId) && await isFeatureEnabled(HTPR_8917_AGENT_WAITING_PERSON_FLAG, parsedUserId);
     const [
       notifications,
       actorActivityRows,
@@ -256,7 +258,9 @@ const notificationGetAll = async (
       }),
       prisma.task.findMany({
         where: {
-          waitingOnUserId: parsedUserId,
+          ...(includeAgentWaiting
+            ? { OR: [{ waitingOnUserId: parsedUserId }, { waitingOnAgentId: agentId }] }
+            : { waitingOnUserId: parsedUserId }),
           status: "Normal",
           project: projectContentAccessWhere(parsedUserId, agentId, teamScope),
         },
