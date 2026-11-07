@@ -47,7 +47,6 @@ import {
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
-import { isPlatformManagedGatewayKey } from "@/app/api/ai/_lib/platformGatewayKeys";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 
@@ -410,6 +409,26 @@ export async function getByokApiKeyForProvider(
 
 const LEGACY_GATEWAY_PROVIDERS = ["gateway", "openai", "claude"] as const;
 
+const PLATFORM_GATEWAY_ENV_NAMES = [
+  "GATEWAY_KEY_HYPERTASK",
+  "GATEWAY_KEY_INNE",
+  "GATEWAY_KEY_VETSAK",
+  "GATEWAY_KEY_BAYBELLA",
+  "GATEWAY_KEY_RODRIGO",
+  "GATEWAY_KEY_D2LAW",
+  "GATEWAY_KEY_PERRY",
+  "GATEWAY_KEY_PUROLOGIX",
+  "GATEWAY_KEY_KVWULP",
+  "GATEWAY_KEY_ALLOCATOR",
+  "GATEWAY_KEY_VALENTIN",
+] as const;
+
+function isPlatformManagedGatewayKey(apiKey: string): boolean {
+  const normalized = apiKey.trim();
+  if (!normalized.startsWith("vck_")) return false;
+  return PLATFORM_GATEWAY_ENV_NAMES.some((name) => process.env[name]?.trim() === normalized);
+}
+
 type GatewayKeyProvenance = { managedKeyId: string; managedKeyUpdatedAt: string };
 
 function provenanceFromRow(row: { id: string; updatedAt: Date }): GatewayKeyProvenance | undefined {
@@ -426,7 +445,7 @@ function withProvenance(
 }
 
 async function retireLegacyDuplicates(
-  teamId: string | null,
+  teamId: string | null | undefined,
   duplicates: Array<{ id: string; ciphertext: string }>,
 ) {
   if (!teamId || duplicates.length === 0) return;
