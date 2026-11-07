@@ -46,6 +46,26 @@ import { isDoneColumn } from '@/lib/doneColumns'
 import { columnRole } from '@/lib/mcp/boards/columnRole'
 import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inboxZero'
 
+const HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG = 'htpr-8742-attachment-download-hint'
+
+export function attachmentDownloadHint(taskId: number, attachmentId: number) {
+  return `GET /api/mcp/tasks/attachments?task_id=${taskId}&attachment_id=${attachmentId} with the same bearer token. fileSource is not an agent download.`
+}
+
+export function withAttachmentDownloadHints<T extends { id: number; attachments?: Array<{ id: number }> }>(
+  task: T,
+  enabled: boolean,
+): T {
+  if (!enabled || !task.attachments?.length) return task
+  return {
+    ...task,
+    attachments: task.attachments.map((attachment) => ({
+      ...attachment,
+      download: attachmentDownloadHint(task.id, attachment.id),
+    })),
+  }
+}
+
 const mcpDoneNameFallback = (title: string) => columnRole(title) === 'done'
 
 export interface ParentTaskSummary {
@@ -356,16 +376,17 @@ export async function GET(request: NextRequest) {
           )
         }
 
+        const attachmentDownloadHints = await isFeatureEnabled(HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG, user.id).catch(() => false)
         const mapTask = async (task: (typeof tasks)[number]) => {
           const pullRequests = task.pullRequests?.length
             ? await refreshTaskPullRequests(task.id, task.pullRequests)
             : task.pullRequests
-          const detail = mapTaskToMcpGetResponse(
+          const detail = withAttachmentDownloadHints(mapTaskToMcpGetResponse(
             { ...task, pullRequests },
             user.id,
             ctx.agentId,
             ctx.teamScope,
-          )
+          ), attachmentDownloadHints)
           const mapped = {
             ...detail,
             skill_context: await getMcpSkillContext(ctx, task.projectId, [
