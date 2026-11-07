@@ -73,8 +73,6 @@ const createActivity = async ({
   if (shouldRunTaskSummary) {
     scheduleTaskSummaryGeneration({
       taskId,
-      agentId: activityAgentId(safeActivityBody),
-      ownerUserId: task?.userId,
       activityOnlyOwnerId: activityBody.type === "TaskDescriptionUpdate" ? null : task?.userId,
     });
   }

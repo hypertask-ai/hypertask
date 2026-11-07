@@ -1,6 +1,5 @@
 import { scheduleJobById } from "@/lib/qstash";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8904_AGENT_AUTOMATIC_AI_FLAG } from "@/lib/flags/definitions/htpr-8904-agent-automatic-ai";
 
 export interface IReq {
   commentId: number;
@@ -21,7 +20,7 @@ function buildJobId(commentId: number) {
 
 export default async function scheduleCommentSummaryGeneration(req: IReq) {
   const { commentId } = req;
-  if (!(typeof req.agentId === "string" && req.agentId.length > 0) || !(await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, req.ownerUserId ?? 0))) {
+  if (!(typeof req.agentId === "string" && req.agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {
     const runAt = new Date(new Date().getTime() + 5 * 60000);
 
     const res = await scheduleJobById({

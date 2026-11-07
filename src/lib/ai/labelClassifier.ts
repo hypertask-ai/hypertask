@@ -1,7 +1,5 @@
 import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
-import { skipAutomaticAiForAgentChange } from "@/lib/ai/agentAutomaticAi";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8904_AGENT_AUTOMATIC_AI_FLAG } from "@/lib/flags/definitions/htpr-8904-agent-automatic-ai";
 import { HTPR_7850_LABEL_BACKFILL_SKIP_UNCHANGED_FLAG } from "@/lib/flags/definitions/htpr-7850-label-backfill-skip-unchanged";
 import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
 import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
@@ -470,7 +468,7 @@ export async function classifyTaskAiLabels(
       select: { userId: true, agentId: true },
     });
     const agentId = trigger.agentId || (trigger.skipAgentCreated ? authored?.agentId : null);
-    if (typeof agentId === "string" && agentId.length > 0 && skipAutomaticAiForAgentChange(agentId, await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, authored?.userId ?? 0).catch(() => false))) return;
+    if (typeof agentId === "string" && agentId.length > 0 && await isFeatureEnabled("htpr-8904-agent-automatic-ai", authored?.userId ?? 0).catch(() => false)) return;
   }
   const labels = await prisma.label.findMany({
     where: { projectId, ai_prompt: { not: null } },
@@ -597,7 +595,7 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
         : [{ ...task, classificationSnapshot: { inputHash, assigned: isAssigned } }];
     });
   }
-  if (tasks.some((task) => task.agentId) && await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, userId ?? 0).catch(() => false)) {
+  if (tasks.some((task) => task.agentId) && await isFeatureEnabled("htpr-8904-agent-automatic-ai", userId ?? 0).catch(() => false)) {
     tasks = tasks.filter((task) => !task.agentId);
   }
   if (tasks.length === 0) return;
