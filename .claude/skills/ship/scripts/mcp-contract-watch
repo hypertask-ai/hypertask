@@ -375,6 +375,18 @@ def plans(incident):
     return title, description, message
 
 
+def emergency_labels(incident):
+    # The incident label starts the emergency lane (YPER4-1375): runners drop other work for it.
+    # Only a real server-side break qualifies: a 5xx, or a 200 whose body breaks the MCP contract.
+    # A timeout, network error, refusal, 401 or 403 can be this watcher's own fault, so they stay plain bugs.
+    status = incident['failure'].get('status')
+    if incident.get('test') or incident['bug_project'] != 15:
+        return []
+    if type(status) is int and (status >= 500 or status == 200):
+        return ['incident', 'brain-hard']
+    return []
+
+
 def report(incident, dry_run, state, path):
     env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher')
     vcc = env.get('MCP_CONTRACT_WATCH_VCC', 'vcc')
@@ -382,7 +394,7 @@ def report(incident, dry_run, state, path):
     section = '4389' if incident['bug_project'] == 15 else None
     if dry_run:
         title, description, message = plans(incident)
-        print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section=section, assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
+        print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section=section, labels=emergency_labels(incident), assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
         return
     if incident['create_state'] != 'done':
         identity = env.get('MCP_CONTRACT_WATCH_IDENTITY', str(HOME / '.agents/skills/ship/scripts/ship-identity'))
@@ -398,6 +410,8 @@ def report(incident, dry_run, state, path):
                 incident['create_state'] = 'unknown'
                 save(state, path)
                 section_args = ['--section', section] if section else []
+                labels = emergency_labels(incident)
+                section_args += ['--labels', ','.join(labels)] if labels else []
                 code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section_args, '--json'], env)
                 ticket = receipt(output) if code == 0 else None
                 if ticket:

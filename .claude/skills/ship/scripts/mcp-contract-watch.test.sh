@@ -69,7 +69,8 @@ if args[:2] == ['task', 'create']:
         print(fixture['secret'], file=sys.stderr)
         sys.exit(1)
     task = dict(id=100 + len(bugs), ticketNumber='TEST-' + str(100 + len(bugs)),
-                title=args[args.index('--title') + 1], description=args[args.index('--description') + 1])
+                title=args[args.index('--title') + 1], description=args[args.index('--description') + 1],
+                labels=args[args.index('--labels') + 1] if '--labels' in args else None)
     bugs.append(task)
     bugs_file.write_text(json.dumps(bugs))
     if fixture.get('unknown_create'):
@@ -821,6 +822,31 @@ class WatcherTests(unittest.TestCase):
         self.assertTrue(alert.startswith('TEST DRILL, not a real outage.'))
         self.assertIn('Bug filed: https://app.hypertask.ai/detail/project-4060/100', alert)
         self.assert_secret_free()
+
+    def test_incident_label_only_for_real_server_side_breaks(self):
+        # YPER4-1375: the incident label starts the emergency lane, so a watcher-side fault must not carry it.
+        for mode, labelled in (('500', True), ('rpc-error', True), ('empty', True), ('401', False), ('403', False)):
+            with self.subTest(mode=mode):
+                h = Harness()
+                try:
+                    h.fixture['mode'] = mode
+                    h.run()
+                    bugs = h.records('bugs.json')
+                    self.assertEqual(len(bugs), 1)
+                    self.assertEqual(bugs[0]['labels'], 'incident,brain-hard' if labelled else None)
+                finally:
+                    h.close()
+
+    def test_incident_label_never_on_drills_or_other_boards_and_shows_in_dry_run(self):
+        self.h.fixture['mode'] = '500'
+        self.h.run('--dry-run')
+        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], ['incident', 'brain-hard'])
+        self.h.run('--force-fail', 'tools/list', '--dry-run')
+        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], [])
+        self.h.run('--bug-project', '4060', '--dry-run')
+        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], [])
+        self.h.run('--force-fail', 'tools/list')
+        self.assertIsNone(self.h.records('bugs.json')[0]['labels'])
 
     def test_dry_run_keeps_existing_incident_state_unchanged(self):
         self.h.fixture['mode'] = 'empty'
