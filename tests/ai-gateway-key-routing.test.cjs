@@ -1478,6 +1478,7 @@ test("task writer key lookup ignores caller teamId when project lookup resolves 
     [
       { teamId_provider: { teamId: projectTeamId, provider: "openai" } },
       { teamId_provider: { teamId: projectTeamId, provider: "gateway" } },
+      { teamId_provider: { teamId: projectTeamId, provider: "managed_gateway" } },
     ],
   );
 
