@@ -48,11 +48,11 @@ import { loadDoneTitlesByProject } from '@/utils/controllers/notifications/inbox
 
 const HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG = 'htpr-8742-attachment-download-hint'
 
-function attachmentDownloadHint(taskId: number, attachmentId: number) {
+export function attachmentDownloadHint(taskId: number, attachmentId: number) {
   return `GET /api/mcp/tasks/attachments?task_id=${taskId}&attachment_id=${attachmentId} with the same bearer token. fileSource is not an agent download.`
 }
 
-function withAttachmentDownloadHints<T extends { id: number; attachments?: Array<{ id: number }> }>(
+export function withAttachmentDownloadHints<T extends { id: number; attachments?: Array<{ id: number }> }>(
   task: T,
   enabled: boolean,
 ): T {
