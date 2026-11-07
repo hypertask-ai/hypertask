@@ -135,6 +135,9 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: still unfinished.</p>"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("An explicit unfinished full-day observation gate remains."), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed."), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: passed</p><p>Report: unfinished</p>"), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("<p>Report: unfinished</p><p>Full-day observation gate: passed</p>"), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: unfinished</p><p>Report: passed</p>"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Search now finds reminders."), false);
   const refused = await open.update();
   assert.equal(refused.status, 409);
@@ -162,4 +165,10 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   const closed = moveFixture({ description: "<p>Full-day observation gate: passed.</p>" });
   assert.equal((await closed.update()).status, 200);
   assert.equal(closed.saved().sectionId, 11);
+
+  const beside = moveFixture({
+    description: "<p>Full-day observation gate: passed</p><p>Report: unfinished</p>",
+  });
+  assert.equal((await beside.update()).status, 200);
+  assert.equal(beside.saved().sectionId, 11);
 });

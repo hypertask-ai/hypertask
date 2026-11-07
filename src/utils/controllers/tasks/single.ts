@@ -97,7 +97,12 @@ class OpenObservationGateError extends Error {}
 const OPEN_OBSERVATION = /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/i;
 
 export function hasUnfinishedFullDayObservation(text: string): boolean {
-  const plain = text.replace(/<[^>]+>/g, " ").replace(/&(?:nbsp|#160);/gi, " ").replace(/\s+/g, " ");
+  const plain = text
+    .replace(/<\s*br\s*\/?\s*>/gi, ". ")
+    .replace(/<\/\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>/gi, ". ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .replace(/\s+/g, " ");
   if (new RegExp(`${OPEN_OBSERVATION.source}[^.]{0,80}\\bfull[- ]day observation\\b`, "i").test(plain)) return true;
   return [...plain.matchAll(/\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}/gi)].some((match) => OPEN_OBSERVATION.test(match[0]));
 }

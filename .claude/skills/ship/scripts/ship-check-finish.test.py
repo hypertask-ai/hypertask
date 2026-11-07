@@ -98,6 +98,11 @@ else:
             'move', 'HTPR-8872', 'Flag: Everyone', success=False, DESCRIPTION=gate))
         self.assertIn('move ok', self.check('move', 'HTPR-8872', 'In Progress', DESCRIPTION=gate))
         self.assertEqual(self.check('done', 'HTPR-8872', SECTION='Flag: Everyone', DESCRIPTION=closed), 'done ok\n')
+        beside = '<p>Full-day observation gate: passed</p><p>Report: unfinished</p>'
+        self.assertEqual(self.check('done', 'HTPR-8872', SECTION='Flag: Everyone', DESCRIPTION=beside), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='<p>Full-day observation gate: unfinished</p><p>Report: passed</p>'))
         self.assertIn('unfinished full-day observation gate', self.check(
             'done', 'HTPR-8872', success=False, SECTION='Done',
             ACCEPTANCE='An explicit unfinished full-day observation gate remains.'))

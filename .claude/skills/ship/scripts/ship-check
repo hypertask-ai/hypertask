@@ -744,6 +744,8 @@ except json.JSONDecodeError:
     sys.exit(1)
 task=(payload.get("tasks") or [{}])[0]
 text=" ".join(str(task.get(key) or "") for key in ("description","acceptanceCriteria","title"))
+text=re.sub(r"<\s*br\s*/?\s*>", ". ", text, flags=re.I)
+text=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", ". ", text, flags=re.I)
 text=re.sub(r"<[^>]+>"," ",text)
 text=re.sub(r"&(?:nbsp|#160);"," ",text,flags=re.I)
 text=re.sub(r"\s+"," ",text)
