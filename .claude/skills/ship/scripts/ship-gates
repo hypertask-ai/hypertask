@@ -104,13 +104,14 @@ await withFileLock(root, ledger, () => {
     }
   }
   if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
-  const earlier = earlierGates(root, ledger, ticket);
+  const earlier = doc.gates.length ? new Map() : earlierGates(root, ledger, ticket);
   for (const [name, [title, expect]] of Object.entries(gates)) {
     if (name === 'proof' && !ticket.startsWith('HTPR-')) continue;
     const id = `${ticket}.${name}`;
     if (doc.gates.some((gate) => gate.id === id)) continue;
     const copied = earlier.get(id);
-    if (copied && copied.expect === expect && copied.cwd === root && generatedCheck.test(copied.check)) {
+    const want = `${envPrefix}${quote(check)} ${name} ${ticket}`;
+    if (copied && copied.expect === expect && copied.cwd === root && copied.check === want) {
       text += `\n${copied.block}\n`;
       continue;
     }
