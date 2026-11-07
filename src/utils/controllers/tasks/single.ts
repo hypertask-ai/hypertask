@@ -1,4 +1,4 @@
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { assertTaskCountTransition, isPlanLimitReachedError, isPlanLimitsEnabled, planLimitResponse } from "@/lib/planLimits";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types';
@@ -780,7 +780,7 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
-    if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field } };
+    if (error instanceof AgentWritingError) return { status: 400, json: { message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) } };
     if (isPlanLimitReachedError(error)) {
       const refusal = planLimitResponse(error);
       return { status: refusal.status, json: refusal.body };

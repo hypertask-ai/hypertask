@@ -1,5 +1,5 @@
 import { parseCommentKind } from '@/lib/mcp/operations/comments/agentChatterRouting'
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -60,7 +60,7 @@ const handler: NextApiHandler = async (
 
       return res.json(comment);
     } catch (error) {
-      if (error instanceof AgentWritingError) return res.status(400).json({ message: error.message, code: error.code, field: error.field });
+      if (error instanceof AgentWritingError) return res.status(400).json({ message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) });
       console.log("🤔 ~ ERROR IN COMMENT CREATION:", error);
       if (error instanceof Error && error.message === "Task not found or access denied") {
         return res.status(404).json({ message: error.message });

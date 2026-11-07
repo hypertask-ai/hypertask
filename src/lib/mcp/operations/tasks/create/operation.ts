@@ -1,4 +1,4 @@
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
@@ -306,7 +306,7 @@ export async function POST(request: NextRequest) {
                     error: error.message,
                     code: error.code,
                     field: error.field,
-                    details: { field: error.field, code: 'agent_writing' },
+                    details: agentWritingDetails(error),
                 },
                 { status: 400 }
             )

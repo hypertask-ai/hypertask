@@ -59,6 +59,10 @@ export class AgentWritingError extends Error {
   }
 }
 
+export function agentWritingDetails(error: AgentWritingError): { field: string; code: 'agent_writing' } {
+  return { field: error.field, code: 'agent_writing' }
+}
+
 function excerpt(text: string | undefined): string {
   if (!text) return ''
   const flat = text.replace(/\s+/g, ' ').trim()
