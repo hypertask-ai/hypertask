@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { getBoardHygiene } from '@/utils/controllers/projects/hygiene'
 import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
+import { ciBlockerWriteOpen, ensureFleetCiWorkflowColumns } from '@/lib/mcp/boards/workflowColumns'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -80,6 +81,15 @@ export async function GET(
       )
     }
 
+    await ensureFleetCiWorkflowColumns(project.id, ctx.user.id);
+    const sections = project.id === 11514
+      ? await prisma.section.findMany({
+          where: { projectId: project.id, deleted: false, visibility: true },
+          select: { id: true, section_title: true, isDone: true, ranking: true, wipLimit: true },
+          orderBy: { ranking: 'asc' },
+        })
+      : project.section;
+    const workflowColumns = await ciBlockerWriteOpen(ctx.user.id);
     const workLimits = await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, ctx.user.id);
     return NextResponse.json({
       success: true,
@@ -88,11 +98,11 @@ export async function GET(
       ...(request.nextUrl.searchParams.get('include') === 'hygiene' ? {
         report: await getBoardHygiene(projectId, ctx.user.id, ctx.agentId, ctx.teamScope),
       } : {}),
-      columns: project.section.map((section) => ({
+      columns: sections.map((section) => ({
         id: section.id,
         title: section.section_title,
         position: section.ranking,
-        role: columnRoleFor(section),
+        role: columnRoleFor(section, workflowColumns),
         wipLimit: workLimits ? section.wipLimit : null,
       })),
       transitions: 'any',

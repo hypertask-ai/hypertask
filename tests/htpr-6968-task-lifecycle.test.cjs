@@ -110,6 +110,7 @@ function fixture(kind, scenario) {
     "@/lib/flags": {
       isFeatureEnabled: async (key, userId) => {
         if (key === "htpr-7740-create-response") return false;
+        if (key === "htpr-8900-ci-blocker-write") return false;
         effects.push(["product-flag", key, userId]); return true;
       },
     },

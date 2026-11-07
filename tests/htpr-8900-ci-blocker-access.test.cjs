@@ -1,6 +1,5 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const { load } = require("./task-route-loader.cjs");
 const { setup } = require("./helpers/comment-routing.cjs");
@@ -439,15 +438,17 @@ test("linking a ticket the agent cannot read is still refused", async () => {
 });
 
 test("Fleet CI columns are missing QA and Release, and the five-column set is missing Blocked too", () => {
-  assert.equal(columnRole("Agent Blocked"), "blocked");
-  assert.equal(columnRole("Agent Blocked (Infra)"), "blocked");
-  assert.equal(columnRole("QA"), "qa");
-  assert.equal(columnRole("Release"), "release");
-  assert.equal(columnRole("Release review"), "release");
-  assert.equal(columnRole("Release verification"), "release");
-  assert.equal(columnRole("Released"), "other");
-  assert.equal(columnRole("Valentin Review"), "human-review");
-  assert.equal(columnRoleFor({ section_title: "Flag: Only Me + QA", isDone: true }), "done");
+  assert.equal(columnRole("QA"), "human-review");
+  assert.equal(columnRole("Agent Blocked"), "other");
+  assert.equal(columnRole("Agent Blocked", true), "blocked");
+  assert.equal(columnRole("Agent Blocked (Infra)", true), "blocked");
+  assert.equal(columnRole("QA", true), "qa");
+  assert.equal(columnRole("Release", true), "release");
+  assert.equal(columnRole("Release review", true), "release");
+  assert.equal(columnRole("Release verification", true), "release");
+  assert.equal(columnRole("Released", true), "other");
+  assert.equal(columnRole("Valentin Review", true), "human-review");
+  assert.equal(columnRoleFor({ section_title: "Flag: Only Me + QA", isDone: true }, true), "done");
   assert.deepEqual(missingWorkflowColumns(fleetCiColumns), ["QA", "Release"]);
   assert.deepEqual(missingWorkflowColumns(fiveColumns), ["Blocked", "QA", "Release"]);
   assert.deepEqual(missingWorkflowColumns([...fleetCiColumns, "QA", "Release"]), []);
@@ -482,20 +483,47 @@ test("a column list finds QA and Release by role", async () => {
   const client = new SectionService({
     makeRequest: async () => ({ success: true, sections, projectId: 11514 }),
   });
-  const qa = await client.manageSection({ action: "list", project_id: 11514, role: "qa" }, { roleEnabled: true });
-  const release = await client.manageSection({ action: "list", project_id: 11514, role: "release" }, { roleEnabled: true });
-  const blocked = await client.manageSection({ action: "list", project_id: 11514, role: "blocked" }, { roleEnabled: true });
+  const options = { roleEnabled: true, workflowColumns: true };
+  const qa = await client.manageSection({ action: "list", project_id: 11514, role: "qa" }, options);
+  const release = await client.manageSection({ action: "list", project_id: 11514, role: "release" }, options);
+  const blocked = await client.manageSection({ action: "list", project_id: 11514, role: "blocked" }, options);
+  const closed = await client.manageSection({ action: "list", project_id: 11514, role: "qa" }, { roleEnabled: true });
   assert.deepEqual(qa.sections.map((section) => section.section_title), ["QA"]);
   assert.deepEqual(release.sections.map((section) => section.section_title), ["Release"]);
   assert.deepEqual(blocked.sections.map((section) => section.section_title), ["Agent Blocked"]);
+  assert.deepEqual(closed.sections, []);
 });
 
-test("the Fleet CI migration adds only the missing workflow columns on project 11514", () => {
-  const sql = fs.readFileSync(path.join(root, "src/prisma/migrations/20261107120000_ci_board_workflow_columns/migration.sql"), "utf8");
-  assert.match(sql, /11514/);
-  assert.doesNotMatch(sql, /projectId"\s*=\s*(?!11514)\d+/);
-  for (const title of ["Blocked", "QA", "Release"]) assert.match(sql, new RegExp(`'${title}'`));
-  assert.match(sql, /status = 'Normal'/);
-  assert.match(sql, /\(\^|\[^\[:alnum:\]\]\)/);
-  assert.match(sql, /workflow\.word/);
+test("workflow columns are added only on Fleet CI while the write is open", async () => {
+  const created = [];
+  const titles = [...fleetCiColumns];
+  let open = false;
+  let flagThrows = false;
+  const { ensureFleetCiWorkflowColumns } = load("src/lib/mcp/boards/workflowColumns.ts", {
+    "@/lib/flags": { isFeatureEnabled: async (key) => {
+      if (flagThrows) throw new Error("flag unavailable");
+      if (key !== FLAG) throw new Error(key);
+      return open;
+    } },
+    "@/lib/prisma": { default: { section: {
+      findMany: async () => titles.map((section_title) => ({ section_title })),
+      create: async ({ data }) => { created.push(data); titles.push(data.section_title); return data; },
+    } } },
+  });
+  await ensureFleetCiWorkflowColumns(11514, 6);
+  assert.deepEqual(created, []);
+  open = true;
+  await ensureFleetCiWorkflowColumns(15, 6);
+  assert.deepEqual(created, []);
+  await ensureFleetCiWorkflowColumns(11514, 6);
+  assert.deepEqual(created.map((column) => [column.section_title, column.ranking]), [["QA", "A0505"], ["Release", "A0525"]]);
+  created.length = 0;
+  titles.splice(0, titles.length, ...fiveColumns);
+  await ensureFleetCiWorkflowColumns(11514, 6);
+  assert.deepEqual(created.map((column) => column.section_title), ["Blocked", "QA", "Release"]);
+  created.length = 0;
+  flagThrows = true;
+  titles.splice(0, titles.length, ...fiveColumns);
+  await ensureFleetCiWorkflowColumns(11514, 6);
+  assert.deepEqual(created, []);
 });
