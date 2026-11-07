@@ -23,6 +23,7 @@
 # A claim whose claim id starts with "-" (a flag recorded as the id, e.g. "[--resume]") names no session and never counts.
 # Resume command: 2nd argument (or --resume <cmd>), else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
+# SHIP_CLAIM_PICKED=1 (set by fleet/pick, which already chose the ticket and the order): skips the infra-first check only.
 set -uo pipefail
 
 # decide <claim-id> <comments.json> [idle-ids] [assigned-ids] [self-resume]
@@ -82,7 +83,7 @@ QUEUE_MAX=20  # queue brake: above this many open non-draft app PRs (CI, Fleet I
 
 # Infra first (Valentin, 2026-10-27: "infrastructure fixes always go first, in code, not prose"). After the open-PR and
 # unfinished-merged-work holds, a NEW app (non-YPER4, non-HYCI) claim is refused while more than QUEUE_MAX non-draft PRs are open
-# or while board 4060 Backlog has a free ticket (no agent, no agent assignee, not "do not touch"). Reads every page.
+# or while board 4060 Backlog has a free ticket (no assignee at all, not "do not touch"). Reads every page.
 # A ticket that already has an open PR is adoption, not new work, and is never braked.
 infra_free() {
   local page offset=0 total count found=""
@@ -93,7 +94,7 @@ infra_free() {
     total=$(jq '.total // (.tasks | length)' <<<"$page"); count=$(jq '.tasks | length' <<<"$page")
     found+=$(jq -r '[.tasks[]
       | select(.section == "Backlog" and ((.title // "") | ascii_downcase | contains("do not touch") | not)
-          and .agent == null and ([.assignees[]? | select(.agent)] | length) == 0)
+          and .agent == null and ((.assignees // []) | length) == 0)
       | .ticketNumber] | join(" ")' <<<"$page") || return 1
     found+=' '
     [ "$((offset + count))" -lt "$total" ] || break
@@ -185,6 +186,7 @@ hold_check() {
     echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) or HYCI (CI) ticket, or nothing."
     return 4
   fi
+  [ -z "${SHIP_CLAIM_PICKED:-}" ] || return 0
   free=$(infra_free) \
     || { echo "ship-claim: HOLD. Cannot read board 4060 to check infra first, so no app claim for RUNNER $rn." >&2; return 4; }
   if [ -n "$free" ]; then
