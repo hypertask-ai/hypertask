@@ -6,7 +6,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
 import { isFeatureEnabled } from "@/lib/flags";
 import {
-  MY_TASKS_OVERDUE_BADGES_FLAG,
   MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
@@ -50,10 +49,10 @@ export default async function Page({
     return redirect("/login");
   }
 
-  const [scopesEnabled, overdueBadgesEnabled] = await Promise.all([
-    isFeatureEnabled(MY_TASKS_SCOPES_FLAG, sessionUser.userId),
-    isFeatureEnabled(MY_TASKS_OVERDUE_BADGES_FLAG, sessionUser.userId),
-  ]);
+  const scopesEnabled = await isFeatureEnabled(
+    MY_TASKS_SCOPES_FLAG,
+    sessionUser.userId,
+  );
   const snoozeEnabled = await isFeatureEnabled(
     MY_TASKS_SNOOZE_FLAG,
     sessionUser.userId,
@@ -132,13 +131,11 @@ export default async function Page({
       {snoozeEnabled ? (
         <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden />
       ) : null}
-      {overdueBadgesEnabled ? (
-        <span
-          className="hidden"
-          data-htpr-6459-my-tasks-overdue-badges
-          aria-hidden
-        />
-      ) : null}
+      <span
+        className="hidden"
+        data-htpr-6459-my-tasks-overdue-badges
+        aria-hidden
+      />
       {scopesEnabled ? (
         <MyTasks
           sections={myTasks.sections}
