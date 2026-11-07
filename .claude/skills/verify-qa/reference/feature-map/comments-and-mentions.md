@@ -121,9 +121,12 @@ return 400 naming `text`; a short typed summary must remain valid. Untyped
 technical text must report `would.routedTo: log`, including a person mention
 or reply target. Read the real comment list after posting a hidden note and
 confirm its unique marker is absent. Reload the thread and confirm the
-short typed summary remains. Agent task create/update must also reject long
-new titles and descriptions before any mutation. Edits may preserve existing
-lines, but new lines are checked. Repeat with a human QA credential: the same
-long text must remain valid. Delete only the temporary QA fixtures.
+short typed summary remains. A people comment edit is refused when any line
+breaks a rule, including a line that was already stored. An agent run reply
+on the ticket is checked the same way. Agent task create/update must also
+reject long new titles and descriptions before any mutation. A task
+description edit may still keep lines that were already there, while new
+lines are checked. Repeat with a human QA credential: the same long text
+must remain valid. Delete only the temporary QA fixtures.
 
-Targeted regression: `npm run test:file -- tests/yper4-910-agent-writing.test.cjs tests/mcp-comments-agent-chatter-routing.test.cjs tests/htpr-7512-comment-attachments-routing.test.cjs`.
+Targeted regression: `npm run test:file -- tests/yper4-910-agent-writing.test.cjs tests/htpr-8889-comment-writing.test.cjs tests/mcp-comments-agent-chatter-routing.test.cjs tests/htpr-7512-comment-attachments-routing.test.cjs`.
