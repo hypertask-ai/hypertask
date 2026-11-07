@@ -402,6 +402,19 @@ chmod +x "$D/hold-gh" "$D/hold-ht"
 export RUNNER_INBOX_DIR=$D/inbox
 export HOLD_READS=$D/hold-reads HOLD_OPEN=$D/open.json HOLD_MERGED=$D/merged.json HOLD_BOARD=$D/board.json HOLD_BOARD_PAGE2=$D/page2.json HOLD_ORIGINAL_HT=$D/hypertask
 export SHIP_CLAIM_GH=$D/hold-gh SHIP_CLAIM_HYPERTASK=$D/hold-ht SHIP_CLAIM_RESUME="claude --resume $ME"
+jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"
+pool_hold() {
+  jq -n --arg b "$2" '[{number:7,headRefName:$b,title:"YPER4-998 [BUGFIX] Other work",isDraft:false}]' > "$HOLD_OPEN"
+  SHIP_SESSION_NAME="RUNNER $1" ./ship-claim hold YPER4-999 >/dev/null 2>&1; echo $?
+}
+for branch in runner1/yper4-998 runner-1/yper4-998; do
+  eq "open PR on $branch holds RUNNER 1" "$(pool_hold 1 "$branch")" 4
+done
+eq "open PR on runner10/yper4-998 does not hold RUNNER 1" "$(pool_hold 1 runner10/yper4-998)" 0
+eq "open PR on runner10/yper4-998 holds RUNNER 10" "$(pool_hold 10 runner10/yper4-998)" 4
+for branch in infra-runner-1/yper4-998 ci-runner-1/yper4-998 ceo-runner-1/yper4-998 hax-runner-1/yper4-998 cursor/runner-1/yper4-998 lead/runner1-yper4-998; do
+  eq "open PR on $branch never holds RUNNER 1" "$(pool_hold 1 "$branch")" 0
+done
 mk "$(c 10 2026-10-01T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 printf '[{"number":7,"headRefName":"runner-3/yper4-999","title":"YPER4-999 [BUGFIX] Own work","isDraft":false}]' > "$HOLD_OPEN"
 jq -n '{success:true,total:0,tasks:[]}' > "$HOLD_BOARD"
