@@ -30,7 +30,8 @@ if [ -n "${SHIP_REPO:-}" ] && [ "$SHIP_REPO" != hypertask-ai/hypertask ]; then
   fi
 fi
 node --input-type=module - "$L" "$ID" "$T" "$C" "$U" "$PWD" "$ENVP" <<'JS'
-import { dirname } from 'node:path';
+import { readdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 const [ledger, session, ticket, check, scripts, root, envPrefix] = process.argv.slice(2);
 const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await import(`${scripts}/lib/gates.mjs`);
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
@@ -50,6 +51,38 @@ const read = (file) => {
   try { return readStableRegularFile(file, { root }); }
   catch (error) { if (error.code === 'ENOENT') return ''; throw error; }
 };
+function earlierGates(rootDir, currentLedger, ticketId) {
+  const found = new Map();
+  let names = [];
+  try { names = readdirSync(join(rootDir, '.unlazy')); } catch { return found; }
+  for (const name of names) {
+    if (!/^s-[A-Za-z0-9._-]{1,8}$/.test(name)) continue;
+    const file = join(rootDir, '.unlazy', name, 'GATES.md');
+    if (file === currentLedger) continue;
+    const body = read(file);
+    if (!body) continue;
+    let mtime = 0;
+    try { mtime = statSync(file).mtimeMs; } catch { continue; }
+    for (const part of body.split(/\n(?=- \[[ xX]\] )/)) {
+      const header = part.match(/^- \[[ xX]\] ([A-Z]+-[0-9]+\.[a-z]+):/);
+      if (!header || !header[1].startsWith(`${ticketId}.`)) continue;
+      const checkLine = part.match(/\n  CHECK: ([^\n]+)/);
+      const expectLine = part.match(/\n  EXPECT: ([^\n]+)/);
+      const cwdLine = part.match(/\n  CWD: ([^\n]+)/);
+      if (!checkLine || !expectLine || !cwdLine) continue;
+      const prev = found.get(header[1]);
+      if (prev && prev.mtime > mtime) continue;
+      found.set(header[1], {
+        mtime,
+        check: checkLine[1],
+        expect: expectLine[1],
+        cwd: cwdLine[1],
+        block: part.replace(/\s+$/, ''),
+      });
+    }
+  }
+  return found;
+}
 await withFileLock(root, ledger, () => {
   const binding = `${dirname(ledger)}/session`;
   const bound = read(binding);
@@ -71,10 +104,16 @@ await withFileLock(root, ledger, () => {
     }
   }
   if (!text) text = '# Gates: /ship\n\nScope: take this session\'s tickets end to end, live and verified.\n';
+  const earlier = earlierGates(root, ledger, ticket);
   for (const [name, [title, expect]] of Object.entries(gates)) {
     if (name === 'proof' && !ticket.startsWith('HTPR-')) continue;
     const id = `${ticket}.${name}`;
     if (doc.gates.some((gate) => gate.id === id)) continue;
+    const copied = earlier.get(id);
+    if (copied && copied.expect === expect && copied.cwd === root && generatedCheck.test(copied.check)) {
+      text += `\n${copied.block}\n`;
+      continue;
+    }
     text += `\n- [ ] ${id}: ${title}\n  CHECK: ${envPrefix}${quote(check)} ${name} ${ticket}\n  EXPECT: ${expect}\n  CWD: ${root}\n  EVIDENCE: pending\n`;
   }
   writeAtomic(binding, session + '\n', { root });
