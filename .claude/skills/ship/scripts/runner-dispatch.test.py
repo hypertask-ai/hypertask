@@ -89,7 +89,7 @@ class DispatchTests(unittest.TestCase):
                 self.assertEqual(self.sent_texts(), [])
                 self.comments[ticket].append(checkpoint)
         self.dispatch([row], go=True)
-        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments: HTPR-1, YPER4-1"])
+        self.assertEqual(self.sent_texts(), ["/clear", "resume: read your held tickets' latest comments and agent log: HTPR-1, YPER4-1"])
 
     def test_blocked_comments_are_read_for_checkpoint_protection(self):
         self.boards[15][0]["section"] = "Agent Blocked (Infra)"
