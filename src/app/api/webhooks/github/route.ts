@@ -7,8 +7,9 @@ import {
   broadcastTaskChange,
 } from "@/lib/realtime/server";
 import generateRank from "@/utils/generateRank";
+import { getGithubAppWebhookSecret } from "@/lib/github/appConfig";
+import { lookupBoardForGithubRepository } from "@/lib/github/boardRepositoryRouting";
 import {
-  boardForGithubRepository,
   isAuthorizedPullRequestAuthor,
   parseGithubPullRequestUrl,
   type PullRequestLifecycle,
@@ -381,11 +382,12 @@ function escapeHtml(value: string): string {
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
-    const signatureIsValid = verifyGithubSignature(
-      rawBody,
-      request.headers.get("x-hub-signature-256"),
-      process.env.GITHUB_WEBHOOK_SECRET,
-    );
+    const signatureHeader = request.headers.get("x-hub-signature-256");
+    const legacySecret = process.env.GITHUB_WEBHOOK_SECRET;
+    const appWebhookSecret = await getGithubAppWebhookSecret();
+    const signatureIsValid =
+      verifyGithubSignature(rawBody, signatureHeader, legacySecret) ||
+      verifyGithubSignature(rawBody, signatureHeader, appWebhookSecret ?? undefined);
 
     if (!signatureIsValid) {
       return NextResponse.json(
@@ -416,11 +418,12 @@ export async function POST(request: NextRequest) {
       | GithubPullRequestPayload
       | GithubCheckSuitePayload;
     const repositoryFullName = payload.repository.full_name;
-    const boardId = boardForGithubRepository({
+    const routing = await lookupBoardForGithubRepository({
       fullName: repositoryFullName,
       isPrivate: payload.repository?.private,
       isFork: payload.repository?.fork,
     });
+    const boardId = routing?.boardId ?? null;
     const repository = repositoryParts(repositoryFullName);
     if (!boardId || !repository) {
       return NextResponse.json({
@@ -579,7 +582,7 @@ export async function POST(request: NextRequest) {
     }
 
     const authorId = pullRequest.user.id;
-    if (!isAuthorizedPullRequestAuthor(boardId, authorId)) {
+    if (!isAuthorizedPullRequestAuthor(boardId, authorId, routing?.mapping)) {
       console.log(
         `[GitHub webhook] Unauthorized PR author: board=${boardId} repo=${repositoryFullName} pr=${pullRequest.number} authorId=${authorId}`,
       );

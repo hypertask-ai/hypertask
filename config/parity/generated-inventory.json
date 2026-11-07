@@ -57,6 +57,7 @@
       "GET /api/mcp/pages/versions",
       "GET /api/mcp/projects",
       "GET /api/mcp/projects/[projectId]/instructions",
+      "GET /api/mcp/projects/[projectId]/github",
       "GET /api/mcp/projects/[projectId]/labels",
       "GET /api/mcp/projects/[projectId]/manifest",
       "GET /api/mcp/projects/[projectId]/members",
@@ -191,6 +192,7 @@
       "POST /api/mcp/webhooks",
       "POST /api/mcp/webhooks/[id]/test",
       "PUT /api/mcp/[...notFound]",
+      "PUT /api/mcp/projects/[projectId]/github",
       "PUT /api/mcp/projects/[projectId]/instructions",
       "PUT /api/mcp/projects/[projectId]/playbook"
     ],
@@ -667,6 +669,7 @@
       "GET /api/mcp/pages/versions": "pages.manage",
       "GET /api/mcp/projects": "boards.read",
       "GET /api/mcp/projects/[projectId]/instructions": "boards.manage",
+      "GET /api/mcp/projects/[projectId]/github": "boards.read",
       "GET /api/mcp/projects/[projectId]/labels": "boards.structure",
       "GET /api/mcp/projects/[projectId]/manifest": "boards.read",
       "GET /api/mcp/projects/[projectId]/members": "boards.read",
@@ -801,6 +804,7 @@
       "POST /api/mcp/webhooks": "webhooks.manage",
       "POST /api/mcp/webhooks/[id]/test": "webhooks.manage",
       "PUT /api/mcp/[...notFound]": "system.catalog",
+      "PUT /api/mcp/projects/[projectId]/github": "boards.manage",
       "PUT /api/mcp/projects/[projectId]/instructions": "boards.manage",
       "PUT /api/mcp/projects/[projectId]/playbook": "boards.manage"
     },

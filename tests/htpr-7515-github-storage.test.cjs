@@ -51,15 +51,6 @@ const publicRepository = (fullName) => ({
   isFork: false,
 });
 
-function currentlyRoutedRepositoryNames() {
-  const source = read("src/lib/pullRequests/githubPullRequests.ts");
-  const match = source.match(
-    /const BOARD_15_GITHUB_REPOSITORIES = new Set\(\[([\s\S]*?)\]\);/,
-  );
-  assert.ok(match, "missing current routing allowlist");
-  return [...match[1].matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
-}
-
 function assertIdempotentLegacySeed(sql) {
   const seed = legacySeed(sql);
   assert.match(
@@ -159,17 +150,16 @@ test("board 15 seed is retry-safe, skips a missing board and never resurrects re
   assert.throws(() => legacySeed(""));
 });
 
-test("legacy resolver still allows exactly every currently routed repo on board 15", () => {
-  const currentNames = currentlyRoutedRepositoryNames();
-  assert.ok(currentNames.length > 0);
-  assert.deepEqual(seededRepositoryNames(migration).sort(), currentNames.sort());
-  assert.equal(new Set(legacyMappings.map((mapping) => mapping.fullName)).size, currentNames.length);
-  for (const fullName of currentNames) {
+test("legacy resolver still allows exactly every seeded repo on board 15", () => {
+  const seededNames = seededRepositoryNames(migration);
+  assert.ok(seededNames.length > 0);
+  assert.equal(new Set(legacyMappings.map((mapping) => mapping.fullName)).size, seededNames.length);
+  for (const fullName of seededNames) {
     for (const variant of [fullName, fullName.toUpperCase()]) {
       const repository = publicRepository(variant);
       const mapping = resolveLegacyBoardGithubRepository(repository, legacyMappings);
       assert.ok(mapping, variant);
-      assert.equal(mapping.projectId, boardForGithubRepository(repository), variant);
+      assert.equal(mapping.projectId, boardForGithubRepository(repository, legacyMappings), variant);
       assert.equal(mapping.fullName, fullName);
     }
   }
@@ -178,7 +168,7 @@ test("legacy resolver still allows exactly every currently routed repo on board 
 test("legacy resolver now refuses unknown repositories beside the known-allowed parity control", () => {
   for (const fullName of ["unknown-owner/hypertask", "hypertask-ai/unknown", "hypertask-ai/hypertask/extra", "", " hypertask-ai/cli"]) {
     const repository = publicRepository(fullName);
-    assert.equal(boardForGithubRepository(repository), null, fullName);
+    assert.equal(boardForGithubRepository(repository, legacyMappings), null, fullName);
     assert.equal(resolveLegacyBoardGithubRepository(repository, legacyMappings), null, fullName);
   }
   assert.equal(resolveLegacyBoardGithubRepository(publicRepository(legacyMappings[0].fullName), []), null);
@@ -197,7 +187,7 @@ test("legacy resolver preserves the public, non-fork boundary and rejects missin
     {},
   ]) {
     assert.equal(resolveLegacyBoardGithubRepository(input, legacyMappings), null);
-    assert.equal(boardForGithubRepository(input), null);
+    assert.equal(boardForGithubRepository(input, legacyMappings), null);
   }
 });
 
