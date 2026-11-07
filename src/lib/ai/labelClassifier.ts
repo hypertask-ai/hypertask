@@ -440,11 +440,12 @@ export async function classifyNewTaskAiLabels(taskId: number, projectId: number)
     taskId,
     projectId,
     new Set(labelsPickedByCreator.map(({ labelId }) => labelId)),
+    { skipAgentCreated: true },
   );
 }
 
-export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number) {
-  waitUntil(classifyTaskAiLabels(taskId, projectId).catch(console.error));
+export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number, agentId?: string | null) {
+  waitUntil(classifyTaskAiLabels(taskId, projectId, new Set(), { agentId }).catch(console.error));
 }
 
 export function scheduleClassifyNewTaskAiLabels(taskId: number, projectId: number) {
@@ -459,7 +460,16 @@ export async function classifyTaskAiLabels(
   taskId: number,
   projectId: number,
   labelIdsLeftToCreator: ReadonlySet<string> = new Set(),
+  trigger?: { agentId?: string | null; skipAgentCreated?: boolean },
 ) {
+  if (trigger?.agentId || trigger?.skipAgentCreated) {
+    const authored = await prisma.task.findFirst({
+      where: { id: taskId, projectId, status: "Normal" },
+      select: { userId: true, agentId: true },
+    });
+    const agentId = trigger.agentId || (trigger.skipAgentCreated ? authored?.agentId : null);
+    if (typeof agentId === "string" && agentId.length > 0 && await isFeatureEnabled("htpr-8904-agent-automatic-ai", authored?.userId ?? 0).catch(() => false)) return;
+  }
   const labels = await prisma.label.findMany({
     where: { projectId, ai_prompt: { not: null } },
     select: { id: true, ai_prompt: true },
@@ -584,6 +594,9 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
         ? []
         : [{ ...task, classificationSnapshot: { inputHash, assigned: isAssigned } }];
     });
+  }
+  if (tasks.some((task) => task.agentId) && await isFeatureEnabled("htpr-8904-agent-automatic-ai", userId ?? 0).catch(() => false)) {
+    tasks = tasks.filter((task) => !task.agentId);
   }
   if (tasks.length === 0) return;
   if (await trySmartLabelBatch(userId, { id: label.id, prompt }, tasks)) return;

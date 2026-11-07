@@ -1,7 +1,10 @@
 import { scheduleJobById } from "@/lib/qstash";
+import { isFeatureEnabled } from "@/lib/flags";
 
 export interface IReq {
   commentId: number;
+  agentId?: string | null;
+  ownerUserId?: number | null;
 }
 
 export interface IJobPayload {
@@ -17,14 +20,16 @@ function buildJobId(commentId: number) {
 
 export default async function scheduleCommentSummaryGeneration(req: IReq) {
   const { commentId } = req;
-  const runAt = new Date(new Date().getTime() + 5 * 60000);
+  if (!(typeof req.agentId === "string" && req.agentId.length > 0) || !(await isFeatureEnabled("htpr-8904-agent-automatic-ai", req.ownerUserId ?? 0))) {
+    const runAt = new Date(new Date().getTime() + 5 * 60000);
 
-  const res = await scheduleJobById({
-    jobId: buildJobId(commentId),
-    path: QUEUE_PATH,
-    body: { commentId },
-    notBefore: Math.floor(runAt.getTime() / 1000),
-  });
+    const res = await scheduleJobById({
+      jobId: buildJobId(commentId),
+      path: QUEUE_PATH,
+      body: { commentId },
+      notBefore: Math.floor(runAt.getTime() / 1000),
+    });
 
-  return res;
+    return res;
+  }
 }

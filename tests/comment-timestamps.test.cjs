@@ -285,7 +285,7 @@ for (const previousEdit of [false, true]) {
     }
     assert.deepEqual(fixture.ownershipReads, [{
       where: { id: 44, creatorId: 6, task: { project: {} } },
-      select: { id: true, taskId: true, text: true, task: { select: { projectId: true } } },
+      select: { id: true, taskId: true, text: true, task: { select: { projectId: true, userId: true } } },
     }])
   })
 }
