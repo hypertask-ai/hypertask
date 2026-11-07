@@ -22,6 +22,7 @@ import { refreshBoardForAgentRun } from "@/lib/agentStatus/boardRefresh";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
+import { HTPR_8900_CI_BLOCKER_WRITE_FLAG } from "@/lib/flags/definitions/htpr-8900-ci-blocker-write";
 import {
   AGENT_CHAT_STOPPED_MESSAGE,
   AGENT_CHAT_TIMEOUT_MESSAGE,
@@ -127,6 +128,14 @@ async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: 
   };
 }
 
+async function ciBlockerWriteOpen(userId: number): Promise<boolean> {
+  try {
+    return await isFeatureEnabled(HTPR_8900_CI_BLOCKER_WRITE_FLAG, userId);
+  } catch {
+    return false;
+  }
+}
+
 export async function createRuntimeAgentRun(
   principal: AgentRunPrincipal,
   input: RuntimeAgentRunInput,
@@ -143,6 +152,7 @@ export async function createRuntimeAgentRun(
   } catch {
     laneFollowsReadableBoard = false;
   }
+  const requireBoardMembership = !(await ciBlockerWriteOpen(principal.userId));
 
   const result = await prisma.$transaction(async (tx) => {
     await lockTaskTeamScope(tx, input.taskId, principal.userId, principal.agentId, principal.teamScope);
@@ -153,7 +163,7 @@ export async function createRuntimeAgentRun(
         project: {
           ...projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope),
           status: { not: Status.Deleted },
-          ...(laneFollowsReadableBoard
+          ...(laneFollowsReadableBoard || !requireBoardMembership
             ? {}
             : { members: { some: { agentId, status: "Accepted" as const } } }),
         },

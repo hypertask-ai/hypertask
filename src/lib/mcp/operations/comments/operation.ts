@@ -1111,14 +1111,22 @@ export async function POST(request: NextRequest) {
             }
           }
           if (writingPolicy) {
-            const boardMember = await prisma.member.findFirst({
-              where: { projectId: taskWithOwner.projectId, agentId: ctx.agentId, status: 'Accepted' },
-              select: { id: true },
-            })
-            if (!boardMember) {
-              throw new AgentLogBoardMemberError(
-                `This agent is not a member of this board, so nothing was posted. Request access with the hypertask_request_board_access tool (project_id ${taskWithOwner.projectId}); the agent's owner approves it in Inbox → Decisions.`
-              )
+            let openToReaders = false
+            try {
+              openToReaders = await isFeatureEnabled('htpr-8900-ci-blocker-write', user.id)
+            } catch {
+              openToReaders = false
+            }
+            if (!openToReaders) {
+              const boardMember = await prisma.member.findFirst({
+                where: { projectId: taskWithOwner.projectId, agentId: ctx.agentId, status: 'Accepted' },
+                select: { id: true },
+              })
+              if (!boardMember) {
+                throw new AgentLogBoardMemberError(
+                  `This agent is not a member of this board, so nothing was posted. Request access with the hypertask_request_board_access tool (project_id ${taskWithOwner.projectId}); the agent's owner approves it in Inbox → Decisions.`
+                )
+              }
             }
             throw new AgentLogUnavailableError('Agent log unavailable. Retry later; no comment was published.')
           }

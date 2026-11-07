@@ -220,7 +220,13 @@ export function createCreateTaskTool(context: ToolContext) {
                   where: { id: actingAgentId, userId: user.id, revokedAt: null },
                   select: { id: true },
                 });
-                if (!agent || !(await isAgentOnBoard(input.project_id, actingAgentId))) {
+                let openToReaders = false;
+                try {
+                  openToReaders = await isFeatureEnabled("htpr-8900-ci-blocker-write", user.id);
+                } catch {
+                  openToReaders = false;
+                }
+                if (!agent || (!openToReaders && !(await isAgentOnBoard(input.project_id, actingAgentId)))) {
                   return { success: false, error: "This agent is not an active owned member of this board." };
                 }
               }
