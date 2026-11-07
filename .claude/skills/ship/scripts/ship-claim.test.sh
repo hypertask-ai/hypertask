@@ -531,7 +531,7 @@ free_infra() { jq -n --arg tk "$1" --arg ti "$2" \
   '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:4060,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
 empty_infra() { printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_INFRA"; }
 prs_adopt() { jq -n --argjson n "$1" --arg tk "$2" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: ("cursor/" + ($tk | ascii_downcase) + "-adopt"), title: "\($tk) [BUGFIX] Adopted work", isDraft: false}]' > "$HOLD_OPEN"; }
 holdrc() { SHIP_SESSION_NAME="$1" ./ship-claim hold "$2" >"$D/hold-out" 2>&1; echo $?; }
 printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"; printf '[]' > "$HOLD_OPEN"
