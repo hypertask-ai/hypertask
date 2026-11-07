@@ -5,12 +5,12 @@ const boards = [
   { id: 8, title: 'Product', uniqueIdentifier: 'PROD' },
 ];
 
-test('HTPR-8829 flag is a small improvement that defaults to Everyone', () => {
+test('HTPR-8829 flag stays at Owner + QA until independent design QA', () => {
   const { default: flag, HTPR_8829_CTRLJ_PLUS_COMPOSER_FLAG: key } = jiti(path.join(root, 'src/lib/flags/definitions/htpr-8829-ctrlj-plus-composer.ts'));
   assert.equal(key, 'htpr-8829-ctrlj-plus-composer');
   assert.equal(flag.key, key);
   assert.equal(flag.kind, 'improvement');
-  assert.equal(flag.defaultMode, 'EVERYONE');
+  assert.equal(flag.defaultMode, 'OWNER_AND_QA');
   assert.equal(flag.releaseRisk.risk, 'small');
 });
 
