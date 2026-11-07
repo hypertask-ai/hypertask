@@ -8,8 +8,7 @@ import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, buildBuiltinViewContext, type BoardVie
 import { useRouter } from 'next/navigation'
 import { getActiveBoardLayoutPreferenceFromProject, replaceProjectSurface, savedBoardLayoutToClient } from '@/utils/helperFunctions/Views/ViewsHelperFunctions'
 import { useFlag, useFlagLoaded } from '@/hooks/useFlag'
-import { HTPR_7092_DECISIONS_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG } from '@/lib/flags/keys'
-import { HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from '@/lib/flags/definitions/htpr-8881-board-view-filters'
+import { HTPR_7092_DECISIONS_FLAG, HTPR_7804_BLOCKED_BY_ME_FLAG, HTPR_8881_BOARD_VIEW_FILTERS_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 

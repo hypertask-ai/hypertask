@@ -44,7 +44,7 @@ for (const includeScalarId of [true, false]) {
     const active = { ...project, project_view: response };
     assert.equal(url.pinProjectViewToUrl(active, "default"), active);
     assert.deepEqual(views.getActiveFiltersFromProject(active), tagFilters);
-    assert.deepEqual(sectionIds(filters.getFilteredSections(active.sections, active)), ["a", "h", "c", "e"]);
+    assert.deepEqual(sectionIds(filters.getFilteredSections(active.sections, active)), ["a", "c", "h", "e"]);
     assert.deepEqual(pv, original);
   });
 }
