@@ -216,7 +216,6 @@ const Commands = (props: Props) => {
   if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const myTasksScopesEnabled = true;
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
   const pageActions = isMobile && currentPageActions &&
     pathname === `/page/${currentPageActions.publicId}`
@@ -242,7 +241,7 @@ const Commands = (props: Props) => {
     };
     const boardCommands = getBoardCommands({
       projects, currentProject, onMyTasks, myTasksViewsEnabled: true,
-      myTasksScopesEnabled, columnArchiveEnabled,
+      myTasksScopesEnabled: true, columnArchiveEnabled,
       context: contextOptions?.context,
     });
     const registryGroups = getCommands({
@@ -428,7 +427,6 @@ const Commands = (props: Props) => {
     onAgentChat,
     onCalendar,
     onMyTasks,
-    myTasksScopesEnabled,
     projects,
     showByokApiKeys,
     isTicketPrefixCommandVisible,
