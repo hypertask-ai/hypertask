@@ -63,3 +63,22 @@ test('HTPR-8829 Tab leaves the textarea and the board chip to the browser so Sen
     assert.equal(legacyTab.defaultPrevented, true, 'flag off keeps the old textarea to chip jump');
   });
 });
+
+test('HTPR-8829 New Task tab drops purple and sparkle and the mic is the white primary mic', async (t) => {
+  await withPalette(t, { tab: 'compose', boards, url: '/my-tasks', previousBoard: 'project-7' }, async ({ flags, rerender }) => {
+    const newTaskTab = () => [...document.querySelectorAll('[aria-label="Commands mode"] [role="tab"]')].find((node) => node.textContent.startsWith('New Task'));
+    const mic = () => document.querySelector('#compose-task-audio-button');
+    flags['htpr-8829-ctrlj-plus-composer'] = true;
+    await rerender();
+    assert.ok(newTaskTab());
+    assert.doesNotMatch(newTaskTab().className, /text-hypertasks-ai-purple/);
+    assert.equal(newTaskTab().querySelector('.lucide-sparkles'), null);
+    assert.match(mic().className, /\bbg-white-black\b/);
+    assert.match(mic().className, /\btext-white-black-inverted\b/);
+    assert.doesNotMatch(mic().className, /bg-shadcn-primary/);
+    flags['htpr-8829-ctrlj-plus-composer'] = false;
+    await rerender();
+    assert.match(newTaskTab().className, /text-hypertasks-ai-purple/);
+    assert.ok(newTaskTab().querySelector('.lucide-sparkles'));
+  });
+});
