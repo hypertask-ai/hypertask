@@ -1,3 +1,4 @@
+const React = require('react');
 const { assert, path, root, jiti, test, withPalette } = require('./helpers/compose-task-palette-fixture.cjs');
 
 const boards = [
@@ -26,8 +27,12 @@ test('HTPR-8829 Ctrl+J keeps + menu, mic and text Send in the box, pickers below
     const menu = row.querySelector('[role="group"][aria-label="Add"]');
     assert.match(menu.textContent, /Attach file/);
     assert.match(menu.textContent, /Add context/);
-    menu.querySelector('[aria-label="Add context"]').click();
-    assert.match(input().value, /@/);
+    const field = writer.querySelector('textarea');
+    row.querySelector('details').open = true;
+    await React.act(async () => {
+      menu.querySelector('[aria-label="Add context"]').click();
+    });
+    assert.match(field.value, /@/);
     assert.ok(row.querySelector('[aria-label="Start dictation"]'), 'the mic sits in the box');
     assert.match(row.textContent, /Send/);
     assert.equal(writer.querySelector('[aria-label="Create task"]'), null);
