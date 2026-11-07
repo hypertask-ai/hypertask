@@ -11,8 +11,7 @@ export default {
   description:
     "Agent ticket creates on internal boards and moves into Valentin Review require the plain-language recommendation block from docs/ticket-template.md.",
   releaseRisk: {
-    risk: "medium",
-    reason:
-      "Refuses some agent ticket writes until bodies match the shared template; flag off restores today’s behaviour.",
+    risk: "small",
+    reason: "Refuses some agent ticket writes until bodies match the shared template; flag off restores prior behaviour.",
   },
 } as const satisfies FeatureFlagDefinition;
