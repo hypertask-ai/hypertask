@@ -25,6 +25,7 @@ import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG } from '@/lib/flags/keys'
+import { HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/definitions/htpr-8738-picker-skips-parked'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -58,6 +59,7 @@ export interface ParentTaskSummary {
 export interface TaskListItem {
   id: number
   blockerCommentId?: number | null
+  waitingOnUserId?: number | null
   ticketNumber?: string
   title: string
   description: string
@@ -688,6 +690,7 @@ export async function GET(request: NextRequest) {
       select: {
         id: true,
         blockerCommentId: true,
+        waitingOnUserId: true,
         ticketNumber: true,
         uniqueIndex: true,
         title: true,
@@ -791,6 +794,11 @@ export async function GET(request: NextRequest) {
         : { skip: usesCursor ? 0 : offset }),
     })
 
+    const showWaitingOn = await isFeatureEnabled(
+      HTPR_8738_PICKER_SKIPS_PARKED_FLAG,
+      user.id,
+    ).catch(() => false)
+
     const uniqueProjects = new Set(tasks.map(t => t.projectId))
     const doneTitlesByProject = await loadDoneTitlesByProject(uniqueProjects, mcpDoneNameFallback)
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
@@ -806,6 +814,7 @@ export async function GET(request: NextRequest) {
         id: task.id,
         ticketNumber: task.ticketNumber || undefined,
         blockerCommentId: task.blockerCommentId ?? null,
+        ...(showWaitingOn ? { waitingOnUserId: task.waitingOnUserId ?? null } : {}),
         uniqueIndex: task.uniqueIndex,
         title: task.title,
         description: mapTaskDescriptionContent(task),

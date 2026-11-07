@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from '@/lib/flags/definitions/htpr-8786-picker-skips-other-agents'
+import { HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/definitions/htpr-8738-picker-skips-parked'
 import { priorityScore } from '@/lib/mcp/tasks/priorityScore'
 import { otherAgentAssigneeWhere } from '@/lib/mcp/tasks/otherAgentAssignee'
 import { blockerStillOpen } from '@/lib/mcp/tasks/blockerStillOpen'
@@ -20,6 +21,11 @@ const LABEL_ID_UUID_RE =
 
 const CANDIDATE_LIMIT = 500
 const mcpDoneNameFallback = (title: string) => columnRole(title) === 'done'
+
+function parkedSection(title: string): boolean {
+  const normalized = ` ${title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `
+  return [' ai review ', ' valentin review ', ' ux sign off ', ' flags '].includes(normalized)
+}
 
 function isLabelIdParam(raw: string): boolean {
   return /^\d+$/.test(raw) || LABEL_ID_UUID_RE.test(raw)
@@ -132,6 +138,13 @@ export async function GET(request: NextRequest) {
         HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG,
         ctx.user.id,
       ))
+    const skipParked =
+      sectionFilter.sectionId === undefined &&
+      !section &&
+      (await isFeatureEnabled(
+        HTPR_8738_PICKER_SKIPS_PARKED_FLAG,
+        ctx.user.id,
+      ))
     const doneTitlesByProject = await loadDoneTitlesByProject(
       [projectId],
       mcpDoneNameFallback
@@ -195,6 +208,8 @@ export async function GET(request: NextRequest) {
         ticketNumber: true,
         title: true,
         section: true,
+        waitingOnUserId: true,
+        blockerCommentId: true,
         priority: {
           select: {
             Priority_Value: true,
@@ -258,7 +273,16 @@ export async function GET(request: NextRequest) {
         })
       : tasks
 
-    const rankedTasks = candidates
+    const activeTasks = skipParked
+      ? candidates.filter(
+          (task) =>
+            task.waitingOnUserId == null &&
+            task.blockerCommentId == null &&
+            !parkedSection(task.section)
+        )
+      : candidates
+
+    const rankedTasks = activeTasks
       .map((task) => ({
         task,
         score: priorityScore(

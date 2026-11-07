@@ -43,6 +43,8 @@ function task({
   assignees = [],
   relatedFromTasks = [],
   relatedToTasks = [],
+  waitingOnUserId = null,
+  blockerCommentId = null,
 }) {
   return {
     id,
@@ -52,6 +54,8 @@ function task({
     projectId,
     status,
     assignees,
+    waitingOnUserId,
+    blockerCommentId,
     priority: null,
     dueDate: null,
     createdAt: new Date(`2026-08-07T00:00:${String(id).padStart(2, '0')}.000Z`),
@@ -83,7 +87,7 @@ function passesAssigneeFilter(candidate, where) {
   return !ownedByAnotherAgent
 }
 
-function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents = false }) {
+function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents = false, skipParked = false }) {
   const doneTitleLoads = []
   const taskQueries = []
   const prisma = {
@@ -148,11 +152,15 @@ function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents =
     if (request === '@/lib/flags') {
       return {
         isFeatureEnabled: async (key) =>
-          skipOtherAgents && key === HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG,
+          (skipOtherAgents && key === HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG) ||
+          (skipParked && key === 'htpr-8738-picker-skips-parked'),
       }
     }
     if (request === '@/lib/flags/definitions/htpr-8786-picker-skips-other-agents') {
       return { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG }
+    }
+    if (request === '@/lib/flags/definitions/htpr-8738-picker-skips-parked') {
+      return { HTPR_8738_PICKER_SKIPS_PARKED_FLAG: 'htpr-8738-picker-skips-parked' }
     }
     if (request === '@/lib/mcp/tasks/otherAgentAssignee') {
       return jiti(path.join(root, 'src/lib/mcp/tasks/otherAgentAssignee.ts'))
@@ -399,6 +407,54 @@ test('the same Doing ticket assigned to another agent is returned while the pick
   assert.deepEqual(
     response.body.tasks.map(({ id }) => id),
     [1, 2, 3, 4, 5, 6]
+  )
+})
+
+test('the default pick leaves out review columns and tickets waiting on a person', async () => {
+  const route = loadRoute({
+    tasks: [
+      task({ id: 1, section: 'In Progress' }),
+      task({ id: 2, section: 'Valentin Review' }),
+      task({ id: 3, section: 'AI Review' }),
+      task({ id: 4, section: 'UX Sign-off' }),
+      task({ id: 5, section: 'Flags' }),
+      task({ id: 6, section: 'In Progress', waitingOnUserId: 6 }),
+      task({ id: 7, section: 'Doing', blockerCommentId: 44 }),
+      task({ id: 8, section: 'Ready' }),
+    ],
+    sectionsByProject: new Map([
+      [15, [
+        { section_title: 'In Progress', isDone: false },
+        { section_title: 'Ready', isDone: false },
+      ]],
+    ]),
+    skipParked: true,
+  })
+
+  const response = await callNext(route.GET)
+
+  assert.deepEqual(
+    response.body.tasks.map(({ id }) => id),
+    [1, 8]
+  )
+})
+
+test('an explicit section still returns a ticket waiting on a person', async () => {
+  const route = loadRoute({
+    tasks: [
+      task({ id: 6, section: 'In Progress', waitingOnUserId: 6 }),
+    ],
+    sectionsByProject: new Map([
+      [15, [{ section_title: 'In Progress', isDone: false }]],
+    ]),
+    skipParked: true,
+  })
+
+  const response = await callNext(route.GET, { section: 'In Progress' })
+
+  assert.deepEqual(
+    response.body.tasks.map(({ id }) => id),
+    [6]
   )
 })
 

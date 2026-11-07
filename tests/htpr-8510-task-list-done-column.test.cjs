@@ -39,7 +39,7 @@ function taskRow({ id, section, projectId = 15 }) {
   };
 }
 
-function fixture(rows, doneTitles) {
+function fixture(rows, doneTitles, { showWaiting = false } = {}) {
   const doneTitleCalls = [];
   class NextResponse {
     static json(body, init = {}) { return Object.assign(new NextResponse(), { body, status: init.status ?? 200 }); }
@@ -67,7 +67,9 @@ function fixture(rows, doneTitles) {
       HTPR_8295_AGENT_ME_ASSIGNEE_FLAG: "htpr-8295-agent-me-assignee",
       HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer",
     },
-    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags": {
+      isFeatureEnabled: async (key) => showWaiting && key === "htpr-8738-picker-skips-parked",
+    },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/lib/mcp/agents": { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => undefined },
     "@/lib/agents/visibility": { accessibleAgentWhere: () => ({}) },
@@ -143,6 +145,15 @@ test("a board that answers with no finished column marks every task as unfinishe
   const f = fixture([taskRow({ id: 1, section: "Done" })], new Map([[15, new Set()]]));
   const tasks = await f.run({});
   assert.equal(tasks[0].sectionIsDone, false);
+});
+
+test("task list includes the waiting person only while the parked-pick flag is on", async () => {
+  const row = taskRow({ id: 1, section: "Bugs" });
+  row.waitingOnUserId = 6;
+  const hidden = await fixture([row], new Map()).run({});
+  assert.equal(Object.hasOwn(hidden[0], "waitingOnUserId"), false);
+  const shown = await fixture([row], new Map(), { showWaiting: true }).run({});
+  assert.equal(shown[0].waitingOnUserId, 6);
 });
 
 test("a board missing from the finished-column answer falls back to the column name", async () => {
