@@ -1,7 +1,7 @@
 import { parse } from 'node-html-parser'
 import { FLAG_CHAT_RECORD, normalizeVisibleText } from '@/lib/flags/approvalWords'
 
-const ROBOT_STATUS = /(^|[\s.])(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
+const ROBOT_STATUS = /^(?:[-*]\s+)?(Next|Helpers|Branch\/PR|Branch|PR|Outputs|Claimed|Claim|Released|Gate|Gates|Resume|Session|tmux|Worktree|Ledger)\s*:/i
 const FEEDBACK_TALLY_LINE = /^(?:AI feedback tally|Fingerprint): ai-fb-[0-9a-f]{12}$/
 const BUILD_ID = 'a build or commit id'
 const TECHNICAL_KINDS: Array<[RegExp, string]> = [
@@ -160,8 +160,14 @@ function questionHit(html: string): Hit | null {
   const questionLine = textLines.find((line) => labelPattern('Question').test(line)) ?? ''
   const asked = questionLine.replace(/^[\s\S]*\bQuestion\s*:\s*/i, '').trim()
   if (!asked.endsWith('?')) return { reason: 'the question must end with a question mark', offender: questionLine }
-  const beforeQuestion = html.split(/Question\s*:/i)[0] ?? ''
-  const bullets = beforeQuestion.match(/<li\b/gi)?.length ?? 0
+  const beforeQuestion = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '').split(/Question\s*:/i)[0] ?? ''
+  const parts = beforeQuestion.split(/<\/(?:ul|ol)\s*>/i)
+  const closedLists = parts.slice(0, -1).join(' ')
+  const tail = parts[parts.length - 1] ?? ''
+  const closedItems = closedLists.match(/<li\b/gi)?.length ?? 0
+  const tailOpens = tail.match(/<li\b/gi)?.length ?? 0
+  const tailCloses = tail.match(/<\/li>/gi)?.length ?? 0
+  const bullets = closedItems + (tailOpens > tailCloses ? tailOpens - 1 : tailOpens)
   if (bullets > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
   return null
 }

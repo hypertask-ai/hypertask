@@ -92,6 +92,47 @@ class TaskDescriptionChangedError extends Error {}
 class TaskTitleChangedError extends Error {}
 class TaskTargetChangedError extends Error {}
 class FlagColumnMismatchError extends Error {}
+class OpenObservationGateError extends Error {}
+
+const OPEN_OBSERVATION = /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/i;
+const NEGATED_OPEN = /(?:\bno longer\b|\bnot\b|\bnever\b)\s+$/i;
+
+function affirmativeOpen(text: string, start: number, slice: string): boolean {
+  const finder = new RegExp(OPEN_OBSERVATION.source, "gi");
+  for (const hit of slice.matchAll(finder)) {
+    if (!NEGATED_OPEN.test(text.slice(0, start + (hit.index ?? 0)))) return true;
+  }
+  return false;
+}
+
+export function hasUnfinishedFullDayObservation(text: string): boolean {
+  const lines = text
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&(?:nbsp|#160);/gi, " ")
+    .split(/\n/);
+  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.;,]{0,80}\\bfull[- ]day observation\\b`, "gi");
+  const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.;,]{0,80}/gi;
+  return lines.some((line) => {
+    const plain = line.replace(/\s+/g, " ").trim();
+    if (!plain) return false;
+    for (const match of plain.matchAll(openBefore)) {
+      if (affirmativeOpen(plain, match.index ?? 0, match[0])) return true;
+    }
+    for (const match of plain.matchAll(openAfter)) {
+      if (affirmativeOpen(plain, match.index ?? 0, match[0])) return true;
+    }
+    return false;
+  });
+}
+
+function destinationIsDone(section: { section_title: string; isDone?: boolean | null } | null, title: string): boolean {
+  if (section?.isDone === true) return true;
+  if (section?.isDone === false) return false;
+  const name = (section?.section_title ?? title).trim().toLowerCase();
+  return name === "done" || name === "complete" || name === "shipped";
+}
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";
 
@@ -366,6 +407,7 @@ export async function updateTaskSingle(
         ) {
           await assertParentTaskOnBoard(tx, updateData.parentTaskId, targetProject);
         }
+        let destinationSection: { section_title: string; isDone: boolean | null } | null = null;
         const requestedSectionId = requestedMutation.sectionId;
         const requestedSectionName = requestedMutation.section;
         sectionIdChanged =
@@ -394,7 +436,7 @@ export async function updateTaskSingle(
                 projectId:
                   requestedMutation.projectId ?? currentState.projectId,
               },
-              select: { section_title: true },
+              select: { section_title: true, isDone: true },
             });
             if (!targetSection) throw new Error("Section not found");
             if (
@@ -403,8 +445,24 @@ export async function updateTaskSingle(
             ) {
               throw new Error("Section does not match sectionId");
             }
+            destinationSection = targetSection;
             updateData.section = targetSection.section_title;
           }
+        }
+        if (
+          !destinationSection &&
+          sectionNameChanged &&
+          typeof requestedSectionName === "string" &&
+          requestedSectionName !== ""
+        ) {
+          const namedSections = await tx.section.findMany({
+            where: {
+              section_title: requestedSectionName,
+              projectId: requestedMutation.projectId ?? currentState.projectId,
+            },
+            select: { section_title: true, isDone: true },
+          });
+          if (namedSections.length === 1) destinationSection = namedSections[0];
         }
         if (sectionChanged && targetProject === 15 && updateData.section === "Flag: Everyone") {
           const { listFeatureFlagModes } = await import("@/lib/flags");
@@ -418,6 +476,22 @@ export async function updateTaskSingle(
           if (blocked.length) {
             throw new FlagColumnMismatchError(`Cannot move to Flag: Everyone. Not released: ${blocked.map(({ key, mode }) => `${key} (${mode})`).join(", ")}.`);
           }
+        }
+        const destinationTitle = typeof updateData.section === "string" ? updateData.section : "";
+        const gateText = [
+          typeof requestedMutation.description === "string"
+            ? requestedMutation.description
+            : currentState.description_?.content ?? currentState.description ?? "",
+          typeof requestedMutation.acceptanceCriteria === "string"
+            ? requestedMutation.acceptanceCriteria
+            : currentState.acceptanceCriteria ?? "",
+        ].join("\n");
+        if (
+          sectionChanged &&
+          destinationIsDone(destinationSection, destinationTitle) &&
+          hasUnfinishedFullDayObservation(gateText)
+        ) {
+          throw new OpenObservationGateError("Cannot mark this ticket done. The full-day observation gate is still unfinished.");
         }
         if (sectionChanged) updateData.sectionChangedAt = new Date();
         updateData.updatedAt = new Date();
@@ -787,6 +861,9 @@ export async function updateTaskSingle(
     }
     if (error instanceof FlagColumnMismatchError) {
       return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
+    }
+    if (error instanceof OpenObservationGateError) {
+      return { status: 409, json: { message: error.message, code: "OPEN_OBSERVATION_GATE" } };
     }
     if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {

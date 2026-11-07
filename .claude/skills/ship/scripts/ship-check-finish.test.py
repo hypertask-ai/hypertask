@@ -35,7 +35,7 @@ import json, os, sys
 from pathlib import Path
 root = Path(os.environ['FIXTURE_ROOT'])
 if sys.argv[1:3] in [['tasks', 'get'], ['task', 'get']]:
-    print(json.dumps({'success': True, 'tasks': [{'ticketNumber': sys.argv[3], 'boardId': 15, 'section': os.environ.get('SECTION', 'In Progress')}]}))
+    print(json.dumps({'success': True, 'tasks': [{'ticketNumber': sys.argv[3], 'boardId': 15, 'section': os.environ.get('SECTION', 'In Progress'), 'description': os.environ.get('DESCRIPTION', ''), 'acceptanceCriteria': os.environ.get('ACCEPTANCE', '')}]}))
 elif sys.argv[1:3] in [['section', 'list'], ['sections', 'list']]:
     print(json.dumps({'success': True, 'sections': [
         {'id': 1, 'section_title': 'Flag: Everyone', 'isDone': True},
@@ -86,6 +86,54 @@ else:
                 self.check('branch', ticket, 'none')
                 self.assertIn('cleaned ok', self.check('cleaned', ticket))
         self.check('done', 'HTPR-7950', success=False, SECTION='Flag: Off')
+
+    def test_unfinished_full_day_observation_stays_open(self):
+        gate = '<p>Full-day observation gate: still unfinished.</p>'
+        closed = '<p>Full-day observation gate: passed.</p>'
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone', DESCRIPTION=gate))
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'move', 'HTPR-8872', 'Done', success=False, DESCRIPTION=gate))
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'move', 'HTPR-8872', 'Flag: Everyone', success=False, DESCRIPTION=gate))
+        self.assertIn('move ok', self.check('move', 'HTPR-8872', 'In Progress', DESCRIPTION=gate))
+        self.assertEqual(self.check('done', 'HTPR-8872', SECTION='Flag: Everyone', DESCRIPTION=closed), 'done ok\n')
+        beside = '<p>Full-day observation gate: passed</p><p>Report: unfinished</p>'
+        self.assertEqual(self.check('done', 'HTPR-8872', SECTION='Flag: Everyone', DESCRIPTION=beside), 'done ok\n')
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed\nReport: unfinished'), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: unfinished\nReport: passed'))
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='<p>Full-day observation gate: unfinished</p><p>Report: passed</p>'))
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Done',
+            ACCEPTANCE='An explicit unfinished full-day observation gate remains.'))
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed',
+            ACCEPTANCE='Report: unfinished'), 'done ok\n')
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed; report unfinished'), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: unfinished; report passed'))
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed, report unfinished'), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: unfinished, report passed'))
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: no longer unfinished.'), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Done',
+            DESCRIPTION='Full-day observation gate: not done.'))
 
     def test_killed_local_check_refuses_blocked_handoff_by_title_and_id(self):
         for section in ['Agent Blocked (Infra)', '5']:
