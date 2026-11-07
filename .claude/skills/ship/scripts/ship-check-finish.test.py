@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 
 SCRIPT = Path(__file__).with_name('ship-check')
@@ -76,6 +77,187 @@ else:
                                 capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stderr
+
+    def test_agent_deployment_requires_matching_live_proof_and_only_proven_path(self):
+        ticket = 'HYCI-161'
+        evidence = self.root / 'evidence' / ticket
+        evidence.mkdir(parents=True)
+        for name, value in [('pr', '42'), ('repo', 'hypertask-ai/hypertask'), ('base', 'production')]:
+            (evidence / name).write_text(value + '\n')
+        home = self.root / 'home'
+        self.env['HOME'] = str(home)
+        installed = home / '.local/lib/hypertask/runner-pickup/runner-selfupdate'
+        installed.parent.mkdir(parents=True)
+        unit = self.repo / '.claude/systemd/runner-selfupdate.service'
+        payload = self.repo / '.claude/skills/ship/scripts/runner-selfupdate'
+        unit.parent.mkdir(parents=True)
+        payload.parent.mkdir(parents=True)
+        unit.write_text('[Service]\nExecStart=%h/.local/lib/hypertask/runner-pickup/runner-selfupdate run\n')
+        payload.write_text('old\n')
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'unit')
+        payload.write_text('new\n')
+        unit.write_text(unit.read_text() + 'Description=updated\n')
+        test = payload.with_name('runner-selfupdate.test.sh')
+        test.write_text('test\n')
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'agent change')
+        sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        fragment = self.root / 'installed.service'
+        start = int(time.time()) - 10
+        def install(path, content):
+            path.write_text(content)
+            os.utime(path, (start - 10, start - 10))
+        install(fragment, unit.read_text())
+        install(installed, payload.read_text())
+        self.write('systemctl', f'''#!/bin/sh
+printf '%s\\n' "$*" >> "$FIXTURE_ROOT/systemctl.log"
+case "$*" in
+  *FragmentPath*) echo "{fragment}" ;;
+  *--timestamp=us*NeedDaemonReload*)
+    if [ "${{RACE:-}}" = yes ]; then RESULT=exit-code STATUS=1; fi
+    printf 'Result=%s\\nExecMainStatus=%s\\nNeedDaemonReload=%s\\nExecMainStartTimestamp=%s\\nExecMainExitTimestamp=%s\\nDropInPaths=%s\\n' "${{RESULT:-success}}" "${{STATUS:-0}}" "${{RELOAD:-no}}" "${{START-@{start}}}" "${{EXIT-@{start}}}" "${{DROP_INS-}}" ;;
+  *Result*) printf 'Result=%s\\nExecMainStatus=%s\\n' "${{RESULT:-success}}" "${{STATUS:-0}}" ;;
+  *) exit 1 ;;
+esac
+''')
+        self.write('gh', f'''#!/bin/sh
+case "$1:$2" in
+  pr:view) echo '{{"number":42,"title":"HYCI-161 [INFRA] Fixture","state":"MERGED","mergeCommit":{{"oid":"'"${{MERGE_SHA:-{sha}}}"'"}},"baseRefName":"production"}}' ;;
+  api:*/deployments/*/statuses) echo "${{DEPLOY_STATE:-}}" ;;
+  api:*/deployments\?*) echo "${{DEPLOY_ID:-}}" ;;
+  api:*/status|api:*/deployments*) echo '' ;;
+  *) exit 1 ;;
+esac
+''')
+        proof = evidence / 'live-proof'
+        def record(value):
+            proof.write_text(f'sha: {value}\nsource: {self.repo}\ncheck: systemd-user-unit runner-selfupdate.service\n')
+        self.check('deployed', ticket, success=False)
+        record(sha)
+        self.assertIn('agent live proof', self.check('deployed', ticket))
+        log = self.root / 'systemctl.log'
+        log.write_text('')
+        self.check('deployed', ticket, success=False, RACE='yes')
+        queries = [line for line in log.read_text().splitlines() if 'FragmentPath' not in line]
+        self.assertEqual(len(queries), 1)
+        for prop in ['Result', 'ExecMainStatus', 'NeedDaemonReload',
+                     'ExecMainStartTimestamp', 'ExecMainExitTimestamp', 'DropInPaths']:
+            self.assertIn(f'-p {prop}', queries[0])
+        self.assertIn('agent live proof', self.check('deployed', ticket,
+                                                    START=f'@{start}.100000000', EXIT=f'@{start}.200000000'))
+        self.check('deployed', ticket, success=False, STATUS='1')
+        self.check('deployed', ticket, success=False, RESULT='failed')
+        self.check('deployed', ticket, success=False, EXIT='')
+        self.check('deployed', ticket, success=False, EXIT=f'@{start - 1}')
+        self.check('deployed', ticket, success=False, EXIT=f'@{start}.100000000', START=f'@{start}.200000000')
+        self.check('deployed', ticket, success=False, EXIT=f'@{int(time.time()) + 3600}')
+        self.check('deployed', ticket, success=False, START='')
+        self.check('deployed', ticket, success=False, START=f'@{start - 20}')
+        self.check('deployed', ticket, success=False, START=f'@{int(time.time()) + 3600}')
+        self.check('deployed', ticket, success=False, RELOAD='yes')
+        self.check('deployed', ticket, success=False, DROP_INS='/tmp/override.conf')
+        original_unit = unit.read_text()
+        for extra_start in ['ExecStart=/bin/false\n', 'ExecStart=\n']:
+            unit.write_text(original_unit + extra_start)
+            install(fragment, unit.read_text())
+            self.run_git('add', '.')
+            self.run_git('commit', '-qm', 'multiple starts')
+            multi_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+            record(multi_sha)
+            self.check('deployed', ticket, success=False, MERGE_SHA=multi_sha)
+        unit.write_text(original_unit)
+        install(fragment, original_unit)
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'restore single start')
+        record(sha)
+        self.assertIn('agent live proof', self.check('deployed', ticket))
+        os.utime(installed, ns=((start * 10**9) + 900_000_000,) * 2)
+        self.check('deployed', ticket, success=False, START=f'@{start}.100000000')
+        install(installed, payload.read_text())
+        installed.unlink()
+        symlink_target = self.root / 'installed-payload'
+        install(symlink_target, payload.read_text())
+        installed.symlink_to(symlink_target)
+        self.assertIn('agent live proof', self.check('deployed', ticket))
+        symlink_target.write_text(payload.read_text())
+        os.utime(symlink_target, (start + 1, start + 1))
+        self.check('deployed', ticket, success=False)
+        installed.unlink()
+        install(installed, payload.read_text())
+        record('0' * 40)
+        self.check('deployed', ticket, success=False)
+        record(sha)
+        installed.write_text('stale\n')
+        self.check('deployed', ticket, success=False)
+        install(installed, payload.read_text())
+        fragment.write_text('wrong unit\n')
+        self.check('deployed', ticket, success=False)
+        install(fragment, unit.read_text())
+        installed.unlink()
+        self.check('deployed', ticket, success=False)
+        install(installed, payload.read_text())
+        wrong = home / '.local/lib/hypertask/other/runner-selfupdate'
+        wrong.parent.mkdir(parents=True)
+        wrong.write_text(payload.read_text())
+        unit.write_text(f'[Service]\nExecStart={wrong} run\n')
+        install(fragment, unit.read_text())
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'wrong installation')
+        wrong_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        record(wrong_sha)
+        self.check('deployed', ticket, success=False, MERGE_SHA=wrong_sha)
+        unit.write_text('[Service]\nExecStart=%h/.local/lib/hypertask/runner-pickup/runner-selfupdate run\nDescription=updated\n')
+        install(fragment, unit.read_text())
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'restore unit')
+        payload.unlink()
+        self.run_git('add', '-A')
+        self.run_git('commit', '-qm', 'missing source')
+        missing_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        record(missing_sha)
+        self.check('deployed', ticket, success=False, MERGE_SHA=missing_sha)
+        payload.write_text(installed.read_text())
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'restore payload')
+        renamed = payload.with_name('renamed')
+        self.run_git('mv', str(payload), str(renamed))
+        self.run_git('commit', '-qm', 'rename payload')
+        renamed_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        record(renamed_sha)
+        self.check('deployed', ticket, success=False, MERGE_SHA=renamed_sha)
+        self.run_git('mv', str(renamed), str(payload))
+        self.run_git('commit', '-qm', 'restore payload name')
+        for name in ['src/app.ts', '.claude/skills/ship/scripts/runner-pickup',
+                     '.claude/skills/ship/scripts/ship-check.test.sh']:
+            extra = self.repo / name
+            extra.parent.mkdir(parents=True, exist_ok=True)
+            extra.write_text('change\n')
+            self.run_git('add', '.')
+            self.run_git('commit', '-qm', 'mixed change')
+            mixed_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+            record(mixed_sha)
+            self.check('deployed', ticket, success=False, MERGE_SHA=mixed_sha)
+            self.assertIn('deployed ok', self.check('deployed', ticket, MERGE_SHA=mixed_sha, DEPLOY_ID='123', DEPLOY_STATE='success'))
+            extra.unlink()
+            self.run_git('add', '-A')
+            self.run_git('commit', '-qm', 'remove extra')
+
+        app = self.repo / 'src/app.ts'
+        app.parent.mkdir(parents=True, exist_ok=True)
+        app.write_text('old app\n')
+        unit.write_text(f'[Service]\nExecStart={app}\n')
+        install(fragment, unit.read_text())
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'app unit')
+        app.write_text('new app\n')
+        os.utime(app, (start - 10, start - 10))
+        self.run_git('add', '.')
+        self.run_git('commit', '-qm', 'app payload')
+        app_sha = self.run_git('rev-parse', 'HEAD').stdout.strip()
+        record(app_sha)
+        self.check('deployed', ticket, success=False, MERGE_SHA=app_sha)
+        self.assertIn('deployed ok', self.check('deployed', ticket, MERGE_SHA=app_sha, DEPLOY_ID='123', DEPLOY_STATE='success'))
 
     def test_three_released_ticket_replays(self):
         for ticket, section in [('HTPR-7950', 'Flag: Everyone'),

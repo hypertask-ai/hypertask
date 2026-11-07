@@ -392,7 +392,7 @@ docs_deploy_ok() {
 }
 
 live_proof_ok() {
-  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out
+  local t=$1 sha=$2 f="$EVID/$1/live-proof" psha source check unit fragment out tmp exec target relative unit_path start exit_time now fragment_time target_time
   [ -s "$f" ] || return 1
   psha=$(sed -n 's/^sha:[[:space:]]*//p' "$f" | head -1)
   source=$(sed -n 's/^source:[[:space:]]*//p' "$f" | head -1)
@@ -439,18 +439,51 @@ live_proof_ok() {
       fragment=$(systemctl --user show "$unit" -p FragmentPath --value 2>/dev/null) || return 1
       [ -f "$fragment" ] || return 1
       tmp=$(mktemp -d) || return 1
-      if ! git -C "$source" show "$sha:systemd/$unit" > "$tmp/unit" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
-      if ! cmp -s "$fragment" "$tmp/unit"; then rm -rf "$tmp"; return 1; fi
+      unit_path="systemd/$unit"
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        unit_path=".claude/systemd/$unit"
+        [[ $unit != *@?*.service ]] || unit_path=".claude/systemd/${unit%%@*}@.service"
+        git -C "$source" cat-file -e "$sha:$unit_path" 2>/dev/null || unit_path="systemd/$unit"
+      fi
+      if ! git -C "$source" show "$sha:$unit_path" > "$tmp/unit" 2>/dev/null || ! cmp -s "$fragment" "$tmp/unit"; then rm -rf "$tmp"; return 1; fi
+      if [[ $REPO == hypertask-ai/hypertask ]] && [ "$(grep -c '^[[:space:]]*ExecStart[[:space:]]*=' "$tmp/unit")" -ne 1 ]; then rm -rf "$tmp"; return 1; fi
       exec=$(sed -n 's/^ExecStart=//p' "$tmp/unit" | head -1)
       target=${exec%% *}
       target=${target/#\%h/$HOME}
-      if [[ $target != "$source"/* ]]; then rm -rf "$tmp"; return 1; fi
-      relative=${target#"$source"/}
-      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null; then rm -rf "$tmp"; return 1; fi
-      if ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
+      if [[ $target == "$source"/* ]]; then
+        relative=${target#"$source"/}
+      elif [[ $REPO == hypertask-ai/hypertask && $target == "$HOME/.local/lib/hypertask/runner-pickup/"* ]]; then
+        case ${target##*/} in
+          runner-pickup|runner-selfupdate|ci-wait|runner-deliver|runner-chat-reply|ship-identity|user-unit-check|runner-domain-pickup.py|runner_domains.py|runner-webhook)
+            relative=".claude/skills/ship/scripts/${target##*/}" ;;
+          runner-inbox-stop.sh) relative=".claude/hooks/runner-inbox-stop.sh" ;;
+          *) rm -rf "$tmp"; return 1 ;;
+        esac
+        [[ $target == "$HOME/.local/lib/hypertask/runner-pickup/${target##*/}" ]] || { rm -rf "$tmp"; return 1; }
+      else
+        rm -rf "$tmp"; return 1
+      fi
+      if ! git -C "$source" show "$sha:$relative" > "$tmp/payload" 2>/dev/null || ! cmp -s "$target" "$tmp/payload"; then rm -rf "$tmp"; return 1; fi
       rm -rf "$tmp"
-      out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
-      grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out"
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        out=$(systemctl --user show "$unit" --timestamp=us -p Result -p ExecMainStatus -p NeedDaemonReload -p ExecMainStartTimestamp -p ExecMainExitTimestamp -p DropInPaths 2>/dev/null) || return 1
+      else
+        out=$(systemctl --user show "$unit" -p Result -p ExecMainStatus 2>/dev/null) || return 1
+      fi
+      grep -qx 'Result=success' <<<"$out" && grep -qx 'ExecMainStatus=0' <<<"$out" || return 1
+      if [[ $REPO == hypertask-ai/hypertask ]]; then
+        grep -qx 'NeedDaemonReload=no' <<<"$out" && grep -qx 'DropInPaths=' <<<"$out" || return 1
+        start=$(sed -n 's/^ExecMainStartTimestamp=//p' <<<"$out")
+        exit_time=$(sed -n 's/^ExecMainExitTimestamp=//p' <<<"$out")
+        [ -n "$start" ] && [ -n "$exit_time" ] || return 1
+        start=$(date -d "$start" +%s%N 2>/dev/null) || return 1
+        exit_time=$(date -d "$exit_time" +%s%N 2>/dev/null) || return 1
+        now=$(date +%s%N) || return 1
+        fragment_time=$(stat -Lc %y "$fragment") && fragment_time=$(date -d "$fragment_time" +%s%N) || return 1
+        target_time=$(stat -Lc %y "$target") && target_time=$(date -d "$target_time" +%s%N) || return 1
+        (( start > 0 && start <= now && start >= fragment_time && start >= target_time && exit_time >= start && exit_time <= now )) || return 1
+      fi
+      PROOF_UNIT_PATH=$unit_path PROOF_PAYLOAD_PATH=$relative
       ;;
     *) return 1 ;;
   esac
@@ -460,7 +493,7 @@ check_deployed() {
   dropped_ok deployed "$1" && return 0
   elsewhere_ok deployed "$1" && return 0
   nochange_ok deployed "$1" && return 0
-  local sha id state
+  local sha id state PROOF_UNIT_PATH= PROOF_PAYLOAD_PATH=
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
     local tag cmp releases runs jobs
@@ -579,6 +612,33 @@ check_deployed() {
     cmp=$(gh api "repos/$REPO/compare/$sha...$tag" --jq .status 2>/dev/null) || fail "could not compare $sha with release $tag"
     [[ $cmp == ahead || $cmp == identical ]] || fail "latest release $tag of $REPO does not contain $sha yet"
     echo "deployed ok (release $tag)"; return
+  fi
+  local source paths path status agent_only=false test_base
+  source=$(sed -n 's/^source:[[:space:]]*//p' "$EVID/$1/live-proof" 2>/dev/null | head -1)
+  if [[ $REPO == hypertask-ai/hypertask && $BASE == production ]] && live_proof_ok "$1" "$sha" \
+    && [[ $PROOF_UNIT_PATH == .claude/systemd/* && $PROOF_UNIT_PATH != *../* ]] \
+    && [[ $PROOF_PAYLOAD_PATH == .claude/skills/ship/scripts/* || $PROOF_PAYLOAD_PATH == .claude/hooks/* ]] \
+    && [[ $PROOF_PAYLOAD_PATH != *../* ]]; then
+    paths=$(mktemp) || fail "could not inspect merge paths"
+    if git -C "$source" diff-tree --no-commit-id --name-status -r -M -z "$sha^1" "$sha" > "$paths" 2>/dev/null && [ -s "$paths" ]; then
+      agent_only=true
+      test_base=${PROOF_PAYLOAD_PATH##*/}
+      while IFS= read -r -d '' status && IFS= read -r -d '' path; do
+        [[ $status == A || $status == M ]] || { agent_only=false; break; }
+        case $path in
+          "$PROOF_UNIT_PATH"|"$PROOF_PAYLOAD_PATH") ;;
+          ".claude/skills/ship/scripts/$test_base.test.sh"|".claude/skills/ship/scripts/$test_base.test.py")
+            [[ $PROOF_PAYLOAD_PATH == ".claude/skills/ship/scripts/$test_base" ]] || agent_only=false ;;
+          .claude/skills/ship/scripts/ship-check-finish.test.py)
+            [[ $PROOF_PAYLOAD_PATH == .claude/skills/ship/scripts/ship-check ]] || agent_only=false ;;
+          *) agent_only=false ;;
+        esac
+      done < "$paths"
+    fi
+    rm -f "$paths"
+    if [ "$agent_only" = true ]; then
+      echo "deployed ok (agent live proof, merged ${sha:0:9})"; return
+    fi
   fi
   local ignored
   ignored=$(gh api "repos/$REPO/commits/$sha/status" --jq '[.statuses[] | select(.context == "Vercel")][0]
