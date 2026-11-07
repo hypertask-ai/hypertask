@@ -43,9 +43,9 @@ For any Accepted row a lint rule, script, hook, test or `ship-check` would enfor
 
 ### 5. Approval, then apply
 
-- Send the full Accepted / Rejected / Backlog list to HT Product Lead with SendMessage and wait for its answer. It picks rows and may change routings. Never auto-apply: a skill edit changes every future runner.
+- Record the full Accepted / Rejected / Backlog list in the completed ticket's agent activity through `vcc activity add`. Do not send a session message or wait for a lead response. Never auto-apply: a skill edit changes every future runner.
 - Edit only skills in this repo under `.claude/skills/` (and `.claude/agents/`). Never global files (`~/.claude`, `~/.agents`, another repo); name those as Backlog instead.
-- Approved rows ship like any other change: one YPER4 ticket on board 4060 via `vcc`, then /ship from Claim to Clean up, one PR. Do not reflect again on that ticket.
+- Accepted findings become their own tickets and normal reviewed PRs: search duplicates first, then one YPER4 ticket on board 4060 via `vcc` and /ship from Claim to Clean up. Keep protected review and merge approvals on that ticket. Do not reflect again on it.
 - A new skill or a skill description change follows the same PR, with its row in `.claude/skills/INDEX.md`.
 - Backlog: one YPER4 ticket per item via `vcc`, after a title search shows no open ticket for it. Do not start work on it.
 
