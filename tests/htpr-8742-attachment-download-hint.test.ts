@@ -21,7 +21,9 @@ test('download instructions appear only when the flag is on', () => {
   assert.equal(off, task)
   assert.equal('download' in off.attachments[0], false)
   const on = withAttachmentDownloadHints(task, true)
-  assert.equal(on.attachments[0].fileSource, task.attachments[0].fileSource)
-  assert.equal(on.attachments[0].download, attachmentDownloadHint(88, 12))
-  assert.equal(withAttachmentDownloadHints({ id: 88 }, true), { id: 88 })
+  const shown = on.attachments[0] as { fileSource: string; download: string }
+  assert.equal(shown.fileSource, task.attachments[0].fileSource)
+  assert.equal(shown.download, attachmentDownloadHint(88, 12))
+  const empty = { id: 88 }
+  assert.equal(withAttachmentDownloadHints(empty, true), empty)
 })
