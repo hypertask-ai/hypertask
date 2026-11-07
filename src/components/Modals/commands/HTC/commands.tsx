@@ -79,7 +79,6 @@ import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
-  MY_TASKS_SCOPES_FLAG,
 } from "@/lib/flags/keys";
 import { SettingsScopeTabs } from "../../Settings/SettingsScopeTabs";
 import Tooltip from "@/components/Common/Tooltip";
@@ -217,7 +216,6 @@ const Commands = (props: Props) => {
   if (githubConnectEnabled) hiddenGithubCommandKey = null;
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const myTasksScopesEnabled = useFlag(MY_TASKS_SCOPES_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
   const pageActions = isMobile && currentPageActions &&
     pathname === `/page/${currentPageActions.publicId}`
@@ -243,7 +241,7 @@ const Commands = (props: Props) => {
     };
     const boardCommands = getBoardCommands({
       projects, currentProject, onMyTasks, myTasksViewsEnabled: true,
-      myTasksScopesEnabled, columnArchiveEnabled,
+      myTasksScopesEnabled: true, columnArchiveEnabled,
       context: contextOptions?.context,
     });
     const registryGroups = getCommands({
@@ -429,7 +427,6 @@ const Commands = (props: Props) => {
     onAgentChat,
     onCalendar,
     onMyTasks,
-    myTasksScopesEnabled,
     projects,
     showByokApiKeys,
     isTicketPrefixCommandVisible,

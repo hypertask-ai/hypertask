@@ -26,12 +26,12 @@ test("normalizeMyTasksScopes allowlists, dedupes, and defaults", () => {
   );
 });
 
-test("effectiveMyTasksScopes forces assigned when the flag is off", () => {
-  assert.deepEqual(
-    effectiveMyTasksScopes(["created", "watching"], false),
-    DEFAULT_MY_TASKS_SCOPES,
-  );
-  assert.deepEqual(effectiveMyTasksScopes(["created"], true), ["created"]);
+test("effectiveMyTasksScopes normalizes saved scopes", () => {
+  assert.deepEqual(effectiveMyTasksScopes(["created", "watching"]), [
+    "created",
+    "watching",
+  ]);
+  assert.deepEqual(effectiveMyTasksScopes(["created"]), ["created"]);
 });
 
 test("parseMyTasksViewConfig keeps scopes when present and defaults when missing", () => {

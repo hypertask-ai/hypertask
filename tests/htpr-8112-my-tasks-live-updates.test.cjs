@@ -14,7 +14,6 @@ new Function("exports", ts.transpileModule(
 const scopes = scopesModule.exports;
 const keys = {
   MY_TASKS_LIVE_UPDATES_FLAG: "htpr-6458-my-tasks-live-updates",
-  MY_TASKS_SCOPES_FLAG: "scopes",
   MY_TASKS_SNOOZE_FLAG: "snooze",
 };
 

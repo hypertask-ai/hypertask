@@ -37,12 +37,10 @@ export function overdueCountForScopedMyTasksView(
   membership: MyTasksScopeMembership,
   now: Date,
   options: ApplyMyTasksViewOptions,
-  scopesEnabled: boolean,
 ): number {
   const config = parseMyTasksViewConfig(rawConfig);
   const scopes = effectiveMyTasksScopes(
     config.scopes ?? DEFAULT_MY_TASKS_SCOPES,
-    scopesEnabled,
   );
   const scoped = tasks.filter((task) =>
     taskMatchesMyTasksScopes(task, scopes, membership),
@@ -56,7 +54,6 @@ export function overdueCountsFromAuthorizedTasks(
   membership: MyTasksScopeMembership,
   now: Date,
   options: ApplyMyTasksViewOptions,
-  scopesEnabled: boolean,
 ): MyTasksViewOverdueCounts {
   const byViewId: Record<number, number> = {};
   for (const view of views) {
@@ -66,7 +63,6 @@ export function overdueCountsFromAuthorizedTasks(
       membership,
       now,
       options,
-      scopesEnabled,
     );
   }
   return {
@@ -76,7 +72,6 @@ export function overdueCountsFromAuthorizedTasks(
       membership,
       now,
       options,
-      scopesEnabled,
     ),
     byViewId,
   };

@@ -82,6 +82,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-7367-server-description-first",
   "htpr-7133-mcp-ratelimit-fast",
   "htpr-6456-my-tasks-table-columns",
+  "htpr-6457-my-tasks-scopes",
   "htpr-6459-my-tasks-overdue-badges",
 ]);
 const RETIRED_CLIENT_FEATURE_FLAGS = {
@@ -112,6 +113,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6129-mobile-agent-chat-viewport": true,
   "htpr-6059-lazy-emoji-list": true,
   "htpr-6456-my-tasks-table-columns": true,
+  "htpr-6457-my-tasks-scopes": true,
   "htpr-6459-my-tasks-overdue-badges": true,
 } as const;
 

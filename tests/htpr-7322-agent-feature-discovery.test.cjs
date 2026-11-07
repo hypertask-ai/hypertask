@@ -10,8 +10,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8')
 const { DECISIONS_GUIDANCE } = load('src/lib/mcp/decisionsGuidance.ts', {})
 const discoveryKey = 'htpr-7322-agent-feature-discovery'
 const decisionsKey = 'htpr-7092-decisions'
-const mappedKey = 'htpr-6457-my-tasks-scopes'
-const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-6457-my-tasks-scopes', 'htpr-6461-my-tasks-snooze']
+const mappedKey = 'htpr-6461-my-tasks-snooze'
+const definitionKeys = [decisionsKey, 'htpr-7064-inbox-remind-returns', mappedKey]
 const definitions = definitionKeys.map((key) => ({
   key,
   kind: key === 'htpr-7064-inbox-remind-returns' ? 'bugfix' : 'feature',
@@ -67,7 +67,7 @@ test('catalog includes every enabled feature kind without requiring a destinatio
   const mod = catalog({ [decisionsKey]: false, [mappedKey]: true, 'htpr-7064-inbox-remind-returns': true, 'htpr-999-improvement': true, 'htpr-998-unmapped-product': true })
   const rows = await mod.getFeatureCatalog(reader.user.id)
   assert.deepEqual(rows.filter(({ key }) => !key.startsWith('core-')), [
-    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'My Tasks scope', url: 'https://app.hypertask.ai/my-tasks' },
+    { key: mappedKey, description: definitions.find(({ key }) => key === mappedKey).description, shippedOn: definitions.find(({ key }) => key === mappedKey).shippedOn, available: true, name: 'My Tasks snooze', url: 'https://app.hypertask.ai/my-tasks' },
     { key: 'htpr-998-unmapped-product', name: 'unmapped product', description: 'No verified destination', shippedOn: '2026-10-11', available: true },
   ])
   for (const key of [decisionsKey, 'htpr-7064-inbox-remind-returns', 'htpr-999-improvement', 'core-decisions']) {

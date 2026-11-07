@@ -12,7 +12,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
   HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG,
-  MY_TASKS_SCOPES_FLAG,
   MY_TASKS_SNOOZE_FLAG,
 } from "@/lib/flags/keys";
 import {
@@ -40,7 +39,6 @@ interface Props {
   onOpenKanbanFilters?: () => void;
   tableColumnsEnabled?: boolean;
   onOpenTableColumns?: () => void;
-  scopesEnabled?: boolean;
   snoozeEnabled?: boolean;
 }
 
@@ -92,15 +90,13 @@ const MyTasksViewControls = ({
   onOpenKanbanFilters,
   tableColumnsEnabled = false,
   onOpenTableColumns,
-  scopesEnabled = false,
   snoozeEnabled: snoozeEnabledProp = false,
 }: Props) => {
   const iconControlsFlag = useFlag(HTPR_6938_MY_TASKS_ICON_CONTROLS_FLAG);
   const iconControlsEnabled = iconControlsFlag && variant === "icons";
-  const myTasksScopesFlag = useFlag(MY_TASKS_SCOPES_FLAG);
   const myTasksSnoozeFlag = useFlag(MY_TASKS_SNOOZE_FLAG);
   const snoozeEnabled = Boolean(myTasksSnoozeFlag && snoozeEnabledProp);
-  const myTasksScopesEnabled = Boolean(myTasksScopesFlag && scopesEnabled);
+  const myTasksScopesEnabled = true;
   const [scopeOpen, setScopeOpen] = useState(false);
   const [involvementOpen, setInvolvementOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
