@@ -5,7 +5,7 @@ export const HTPR_7294_DAILY_FUNNEL_PROBE_FLAG =
 
 export default {
   key: HTPR_7294_DAILY_FUNNEL_PROBE_FLAG,
-  kind: "internal",
+  kind: "feature",
   defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-11-07",
   description:
