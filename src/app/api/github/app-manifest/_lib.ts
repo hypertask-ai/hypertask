@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getGithubConnectPrincipal, noStore } from "@/app/api/github/_lib";
 import { FEATURE_FLAG_OWNER_USER_ID } from "@/lib/auth/ownerOrQaIds";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import {
   GITHUB_APP_MANIFEST_COOKIE,
   GITHUB_APP_MANIFEST_COOKIE_PATH,
@@ -13,6 +15,9 @@ export async function requireGithubAppManifestOwner(request: NextRequest): Promi
   if (principal.status === "unauthorized") return noStore({ error: "unauthorized" }, 401);
   if (principal.status === "error") return noStore({ error: "unavailable" }, 503);
   if (principal.status !== "allowed" || principal.userId !== FEATURE_FLAG_OWNER_USER_ID) {
+    return noStore({ error: "not_found" }, 404);
+  }
+  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, principal.userId)) {
     return noStore({ error: "not_found" }, 404);
   }
   return principal.userId;

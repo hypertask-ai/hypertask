@@ -7,6 +7,8 @@ import {
   githubCallbackUrl,
   refusePrincipal,
 } from "@/app/api/github/_lib";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7515-connect-github-per-board";
 import { adoptGithubInstallation } from "@/lib/github/adoptInstallation";
 import { getGithubAppConfig } from "@/lib/github/appConfig";
 import {
@@ -33,6 +35,9 @@ const MAX_CODE_LENGTH = 512;
 export async function GET(request: NextRequest) {
   const principal = await getGithubConnectPrincipal(request);
   if (principal.status !== "allowed") return refusePrincipal(principal);
+  if (!await isFeatureEnabled(HTPR_7515_CONNECT_GITHUB_PER_BOARD_FLAG, principal.userId)) {
+    return refusePrincipal({ status: "disabled" });
+  }
 
   const config = await getGithubAppConfig();
   if (!config) return finishAttempt(request, null, { error: "not_configured" });
