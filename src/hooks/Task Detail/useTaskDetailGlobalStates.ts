@@ -142,13 +142,17 @@ const useTaskDetailGlobalStates = (
     }));
   }, []);
   const [stacked, setStacked] = useState<StackedType>(_initialStacked ?? {});
-  const collapseAgentLane = useFlag("htpr-8262-agent-lane-collapse");
+  const collapseAgentLaneFlag = useFlag("htpr-8262-agent-lane-collapse");
   const [agentLaneFoldState, setAgentLaneFoldState] = useState({ taskId: _parsedTask?.id, collapsed: false, version: 0 });
+  const readAgentLaneFold = () => {
+    if (!collapseAgentLaneFlag) return { taskId: _parsedTask?.id, collapsed: false, version: 0 };
+    return agentLaneFoldState;
+  };
+  const agentLaneFold = readAgentLaneFold();
   const setAgentLaneFold = useCallback<Dispatch<SetStateAction<typeof agentLaneFoldState>>>((update) => {
-    if (!collapseAgentLane) return;
+    if (!collapseAgentLaneFlag) return;
     setAgentLaneFoldState(update);
-  }, [collapseAgentLane]);
-  const agentLaneFold = collapseAgentLane ? agentLaneFoldState : { taskId: _parsedTask?.id, collapsed: false, version: 0 };
+  }, [collapseAgentLaneFlag]);
 
   const [tasksPlayList, setTasksPlaylist] = useRecoilState(tasksPlayListAtom);
   const [__, setInboxTaskIndexAtom] = useRecoilState(InboxTaskIndexAtom);
