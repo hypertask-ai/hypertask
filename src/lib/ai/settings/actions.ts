@@ -18,7 +18,7 @@ export async function readSettingsPage(userId: number, scope: SettingsScope) {
       isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId),
       readThemeVisibility(userId),
     ]);
-    return { theme: normalizeThemePreference(scope.theme, true, visibility.restore || graphite2, visibility.restore) ?? "system", options: availableThemeOptions(rounded, graphite2, visibility) };
+    return { theme: normalizeThemePreference(scope.theme, true, graphite2, visibility.restore) ?? "system", options: availableThemeOptions(rounded, graphite2, visibility) };
   }
   if (scope.section === "notifications") {
     const settings = await prisma.userSetting.findUnique({
@@ -61,9 +61,6 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
   assertSettingPage(scope, change);
   if (change.kind === "theme") {
     const [graphite2, visibility] = await Promise.all([isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId), readThemeVisibility(userId)]);
-    if (!visibility.restore && graphite2 && (["graphite", "dia", "rounded"].includes(String(destination)) || (destination === "system" && change.value === "system"))) {
-      throw new Error("Theme is not available for your account.");
-    }
     if (destination === "rounded" && !(await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, userId))) {
       throw new Error("Material theme is not available for your account.");
     }
@@ -73,7 +70,7 @@ export async function readSettingChange(userId: number, scope: SettingsScope, ch
     if (visibility.restore && !availableThemeOptions(true, graphite2, visibility).some(option => option.value === destination)) {
       throw new Error("Theme is not available for your account.");
     }
-    return { label: "Theme", value: normalizeThemePreference(scope.theme, true, visibility.restore || graphite2, visibility.restore) ?? "system" };
+    return { label: "Theme", value: scope.theme === "graphite-2" ? scope.theme : normalizeThemePreference(scope.theme, true, graphite2, visibility.restore) ?? "system" };
   }
   if (change.kind === "notification") {
     const settings = await prisma.userSetting.findUnique({

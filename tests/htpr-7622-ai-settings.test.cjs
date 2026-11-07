@@ -811,13 +811,13 @@ test("Graphite 2 disabled blocks apply and undo destinations, without blocking e
 });
 
 
-test("retirement rejects old destinations and canonicalizes legacy cookies", async () => {
+test("Graphite 2 preserves old destinations and canonicalizes legacy cookies", async () => {
   const h = harness();
-  assert.deepEqual((await h.actions.readSettingsPage(6, themeScope)).options.map(x => x.value), ["porcelain", "amoled", "graphite-2"]);
+  assert.deepEqual((await h.actions.readSettingsPage(6, themeScope)).options.map(x => x.value), ["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", "rounded"]);
   for (const value of ["graphite", "dia", "rounded", "system"]) {
-    await assert.rejects(h.proposals.createSettingProposal(6, sessionId, themeScope, { kind: "theme", value }), /not available/);
+    await h.proposals.createSettingProposal(6, sessionId, themeScope, { kind: "theme", value });
   }
-  for (const [cookie, before] of [["graphite", "graphite-2"], ["dark", "graphite-2"], ["dia", "porcelain"], ["rounded", "system"]]) {
+  for (const [cookie, before] of [["graphite", "graphite"], ["dark", "graphite"], ["dia", "dia"], ["rounded", "rounded"]]) {
     const scope = { section: "appearance", theme: cookie === "dark" ? "graphite" : cookie };
     const card = await h.proposals.createSettingProposal(6, sessionId, scope, { kind: "theme", value: "amoled" });
     assert.equal(card.before, before);

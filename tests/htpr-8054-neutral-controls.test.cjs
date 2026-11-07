@@ -90,24 +90,24 @@ function renderRail({ enabled, wide, pathname, inboxRowFill, board = false }) {
 }
 
 for (const theme of ["light", "amoled", "graphite-2"]) {
-  test(`AI controls use the flag's colour in ${theme}`, () => {
+  test(`AI controls use theme-scoped colours in ${theme}`, () => {
     for (const enabled of [false, true]) {
       const doc = renderControls(enabled, theme);
       for (const selector of ["#writer", "#create-comment-ai-writer-button"]) {
         const control = doc.querySelector(selector);
         assert.ok(control, selector);
-        assert.equal(control.classList.contains("text-white-black"), enabled);
-        assert.equal(control.classList.contains("text-hypertasks-ai-purple"), !enabled);
+        assert.ok(control.classList.contains("text-hypertasks-ai-purple"));
+        assert.ok(control.classList.contains("[.graphite-2_&]:text-white-black"));
       }
     }
   });
 }
 
-test("rail controls and their RailItem wrappers use flag-controlled corners", () => {
+test("rail controls and their RailItem wrappers use theme-scoped corners", () => {
   for (const enabled of [false, true]) for (const wide of [false, true]) for (const board of [false, true]) {
     const doc = renderRail({ enabled, wide, board, pathname: "/my-tasks", inboxRowFill: false });
-    const expected = enabled ? "rounded-[4px]" : "rounded-[5px]";
-    const opposite = enabled ? "rounded-[5px]" : "rounded-[4px]";
+    const expected = "rounded-[5px]";
+    const scoped = "[.graphite-2_&]:rounded-[4px]";
     const labels = ["Your Kanban boards", "Go to inbox", "Board layout", "Table layout", "Go to calendar", "AI Chat", "Agents"];
     if (board) labels.push("Running timers");
     const selectors = labels.map((label) => `[aria-label="${label}"]`);
@@ -117,13 +117,13 @@ test("rail controls and their RailItem wrappers use flag-controlled corners", ()
       assert.ok(control, label);
       for (const element of [control, control.parentElement]) {
         assert.ok(element.classList.contains(expected), label);
-        assert.ok(!element.classList.contains(opposite), label);
+        assert.ok(element.classList.contains(scoped), label);
       }
     }
     for (const control of [doc.querySelector('[aria-label="New Task"]'), doc.querySelector('[aria-label="Go to pages"]')]) {
       assert.ok(control);
       assert.ok(control.classList.contains(expected));
-      assert.ok(!control.classList.contains(opposite));
+      assert.ok(control.classList.contains(scoped));
     }
   }
 });
@@ -132,9 +132,11 @@ test("AI Chat glyph preserves inbox row fill behavior when the ticket flag is of
   for (const enabled of [false, true]) for (const wide of [false, true]) for (const pathname of ["/inbox", "/my-tasks"]) for (const inboxRowFill of [false, true]) {
     const doc = renderRail({ enabled, wide, pathname, inboxRowFill });
     const chat = doc.querySelector('[aria-label="AI Chat"]');
-    const expected = enabled || (pathname === "/inbox" && inboxRowFill) ? iconoir.IconoirChat : iconoir.IconoirSparks;
-    const glyph = documentFor(React.createElement(expected, { size: 18, strokeWidth: 1.5 }), "");
-    assert.equal(chat.querySelector("svg").outerHTML, glyph.querySelector("svg").outerHTML);
+    const expected = pathname === "/inbox" && inboxRowFill ? iconoir.IconoirChat : iconoir.IconoirSparks;
+    const glyph = documentFor(React.createElement(expected, { size: 18, strokeWidth: 1.5, className: "[.graphite-2_&]:hidden" }), "");
+    const graphiteGlyph = documentFor(React.createElement(iconoir.IconoirChat, { size: 18, strokeWidth: 1.5, className: "[html:not(.graphite-2)_&]:hidden" }), "");
+    assert.equal(chat.querySelectorAll("svg")[0].outerHTML, graphiteGlyph.querySelector("svg").outerHTML);
+    assert.equal(chat.querySelectorAll("svg")[1].outerHTML, glyph.querySelector("svg").outerHTML);
     assert.equal(doc.querySelector("aside").hasAttribute("data-inbox-rail"), pathname === "/inbox" && inboxRowFill);
   }
 });

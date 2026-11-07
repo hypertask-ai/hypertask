@@ -141,6 +141,6 @@ html.graphite-2 {
   color: var(--color-text-light-gray) !important;
 }
 
-.graphite-2 svg.lucide:not(.keep-stroke) {
-  stroke-width: 1.5;
+.graphite-2 .app-shell-rail svg:not(.keep-stroke) {
+  stroke-width: 1.85;
 }

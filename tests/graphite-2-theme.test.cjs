@@ -50,10 +50,10 @@ test("legacy cookies migrate identically before and after hydration", () => {
 test("Appearance picker shows Graphite 2 only when enabled and selects the saved choice", () => {
   for (const enabled of [false, true]) for (const [currentTheme, effectiveTheme, selected] of [
     ["graphite-2", undefined, enabled ? "Graphite 2" : undefined],
-    ["system", "dark", enabled ? "AMOLED" : "Follow system"],
-    ["system", "light", enabled ? "Light" : "Follow system"],
-    [undefined, "dark", enabled ? "AMOLED" : "Follow system"],
-    [undefined, "light", enabled ? "Light" : "Follow system"],
+    ["system", "dark", "Follow system"],
+    ["system", "light", "Follow system"],
+    [undefined, "dark", "Follow system"],
+    [undefined, "light", "Follow system"],
   ]) {
     const writes = [];
     const { default: Appearance } = load("src/components/Modals/Settings/AppearanceSection.tsx", {
@@ -73,7 +73,7 @@ test("Appearance picker shows Graphite 2 only when enabled and selects the saved
     const rows = picker.type(picker.props).props.children;
     const row = rows.find(row => row.props.children[0].props.children === "Graphite 2");
     assert.equal(Boolean(row), enabled);
-    assert.deepEqual(rows.map(row => row.props.children[0].props.children), enabled ? ["Light", "AMOLED", "Graphite 2"] : ["Follow system", "Light · Porcelain", "Dark · Graphite", "OLED black · AMOLED", "Paper · Dia"]);
+    assert.deepEqual(rows.map(row => row.props.children[0].props.children), enabled ? ["Follow system", "Light · Porcelain", "Dark · Graphite", "Graphite 2", "OLED black · AMOLED", "Paper · Dia"] : ["Follow system", "Light · Porcelain", "Dark · Graphite", "OLED black · AMOLED", "Paper · Dia"]);
     assert.deepEqual(rows.filter(row => row.props.className.includes("bg-active-modal-element")).map(row => row.props.children[0].props.children), selected ? [selected] : []);
     if (enabled) {
       row.props.onClick();
@@ -112,7 +112,7 @@ test("Ctrl+K adds one command beside Graphite, dispatches it, and keeps old comm
   const off = commands(false);
   const command = on.find(command => command.key === "graphite2Theme");
   assert.equal(command.name, "Graphite 2");
-  assert.deepEqual(on.filter(item => item.key.endsWith("Theme")).map(item => item.name), ["Light", "AMOLED", "Graphite 2"]);
+  assert.deepEqual(on.filter(item => item.key.endsWith("Theme")).map(item => item.name), ["Follow system", "Light · Porcelain", "Dark · Graphite", "Graphite 2", "OLED black · AMOLED", "Paper · Dia"]);
   assert.deepEqual(off.filter(item => item.key.endsWith("Theme")).map(item => item.name), ["Follow system", "Light · Porcelain", "Dark · Graphite", "OLED black · AMOLED", "Paper · Dia"]);
   const writes = [];
   let closed = 0;
@@ -217,10 +217,10 @@ test("server document gates Graphite 2 without changing other saved themes", asy
   ];
   for (const [theme, off, on, restored] of [
     ["graphite-2", "system", "graphite-2", "graphite-2"],
-    ["graphite", "graphite", "graphite-2", "graphite"],
+    ["graphite", "graphite", "graphite", "graphite"],
     ["porcelain", "porcelain", "porcelain", "porcelain"],
     ["amoled", "amoled", "amoled", "amoled"],
-    ["dia", "dia", "porcelain", "dia"],
+    ["dia", "dia", "dia", "dia"],
   ]) for (const [enabled, restore, expected] of [[false, false, off], [true, false, on], [true, true, restored]]) {
     const { default: RootLayout } = load("src/app/layout.tsx", {
       ...Object.fromEntries(unused.map(name => [name, {}])),
@@ -357,5 +357,17 @@ test("appearance picker and theme commands wait for visibility and show only ena
       .flatMap(group => group.commandLists).map(command => command.key);
     assert.deepEqual(["systemTheme", "lightTheme", "darkTheme", "amoledTheme", "paperTheme"].filter(key => keys.includes(key)),
       visibility.loaded ? ["systemTheme", "lightTheme", "amoledTheme"] : []);
+  }
+});
+
+
+test("Graphite 2 availability never changes legacy choices or component styling", () => {
+  for (const rounded of [false, true]) {
+    assert.deepEqual(preferences.availableThemeOptions(rounded, true, { restore: false, loaded: true }).map(option => option.value),
+      ["system", "porcelain", "graphite", "graphite-2", "amoled", "dia", ...(rounded ? ["rounded"] : [])]);
+    assert.equal(preferences.normalizeThemePreference("graphite", rounded, true), "graphite");
+  }
+  for (const file of ["src/components/PageComponents/Kanban/HeaderComponents/AppShellRail.tsx", "src/components/Common/AIWriterButton.tsx", "src/components/Common/AttachmentsUpload/AttachmentControls.tsx", "src/components/PageComponents/TaskDetail/MainPageComponents/TaskInfoLabel.tsx", "src/components/PageComponents/TaskDetail/MainPageComponents/index.tsx"]) {
+    assert.doesNotMatch(fs.readFileSync(path.join(root, file), "utf8"), /useFlag\(HTPR_8054_GRAPHITE_2_FLAG\)/);
   }
 });

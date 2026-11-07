@@ -48,7 +48,8 @@ export async function POST(request: NextRequest) {
       const [graphite2, visibility] = await Promise.all([
         isFeatureEnabled(HTPR_8054_GRAPHITE_2_FLAG, userId), readThemeVisibility(userId),
       ]);
-      scope = { ...input.data.scope, theme: normalizeThemePreference(request.cookies.get("theme")?.value, true, visibility.restore || graphite2, visibility.restore) ?? "system" };
+      const savedTheme = request.cookies.get("theme")?.value;
+      scope = { ...input.data.scope, theme: savedTheme === "graphite-2" ? savedTheme : normalizeThemePreference(savedTheme, true, graphite2, visibility.restore) ?? "system" };
     }
     const result = await actOnSettingProposal(userId, input.data.id, input.data.action, scope);
     const response = NextResponse.json(result);
