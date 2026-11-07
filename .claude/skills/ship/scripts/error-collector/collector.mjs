@@ -8,7 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
-import { renderPlainLanguageTicketDescription } from '../../../../src/lib/tickets/plainLanguageTicket.mjs';
+import { renderPlainLanguageTicketDescription } from '../../../../../src/lib/tickets/plainLanguageTicket.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
