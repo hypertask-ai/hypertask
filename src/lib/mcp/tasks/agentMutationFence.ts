@@ -54,7 +54,7 @@ export class TaskTeamScopeError extends Error {
 }
 
 export async function lockAgentMutationFence(
-  tx: Prisma.TransactionClient,
+  tx: { $executeRaw: Prisma.TransactionClient["$executeRaw"] },
   taskId: number
 ): Promise<void> {
   await tx.$executeRaw`
@@ -62,6 +62,9 @@ export async function lockAgentMutationFence(
       CAST(${AGENT_MUTATION_LOCK_NAMESPACE} AS integer),
       CAST(${taskId} AS integer)
     )
+  `
+  await tx.$executeRaw`
+    SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE
   `
 }
 
