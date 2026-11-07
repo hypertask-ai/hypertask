@@ -6,6 +6,7 @@ import {
   validateManagementOrSessionAuth,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
+import { resolveAgentTeamScope } from '@/lib/auth/agentTeamScope'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import { hasManagementWritePermission } from '@/lib/mcp/managementPermissions'
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
@@ -110,7 +111,7 @@ export async function handleRotateAgentTokenRequest(
       runtimeType: 'EXTERNAL',
       ...agentScope,
     },
-    select: { id: true, runtimeGeneration: true },
+    select: { id: true, runtimeGeneration: true, credentialTeamId: true, credentialTeamAccessBinding: true },
   })
   if (!agent) {
     return NextResponse.json(
@@ -119,13 +120,21 @@ export async function handleRotateAgentTokenRequest(
     )
   }
 
-  const teamScope = managementAgentTokenScope(ctx.management)
+  let teamScope
+  try {
+    teamScope = managementAgentTokenScope(ctx.management) ?? await resolveAgentTeamScope(ctx.user.id, agent)
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Agent team grant is no longer valid' },
+      { status: 403 }
+    )
+  }
   const token = createMcpToken(
     ctx.user.id,
     ctx.user.email,
     undefined,
     agent.id,
-    teamScope
+    teamScope ?? undefined
   )
   const updated = await prisma.agent.updateMany({
     where: {
@@ -155,5 +164,5 @@ export async function handleRotateAgentTokenRequest(
     success: true,
     token,
     message: 'Store this token securely. It will not be shown again.',
-  })
+  }, { headers: { 'Cache-Control': 'no-store' } })
 }

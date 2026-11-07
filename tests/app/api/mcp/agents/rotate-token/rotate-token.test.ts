@@ -143,7 +143,7 @@ async function demo() {
     let managementUpdate: Record<string, any> | undefined
     prismaMock.agent.findFirst = async (args: Record<string, any>) => {
       managementOwnershipQuery = args
-      return { id: 'owned-agent', runtimeGeneration: 0 }
+      return { id: 'owned-agent', runtimeGeneration: 0, credentialTeamId: null, credentialTeamAccessBinding: null }
     }
     prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       managementUpdate = args
@@ -174,7 +174,7 @@ async function demo() {
       if (args.select?.mcpTokenJti) {
         return stored ? { id: 'owned-agent', ...stored } : null
       }
-      return { id: 'owned-agent', runtimeGeneration: 0 }
+      return { id: 'owned-agent', runtimeGeneration: 0, credentialTeamId: null, credentialTeamAccessBinding: null }
     }
     prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       updateNumber += 1

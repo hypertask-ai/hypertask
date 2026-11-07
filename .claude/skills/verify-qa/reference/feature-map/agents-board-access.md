@@ -52,3 +52,27 @@ An agent that enters cross-team use keeps its original team durably. Turning the
 Mention results come from `GET /api/tasks/searchByParam?param=<name>&projectId=<board>`. Assignment options come from `GET /api/members/getAllForAssignees?projectId=<board>` (`boardAgents`). The board agent list uses `GET /api/agents/all?projectId=<board>`. Each must contain the same agent ID only after an explicit Accepted board grant. Never confuse a register candidate with an assigned board member. Team agent responses must not expose another team's boards or comment timestamps.
 
 Use QA 985 for browser evidence. A specifically requested real-board check may use authorized read-only CLI/API surfaces, not the owner's browser or cookies. Record any inaccessible picker as UNREACHABLE, with the exact permission reason; an API membership record alone is not visual picker proof.
+
+## Existing-agent login recovery
+
+For HTPR-8861, use one recorded throwaway EXTERNAL agent owned by QA 985 on
+sandbox board 7049. Never rotate a fleet lead or an existing QA watcher.
+
+- Capture the existing Access key panel in Light, AMOLED and Graphite 2 before
+  changing it. Revoke only this run's fixture. The old panel disables Generate a key.
+- With `htpr-8861-agent-login-recovery` at Owner + QA, the same panel permits
+  Generate a key for that revoked fixture. Record the unchanged agent ID and
+  board grants; do not capture the displayed credential.
+- Keep the new token in memory only. Verify `/api/mcp/hello` accepts it, and a
+  previously issued token remains refused. Reload the owner detail: no plaintext
+  token may return from the read API or remain visible after reload.
+- An agent session and a different owner cannot issue a login. Removed team
+  bindings must fail closed rather than issuing an unbound credential.
+- CLI `agents rotate-token --id <fixture-id>` uses the same identity, with either
+  an owner login or an authorized management key. Native `status` verifies the
+  current credential with the server and exits nonzero for revoked logins;
+  unreachable servers are unverified, not authenticated. `status` must not refresh.
+- Native `update` checks public GitHub releases without sending Hypertask
+  credentials. Authentication errors name the recovery page and commands.
+- Keep the flag restricted until another runner completes visual QA. Clean up
+  only this run's recorded fixture through its owner detail surface.
