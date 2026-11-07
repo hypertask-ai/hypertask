@@ -2084,7 +2084,7 @@ test("first placement of an existing local component needs a flag", async (t) =>
 
 test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
   const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
-  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller could bypass authorization." } }';
   const ownerRequest = 'ownerRequest: { quote: "Keep this Owner only for now.", ticketUrl: "https://app.hypertask.ai/detail/project-15/2" }';
   const requested = `releaseRisk: { risk: "new", reason: "Fixture", ${ownerRequest} }`;
   for (const [extra, pass, message] of [
@@ -2104,8 +2104,8 @@ test("added-file default policy preserves existing flags and requires explicit E
     [`defaultMode: "OFF", ${requested}`, false, /must set defaultMode: "EVERYONE"/],
     [requested, false, /must set defaultMode: "EVERYONE"/],
     [`defaultMode: "EVERYONE", ${requested}`, true],
-    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, true],
-    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
+    [`defaultMode: "OWNER_AND_QA", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller could bypass authorization." }, ${ownerRequest} }`, true],
+    [`defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller could bypass authorization." }, ${ownerRequest} }`, false, /releaseRisk\.highRisk may not default to Everyone/],
     [`kind: "bugfix", ${risk}`, true],
     [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
     [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
@@ -2838,10 +2838,69 @@ export default { key: OTHER_FLAG, kind: "bugfix", defaultMode: "OWNER_AND_QA", s
     writeFile(dir, "src/lib/flags/keys.ts", `export { OTHER_FLAG } from "./definitions/htpr-1-other";`);
     const base = commit(git, "existing money flag");
     writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
-export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money" } } as const;`);
+export default { key: NEW_FLAG, kind: "bugfix", defaultMode: "${mode}", shippedOn: "2026-10-28", description: "New money flag", releaseRisk: { risk: "small", reason: "Paid reporting", highRisk: "money", harmEvidence: { harm: "charge", scenario: "A customer could be charged." } } } as const;`);
     const head = commit(git, "new money flag");
     const result = await evaluate("HTPR-2 [BUGFIX] money fixture", base, head, dir);
     assert.equal(result.pass, mode === "OWNER_AND_QA", result.reason);
     if (["OFF", "OWNER_ONLY"].includes(mode)) assert.match(result.reason, /new money flag htpr-2-new must set defaultMode: "OWNER_AND_QA"/);
+  }
+});
+
+test("lasting harm evidence is required for new or changed high-risk metadata", async (t) => {
+  const scenarios = [
+    ['highRisk: "money", harmEvidence: { harm: "charge", scenario: "A customer is charged." }', true],
+    ['highRisk: "access", harmEvidence: { harm: "private-data-exposure", scenario: "Another team can read private tickets." }', true],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller bypasses authorization." }', true],
+    ['highRisk: "data-deletion", harmEvidence: { harm: "permanent-deletion", scenario: "A ticket is deleted permanently." }', true],
+    ['highRisk: "customer-email", harmEvidence: { harm: "customer-email", scenario: "Customers receive an unsolicited email." }', true],
+    ['highRisk: "access"', false],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: " " }', false],
+    ['highRisk: "access", harmEvidence: { harm: "permanent-deletion", scenario: "Deletes data." }', false],
+    ['highRisk: "access", harmEvidence: { harm: "owner-agent-action", scenario: "An owner acts as their agent." }', false],
+    ['highRisk: "money", harmEvidence: { harm: "ai-usage", scenario: "Uses AI." }', false],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", harm: "auth-bypass" }', false],
+    ['highRisk: "access", harmEvidence: { harm: "auth-bypass", unknown: "A caller bypasses authorization." }', false],
+    ['highRisk: "access", harmEvidence: "auth-bypass"', false],
+    ['harmEvidence: { harm: "auth-bypass", scenario: "A caller bypasses authorization." }', false],
+  ];
+  for (const [metadata, pass] of scenarios) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", ${metadata} } } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "new risk"), dir);
+    assert.equal(result.pass, pass, `${metadata}: ${result.reason}`);
+  }
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const file = "src/lib/flags/definitions/htpr-1-other.ts";
+  const legacy = `export const OTHER_FLAG = "htpr-1-other";
+export default { key: OTHER_FLAG, defaultMode: "OWNER_AND_QA", shippedOn: "2026-10-20", description: "Legacy", releaseRisk: { risk: "new", reason: "Legacy risk", highRisk: "access" } } as const;`;
+  writeFile(dir, file, legacy);
+  const base = commit(git, "legacy");
+  writeFile(dir, file, legacy.replace('description: "Legacy"', 'description: "Updated"'));
+  assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "unrelated edit"), dir)).pass, true);
+  writeFile(dir, file, legacy.replace('reason: "Legacy risk"', 'reason: "Changed risk"'));
+  const changed = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "changed risk"), dir);
+  assert.equal(changed.pass, false);
+  assert.match(changed.reason, /harmEvidence/);
+  writeFile(dir, file, legacy.replace('"htpr-1-other"', '"htpr-2-new"'));
+  const replaced = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "replace key"), dir);
+  assert.equal(replaced.pass, false);
+  assert.match(replaced.reason, /filename must match the flag key/);
+  writeFile(dir, file, legacy.replace('highRisk: "access"', 'highRisk: "access", harmEvidence: { harm: "auth-bypass", scenario: "A caller bypasses authorization." }'));
+  assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "evidence"), dir)).pass, true);
+});
+
+test("owner-scoped agent actions and ordinary AI use can default to Everyone", async (t) => {
+  for (const reason of ["Owner acts as their own agent.", "Uses AI for ordinary assistance."]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, defaultMode: "EVERYONE", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "${reason}" } } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "safe feature"), dir);
+    assert.equal(result.pass, true, result.reason);
   }
 });
