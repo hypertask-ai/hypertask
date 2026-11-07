@@ -1,8 +1,22 @@
+import { buildFieldError } from '@/lib/mcp/fieldError'
+
 export const mcpTaskRelationTypes = [
   'RelatedTo',
   'BlockedBy',
   'BlockedTo',
 ] as const
+
+export const taskRelationTypeHelp =
+  'relation_type is RelatedTo, BlockedBy or BlockedTo'
+
+export function invalidTaskRelationTypeBody() {
+  return buildFieldError(
+    'invalid_field',
+    'relation_type',
+    `relation_type must be one of ${mcpTaskRelationTypes.join(', ')}`,
+    mcpTaskRelationTypes
+  )
+}
 
 export type McpTaskRelationType = (typeof mcpTaskRelationTypes)[number]
 

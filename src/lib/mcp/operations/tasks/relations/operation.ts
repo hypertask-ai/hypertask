@@ -6,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
 import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
-import { normalizeTaskRelationType } from '@/lib/mcp/tasks/relationType'
+import { invalidTaskRelationTypeBody, normalizeTaskRelationType } from '@/lib/mcp/tasks/relationType'
 import {
   findTaskByIdentifier,
   taskIdentifierErrorResponse,
@@ -126,9 +126,7 @@ export async function POST(request: NextRequest) {
 
   const relationType = normalizeTaskRelationType(relation_type)
   if (relationType === null) {
-    return validationError(
-      'relation_type must be one of RelatedTo, BlockedBy, or BlockedTo'
-    )
+    return NextResponse.json(invalidTaskRelationTypeBody(), { status: 400 })
   }
 
   let sourceTask

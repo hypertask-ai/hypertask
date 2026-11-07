@@ -78,7 +78,7 @@
   "source_task_id": "Numeric source ticket id for a link or unlink action.",
   "source_ticket_number": "Stable source ticket key, for example HTPR-1234.",
   "source_unique_index": "Source ticket number within source_project_id; both fields must be supplied together.",
-  "status": "Storage state for tasks or projects (Normal, Archive, Deleted), or decision state where supported; not a workflow column.",
+  "status": "Storage state for tasks or projects (Normal, Archive, Deleted), or decision state where supported; not a workflow column. Done is a column, so set section to mark a ticket done.",
   "summary": "Request the shorter ticket-context representation when true.",
   "target_project_id": "Destination board id for a move, or target board id for relation identification.",
   "target_task_id": "Numeric target ticket id for a link or unlink action.",

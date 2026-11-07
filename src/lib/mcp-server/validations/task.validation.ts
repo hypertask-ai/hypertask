@@ -15,6 +15,7 @@ import {
   createSearchPaginationSchema,
 } from './common/pagination';
 import { TASK_SEARCH_SORT_FIELDS } from '@/lib/mcp/listQuery';
+import { taskRelationTypeHelp } from '@/lib/mcp/tasks/relationType';
 import { listQueryToolSchema, withListQuerySchema } from './common/listQuery';
 import {
   priorityFilterNoNoneSchema,
@@ -168,7 +169,7 @@ export function getLinkTasksBaseSchema() {
       relation_type: z
         .enum(['RelatedTo', 'BlockedBy', 'BlockedTo'])
         .optional()
-        .describe('Required when action is link.'),
+        .describe(`${taskRelationTypeHelp}. Required when action is link.`),
     })
     .strict();
 }
@@ -262,7 +263,7 @@ export function getLinkTasksInputSchema() {
     .refine(
       (data) => data.action !== 'link' || data.relation_type !== undefined,
       {
-        message: 'relation_type is required for link',
+        message: 'relation_type is required for link and must be RelatedTo, BlockedBy or BlockedTo',
         path: ['relation_type'],
       }
     );

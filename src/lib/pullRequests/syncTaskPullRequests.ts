@@ -10,6 +10,7 @@ import {
   type PullRequestDisplayState,
   type PullRequestLifecycle,
 } from "./githubPullRequests";
+import { lockPullRequestIdentity } from "./taskPullRequests";
 
 interface PullRequestWebhookUpdate {
   boardId: number;
@@ -85,6 +86,12 @@ export async function syncPullRequestFromWebhook(
   input: PullRequestWebhookUpdate,
 ): Promise<{ linked: number; updated: number; taskIds: number[] }> {
   return prisma.$transaction(async (transaction) => {
+    await lockPullRequestIdentity(
+      transaction,
+      input.repositoryOwner,
+      input.repositoryName,
+      input.number,
+    )
     const existingLinks = await transaction.taskPullRequest.findMany({
       where: {
         repositoryOwner: input.repositoryOwner,
@@ -101,13 +108,11 @@ export async function syncPullRequestFromWebhook(
     let taskIds = [...new Set(existingLinks.map((link) => link.taskId))];
     const affectedTaskIds: number[] = [];
     if (taskIds.length === 0) {
-      const globallyLinked = await transaction.taskPullRequest.findUnique({
+      const globallyLinked = await transaction.taskPullRequest.findFirst({
         where: {
-          repositoryOwner_repositoryName_number: {
-            repositoryOwner: input.repositoryOwner,
-            repositoryName: input.repositoryName,
-            number: input.number,
-          },
+          repositoryOwner: input.repositoryOwner,
+          repositoryName: input.repositoryName,
+          number: input.number,
         },
         select: { id: true },
       });
