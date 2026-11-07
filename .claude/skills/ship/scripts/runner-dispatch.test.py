@@ -94,6 +94,8 @@ class DispatchTests(unittest.TestCase):
     def test_blocked_comments_are_read_for_checkpoint_protection(self):
         self.boards[15][0]["section"] = "Agent Blocked (Infra)"
         self.boards[4060][0]["section"] = "Agent Blocked"
+        self.commands.side_effect = None
+        self.commands.return_value = json.dumps({"success": True, "activities": []})
         with patch.object(m, "pages", return_value=[]) as pages:
             comments = m.read_comments(self.boards)
         for ticket in ("HTPR-1", "YPER4-1"):
