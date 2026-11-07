@@ -580,6 +580,13 @@ EOF
 chmod +x "$D/ht4060fail"
 eq "board 4060 read fails -> app hold" "$(SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 4
 eq "board 4060 read fails -> every claim held" "$(SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
+free_infra YPER4-8 'assigned to a human'; jq '.tasks[0].assignees=[{displayName:"Chief Of Staff"}]' "$HOLD_INFRA" > "$D/next"; mv "$D/next" "$HOLD_INFRA"
+eq "human-assigned Backlog infra ticket never blocks an app claim" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+prs 5; free_infra YPER4-4 free
+eq "picked by the launcher, free infra waits -> app claim allowed" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 0
+eq "picked by the launcher, board 4060 unreadable -> app claim allowed" "$(SHIP_CLAIM_PICKED=1 SHIP_CLAIM_HYPERTASK=$D/ht4060fail SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold HTPR-1 >/dev/null 2>&1; echo $?)" 0
+prs 21; eq "picked by the launcher, queue full -> app claim still held" "$(SHIP_CLAIM_PICKED=1 holdrc 'RUNNER 6' HTPR-1)" 4
+prs 5; empty_infra
 prs 5; eq "PR read fails -> hold" "$(HOLD_OPEN_FAIL=1 SHIP_SESSION_NAME='RUNNER 6' ./ship-claim hold YPER4-2 >/dev/null 2>&1; echo $?)" 4
 prs_own 21 runner6/htpr-7-x HTPR-7
 eq "own open app PR ticket, queue full -> allowed" "$(holdrc 'RUNNER 6' HTPR-7)" 0
