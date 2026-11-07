@@ -51,6 +51,7 @@ interface IProp {
   cancelButtonId?: string;
   compactListeningPill?: boolean;
   compactRecordingPill?: boolean;
+  primaryMic?: boolean;
 }
 
 const DEVICE_STORAGE_KEY = "ht-dictation-deviceId";
@@ -88,6 +89,7 @@ export const AudioButton = ({
   cancelButtonId,
   compactListeningPill = false,
   compactRecordingPill = false,
+  primaryMic = false,
 }: IProp) => {
   const showCompactPill = compactListeningPill || compactRecordingPill;
   const activeRef = useRef(active);
@@ -139,7 +141,7 @@ export const AudioButton = ({
       "ai-writer-audio-button",
       "inline-draft-ai-audio-button",
     ].includes(id));
-  const primaryDesktopAiMic = isDesktopAiMic && isAiChat && compactListeningPill;
+  const primaryDesktopAiMic = !isMobileView && compactListeningPill && ((isDesktopAiMic && isAiChat) || primaryMic);
   const currentProject = useRecoilValue(currentProjectAtom);
   const resolvedProjectId =
     projectIdProp === undefined ? currentProject?.id : projectIdProp ?? undefined;
@@ -742,7 +744,7 @@ export const AudioButton = ({
                       <span className="text-dense">Transcribing...</span>
                     )}
                   </>
-                ) : isDesktopAiMic ? (
+                ) : isDesktopAiMic || primaryDesktopAiMic ? (
                   <svg
                     width="18"
                     height="18"
@@ -872,6 +874,7 @@ export const AudioButton = ({
         >
           <button
             type="button"
+            id={stopButtonId}
             data-ai-chat-recording-submit={isAiChat || undefined}
             onClick={() => stopRecording(true)}
             aria-label="Stop dictation"
