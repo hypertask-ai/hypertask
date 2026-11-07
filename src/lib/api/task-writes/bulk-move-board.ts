@@ -14,14 +14,20 @@ import { BULK_MOVE_BOARD_LIMIT } from "@/lib/kanbanBulkSelection";
 
 const positiveId = z.number().int().positive();
 
+export async function refuseBulkMoveBoardWhenFlagOff(userId: number) {
+  if (!(await isFeatureEnabled(HTPR_8737_BULK_MOVE_BOARD_FLAG, userId))) {
+    return NextResponse.json({ message: "Not found" }, { status: 404 });
+  }
+  return null;
+}
+
 export const POST = taskWriteRoute({
   schema: z.object({ ids: z.array(positiveId).min(1).max(BULK_MOVE_BOARD_LIMIT), sourceProjectId: positiveId, projectId: positiveId, sectionId: positiveId, agentId: z.string().optional() }),
   validationMessage: "Invalid move request",
   prepare: async (session) => ({ session, currentUser: await loadSessionUserRecord(session.userId) }),
   operation: async ({ ids, sourceProjectId, projectId, sectionId }, { session, currentUser }) => {
-    if (!(await isFeatureEnabled(HTPR_8737_BULK_MOVE_BOARD_FLAG, session.userId))) {
-      return NextResponse.json({ message: "Not found" }, { status: 404 });
-    }
+    const refused = await refuseBulkMoveBoardWhenFlagOff(session.userId);
+    if (refused) return refused;
     if (sourceProjectId === projectId) {
       return NextResponse.json({ message: "Choose another board" }, { status: 400 });
     }
