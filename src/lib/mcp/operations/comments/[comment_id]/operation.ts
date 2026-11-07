@@ -1,5 +1,5 @@
 import { AgentWritingError } from '@/lib/agents/writing'
-import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
+import { enforcePeopleCommentEdit } from '@/lib/agents/writingEnforcement'
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
@@ -351,7 +351,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       }
     }
 
-    await enforceAgentWriting(ctx.user.id, ctx.agentId, { text: sanitizedText }, { text: comment.text })
+    await enforcePeopleCommentEdit(ctx.user.id, ctx.agentId, sanitizedText, comment.text)
     const updatedComment = await updateCommentService({
       commentId,
       text: sanitizedText,

@@ -1,6 +1,7 @@
 import { assertAgentWriting, type AgentWritingContext } from '@/lib/agents/writing'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules'
+import { HTPR_8889_PEOPLE_COMMENT_WRITING_FLAG } from '@/lib/flags/definitions/htpr-8889-people-comment-writing'
 import { YPER4_910_AGENT_WRITING_FLAG } from '@/lib/flags/definitions/yper4-910-agent-writing'
 
 export async function agentWritingPolicyEnabled(userId: number): Promise<boolean> {
@@ -19,6 +20,25 @@ async function houseRulesEnabled(userId: number, context: AgentWritingContext): 
   } catch {
     return true
   }
+}
+
+export async function peopleCommentWholeCheckEnabled(userId: number): Promise<boolean> {
+  try {
+    return await isFeatureEnabled(HTPR_8889_PEOPLE_COMMENT_WRITING_FLAG, userId)
+  } catch {
+    return true
+  }
+}
+
+export async function enforcePeopleCommentEdit(
+  userId: number,
+  agentId: string | null | undefined,
+  text: string,
+  previousText: string,
+): Promise<void> {
+  if (!agentId) return
+  const previous = await peopleCommentWholeCheckEnabled(userId) ? {} : { text: previousText }
+  await enforceAgentWriting(userId, agentId, { text }, previous)
 }
 
 export async function enforceAgentWriting(
