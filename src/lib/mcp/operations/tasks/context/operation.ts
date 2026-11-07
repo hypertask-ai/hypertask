@@ -5,7 +5,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 
 import prisma from '@/lib/prisma';
-import { mapRelatedTaskContext, relatedTaskContextSelect } from '@/lib/mcp/tasks/relatedTaskContext';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_8896_SKIP_TAKEN_WORK_FLAG } from '@/lib/flags/definitions/htpr-8896-skip-taken-work';
+import { loadTaskAgentActivities, mapRelatedTaskContext, relatedTaskContextSelect } from '@/lib/mcp/tasks/relatedTaskContext';
 import { extractPrLinks } from '@/lib/mcp/tasks/extractPrLinks';
 import {
   derivePullRequestDisplayState,
@@ -281,6 +283,18 @@ export async function GET(request: NextRequest) {
         ...legacyPullRequestUrls,
       ]),
     ];
+    const showActiveLog = await isFeatureEnabled(
+      HTPR_8896_SKIP_TAKEN_WORK_FLAG,
+      ctx.user.id,
+    );
+    const agentActivities = showActiveLog
+      ? await loadTaskAgentActivities(
+          { id: resolvedTask.id, projectId },
+          ctx.user.id,
+          relatedTaskAccess,
+          true,
+        )
+      : undefined;
 
     return NextResponse.json({
       success: true,
@@ -303,6 +317,7 @@ export async function GET(request: NextRequest) {
       subtasks: mappedTask.sub_tasks,
       relatedTasks,
       comments,
+      ...(agentActivities ? { agentActivities } : {}),
       pullRequests,
       linkedPRs,
       linkedPRsTruncated: commentCount > PR_LINK_SCAN_LIMIT,

@@ -6,11 +6,12 @@ import { Prisma } from "@prisma/client";
 import { buildLimitedScanMetadata } from "@/app/api/ai/chat/stream/bulkTools";
 import { loadDoneTitlesByProject } from "@/utils/controllers/notifications/inboxZero";
 import { columnRole } from "@/lib/mcp/boards/columnRole";
-import { blockerStillOpen } from "@/lib/mcp/tasks/blockerStillOpen";
 import { priorityScore } from "@/lib/mcp/tasks/priorityScore";
 import { otherAgentAssigneeWhere } from "@/lib/mcp/tasks/otherAgentAssignee";
+import { hasOpenRecordedBlocker, takenWorkWhere } from "@/lib/mcp/tasks/takenWork";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from "@/lib/flags/definitions/htpr-8786-picker-skips-other-agents";
+import { HTPR_8896_SKIP_TAKEN_WORK_FLAG } from "@/lib/flags/definitions/htpr-8896-skip-taken-work";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
@@ -65,6 +66,10 @@ export function createNextTasksTool(context: ToolContext) {
               user.id,
             )
           : false;
+        const skipTaken = await isFeatureEnabled(
+          HTPR_8896_SKIP_TAKEN_WORK_FLAG,
+          user.id,
+        );
         const where: Prisma.TaskWhereInput = {
           projectId: input.project_id,
           project: projectAccessWhere,
@@ -92,6 +97,7 @@ export function createNextTasksTool(context: ToolContext) {
           ...(actingAgentId && skipOtherAgents
             ? otherAgentAssigneeWhere(actingAgentId)
             : {}),
+          ...(skipTaken ? takenWorkWhere(actingAgentId) : {}),
         };
 
         const scanLimit = 500;
@@ -141,28 +147,19 @@ export function createNextTasksTool(context: ToolContext) {
         );
         const tasks = scannedTasks.slice(0, scanLimit);
 
-        const blockersOf = (task: (typeof tasks)[number]) => [
-          ...task.relatedFromTasks.map((relation) => relation.targetTask),
-          ...task.relatedToTasks.map((relation) => relation.sourceTask),
+        const blockerProjectIds = (task: (typeof tasks)[number]) => [
+          ...task.relatedFromTasks.map((relation) => relation.targetTask.projectId),
+          ...task.relatedToTasks.map((relation) => relation.sourceTask.projectId),
         ];
-        const doneTitlesByProject = input.exclude_blocked
+        const leaveOutBlockers = input.exclude_blocked || skipTaken;
+        const doneTitlesByProject = leaveOutBlockers
           ? await loadDoneTitlesByProject(
-            tasks.flatMap((task) =>
-              blockersOf(task).map((blocker) => blocker.projectId)
-            ),
+            tasks.flatMap((task) => blockerProjectIds(task)),
             (title) => columnRole(title) === "done"
           )
           : new Map<number, Set<string>>();
-        const candidates = input.exclude_blocked
-          ? tasks.filter(
-            (task) =>
-              !blockersOf(task).some((blocker) =>
-                blockerStillOpen(
-                  blocker,
-                  doneTitlesByProject.get(blocker.projectId)
-                )
-              )
-          )
+        const candidates = leaveOutBlockers
+          ? tasks.filter((task) => !hasOpenRecordedBlocker(task, doneTitlesByProject))
           : tasks;
         const rankedTasks = candidates
           .map((task) => ({
