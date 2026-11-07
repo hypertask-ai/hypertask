@@ -312,9 +312,12 @@ if [ -s "$cache" ]; then
   [[ $run =~ ^[A-Za-z0-9-]+$ ]] || fail 'invalid cached run id'
 fi
 open_run() {
-  local task_id
-  task_id=$(hypertask tasks get "$ticket" --json | jq -er '.tasks[0].id') || fail "cannot read $ticket"
-  request POST agents/runs "$(jq -nc --argjson id "$task_id" '{taskId:$id,source:"runtime"}')"
+  local task_json task_id project_id board_number
+  task_json=$(hypertask tasks get "$ticket" --json) || fail "cannot read $ticket"
+  task_id=$(jq -er '.tasks[0].id' <<<"$task_json") || fail "cannot read $ticket"
+  project_id=$(jq -er '.tasks[0].projectId' <<<"$task_json") || fail "cannot read $ticket"
+  board_number=$(jq -er '.tasks[0].uniqueIndex' <<<"$task_json") || fail "cannot read $ticket"
+  request POST agents/runs "$(jq -nc --argjson id "$task_id" --argjson project "$project_id" --argjson board "$board_number" '{taskId:$id,projectId:$project,boardNumber:$board,source:"runtime"}')"
   success
   run=$(jq -er '.run.id | select(type == "string" and test("^[A-Za-z0-9-]+$"))' "$body") || fail 'open returned no run id'
   printf '%s\n' "$run" > "$cache"
