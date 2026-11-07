@@ -12,10 +12,7 @@ import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
 import { Prisma } from "@prisma/client";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
-import { AgentWritingError } from "@/lib/agents/writing";
-import { enforceAgentWriting } from "@/lib/agents/writingEnforcement";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_8905_SHARED_TICKET_WRITING_FLAG } from "@/lib/flags/definitions/htpr-8905-shared-ticket-writing";
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { getNextUniqueTaskIndex } from "@/utils/controllers/tasks/getNextUniqueTaskIndex";
@@ -199,12 +196,14 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     let sharedWriting = false;
     if (agentId) {
       try {
-        sharedWriting = await isFeatureEnabled(HTPR_8905_SHARED_TICKET_WRITING_FLAG, userId);
+        sharedWriting = await isFeatureEnabled("htpr-8905-shared-ticket-writing", userId);
       } catch {
         sharedWriting = true;
       }
     }
     if (sharedWriting) {
+      const { enforceAgentWriting } = require("@/lib/agents/writingEnforcement") as typeof import("@/lib/agents/writingEnforcement");
+      const { AgentWritingError } = require("@/lib/agents/writing") as typeof import("@/lib/agents/writing");
       try {
         await enforceAgentWriting(userId, agentId, { title, description: storedDescription }, {}, { create: true });
       } catch (error) {
