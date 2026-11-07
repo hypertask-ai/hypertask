@@ -523,9 +523,9 @@ if [ "$fails" = 0 ]; then echo 'ship-claim completion-hold ok'; fi
 # Queue brake and infra first (YPER4-880), on the same hold stubs.
 export HOLD_INFRA=$D/infra.json
 prs() { jq -n --argjson n "$1" --argjson d "${2:-0}" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
 prs_own() { jq -n --argjson n "$1" --arg own "$2" --arg tk "$3" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: $own, title: "\($tk) [INFRA] own open work", isDraft: false}]' > "$HOLD_OPEN"; }
 free_infra() { jq -n --arg tk "$1" --arg ti "$2" \
   '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:4060,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
