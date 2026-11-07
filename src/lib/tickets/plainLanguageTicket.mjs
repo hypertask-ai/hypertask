@@ -1,4 +1,3 @@
-import { parse } from "node-html-parser";
 import { plainPageName, plainProblem } from "../errors/plainIncident.mjs";
 
 export const PLAIN_LANGUAGE_TICKET_LABELS = [
@@ -13,17 +12,34 @@ const TEMPLATE_DOC = "docs/ticket-template.md";
 
 function labelPattern(label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  return new RegExp(`(?:^|\\n)\\s*(?:\\*\\*)?${escaped}\\s*[:.]?(?:\\*\\*)?(?=\\s|$)`, "i");
+  return new RegExp(`(?:^|\\s)${escaped}\\s*:(?=\\s)`, "i");
 }
 
 function openingLabelPattern(label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-  return new RegExp(`^\\s*(?:\\*\\*)?${escaped}\\s*[:.]?(?:\\*\\*)?(?=\\s|$)`, "i");
+  return new RegExp(`^\\s*${escaped}\\s*:(?=\\s)`, "i");
+}
+
+function structuredText(html) {
+  return html
+    .replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, "\n")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&amp;/gi, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function hasPlainLanguageTicketBlock(html) {
   if (typeof html !== "string" || !html.trim()) return false;
-  const source = parse(html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, "\n")).structuredText;
+  const source = structuredText(html);
   const trimmed = source.trimStart();
   const opener = openingLabelPattern(PLAIN_LANGUAGE_TICKET_LABELS[0]);
   const atStart = trimmed.match(opener);
@@ -33,7 +49,7 @@ export function hasPlainLanguageTicketBlock(html) {
 
 export function missingPlainLanguageTicketLabels(html) {
   if (typeof html !== "string" || !html.trim()) return [...PLAIN_LANGUAGE_TICKET_LABELS];
-  const source = parse(html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, "\n")).structuredText;
+  const source = structuredText(html);
   return PLAIN_LANGUAGE_TICKET_LABELS.filter((label) => !labelPattern(label).test(source));
 }
 
