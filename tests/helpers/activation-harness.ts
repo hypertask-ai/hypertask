@@ -167,6 +167,7 @@ export function activationHarness() {
       };
     } },
     "@/utils/controllers/logs/createLog": { default: noop },
+    "@/utils/controllers/logs/quietPersonalLog": { logPersonal: async (_userId: number | null, label: string, _ids: unknown, raw?: unknown) => { if (raw !== undefined) console.log(label, raw); } },
     "@/lib/projectPrefix": { normalizeProjectPrefix: (value: any) => value, suggestProjectPrefix: () => "BOARD" },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { buildDefaultTitle: () => "Board", getViewFromProject: () => undefined },
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },

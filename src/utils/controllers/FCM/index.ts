@@ -265,7 +265,7 @@ export const sendDataOnlyFcm = async (
       deliveryResolved = true;
     } catch (error) {
       if (isUnregisteredTokenError(error)) {
-        await logPersonal(device.userId ?? null, "sendDataOnlyFcm dropping unregistered device", {
+        await logPersonal(device.userId ?? null, "sendDataOnlyFcm dropping unregistered device token", {
           deviceId: device.id ?? null,
           userId: device.userId ?? null,
         }, device.firebaseId);
