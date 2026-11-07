@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG } from '@/lib/flags/definitions/htpr-8786-picker-skips-other-agents'
+import { HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/definitions/htpr-8738-picker-skips-parked'
 import { priorityScore } from '@/lib/mcp/tasks/priorityScore'
 import { otherAgentAssigneeWhere } from '@/lib/mcp/tasks/otherAgentAssignee'
 import { blockerStillOpen } from '@/lib/mcp/tasks/blockerStillOpen'
@@ -20,6 +21,11 @@ const LABEL_ID_UUID_RE =
 
 const CANDIDATE_LIMIT = 500
 const mcpDoneNameFallback = (title: string) => columnRole(title) === 'done'
+
+function parkedSection(title: string): boolean {
+  const normalized = ` ${title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `
+  return [' ai review ', ' valentin review ', ' ux sign off ', ' flags '].includes(normalized)
+}
 
 function isLabelIdParam(raw: string): boolean {
   return /^\d+$/.test(raw) || LABEL_ID_UUID_RE.test(raw)
@@ -132,24 +138,45 @@ export async function GET(request: NextRequest) {
         HTPR_8786_PICKER_SKIPS_OTHER_AGENTS_FLAG,
         ctx.user.id,
       ))
+    const skipParked =
+      sectionFilter.sectionId === undefined &&
+      !section &&
+      (await isFeatureEnabled(
+        HTPR_8738_PICKER_SKIPS_PARKED_FLAG,
+        ctx.user.id,
+      ))
     const doneTitlesByProject = await loadDoneTitlesByProject(
       [projectId],
       mcpDoneNameFallback
     )
     const projectDoneTitles = doneTitlesByProject.get(projectId)
+    const parkedTitles = skipParked
+      ? (
+          await prisma.section.findMany({
+            where: { projectId, deleted: false },
+            select: { section_title: true },
+          })
+        )
+          .map((row) => row.section_title)
+          .filter(parkedSection)
+      : []
 
     const sectionIdOutOfRange = findIdParamOutOfRange({ section: sectionFilter.sectionId })
     if (sectionIdOutOfRange) return validationError(idOutOfRangeMessage(sectionIdOutOfRange))
 
+    const hiddenTitles = [
+      ...(projectDoneTitles ? Array.from(projectDoneTitles) : []),
+      ...parkedTitles,
+    ]
     const sectionWhere: Prisma.TaskWhereInput =
       sectionFilter.sectionId !== undefined
         ? { sectionId: sectionFilter.sectionId }
         : section
           ? { section }
-          : projectDoneTitles && projectDoneTitles.size > 0
+          : hiddenTitles.length > 0
             ? {
                 section: {
-                  notIn: Array.from(projectDoneTitles),
+                  notIn: hiddenTitles,
                   mode: 'insensitive',
                 },
               }
@@ -186,6 +213,12 @@ export async function GET(request: NextRequest) {
       ...(ctx.agentId != null && skipOtherAgents
         ? otherAgentAssigneeWhere(ctx.agentId)
         : {}),
+      ...(skipParked
+        ? {
+            waitingOnUserId: null,
+            blockerCommentId: null,
+          }
+        : {}),
     }
 
     const tasks = await prisma.task.findMany({
@@ -195,6 +228,8 @@ export async function GET(request: NextRequest) {
         ticketNumber: true,
         title: true,
         section: true,
+        waitingOnUserId: true,
+        blockerCommentId: true,
         priority: {
           select: {
             Priority_Value: true,
