@@ -80,6 +80,17 @@ if args[:2] == ['task', 'create']:
         print(json.dumps(dict(success=True, task=dict(ticketNumber=fixture['secret']))))
     else:
         print(json.dumps(dict(success=True, task=task)))
+elif args[:2] == ['task', 'update']:
+    assert '--priority' not in args and '--labels' not in args
+    if fixture.get('update_fail'):
+        print(fixture['secret'], file=sys.stderr)
+        sys.exit(1)
+    task = next(bug for bug in bugs if bug['ticketNumber'] == args[2])
+    task['labels'] = args[args.index('--add-labels') + 1]
+    task.setdefault('label_updates', 0)
+    task['label_updates'] += 1
+    bugs_file.write_text(json.dumps(bugs))
+    print(json.dumps(dict(success=True, task=task)))
 elif args[:2] == ['task', 'list']:
     if fixture.get('search_fail'):
         print(fixture['secret'], file=sys.stderr)
@@ -735,7 +746,7 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(self.h.state()['create_state'], 'done')
         self.assertEqual(len(self.h.records('bugs.json')), 1)
         calls = [c for c in self.h.records('commands.jsonl') if c['name'] == 'vcc']
-        self.assertEqual([c['args'][1] for c in calls], ['create', 'list', 'list'])
+        self.assertEqual([c['args'][1] for c in calls], ['create', 'list', 'list', 'update'])
         self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
         self.assert_secret_free()
 
@@ -823,8 +834,9 @@ class WatcherTests(unittest.TestCase):
         self.assertIn('Bug filed: https://app.hypertask.ai/detail/project-4060/100', alert)
         self.assert_secret_free()
 
-    def test_incident_label_only_for_real_server_side_breaks(self):
-        # YPER4-1375: the incident label starts the emergency lane, so a watcher-side fault must not carry it.
+    def test_incident_label_only_after_two_failing_checks_in_a_row(self):
+        # YPER4-1375: the incident label starts the emergency lane and preempts a runner, so one red check is not enough.
+        # A watcher-side fault (401, 403) never earns the label, however long it lasts.
         for mode, labelled in (('500', True), ('rpc-error', True), ('empty', True), ('401', False), ('403', False)):
             with self.subTest(mode=mode):
                 h = Harness()
@@ -833,20 +845,75 @@ class WatcherTests(unittest.TestCase):
                     h.run()
                     bugs = h.records('bugs.json')
                     self.assertEqual(len(bugs), 1)
+                    self.assertIsNone(bugs[0]['labels'], 'one red check must stay a plain bug')
+                    h.run()
+                    bugs = h.records('bugs.json')
+                    self.assertEqual(len(bugs), 1)
                     self.assertEqual(bugs[0]['labels'], 'incident,brain-hard' if labelled else None)
+                    h.run()
+                    self.assertEqual(h.records('bugs.json')[0].get('label_updates', 0), 1 if labelled else 0)
                 finally:
                     h.close()
+
+    def test_recovery_between_failing_checks_resets_the_count(self):
+        self.h.fixture['mode'] = '500'
+        self.h.run()
+        self.h.fixture['mode'] = 'green'
+        self.h.run()
+        self.h.fixture['mode'] = '500'
+        self.h.run()
+        bugs = self.h.records('bugs.json')
+        self.assertEqual(len(bugs), 1)
+        self.assertIsNone(bugs[0]['labels'])
+        self.h.run()
+        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
+
+    def test_a_watcher_side_fault_between_server_breaks_does_not_confirm(self):
+        self.h.fixture['mode'] = '500'
+        self.h.run()
+        self.h.fixture['mode'] = '403'
+        self.h.run()
+        self.h.fixture['mode'] = '500'
+        self.h.run()
+        self.assertIsNone(self.h.records('bugs.json')[0]['labels'])
+
+    def test_failed_label_update_is_retried_and_confirmation_survives_recovery(self):
+        self.h.fixture.update(mode='500', update_fail=True)
+        self.h.run()
+        self.h.run()
+        self.assertIsNone(self.h.records('bugs.json')[0]['labels'])
+        self.assertNotIn(self.h.state().get('label_state'), ('done',))
+        self.h.fixture.update(mode='green', update_fail=False)
+        self.h.run()
+        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
+        self.assert_secret_free()
 
     def test_incident_label_never_on_drills_or_other_boards_and_shows_in_dry_run(self):
         self.h.fixture['mode'] = '500'
         self.h.run('--dry-run')
+        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], [])
+        self.h.run()
+        self.h.run()
+        self.h.run('--dry-run')
         self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], ['incident', 'brain-hard'])
-        self.h.run('--force-fail', 'tools/list', '--dry-run')
-        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], [])
-        self.h.run('--bug-project', '4060', '--dry-run')
-        self.assertEqual(json.loads(self.h.outputs[-1].splitlines()[0])['would_file']['labels'], [])
-        self.h.run('--force-fail', 'tools/list')
-        self.assertIsNone(self.h.records('bugs.json')[0]['labels'])
+        drill = Harness()
+        try:
+            drill.run('--force-fail', 'tools/list')
+            drill.run('--force-fail', 'tools/list')
+            drill.run('--force-fail', 'tools/list')
+            self.assertIsNone(drill.records('bugs.json')[0]['labels'])
+        finally:
+            drill.close()
+        other = Harness()
+        try:
+            other.fixture['mode'] = '500'
+            other.run('--bug-project', '4060')
+            other.run('--bug-project', '4060')
+            other.run('--bug-project', '4060', '--dry-run')
+            self.assertEqual(json.loads(other.outputs[-1].splitlines()[0])['would_file']['labels'], [])
+            self.assertIsNone(other.records('bugs.json')[0]['labels'])
+        finally:
+            other.close()
 
     def test_dry_run_keeps_existing_incident_state_unchanged(self):
         self.h.fixture['mode'] = 'empty'

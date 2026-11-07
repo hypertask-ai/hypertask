@@ -375,16 +375,28 @@ def plans(incident):
     return title, description, message
 
 
-def emergency_labels(incident):
+def qualifies(failure):
     # The incident label starts the emergency lane (YPER4-1375): runners drop other work for it.
     # Only a real server-side break qualifies: a 5xx, or a 200 whose body breaks the MCP contract.
     # A timeout, network error, refusal, 401 or 403 can be this watcher's own fault, so they stay plain bugs.
-    status = incident['failure'].get('status')
-    if incident.get('test') or incident['bug_project'] != 15:
+    status = failure.get('status') if failure else None
+    return type(status) is int and (status >= 500 or status == 200)
+
+
+def emergency_labels(incident):
+    # An incident preempts a runner, so one red check is not enough: the labels wait for a second
+    # qualifying check in a row. Once confirmed, the flag sticks even if the service recovers.
+    if incident.get('test') or incident['bug_project'] != 15 or not incident.get('emergency'):
         return []
-    if type(status) is int and (status >= 500 or status == 200):
-        return ['incident', 'brain-hard']
-    return []
+    return ['incident', 'brain-hard']
+
+
+def board_writer(env):
+    identity = env.get('MCP_CONTRACT_WATCH_IDENTITY', str(HOME / '.agents/skills/ship/scripts/ship-identity'))
+    code, output = command([identity], env, timeout=5)
+    fields = output.strip().split('\t')
+    # Only agent identities write to the board: the dedicated watcher login, else the shared Valentins Claude Code agent.
+    return code == 0 and len(fields) == 2 and fields[0] in ('MCP Contract Watcher', 'Valentins Claude Code') and Path(fields[1]).is_file()
 
 
 def report(incident, dry_run, state, path):
@@ -397,11 +409,7 @@ def report(incident, dry_run, state, path):
         print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section=section, labels=emergency_labels(incident), assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
         return
     if incident['create_state'] != 'done':
-        identity = env.get('MCP_CONTRACT_WATCH_IDENTITY', str(HOME / '.agents/skills/ship/scripts/ship-identity'))
-        code, output = command([identity], env, timeout=5)
-        fields = output.strip().split('\t')
-        # Only agent identities write to the board: the dedicated watcher login, else the shared Valentins Claude Code agent.
-        if code == 0 and len(fields) == 2 and fields[0] in ('MCP Contract Watcher', 'Valentins Claude Code') and Path(fields[1]).is_file():
+        if board_writer(env):
             if incident['create_state'] == 'unknown':
                 incident['create_state'], incident['ticket_id'] = reconcile(incident, vcc, env)
                 save(state, path)
@@ -416,7 +424,16 @@ def report(incident, dry_run, state, path):
                 ticket = receipt(output) if code == 0 else None
                 if ticket:
                     incident.update(create_state='done', ticket_id=ticket)
+                    if labels:
+                        incident['label_state'] = 'done'
                 save(state, path)
+    # The plain bug exists after the first red check. A confirmed outage adds the labels to it (idempotent, retried each tick).
+    labels = emergency_labels(incident)
+    if labels and incident['create_state'] == 'done' and incident.get('label_state') != 'done' and board_writer(env):
+        code, _ = command([vcc, 'task', 'update', str(incident['ticket_id']), '--add-labels', ','.join(labels), '--json'], env)
+        if code == 0:
+            incident['label_state'] = 'done'
+        save(state, path)
     if incident['alert_state'] != 'done':
         _, _, message = plans(incident)
         env['RUNNER_DELIVER_ID'] = incident['marker']
@@ -480,10 +497,13 @@ def tick_once(args):
             incident = dict(id=identifier, marker='mcp-contract-watch:' + identifier, opened_at=identifier,
                             failure=next(record for record in tick['calls'] if not record['ok']),
                             bug_project=args.bug_project, test=bool(args.force_fail), create_state='pending', alert_state='pending',
-                            ticket_id=None, consecutive_ok=0, closed_at=None)
+                            ticket_id=None, consecutive_ok=0, consecutive_qualifying=0, emergency=False, label_state='none', closed_at=None)
             state['incident'] = incident
         if incident and not incident.get('closed_at'):
             incident['consecutive_ok'] = incident['consecutive_ok'] + 1 if tick['ok'] else 0
+            incident['consecutive_qualifying'] = incident.get('consecutive_qualifying', 0) + 1 if not tick['ok'] and qualifies(failure) else 0
+            if incident['consecutive_qualifying'] >= 2:
+                incident['emergency'] = True
             tick['incident_id'] = incident['id']
         if incident or state['pending_incidents']:
             if not args.dry_run:
