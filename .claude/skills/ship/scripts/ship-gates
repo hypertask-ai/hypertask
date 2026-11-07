@@ -10,8 +10,8 @@ fi
 T=$1
 [[ $T =~ ^[0-9]+$ ]] && T=HTPR-$T
 [[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "ticket must look like HTPR-1234, HYFA-12 or YPER4-12" >&2; exit 1; }
-ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-}}}
-[ -n "$ID" ] || { echo "ship-gates needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID or CODEX_THREAD_ID" >&2; exit 1; }
+ID=${CLAUDE_CODE_SESSION_ID:-${CODEX_SESSION_ID:-${CODEX_THREAD_ID:-${CURSOR_CONVERSATION_ID:-}}}}
+[ -n "$ID" ] || { echo "ship-gates needs CLAUDE_CODE_SESSION_ID, CODEX_SESSION_ID, CODEX_THREAD_ID or CURSOR_CONVERSATION_ID" >&2; exit 1; }
 [[ ${ID:0:8} =~ ^[A-Za-z0-9._-]+$ ]] || { echo "ship-gates: invalid session id prefix" >&2; exit 1; }
 L=$PWD/.unlazy/s-${ID:0:8}/GATES.md
 C=$HOME/.agents/skills/ship/scripts/ship-check
