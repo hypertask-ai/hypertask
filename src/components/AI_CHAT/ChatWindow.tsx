@@ -74,7 +74,9 @@ export const ChatWindow = ({ framed = false }: { framed?: boolean } = {}) => {
       tabIndex={shortcuts.enabled ? -1 : undefined}
       className={cn(
         "bg-ai-chat text-meta flex flex-col overflow-hidden chatwindow",
-        amoledChatBorder && !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)] [--bs-border-radius:var(--radius-chat-window)]",
+        !isMbl && multiChatWindowsEnabled && "[--bs-border-radius:4px]",
+        amoledChatBorder && !isMbl && "[outline:var(--outline-floating-panel)] [outline-offset:var(--offset-floating-panel-outline)]",
+        amoledChatBorder && !isMbl && !multiChatWindowsEnabled && "[--bs-border-radius:var(--radius-chat-window)]",
         isMbl || windowFramed
           ? "h-full min-h-0 w-full flex-1 rounded-none"
           : cn("h-[70svh] max-h-[calc(100svh-1rem)] w-[30vw] min-w-[360px] max-w-[calc(100vw-1rem)]", chatCleanupEnabled ? "rounded-[4px]" : "rounded"),

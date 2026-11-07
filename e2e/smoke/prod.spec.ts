@@ -370,6 +370,23 @@ test('multi-chat window has four 4px corners', { tag: ['@id:multi-chat-window-co
   for (const corner of ['border-top-left-radius', 'border-top-right-radius', 'border-bottom-left-radius', 'border-bottom-right-radius']) {
     await expect(frame).toHaveCSS(corner, '4px')
   }
+  const title = frame.locator('button[aria-controls="ai-chat-session-history"]')
+  const suggestions = frame.locator('button.bg-kanban-active-cardbg')
+  await expect(title).toBeVisible()
+  for (const theme of ['porcelain', 'graphite-2', 'amoled']) {
+    await page.locator('html').evaluate((html, name) => {
+      html.classList.remove('porcelain', 'graphite-2', 'amoled')
+      html.classList.add(name)
+      html.setAttribute('data-theme', name)
+    }, theme)
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    await expect(title, `${theme} multi-chat title corners`).toHaveCSS('border-radius', '4px')
+    await expect.poll(() => suggestions.count(), { message: `${theme} multi-chat suggestions` }).toBeGreaterThan(0)
+    const count = await suggestions.count()
+    for (let i = 0; i < count; i++) {
+      await expect(suggestions.nth(i), `${theme} multi-chat suggestion ${i} corners`).toHaveCSS('border-radius', '4px')
+    }
+  }
 })
 
 test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-click'] }, async ({ page }, testInfo) => {
