@@ -70,6 +70,7 @@ export type SerializedAgentRunActivity = {
   selectedAt: string | null;
   selectedBy: number | null;
   createdAt: string;
+  agentName?: string;
 };
 
 export class AgentRunInputError extends Error {}

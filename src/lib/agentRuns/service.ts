@@ -46,6 +46,8 @@ import {
   type AgentRunSelectionPersistenceInput,
 } from "./persistence";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8846-agent-lane-on-readable-board";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AGENT_CHAT_EVENT,
@@ -132,6 +134,15 @@ export async function createRuntimeAgentRun(
 ) {
   if (!principal.agentId) return null;
   const agentId = principal.agentId;
+  let laneFollowsReadableBoard = false;
+  try {
+    laneFollowsReadableBoard = await isFeatureEnabled(
+      HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG,
+      principal.userId,
+    );
+  } catch {
+    laneFollowsReadableBoard = false;
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     await lockTaskTeamScope(tx, input.taskId, principal.userId, principal.agentId, principal.teamScope);
@@ -142,9 +153,9 @@ export async function createRuntimeAgentRun(
         project: {
           ...projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope),
           status: { not: Status.Deleted },
-          members: {
-            some: { agentId, status: "Accepted" },
-          },
+          ...(laneFollowsReadableBoard
+            ? {}
+            : { members: { some: { agentId, status: "Accepted" as const } } }),
         },
       },
       select: { id: true, projectId: true },
@@ -642,9 +653,16 @@ export async function listTaskAgentRunActivities(
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: AGENT_RUN_ACTIVITY_LIST_LIMIT,
+    include: {
+      run: { select: { agent: { select: { displayName: true } } } },
+    },
   });
 
-  return activities.reverse().map(serializeAgentRunActivity);
+  return activities.reverse().map((activity) => {
+    const serialized = serializeAgentRunActivity(activity);
+    const agentName = activity.run?.agent?.displayName?.trim();
+    return agentName ? { ...serialized, agentName } : serialized;
+  });
 }
 
 export async function createAgentRunActivity(

@@ -347,6 +347,7 @@
     "htpr-8219-status-update-door": "EVERYONE",
     "htpr-8219-velocity-report": "EVERYONE",
     "htpr-8231-agent-archive-done": "OWNER_AND_QA",
+    "htpr-8846-agent-lane-on-readable-board": "OWNER_AND_QA",
     "yper4-651-self-follow-quiet": "OWNER_AND_QA",
     "yper4-801-manager-lease-flag-switch": "OWNER_AND_QA",
     "yper4-910-agent-writing": "EVERYONE",
