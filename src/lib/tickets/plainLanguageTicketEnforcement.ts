@@ -2,8 +2,8 @@ import {
   hasPlainLanguageTicketBlock,
   missingPlainLanguageTicketLabels,
   plainLanguageTicketRefusalMessage,
-  INTERNAL_AGENT_TICKET_BOARDS,
-} from "./plainLanguageTicket.mjs";
+  isInternalAgentTicketBoard,
+} from "./plainLanguageTicket";
 
 export class PlainLanguageTicketError extends Error {
   constructor(readonly missing: string[]) {
@@ -17,8 +17,4 @@ export function assertPlainLanguageTicketBlock(html: string | null | undefined):
   }
 }
 
-export function isInternalAgentTicketBoard(projectId: number): boolean {
-  return INTERNAL_AGENT_TICKET_BOARDS.has(projectId);
-}
-
-export { hasPlainLanguageTicketBlock, plainLanguageTicketRefusalMessage };
+export { hasPlainLanguageTicketBlock, plainLanguageTicketRefusalMessage, isInternalAgentTicketBoard };

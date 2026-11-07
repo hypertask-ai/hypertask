@@ -63,11 +63,8 @@ import {
   assertCycleAssignable,
   CycleAssignmentError,
 } from "@/lib/cycleService";
-import {
-  PlainLanguageTicketError,
-  hasPlainLanguageTicketBlock,
-  isInternalAgentTicketBoard,
-} from "@/lib/tickets/plainLanguageTicketEnforcement";
+import { PlainLanguageTicketError, hasPlainLanguageTicketBlock } from "@/lib/tickets/plainLanguageTicketEnforcement";
+import { isInternalAgentTicketBoard } from "@/lib/tickets/plainLanguageTicket";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } from "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template";
 
@@ -418,10 +415,6 @@ export async function updateTaskSingle(
           isInternalAgentTicketBoard(targetProject) &&
           updateData.section === "Valentin Review"
         ) {
-          const { isFeatureEnabled } = await import("@/lib/flags");
-          const { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } = await import(
-            "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template",
-          );
           if (await isFeatureEnabled(HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG, currentUser.id)) {
             const descriptionHtml =
               typeof requestedMutation.description === "string"
