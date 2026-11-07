@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import {
   checkMcpRateLimit,
-  createUnauthorizedResponse,
+  mcpUnauthorizedResponse,
   validateMcpAuth,
   type McpAuthContext,
 } from '@/lib/mcp/auth'
@@ -231,7 +231,7 @@ export async function handleHelloRequest(request: NextRequest) {
     if (rateLimited) return rateLimited
 
     const ctx = await validateMcpAuth(request)
-    if (!ctx) return createUnauthorizedResponse()
+    if (!ctx) return mcpUnauthorizedResponse(request)
 
     const payload = await getHelloPayload(ctx)
     return NextResponse.json({ success: true, ...payload })
