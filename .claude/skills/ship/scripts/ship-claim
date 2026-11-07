@@ -14,7 +14,8 @@
 # last`); if that read fails the old claim counts. Losing to the same agent identity (another
 # session) never unassigns, because that would remove the winner.
 # A RUNNER n slot runs one session at a time, so its own claims older than 6 h from another session never count.
-# A CI Runner n or Infra Runner n slot counts every claim by its own agent identity as its own, at any age.
+# A CI Runner n or Infra Runner n slot resumes a quiet same-agent claim at any age.
+# A same-agent session with activity in the last 6 h still owns the ticket, so a second dispatch steps back.
 # A claim also stops counting (YPER4-269) when (a) its agent is no longer assigned to the ticket (read once
 # with `hypertask tasks get`; skipped if that read fails, if no agent is assigned, or if the claim is within
 # 5 min of ours, because a claimer may not have assigned itself yet), or (b) the same agent later posted a
@@ -52,7 +53,7 @@ decide() {
     | ($asg | split("\n") | map(select(. != ""))) as $asg
     | [(.comments[], (.activities[]? | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
     | ([$c[] | select(txt | contains("Claimed.")) | select(own) | key] | first // "") as $mine_agent
-    | def ours: own or ($slot == "1" and $mine_agent != "" and key == $mine_agent);
+    | def ours: own;
       [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(handover)] as $gone
     | ([$c[] | select(ours) | secs] | min // 0) as $mine
@@ -66,7 +67,8 @@ decide() {
       else ($ours | sort_by(at) | first) as $me
         | ([$claims[] | select((ours | not)
               and at < ($me | at)
-              and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not)))]
+              and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not))
+              and ($slot != "1" or key != ($me | key) or (key as $k | $idle | index($k) | not)))]
             | sort_by(at) | first // null) as $other
         | if $other == null then "WIN"
           else "LOSE\t" + ($other | name) + "\t" + ($other | key) + "\t"
@@ -322,7 +324,8 @@ for _ in 1 2 3 4 5 6 7 8; do
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
-      if [ "$old" = 1 ] && { { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ [1-9][0-9]*$ ]]; } || agent_idle "$oid" "$same"; }; then echo "$oid" >> "$IDLE"; continue; fi ;;
+      if { [ "$old" = 1 ] && { { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^RUNNER\ [1-9][0-9]*$ ]]; } || agent_idle "$oid" "$same"; }; } \
+        || { [ "$same" = 1 ] && [[ ${SHIP_SESSION_NAME:-} =~ ^(CI|Infra)\ Runner\ [1-9][0-9]*$ ]] && agent_idle "$oid" "$same"; }; then echo "$oid" >> "$IDLE"; continue; fi ;;
   esac
   break
 done
