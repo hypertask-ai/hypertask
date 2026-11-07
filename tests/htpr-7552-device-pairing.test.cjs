@@ -142,6 +142,10 @@ test('paired agents keep own-board access and refuse foreign tasks with scope fl
     if (unavailable) f.state.flagError = new Error('scope flag storage unavailable');
     f.mocks['@/lib/mcp/agents'] = { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null, getMcpSessionAgentSummary: async () => null };
     const { GET } = f.load('src/lib/mcp/operations/tasks/operation.ts');
+    if (unavailable) {
+      await assert.rejects(() => GET(new NextRequest(`${ORIGIN}/api/mcp/tasks?task_id=150`)));
+      continue;
+    }
     const own = await GET(new NextRequest(`${ORIGIN}/api/mcp/tasks?task_id=150`));
     assert.equal(own.status, 200);
     const foreign = await GET(new NextRequest(`${ORIGIN}/api/mcp/tasks?task_id=21280`));

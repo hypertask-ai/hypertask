@@ -24,8 +24,12 @@ export async function GET(request: NextRequest) {
   }
   try {
     const sweep = await sweepOAuthTokens(prisma)
-    const devicePairings = await cleanupDevicePairings()
-    console.log('oauth_token_sweep', JSON.stringify({ ...sweep, devicePairings, verify: await verifyWhenSwept(sweep.remaining) }))
+    try {
+      await cleanupDevicePairings()
+    } catch {
+      console.warn('device_pairing_cleanup_failed')
+    }
+    console.log('oauth_token_sweep', JSON.stringify({ ...sweep, verify: await verifyWhenSwept(sweep.remaining) }))
     return NextResponse.json(sweep, { headers })
   } catch {
     console.log('oauth_token_sweep', JSON.stringify({ error: 'oauth_token_sweep_failed' }))

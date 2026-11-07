@@ -99,7 +99,9 @@ test('paired consent never creates human-wide consent and existing independent g
   assert.equal(f.state.codes.length, 1);
   f.state.grant = { id: 'separately-approved-human-grant' };
   const allowed = await f.request('GET', f.base, flow);
-  assert.equal(new URL(allowed.headers.get('location')).origin, new URL(REDIRECT).origin);
+  const allowedUrl = new URL(allowed.headers.get('location'));
+  const allowedTarget = allowedUrl.pathname === '/oauth/success' ? new URL(allowedUrl.searchParams.get('redirect_uri')) : allowedUrl;
+  assert.equal(allowedTarget.origin, new URL(REDIRECT).origin);
   assert.equal(f.state.codes[1].agent_id, null);
   assert.equal(f.state.codes[1].devicePairingId, undefined);
   const pending = await f.start();

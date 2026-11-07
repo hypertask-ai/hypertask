@@ -64,6 +64,7 @@ async function withPage(query, check) {
       'lucide-react': { Copy: () => React.createElement('svg') },
       'next/link': { __esModule: true, default: ({ children, href }) => React.createElement('a', { href }, children) },
       '@/hooks/useFlag': { useFlag: () => false },
+      zod: require('zod'),
     };
     const mod = { exports: {} };
     const browser = { location: { set href(url) { navigated.push(url); } } };

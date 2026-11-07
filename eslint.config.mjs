@@ -66,6 +66,8 @@ export default defineConfig([
       "src/app/(tutorial space)/demo/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
       "src/app/qa/login/page.tsx",
+      // HTPR-7552: server component; gates the agent-board consent form.
+      "src/app/oauth/consent/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
       "src/app/\\[...boardURL\\]/page.tsx",
