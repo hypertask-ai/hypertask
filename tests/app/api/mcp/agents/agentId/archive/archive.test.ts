@@ -110,7 +110,7 @@ async function demo() {
     assert.equal(typeof body.agent.archived_at, 'string')
     assert.equal(body.agent.revoked, false)
     assert.equal(body.agent.has_token, true)
-    assert.deepEqual(updateArgs?.where, { id: 'owned-agent', userId: user.id })
+    assert.deepEqual(updateArgs?.where, { id: 'owned-agent' })
     assert.equal(updateArgs?.data.archivedAt instanceof Date, true)
     assert.deepEqual(findQueries[0].where, {
       id: 'owned-agent',

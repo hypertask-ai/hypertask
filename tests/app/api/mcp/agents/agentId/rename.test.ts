@@ -102,7 +102,7 @@ async function demo() {
     assert.equal(renamedResponse.status, 200)
     assert.equal(renamedBody.success, true)
     assert.equal(renamedBody.agent.display_name, 'Release Helper')
-    assert.deepEqual(updateArgs?.where, { id: 'owned-agent', userId: user.id })
+    assert.deepEqual(updateArgs?.where, { id: 'owned-agent' })
     assert.deepEqual(updateArgs?.data, { displayName: 'Release Helper' })
 
     const invalidResponse = await PATCH(
