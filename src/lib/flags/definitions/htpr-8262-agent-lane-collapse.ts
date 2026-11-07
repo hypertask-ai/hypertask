@@ -7,7 +7,7 @@ export default {
   kind: "improvement",
   shippedOn: "2026-11-03",
   defaultMode: "OWNER_AND_QA",
-  description: "Shift+O collapses agent lane entries with the comments, a collapsed lane row uses the comment one-line row, and lane rows use shared numeric comment card spacing.",
+  description: "Shift+O collapses agent lane entries with the comments, a collapsed lane row uses the comment one-line row, and an open lane row uses the live comment card.",
   releaseRisk: {
     risk: "small",
     reason: "Changes how agent lane rows fold and how much padding they use inside the ticket thread. Off keeps lane rows always expanded at today's inset.",

@@ -20,7 +20,6 @@ import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
 import { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG, HTPR_7611_COMMENT_PARTS_ONE_PASS_FLAG } from "@/lib/flags/keys";
 import { isTaskDetailEditTarget } from "@/lib/taskDetailEditTarget";
@@ -85,7 +84,6 @@ const CommentsContainer = () => {
     useDescriptionAndCommentsContext();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
-  const threadSpacing = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
   const doubleClickToEdit = useFlag(HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG);
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const isBlocker = blockerCommentEnabled && !comment.activity && currentTask?.blockerCommentId === Number(comment.id);
@@ -182,7 +180,6 @@ const CommentsContainer = () => {
         tabIndex={i}
         id={`comment-${i}`}
         data-testid="ticket-comment"
-        data-agent-lane-corners={threadSpacing ? "" : undefined}
         data-task-comment-box={!comment.activity || undefined}
         data-task-comment-blocker={isBlocker || undefined}
         data-task-comment-collapsed={isStacked || undefined}
@@ -202,7 +199,7 @@ const CommentsContainer = () => {
         <Suspense fallback={null}>
           {!comment.activity ? (
             <>
-              <CommentBodyDesktop isStacked={isStacked} threadSpacing={threadSpacing}>
+              <CommentBodyDesktop>
                 <CommentCreatedBy />
 
                 <CommentText />

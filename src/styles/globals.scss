@@ -1019,12 +1019,3 @@ svg.lucide.fill-current {
     display: none;
   }
 }
-
-@layer bootstrap {
-  html[data-task-box-outlines][data-task-box-outlines] [data-task-detail-path] [data-agent-lane-corners],
-  html.dia[data-task-box-outlines] [data-task-detail-path] [data-agent-lane-corners],
-  html.rounded.rounded [data-agent-lane-corners],
-  html [data-agent-lane-corners] {
-    border-radius: 4px !important;
-  }
-}

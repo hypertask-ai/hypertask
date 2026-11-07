@@ -150,10 +150,9 @@ const AgentRunActivityRow = ({
         tabIndex={0}
         aria-expanded={false}
         aria-label={`Agent ${activity.type}, collapsed`}
-        data-agent-lane-corners=""
         onClick={toggleRow}
         onKeyDown={rowKeyDown}
-        className="my-[4px] flex h-[29px] min-w-0 cursor-pointer items-center gap-2 rounded-[4px] border-l-4 border-transparent px-4 py-1 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
+        className="my-[8px] flex h-[29px] min-w-0 cursor-pointer items-center gap-2 rounded-[4px] border-l-4 border-transparent px-4 text-content text-text-light-gray outline-none hover:bg-active-elementBg focus-visible:bg-hover-active focus-visible:text-white-black"
       >
         {icon}
         {laneAuthor}
@@ -180,13 +179,12 @@ const AgentRunActivityRow = ({
     return (
       <div
         ref={rowRef}
-        className="my-[8px] cursor-pointer rounded-[4px] border-l-4 border-transparent bg-comment-description shadow-md outline-none focus-visible:bg-hover-active"
-        data-agent-lane-corners=""
+        className="my-[8px] cursor-pointer rounded-[4px] border-l-4 border-transparent outline-none focus-visible:bg-hover-active"
         {...(activity.type === "elicitation"
           ? { role: "group" as const, "aria-label": `Agent ${activity.type}`, onClick: toggleRow }
           : openRowProps)}
       >
-        <CommentBodyDesktop isStacked={false} threadSpacing>
+        <CommentBodyDesktop isStacked={false}>
           <div
             ref={captureHeader}
             className={cn(

@@ -78,7 +78,7 @@ const useCommentsContext = () => {
   return context;
 };
 
-export { CommentsProvider, useCommentsContext };
+export { CommentsContext, CommentsProvider, useCommentsContext };
 
 const useHook = (comment: IComment, i: number) => {
   const { setEditState, focusOn, currentTask, currentId, setEditMode } =

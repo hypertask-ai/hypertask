@@ -1,17 +1,19 @@
+import { useContext } from "react";
+import { CommentsContext } from "@/lib/contexts/CommentsContext";
 import styles from '@/styles/tiptap.module.scss'
 
 const CommentBodyDesktop  =(
     {
-        children, isStacked, threadSpacing = false
+        children,
+        isStacked: isStackedProp,
     }:{
         children: React.ReactNode;
-        isStacked: boolean;
-        threadSpacing?: boolean;
-        
+        isStacked?: boolean;
     }
 )=>{
+    const comment = useContext(CommentsContext);
+    const isStacked = isStackedProp ?? Boolean(comment?.isStacked);
 
-   
     return (
         <div 
 
@@ -21,7 +23,7 @@ const CommentBodyDesktop  =(
             
             w-full grid items-center
             ${isStacked ? ` ${styles.stackedContainer}`:`comment-body bg-comment-description rounded-br rounded-tr ${styles.unstackedContainer}`} 
-            ${styles.hellow} ${threadSpacing && !isStacked ? styles.threadCard : ""}
+            ${styles.hellow}
             `}>
                 {children}
                 
