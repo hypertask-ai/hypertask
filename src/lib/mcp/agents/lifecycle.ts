@@ -191,7 +191,7 @@ export async function archiveOwnedAgent(
 
   try {
     const agent = await database.agent.update({
-      where: { id: existing.id },
+      where: { id: existing.id, userId },
       data: { archivedAt },
       select: LIFECYCLE_SELECT,
     })
@@ -225,7 +225,7 @@ export async function renameOwnedAgent(
 
   try {
     const agent = await database.agent.update({
-      where: { id: existing.id },
+      where: { id: existing.id, userId },
       data: { displayName },
       select: LIFECYCLE_SELECT,
     })
