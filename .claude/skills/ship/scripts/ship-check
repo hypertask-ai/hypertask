@@ -744,16 +744,20 @@ except json.JSONDecodeError:
     sys.exit(1)
 task=(payload.get("tasks") or [{}])[0]
 text=" ".join(str(task.get(key) or "") for key in ("description","acceptanceCriteria","title"))
-text=re.sub(r"<\s*br\s*/?\s*>", ". ", text, flags=re.I)
-text=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", ". ", text, flags=re.I)
+text=re.sub(r"<\s*br\s*/?\s*>", "\n", text, flags=re.I)
+text=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", "\n", text, flags=re.I)
 text=re.sub(r"<[^>]+>"," ",text)
 text=re.sub(r"&(?:nbsp|#160);"," ",text,flags=re.I)
-text=re.sub(r"\s+"," ",text)
 open_word=r"(?:unfinished|still open|not finished|not done|incomplete|remains open)"
-if re.search(rf"\b{open_word}\b[^.]{{0,80}}\bfull[- ]day observation\b", text, re.I):
-    sys.exit(0)
-spans=re.findall(r"\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}", text, re.I)
-sys.exit(0 if any(re.search(rf"\b{open_word}\b", span, re.I) for span in spans) else 1)
+def line_open(line):
+    line=re.sub(r"\s+"," ",line).strip()
+    if not line:
+        return False
+    if re.search(rf"\b{open_word}\b[^.]{{0,80}}\bfull[- ]day observation\b", line, re.I):
+        return True
+    spans=re.findall(r"\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}", line, re.I)
+    return any(re.search(rf"\b{open_word}\b", span, re.I) for span in spans)
+sys.exit(0 if any(line_open(line) for line in text.splitlines()) else 1)
 '
 }
 

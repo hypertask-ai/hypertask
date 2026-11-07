@@ -138,6 +138,8 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: passed</p><p>Report: unfinished</p>"), false);
   assert.equal(open.hasUnfinishedFullDayObservation("<p>Report: unfinished</p><p>Full-day observation gate: passed</p>"), false);
   assert.equal(open.hasUnfinishedFullDayObservation("<p>Full-day observation gate: unfinished</p><p>Report: passed</p>"), true);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed\nReport: unfinished"), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished\nReport: passed"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Search now finds reminders."), false);
   const refused = await open.update();
   assert.equal(refused.status, 409);

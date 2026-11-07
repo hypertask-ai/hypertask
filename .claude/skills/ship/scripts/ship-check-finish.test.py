@@ -100,6 +100,12 @@ else:
         self.assertEqual(self.check('done', 'HTPR-8872', SECTION='Flag: Everyone', DESCRIPTION=closed), 'done ok\n')
         beside = '<p>Full-day observation gate: passed</p><p>Report: unfinished</p>'
         self.assertEqual(self.check('done', 'HTPR-8872', SECTION='Flag: Everyone', DESCRIPTION=beside), 'done ok\n')
+        self.assertEqual(self.check(
+            'done', 'HTPR-8872', SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: passed\nReport: unfinished'), 'done ok\n')
+        self.assertIn('unfinished full-day observation gate', self.check(
+            'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
+            DESCRIPTION='Full-day observation gate: unfinished\nReport: passed'))
         self.assertIn('unfinished full-day observation gate', self.check(
             'done', 'HTPR-8872', success=False, SECTION='Flag: Everyone',
             DESCRIPTION='<p>Full-day observation gate: unfinished</p><p>Report: passed</p>'))

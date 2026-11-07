@@ -97,14 +97,20 @@ class OpenObservationGateError extends Error {}
 const OPEN_OBSERVATION = /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/i;
 
 export function hasUnfinishedFullDayObservation(text: string): boolean {
-  const plain = text
-    .replace(/<\s*br\s*\/?\s*>/gi, ". ")
-    .replace(/<\/\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>/gi, ". ")
+  const lines = text
+    .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>/gi, "\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&(?:nbsp|#160);/gi, " ")
-    .replace(/\s+/g, " ");
-  if (new RegExp(`${OPEN_OBSERVATION.source}[^.]{0,80}\\bfull[- ]day observation\\b`, "i").test(plain)) return true;
-  return [...plain.matchAll(/\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}/gi)].some((match) => OPEN_OBSERVATION.test(match[0]));
+    .split(/\n/);
+  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.]{0,80}\\bfull[- ]day observation\\b`, "i");
+  const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.]{0,80}/gi;
+  return lines.some((line) => {
+    const plain = line.replace(/\s+/g, " ").trim();
+    if (!plain) return false;
+    if (openBefore.test(plain)) return true;
+    return [...plain.matchAll(openAfter)].some((match) => OPEN_OBSERVATION.test(match[0]));
+  });
 }
 
 function destinationIsDone(section: { section_title: string; isDone?: boolean | null } | null, title: string): boolean {
