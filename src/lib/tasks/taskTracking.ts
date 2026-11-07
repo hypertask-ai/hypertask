@@ -5,6 +5,7 @@ import { withTaskStarWriteLock } from "@/lib/taskCardActions/writeLocks";
 import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
 import { nextReminderRevision } from "@/utils/controllers/reminders/revision";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
+import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_8217_AGENT_FOLLOW_REMINDER_FLAG } from "@/lib/flags/definitions/htpr-8217-agent-follow-reminder";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import {
