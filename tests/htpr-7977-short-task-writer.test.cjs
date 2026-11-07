@@ -1,9 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
-const vm = require("node:vm");
-const ts = require("typescript");
+const { loadModule } = require("./helpers/loadModule.cjs");
 
 const root = path.resolve(__dirname, "..");
 const load = require("jiti")(__filename, {
@@ -18,10 +16,6 @@ const flag = "htpr-7977-short-task-writer";
 const shortRule = registry.renderPrompt("task-writer-short-style-rule");
 
 async function prepare({ enabled, aiMode = "AiTaskWriter", boardRules = "BOARD_RULES_SENTINEL", templates = [], note = "Fix the login button" }) {
-  const filename = path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts");
-  const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
   const checks = [];
   const stubs = {
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
@@ -56,13 +50,9 @@ async function prepare({ enabled, aiMode = "AiTaskWriter", boardRules = "BOARD_R
     "@/app/api/ai/_lib/skills": { resolveSkills: async (text) => ({ cleanedText: text, skills: [], systemPromptAddition: "" }) },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
   };
-  const loadedModule = { exports: {} };
-  vm.runInNewContext(code, {
-    module: loadedModule, exports: loadedModule.exports, console,
-    require: (id) => stubs[id] ?? (id.startsWith("@/") ? load(path.join(root, "src", id.slice(2))) : require(id)),
-  }, { filename });
-  const body = loadedModule.exports.taskWriterRequestSchema.parse({ projectId: 15, PROMPT: note, customInstructions: boardRules, aiMode });
-  return { run: await loadedModule.exports.prepareTaskWriterRun(body, 985), checks };
+  const { taskWriterRequestSchema, prepareTaskWriterRun } = loadModule("src/app/api/ai/_lib/taskWriterRun.ts", stubs);
+  const body = taskWriterRequestSchema.parse({ projectId: 15, PROMPT: note, customInstructions: boardRules, aiMode });
+  return { run: await prepareTaskWriterRun(body, 985), checks };
 }
 
 test("flag off keeps the production writer prompt and flag on appends only the short rule", async () => {
