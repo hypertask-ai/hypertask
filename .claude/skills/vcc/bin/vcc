@@ -67,7 +67,7 @@ question_check() {
       ("Yes:", "No:", "My recommendation:") as $part |
         if any($plain[]; startswith($part)) then empty else $part end
     ] + [
-      (if ([$plain[] | select(startswith("Question:"))] | length) > 1
+      (if ([$plain[] | scan("\\bQuestion:")] | length) > 1
        then "only one Question:" else empty end),
       (if $question_index != null and $question_index > 8
        then "at most 8 context lines before Question:" else empty end),

@@ -432,6 +432,11 @@ text="${plain/<p>Question:/<p>Question: note.</p><p>Question:}"
 question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
 fixture "$text"
 review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+text="${plain/Keep it?/Keep it?<\/strong> Question: <strong>Remove it?}"
+question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
+fixture "$text"
+review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it?** Question: **Remove it?}"
 question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "${markdown/Question: **Keep it?**/Question: summary$'\n'Question: **Keep it?**}"
 question_refused 'must be right under' comment add X-1 --kind question --markdown --text "${markdown/My recommendation: yes. Why: less work./Extra.$'\n'My recommendation: yes. Why: less work.}"
 for context in '<ul><li><p>What this is: the setting that keeps the board tidy.</p></li></ul>' '<blockquote>What this is: the setting that keeps the board tidy.</blockquote>'; do
