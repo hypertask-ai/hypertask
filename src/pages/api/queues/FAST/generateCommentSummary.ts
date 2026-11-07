@@ -21,17 +21,16 @@ function buildJobId(commentId: number) {
 
 export default async function scheduleCommentSummaryGeneration(req: IReq) {
   const { commentId } = req;
-  if (typeof req.agentId === "string" && req.agentId.length > 0) {
-    if (await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, req.ownerUserId ?? 0)) return;
+  if (!(typeof req.agentId === "string" && req.agentId.length > 0) || !(await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, req.ownerUserId ?? 0))) {
+    const runAt = new Date(new Date().getTime() + 5 * 60000);
+
+    const res = await scheduleJobById({
+      jobId: buildJobId(commentId),
+      path: QUEUE_PATH,
+      body: { commentId },
+      notBefore: Math.floor(runAt.getTime() / 1000),
+    });
+
+    return res;
   }
-  const runAt = new Date(new Date().getTime() + 5 * 60000);
-
-  const res = await scheduleJobById({
-    jobId: buildJobId(commentId),
-    path: QUEUE_PATH,
-    body: { commentId },
-    notBefore: Math.floor(runAt.getTime() / 1000),
-  });
-
-  return res;
 }

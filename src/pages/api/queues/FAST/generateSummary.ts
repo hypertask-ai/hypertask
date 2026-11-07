@@ -23,20 +23,19 @@ function buildJobId(taskId: number) {
 
 export default async function scheduleTaskSummaryGeneration(req: IReq) {
   const { taskId, agentId } = req;
-  if (typeof agentId === "string" && agentId.length > 0) {
-    if (await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, req.ownerUserId ?? 0)) return;
-  }
-  if (req.activityOnlyOwnerId) {
-    if (await isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, req.activityOnlyOwnerId)) return;
-  }
-  const runAt = new Date(new Date().getTime() + 5 * 60000);
+  if (!(typeof agentId === "string" && agentId.length > 0) || !(await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, req.ownerUserId ?? 0))) {
+    if (req.activityOnlyOwnerId) {
+      if (await isFeatureEnabled(HTPR_7689_PROMPT_CACHING_FLAG, req.activityOnlyOwnerId)) return;
+    }
+    const runAt = new Date(new Date().getTime() + 5 * 60000);
 
-  const res = await scheduleJobById({
-    jobId: buildJobId(taskId),
-    path: QUEUE_PATH,
-    body: agentId === undefined ? { taskId } : { taskId, agentId },
-    notBefore: Math.floor(runAt.getTime() / 1000),
-  });
+    const res = await scheduleJobById({
+      jobId: buildJobId(taskId),
+      path: QUEUE_PATH,
+      body: agentId === undefined ? { taskId } : { taskId, agentId },
+      notBefore: Math.floor(runAt.getTime() / 1000),
+    });
 
-  return res;
+    return res;
+  }
 }
