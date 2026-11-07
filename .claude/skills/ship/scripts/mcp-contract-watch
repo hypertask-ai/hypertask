@@ -399,6 +399,13 @@ def board_writer(env):
     return code == 0 and len(fields) == 2 and fields[0] in ('MCP Contract Watcher', 'Valentins Claude Code') and Path(fields[1]).is_file()
 
 
+def unfinished(incident):
+    # A report is owed until the bug exists, the alert went out, and a confirmed outage carries its labels.
+    # Recovery must not drop a failed label update, so closed incidents stay queued until it lands.
+    return (incident['create_state'] != 'done' or incident['alert_state'] != 'done'
+            or bool(emergency_labels(incident) and incident.get('label_state') != 'done'))
+
+
 def report(incident, dry_run, state, path):
     env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher')
     vcc = env.get('MCP_CONTRACT_WATCH_VCC', 'vcc')
@@ -491,7 +498,7 @@ def tick_once(args):
         credential_revoked = tick.get('watcher_credential') == 'revoked'
         incident = state['incident']
         if not tick['ok'] and not credential_revoked and (incident is None or incident.get('closed_at')):
-            if incident and (incident['create_state'] != 'done' or incident['alert_state'] != 'done'):
+            if incident and unfinished(incident):
                 state['pending_incidents'].append(incident)
             identifier = tick['time']
             incident = dict(id=identifier, marker='mcp-contract-watch:' + identifier, opened_at=identifier,
@@ -510,12 +517,12 @@ def tick_once(args):
                 save(state, path)
             # Recovery rearms detection, but never discards an undelivered report.
             for pending in ([incident] if incident else []) + state['pending_incidents']:
-                if not pending.get('closed_at') or pending['create_state'] != 'done' or pending['alert_state'] != 'done':
+                if not pending.get('closed_at') or unfinished(pending):
                     report(pending, args.dry_run, state, path)
             if incident and not credential_revoked and incident['consecutive_ok'] >= 2 and not incident.get('closed_at'):
                 incident['closed_at'] = tick['time']
             state['pending_incidents'] = [pending for pending in state['pending_incidents']
-                                          if pending['create_state'] != 'done' or pending['alert_state'] != 'done']
+                                          if unfinished(pending)]
             if not args.dry_run:
                 save(state, path)
         if credential_revoked:

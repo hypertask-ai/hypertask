@@ -888,6 +888,37 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
         self.assert_secret_free()
 
+    def test_failed_label_update_survives_incident_closing_and_is_retried(self):
+        self.h.fixture.update(mode='500', update_fail=True)
+        self.h.run()
+        self.h.run()
+        self.h.fixture['mode'] = 'green'
+        self.h.run()
+        self.h.run()
+        self.assertIsNotNone(self.h.state().get('closed_at'))
+        self.assertIsNone(self.h.records('bugs.json')[0]['labels'])
+        self.h.fixture['update_fail'] = False
+        self.h.run()
+        self.assertEqual(self.h.records('bugs.json')[0]['labels'], 'incident,brain-hard')
+        self.h.run()
+        self.assertEqual(self.h.records('bugs.json')[0]['label_updates'], 1)
+        self.assert_secret_free()
+
+    def test_new_incident_does_not_drop_an_unlabelled_confirmed_one(self):
+        self.h.fixture.update(mode='500', update_fail=True)
+        self.h.run()
+        self.h.run()
+        self.h.fixture['mode'] = 'green'
+        self.h.run()
+        self.h.run()
+        self.h.fixture['mode'] = '500'
+        self.h.run()
+        self.assertEqual(len(self.h.records('bugs.json')), 2)
+        self.h.fixture['update_fail'] = False
+        self.h.run()
+        labelled = [bug['ticketNumber'] for bug in self.h.records('bugs.json') if bug['labels']]
+        self.assertEqual(labelled, ['TEST-100', 'TEST-101'])
+
     def test_incident_label_never_on_drills_or_other_boards_and_shows_in_dry_run(self):
         self.h.fixture['mode'] = '500'
         self.h.run('--dry-run')
