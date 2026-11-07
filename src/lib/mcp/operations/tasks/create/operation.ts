@@ -23,6 +23,7 @@ import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
 import { HTPR_8798_WRITING_HOUSE_RULES_FLAG } from '@/lib/flags/definitions/htpr-8798-writing-house-rules';
 import { HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG } from '@/lib/flags/definitions/htpr-8471-board-refusal-next-step';
+import { ciBlockerWriteOpen } from '@/lib/mcp/boards/workflowColumns';
 import prisma from '@/lib/prisma';
 
 export interface CreateTaskResponse {
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        if (ctx.agentId && !(await isAgentOnBoard(project_id, ctx.agentId))) {
+        if (ctx.agentId && !(await ciBlockerWriteOpen(user.id)) && !(await isAgentOnBoard(project_id, ctx.agentId))) {
             const boardAccessGuidance = await isFeatureEnabled(HTPR_8471_BOARD_REFUSAL_NEXT_STEP_FLAG, user.id)
             return NextResponse.json(
                 {

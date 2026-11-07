@@ -22,6 +22,7 @@ import { refreshBoardForAgentRun } from "@/lib/agentStatus/boardRefresh";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
+import { ciBlockerWriteOpen } from "@/lib/mcp/boards/workflowColumns";
 import {
   AGENT_CHAT_STOPPED_MESSAGE,
   AGENT_CHAT_TIMEOUT_MESSAGE,
@@ -132,6 +133,7 @@ export async function createRuntimeAgentRun(
 ) {
   if (!principal.agentId) return null;
   const agentId = principal.agentId;
+  const requireBoardMembership = !(await ciBlockerWriteOpen(principal.userId));
 
   const result = await prisma.$transaction(async (tx) => {
     await lockTaskTeamScope(tx, input.taskId, principal.userId, principal.agentId, principal.teamScope);
@@ -142,9 +144,9 @@ export async function createRuntimeAgentRun(
         project: {
           ...projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope),
           status: { not: Status.Deleted },
-          members: {
-            some: { agentId, status: "Accepted" },
-          },
+          ...(requireBoardMembership
+            ? { members: { some: { agentId, status: "Accepted" as const } } }
+            : {}),
         },
       },
       select: { id: true, projectId: true },

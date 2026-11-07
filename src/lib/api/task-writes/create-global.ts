@@ -96,7 +96,13 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       const { isAgentOnBoard } = await import(
         "@/utils/controllers/agents/boardMembers"
       );
-      if (!(await isAgentOnBoard(Number(projectId), agentId))) {
+      let openToReaders = false;
+      try {
+        openToReaders = await isFeatureEnabled("htpr-8900-ci-blocker-write", session.userId);
+      } catch {
+        openToReaders = false;
+      }
+      if (!openToReaders && !(await isAgentOnBoard(Number(projectId), agentId))) {
         return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
       }
     }

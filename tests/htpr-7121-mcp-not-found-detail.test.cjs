@@ -86,6 +86,9 @@ function loadPost({ flagOn, knownLabelIds }) {
     if (request.startsWith("@/lib/flags/definitions/")) {
       return { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG: "htpr-7121-mcp-not-found-detail" };
     }
+    if (request === "@/lib/mcp/boards/workflowColumns") {
+      return { ciBlockerWriteOpen: async (userId) => stubs["@/lib/flags"].isFeatureEnabled("htpr-8900-ci-blocker-write", userId) };
+    }
     return originalLoad.call(this, request, parent, isMain);
   };
   try {

@@ -71,6 +71,7 @@ function loadCreateRoute({ flagOn }) {
     "@/lib/flags": {
       isFeatureEnabled: async (key) => {
         calls.flagChecks.push(key);
+        if (key === "htpr-8900-ci-blocker-write") return false;
         return flagOn;
       },
     },
@@ -105,7 +106,7 @@ test("a non-member agent is told the request tool and the board it must request"
   assert.match(response.body.message, /Inbox/);
   assert.doesNotMatch(response.body.message, /Ask the board owner to add it/);
   assert.equal(calls.created, 0);
-  assert.deepEqual(calls.flagChecks, ["htpr-8798-writing-house-rules", FLAG]);
+  assert.deepEqual(calls.flagChecks, ["htpr-8798-writing-house-rules", "htpr-8900-ci-blocker-write", FLAG]);
 });
 
 test("flag off restores the old refusal word for word", async () => {
