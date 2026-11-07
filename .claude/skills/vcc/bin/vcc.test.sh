@@ -535,8 +535,17 @@ mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
 printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
 completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done
 printf 'ok real checker requires merged PR, successful deploy, and app QA proof\n'
-printf '%s\n' '{"tasks":[{"id":42}]}' > "$T/task.json"
-export VCC_TEST_TASK="$T/task.json"
+cat > "$T/bin/hypertask" <<'STUB'
+#!/usr/bin/env bash
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+if [ "${1:-} ${2:-}" = 'tasks get' ]; then
+  printf '%s\n' '{"tasks":[{"id":42}]}'
+  exit 0
+fi
+printf 'stub:'; printf ' <%s>' "$@"; printf '\n'
+STUB
+chmod +x "$T/bin/hypertask"
 cat > "$T/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 url="${*: -1}"
