@@ -75,6 +75,7 @@ export interface ChatContextType {
     contextCallback: (node: any) => void;
     projectId?: number;
     onEditor: (editor: Editor | null) => void;
+    listening?: boolean;
   };
   sessions: IChatSession[];
   sessionPagingEnabled: boolean;

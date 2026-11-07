@@ -506,6 +506,7 @@ export function AI_Tiptap_Container({
                 id={audioButtonId}
                 active={active}
                 hideDevicePicker={hideMicrophonePicker}
+                compactRecordingPill={fullScreenCleanup}
                 toggleRecording={toggleRecording!}
                 globalRecording={isRecording}
                 hasText={hasComposerText}

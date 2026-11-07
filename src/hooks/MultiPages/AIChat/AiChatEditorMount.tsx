@@ -7,12 +7,14 @@ const AiChatEditorMount = ({
   contextCallback,
   projectId,
   onEditor,
+  listening,
 }: {
   contextCallback: (node: any) => void;
   projectId?: number;
   onEditor: (editor: Editor | null) => void;
+  listening?: boolean;
 }) => {
-  const { editor } = useTiptapForAI({ contextCallback, projectId });
+  const { editor } = useTiptapForAI({ contextCallback, projectId, listening });
 
   useEffect(() => {
     onEditor(editor);

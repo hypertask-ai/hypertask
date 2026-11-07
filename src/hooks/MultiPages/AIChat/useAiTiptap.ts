@@ -12,7 +12,7 @@ import Gapcursor from "@tiptap/extension-gapcursor";
 import { createMentionData } from "@/components/RTE/Components/AI_Chat/MentionData";
 import { LinkableMention } from "@/components/RTE/Extensions/LinkableMention";
 import SlashCommands from "@/components/RTE/Extensions/SlashCommands/SlashCommands";
-import { useContext, useRef } from "react";
+import { useContext, useEffect, useRef } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
 import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
@@ -34,9 +34,11 @@ const DisableEnter = Extension.create({
 const useTiptapForAI = ({
   contextCallback,
   projectId,
+  listening = false,
 }: {
   contextCallback: (node: any) => void;
   projectId?: number;
+  listening?: boolean;
 }) => {
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
@@ -57,6 +59,8 @@ const useTiptapForAI = ({
   const fullScreenChat = chatCleanup && (pathname ?? "").startsWith("/chat");
   const fullScreenChatRef = useRef(false);
   fullScreenChatRef.current = fullScreenChat;
+  const listeningRef = useRef(false);
+  listeningRef.current = listening;
 
   const editor = useEditor({
     extensions: [
@@ -83,6 +87,7 @@ const useTiptapForAI = ({
       Placeholder.configure({
         placeholder: () => {
           if (isMobileRef.current) return `@ for context`;
+          if (fullScreenChatRef.current && listeningRef.current) return `Listening...`;
           if (fullScreenChatRef.current) return `Ask anything, @ for context`;
           return `Focus with CTRL + Q, @ for context`;
         },
@@ -111,6 +116,10 @@ const useTiptapForAI = ({
     editorProps: writingAssistanceEditorProps,
     immediatelyRender: false,
   });
+  useEffect(() => {
+    if (!editor || editor.isDestroyed || !fullScreenChat) return;
+    editor.view.dispatch(editor.state.tr);
+  }, [editor, fullScreenChat, listening]);
   return {
     editor,
   };
