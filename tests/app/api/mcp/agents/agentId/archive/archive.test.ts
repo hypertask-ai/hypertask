@@ -30,6 +30,7 @@ async function demo() {
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
   const originalAgentUpdate = prismaMock.agent.update
+  const originalAgentUpdateMany = prismaMock.agent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst = prismaMock.revokedToken.findFirst
   const originalLogsCreate = prismaMock.logs.create
@@ -88,14 +89,18 @@ async function demo() {
     prismaMock.featureFlag.findUnique = async () => ({ mode: 'OFF' })
 
     const findQueries: Record<string, any>[] = []
-    let updateArgs: Record<string, any> | undefined
+    let updateManyArgs: Record<string, any> | undefined
+    let findCall = 0
     prismaMock.agent.findFirst = async (args: Record<string, any>) => {
       findQueries.push(args)
-      return { ...row }
+      findCall += 1
+      return findCall === 1
+        ? { ...row }
+        : { ...row, archivedAt: new Date('2026-11-07T00:00:00.000Z') }
     }
-    prismaMock.agent.update = async (args: Record<string, any>) => {
-      updateArgs = args
-      return { ...row, archivedAt: args.data.archivedAt }
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
+      updateManyArgs = args
+      return { count: 1 }
     }
 
     const response = await POST(
@@ -110,8 +115,11 @@ async function demo() {
     assert.equal(typeof body.agent.archived_at, 'string')
     assert.equal(body.agent.revoked, false)
     assert.equal(body.agent.has_token, true)
-    assert.deepEqual(updateArgs?.where, { id: 'owned-agent', userId: user.id })
-    assert.equal(updateArgs?.data.archivedAt instanceof Date, true)
+    assert.deepEqual(updateManyArgs?.where, {
+      id: 'owned-agent',
+      userId: user.id,
+    })
+    assert.equal(updateManyArgs?.data.archivedAt instanceof Date, true)
     assert.deepEqual(findQueries[0].where, {
       id: 'owned-agent',
       userId: user.id,
@@ -128,7 +136,7 @@ async function demo() {
     assert.equal(missingBody.error, 'Agent not found')
 
     prismaMock.agent.findFirst = async () => ({ ...row })
-    prismaMock.agent.update = async () => {
+    prismaMock.agent.updateMany = async () => {
       throw new Error('database unavailable')
     }
     const originalError = console.error
@@ -156,6 +164,7 @@ async function demo() {
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.agent.update = originalAgentUpdate
+    prismaMock.agent.updateMany = originalAgentUpdateMany
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst = originalRevokedTokenFindFirst
     prismaMock.logs.create = originalLogsCreate

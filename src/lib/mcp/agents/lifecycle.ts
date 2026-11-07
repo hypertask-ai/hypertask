@@ -38,21 +38,8 @@ export type AgentLifecycleDatabase = {
     }): Promise<AgentLifecycleRow | null>
     updateMany(args: {
       where: Prisma.AgentWhereInput
-      data: {
-        revokedAt: null
-        mcpTokenHash: string | null
-        mcpTokenJti: string | null
-        mcpTokenExpiresAt: null
-        credentialTeamId: string | null
-        credentialTeamAccessBinding: string | null
-        runtimeGeneration: { increment: number }
-      }
+      data: Prisma.AgentUpdateManyMutationInput
     }): Promise<{ count: number }>
-    update(args: {
-      where: Prisma.AgentWhereUniqueInput
-      data: { archivedAt?: Date | null; displayName?: string }
-      select: typeof LIFECYCLE_SELECT
-    }): Promise<AgentLifecycleRow>
   }
   user: {
     findUnique(args: {
@@ -189,17 +176,18 @@ export async function archiveOwnedAgent(
     return { status: 'ok', agent: existing }
   }
 
-  try {
-    const agent = await database.agent.update({
-      where: { ...scopeWhere, id: existing.id, userId },
-      data: { archivedAt },
-      select: LIFECYCLE_SELECT,
-    })
-    return { status: 'ok', agent }
-  } catch (error) {
-    if (isRecordNotFoundError(error)) return { status: 'not_found' }
-    throw error
-  }
+  const transition = await database.agent.updateMany({
+    where: { ...scopeWhere, id: existing.id, userId },
+    data: { archivedAt },
+  })
+  if (transition.count !== 1) return { status: 'not_found' }
+
+  const agent = await database.agent.findFirst({
+    where: { ...scopeWhere, id: existing.id, userId },
+    select: LIFECYCLE_SELECT,
+  })
+  if (!agent) return { status: 'not_found' }
+  return { status: 'ok', agent }
 }
 
 export type RenameOwnedAgentResult =
@@ -223,15 +211,16 @@ export async function renameOwnedAgent(
     return { status: 'ok', agent: existing }
   }
 
-  try {
-    const agent = await database.agent.update({
-      where: { ...scopeWhere, id: existing.id, userId },
-      data: { displayName },
-      select: LIFECYCLE_SELECT,
-    })
-    return { status: 'ok', agent }
-  } catch (error) {
-    if (isRecordNotFoundError(error)) return { status: 'not_found' }
-    throw error
-  }
+  const transition = await database.agent.updateMany({
+    where: { ...scopeWhere, id: existing.id, userId },
+    data: { displayName },
+  })
+  if (transition.count !== 1) return { status: 'not_found' }
+
+  const agent = await database.agent.findFirst({
+    where: { ...scopeWhere, id: existing.id, userId },
+    select: LIFECYCLE_SELECT,
+  })
+  if (!agent) return { status: 'not_found' }
+  return { status: 'ok', agent }
 }

@@ -30,6 +30,7 @@ async function demo() {
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
   const originalAgentUpdate = prismaMock.agent.update
+  const originalAgentUpdateMany = prismaMock.agent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst =
     prismaMock.revokedToken.findFirst
@@ -87,11 +88,17 @@ async function demo() {
     prismaMock.member.findMany = async () => []
     prismaMock.featureFlag.findUnique = async () => ({ mode: 'OFF' })
 
-    let updateArgs: Record<string, any> | undefined
-    prismaMock.agent.findFirst = async () => ({ ...row })
-    prismaMock.agent.update = async (args: Record<string, any>) => {
-      updateArgs = args
-      return { ...row, displayName: args.data.displayName }
+    let updateManyArgs: Record<string, any> | undefined
+    let findCall = 0
+    prismaMock.agent.findFirst = async () => {
+      findCall += 1
+      return findCall === 1
+        ? { ...row }
+        : { ...row, displayName: 'Release Helper' }
+    }
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
+      updateManyArgs = args
+      return { count: 1 }
     }
 
     const renamedResponse = await PATCH(
@@ -102,8 +109,11 @@ async function demo() {
     assert.equal(renamedResponse.status, 200)
     assert.equal(renamedBody.success, true)
     assert.equal(renamedBody.agent.display_name, 'Release Helper')
-    assert.deepEqual(updateArgs?.where, { id: 'owned-agent', userId: user.id })
-    assert.deepEqual(updateArgs?.data, { displayName: 'Release Helper' })
+    assert.deepEqual(updateManyArgs?.where, {
+      id: 'owned-agent',
+      userId: user.id,
+    })
+    assert.deepEqual(updateManyArgs?.data, { displayName: 'Release Helper' })
 
     const invalidResponse = await PATCH(
       request({ display_name: 42 }),
@@ -133,6 +143,7 @@ async function demo() {
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.agent.update = originalAgentUpdate
+    prismaMock.agent.updateMany = originalAgentUpdateMany
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst = originalRevokedTokenFindFirst
     prismaMock.logs.create = originalLogsCreate

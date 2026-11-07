@@ -45,14 +45,20 @@ function fakeSetup(state: FakeState) {
         state.row && state.row.id === where.id ? { ...state.row } : null,
       updateMany: async ({ where, data }: any) => {
         if (state.loseTransition) return { count: 0 };
-        if (!state.row || state.row.revokedAt === null) return { count: 0 };
-        assert.equal(where.userId, 6);
-        state.row = {
-          ...state.row,
-          revokedAt: data.revokedAt,
-          mcpTokenHash: data.mcpTokenHash,
-          mcpTokenJti: data.mcpTokenJti,
-        };
+        if (!state.row || state.row.id !== where.id || where.userId !== 6) {
+          return { count: 0 };
+        }
+        if (data.revokedAt !== undefined) {
+          if (state.row.revokedAt === null) return { count: 0 };
+          state.row = {
+            ...state.row,
+            revokedAt: data.revokedAt,
+            mcpTokenHash: data.mcpTokenHash,
+            mcpTokenJti: data.mcpTokenJti,
+          };
+        } else {
+          state.row = { ...state.row, ...data };
+        }
         state.updateManyCount += 1;
         return { count: 1 };
       },
