@@ -30,6 +30,7 @@ import {
   getAiModelOptionById,
   isHaiku55Model,
   type AiDefaultModelContext,
+  type TAiModelKey,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import {
@@ -284,6 +285,13 @@ function forcedServesProvider(forced: ForcedTeamKey, provider: TByokProviderKey)
     && provider !== "baseten";
 }
 
+function modelByokProvider(option: { modelKey: string; source?: string }) {
+  if (option.source === "custom" || option.modelKey === "custom") return "custom" as const;
+  const definition = getAiModelDefinition(option.modelKey as TAiModelKey);
+  if (!definition || definition.provider === "custom") return null;
+  return getAiProviderInfo(definition.provider)?.byokKey ?? null;
+}
+
 export async function resolveTeamByokApiKey(
   provider: TByokProviderKey,
   lookup?: ByokLookupContext,
@@ -509,7 +517,8 @@ export async function getByokOrTeamGatewayApiKey(
 ) {
   const forced = await resolveForcedTeamKey(lookup);
   if (forced) {
-    if (!(await forcedKeyEligible(forced, lookup)) || !forcedServesProvider(forced, provider)) {
+    if (!(await forcedKeyEligible(forced, lookup)) || !forcedServesProvider(forced, provider) ||
+        !(await isByokProviderAllowedForLookup(provider, lookup))) {
       throw new ForcedTeamKeyError(forced.provider);
     }
     return forced.apiKey;
@@ -546,7 +555,9 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
 ): Promise<AiModelCredential | undefined> {
   const forced = await resolveForcedTeamKey(lookup);
   if (forced) {
-    if (!(await forcedKeyEligible(forced, lookup)) || !forced.apiKey || !modelOptionMatchesForcedKey(option, forced.provider)) {
+    const servedProvider = modelByokProvider(option);
+    if (!(await forcedKeyEligible(forced, lookup)) || !forced.apiKey || !modelOptionMatchesForcedKey(option, forced.provider) ||
+        (servedProvider && !(await isByokProviderAllowedForLookup(servedProvider, lookup)))) {
       throw new ForcedTeamKeyError(forced.provider);
     }
     if (forced.provider === "custom") {
