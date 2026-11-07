@@ -251,22 +251,129 @@ review_refuse() {
   printf 'vcc: Valentin Review needs one plain Question comment first: a "What this is:" paragraph, then "Question: <strong>yes/no question?</strong>", "My recommendation:", "Why:", "Yes:" and "No:". Post it with vcc comment add %s --kind question, then move.%s\n' "$1" "${2:+ ($2)}" >&2
   exit 5
 }
-review_move() {
-  case "${1:-} ${2:-}" in 'task move'|'tasks move') ;; *) return 0 ;; esac
-  local ticket='' section='' comments newest reason description
-  shift 2
+# Who may make Valentin the blocker (YPER4-1376). One definition: blocker-review --gate, shared with the
+# daily sweep. Chief Of Staff and the board's lead pass; a runner hands the ticket to them instead.
+BLOCKER_REVIEW=${VCC_BLOCKER_REVIEW:-$HOME/.local/share/house-rules/skills/hypertask-triage/scripts/blocker-review}
+blocker_refuse() {
+  printf 'vcc: %s refused\n%s\n' "$1" "$2" >&2
+  exit 5
+}
+blocker_gate() {
+  # blocker_gate WHAT TICKET PROJECT [QUESTION_TEXT]: with a fourth argument the Question must also be his call.
+  local what=$1 ticket=$2 project=$3 board=$3 out
+  [ -x "$BLOCKER_REVIEW" ] || blocker_refuse "$what" "blocker-review missing at $BLOCKER_REVIEW; run house-rules-sync"
+  if [ -z "$board" ] && [ -n "$ticket" ]; then
+    board=$(hypertask tasks get "$ticket" --json 2>/dev/null | jq -r '.tasks[0].boardId // .tasks[0].projectId // empty' 2>/dev/null) || board=''
+  fi
+  if [ "$#" -ge 4 ]; then
+    out=$(printf '%s' "$4" | "$BLOCKER_REVIEW" --gate --who "$IDENTITY" --board "$board" --text-stdin 2>&1) || blocker_refuse "$what" "$out"
+  else
+    out=$("$BLOCKER_REVIEW" --gate --who "$IDENTITY" --board "$board" 2>&1 < /dev/null) || blocker_refuse "$what" "$out"
+  fi
+}
+# A Question comment, or a waiting person set to Valentin (user 6, or "me": every login writes as user 6).
+blocker_entry() {
+  local project='' ticket='' kind='' text='' file='' user='' have_user=false what arg
   while [ "$#" -gt 0 ]; do
     case "$1" in
-      --section) section=${2:-}; shift; [ "$#" -gt 0 ] || break ;;
-      --section=*) section=${1#--section=} ;;
-      *) if [[ $1 =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]]; then ticket=$1; fi ;;
+      --project) project=${2:-}; shift; [ "$#" -gt 0 ] && shift ;;
+      --team) shift; [ "$#" -gt 0 ] && shift ;;
+      --project=*) project=${1#*=}; shift ;;
+      --team=*|--json|--human) shift ;;
+      *) break ;;
+    esac
+  done
+  case "${1:-} ${2:-}" in
+    'comment add'|'comments add') what=Question ;;
+    'task waiting-on'|'tasks waiting-on') what='Valentin as the waiting person' ;;
+    *) return 0 ;;
+  esac
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    arg=$1
+    case "$arg" in
+      --kind|--text|--body|--file|--user|--project)
+        [ "$#" -ge 2 ] || break
+        case "$arg" in
+          --kind) kind=$2 ;;
+          --text|--body) text=$2; file='' ;;
+          --file) file=$2; text='' ;;
+          --user) user=$2; have_user=true ;;
+          --project) project=$2 ;;
+        esac
+        shift ;;
+      --kind=*) kind=${arg#*=} ;;
+      --text=*|--body=*) text=${arg#*=}; file='' ;;
+      --file=*) file=${arg#*=}; text='' ;;
+      --user=*) user=${arg#*=}; have_user=true ;;
+      --project=*) project=${arg#*=} ;;
+      --*) ;;
+      *) if [ -z "$ticket" ] && [[ $arg =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]]; then ticket=$arg; fi ;;
     esac
     shift
   done
-  [ -n "$ticket" ] || return 0
+  if [ "$what" = Question ]; then
+    [ "$kind" = question ] || return 0
+    if [ -n "$file" ]; then
+      text=$(cat -- "$file" 2>/dev/null) || blocker_refuse Question 'cannot read --file'
+    fi
+    blocker_gate "$what" "$ticket" "$project" "$text"
+  else
+    [ "$have_user" = true ] && { [ "$user" = 6 ] || [ "$user" = me ]; } || return 0
+    blocker_gate "$what" "$ticket" "$project"
+  fi
+}
+review_move() {
+  local project='' to_project='' ticket='' section='' second='' newest reason description verb comments name id board
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --project) project=${2:-}; shift; [ "$#" -gt 0 ] && shift ;;
+      --team) shift; [ "$#" -gt 0 ] && shift ;;
+      --project=*) project=${1#*=}; shift ;;
+      --team=*|--json|--human) shift ;;
+      *) break ;;
+    esac
+  done
+  case "${1:-} ${2:-}" in
+    'task move'|'tasks move'|'task update'|'tasks update'|'task create'|'tasks create') ;;
+    *) return 0 ;;
+  esac
+  verb=$2
+  shift 2
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --section|--to-section) section=${2:-}; shift; [ "$#" -gt 0 ] && shift ;;
+      --section=*|--to-section=*) section=${1#*=}; shift ;;
+      --project|--to) to_project=${2:-}; shift; [ "$#" -gt 0 ] && shift ;;
+      --project=*|--to=*) to_project=${1#*=}; shift ;;
+      --*) shift ;;
+      *) if [ -z "$ticket" ] && [[ $1 =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]]; then ticket=$1
+         elif [ -z "$second" ]; then second=$1; fi
+         shift ;;
+    esac
+  done
+  # `task move T "Valentin Review"` names the section as the second argument.
+  if [ -z "$section" ] && [ "$verb" = move ]; then section=$second; fi
   section=${section#"${section%%[![:space:]]*}"}
   section=${section%"${section##*[![:space:]]}"}
+  [ -n "$section" ] || return 0
+  if [[ $section =~ ^[0-9]+$ ]]; then
+    # A section id: look its name up on the board it belongs to.
+    id=$section
+    board=${to_project:-${project:-$(hypertask tasks get "$ticket" --json 2>/dev/null | jq -r '.tasks[0].boardId // .tasks[0].projectId // empty' 2>/dev/null)}}
+    if name=$(hypertask section list --project "$board" --json 2>/dev/null |
+      jq -er --argjson id "$id" '.sections[] | select(.id == $id) | .section_title' 2>/dev/null); then
+      section=$name
+    else
+      # Name unknown (often a rate limit): let the move through. Only a named Valentin Review move is gated;
+      # refusing here would block every runner column move whenever the board read fails.
+      printf 'vcc: section %s name unknown; Valentin Review gate skipped\n' "$id" >&2
+      return 0
+    fi
+  fi
   [ "${section,,}" = 'valentin review' ] || return 0
+  blocker_gate 'Valentin Review move' "$ticket" "${to_project:-$project}"
+  [ -n "$ticket" ] || return 0
   comments=$(hypertask comments list "$ticket" --json 2>/dev/null) || review_refuse "$ticket" 'cannot read comments'
   newest=$(jq -cs '
     if length == 1 then .[0] else error("expected one comments response") end |
@@ -277,10 +384,12 @@ review_move() {
   reason=$(question_check "$(jq -r '.text // ""' <<< "$newest")") || review_refuse "$ticket" 'cannot check Question'
   [ -z "$reason" ] || review_refuse "$ticket" "$reason; rewrite it for a product owner (pospeak)"
   house_lint "Valentin Review move ($ticket Question)" "$(jq -r '.text // ""' <<< "$newest")"
+  blocker_gate 'Valentin Review move' "$ticket" "${to_project:-$project}" "$(jq -r '.text // ""' <<< "$newest")"
   description=$(hypertask tasks get "$ticket" --json 2>/dev/null | jq -er '.tasks[0].description // ""') || review_refuse "$ticket" 'cannot read description'
   house_lint "Valentin Review move ($ticket description)" "$description" --shape
 }
 if [ "${1:-}" != activity ]; then
+  blocker_entry "$@"
   review_move "$@"
   exec /usr/bin/env -S hypertask "$@"
 fi
