@@ -31,7 +31,9 @@ import {
   useMemo,
   useRef,
   useState,
+  type Dispatch,
   type RefObject,
+  type SetStateAction,
 } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
@@ -140,7 +142,13 @@ const useTaskDetailGlobalStates = (
     }));
   }, []);
   const [stacked, setStacked] = useState<StackedType>(_initialStacked ?? {});
-  const [agentLaneFold, setAgentLaneFold] = useState({ taskId: _parsedTask?.id, collapsed: false, version: 0 });
+  const collapseAgentLane = useFlag("htpr-8262-agent-lane-collapse");
+  const [agentLaneFoldState, setAgentLaneFoldState] = useState({ taskId: _parsedTask?.id, collapsed: false, version: 0 });
+  const setAgentLaneFold = useCallback<Dispatch<SetStateAction<typeof agentLaneFoldState>>>((update) => {
+    if (!collapseAgentLane) return;
+    setAgentLaneFoldState(update);
+  }, [collapseAgentLane]);
+  const agentLaneFold = collapseAgentLane ? agentLaneFoldState : { taskId: _parsedTask?.id, collapsed: false, version: 0 };
 
   const [tasksPlayList, setTasksPlaylist] = useRecoilState(tasksPlayListAtom);
   const [__, setInboxTaskIndexAtom] = useRecoilState(InboxTaskIndexAtom);
