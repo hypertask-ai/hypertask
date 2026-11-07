@@ -530,15 +530,15 @@ if [ "$fails" = 0 ]; then echo 'ship-claim completion-hold ok'; fi
 # Queue brake and infra first (YPER4-880), on the same hold stubs.
 export HOLD_INFRA=$D/infra.json
 prs() { jq -n --argjson n "$1" --argjson d "${2:-0}" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: (. < $d)}]' > "$HOLD_OPEN"; }
 prs_own() { jq -n --argjson n "$1" --arg own "$2" --arg tk "$3" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: $own, title: "\($tk) [INFRA] own open work", isDraft: false}]' > "$HOLD_OPEN"; }
 free_infra() { jq -n --arg tk "$1" --arg ti "$2" \
   '{success:true,total:1,tasks:[{ticketNumber:$tk,title:$ti,section:"Backlog",projectId:4060,uniqueIndex:1,agent:null,assignees:[]}]}' > "$HOLD_INFRA"; }
 empty_infra() { printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_INFRA"; }
 prs_adopt() { jq -n --argjson n "$1" --arg tk "$2" \
-  '[range($n) | {number: ., headRefName: "cursor/x\(.)", title: "X \(.)", isDraft: false}]
+  '[range($n) | {number: ., headRefName: "runner9/x\(.)", title: "X \(.)", isDraft: false}]
    + [{number: 999, headRefName: ("cursor/" + ($tk | ascii_downcase) + "-adopt"), title: "\($tk) [BUGFIX] Adopted work", isDraft: false}]' > "$HOLD_OPEN"; }
 holdrc() { SHIP_SESSION_NAME="$1" ./ship-claim hold "$2" >"$D/hold-out" 2>&1; echo $?; }
 printf '{"success":true,"total":0,"tasks":[]}' > "$HOLD_BOARD"; printf '[]' > "$HOLD_MERGED"; printf '[]' > "$HOLD_OPEN"
@@ -555,6 +555,8 @@ jq -n '[range(30) | {number: ., headRefName: "ci-runner-2/hyci-\(.)", title: "HY
   + [range(5) | {number: (100 + .), headRefName: "dependabot/npm/x\(.)", title: "Bump x", isDraft: false}]
   + [range(5) | {number: (200 + .), headRefName: "infra-lead/yper4-\(.)", title: "YPER4-\(.) [INFRA] tool", isDraft: false}]' > "$HOLD_OPEN"
 eq "30 CI, 5 dependency and 5 infra PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+jq -n '[range(25) | {number: (300 + .), headRefName: "cursor/cloud-fix-\(.)", title: "HTPR-\(900 + .) [BUGFIX] Cloud fix", isDraft: false}]' > "$HOLD_OPEN"
+eq "25 cloud agent PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
 prs 21; eq "queue 21, CI ticket -> allowed" "$(holdrc 'RUNNER 6' HYCI-30)" 0
 prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0
