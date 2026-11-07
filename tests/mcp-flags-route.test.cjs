@@ -654,6 +654,13 @@ test("PATCH refuses a conditional off order in a quote block", async () => {
   await assertRefused(approvalRequired, "OFF");
 });
 
+test("PATCH refuses a deferred off order whose switch sits in a template", async () => {
+  templateQuestionFlagOn = true;
+  quoteBlockRecord(`turn it off after QA. What this is: a flag. Question: Switch ${key} to Off? My recommendation: Yes.`);
+  ticketComments = [];
+  await assertRefused(approvalRequired, "OFF");
+});
+
 test("PATCH refuses a quote-block off order for Everyone", async () => {
   quoteBlockRecord("turn it off");
   await assertRefused();

@@ -251,8 +251,9 @@ export async function PATCH(request: NextRequest) {
           chatTail = record.tail;
           chatSwitchText = `${record.quote} ${record.tail}`.trim();
         }
+        if (/^[\s\p{P}]*$/u.test(chatTail)) chatTail = "";
         if (kind === "chat-record" && chatSwitchText) {
-          switches = parseSwitchQuestion(chatSwitchText, templateQuestionAllowed);
+          switches = parseSwitchQuestion(chatSwitchText, false);
           if (!switches && chatTail) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         }
         if (kind !== "chat-record" || !switches) {
