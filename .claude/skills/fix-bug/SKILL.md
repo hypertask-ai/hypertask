@@ -5,7 +5,7 @@ description: Reproduce wrong behavior, prove its cause, and ship the smallest te
 
 # Fix a bug
 
-Use [/ship](../ship/SKILL.md) for claim, gates, PR, deployment, live QA, and cleanup. Follow [repository flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior). A bug fix restores intended behavior; new behavior uses [ship-feature-behind-flag](../ship-feature-behind-flag/SKILL.md).
+Use [/ship](../ship/SKILL.md) for claim, gates, PR, deployment, live QA, and cleanup. Follow [repository flag policy](../../../AGENTS.md#feature-flags-for-new-user-facing-behavior). A bug fix restores intended behavior; new behavior uses [ship-feature-behind-flag](../ship-feature-behind-flag/SKILL.md). Ticket descriptions on internal boards follow [docs/ticket-template.md](../../../docs/ticket-template.md).
 
 ## Before coding
 

@@ -30,7 +30,7 @@ Read linked sections on demand, not every reference.
 | When | Read |
 |---|---|
 | Starting, claiming, delegating, shipping | [Session rules](.claude/reference/workflow.md#claude-code-and-codex-sessions), [claim rules](.claude/reference/boards.md#claim-a-ticket-before-working-it-collision-avoidance), `/ship` |
-| Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions) |
+| Reading tickets or writing board content | [Ticket access](.claude/reference/boards.md#hypertask-ticket-access), [comments](.claude/reference/boards.md#ticket-comments), [board exceptions](.claude/reference/boards.md#repo-board-exceptions), [ticket template](docs/ticket-template.md) |
 | CLI or MCP work | [Repositories and credentials](.claude/reference/cli.md#cli-and-mcp-repositories) |
 | Branching, PRs, merging, deploying, cleanup | [Repository workflow](.claude/reference/workflow.md#repository-workflow), [workflow detail](.claude/reference/workflow.md#repo-workflow-detail), [cleanup safeguards](.claude/reference/workflow.md#worktree-cleanup), [.claude/skills/clean-up/SKILL.md](.claude/skills/clean-up/SKILL.md) |
 | Workflows, runners, rulesets, checks, previews | [CI contract](.claude/reference/ci.md#ci-contract), [docs/ci.md](docs/ci.md), [docs/ci-policy.yml](docs/ci-policy.yml) |

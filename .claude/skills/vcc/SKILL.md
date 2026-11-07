@@ -13,6 +13,8 @@ Read `ship-identity` before writing. Use `vcc` for every board mutation, includi
 
 Use `ship-claim` with your actual resume command before investigating. It assigns your agent before posting the claim to agent activity, then checks activity and legacy comments for collisions. Stop on failed assignment or a losing claim. Preserve existing human assignees and manual moves; add only your own agent, never Valentin. Read back each board write. If `vcc` fails, stop and record the blocker through the authorized path when available; never switch identity to work around it.
 
+New tickets on internal boards use the shape in [docs/ticket-template.md](../../../docs/ticket-template.md); link that file, do not copy it.
+
 Keep the ticket In Progress while actively working. Resume AI Review tickets there before fixing them. Use the shared `tickets` skill: human decisions and QA use their kinds; plans, tests, and progress go to agent activity. Keep technical status, session names, resume commands, and handoffs in agent activity only; people comments contain results and evidence links. Runners report on tickets, never through Valentin's browser or another session's chat.
 
 ## Before opening the PR

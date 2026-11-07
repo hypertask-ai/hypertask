@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { correlate, incidentOf, redact, relatedTicket, taskIncident } from './incident.mjs';
+import { renderPlainLanguageTicketDescription } from '../../../../src/lib/tickets/plainLanguageTicket.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
@@ -133,12 +134,29 @@ function merge(group, event) {
 }
 
 function description(group, fp) {
+  const block = group.noiseRule
+    ? renderPlainLanguageTicketDescription({
+        whatWrongOrWanted: `${group.service} emitted ${group.normalized} on stderr ${group.hourlyCount} times in one hour.`,
+        whoItAffects: "internal only; not a user-facing error unless the warning hides a real failure",
+        recommendedCourseAndWhy:
+          "Fix the noisy warning at the source instead of filtering it. Why: stderr spam hides real incidents.",
+        whatValentinMustDecide: "nothing",
+        howToUndo: "revert the change that introduced the warning",
+      })
+    : renderPlainLanguageTicketDescription({
+        whatWrongOrWanted: `${group.service} failed: ${group.normalized}.`,
+        whoItAffects: "check routes and user hit counts in the detail below",
+        recommendedCourseAndWhy:
+          "A runner traces the sample stack and fixes the root cause. Why: this fired repeatedly in the collection window.",
+        whatValentinMustDecide: "nothing; a runner will investigate",
+        howToUndo: "revert the breaking deploy or patch the handler",
+      });
   if (group.noiseRule) {
     const fields = [ ['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message] ];
-    return `<p><strong>${html(group.service)} emitted ${html(group.normalized)} ${group.hourlyCount} times within one hour.</strong></p><p>This is a warning on stderr, not a thrown product error. Fix it at the source rather than hiding the warning.</p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
+    return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
   }
   const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
-  return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
+  return block + `<ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>${group.incident ? `<p>Error root: ${html(group.incident.route)} | ${html(group.incident.root)}</p><p>Error route: ${group.incident.routeKey}</p>` : ''}`;
 }
 
 function search(fp, board, env, incident) {

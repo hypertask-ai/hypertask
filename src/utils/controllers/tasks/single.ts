@@ -63,6 +63,11 @@ import {
   assertCycleAssignable,
   CycleAssignmentError,
 } from "@/lib/cycleService";
+import {
+  PlainLanguageTicketError,
+  hasPlainLanguageTicketBlock,
+  isInternalAgentTicketBoard,
+} from "@/lib/tickets/plainLanguageTicketEnforcement";
 
 type UpdateTaskSingleOptions = {
   teamScope?: AgentTokenTeamScope | null;
@@ -404,6 +409,37 @@ export async function updateTaskSingle(
               throw new Error("Section does not match sectionId");
             }
             updateData.section = targetSection.section_title;
+          }
+        }
+        if (
+          sectionChanged &&
+          isInternalAgentTicketBoard(targetProject) &&
+          updateData.section === "Valentin Review"
+        ) {
+          const { isFeatureEnabled } = await import("@/lib/flags");
+          const { HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG } = await import(
+            "@/lib/flags/definitions/htpr-7933-plain-language-ticket-template",
+          );
+          if (await isFeatureEnabled(HTPR_7933_PLAIN_LANGUAGE_TICKET_TEMPLATE_FLAG, currentUser.id)) {
+            const descriptionHtml =
+              typeof requestedMutation.description === "string"
+                ? requestedMutation.description
+                : currentState.description_?.content ?? currentState.description ?? "";
+            if (!hasPlainLanguageTicketBlock(descriptionHtml)) {
+              const newestAgentComment = await tx.comment.findFirst({
+                where: {
+                  taskId: newTask.id,
+                  OR: [{ agentId: { not: null } }, { agentDisplayName: { not: null } }],
+                },
+                orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+                select: { text: true, commentText: true },
+              });
+              const commentHtml =
+                newestAgentComment?.commentText ?? newestAgentComment?.text ?? "";
+              if (!hasPlainLanguageTicketBlock(commentHtml)) {
+                throw new PlainLanguageTicketError([]);
+              }
+            }
           }
         }
         if (sectionChanged && targetProject === 15 && updateData.section === "Flag: Everyone") {
@@ -788,6 +824,9 @@ export async function updateTaskSingle(
     }
     if (error instanceof FlagColumnMismatchError) {
       return { status: 409, json: { message: error.message, code: "FLAG_COLUMN_MISMATCH" } };
+    }
+    if (error instanceof PlainLanguageTicketError) {
+      return { status: 400, json: { message: error.message, code: "PLAIN_LANGUAGE_TICKET_REQUIRED" } };
     }
     if (error instanceof TaskTeamScopeError) return { status: 404, json: { message: error.message } };
     if (error instanceof ParentTaskNotFoundError) {
