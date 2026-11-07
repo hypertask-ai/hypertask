@@ -10,6 +10,7 @@ import { broadcastBoardChange } from '@/lib/realtime/server'
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8354_SECTION_NAME_FLAG } from '@/lib/flags/definitions/htpr-8354-section-name'
+import { ensureFleetCiWorkflowColumns } from '@/lib/mcp/boards/workflowColumns'
 
 export interface SectionListItem {
   id: number
@@ -249,6 +250,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
         { status: 404 }
       )
     }
+
+    await ensureFleetCiWorkflowColumns(project.id, user.id)
 
     const searchParams = request.nextUrl.searchParams
     const includeHidden = searchParams.get('include_hidden') === 'true'

@@ -43,11 +43,14 @@ export type SectionCrudResponse =
   | DeleteSectionResponse;
 
 export class SectionService {
+  private workflowColumns = false;
+
   constructor(private readonly apiClient: IApiClient) {}
 
-  async manageSection(params: unknown, options?: { roleEnabled?: boolean }): Promise<SectionCrudResponse> {
+  async manageSection(params: unknown, options?: { roleEnabled?: boolean; workflowColumns?: boolean }): Promise<SectionCrudResponse> {
     const validatedInput = SectionCrudInputSchema.parse(params);
     const roleEnabled = options?.roleEnabled === true;
+    this.workflowColumns = options?.workflowColumns === true;
 
     switch (validatedInput.action) {
       case 'list':
@@ -112,7 +115,7 @@ export class SectionService {
       correlationId
     );
 
-    const sections = roleEnabled ? response.sections.map(withRole) : response.sections;
+    const sections = roleEnabled ? response.sections.map((section) => this.withRole(section)) : response.sections;
     logger.info('Sections listed', { correlationId, projectId: params.project_id, role: params.role });
 
     if (params.role === undefined) {
@@ -144,7 +147,7 @@ export class SectionService {
       throw new Error(`Section ${params.section_id} not found in project ${params.project_id}`);
     }
 
-    const resolved = params.roleEnabled ? withRole(section) : section;
+    const resolved = params.roleEnabled ? this.withRole(section) : section;
     if (params.role !== undefined && resolved.role !== params.role) {
       throw new Error(
         `Section ${params.section_id} has role ${resolved.role}, not ${params.role}. Roles follow the column title; use action list with role to find the column.`
@@ -215,7 +218,7 @@ export class SectionService {
       correlationId
     );
 
-    return { ...response, section: roleEnabled ? withRole(response.section) : response.section };
+    return { ...response, section: roleEnabled ? this.withRole(response.section) : response.section };
   }
 
   private async updateSection(params: {
@@ -239,7 +242,7 @@ export class SectionService {
       correlationId
     );
 
-    return { ...response, section: roleEnabled ? withRole(response.section) : response.section };
+    return { ...response, section: roleEnabled ? this.withRole(response.section) : response.section };
   }
 
   private async deleteSection(params: {
@@ -261,8 +264,8 @@ export class SectionService {
 
     return response;
   }
-}
 
-function withRole(section: SectionListItem): SectionListItem {
-  return { ...section, role: columnRoleFor(section) };
+  private withRole(section: SectionListItem): SectionListItem {
+    return { ...section, role: columnRoleFor(section, this.workflowColumns) };
+  }
 }

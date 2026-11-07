@@ -1,5 +1,6 @@
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7843_SECTIONS_ROLE_FLAG } from '@/lib/flags/keys';
+import { HTPR_8900_CI_BLOCKER_WRITE_FLAG } from '@/lib/flags/definitions/htpr-8900-ci-blocker-write';
 import { getMcpExecutionContext } from '@/lib/mcp/operationContext';
 import { getSectionCrudBaseSchema } from '../validations/project.validation';
 import { TOOL_METADATA } from '../config/tool-metadata';
@@ -14,10 +15,11 @@ export const sectionTool = {
     const validatedInput = args;
     const userId = typeof context === 'string' ? getMcpExecutionContext(context)?.user.id : undefined;
     const roleEnabled = Boolean(userId) && await isFeatureEnabled(HTPR_7843_SECTIONS_ROLE_FLAG, userId as number).catch(() => false);
+    const workflowColumns = Boolean(userId) && await isFeatureEnabled(HTPR_8900_CI_BLOCKER_WRITE_FLAG, userId as number).catch(() => false);
     return executeWithService(
       context,
       SectionService,
-      (service, input: unknown) => service.manageSection(input, { roleEnabled }),
+      (service, input: unknown) => service.manageSection(input, { roleEnabled, workflowColumns }),
       validatedInput
     );
   },

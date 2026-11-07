@@ -22,7 +22,7 @@ import { refreshBoardForAgentRun } from "@/lib/agentStatus/boardRefresh";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
-import { HTPR_8900_CI_BLOCKER_WRITE_FLAG } from "@/lib/flags/definitions/htpr-8900-ci-blocker-write";
+import { ciBlockerWriteOpen } from "@/lib/mcp/boards/workflowColumns";
 import {
   AGENT_CHAT_STOPPED_MESSAGE,
   AGENT_CHAT_TIMEOUT_MESSAGE,
@@ -126,14 +126,6 @@ async function accessibleRunWhere(principal: AgentRunPrincipal, id: string, db: 
         }
       : { agent: { userId: principal.userId } }),
   };
-}
-
-async function ciBlockerWriteOpen(userId: number): Promise<boolean> {
-  try {
-    return await isFeatureEnabled(HTPR_8900_CI_BLOCKER_WRITE_FLAG, userId);
-  } catch {
-    return false;
-  }
 }
 
 export async function createRuntimeAgentRun(

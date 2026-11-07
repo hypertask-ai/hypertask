@@ -5,6 +5,7 @@ import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
+import { ciBlockerWriteOpen, ensureFleetCiWorkflowColumns } from "@/lib/mcp/boards/workflowColumns";
 import { withToolErrors } from "@/lib/ai/tools/execution";
 import { sanitizeForJson } from "@/lib/ai/tools/helpers";
 
@@ -47,16 +48,25 @@ export function createBoardManifestTool(context: ToolContext) {
           return { success: false, error: "Project not found or access denied" };
         }
 
+        await ensureFleetCiWorkflowColumns(project.id, user.id);
+        const sections = project.id === 11514
+          ? await prisma.section.findMany({
+              where: { projectId: project.id, deleted: false, visibility: true },
+              select: { id: true, section_title: true, isDone: true, ranking: true, wipLimit: true },
+              orderBy: { ranking: "asc" },
+            })
+          : project.section;
+        const workflowColumns = await ciBlockerWriteOpen(user.id);
         const workLimits = await isFeatureEnabled(HTPR_7975_COLUMN_WORK_LIMITS_FLAG, user.id);
         return sanitizeForJson({
           success: true,
           projectId: project.id,
           boardTitle: project.title || "",
-          columns: project.section.map((section) => ({
+          columns: sections.map((section) => ({
             id: section.id,
             title: section.section_title,
             position: section.ranking,
-            role: columnRoleFor(section),
+            role: columnRoleFor(section, workflowColumns),
             wipLimit: workLimits ? section.wipLimit : null,
           })),
           transitions: "any",
