@@ -179,7 +179,7 @@ function fail(field: string, id: string, hit: Hit): never {
   throw new AgentWritingError(field, `Rule ${rule.name}: ${hit.reason}`, hit.offender, hit.fix ?? rule.fix, rule.id)
 }
 
-export type AgentWritingContext = { create?: boolean; houseRules?: boolean }
+export type AgentWritingContext = { create?: boolean; houseRules?: boolean; commentEdit?: boolean }
 
 const HOUSE_RULES = new Set(["dashed-code-name", "plain-valentin-quote", "question-shape", "ticket-parts"])
 

@@ -30,17 +30,6 @@ export async function peopleCommentWholeCheckEnabled(userId: number): Promise<bo
   }
 }
 
-export async function enforcePeopleCommentEdit(
-  userId: number,
-  agentId: string | null | undefined,
-  text: string,
-  previousText: string,
-): Promise<void> {
-  if (!agentId) return
-  const previous = await peopleCommentWholeCheckEnabled(userId) ? {} : { text: previousText }
-  await enforceAgentWriting(userId, agentId, { text }, previous)
-}
-
 export async function enforceAgentWriting(
   userId: number,
   agentId: string | null | undefined,
@@ -50,5 +39,6 @@ export async function enforceAgentWriting(
 ): Promise<void> {
   if (!agentId) return
   const houseRules = await houseRulesEnabled(userId, context)
-  if (await agentWritingPolicyEnabled(userId)) assertAgentWriting(agentId, fields, previous, { ...context, houseRules })
+  const checkedPrevious = context.commentEdit && await peopleCommentWholeCheckEnabled(userId) ? {} : previous
+  if (await agentWritingPolicyEnabled(userId)) assertAgentWriting(agentId, fields, checkedPrevious, { ...context, houseRules })
 }

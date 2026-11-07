@@ -1,4 +1,4 @@
-import { enforcePeopleCommentEdit } from '@/lib/agents/writingEnforcement'
+import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { verifyTaskAttachmentLinks } from "@/lib/storage/verifyTaskAttachmentLinks";
 import type { AgentTokenTeamScope } from '@/lib/mcp/auth/types'
 import prisma from '@/lib/prisma'
@@ -40,7 +40,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
     throw new Error('Comment not found or not owned by user')
   }
 
-  await enforcePeopleCommentEdit(userId, agentId, text, comment.text)
+  await enforceAgentWriting(userId, agentId, { text }, { text: comment.text }, { commentEdit: true })
   await invalidateHyperAiCommentOrigin(commentId)
   const textChanged = text !== normalizeBlockHtml(comment.text)
   const updatedComment = await prisma.$transaction(async (transaction) => {
