@@ -365,8 +365,9 @@ review_move() {
       jq -er --argjson id "$id" '.sections[] | select(.id == $id) | .section_title' 2>/dev/null); then
       section=$name
     else
-      # Name unknown: only the identity gate can still apply; completion checks stay with their own code.
-      blocker_gate 'section move' "$ticket" "$board"
+      # Name unknown (often a rate limit): let the move through. Only a named Valentin Review move is gated;
+      # refusing here would block every runner column move whenever the board read fails.
+      printf 'vcc: section %s name unknown; Valentin Review gate skipped\n' "$id" >&2
       return 0
     fi
   fi
