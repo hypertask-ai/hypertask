@@ -1,5 +1,5 @@
 import { getMcpSkillContext } from '@/lib/mcp/skills/context'
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { agentWritingPolicyEnabled, enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { isPlanLimitReachedError, planLimitResponse } from '@/lib/planLimits';
 import { IdempotencyAccessError } from "@/lib/mcp/idempotency/idempotencyStore"
@@ -1221,7 +1221,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof AgentLogBoardMemberError) {
       return NextResponse.json({ success: false, error: error.message, code: 'forbidden' }, { status: 403 })
     }
-    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) }, { status: 400 })
     if (isPlanLimitReachedError(error)) {
       const response = planLimitResponse(error);
       return NextResponse.json(response.body, { status: response.status });

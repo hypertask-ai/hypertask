@@ -1,4 +1,4 @@
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
       { status: 400 }
     )
   } catch (error) {
-    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) }, { status: 400 })
     console.error('[MCP POST Publish Draft] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

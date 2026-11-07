@@ -1,4 +1,4 @@
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { isPlanLimitReachedError, planLimitResponse } from "@/lib/planLimits";
 import { TaskAttachmentLinkError } from "@/lib/storage/linkTaskAttachment";
 import { inlineAgentImagesForUser } from "@/lib/media/inlineAgentImages.server";
@@ -84,7 +84,7 @@ const handler: NextApiHandler = async (
 
       return res.status(200).json(toUpdate);
     } catch (error) {
-      if (error instanceof AgentWritingError) return res.status(400).json({ message: error.message, code: error.code, field: error.field });
+      if (error instanceof AgentWritingError) return res.status(400).json({ message: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) });
       if (isPlanLimitReachedError(error)) {
         const response = planLimitResponse(error);
         return res.status(response.status).json(response.body);

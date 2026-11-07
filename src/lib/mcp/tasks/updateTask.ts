@@ -1,4 +1,4 @@
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { EstimateConstants, PriorityConstants } from '@/lib/constants/constants'
 import prisma from '@/lib/prisma'
@@ -50,7 +50,7 @@ async function preflight(options: ExecuteTaskUpdateOptions, plan: UpdatePlan) {
     try {
       for (const task of previous) await enforceAgentWriting(ctx.user.id, ctx.agentId, requestBody, { title: task.title, description: task.description_?.content ?? task.description })
     } catch (error) {
-      if (error instanceof AgentWritingError) return { response: NextResponse.json({ ...buildFieldError(error.code, error.field, error.message), ...(dryRun && { valid: false }) }, { status: 400 }), outcome: 'error' as const }
+      if (error instanceof AgentWritingError) return { response: NextResponse.json({ ...buildFieldError(error.code, error.field, error.message), details: agentWritingDetails(error), ...(dryRun && { valid: false }) }, { status: 400 }), outcome: 'error' as const }
       throw error
     }
   }

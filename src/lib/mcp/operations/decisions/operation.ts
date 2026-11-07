@@ -1,4 +1,4 @@
-import { AgentWritingError } from '@/lib/agents/writing'
+import { AgentWritingError, agentWritingDetails } from '@/lib/agents/writing'
 import { enforceAgentWriting } from '@/lib/agents/writingEnforcement'
 import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard"
 import { lockTaskTeamScope, TaskTeamScopeError } from "@/lib/mcp/tasks/agentMutationFence"
@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
-    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field }, { status: 400 })
+    if (error instanceof AgentWritingError) return NextResponse.json({ success: false, error: error.message, code: error.code, field: error.field, details: agentWritingDetails(error) }, { status: 400 })
     if (error instanceof TaskTeamScopeError) return NextResponse.json({ success: false, error: error.message }, { status: 404 })
     const identifierResponse = taskIdentifierErrorResponse(error)
     if (identifierResponse) return identifierResponse

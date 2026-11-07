@@ -7,6 +7,7 @@ import {
   checkMcpRateLimit,
   createUnauthorizedResponse,
   validateManagementOrSessionAuth,
+  validateMcpAuth,
 } from "@/lib/mcp/auth";
 import {
   InvalidAccountMcpTokenError,
@@ -33,13 +34,28 @@ const revokeTokenSchema = z
     message: "Provide exactly one of token or revoke_all=true",
   });
 
+async function refuseAccountTokens(request: NextRequest) {
+  if (request.headers.has("Authorization") && (await validateMcpAuth(request))) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "This login cannot create or revoke account tokens. Use an account MCP token or a management key with write access.",
+        code: "forbidden",
+        field: "authorization",
+      },
+      { status: 403 },
+    );
+  }
+  return createUnauthorizedResponse();
+}
+
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
   const ctx = await validateManagementOrSessionAuth(request, "write");
-  if (!ctx) return createUnauthorizedResponse();
+  if (!ctx) return refuseAccountTokens(request);
   if (ctx.management?.teamId) {
     return NextResponse.json(
       {
@@ -80,7 +96,7 @@ export async function DELETE(request: NextRequest) {
   if (rateLimited) return rateLimited;
 
   const ctx = await validateManagementOrSessionAuth(request, "write");
-  if (!ctx) return createUnauthorizedResponse();
+  if (!ctx) return refuseAccountTokens(request);
   if (ctx.management?.teamId) {
     return NextResponse.json(
       {
