@@ -38,11 +38,21 @@ question_check() {
       gsub("[\u0009-\u000d\u0020\u0085\u00a0\u1680\u2000-\u200b\u2028\u2029\u202f\u205f\u3000\ufeff]"; " ") |
       gsub("&quot;"; "\"") | gsub("&amp;"; "&") | gsub("^\\s+|\\s+$"; "");
     def unmention:
-      sub("^\\s*(<p\\b[^>]*>\\s*)?<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
+      sub("^\\s*(<(?:p|li|div|blockquote)\\b[^>]*>\\s*)*<span\\b(?=[^>]*data-type=[\"\u0027]mention[\"\u0027])[^>]*>Valentin Yeo</span>\\s*"; "");
     ($markdown == "true") as $md |
     (if $md then $text | split("\n") | map(gsub("^\\s+|\\s+$"; "") | select(length > 0))
-     else [$text | scan("<p\\b[^>]*>(.*?)</p>"; "s") | .[0]] end) as $paragraphs |
-    ($paragraphs | map(if $md then gsub("\\*\\*"; "") else visible end)) as $plain |
+     else $text | gsub("[\\r\\n]+"; " ") |
+       gsub("(?<opening>Question:\\s*<strong\\b[^>]*>)(?<question>.*?)</strong>";
+         .opening + (.question | gsub("<br\\s*/?>"; " "; "i")) + "</strong>"; "is") |
+       gsub("</?(?:ul|ol)\\b[^>]*>"; ""; "i") |
+       gsub("<br\\s*/?>|</(?:p|li|div|blockquote|h[1-6])>"; "\n"; "i") | split("\n") |
+       map(gsub("^\\s+|\\s+$"; "") | select((visible | length) > 0)) end) as $paragraphs |
+    ($paragraphs | map(if $md then gsub("\\*\\*"; "") else unmention | visible end)) as $plain |
+    ([$paragraphs | to_entries[] | select(.value |
+      (if $md then . else unmention end) |
+      [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
+        else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
+        (if $md then . else visible end) | endswith("?")] | any) | .key] | first) as $question_index |
     (if $md then $text | gsub("\\[(?<label>[^\\]]*)\\]\\([^\\s)]*\\)"; "\(.label)")
      else $text | visible end) as $visible |
     (if $md then $text | gsub("\\[[^\\]]*\\]\\([^\\s)]*\\)"; "") | visible
@@ -52,15 +62,19 @@ question_check() {
       (if ($first | (if $md then gsub("[*_`]"; "") else . end) | test("^What this is:\\s*\\S")) and
           ($md or ($text | unmention | visible | test("^What this is:\\s*\\S")))
        then empty else "What this is: <what he is deciding, in his words> first (Markdown: What this is: ...)" end),
-      (if any($paragraphs[];
-        (if $md then . else unmention end) |
-        [capture(if $md then "^Question:\\s*\\*\\*(?<question>.*?)\\*\\*"
-          else "^\\s*(?:<[^>]*>\\s*)*Question:\\s*<strong\\b[^>]*>(?<question>.*?)</strong>" end; "s").question |
-          (if $md then . else visible end) | endswith("?")] | any)
+      (if $question_index != null
        then empty else "Question: <strong>yes/no question?</strong> (Markdown: Question: **yes/no question?**)" end),
       ("Yes:", "No:", "My recommendation:") as $part |
         if any($plain[]; startswith($part)) then empty else $part end
     ] + [
+      (if ([$plain[] | select(startswith("Question:"))] | length) > 1
+       then "only one Question:" else empty end),
+      (if $question_index != null and $question_index > 8
+       then "at most 8 context lines before Question:" else empty end),
+      (if $question_index != null and ($plain[$question_index + 1] // "" | startswith("My recommendation:") | not)
+       then "My recommendation: must be right under Question:" else empty end),
+      (if $text | test("https?://|www\\.|<a\\b|\\[[^\\]]*\\]\\("; "i")
+       then "no outside links in a Question" else empty end),
       (if any($plain[]; startswith("Why:") or (startswith("My recommendation:") and test("\\bWhy:")))
        then empty else "Why:" end),
       ($visible | scan("(?i)\\bsrc/[^\\s]*|\\b[\\w./-]+\\.(?:tsx?|js|md)\\b|[^\\s]*/api/[^\\s]*|\\b(?:endpoint|route|bearer|OAuth|prefilter|regex|schema|migration|CodeQL|token audience)\\b")),

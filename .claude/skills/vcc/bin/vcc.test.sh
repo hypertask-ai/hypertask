@@ -279,8 +279,8 @@ question_refused() {
   [[ $(< "$T/err") == *'rewrite it for a product owner (pospeak)'* ]] || fail 'missing product-owner guidance'
   [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'refused Question reached CLI'
 }
-plain='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes.</p><p>Why: less work.</p>'
-inline_why='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>Yes: keep it.</p><p>No: remove it.</p><p>My recommendation: yes. Why: less work.</p>'
+plain='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes.</p><p>Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
+inline_why='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p><p>Question: <strong>Keep it?</strong></p><p>My recommendation: yes. Why: less work.</p><p>Yes: keep it.</p><p>No: remove it.</p>'
 for text in "$plain" "$inline_why" "$question"; do
   allowed bash "$vcc" comment add X-1 --kind question --text "$text"
   [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--text> <$text>" ]] || fail 'Question arguments changed'
@@ -345,8 +345,11 @@ for word in 'src/app/page.tsx' '/api/' '/api/boards' 'page.ts' 'page.tsx' 'page.
 done
 question_refused CI comment add X-1 --kind question --text "$plain<p>CI and OAuth</p>"
 [[ $(< "$T/err") == *OAuth* ]] || fail 'did not name every developer word'
-for text in   "$plain<p>We can decide in Circle, with ci and circles.</p>"   "$plain<p><a href="https://example.test/src/app/page.tsx/api/OAuth/CI#123">Details</a></p>"   "$plain<p><a href="https://example.test/123">PR #123</a></p>"   "$plain<p><a href="https://example.test/123"><strong>#123</strong></a></p>"; do
-  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+allowed bash "$vcc" comment add X-1 --kind question --text "$plain<p>We can decide in Circle, with ci and circles.</p>"
+for link in '<a href="https://example.test">Details</a>' 'https://example.test' 'www.example.test' '<a href="/detail/project-15/1">Details</a>'; do
+  question_refused 'no outside links' comment add X-1 --kind question --text "$plain<p>$link</p>"
+  fixture "$plain<p>$link</p>"
+  review_refused 'no outside links' task move X-1 --section 'Valentin Review'
 done
 question_refused '#456' comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">PR #123</a> #456</p>"
 question_refused OAuth comment add X-1 --kind question --text "$plain<p><a href="https://example.test/123">OAuth</a></p>"
@@ -378,23 +381,22 @@ markdown='What this is: the setting that keeps the board tidy.
 
 Question: **Keep it?**
 
+My recommendation: yes. Why: less work.
 Yes: keep it.
-No: remove it.
-My recommendation: yes. Why: less work.'
+No: remove it.'
 allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown"
 [[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$markdown>" ]] || fail 'Markdown arguments changed'
 for context in $'\u200b' $'\u00a0\u200b\u3000\ufeff' '&#9;&#xA;&#160;' '&Tab;&NewLine;&emsp;' '[](https://example.test)' '[&#32;](https://example.test)' '*' '_' '**' '* _ **' '`' '```' '* _ ` **' '[*](https://example.test)' '<em>_</em>'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   question_refused 'What this is:' comment add X-1 --kind question --markdown --text "$text"
 done
-for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' 'See [*the setting*](https://example.test).' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
+for context in $'\u200b**設定を確認。**' $'\u00a0*the setting* stays.' '*the setting* keeps the board tidy.' '_the setting_ keeps the board tidy.' '**the setting** keeps the board tidy.' '`the setting` keeps the board tidy.' '<em>the setting</em> stays.' '設定を確認。' 'Keep version 1.2, A/B, and C++.'; do
   text="${markdown/the setting that keeps the board tidy./"$context"}"
   allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
 done
 context='&#9;See [the setting](https://example.test)&#x20;here.'
 text="${markdown/the setting that keeps the board tidy./"$context"}"
-allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
-[[ $(< "$T/out") == "stub: <comment> <add> <X-1> <--kind> <question> <--markdown> <--text> <$text>" ]] || fail 'Markdown context arguments changed'
+question_refused 'no outside links' comment add X-1 --kind question --markdown --text "$text"
 question_refused '#123' comment add X-1 --kind question --markdown --text "$text #123"
 question_refused '#35' comment add X-1 --kind question --markdown --text "$text &#35;123"
 printf '%s\n' "$markdown" > "$T/question.md"
@@ -404,8 +406,38 @@ question_refused 'My recommendation:' comment add X-1 --kind question --markdown
 question_refused 'Question:' comment add X-1 --kind question --markdown --text "${markdown/Keep it?/Keep it.}"
 question_refused OAuth comment add X-1 --kind question --markdown --text "$markdown
 OAuth"
-allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$markdown
+question_refused 'no outside links' comment add X-1 --kind question --markdown --text "$markdown
 [PR #123](https://example.test/api/OAuth/CI)"
+for suffix in '<p>Extra.</p>' '<div>Extra.</div>' '<li><p>Extra.</p></li>' '<br>Extra.<br>'; do
+  context='<p><strong>What this is:</strong> the setting that keeps the board tidy.</p>'
+  for ((n=1; n<8; n++)); do context+="$suffix"; done
+  text="${plain/$label/$context}"
+  allowed bash "$vcc" comment add X-1 --kind question --text "$text"
+  text="${plain/$label/$context$suffix}"
+  question_refused 'at most 8 context lines' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'at most 8 context lines' task move X-1 --section 'Valentin Review'
+done
+context='What this is: the setting that keeps the board tidy.'
+for ((n=1; n<8; n++)); do context+=$'\nExtra.'; done
+text="${markdown/What this is: the setting that keeps the board tidy./$context}"
+allowed bash "$vcc" comment add X-1 --kind question --markdown --text "$text"
+question_refused 'at most 8 context lines' comment add X-1 --kind question --markdown --text "${markdown/What this is: the setting that keeps the board tidy./$context$'\nExtra.'}"
+for text in "${plain/<p>My recommendation: yes.<\/p>/}<p>My recommendation: yes.</p>" "${plain/<p>My recommendation: yes.<\/p>/<p>Extra.</p><p>My recommendation: yes.</p>}"; do
+  question_refused 'must be right under' comment add X-1 --kind question --text "$text"
+  fixture "$text"
+  review_refused 'must be right under' task move X-1 --section 'Valentin Review'
+done
+text="${plain/<p>Question:/<p>Question: note.</p><p>Question:}"
+question_refused 'only one Question:' comment add X-1 --kind question --text "$text"
+fixture "$text"
+review_refused 'only one Question:' task move X-1 --section 'Valentin Review'
+question_refused 'only one Question:' comment add X-1 --kind question --markdown --text "${markdown/Question: **Keep it?**/Question: summary$'\n'Question: **Keep it?**}"
+question_refused 'must be right under' comment add X-1 --kind question --markdown --text "${markdown/My recommendation: yes. Why: less work./Extra.$'\n'My recommendation: yes. Why: less work.}"
+for context in '<ul><li><p>What this is: the setting that keeps the board tidy.</p></li></ul>' '<blockquote>What this is: the setting that keeps the board tidy.</blockquote>'; do
+  allowed bash "$vcc" comment add X-1 --kind question --text "${plain/$label/$context}"
+done
+printf 'ok short context, immediate recommendation, one question and no links enforced with allowed controls\n'
 printf 'ok singular/plural, text/body/file, equals options, and Markdown forms\n'
 
 for kind in qa done ''; do
