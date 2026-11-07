@@ -199,4 +199,28 @@ Next.js build worker exited with code: null and signal: SIGKILL
 
 The kill lands about 130 seconds into the compile. There is no "Reached heap limit". The 4096 MB cap was still in the build script, so the worker could hold a 4 GB heap on an 8 GB machine while native SWC memory sat outside that cap. Pull request 3044 added no dependency and no build setting. It is the straw. The tree diff from the last green commit is about 1555 lines.
 
-The build script now sets `--max-old-space-size=3072`. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`. `tests/build-memory-config.test.cjs` fails if the cap rises above 3072. If the next production build says "Reached heap limit", 3072 MB is too small for the compiler and the next step is the paid Enhanced Build Machine, which is Valentin's decision. A silent SIGKILL at 3072 means the native side still does not fit, and that is the same decision.
+The build script then set `--max-old-space-size=3072`. `NEXT_WEBPACK_PARALLELISM` stayed 1 and the builder stayed `--webpack`. The guard test rejected a cap above 3072. The written next step, if a build then said "Reached heap limit", was the paid Enhanced Build Machine. A silent SIGKILL at 3072 would have been the same decision.
+
+That heap-limit case arrived the same day. HYCI-184 measured it and raised the cap to 3584 MB instead of buying a larger machine. See the next section.
+
+## Heap cap 3584 MB (2026-11-07, HYCI-184)
+
+Ticket: https://app.hypertask.ai/detail/project-11514/184
+
+The last green production deployment was `87a3b06a` (deployment 7627067597). The next production deployments failed while the build script still set `--max-old-space-size=3072`:
+
+| Commit | Deployment | Log |
+| --- | --- | --- |
+| `2d07cb81ac` (first bad, merge of pull request 3038) | 7627757510 | `dpl_3nFWTzD4yPtksDH8sEtT6HKY6wDe` |
+| `e41b16ad95` | 7627883408 | `dpl_J6DZH8eFqGiaSUdoKRuf5dr66TzA` |
+| `c33489117f` | 7627998823 | GitHub recorded failure |
+
+The first two logs die in "Creating an optimized production build" with:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+Mark-compact had reduced the live set to about 2783 MB, and the worker was still running when V8 aborted. That is the 3072 MB heap cap, not the SIGKILL from HYCI-177. The build machine is still the standard 8192 MiB machine. Pull request 3038 changed 177 lines of flag defaults and added no dependency. The tree was already on the ceiling.
+
+The build script now sets `--max-old-space-size=3584`. That is 512 MB under the 4096 MB cap that SIGKILL'd the machine, and under half of 8192 MiB. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`. `tests/build-memory-config.test.cjs` requires this exact cap. A SIGKILL at 3584 MB, or another heap abort at 3584 MB, is the paid Enhanced Build Machine, which is Valentin's decision.
