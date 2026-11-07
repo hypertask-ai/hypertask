@@ -121,8 +121,8 @@ function moveFixture({ section = "Done", isDone = true, description = "", accept
     calls,
     hasUnfinishedFullDayObservation: controller.hasUnfinishedFullDayObservation,
     saved: () => saved,
-    update: () => controller.updateTaskSingle(
-      byName ? { id: 1, section } : { id: 1, sectionId: 11, section },
+    update: (extra = {}) => controller.updateTaskSingle(
+      { ...(byName ? { id: 1, section } : { id: 1, sectionId: 11, section }), ...extra },
       { id: 985 },
       null,
       { skipAutoAssign: true, taskMovedActivity: { fromAgent: null } },
@@ -142,6 +142,8 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished\nReport: passed"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed; report unfinished"), false);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished; report passed"), true);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed, report unfinished"), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished, report passed"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Search now finds reminders."), false);
   const refused = await open.update();
   assert.equal(refused.status, 409);
@@ -193,4 +195,11 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   });
   assert.equal((await namedDone.update()).status, 409);
   assert.equal(namedDone.saved().sectionId, 10);
+
+  const clearing = moveFixture({
+    description: "<p>Full-day observation gate: passed.</p>",
+    acceptanceCriteria: "An explicit unfinished full-day observation gate remains.",
+  });
+  assert.equal((await clearing.update({ acceptanceCriteria: "" })).status, 200);
+  assert.equal(clearing.saved().sectionId, 11);
 });

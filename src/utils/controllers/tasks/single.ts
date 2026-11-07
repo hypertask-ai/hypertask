@@ -103,8 +103,8 @@ export function hasUnfinishedFullDayObservation(text: string): boolean {
     .replace(/<[^>]+>/g, " ")
     .replace(/&(?:nbsp|#160);/gi, " ")
     .split(/\n/);
-  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.;]{0,80}\\bfull[- ]day observation\\b`, "i");
-  const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.;]{0,80}/gi;
+  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.;,]{0,80}\\bfull[- ]day observation\\b`, "i");
+  const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.;,]{0,80}/gi;
   return lines.some((line) => {
     const plain = line.replace(/\s+/g, " ").trim();
     if (!plain) return false;
@@ -468,7 +468,9 @@ export async function updateTaskSingle(
           typeof requestedMutation.description === "string"
             ? requestedMutation.description
             : currentState.description_?.content ?? currentState.description ?? "",
-          currentState.acceptanceCriteria ?? "",
+          typeof requestedMutation.acceptanceCriteria === "string"
+            ? requestedMutation.acceptanceCriteria
+            : currentState.acceptanceCriteria ?? "",
         ].join("\n");
         if (
           sectionChanged &&
