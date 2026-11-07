@@ -70,6 +70,7 @@ function fixture(entry) {
     '@/lib/mcp/tasks/extractPrLinks': { extractPrLinks: () => [] },
     '@/lib/pullRequests/githubPullRequests': { derivePullRequestDisplayState: () => '', parseGithubPullRequestUrl: () => null },
     '@/lib/pullRequests/taskPullRequests': { refreshTaskPullRequests: async () => [] },
+    '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/lib/ai/tools/execution': { withToolErrors: (fn) => fn },
     '@/lib/ai/tools/helpers': { mapTaskToMcpGetResponse: () => mappedTask, stripInlineDataUris: (text) => text, sanitizeForJson: (value) => value },
   };
