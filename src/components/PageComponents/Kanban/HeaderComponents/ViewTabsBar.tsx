@@ -190,7 +190,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                               <Sparkles
                                 size={13}
                                 strokeWidth={1.75}
-                                className="shrink-0 self-center text-hypertasks-ai-purple"
+                                className={cn('shrink-0 self-center', !cleanup && 'text-hypertasks-ai-purple')}
                                 aria-label="Smart split"
                               />
                             )}
@@ -226,7 +226,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                               <Sparkles
                                 size={12}
                                 strokeWidth={1.75}
-                                className="shrink-0 text-hypertasks-ai-purple"
+                                className={cn('shrink-0', !cleanup && 'text-hypertasks-ai-purple')}
                                 aria-label="Smart split"
                               />
                             )}
