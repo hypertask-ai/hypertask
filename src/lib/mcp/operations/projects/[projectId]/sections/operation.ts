@@ -12,6 +12,8 @@ import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8354_SECTION_NAME_FLAG } from '@/lib/flags/definitions/htpr-8354-section-name'
 import { columnWorkflowRole } from '@/lib/mcp/boards/workflowMapping'
 import type { BoardColumnRole } from '@/lib/mcp/boards/columnRole'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_8758_WORKFLOW_MAPPING_FLAG } from '@/lib/flags/definitions/htpr-8758-workflow-mapping'
 
 export interface SectionListItem {
   id: number
@@ -24,7 +26,7 @@ export interface SectionListItem {
   isDone: boolean | null
   autoAssign: number | string | null
   taskCount: number
-  role: BoardColumnRole
+  role?: BoardColumnRole
 }
 
 export interface ListSectionsResponse {
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
     const user = ctx.user;
     const named = await isFeatureEnabled(HTPR_8354_SECTION_NAME_FLAG, user.id)
+    const workflowMapping = await isFeatureEnabled(HTPR_8758_WORKFLOW_MAPPING_FLAG, user.id)
     const projectId = parseInt(params.projectId)
 
     if (isNaN(projectId) || projectId <= 0) {
@@ -180,7 +183,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
           isDone: section.isDone ?? null,
           autoAssign: null,
           taskCount,
-          role: columnWorkflowRole(section),
+          ...(workflowMapping ? { role: columnWorkflowRole(section) } : {}),
         },
         message: 'Section created successfully'
       },
@@ -221,6 +224,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     }
     const user = ctx.user;
     const named = await isFeatureEnabled(HTPR_8354_SECTION_NAME_FLAG, user.id)
+    const workflowMapping = await isFeatureEnabled(HTPR_8758_WORKFLOW_MAPPING_FLAG, user.id)
     const projectId = parseInt(params.projectId)
 
     if (isNaN(projectId)) {
@@ -309,7 +313,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
           isDone: section.isDone,
           autoAssign: section.autoAssignAgentId ?? section.autoAssignUserId ?? null,
           taskCount,
-          role: columnWorkflowRole(section),
+          ...(workflowMapping ? { role: columnWorkflowRole(section) } : {}),
         }
       })
     )

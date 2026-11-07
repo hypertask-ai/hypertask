@@ -1,6 +1,7 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7990_TASK_MOVE_REFUSAL_FLAG } from '@/lib/flags/definitions/htpr-7990-task-move-refusal';
+import { HTPR_8758_WORKFLOW_MAPPING_FLAG } from '@/lib/flags/definitions/htpr-8758-workflow-mapping';
 import { loadBoardWorkflowMapping } from '@/lib/mcp/boards/workflowMapping';
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
@@ -34,7 +35,8 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
                 errorData,
                 `Move task failed: ${moveResponse.status}`
             )
-            if (moveResponse.status >= 400 && moveResponse.status < 500) {
+            if (moveResponse.status >= 400 && moveResponse.status < 500 &&
+                await isFeatureEnabled(HTPR_8758_WORKFLOW_MAPPING_FLAG, ctx.user.id)) {
                 const mapping = await loadBoardWorkflowMapping(task.projectId)
                 message = `${message} Allowed workflow mapping: ${mapping}.`
             }
@@ -52,9 +54,13 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
             { status: 400, code: 'invalid_value', field: 'sectionId' }
         )
     } else if (requestBody.sectionId && !sectionInfo) {
-        const mapping = await loadBoardWorkflowMapping(task.projectId)
+        const mappingEnabled = await isFeatureEnabled(HTPR_8758_WORKFLOW_MAPPING_FLAG, ctx.user.id)
+        const mapping = mappingEnabled ? await loadBoardWorkflowMapping(task.projectId) : null
+        const detail = mapping
+            ? `sectionId does not match a column. Allowed workflow mapping: ${mapping}.`
+            : 'sectionId does not match a column. Pass a column id from the task\'s own board.'
         throw Object.assign(
-            new Error(`sectionId does not match a column. Allowed workflow mapping: ${mapping}.`),
+            new Error(detail),
             { status: 400, code: 'not_found', field: 'sectionId' }
         )
     }
