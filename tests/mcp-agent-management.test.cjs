@@ -587,7 +587,7 @@ test('token rotation reactivates a revoked agent owned by the caller', async () 
     agent: {
       findFirst: async (args) => {
         queries.push(args)
-        return { id: 'owned-agent', runtimeGeneration: 3 }
+        return { id: 'owned-agent', runtimeGeneration: 3, credentialTeamId: null, credentialTeamAccessBinding: null }
       },
       updateMany: async (args) => {
         updates.push(args)

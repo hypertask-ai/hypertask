@@ -117,12 +117,13 @@ done
 cat > "$T/gh" <<G
 #!/bin/sh
 { printf "%s " "\$*" | tr "\\n" " "; echo; } >> "$T/gh.log"
-case "\$*" in *headRefName*) echo '{"headRefName":"runner8/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' ;; *statusCheckRollup*) cat "$T/rollup" ;; esac
+case "\$*" in *headRefName*) echo '{"headRefName":"runner8/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}' ;; *statusCheckRollup*) cat "$T/rollup" ;; api*) [ ! -f "$T/api.fail" ] && cat "$T/runs" || exit 1 ;; *) exit 1 ;; esac
 G
 roll() { # state then name:status:conclusion ...
   local st=$1; shift
   printf '%s\n' "$@" | jq -Rn --arg st "$st" '{data:{repository:{pullRequest:{state:$st,headRefOid:("a" * 40)},object:{oid:("a" * 40),statusCheckRollup:{contexts:{nodes:[inputs | split(":") | {name:.[0],status:.[1],conclusion:(.[2] // "")}],pageInfo:{hasNextPage:false}}}}}}}' > "$T/rollup"
 }
+printf '%s\n' '[{"workflow_runs":[]}]' > "$T/runs"
 chmod +x "$T/gh"; roll OPEN "CI Tests:IN_PROGRESS:" "Lint:COMPLETED:SUCCESS"
 for repo in '' 'not-a-repository' 'owner/repo/extra'; do
   CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo "$repo" >/dev/null 2>&1
@@ -220,6 +221,33 @@ jq -n '{state:"OPEN", statusCheckRollup:[
 check_rollup "new status context supersedes failure" 0
 jq '.statusCheckRollup += [{__typename:"StatusContext", context:"other", createdAt:"2026-01-01T00:00:00Z", state:"FAILURE"}]' "$T/rollup" > "$T/rollup.next" || exit 1; mv "$T/rollup.next" "$T/rollup"
 check_rollup "unrelated status failure remains" 1
+jq -n '{state:"OPEN", statusCheckRollup:[
+  {__typename:"CheckRun", name:"CI", workflowName:"Tests", detailsUrl:"https://github.com/o/r/actions/runs/9/job/1", status:"COMPLETED", conclusion:"FAILURE"},
+  {__typename:"CheckRun", name:"CI", workflowName:"Tests", detailsUrl:"https://github.com/o/r/actions/runs/10/job/2", status:"COMPLETED", conclusion:"SUCCESS"}]}' > "$T/rollup" || exit 1
+printf '%s\n' '[{"workflow_runs":[{"id":11,"workflow_id":1,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"queued","conclusion":null}]}]' > "$T/runs"
+check_rollup "superseded failure with newer queued retry stays pending" 2
+printf '%s\n' '[{"workflow_runs":[]}]' > "$T/runs"
+roll OPEN "CI Tests:COMPLETED:SUCCESS"
+for status in queued in_progress; do
+  printf '[{"workflow_runs":[{"id":10,"workflow_id":1,"name":"CI Tests","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"%s","conclusion":null}]}]\n' "$status" > "$T/runs"
+  CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 0 >/dev/null
+  eq "stale success with $status retry stays pending" "$?" 2
+done
+printf '%s\n' '[{"workflow_runs":[{"id":10,"workflow_id":1,"name":"CI Tests","head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"completed","conclusion":"failure"}]}]' > "$T/runs"
+out=$(CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 0)
+eq "failed retry overrides stale success" "$?" 1
+grep -q 'CI Tests (failure)' <<<"$out" && ok "failed retry is named" || bad "failed retry not named"
+printf '%s\n' '[{"workflow_runs":[]},{"workflow_runs":[{"id":10,"workflow_id":1,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"queued","conclusion":null}]}]' > "$T/runs"
+CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 0 >/dev/null
+eq "pending run on later page prevents pass" "$?" 2
+printf '%s\n' '[{"workflow_runs":[{"id":9,"workflow_id":1,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"completed","conclusion":"failure"},{"id":99,"workflow_id":1,"head_sha":"other","status":"in_progress","conclusion":null}]},{"workflow_runs":[{"id":10,"workflow_id":1,"head_sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","status":"completed","conclusion":"success"}]}]' > "$T/runs"
+CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 0 >/dev/null
+eq "newer success across pages ignores old and other-head runs" "$?" 0
+grep -q 'api --paginate --slurp repos/hypertask-ai/hypertask/actions/runs?head_sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&per_page=100' "$T/gh.log" && ok "current head and pagination requested" || bad "head or pagination missing"
+touch "$T/api.fail"
+CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask --timeout 0 >/dev/null 2>&1
+eq "API failure cannot pass" "$?" 2
+rm "$T/api.fail"
 roll MERGED "CI Tests:COMPLETED:CANCELLED"
 CI_WAIT_GH=$T/gh GH_NOTIFY_DIR=$T/notify ./ci-wait 6 --head aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --repo hypertask-ai/hypertask >/dev/null; eq "merged PR exits 0" "$?" 0
 roll OPEN "CI Tests:COMPLETED:SUCCESS" "Lint:QUEUED:"

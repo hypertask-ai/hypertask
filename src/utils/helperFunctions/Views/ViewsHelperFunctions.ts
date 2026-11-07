@@ -657,6 +657,12 @@ export const pinProjectToUrlView = (project: IProject, viewSlug?: string | null,
   return pinnedProject
 }
 
+export const getProjectForViewMutation = (cachedProject: IProject, baseProject: IProject): IProject =>
+  pinProjectToUrlView(
+    cachedProject,
+    baseProject.project_view?.user_project_views[0]?.appliedView?.slug ?? "default",
+  )
+
 export const getBoardAndUserAppliedSortingView = (_currentProject: IProject) => {
     const defaultView = _currentProject.project_view?.default_view?.board_sorting_mode
     const userAppliedView = _currentProject.project_view?.user_project_views[0]?.appliedView?.board_sorting_mode

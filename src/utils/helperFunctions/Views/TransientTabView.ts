@@ -36,7 +36,12 @@ export function applyTransientTabSettings(
   isDirty: boolean,
 ) {
   const existing = projectView.user_project_views[0];
-  const persistedUnsavedId = existing?.unsavedViewId;
+  const persistedUnsavedView = existing?.unsavedView;
+  const persistedUnsavedId = existing?.unsavedViewId ?? (
+    persistedUnsavedView && typeof persistedUnsavedView === "object" && "id" in persistedUnsavedView
+      ? persistedUnsavedView.id
+      : undefined
+  );
   const transientId = `tab-unsaved:${baseView?.id ?? "default"}`;
   const transientView = isDirty
     ? {

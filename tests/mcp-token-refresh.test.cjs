@@ -161,7 +161,10 @@ test('an agent token with a bad signature does not disclose agent state', async 
 
   assert.equal(response.status, 401)
   assert.equal(body.reason, 'invalid_token')
-  assert.equal(body.message, 'Authentication required. Please check your token and try again.')
+  assert.match(body.message, /Authentication required/);
+  assert.match(body.message, /https:\/\/app\.hypertask\.ai\/agents/);
+  assert.match(body.message, /hypertask agents rotate-token --id/);
+  assert.match(body.message, /hypertask login --token/)
   assert.deepEqual(deps.calls.agentLookups, [])
 })
 
@@ -350,7 +353,10 @@ test('an invalid token keeps the generic invalid_token response', async () => {
 
   assert.equal(response.status, 401)
   assert.equal(body.reason, 'invalid_token')
-  assert.equal(body.message, 'Authentication required. Please check your token and try again.')
+  assert.match(body.message, /Authentication required/);
+  assert.match(body.message, /https:\/\/app\.hypertask\.ai\/agents/);
+  assert.match(body.message, /hypertask agents rotate-token --id/);
+  assert.match(body.message, /hypertask login --token/)
   assert.deepEqual(deps.calls.created, [])
   assert.deepEqual(deps.calls.claimed, [])
 })
