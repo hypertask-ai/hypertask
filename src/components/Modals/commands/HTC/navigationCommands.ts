@@ -270,6 +270,12 @@ export const getBulkTaskCommands = (
       ? `${commandOptions.bulkSelectionCount} selected tasks`
       : "Selected tasks",
     commandLists: [
+      ...(commandOptions.bulkMoveBoardEnabled ? [{
+        key: "bulkMoveToBoard",
+        name: "Move selected tasks to board",
+        commandMode: CommandMode.MoveTaskToBoard,
+        keywords: "move selected tasks board project",
+      }] : []),
       {
         key: "bulkMoveToColumn",
         name: commandOptions.kanbanSelectAllEnabled ? "Move to column" : "Move selected tasks to column",

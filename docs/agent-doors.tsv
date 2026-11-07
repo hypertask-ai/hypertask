@@ -1,7 +1,7 @@
 action	person_action	cli	mcp_api	ai_chat	note
 task.create	Create a task, subtask, copy of a task, or a task from a comment	task create	/mcp/tasks/create	create_task	
 task.update	Rename a task and change its dates, priority, size, tags or description	task update	/mcp/tasks/update	update_task	
-task.move	Move a task to another column or board	task move	/mcp/tasks/move	move_task_between_boards	Column moves have no AI chat tool
+task.move	Move one or more tasks to another column or board	task move	/mcp/tasks/move	move_task_between_boards	Column moves have no AI chat tool
 task.assign	Assign a task to a person or agent	task assign	/mcp/assignees/assign	assign_user	
 task.archive	Archive, delete or bulk-archive tasks	no	no	no	Gap HTPR-8215: /mcp/tasks is GET only and the CLI has no task archive or delete
 task.blocked	Mark a task blocked by a person, blocking, or clear the red border	task waiting-on	/mcp/tasks/waiting-on	no	Accept, decline and duplicate-mark have no door

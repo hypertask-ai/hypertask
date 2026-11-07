@@ -1127,6 +1127,7 @@ export interface IAllCommands {
   context: HTCContext;
   triageInboxEnabled?: boolean;
   bulkSelectionCount?: number;
+  bulkMoveBoardEnabled?: boolean;
   kanbanSelectAllEnabled?: boolean;
   task?: {
     taskId: number;
