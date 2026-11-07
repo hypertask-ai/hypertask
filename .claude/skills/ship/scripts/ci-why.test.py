@@ -41,6 +41,11 @@ assert '--allow-escape-sequences' not in args or args[1].endswith('/logs'), args
 route = json.loads((root / 'routes').read_text()).get(args[1])
 if route is None:
     sys.exit('unexpected GitHub API read: ' + args[1])
+if 'sequence' in route:
+    counter = root / 'sequence-count'
+    count = int(counter.read_text()) if counter.exists() else 0
+    counter.write_text(str(count + 1))
+    route = route['sequence'][min(count, len(route['sequence']) - 1)]
 if 'error' in route:
     sys.exit(route['error'])
 if '\\x1b' in route.get('raw', '') and not {'--allow-escape-sequences', '--paginate'} <= set(args[2:]):
@@ -313,6 +318,149 @@ else:
                     self.assertTrue(result.stdout.startswith('FAIL: '), result.stdout)
                     target = production_run['html_url'] if conclusion == 'success' else '1771'
                     self.assertEqual(result.stdout.splitlines()[-1], f'run ci-why {target} for the failed step')
+
+    def release_routes(self):
+        sha = 'a' * 40
+        self.routes[f'{BASE}/pulls/1771']['json']['base'] = {'ref': 'production', 'sha': 'c' * 40}
+        self.routes[f'{BASE}/branches/production'] = {'json': {'protection': {
+            'enabled': True, 'required_status_checks': {
+                'checks': [{'context': 'ci-tests', 'app_id': 15368}], 'contexts': ['ci-tests']}}}}
+        self.routes[f'{BASE}/rules/branches/production?per_page=100&page=1'] = {'json': [
+            {'type': 'required_status_checks', 'parameters': {'required_status_checks': [
+                {'context': 'ai-review'}, {'context': 'claude-review'}]}}]}
+        self.routes[f'{BASE}/commits/{sha}/statuses?per_page=100&page=1'] = {'json': []}
+        self.routes[f'{BASE}/commits/{sha}/check-runs?filter=all&per_page=100&page=1'] = {'json': {
+            'check_runs': [{'id': 1, 'name': 'ci-tests', 'head_sha': sha, 'status': 'completed',
+                            'conclusion': 'success', 'app': {'id': 15368}, 'html_url': 'https://example.test/ci'}]}}
+
+    def test_release_missing_reviews_despite_green_jobs(self):
+        self.release_routes()
+        result = self.invoke('1771', '--release')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('ci-tests app_id=15368 check_run: success https://example.test/ci', result.stdout)
+        self.assertIn('ai-review: missing', result.stdout)
+        self.assertIn('claude-review: missing', result.stdout)
+
+    def test_release_review_states_and_current_head(self):
+        self.release_routes()
+        sha = 'a' * 40
+        endpoint = f'{BASE}/commits/{sha}/statuses?per_page=100&page=1'
+        self.routes[endpoint]['json'] = [
+            {'id': 1, 'context': 'ai-review', 'state': 'failure', 'target_url': 'https://example.test/ai'},
+            {'id': 2, 'context': 'claude-review', 'state': 'pending', 'target_url': 'https://example.test/claude'},
+            {'id': 3, 'context': 'ai-review', 'state': 'success', 'head_sha': 'b' * 40}]
+        result = self.invoke('1771', '--release', '--json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(result.stdout)
+        self.assertEqual(data['head'], sha)
+        checks = {check['name']: check for check in data['checks']}
+        self.assertEqual(checks['ai-review']['state'], 'failure')
+        self.assertEqual(checks['ai-review']['url'], 'https://example.test/ai')
+        self.assertEqual(checks['claude-review']['state'], 'pending')
+        self.routes[endpoint]['json'][0]['state'] = 'success'
+        self.routes[endpoint]['json'][1]['state'] = 'success'
+        result = self.invoke('1771', '--release', '--json')
+        self.assertTrue(all(check['state'] == 'success' for check in json.loads(result.stdout)['checks']))
+        self.assertTrue(any(f'/commits/{sha}/statuses?' in call[1] for call in self.calls()))
+
+    def test_release_pinned_apps_and_api_failure(self):
+        self.release_routes()
+        rules = self.routes[f'{BASE}/rules/branches/production?per_page=100&page=1']['json']
+        rules[0]['parameters']['required_status_checks'][0]['integration_id'] = 42
+        endpoint = f'{BASE}/commits/{"a" * 40}/statuses?per_page=100&page=1'
+        self.routes[endpoint]['json'] = [{'id': 1, 'context': 'ai-review', 'state': 'success',
+                                          'target_url': 'https://example.test/ai'}]
+        for state in ('failure', 'pending', 'success'):
+            with self.subTest(state=state):
+                self.routes[endpoint]['json'][0]['state'] = state
+                result = self.invoke('1771', '--release', '--json')
+                checks = {check['name']: check for check in json.loads(result.stdout)['checks']}
+                self.assertEqual(checks['ai-review']['state'], state)
+                self.assertIs(checks['ai-review']['app_verified'], False)
+                self.assertIs(checks['ci-tests']['app_verified'], True)
+                self.assertIsNone(checks['claude-review']['app_verified'])
+                result = self.invoke('1771', '--release')
+                self.assertIn(f'ai-review app_id=42 status: {state} https://example.test/ai (app pin unverified)', result.stdout)
+        self.routes[endpoint]['json'][0]['app'] = {'id': 43}
+        result = self.invoke('1771', '--release', '--json')
+        check = json.loads(result.stdout)['checks'][0]
+        self.assertEqual(check['state'], 'missing')
+        self.assertIs(check['app_verified'], False)
+        self.routes[endpoint] = {'error': 'gh: unavailable (HTTP 503)'}
+        result = self.invoke('1771', '--release', '--json')
+        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.stdout, '')
+        self.assertIn('cannot read GitHub API', result.stderr)
+
+    def test_release_unknown_classic_still_reports_rules(self):
+        self.release_routes()
+        self.routes[f'{BASE}/branches/production']['json']['protection'].pop('required_status_checks')
+        result = self.invoke('1771', '--release')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('classic protection requirements unknown', result.stdout)
+        self.assertIn('ai-review: missing', result.stdout)
+        self.assertNotIn('no required checks', result.stdout)
+        self.assertFalse(any('/protection/required_status_checks' in call[1] for call in self.calls()))
+
+    def test_release_no_rules_and_unknown_classic(self):
+        self.release_routes()
+        self.routes[f'{BASE}/rules/branches/production?per_page=100&page=1']['json'] = []
+        protection = self.routes[f'{BASE}/branches/production']['json']['protection']
+        protection['enabled'] = False
+        result = self.invoke('1771', '--release')
+        self.assertIn('no required checks', result.stdout)
+        protection['enabled'] = True
+        protection.pop('required_status_checks')
+        result = self.invoke('1771', '--release')
+        self.assertIn('classic protection requirements unknown', result.stdout)
+        self.assertNotIn('no required checks', result.stdout)
+
+    def test_release_rerun_selection_and_unpinned_success(self):
+        self.release_routes()
+        sha = 'a' * 40
+        protection = self.routes[f'{BASE}/branches/production']['json']['protection']
+        protection['required_status_checks']['checks'] = [{'context': 'ci-tests'}]
+        runs = self.routes[f'{BASE}/commits/{sha}/check-runs?filter=all&per_page=100&page=1']['json']['check_runs']
+        runs[0].update(id=20, created_at='2026-01-01T00:00:00Z')
+        runs.append(dict(runs[0], id=19, created_at='2026-02-01T00:00:00Z', conclusion='failure'))
+        result = self.invoke('1771', '--release', '--json')
+        checks = json.loads(result.stdout)['checks']
+        self.assertEqual(next(c for c in checks if c['name'] == 'ci-tests')['state'], 'success')
+
+    def test_release_paginates_rules_and_check_runs(self):
+        self.release_routes()
+        rules = f'{BASE}/rules/branches/production?per_page=100&page='
+        self.routes[rules + '1']['json'] = [{'type': 'other'}] * 100
+        self.routes[rules + '2'] = {'json': [{'type': 'required_status_checks', 'parameters': {
+            'required_status_checks': [{'context': 'extra'}]}}]}
+        runs = f'{BASE}/commits/{"a" * 40}/check-runs?filter=all&per_page=100&page='
+        original = self.routes[runs + '1']['json']['check_runs']
+        self.routes[runs + '1']['json']['check_runs'] = [dict(original[0], name='other')] * 100
+        self.routes[runs + '2'] = {'json': {'check_runs': original}}
+        result = self.invoke('1771', '--release')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('extra: missing', result.stdout)
+        self.assertIn('ci-tests app_id=15368 check_run: success', result.stdout)
+
+    def test_release_warns_if_head_or_base_changes(self):
+        for field in ('head', 'base', 'base_sha'):
+            with self.subTest(field=field):
+                self.release_routes()
+                endpoint = f'{BASE}/pulls/1771'
+                first = self.routes[endpoint]['json']
+                second = json.loads(json.dumps(first))
+                if field == 'head':
+                    second['head']['sha'] = 'b' * 40
+                elif field == 'base':
+                    second['base']['ref'] = 'other'
+                else:
+                    second['base']['sha'] = 'd' * 40
+                self.routes[endpoint] = {'sequence': [{'json': first}, {'json': second}]}
+                (self.root / 'sequence-count').unlink(missing_ok=True)
+                result = self.invoke('1771', '--release', '--json')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn('changed during reads', json.loads(result.stdout)['warnings'][0])
+                self.routes[endpoint] = {'json': first}
 
     def calls(self):
         return [json.loads(line) for line in (self.root / 'calls').read_text().splitlines()]
