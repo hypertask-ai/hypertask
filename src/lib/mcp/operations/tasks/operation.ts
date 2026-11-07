@@ -18,6 +18,7 @@ import {
   mcpTaskLabelSelect,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
+import { withAttachmentDownloadHints } from '@/lib/mcp/tasks/attachmentDownloadHint'
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
 import { refreshTaskPullRequests } from '@/lib/pullRequests/taskPullRequests'
 import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
@@ -25,6 +26,7 @@ import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG, HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG, HTPR_8295_AGENT_ME_ASSIGNEE_FLAG, HTPR_8536_SECTION_NOT_FILTER_FLAG, HTPR_8738_PICKER_SKIPS_PARKED_FLAG } from '@/lib/flags/keys'
+import { HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG } from '@/lib/flags/definitions/htpr-8742-attachment-download-hint'
 import {
   ASSIGNED_TO_FILTER_MESSAGE,
   hasPrWhere,
@@ -356,16 +358,17 @@ export async function GET(request: NextRequest) {
           )
         }
 
+        const attachmentDownloadHints = await isFeatureEnabled(HTPR_8742_ATTACHMENT_DOWNLOAD_HINT_FLAG, user.id)
         const mapTask = async (task: (typeof tasks)[number]) => {
           const pullRequests = task.pullRequests?.length
             ? await refreshTaskPullRequests(task.id, task.pullRequests)
             : task.pullRequests
-          const detail = mapTaskToMcpGetResponse(
+          const detail = withAttachmentDownloadHints(mapTaskToMcpGetResponse(
             { ...task, pullRequests },
             user.id,
             ctx.agentId,
             ctx.teamScope,
-          )
+          ), attachmentDownloadHints)
           const mapped = {
             ...detail,
             skill_context: await getMcpSkillContext(ctx, task.projectId, [
