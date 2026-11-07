@@ -50,6 +50,7 @@ Internal build, release and monitoring recipes: [Ops map](../ops-map/INDEX.md).
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
 | Login | [login.md](login.md) | `login` (write journey) |
 | Legacy MCP SSE transport | [mcp-legacy-sse.md](mcp-legacy-sse.md) | no smoke id; verify requests and PostHog ingestion directly |
+| Next-task pick | [mcp-next-task.md](mcp-next-task.md) | read-only next-task and task context for project 15 |
 | MCP and CLI project listing | [mcp-project-list.md](mcp-project-list.md) | read-only pagination, malformed-input refusals, metadata and scoped caller checks |
 | MCP task lookup and hello | [mcp-task-lookup.md](mcp-task-lookup.md) | no smoke id; real `tools/call` lookups and read-only hello/catalog checks |
 | MCP task moves | [mcp-task-moves.md](mcp-task-moves.md) | disposable fixture refusal, unchanged column, successful moves; delete fixture |
