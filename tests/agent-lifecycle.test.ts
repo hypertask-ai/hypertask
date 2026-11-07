@@ -45,20 +45,28 @@ function fakeSetup(state: FakeState) {
         state.row && state.row.id === where.id ? { ...state.row } : null,
       updateMany: async ({ where, data }: any) => {
         if (state.loseTransition) return { count: 0 };
-        if (!state.row || state.row.revokedAt === null) return { count: 0 };
-        assert.equal(where.userId, 6);
-        state.row = {
-          ...state.row,
-          revokedAt: data.revokedAt,
-          mcpTokenHash: data.mcpTokenHash,
-          mcpTokenJti: data.mcpTokenJti,
-        };
+        if (!state.row || where.userId !== 6 || where.id !== state.row.id) {
+          return { count: 0 };
+        }
+        if (
+          data &&
+          typeof data === "object" &&
+          ("revokedAt" in data ||
+            "mcpTokenHash" in data ||
+            "runtimeGeneration" in data)
+        ) {
+          if (state.row.revokedAt === null) return { count: 0 };
+          state.row = {
+            ...state.row,
+            revokedAt: data.revokedAt,
+            mcpTokenHash: data.mcpTokenHash,
+            mcpTokenJti: data.mcpTokenJti,
+          };
+        } else {
+          state.row = { ...(state.row as AgentLifecycleRow), ...data };
+        }
         state.updateManyCount += 1;
         return { count: 1 };
-      },
-      update: async ({ data }: any) => {
-        state.row = { ...(state.row as AgentLifecycleRow), ...data };
-        return { ...(state.row as AgentLifecycleRow) };
       },
     },
     user: {

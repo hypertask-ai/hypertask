@@ -29,7 +29,7 @@ async function demo() {
   const prismaMock = prisma as any
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
-  const originalAgentUpdate = prismaMock.agent.update
+  const originalAgentUpdateMany = prismaMock.agent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst = prismaMock.revokedToken.findFirst
   const originalLogsCreate = prismaMock.logs.create
@@ -89,13 +89,15 @@ async function demo() {
 
     const findQueries: Record<string, any>[] = []
     let updateArgs: Record<string, any> | undefined
+    let archivedAt: Date | null = null
     prismaMock.agent.findFirst = async (args: Record<string, any>) => {
       findQueries.push(args)
-      return { ...row }
+      return { ...row, archivedAt: archivedAt ?? row.archivedAt }
     }
-    prismaMock.agent.update = async (args: Record<string, any>) => {
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       updateArgs = args
-      return { ...row, archivedAt: args.data.archivedAt }
+      archivedAt = args.data.archivedAt
+      return { count: 1 }
     }
 
     const response = await POST(
@@ -128,7 +130,7 @@ async function demo() {
     assert.equal(missingBody.error, 'Agent not found')
 
     prismaMock.agent.findFirst = async () => ({ ...row })
-    prismaMock.agent.update = async () => {
+    prismaMock.agent.updateMany = async () => {
       throw new Error('database unavailable')
     }
     const originalError = console.error
@@ -155,7 +157,7 @@ async function demo() {
     assert.equal(agentBody.error, 'Agents cannot manage agents')
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
-    prismaMock.agent.update = originalAgentUpdate
+    prismaMock.agent.updateMany = originalAgentUpdateMany
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst = originalRevokedTokenFindFirst
     prismaMock.logs.create = originalLogsCreate

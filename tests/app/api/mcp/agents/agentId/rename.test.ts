@@ -29,7 +29,7 @@ async function demo() {
   const prismaMock = prisma as any
   const authApi = auth.api as any
   const originalAgentFindFirst = prismaMock.agent.findFirst
-  const originalAgentUpdate = prismaMock.agent.update
+  const originalAgentUpdateMany = prismaMock.agent.updateMany
   const originalUserFindUnique = prismaMock.user.findUnique
   const originalRevokedTokenFindFirst =
     prismaMock.revokedToken.findFirst
@@ -88,10 +88,12 @@ async function demo() {
     prismaMock.featureFlag.findUnique = async () => ({ mode: 'OFF' })
 
     let updateArgs: Record<string, any> | undefined
-    prismaMock.agent.findFirst = async () => ({ ...row })
-    prismaMock.agent.update = async (args: Record<string, any>) => {
+    let displayName = row.displayName
+    prismaMock.agent.findFirst = async () => ({ ...row, displayName })
+    prismaMock.agent.updateMany = async (args: Record<string, any>) => {
       updateArgs = args
-      return { ...row, displayName: args.data.displayName }
+      displayName = args.data.displayName
+      return { count: 1 }
     }
 
     const renamedResponse = await PATCH(
@@ -132,7 +134,7 @@ async function demo() {
     assert.equal(missingBody.error, 'Agent not found')
   } finally {
     prismaMock.agent.findFirst = originalAgentFindFirst
-    prismaMock.agent.update = originalAgentUpdate
+    prismaMock.agent.updateMany = originalAgentUpdateMany
     prismaMock.user.findUnique = originalUserFindUnique
     prismaMock.revokedToken.findFirst = originalRevokedTokenFindFirst
     prismaMock.logs.create = originalLogsCreate

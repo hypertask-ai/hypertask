@@ -187,7 +187,7 @@ export async function archiveOwnedAgent(
   if (transition.count === 0) return { status: 'not_found' }
 
   const agent = await database.agent.findFirst({
-    where: { id: existing.id, userId },
+    where: { ...scopeWhere, id: existing.id, userId },
     select: LIFECYCLE_SELECT,
   })
   if (!agent) return { status: 'not_found' }
@@ -222,7 +222,7 @@ export async function renameOwnedAgent(
   if (transition.count === 0) return { status: 'not_found' }
 
   const agent = await database.agent.findFirst({
-    where: { id: existing.id, userId },
+    where: { ...scopeWhere, id: existing.id, userId },
     select: LIFECYCLE_SELECT,
   })
   if (!agent) return { status: 'not_found' }
