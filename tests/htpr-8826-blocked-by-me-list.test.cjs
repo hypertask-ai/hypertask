@@ -103,8 +103,8 @@ test('live update projection restores counted rows even after saved subtask filt
   );
 });
 
-test('restored rows ship only to Owner and QA', () => {
-  assert.equal(flag.default.defaultMode, 'OWNER_AND_QA');
+test('restored rows ship to Everyone', () => {
+  assert.equal(flag.default.defaultMode, 'EVERYONE');
   assert.equal(flag.default.kind, 'bugfix');
 });
 
