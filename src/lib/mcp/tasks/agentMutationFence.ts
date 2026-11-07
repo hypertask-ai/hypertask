@@ -58,13 +58,16 @@ export async function lockAgentMutationFence(
   taskId: number
 ): Promise<void> {
   await tx.$executeRaw`
-    SELECT pg_advisory_xact_lock(
-      CAST(${AGENT_MUTATION_LOCK_NAMESPACE} AS integer),
-      CAST(${taskId} AS integer)
+    WITH fence AS MATERIALIZED (
+      SELECT pg_advisory_xact_lock(
+        CAST(${AGENT_MUTATION_LOCK_NAMESPACE} AS integer),
+        CAST(${taskId} AS integer)
+      ) AS locked
     )
-  `
-  await tx.$executeRaw`
-    SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE
+    SELECT t.id
+    FROM fence
+    JOIN "Task" t ON t.id = ${taskId}
+    FOR UPDATE
   `
 }
 

@@ -117,17 +117,9 @@ function maxTime(values: Array<string | null | undefined>): number | null {
   return latest;
 }
 
-function lines(value: string | null | undefined): string[] {
-  return (value ?? "")
-    .replace(/<\/(p|div|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-}
-
 function isQuestion(value: string | null | undefined): boolean {
-  return lines(value).some((line) => /^question:/i.test(line));
+  const text = (value ?? "").replace(/<\/?(?:p|div|li|h[1-6]|blockquote)\b[^>]*>|<br\s*\/?>/gi, "\n");
+  return text.split("\n").some((line) => /^question:/i.test(line.trim()));
 }
 
 function humanAssignees(row: AbandonedRow): AssigneeFact[] {

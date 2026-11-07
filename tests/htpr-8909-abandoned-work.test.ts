@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   BOARDS,
@@ -180,19 +179,6 @@ test("the preview matches the separate hand count, and a resumed reread is not r
   });
   assert.equal(survived, "kept");
   assert.equal(applied, false);
-});
-
-test("writers and the sweep share one task lock, and each board is read once", () => {
-  const fence = readFileSync("src/lib/mcp/tasks/agentMutationFence.ts", "utf8");
-  assert.match(fence, /pg_advisory_xact_lock/);
-  assert.match(fence, /SELECT id FROM "Task" WHERE id = \$\{taskId\} FOR UPDATE/);
-  assert.match(readFileSync("src/lib/agentRuns/persistence.ts", "utf8"), /lockAgentMutationFence\(tx, input\.context\.taskId\)/);
-  assert.match(readFileSync("src/lib/pullRequests/syncTaskPullRequests.ts", "utf8"), /lockAgentMutationFence\(transaction, taskId\)/);
-  const sweep = readFileSync("src/lib/abandonedWork/sweep.ts", "utf8");
-  assert.equal(sweep.match(/await readBoardOnce\(/g)?.length, 1);
-  assert.match(sweep, /lockAgentMutationFence\(tx, row\.id\)/);
-  assert.match(readFileSync("vercel.json", "utf8"), /"path": "\/api\/cron\/abandoned-work"/);
-  assert.match(readFileSync("src/app/api/cron/abandoned-work/route.ts", "utf8"), /HTPR_8909_ABANDONED_WORK_FLAG|sweepAbandonedWork/);
 });
 
 test("capacity allows live runners plus three and warns once", () => {

@@ -975,6 +975,7 @@ async function runAuthorScenario(payload, mode = "linked", event = "pull_request
     task: { findFirst: read("sync.task", task) },
     user: { findUnique: read("sync.actor", bot) },
     comment: { create: write("activity.create", {}) },
+    $executeRaw: async () => 0,
     $queryRaw: write("row-lock", []),
   };
   const prisma = {
