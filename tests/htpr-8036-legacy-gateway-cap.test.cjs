@@ -24,6 +24,39 @@ function loadKeys(plan, rows) {
       haiku55ModelEnabled: async () => false,
       storePlanIdForProject: async () => plan,
     },
+    "@/app/api/ai/_lib/modelProvider": {
+      isVercelAiGatewayKey: (key) => typeof key === "string" && key.startsWith("vck_"),
+      registerManagedGatewayKey: () => {},
+      resolveAiModel: () => undefined,
+      inheritAiModelUsage: () => undefined,
+      configureAiModelUsage: () => undefined,
+      aiUsageProviderForCredential: () => undefined,
+      providerOptionsForAiModel: () => undefined,
+    },
+    "@/lib/ai/modelFundingGuard": {
+      fallbackRunsOnOurOwnGatewayKey: () => false,
+    },
+    "@/utils/controllers/projects/getAllIncludes": {
+      getProjectWhere: () => ({}),
+    },
+    "@/lib/aiModelOptions": {
+      getAiModelDefinition: () => undefined,
+      getAiModelOptionById: () => undefined,
+      isHaiku55Model: () => false,
+    },
+    "@/lib/aiProviders": {
+      BASETEN_MODEL_SLUGS: [],
+      getAiProviderInfo: () => undefined,
+      isByokProviderRestrictedInGdprSafeMode: () => false,
+      isGdprSafeModeEnabled: () => false,
+      resolveTeamProviderEnabled: () => false,
+    },
+    "@/lib/ai/customEndpoint": {
+      parseCustomEndpointConfig: () => null,
+    },
+    "@/app/api/ai/chat/stream/modelFallback": {
+      previousModelForFailedStream: () => undefined,
+    },
   });
 }
 
