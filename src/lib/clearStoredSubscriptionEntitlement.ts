@@ -10,8 +10,9 @@ export async function clearStoredSubscriptionEntitlement(
   teamId: string,
   subscriptionId: string,
   status: RevokedSubscriptionStatus,
+  db: typeof prisma = prisma,
 ) {
-  await prisma.$transaction(async (tx) => {
+  await db.$transaction(async (tx) => {
     await tx.subscriptionPlan.updateMany({
       where: { subscriptionId },
       data: { subscriptionStatus: status as SubscriptionPlanStatus },
