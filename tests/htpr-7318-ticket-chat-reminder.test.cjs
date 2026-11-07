@@ -127,6 +127,7 @@ async function withReminder(options, check) {
     "./taskSummaryAction": { taskSummaryActionFor: () => null },
     "@/lib/flags/keys": {},
     "@/lib/flags/definitions/htpr-8261-chat-cleanup": { HTPR_8261_CHAT_CLEANUP_FLAG: "htpr-8261-chat-cleanup" },
+    "@/lib/flags/definitions/htpr-8263-full-screen-chat-cleanup": { HTPR_8263_FULL_SCREEN_CHAT_CLEANUP_FLAG: "htpr-8263-full-screen-chat-cleanup" },
     "@/hooks/General/useHydrated": { useHydrated: () => true },
   };
   const welcome = load("src/components/AI_CHAT/WelcomeScreen.tsx", mocks);

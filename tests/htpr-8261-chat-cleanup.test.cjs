@@ -20,8 +20,8 @@ test("AI chat cleanup flag is a Everyone improvement", () => {
 test("listening replaces the microphone with a Dictation pill", () => {
   const audio = read("src/components/RTE/Components/AudioButton.tsx");
   assert.match(audio, /compactListeningPill\?: boolean/);
-  assert.match(audio, /recording && !compactListeningPill && "w-full"/);
-  assert.match(audio, /\) : compactListeningPill \? \(/);
+  assert.match(audio, /recording && !showCompactPill && "w-full"/);
+  assert.match(audio, /\) : showCompactPill \? \(/);
   assert.match(audio, /data-ai-chat-dictation-pill/);
   assert.doesNotMatch(audio, /data-ai-chat-dictation-pill[\s\S]{0,400}>Dictation<\/span>/);
   assert.match(audio, /data-level-dots/);
