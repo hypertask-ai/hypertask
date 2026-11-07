@@ -150,19 +150,33 @@ export async function GET(request: NextRequest) {
       mcpDoneNameFallback
     )
     const projectDoneTitles = doneTitlesByProject.get(projectId)
+    const parkedTitles = skipParked
+      ? (
+          await prisma.section.findMany({
+            where: { projectId, deleted: false },
+            select: { section_title: true },
+          })
+        )
+          .map((row) => row.section_title)
+          .filter(parkedSection)
+      : []
 
     const sectionIdOutOfRange = findIdParamOutOfRange({ section: sectionFilter.sectionId })
     if (sectionIdOutOfRange) return validationError(idOutOfRangeMessage(sectionIdOutOfRange))
 
+    const hiddenTitles = [
+      ...(projectDoneTitles ? Array.from(projectDoneTitles) : []),
+      ...parkedTitles,
+    ]
     const sectionWhere: Prisma.TaskWhereInput =
       sectionFilter.sectionId !== undefined
         ? { sectionId: sectionFilter.sectionId }
         : section
           ? { section }
-          : projectDoneTitles && projectDoneTitles.size > 0
+          : hiddenTitles.length > 0
             ? {
                 section: {
-                  notIn: Array.from(projectDoneTitles),
+                  notIn: hiddenTitles,
                   mode: 'insensitive',
                 },
               }
@@ -203,15 +217,6 @@ export async function GET(request: NextRequest) {
         ? {
             waitingOnUserId: null,
             blockerCommentId: null,
-            NOT: {
-              OR: [
-                { section: { equals: 'AI Review', mode: 'insensitive' } },
-                { section: { equals: 'Valentin Review', mode: 'insensitive' } },
-                { section: { equals: 'UX Sign-off', mode: 'insensitive' } },
-                { section: { equals: 'UX Sign off', mode: 'insensitive' } },
-                { section: { equals: 'Flags', mode: 'insensitive' } },
-              ],
-            },
           }
         : {}),
     }
@@ -288,16 +293,7 @@ export async function GET(request: NextRequest) {
         })
       : tasks
 
-    const activeTasks = skipParked
-      ? candidates.filter(
-          (task) =>
-            task.waitingOnUserId == null &&
-            task.blockerCommentId == null &&
-            !parkedSection(task.section)
-        )
-      : candidates
-
-    const rankedTasks = activeTasks
+    const rankedTasks = candidates
       .map((task) => ({
         task,
         score: priorityScore(

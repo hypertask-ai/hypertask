@@ -108,6 +108,12 @@ function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents =
     project: {
       findFirst: async () => ({ id: 15 }),
     },
+    section: {
+      findMany: async () =>
+        (sectionsByProject.get(15) ?? []).map((row) => ({
+          section_title: row.section_title,
+        })),
+    },
     task: {
       findMany: async (query) => {
         taskQueries.push(query)
@@ -441,6 +447,10 @@ test('the default pick leaves out review columns and tickets waiting on a person
       [15, [
         { section_title: 'In Progress', isDone: false },
         { section_title: 'Ready', isDone: false },
+        { section_title: 'Valentin Review', isDone: false },
+        { section_title: 'AI Review', isDone: false },
+        { section_title: 'UX Sign-off', isDone: false },
+        { section_title: 'Flags', isDone: false },
       ]],
     ]),
     skipParked: true,
@@ -458,13 +468,13 @@ test('the default pick leaves out review columns and tickets waiting on a person
 
 test('parked tickets older than the candidate cap do not hide a ready ticket', async () => {
   const parked = Array.from({ length: 500 }, (_, index) =>
-    task({ id: index + 1, section: 'Valentin Review' })
+    task({ id: index + 1, section: 'AI-Review' })
   )
   const route = loadRoute({
     tasks: [...parked, task({ id: 501, section: 'Ready' })],
     sectionsByProject: new Map([
       [15, [
-        { section_title: 'Valentin Review', isDone: false },
+        { section_title: 'AI-Review', isDone: false },
         { section_title: 'Ready', isDone: false },
       ]],
     ]),
