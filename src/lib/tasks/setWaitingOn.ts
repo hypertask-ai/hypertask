@@ -117,7 +117,7 @@ export async function setTaskWaitingOn({
     data.waitingOnUserId = userId;
     data.waitingOnSetById = userId === null ? null : currentUser.id;
     data.waitingOnSetAt = userId === null ? null : new Date();
-    if (task.waitingOnAgentId != null) data.waitingOnAgentId = null;
+    data.waitingOnAgentId = null;
   }
   if (waitingAgentId !== undefined) {
     data.waitingOnAgentId = waitingAgentId;
@@ -125,7 +125,7 @@ export async function setTaskWaitingOn({
       data.waitingOnUserId = null;
       data.waitingOnSetById = currentUser.id;
       data.waitingOnSetAt = new Date();
-    } else if (userId === undefined) {
+    } else if (userId === undefined && task.waitingOnUserId == null) {
       data.waitingOnSetById = null;
       data.waitingOnSetAt = null;
     }
@@ -172,7 +172,10 @@ export async function setTaskWaitingOn({
 
   void broadcastBoardChange(task.projectId, { originUserId: currentUser.id });
   if (blockerCommentId !== undefined) void broadcastTaskChange(taskId, { originUserId: currentUser.id });
-  const previousAgentUserId = task.waitingOnAgentId && data.waitingOnAgentId === null
+  const nextAgentId = Object.prototype.hasOwnProperty.call(data, "waitingOnAgentId")
+    ? data.waitingOnAgentId
+    : task.waitingOnAgentId;
+  const previousAgentUserId = task.waitingOnAgentId && task.waitingOnAgentId !== nextAgentId
     ? (await prisma.agent.findUnique({ where: { id: task.waitingOnAgentId }, select: { userId: true } }))?.userId
     : undefined;
   const mentionedUserIds = clearsBlocker

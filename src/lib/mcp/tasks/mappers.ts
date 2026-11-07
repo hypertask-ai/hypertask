@@ -6,7 +6,7 @@ import {
     mapVisibleMcpAgent,
     mcpVisibleAgentSelect,
 } from '@/lib/mcp/agents';
-import { accessibleAgentWhere } from '@/lib/agents/visibility';
+import { accessibleAgentWhere, isAgentVisibleToUser } from '@/lib/agents/visibility';
 import { taskStaleness } from '@/lib/staleness';
 import { derivePullRequestDisplayState } from '@/lib/pullRequests/githubPullRequests';
 import { McpTaskAssignee, TaskDetail } from './types';
@@ -116,7 +116,7 @@ export function taskDetailInclude(userId: number) {
         select: mcpVisibleAgentSelect(userId),
     },
     waitingOnAgent: {
-        select: { id: true, displayName: true, photoURL: true },
+        select: mcpVisibleAgentSelect(userId),
     },
     assignees: {
         where: {
@@ -240,6 +240,25 @@ export function taskMcpGetInclude(userId: number, agentId?: string | null, teamS
     };
 }
 
+function waitingOnForReader<T extends {
+    projectId?: number;
+    waitingOnAgentId?: string | null;
+    waitingOnAgent?: {
+        userId?: number;
+        visibility?: "PRIVATE" | "TEAM";
+        members?: readonly { projectId: number }[];
+    } | null;
+}>(task: T, userId: number): T {
+    const agent = task.waitingOnAgent;
+    if (!agent || agent.userId == null || agent.visibility == null || task.projectId == null) return task;
+    if (isAgentVisibleToUser({
+        userId: agent.userId,
+        visibility: agent.visibility,
+        members: agent.members ?? [],
+    }, userId, task.projectId)) return task;
+    return { ...task, waitingOnAgentId: null, waitingOnAgent: null };
+}
+
 export function mapTaskWaitingOn(task: {
     waitingOnUserId?: number | null;
     waitingOnSetAt?: Date | string | null;
@@ -292,7 +311,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: str
         section: task.section,
         sectionId: task.sectionId || undefined,
         blockerCommentId: task.blockerCommentId ?? null,
-        ...mapTaskWaitingOn(task),
+        ...mapTaskWaitingOn(waitingOnForReader(task, userId)),
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
@@ -398,7 +417,7 @@ export function mapTaskToDetail(task: any, userId: number): TaskDetail {
         section: task.section,
         sectionId: task.sectionId || 0,
         blockerCommentId: task.blockerCommentId ?? null,
-        ...mapTaskWaitingOn(task),
+        ...mapTaskWaitingOn(waitingOnForReader(task, userId)),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
         projectId: task.projectId,

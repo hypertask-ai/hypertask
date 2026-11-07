@@ -152,7 +152,7 @@ test("flag on: an owner agent sets a board member then clears through the shared
   assert.equal(response.status, 200);
   const result = await response.json();
   assert.equal(result.success, true);
-  assert.deepEqual({ ...result.task, waitingOnSetAt: null }, { id: 42, waitingOnUserId: 9, waitingOnSetById: 7, waitingOnSetAt: null });
+  assert.deepEqual({ ...result.task, waitingOnSetAt: null }, { id: 42, waitingOnUserId: 9, waitingOnSetById: 7, waitingOnSetAt: null, waitingOnAgentId: null });
   assert.ok(Number.isFinite(Date.parse(result.task.waitingOnSetAt)));
   assert.ok(f.writes[0].data.waitingOnSetAt instanceof Date);
   assert.deepEqual(f.members, [{ projectId: 15, ids: [9] }]);
@@ -164,7 +164,7 @@ test("flag on: an owner agent sets a board member then clears through the shared
 
   const cleared = await f.post({ taskId: 42, userId: null });
   assert.equal(cleared.status, 200);
-  assert.deepEqual(await cleared.json(), { success: true, task: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null } });
+  assert.deepEqual(await cleared.json(), { success: true, task: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, waitingOnAgentId: null } });
   assert.equal(f.members.length, 1);
   assert.equal(f.activities[1].activityBody.data.waitingOnDisplayName, null);
   assert.deepEqual(f.inboxes.slice(2), [[9, { originUserId: 7 }]]);
@@ -208,7 +208,7 @@ test("flag off: the existing session and Pages route retain coercion, raw receip
   assert.equal(receipt.success, undefined);
   assert.deepEqual(f.access[0].project, projectAccess.getProjectWhere(7));
   const cleared = await f.pages({ taskId: 42, userId: null });
-  assert.deepEqual(cleared, { status: 200, body: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null } });
+  assert.deepEqual(cleared, { status: 200, body: { id: 42, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, waitingOnAgentId: null } });
   assert.equal(f.writes.length, 2);
   assert.equal(f.activities.length, 2);
   assert.equal(f.boards.length, 2);
@@ -268,7 +268,7 @@ test("blocker comment and person are set in one write, replaced, read in the rec
 
   const cleared = await f.post({ taskId: 42, userId: null, blockerCommentId: null });
   assert.equal(cleared.status, 200);
-  assert.deepEqual((await cleared.json()).task, { id: 42, blockerCommentId: null, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null });
+  assert.deepEqual((await cleared.json()).task, { id: 42, blockerCommentId: null, waitingOnUserId: null, waitingOnSetById: null, waitingOnSetAt: null, waitingOnAgentId: null });
   assert.equal(f.writes.length, 3);
   assert.equal(f.commentReads.length, 2);
 });
