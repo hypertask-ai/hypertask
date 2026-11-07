@@ -51,7 +51,7 @@ function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled
         findFirst: async () => accessible ? { id: "fixture-team" } : null,
       },
       project: { findFirst: async () => accessible ? { teamId: "fixture-team" } : null },
-      teamByokApiKey: { findUnique: async ({ where }) => {
+      teamByokApiKey: { findFirst: async () => null, findUnique: async ({ where }) => {
         const { teamId, provider } = where.teamId_provider;
         calls.keys.push({ teamId, provider });
         if (teamId !== "fixture-team") return null;
@@ -69,7 +69,9 @@ function routingHarness({ enabled = true, plan = "Pro", saved = true, keyEnabled
     } },
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
     "@/lib/flags/definitions/htpr-7634-openai-only-default": {},
-    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { calls.flags.push([key, userId]); return enabled; } },
+    "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
+    "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")),
+    "@/lib/flags": { isFeatureEnabled: async (key, userId) => { calls.flags.push([key, userId]); if (key === "htpr-8049-always-use-this-key") return false; return enabled; } },
     "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => { calls.decrypted.push(value); return value; } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
     "@/app/api/ai/_lib/modelProvider": {
@@ -100,6 +102,8 @@ function settingsHarness({ enabled = true, paid = true, gdpr = false, allowed = 
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { assert.ok([flagKey, providerSyncFlag.HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG].includes(key)); assert.equal(userId, 985); return key === flagKey ? enabled : true; } },
     "@/lib/flags/definitions/htpr-7741-byok-enables-provider": providerSyncFlag,
     "@/lib/flags/definitions/htpr-7732-baseten-byok": flag,
+    "@/lib/flags/definitions/htpr-8049-always-use-this-key": { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG: "htpr-8049-always-use-this-key" },
+    "@/lib/ai/forcedTeamKey": load(path.join(root, "src/lib/ai/forcedTeamKey.ts")),
     "@/lib/prisma": { default: {
       user: { findUnique: async () => ({ id: 985 }) },
       team: { findUnique: async () => ({ googleAccount: { userId: allowed ? 985 : 1 }, members: [] }) },
@@ -183,7 +187,7 @@ test("all four options use only the enabled saved paid-team Baseten key before p
       assert.equal(credential.apiKey, fakeKey);
       assert.equal(credential.modelKey, modelKey);
     }
-    assert.ok(h.calls.flags.every(([key, userId]) => key === flagKey && userId === 985));
+    assert.ok(h.calls.flags.filter(([key]) => key !== "htpr-8049-always-use-this-key").every(([key, userId]) => key === flagKey && userId === 985));
     assert.equal(h.calls.agent.includes("baseten"), false);
     assert.equal(h.calls.decrypted.includes("fake-request-key"), false);
   }

@@ -146,6 +146,10 @@ export function isOwnKeyAuthFailure(provider: string | null | undefined, error: 
 }
 
 export function userFacingErrorMessage(error: unknown, stage: string, provider?: string | null) {
+  if (error instanceof Error && error.name === "ForcedTeamKeyError" && error.message.trim()) {
+    console.warn(`[ai/chat/stream] ${stage} refused: forced team key`);
+    return error.message;
+  }
   const allowanceError = includedAllowanceError(error);
   if (allowanceError) {
     console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);

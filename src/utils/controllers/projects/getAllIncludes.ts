@@ -596,6 +596,7 @@ export const getProjectIncludeWithoutTasks = (
         select: {
           provider: true,
           enabled: true,
+          alwaysUse: true,
         },
       },
     },

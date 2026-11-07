@@ -40,4 +40,8 @@ regexes = [
   # HTPR-8276: a sha256 call digest in .github/paid-api-cost-notes.json whose source path
   # names Slack, so the generic rule reads the digest as a key.
   '''358f54578c5f4b9f87252011a8fcb3513c6b94b60e70fa98c555a6aeaa09567c''',
+  # HTPR-8049: sha256 call digests whose source path is ApiKeysSection.tsx, so the
+  # generic rule reads each digest as a key. They are cost-note pins, not credentials.
+  '''d81492e3ad427ad3c756a6a9df025a18ce34c8bf15e826af7843ac301b086548''',
+  '''f3674c8615f24685280d686182c0eb898a780fd28735c7d75799b7fbd532482c''',
 ]

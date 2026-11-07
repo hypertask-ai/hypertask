@@ -1,6 +1,8 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG } from "@/lib/flags/definitions/htpr-7730-deepseek-flash-fast";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
 import { HTPR_7939_GROK_GEMINI4_MODELS_FLAG } from "@/lib/flags/keys";
+import { forcedByokProvider, modelOptionMatchesForcedKey } from "@/lib/ai/forcedTeamKey";
 import { useAiDefaultModelContext } from "@/hooks/useAiDefaultModelContext";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -109,6 +111,7 @@ const AIModelDropDownList = ({
   onKeyboardClose?: () => void;
   shortcutHint?: string;
 }) => {
+  const alwaysUseThisKey = useFlag(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG);
   const deepseekFlashFastLoaded = useFlagLoaded(HTPR_7730_DEEPSEEK_FLASH_FAST_FLAG);
   const grokGemini4Loaded = useFlagLoaded(HTPR_7939_GROK_GEMINI4_MODELS_FLAG);
   const modelFlagsLoaded = (aiSelected?.id !== "deepseek-v4.1-flash-fast" || deepseekFlashFastLoaded) &&
@@ -134,8 +137,15 @@ const AIModelDropDownList = ({
     resolvedTeamId == null || billing?.teamId === String(resolvedTeamId)
       ? billing
       : null;
-  const { enabledProviders, isLoading: providerSettingsLoading } =
+  const { enabledProviders, isLoading: providerSettingsLoading, ownKeyOnly } =
     useTeamAiProviders(resolvedTeamId);
+  const forcedProvider = alwaysUseThisKey && !ownKeyOnly ? forcedByokProvider(scopedBilling?.byokProviderFlags) : null;
+  const menuModelOptions: TAiModelOption[] = [];
+  for (const option of visibleModelOptions) {
+    if (!forcedProvider || modelOptionMatchesForcedKey(option, forcedProvider)) {
+      menuModelOptions.push(option);
+    }
+  }
   const customEndpoint = useTeamCustomEndpoint(resolvedTeamId);
   const enabledProviderSet = useMemo(
     () => new Set(enabledProviders),
@@ -152,17 +162,18 @@ const AIModelDropDownList = ({
   const listedModelKeys = useMemo(
     () =>
       new Set(
-        visibleModelOptions
+        menuModelOptions
           .filter((option) => listedIds.has(option.id))
           .map((option) => option.modelKey)
       ),
-    [listedIds, visibleModelOptions]
+    [listedIds, menuModelOptions]
   );
   const availableOptions = useMemo(
     () =>
-      visibleModelOptions.filter((option) => {
+      menuModelOptions.filter((option) => {
         if (!listedIds.has(option.id)) return false;
         if (isGuest) return isGuestAllowedModelKey(option.modelKey);
+        if (forcedProvider) return option.source !== "custom" || customEndpoint.configured;
         if (option.source === "custom") return customEndpoint.configured;
         if (!respectTeamAvailability) return true;
         const definition = getAiModelDefinition(option.modelKey);
@@ -175,8 +186,9 @@ const AIModelDropDownList = ({
     [
       customEndpoint.configured,
       enabledProviderSet,
+      forcedProvider,
       listedIds,
-      visibleModelOptions,
+      menuModelOptions,
       respectTeamAvailability,
       isGuest,
     ]
@@ -461,6 +473,7 @@ const AIModelDropDownList = ({
             {quickModelIds.map((quickModelId) => {
               const catalogOption = getAiModelOptionById(quickModelId);
               if (!catalogOption) return null;
+              if (forcedProvider && !modelOptionMatchesForcedKey(catalogOption, forcedProvider)) return null;
               const option = availableOptions.find(
                 (candidate) => candidate.id === catalogOption.id,
               );

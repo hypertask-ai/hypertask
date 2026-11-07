@@ -17,6 +17,8 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { isPaidTeam } from "@/lib/freeTier";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7741_BYOK_ENABLES_PROVIDER_FLAG } from "@/lib/flags/definitions/htpr-7741-byok-enables-provider";
+import { HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG } from "@/lib/flags/definitions/htpr-8049-always-use-this-key";
+import { isOwnKeyOnlySettings } from "@/lib/ai/forcedTeamKey";
 import { withLockedTeamAiSettings } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
 import type { Prisma } from "@prisma/client";
 import {
@@ -28,6 +30,7 @@ import {
 } from "@/lib/ai/customEndpoint";
 
 class GdprSafeModeByokError extends Error {}
+class AlwaysUseKeyError extends Error {}
 
 async function mutateByokWithSafeModeLock(
   teamId: string,
@@ -148,7 +151,7 @@ const handler: NextApiHandler = async (
         aiProviderSettings,
         rows: await transaction.teamByokApiKey.findMany({
           where: { teamId },
-          select: { provider: true, enabled: true, ciphertext: true },
+          select: { provider: true, enabled: true, ciphertext: true, alwaysUse: true },
         }),
       }),
     );
@@ -160,6 +163,7 @@ const handler: NextApiHandler = async (
         {
           enabled: r.enabled,
           ciphertext: r.ciphertext,
+          alwaysUse: r.alwaysUse,
         },
       ]),
     );
@@ -203,6 +207,7 @@ const handler: NextApiHandler = async (
       return {
         provider,
         enabled: row?.enabled ?? false,
+        alwaysUse: Boolean(row?.alwaysUse && row.enabled && hasSecret),
         hasSecret,
         maskedKey,
         ...(provider === "custom"
@@ -227,6 +232,7 @@ const handler: NextApiHandler = async (
       gdprCompliant,
       modelId,
       clearSecret,
+      alwaysUse,
     } = req.body as {
         teamId?: string;
         provider?: string;
@@ -236,6 +242,7 @@ const handler: NextApiHandler = async (
         gdprCompliant?: boolean;
         modelId?: string;
         clearSecret?: boolean;
+        alwaysUse?: boolean;
       };
 
     if (!teamId || typeof teamId !== "string") {
@@ -252,6 +259,65 @@ const handler: NextApiHandler = async (
     );
     if (!gate.ok) {
       return res.status(gate.status).json({ message: gate.message });
+    }
+
+    const hasKeyPayload =
+      typeof apiKey === "string" && apiKey.trim().length > 0;
+
+    if (typeof alwaysUse === "boolean" && !hasKeyPayload && clearSecret !== true) {
+      if (!(await isFeatureEnabled(HTPR_8049_ALWAYS_USE_THIS_KEY_FLAG, user.id))) {
+        return res.status(403).json({ message: "Always use this key is unavailable" });
+      }
+      if (alwaysUse && provider === "baseten" && !(await isFeatureEnabled(HTPR_7732_BASETEN_BYOK_FLAG, user.id))) {
+        return res.status(403).json({ message: "Always use this key is unavailable" });
+      }
+      if (alwaysUse && !(await isPaidTeam(teamId))) {
+        return res.status(402).json({
+          message: "Adding your own API key requires a paid plan.",
+          code: "UPGRADE_REQUIRED",
+        });
+      }
+      try {
+        await mutateByokWithSafeModeLock(
+          teamId,
+          provider,
+          alwaysUse === false || !isByokProviderRestrictedInGdprSafeMode(provider),
+          async (transaction, currentSettings) => {
+            if (isOwnKeyOnlySettings(currentSettings)) {
+              throw new AlwaysUseKeyError("This team already runs only on its own keys");
+            }
+            if (!alwaysUse) {
+              await transaction.teamByokApiKey.updateMany({
+                where: { teamId, provider },
+                data: { alwaysUse: false },
+              });
+              return;
+            }
+            const existing = await transaction.teamByokApiKey.findUnique({
+              where: { teamId_provider: { teamId, provider } },
+              select: { enabled: true, ciphertext: true },
+            });
+            if (!existing?.enabled || !existing.ciphertext?.trim()) {
+              throw new AlwaysUseKeyError("Save and turn on the key first");
+            }
+            await transaction.teamByokApiKey.updateMany({
+              where: { teamId, alwaysUse: true, NOT: { provider } },
+              data: { alwaysUse: false },
+            });
+            await transaction.teamByokApiKey.update({
+              where: { teamId_provider: { teamId, provider } },
+              data: { alwaysUse: true },
+            });
+          },
+        );
+        return res.status(200).json({ ok: true });
+      } catch (e) {
+        if (e instanceof AlwaysUseKeyError || e instanceof GdprSafeModeByokError) {
+          return res.status(400).json({ message: e.message });
+        }
+        console.error(e);
+        return res.status(500).json({ message: "Save failed" });
+      }
     }
 
     if (clearSecret === true) {
@@ -272,8 +338,6 @@ const handler: NextApiHandler = async (
       }
     }
 
-    const hasKeyPayload =
-      typeof apiKey === "string" && apiKey.trim().length > 0;
     const disablingBaseten = provider === "baseten" && enabled === false && !hasKeyPayload;
     if (
       provider === "baseten" &&
@@ -348,6 +412,7 @@ const handler: NextApiHandler = async (
               update: {
                 ciphertext,
                 enabled: typeof enabled === "boolean" ? enabled : true,
+                ...(enabled === false ? { alwaysUse: false } : {}),
               },
             });
           },
@@ -403,6 +468,7 @@ const handler: NextApiHandler = async (
               update: {
                 ciphertext,
                 ...(typeof enabled === "boolean" ? { enabled } : {}),
+                ...(enabled === false ? { alwaysUse: false } : {}),
               },
             }),
           syncProviderEnabled,
@@ -453,7 +519,7 @@ const handler: NextApiHandler = async (
             return transaction.teamByokApiKey.upsert({
               where: { teamId_provider: { teamId, provider } },
               create: { teamId, provider, enabled, ciphertext: "" },
-              update: { enabled },
+              update: { enabled, ...(enabled ? {} : { alwaysUse: false }) },
             });
           },
           syncProviderEnabled,

@@ -42,6 +42,6 @@ test("deriveCurrentBoardBilling gives comped teams Pro with no billing interval"
   assert.equal(billing?.billingInterval, null);
   assert.equal(billing?.stripePriceId, "price_partner_flat_fee");
   assert.deepEqual(billing?.byokProviderFlags, [
-    { provider: "openai", enabled: true },
+    { provider: "openai", enabled: true, alwaysUse: false },
   ]);
 });
