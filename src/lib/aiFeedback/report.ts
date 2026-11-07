@@ -10,6 +10,7 @@ import { createProvisionedTaskCore } from '@/utils/controllers/tasks/createTaskC
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, scrubFeedbackNote, automaticFeedbackSchema, type AiFeedbackInput, type AutomaticFeedbackInput } from './input'
+import { withFeedbackToolSlug } from './repeatAccess'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
 import { filedRecently, quietFixableReports, quietInputRefusal } from './callerFixable'
 
@@ -219,7 +220,7 @@ export function plainFeedback(input: AutomaticFeedbackInput, fingerprint: string
 }
 
 export async function fileAiFeedback(raw: unknown, userId?: number, reporter: { origin: 'agent' | 'automatic'; agentName?: string | null } = { origin: 'agent' }) {
-  const parsed = (reporter.origin === 'automatic' ? automaticFeedbackSchema : aiFeedbackSchema).safeParse(raw)
+  const parsed = (reporter.origin === 'automatic' ? automaticFeedbackSchema : aiFeedbackSchema).safeParse(await withFeedbackToolSlug(raw, userId))
   if (!parsed.success) {
     throw new AiFeedbackError(400, parsed.error.issues.map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`).join('; '))
   }

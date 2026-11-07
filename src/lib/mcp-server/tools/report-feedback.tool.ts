@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server'
+import { z } from 'zod'
 import { aiFeedbackSchema, feedbackClient } from '@/lib/aiFeedback/input'
+import { withFeedbackToolSlug } from '@/lib/aiFeedback/repeatAccess'
 import { getFeedbackClient } from '@/lib/aiFeedback/clientInfo'
 import { validateMcpAuth } from '@/lib/mcp/auth'
 import { getMcpExecutionContext } from '@/lib/mcp/operationContext'
@@ -25,7 +27,9 @@ export const reportFeedbackTool = {
   name: TOOL_METADATA.REPORT_FEEDBACK.name,
   description: TOOL_METADATA.REPORT_FEEDBACK.description,
   annotations: TOOL_ANNOTATIONS.hypertask_report_feedback,
-  parameters: aiFeedbackSchema.omit({ surface: true, client: true }),
+  parameters: aiFeedbackSchema.omit({ surface: true, client: true }).extend({
+    tool: z.string().max(80).optional(),
+  }),
   execute: async (args: unknown, token: string, invocation?: { clientName?: string }) => {
     const auth = getMcpExecutionContext(token) ?? await validateMcpAuth(
       new NextRequest(`${OPERATION_ORIGIN}/mcp`, {
@@ -36,7 +40,8 @@ export const reportFeedbackTool = {
     if (!auth) throw new Error('Unauthorized. Invalid or missing authentication token.')
 
     const { fileAiFeedback } = await import('@/lib/aiFeedback/report')
-    const input = await feedbackInput(args, auth.user.id).catch(() => parseFeedbackArgs(args))
+    const prepared = await withFeedbackToolSlug(args, auth.user.id)
+    const input = await feedbackInput(prepared, auth.user.id).catch(() => parseFeedbackArgs(prepared))
     return JSON.stringify(await fileAiFeedback({
       ...input,
       surface: 'mcp',

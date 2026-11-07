@@ -148,7 +148,7 @@ test('a bare board number is not guessed onto another board', async () => {
   assert.equal(response.status, 404)
   assert.equal((await response.json()).error, 'Task not found')
   assert.deepEqual(f.opened, [{ taskId: 8777, title: null, source: 'runtime' }])
-  assert.deepEqual(f.flagReads, [])
+  assert.deepEqual(f.flagReads, [{ key: 'htpr-8894-feedback-repeat-activity', userId: 6 }])
 })
 
 test('a number that is both a task id and a different board number is refused', async () => {
