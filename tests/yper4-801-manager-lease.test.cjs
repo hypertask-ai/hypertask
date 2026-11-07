@@ -293,9 +293,12 @@ test("registry refuses non managers and malformed requests", async () => {
   assert.equal((await post({ action: "take", session: "x", grantHash: "nothex", ttlMinutes: 30, operationId: operationId() })).status, 400);
   assert.equal((await post({ action: "take", session: "x", grantHash: hashManagerGrant(token), ttlMinutes: 9999, operationId: operationId() })).status, 400);
   assert.equal((await post({ action: "renew" })).status, 400);
-  assert.equal((await post({ action: "renew", grant: token, grantHash: hashManagerGrant(token), operationId: operationId() })).status, 400);
+  const legacy = await post({ action: "renew", grant: token });
+  assert.equal(legacy.status, 200);
+  assert.equal((await post({ action: "renew", grant: token, grantHash: hashManagerGrant(otherToken) })).status, 400);
   assert.equal((await post({ action: "nope" })).status, 400);
   assert.equal(JSON.stringify(grants).includes(token), false);
+  assert.equal(JSON.stringify(operations).includes(token), false);
   assert.equal(NextResponse.json({}).status, 200);
 });
 

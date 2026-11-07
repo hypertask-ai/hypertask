@@ -4,6 +4,7 @@ import { requireAgentWriteRole } from "@/lib/mcp/agents/readRoleGuard";
 import { authorize } from "@/lib/flags/agentAuthorization";
 import {
   applyManagerLeaseAction,
+  hashManagerGrant,
   isManagerClassAgentName,
   ManagerLeaseError,
   readManagerLeaseOperation,
@@ -41,14 +42,19 @@ export async function POST(request: NextRequest) {
       if (!isManagerClassAgentName(agent.displayName)) {
         return noStore({ error: "Only manager agents register manager leases" }, 403);
       }
-      if (Object.prototype.hasOwnProperty.call(body, "grant")) {
-        return noStore({ error: "Send grantHash, not the grant" }, 400);
+      let grantHash = typeof body.grantHash === "string" ? body.grantHash : undefined;
+      if (typeof body.grant === "string") {
+        const hashed = hashManagerGrant(body.grant);
+        if (grantHash && grantHash !== hashed) return noStore({ error: "grantHash does not match grant" }, 400);
+        grantHash = hashed;
+      } else if (Object.prototype.hasOwnProperty.call(body, "grant")) {
+        return noStore({ error: "grant must be the take receipt" }, 400);
       }
-      const operationId = typeof body.operationId === "string" ? body.operationId : "";
+      const operationId = typeof body.operationId === "string" && body.operationId ? body.operationId : undefined;
       if (body.action === "status") {
         const found = await prisma.$transaction((tx) => readManagerLeaseOperation(tx, {
           agentId: ctx.agentId as string,
-          operationId,
+          operationId: operationId ?? "",
         }));
         if (!found) return noStore({ ok: false, committed: false }, 404);
         return noStore({ ok: true, committed: true, action: found.action, expiresAt: found.expiresAt ? found.expiresAt.toISOString() : null });
@@ -58,7 +64,7 @@ export async function POST(request: NextRequest) {
         action: body.action as ManagerLeaseAction,
         operationId,
         session: typeof body.session === "string" ? body.session : undefined,
-        grantHash: typeof body.grantHash === "string" ? body.grantHash : undefined,
+        grantHash,
         ttlMinutes: typeof body.ttlMinutes === "number" ? body.ttlMinutes : undefined,
       }));
       return noStore(confirmed(body.action, result.expiresAt));
