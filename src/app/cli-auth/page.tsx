@@ -31,7 +31,7 @@ function CliAuthShell({ children }: { children: React.ReactNode }) {
     <div
       className={cn(
         'relative min-h-[100svh] w-full overflow-hidden',
-        'text-white bg-black flex flex-col items-center justify-center p-4 sm:p-8'
+        'text-white-black bg-pageBackground flex flex-col items-center justify-center p-4 sm:p-8'
       )}
     >
       <div className="relative w-full flex flex-col items-center justify-center">
@@ -46,7 +46,7 @@ function CliAuthCard({ children }: { children: React.ReactNode }) {
     <div
       className={cn(
         'w-full max-w-md rounded px-8 py-8 sm:py-10',
-        'border border-[#262626] bg-black shadow-lg'
+        'border border-border-light-gray-thin bg-pageBackground shadow-lg'
       )}
     >
       {children}
@@ -220,12 +220,12 @@ function CliAuthContent() {
               width={200}
               height={28}
             />
-            <h1 className="text-heading font-bold text-white">
+            <h1 className="text-heading font-bold text-white-black">
               Authenticating HyperTask CLI
             </h1>
-            <p className="text-[#a3a3a3]">Checking your session…</p>
+            <p className="text-text-light-gray">Checking your session…</p>
             <div
-              className="h-10 w-10 rounded-full border-2 border-white/25 border-t-white animate-spin"
+              className="h-10 w-10 rounded-full border-2 border-border-light-gray-thin border-t-white-black animate-spin"
               aria-hidden
             />
           </div>
@@ -245,20 +245,20 @@ function CliAuthContent() {
             width={200}
             height={28}
           />
-          <h1 className="text-heading font-bold text-white">
+          <h1 className="text-heading font-bold text-white-black">
             Authenticating HyperTask CLI
           </h1>
 
           {step === 'declined' && (
             <div className="space-y-4 text-left">
-              <p className="text-[#a3a3a3] text-content leading-relaxed">
+              <p className="text-text-light-gray text-content leading-relaxed">
                 You chose not to connect the CLI. You can close this window and
                 keep using Hypertask in your browser.
               </p>
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full px-4 py-2.5 rounded-md border border-[#262626] text-white font-medium hover:bg-white/10 transition-colors"
+                className="w-full px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
               >
                 Close
               </button>
@@ -271,7 +271,7 @@ function CliAuthContent() {
               <button
                 type="button"
                 onClick={handleTryAgain}
-                className="mt-4 w-full px-4 py-2.5 rounded-md bg-white text-black font-semibold shadow-lg hover:bg-gray-50 transition-colors"
+                className="mt-4 w-full px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
               >
                 Try again
               </button>
@@ -280,7 +280,7 @@ function CliAuthContent() {
 
           {step === 'consent' && (
             <div className="space-y-6 text-left">
-              <p className="text-[#a3a3a3] text-content leading-relaxed">
+              <p className="text-text-light-gray text-content leading-relaxed">
                 The Hypertask CLI is asking to link to your account and receive
                 a short-lived sign-in code. Only continue if you started this
                 from a terminal you trust. Click{' '}
@@ -292,19 +292,19 @@ function CliAuthContent() {
                 <button
                   type="button"
                   onClick={handleAllow}
-                  className="px-4 py-2.5 rounded-md bg-white text-black font-semibold shadow-lg hover:bg-gray-50 transition-colors"
+                  className="px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
                 >
                   Allow and continue
                 </button>
                 <button
                   type="button"
                   onClick={handleDecline}
-                  className="px-4 py-2.5 rounded-md border border-[#262626] text-white font-medium hover:bg-white/10 transition-colors"
+                  className="px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
                 >
                   Cancel
                 </button>
               </div>
-              <p className="text-meta text-[#8a8a8a] text-center">
+              <p className="text-meta text-text-light-gray text-center">
                 Local port: {port}
               </p>
             </div>
@@ -312,12 +312,12 @@ function CliAuthContent() {
 
           {step === 'loading' && (
             <div className="space-y-4">
-              <p className="text-[#a3a3a3] text-content">
+              <p className="text-text-light-gray text-content">
                 Generating a sign-in code for your terminal…
               </p>
               <div className="flex justify-center">
                 <div
-                  className="h-10 w-10 rounded-full border-2 border-white/25 border-t-white animate-spin"
+                  className="h-10 w-10 rounded-full border-2 border-border-light-gray-thin border-t-white-black animate-spin"
                   aria-hidden
                 />
               </div>
@@ -326,13 +326,13 @@ function CliAuthContent() {
 
           {step === 'connected' && connected && (
             <div className="space-y-4 text-left">
-              <p className="text-[#a3a3a3] text-content leading-relaxed">
+              <p className="text-text-light-gray text-content leading-relaxed">
                 A <strong>one-time authorization code</strong> is ready. The CLI sends it to
                 Hypertask and gets back the real API token. If you use SSH, CI, or
                 a remote host, copy the callback URL or the code below. It expires in
                 about 2 minutes.
               </p>
-              <p className="text-meta text-[#8a8a8a]">
+              <p className="text-meta text-text-light-gray">
                 If a window opened to localhost, the CLI on this computer may
                 connect automatically. You can still use copy when the browser
                 and terminal are on different machines.
@@ -355,18 +355,18 @@ function CliAuthContent() {
                 <button
                   type="button"
                   onClick={handleConnectedContinue}
-                  className="w-full px-4 py-2.5 rounded-md bg-white text-black font-semibold shadow-lg hover:bg-gray-50 transition-colors"
+                  className="w-full px-4 py-2.5 rounded bg-shadcn-primary text-primary-foreground font-semibold shadow-lg hover:bg-hover-active transition-colors"
                 >
                   Continue to Hypertask
                 </button>
                 <button
                   type="button"
                   onClick={handleOpenCallbackInThisTab}
-                  className="w-full px-4 py-2.5 rounded-md border border-[#262626] text-white font-medium hover:bg-white/10 transition-colors"
+                  className="w-full px-4 py-2.5 rounded border border-border-light-gray-thin text-white-black font-medium hover:bg-hover-active transition-colors"
                 >
                   I&apos;m on the same device
                 </button>
-                <p className="text-meta text-[#8a8a8a] text-center">
+                <p className="text-meta text-text-light-gray text-center">
                   Use this when your browser and terminal are on the same machine.
                 </p>
               </div>
@@ -384,7 +384,7 @@ export default function CliAuthPage() {
       fallback={
         <CliAuthShell>
           <div
-            className="h-10 w-10 rounded-full border-2 border-white/25 border-t-white animate-spin"
+            className="h-10 w-10 rounded-full border-2 border-border-light-gray-thin border-t-white-black animate-spin"
             aria-label="Loading"
           />
         </CliAuthShell>

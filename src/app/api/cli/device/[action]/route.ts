@@ -99,7 +99,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
       if (!await throttle(`owner:${user.userId}`, 5, 3600)) {
         return NextResponse.json({ error: "slow_down" }, { status: 429, headers: HEADERS });
       }
-      const browserSecret = randomBytes(32).toString("base64url");
+      const presented = deviceSecretSchema.safeParse(request.cookies.get(DEVICE_PAIRING_COOKIE)?.value);
+      const browserSecret = presented.success ? presented.data : randomBytes(32).toString("base64url");
       const result = await startDevicePairing(user.userId, browserSecret);
       return rememberBrowser(NextResponse.json(result, { headers: HEADERS }), browserSecret, result.expiresAt);
     }
