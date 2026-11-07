@@ -158,11 +158,12 @@ function feedbackFixture({ repeat = true } = {}) {
   return { ...mod, created, comments }
 }
 
-test('the flag is a bug fix on for everyone', () => {
+test('the flag is an access bug fix for the owner and QA', () => {
   const definition = load(`src/lib/flags/definitions/${repeatFlag}.ts`).default
   assert.equal(definition.key, repeatFlag)
   assert.equal(definition.kind, 'bugfix')
-  assert.equal(definition.defaultMode, 'EVERYONE')
+  assert.equal(definition.defaultMode, 'OWNER_AND_QA')
+  assert.equal(definition.releaseRisk.highRisk, 'access')
 })
 
 test('HTPR-8894 repeat activity on the linked feedback ticket is not task not found', async () => {
