@@ -177,7 +177,7 @@ hold_check() {
   [[ $t == YPER4-* || $t == HYCI-* ]] && return 0  # Fleet Infra and CI work are never braked (Valentin, 2026-10-31: "CI work only, so CI gets fixed first")
   n=$(jq -e '[.[] | select((.isDraft | not)
       and (.title | test("^(YPER4|HYCI)-") | not)
-      and (.headRefName | test("^(ci-runner-[0-9]+|ci-boss|infra-lead|dependabot)/") | not))] | length' <<<"$open") \
+      and (.headRefName | test("^(ci-runner-[0-9]+|ci-boss|infra-lead|dependabot|cursor)/") | not))] | length' <<<"$open") \
     || { echo "ship-claim: HOLD. Cannot count open PRs for RUNNER $rn." >&2; return 4; }
   if [ "$n" -gt "$QUEUE_MAX" ]; then
     echo "ship-claim: HOLD. queue full: infra only ($n open non-draft PRs > $QUEUE_MAX). Do NOT claim $t; claim a YPER4 (Fleet Infra) or HYCI (CI) ticket, or nothing."

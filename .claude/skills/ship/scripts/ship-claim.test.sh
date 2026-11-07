@@ -548,6 +548,8 @@ jq -n '[range(30) | {number: ., headRefName: "ci-runner-2/hyci-\(.)", title: "HY
   + [range(5) | {number: (100 + .), headRefName: "dependabot/npm/x\(.)", title: "Bump x", isDraft: false}]
   + [range(5) | {number: (200 + .), headRefName: "infra-lead/yper4-\(.)", title: "YPER4-\(.) [INFRA] tool", isDraft: false}]' > "$HOLD_OPEN"
 eq "30 CI, 5 dependency and 5 infra PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
+jq -n '[range(25) | {number: (300 + .), headRefName: "cursor/cloud-fix-\(.)", title: "HTPR-\(900 + .) [BUGFIX] Cloud fix", isDraft: false}]' > "$HOLD_OPEN"
+eq "25 cloud agent PRs never brake app work" "$(holdrc 'RUNNER 6' HTPR-1)" 0
 prs 21; eq "queue 21, YPER4 ticket -> allowed" "$(holdrc 'RUNNER 6' YPER4-2)" 0
 prs 21; eq "queue 21, CI ticket -> allowed" "$(holdrc 'RUNNER 6' HYCI-30)" 0
 prs 25 10; eq "drafts do not count toward the brake" "$(holdrc 'RUNNER 6' HTPR-1)" 0
