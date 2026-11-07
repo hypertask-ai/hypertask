@@ -33,7 +33,6 @@ import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection
 import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7724_BLOCKER_COMMENT_FLAG } from "@/lib/flags/definitions/htpr-7724-blocker-comment";
-import { MY_TASKS_SNOOZE_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
@@ -49,7 +48,7 @@ export function useCommandsState(context: Context) {
   const queryClient = useQueryClient();
   const blockerCommentEnabled = useFlag(HTPR_7724_BLOCKER_COMMENT_FLAG);
   const myTasksViewsEnabled = true;
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
+  const myTasksSnoozeEnabled = true;
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
     updateTaskInCache,

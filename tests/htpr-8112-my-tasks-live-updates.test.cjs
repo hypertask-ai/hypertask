@@ -12,10 +12,7 @@ new Function("exports", ts.transpileModule(
   { compilerOptions: { module: ts.ModuleKind.CommonJS } },
 ).outputText)(scopesModule.exports);
 const scopes = scopesModule.exports;
-const keys = {
-  MY_TASKS_LIVE_UPDATES_FLAG: "htpr-6458-my-tasks-live-updates",
-  MY_TASKS_SNOOZE_FLAG: "snooze",
-};
+const keys = {};
 
 function fixture(userId = 985) {
   const calls = [];
@@ -50,13 +47,17 @@ function fixture(userId = 985) {
   return { GET: loadedModule.exports.GET, calls, payload };
 }
 
-test("My Tasks GET always returns authorized realtime boards without the retired flag", async () => {
+test("My Tasks GET always loads snoozed rows without a retired snooze flag check", async () => {
   const f = fixture();
   const response = await f.GET(new NextRequest("https://app.hypertask.ai/api/my-tasks?scopes=created"));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(await response.json(), { ...f.payload, accessibleProjectIds: [7049, 7283] });
   assert.deepEqual(f.calls.filter(([kind]) => kind === "projects"), [["projects", 985, "Calendar", false]]);
+  const tasksCall = f.calls.find(([kind]) => kind === "tasks");
+  assert.ok(tasksCall);
+  assert.equal(tasksCall[4]?.snoozeEnabled, true);
+  assert.ok(f.calls.every(([kind, key]) => kind !== "flag" || key !== "snooze"));
   assert.ok(f.calls.every(([kind, key]) => kind !== "flag" || key !== "htpr-6458-my-tasks-live-updates"));
   assert.ok(f.calls.every(([kind, key]) => kind !== "flag" || key !== "views"));
 });
