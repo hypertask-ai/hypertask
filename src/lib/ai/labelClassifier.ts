@@ -1,5 +1,7 @@
 import { findSharedAiAllowanceError } from "@/app/api/ai/_lib/allowanceError";
+import { skipAutomaticAiForAgentChange } from "@/lib/ai/agentAutomaticAi";
 import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_8904_AGENT_AUTOMATIC_AI_FLAG } from "@/lib/flags/definitions/htpr-8904-agent-automatic-ai";
 import { HTPR_7850_LABEL_BACKFILL_SKIP_UNCHANGED_FLAG } from "@/lib/flags/definitions/htpr-7850-label-backfill-skip-unchanged";
 import { YPER4_915_ERROR_LOG_NEVER_BUG_FLAG } from "@/lib/flags/definitions/yper4-915-error-log-never-bug";
 import { HTPR_8099_SMART_LABEL_REFUSAL_FLAG } from "@/lib/flags/definitions/htpr-8099-smart-label-refusal";
@@ -440,11 +442,12 @@ export async function classifyNewTaskAiLabels(taskId: number, projectId: number)
     taskId,
     projectId,
     new Set(labelsPickedByCreator.map(({ labelId }) => labelId)),
+    { skipAgentCreated: true },
   );
 }
 
-export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number) {
-  waitUntil(classifyTaskAiLabels(taskId, projectId).catch(console.error));
+export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number, agentId?: string | null) {
+  waitUntil(classifyTaskAiLabels(taskId, projectId, new Set(), { agentId }).catch(console.error));
 }
 
 export function scheduleClassifyNewTaskAiLabels(taskId: number, projectId: number) {
@@ -459,7 +462,16 @@ export async function classifyTaskAiLabels(
   taskId: number,
   projectId: number,
   labelIdsLeftToCreator: ReadonlySet<string> = new Set(),
+  trigger?: { agentId?: string | null; skipAgentCreated?: boolean },
 ) {
+  if (trigger?.agentId || trigger?.skipAgentCreated) {
+    const authored = await prisma.task.findFirst({
+      where: { id: taskId, projectId, status: "Normal" },
+      select: { userId: true, agentId: true },
+    });
+    const agentId = trigger.agentId || (trigger.skipAgentCreated ? authored?.agentId : null);
+    if (typeof agentId === "string" && agentId.length > 0 && skipAutomaticAiForAgentChange(agentId, await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, authored?.userId ?? 0).catch(() => false))) return;
+  }
   const labels = await prisma.label.findMany({
     where: { projectId, ai_prompt: { not: null } },
     select: { id: true, ai_prompt: true },
@@ -584,6 +596,9 @@ export async function backfillAiLabel(labelId: string, userId?: number) {
         ? []
         : [{ ...task, classificationSnapshot: { inputHash, assigned: isAssigned } }];
     });
+  }
+  if (tasks.some((task) => task.agentId) && await isFeatureEnabled(HTPR_8904_AGENT_AUTOMATIC_AI_FLAG, userId ?? 0).catch(() => false)) {
+    tasks = tasks.filter((task) => !task.agentId);
   }
   if (tasks.length === 0) return;
   if (await trySmartLabelBatch(userId, { id: label.id, prompt }, tasks)) return;
