@@ -141,7 +141,10 @@ test("trial comparison keeps production columns until the copy flag is on", () =
   assert.equal(off.proWithAi.some((perk) => perk.amount === "Email"), true);
 
   const on = plans.trialComparisonColumns(true);
-  assert.equal(plans.trialPlanBlurb(true), "Risk free, cancel anytime.");
+  assert.equal(
+    plans.trialPlanBlurb(true),
+    "Upgrade to Pro for more included AI. Integrations stay included on every plan. Risk free, cancel anytime.",
+  );
   assert.equal(plans.trialPlanBlurb(true).toLowerCase().includes("unlimited ai"), false);
   assert.equal(on.sharedTitles, null);
   assert.equal(on.starter.some((perk) => perk.title === "LLM billing" && perk.amount.includes("Your API keys")), true);
@@ -175,7 +178,7 @@ test("the trial table renders each plan's own features only when the copy flag i
   assert.equal(off.includes("unlimited AI"), true);
   assert.equal(off.includes("$15 of tokens"), true);
   assert.equal(on.includes("unlimited AI"), false);
-  assert.equal(on.includes("Risk free, cancel anytime."), true);
+  assert.equal(on.includes("more included AI"), true);
   assert.equal(on.includes("$15 of tokens"), false);
   assert.equal(on.includes("Your API keys"), true);
   assert.equal(on.includes("Priority"), true);

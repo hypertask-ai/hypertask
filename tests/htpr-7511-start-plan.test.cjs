@@ -42,8 +42,17 @@ async function withButton(fn, backend) {
   };
   const router = { push: (url) => pushes.push(url), refresh: () => { refreshes++; } };
   const flagMock = { useFlag: (name) => {
-    if (name === "htpr-7686-free-plan-copy" || name === "htpr-7919-allowance-percent") return false;
-    assert.equal(name, key); return state.enabled;
+    if (
+      name === "htpr-7686-free-plan-copy"
+      || name === "htpr-7919-allowance-percent"
+      || name === "htpr-7686-free-plan-limits"
+      || name === "htpr-7922-unlimited-free-boards"
+      || name === "htpr-7923-unlimited-free-tickets"
+      || name === "htpr-7924-free-file-25mb"
+      || name === "htpr-7924-free-storage-2gb"
+    ) return false;
+    if (name === key) return state.enabled;
+    assert.fail(`unexpected flag ${name}`);
   }, useFlagReady: () => state.flagReady };
   const buttonModule = load("src/components/PageComponents/Kanban/HeaderComponents/StartPlanButton.tsx", {
     axios, "next/navigation": { useRouter: () => router },
