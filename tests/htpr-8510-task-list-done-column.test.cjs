@@ -66,6 +66,7 @@ function fixture(rows, doneTitles, { showWaiting = false } = {}) {
       HTPR_7733_PERSON_ASSIGNMENT_FILTER_FLAG: "htpr-7733-person-assignment-filter",
       HTPR_8295_AGENT_ME_ASSIGNEE_FLAG: "htpr-8295-agent-me-assignee",
       HTPR_7684_DESKTOP_AI_CHAT_BEARER_FLAG: "htpr-7684-desktop-ai-chat-bearer",
+      HTPR_8738_PICKER_SKIPS_PARKED_FLAG: "htpr-8738-picker-skips-parked",
     },
     "@/lib/flags": {
       isFeatureEnabled: async (key) => showWaiting && key === "htpr-8738-picker-skips-parked",

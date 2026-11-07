@@ -77,6 +77,20 @@ function assigneeClauseMatches(row, clause) {
   return false
 }
 
+function parkedByQuery(candidate, where) {
+  if (where.waitingOnUserId === null && candidate.waitingOnUserId != null) return true
+  if (where.blockerCommentId === null && candidate.blockerCommentId != null) return true
+  const parkedSections = where.NOT && where.NOT.OR
+  if (!Array.isArray(parkedSections)) return false
+  return parkedSections.some((clause) => {
+    const equals = clause.section && clause.section.equals
+    if (!equals) return false
+    return clause.section.mode === 'insensitive'
+      ? candidate.section.toLowerCase() === String(equals).toLowerCase()
+      : candidate.section === equals
+  })
+}
+
 function passesAssigneeFilter(candidate, where) {
   const none = where.assignees && where.assignees.none
   if (!none) return true
@@ -101,6 +115,7 @@ function loadRoute({ tasks, sectionsByProject, agentId = null, skipOtherAgents =
         const matchingTasks = tasks.filter((candidate) => {
           if (candidate.status !== query.where.status) return false
           if (!passesAssigneeFilter(candidate, query.where)) return false
+          if (parkedByQuery(candidate, query.where)) return false
           if (typeof sectionFilter === 'string') {
             return candidate.section === sectionFilter
           }
@@ -436,6 +451,31 @@ test('the default pick leaves out review columns and tickets waiting on a person
   assert.deepEqual(
     response.body.tasks.map(({ id }) => id),
     [1, 8]
+  )
+  assert.equal(route.taskQueries[0].where.waitingOnUserId, null)
+  assert.equal(route.taskQueries[0].where.blockerCommentId, null)
+})
+
+test('parked tickets older than the candidate cap do not hide a ready ticket', async () => {
+  const parked = Array.from({ length: 500 }, (_, index) =>
+    task({ id: index + 1, section: 'Valentin Review' })
+  )
+  const route = loadRoute({
+    tasks: [...parked, task({ id: 501, section: 'Ready' })],
+    sectionsByProject: new Map([
+      [15, [
+        { section_title: 'Valentin Review', isDone: false },
+        { section_title: 'Ready', isDone: false },
+      ]],
+    ]),
+    skipParked: true,
+  })
+
+  const response = await callNext(route.GET)
+
+  assert.deepEqual(
+    response.body.tasks.map(({ id }) => id),
+    [501]
   )
 })
 

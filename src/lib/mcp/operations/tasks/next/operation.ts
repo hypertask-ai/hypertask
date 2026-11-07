@@ -199,6 +199,21 @@ export async function GET(request: NextRequest) {
       ...(ctx.agentId != null && skipOtherAgents
         ? otherAgentAssigneeWhere(ctx.agentId)
         : {}),
+      ...(skipParked
+        ? {
+            waitingOnUserId: null,
+            blockerCommentId: null,
+            NOT: {
+              OR: [
+                { section: { equals: 'AI Review', mode: 'insensitive' } },
+                { section: { equals: 'Valentin Review', mode: 'insensitive' } },
+                { section: { equals: 'UX Sign-off', mode: 'insensitive' } },
+                { section: { equals: 'UX Sign off', mode: 'insensitive' } },
+                { section: { equals: 'Flags', mode: 'insensitive' } },
+              ],
+            },
+          }
+        : {}),
     }
 
     const tasks = await prisma.task.findMany({
