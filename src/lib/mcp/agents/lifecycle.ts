@@ -191,7 +191,7 @@ export async function archiveOwnedAgent(
 
   try {
     const agent = await database.agent.update({
-      where: { ...scopeWhere, id: existing.id, userId },
+      where: { id: existing.id, userId, AND: scopeWhere },
       data: { archivedAt },
       select: LIFECYCLE_SELECT,
     })
@@ -225,7 +225,7 @@ export async function renameOwnedAgent(
 
   try {
     const agent = await database.agent.update({
-      where: { ...scopeWhere, id: existing.id, userId },
+      where: { id: existing.id, userId, AND: scopeWhere },
       data: { displayName },
       select: LIFECYCLE_SELECT,
     })
