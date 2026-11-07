@@ -165,7 +165,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
     currentTask.projectId
   );
   const agentWaitingEnabled = useFlag(HTPR_8917_AGENT_WAITING_PERSON_FLAG);
-  const waitingOnAgent = agentWaitingEnabled ? currentTask.waitingOnAgent : null;
   const waitingOnUser = useMemo(() => {
     const users: IUser[] = [
       ...(membersAndOwner?.owner ? [membersAndOwner.owner] : []),
@@ -247,7 +246,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
         currentTask={currentTask}
       />
 
-      {(currentTask.waitingOnUserId || waitingOnAgent) && (
+      {(currentTask.waitingOnUserId || (agentWaitingEnabled && currentTask.waitingOnAgent)) && (
         <TaskInfoRow>
           <LocalRightSideInfo
             onClick={openWaitingOnPicker}
@@ -263,7 +262,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           >
             <span className="inline-flex max-w-full items-center gap-1.5 font-medium text-white-black">
               <span className="truncate">
-                {waitingOnAgent?.displayName ?? waitingOnUser?.displayName ?? "Unknown user"}
+                {(agentWaitingEnabled && currentTask.waitingOnAgent?.displayName) || waitingOnUser?.displayName || "Unknown user"}
               </span>
               {waitingOnAge && (
                 <span
