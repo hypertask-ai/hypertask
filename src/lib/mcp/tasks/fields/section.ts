@@ -1,6 +1,7 @@
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7990_TASK_MOVE_REFUSAL_FLAG } from '@/lib/flags/definitions/htpr-7990-task-move-refusal';
+import { loadBoardWorkflowMapping } from '@/lib/mcp/boards/workflowMapping';
 import type { TaskUpdateFieldContext, TaskUpdateTarget } from './types';
 
 export async function updateTaskSection(context: TaskUpdateFieldContext, task: TaskUpdateTarget) {
@@ -29,12 +30,15 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
         })
         if (!moveResponse.ok) {
             const errorData = await moveResponse.json().catch(() => null)
-            const error = new Error(
-                toErrorMessage(
-                    errorData,
-                    `Move task failed: ${moveResponse.status}`
-                )
+            let message = toErrorMessage(
+                errorData,
+                `Move task failed: ${moveResponse.status}`
             )
+            if (moveResponse.status >= 400 && moveResponse.status < 500) {
+                const mapping = await loadBoardWorkflowMapping(task.projectId)
+                message = `${message} Allowed workflow mapping: ${mapping}.`
+            }
+            const error = new Error(message)
             if (moveResponse.status >= 400 && moveResponse.status < 500 &&
                 (requestBody.expected_section_id !== undefined || await isFeatureEnabled(HTPR_7990_TASK_MOVE_REFUSAL_FLAG, ctx.user.id))) {
                 throw Object.assign(error, { status: moveResponse.status, code: 'task_move_refused' })
@@ -48,8 +52,9 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
             { status: 400, code: 'invalid_value', field: 'sectionId' }
         )
     } else if (requestBody.sectionId && !sectionInfo) {
+        const mapping = await loadBoardWorkflowMapping(task.projectId)
         throw Object.assign(
-            new Error('sectionId does not match a column. Pass a column id from the task\'s own board.'),
+            new Error(`sectionId does not match a column. Allowed workflow mapping: ${mapping}.`),
             { status: 400, code: 'not_found', field: 'sectionId' }
         )
     }

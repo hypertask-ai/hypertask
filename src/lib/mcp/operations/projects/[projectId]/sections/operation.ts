@@ -10,6 +10,8 @@ import { broadcastBoardChange } from '@/lib/realtime/server'
 import { readListQuery, tryApplyCollectionQuery } from '@/lib/mcp/readListQuery'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_8354_SECTION_NAME_FLAG } from '@/lib/flags/definitions/htpr-8354-section-name'
+import { columnWorkflowRole } from '@/lib/mcp/boards/workflowMapping'
+import type { BoardColumnRole } from '@/lib/mcp/boards/columnRole'
 
 export interface SectionListItem {
   id: number
@@ -22,6 +24,7 @@ export interface SectionListItem {
   isDone: boolean | null
   autoAssign: number | string | null
   taskCount: number
+  role: BoardColumnRole
 }
 
 export interface ListSectionsResponse {
@@ -176,7 +179,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
           ranking: section.ranking,
           isDone: section.isDone ?? null,
           autoAssign: null,
-          taskCount
+          taskCount,
+          role: columnWorkflowRole(section),
         },
         message: 'Section created successfully'
       },
@@ -304,7 +308,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
           ranking: section.ranking,
           isDone: section.isDone,
           autoAssign: section.autoAssignAgentId ?? section.autoAssignUserId ?? null,
-          taskCount
+          taskCount,
+          role: columnWorkflowRole(section),
         }
       })
     )
