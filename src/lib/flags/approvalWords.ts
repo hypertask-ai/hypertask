@@ -21,18 +21,22 @@ function collectChatParts(node: Node, parts: Array<{ kind: "text" | "quote"; tex
   if (node.nodeType === NodeType.COMMENT_NODE) return;
   const element = node as HTMLElement;
   if (element.tagName === "BLOCKQUOTE") {
+    if (element.querySelectorAll("blockquote").length > 0) {
+      parts.push({ kind: "quote", text: "" }, { kind: "quote", text: "" });
+      return;
+    }
     parts.push({ kind: "quote", text: normalizeVisibleText(element.innerHTML) });
     return;
   }
   for (const child of node.childNodes) collectChatParts(child, parts);
 }
 
-export function parseFlagChatRecord(html: string): { date: string; quote: string } | null {
+export function parseFlagChatRecord(html: string): { date: string; quote: string; tail: string } | null {
   const words = normalizeVisibleText(html);
   const legacy = FLAG_CHAT_RECORD.exec(words);
   if (legacy) {
     if ((words.match(/"/g) ?? []).length !== 2) return null;
-    return { date: legacy[1], quote: legacy[2] };
+    return { date: legacy[1], quote: legacy[2], tail: words.slice(words.lastIndexOf('"') + 1).trim() };
   }
   const parts: Array<{ kind: "text" | "quote"; text: string }> = [];
   collectChatParts(parse(html), parts);
@@ -44,7 +48,7 @@ export function parseFlagChatRecord(html: string): { date: string; quote: string
   if (!header) return null;
   const after = normalizeVisibleText(parts.slice(quoteAt + 1).map((part) => part.text).join(" "));
   if (!BLOCK_TAIL.test(after)) return null;
-  return { date: header[1], quote };
+  return { date: header[1], quote, tail: after };
 }
 
 export function classifyAnswer(text: string): "yes" | "no" | "unclear" {

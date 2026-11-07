@@ -35,21 +35,26 @@ test("the chat record identity is the configured lead UUID", () => {
 
 test("a quote block after the chat header is the approval and adjacent prose is not", () => {
   assert.deepEqual(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><blockquote><p>yes, ship it</p></blockquote>'), {
-    date: "2026-11-07", quote: "yes, ship it",
+    date: "2026-11-07", quote: "yes, ship it", tail: "",
   });
-  assert.deepEqual(parseFlagChatRecord('<p>@HT Product Lead Valentin said in chat (2026-11-07):</p><blockquote><p>yes, ship it</p></blockquote><p>Switch htpr-3533-google-calendar to Everyone</p>'), {
-    date: "2026-11-07", quote: "yes, ship it",
+  const named = '<p>Valentin said in chat (2026-11-07):</p><blockquote><p>yes, ship it</p></blockquote><p>Switch htpr-3533-google-calendar to Off</p>';
+  const record = parseFlagChatRecord(named);
+  assert.equal(parseSwitchQuestion(normalizeVisibleText(named)), null);
+  assert.deepEqual(record, {
+    date: "2026-11-07", quote: "yes, ship it", tail: "switch htpr-3533-google-calendar to off",
   });
+  assert.deepEqual([...(parseSwitchQuestion(record.tail) || [])], [["htpr-3533-google-calendar", "Off"]]);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><p>yes, ship it</p>'), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07): he meant</p><blockquote><p>yes, ship it</p></blockquote>'), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><blockquote><p>yes, ship it</p></blockquote><p>Thanks</p>'), null);
   assert.equal(parseFlagChatRecord('<blockquote><p>yes, ship it</p></blockquote><p>Valentin said in chat (2026-11-07):</p>'), null);
   assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><blockquote><p>yes</p></blockquote><blockquote><p>ship it</p></blockquote>'), null);
+  assert.equal(parseFlagChatRecord('<p>Valentin said in chat (2026-11-07):</p><blockquote><blockquote><p>yes, ship it</p></blockquote></blockquote>'), null);
 });
 
 test("older quote-mark chat records still parse and a second quoted span does not", () => {
   assert.deepEqual(parseFlagChatRecord('Valentin said in chat (2026-11-07): "yes, ship it". Switch htpr-3533-google-calendar to Off'), {
-    date: "2026-11-07", quote: "yes, ship it",
+    date: "2026-11-07", quote: "yes, ship it", tail: ". switch htpr-3533-google-calendar to off",
   });
   assert.equal(parseFlagChatRecord('Valentin said in chat (2026-11-07): "yes, ship it" "yes"'), null);
 });

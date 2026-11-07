@@ -226,6 +226,7 @@ export async function PATCH(request: NextRequest) {
       } else {
         if (!plainYesAllowed) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
         const fresh = comment.createdAt.getTime() >= now - week;
+        let chatTail = "";
         if (human && fresh && answer === "yes") {
           kind = "ticket-yes";
         } else {
@@ -246,6 +247,10 @@ export async function PATCH(request: NextRequest) {
           }
           kind = "chat-record";
           approvedAt = new Date(recordDate);
+          chatTail = record ? record.tail : "";
+        }
+        if (kind === "chat-record" && !switches && chatTail) {
+          switches = parseSwitchQuestion(chatTail, templateQuestionAllowed) ?? switches;
         }
         if (kind !== "chat-record" || !switches) {
           const beforeApproval = { OR: [

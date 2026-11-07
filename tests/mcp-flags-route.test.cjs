@@ -653,6 +653,12 @@ test("PATCH refuses a quote-block off order for Everyone", async () => {
   await assertRefused();
 });
 
+test("PATCH refuses a nested quote block", async () => {
+  const day = new Date().toISOString().slice(0, 10);
+  chatRecord(`<p>Valentin said in chat (${day}):</p><blockquote><blockquote><p>yes, ship it</p></blockquote></blockquote>`);
+  await assertRefused();
+});
+
 test("PATCH refuses chat words that are not inside the quote block", async () => {
   const day = new Date().toISOString().slice(0, 10);
   chatRecord(`<p>Valentin said in chat (${day}): yes, ship it</p>`);
