@@ -31,6 +31,40 @@ if helper_run; then
   esac
 fi
 
+activity_usage() {
+  printf '%s\n' \
+    'usage: vcc activity add <TICKET-or-task-ID> [--text] "<text>"' \
+    '       vcc activity last <TICKET-or-task-ID>' \
+    '       vcc activity list <TICKET-or-task-ID> [--json]' \
+    'last prints timestamp, author and text; list returns up to 100 notes as TSV or --json.'
+}
+if [ "${1:-}" = activity ]; then
+  for arg in "$@"; do
+    case "$arg" in -h|--help) activity_usage; exit 0 ;; esac
+  done
+  [ "$#" -ge 3 ] || { activity_usage >&2; exit 1; }
+  case "$2" in
+    add)
+      text=''
+      if [ "$#" = 5 ] && [ "$4" = --text ]; then
+        text=$5
+      elif [ "$#" = 4 ] && [[ $4 == --text=* ]]; then
+        text=${4#--text=}
+      elif [ "$#" = 4 ] && [[ $4 != --* ]]; then
+        text=$4
+      fi
+      [ -n "${text//[[:space:]]/}" ] || { activity_usage >&2; exit 1; } ;;
+    last) [ "$#" = 3 ] || { activity_usage >&2; exit 1; } ;;
+    list) [ "$#" = 3 ] || { [ "$#" = 4 ] && [ "$4" = --json ]; } \
+        || { activity_usage >&2; exit 1; } ;;
+    *) activity_usage >&2; exit 1 ;;
+  esac
+fi
+
+if ! command -v hypertask >/dev/null 2>&1 && [ -x "$HOME/.local/bin/hypertask" ]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
 question_check() {
   jq -nr --arg text "$1" --arg markdown "${2:-false}" '
     def visible:
@@ -220,7 +254,13 @@ case "$(printf '%s' "${SHIP_SESSION_NAME:-}" | tr '[:upper:]' '[:lower:]')" in
     [ "$IDENTITY" = "${SHIP_SESSION_NAME%% | *}" ] \
       || { printf 'vcc: %s has no board login; refusing to write as %s\n' "$SHIP_SESSION_NAME" "$IDENTITY" >&2; exit 2; } ;;
 esac
+caller_token=${HT_TOKEN:-}
 HT_TOKEN="$(cat "$TOKEN_FILE")"
+if [ -z "${SHIP_SESSION_NAME:-}" ] && [ -n "$caller_token" ] && [ "$caller_token" != "$HT_TOKEN" ]; then
+  printf '%s\n' 'vcc: supplied board login differs from the default; set SHIP_SESSION_NAME to your configured agent identity' >&2
+  exit 2
+fi
+unset caller_token
 [ -n "${HT_TOKEN//[[:space:]]/}" ] || { printf 'vcc: empty board login for %s; refusing to write\n' "$IDENTITY" >&2; exit 2; }
 export HT_TOKEN
 completion_move "$@"
@@ -263,27 +303,13 @@ if [ "${1:-}" != activity ]; then
 fi
 
 fail() { echo "vcc activity: $*" >&2; exit 1; }
-[ "$#" -ge 3 ] || fail 'usage: vcc activity add <TICKET> ["--text"] "<text>" | vcc activity list <TICKET> | vcc activity last <TICKET>'
 command=$2; ticket=$3
-[[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number'
+if [[ $ticket =~ ^[0-9]+$ ]]; then
+  ticket=$(hypertask tasks get "$ticket" --json | jq -er '.tasks | select(length == 1) | .[0].ticketNumber') \
+    || fail 'cannot resolve task ID to a ticket number'
+fi
+[[ $ticket =~ ^[A-Za-z][A-Za-z0-9_-]*-[0-9]+$ ]] || fail 'expected a ticket number or numeric task ID'
 ticket=${ticket^^}
-text=''
-case "$command" in
-  add)
-    if [ "$#" = 5 ] && [ "$4" = --text ]; then
-      text=$5
-    elif [ "$#" = 4 ] && [[ $4 == --text=* ]]; then
-      text=${4#--text=}
-    elif [ "$#" = 4 ]; then
-      text=$4
-    else
-      fail 'add needs one non-empty text argument'
-    fi
-    [ -n "${text//[[:space:]]/}" ] || fail 'add needs one non-empty text argument'
-    ;;
-  list|last) [ "$#" = 3 ] || fail "$command needs only a ticket number" ;;
-  *) fail "unknown activity command: $command" ;;
-esac
 
 body=$(mktemp)
 trap 'rm -f "$body"' EXIT
@@ -304,7 +330,7 @@ success() {
 
 if [ "$command" = last ] || [ "$command" = list ]; then
   limit=1
-  [ "$command" = list ] && limit=20
+  [ "$command" != list ] || limit=100
   path="tasks/$ticket/agent-activity?limit=$limit"
   # Board checks use the immutable claimant id; normal last reads every agent.
   if [ -n "${VCC_ACTIVITY_AGENT_ID:-}" ]; then
@@ -317,9 +343,13 @@ if [ "$command" = last ] || [ "$command" = list ]; then
   fi
   success
   if [ "$command" = list ]; then
-    jq -r 'if (.activities | length) == 0 then "" else .activities[] | [.createdAt, .agentName, ((.text // "") | gsub("[[:space:]]+"; " "))] | @tsv end' "$body"
+    if [ "${4:-}" = --json ]; then
+      jq . "$body"
+    else
+      jq -r 'if (.activities | length) == 0 then "" else .activities[] | [.createdAt, .agentName, ((.text // "") | gsub("[[:space:]]+"; " "))] | @tsv end' "$body"
+    fi
   else
-    jq -er '.activities | if length == 0 then "" else .[0] | [.createdAt, .agentName] | @tsv end' "$body" | sed '/^$/d'
+    jq -er '.activities | if length == 0 then "" else .[0] | [.createdAt, .agentName, .text] | @tsv end' "$body" | sed '/^$/d'
   fi
   exit 0
 fi

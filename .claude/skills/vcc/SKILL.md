@@ -13,7 +13,17 @@ Read `ship-identity` before writing. Use `vcc` for every board mutation, includi
 
 Use `ship-claim` with your actual resume command before investigating. It assigns your agent before posting the claim to agent activity, then checks activity and legacy comments for collisions. Stop on failed assignment or a losing claim. Preserve existing human assignees and manual moves; add only your own agent, never Valentin. Read back each board write. If `vcc` fails, stop and record the blocker through the authorized path when available; never switch identity to work around it.
 
+If `HT_TOKEN` belongs to another identity and no session name is set, `vcc` refuses rather than silently substituting its default login. Set `SHIP_SESSION_NAME` to your own configured agent; do not fall back to a human login or broaden the default agent's board access.
+
 Keep the ticket In Progress while actively working. Resume AI Review tickets there before fixing them. Use the shared `tickets` skill: human decisions and QA use their kinds; plans, tests, and progress go to agent activity. Keep technical status, session names, resume commands, and handoffs in agent activity only; people comments contain results and evidence links. Runners report on tickets, never through Valentin's browser or another session's chat.
+
+## Work notes
+
+- `vcc activity add <TICKET-or-task-ID> "<text>"` writes one agent note. Text may be positional or use `--text` / `--text=`. `--kind` is not supported here.
+- `vcc activity last <TICKET-or-task-ID>` prints the latest note's timestamp, author, and complete text as tab-separated fields. Tabs and newlines inside text are escaped.
+- `vcc activity list <TICKET-or-task-ID> [--json]` reads up to 100 recent notes as tab-separated rows; `--json` preserves full text and metadata. It never writes a note.
+- `vcc activity --help` and `vcc activity add <TICKET> --help` print usage without opening credentials or writing to the board.
+- Numeric references are immutable task IDs, not a board's ticket index.
 
 ## Before opening the PR
 

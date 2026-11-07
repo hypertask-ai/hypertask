@@ -99,7 +99,14 @@ printf ' \n\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-co
 run env SHIP_SESSION_NAME='Valentins Claude Code' bash "$vcc" comment add X-1 --text hi
 [ "$status" = 2 ] || fail 'empty board login was not refused'
 printf 'fixture-token\n' > "$HOME/.config/hypertask-agents/credentials/valentins-claude-code-agent-token"
-printf 'ok runner writes refused without its own board login\n'
+run env -u SHIP_SESSION_NAME HT_TOKEN=another-agent-token bash "$vcc" comment add X-1 --text hi
+[ "$status" = 2 ] || fail 'foreign supplied login silently replaced by default identity'
+[[ $(< "$T/err") == *'set SHIP_SESSION_NAME'* ]] || fail 'missing explicit-identity guidance'
+[[ $(< "$T/err") != *another-agent-token* ]] || fail 'identity refusal leaked supplied token'
+[[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail 'foreign login refusal reached the board'
+allowed env -u SHIP_SESSION_NAME HT_TOKEN=fixture-token bash "$vcc" comment add X-1 --text hi
+allowed env SHIP_SESSION_NAME=Fixture HT_TOKEN=another-agent-token bash "$vcc" comment add X-1 --text hi
+printf 'ok runner writes refused without its own board login; ambiguous supplied login fails closed\n'
 
 for command in get list search last; do
   allowed env VCC_HELPER=1 bash "$vcc" tasks "$command" X-1
@@ -160,15 +167,20 @@ allowed launch_hax 'prompt containing -p' comment add X-1 --text hi
 allowed launch_hax interactive comment add X-1 --text hi
 printf 'ok hax without an exact prompt argument remains a runner\n'
 
-# Unknown activity subcommands stop in vcc with its usage, never reach the CLI.
-for args in "activity" "activity --help" "activity bogus X-1"; do
+for args in 'activity --help' 'activity add --help' 'activity add X-1 --help' 'activity list X-1 --help'; do
+  run bash "$vcc" $args
+  [ "$status" = 0 ] || fail "help failed: vcc $args"
+  [[ $(< "$T/out") == 'usage: vcc activity '* ]] || fail "missing activity help: vcc $args"
+  [ ! -s "$VCC_TEST_TRACE" ] || fail "help accessed credentials or board: vcc $args"
+done
+for args in 'activity' 'activity unknown X-1' 'activity add X-1 --text' 'activity add X-1 --typo' 'activity list X-1 --bad'; do
   run bash "$vcc" $args
   [ "$status" = 1 ] || fail "expected exit 1, got $status: vcc $args"
-  [[ $(< "$T/err") == "vcc activity: "* ]] || fail "missing vcc activity error: vcc $args"
-  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail "fell through to CLI: vcc $args"
+  [[ $(< "$T/err") == 'usage: vcc activity '* ]] || fail "missing activity usage: vcc $args"
+  [ ! -s "$VCC_TEST_TRACE" ] || fail "invalid syntax accessed credentials or board: vcc $args"
 done
 allowed bash "$vcc" tasks get X-1
-printf 'ok unknown activity subcommands fail in vcc\n'
+printf 'ok activity help and invalid options never access credentials or board\n'
 cat > "$T/bin/curl" <<'STUB'
 #!/usr/bin/env bash
 cat >/dev/null
@@ -187,7 +199,7 @@ STUB
 chmod +x "$T/bin/curl"
 run bash "$vcc" activity list X-1
 [ "$status" = 0 ] || fail "activity list failed: $(cat "$T/err")"
-[[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=20'* ]] || fail "activity list used the wrong limit"
+[[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=100'* ]] || fail "activity list used the wrong limit"
 [[ $(< "$T/out") == *'older note'* && $(< "$T/out") == *'newer note'* ]] || fail "activity list dropped a row: $(cat "$T/out")"
 run bash "$vcc" activity last X-1
 [ "$status" = 0 ] || fail "activity last failed: $(cat "$T/err")"
@@ -593,6 +605,97 @@ mkdir -p "$VCC_EVIDENCE_DIR/HTPR-999"
 printf '1\n' > "$VCC_EVIDENCE_DIR/HTPR-999/pr"
 completion_refused env VCC_TEST_TICKET=HTPR-999 bash "$vcc" task move HTPR-999 --section Done
 printf 'ok real checker requires merged PR, successful deploy, and app QA proof\n'
+mkdir -p "$HOME/.local/bin"
+ln -s "$T/bin/hypertask" "$HOME/.local/bin/hypertask"
+allowed env PATH=/usr/bin:/bin bash "$vcc" --version
+printf 'ok installed CLI recovered when launcher omits local bin from PATH\n'
+
+export VCC_TEST_TASK="$T/task.json"
+cat > "$T/bin/hypertask" <<'STUB'
+#!/usr/bin/env bash
+[ "${HT_TOKEN:-}" = fixture-token ] || exit 91
+printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
+[ "$1 $2" = 'tasks get' ] || exit 92
+exec /bin/cat "$VCC_TEST_TASK"
+STUB
+cat > "$T/bin/curl" <<'STUB'
+#!/usr/bin/env bash
+set -euo pipefail
+method='' output='' data='' url=''
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --request) method=$2; shift ;;
+    --output) output=$2; shift ;;
+    --data) data=$2; shift ;;
+    https://*) url=$1 ;;
+  esac
+  shift
+done
+printf '%s %s %s\n' "$method" "$url" "$data" >> "$VCC_TEST_TRACE"
+case "$url" in
+  */agent-activity\?*)
+    printf '%s' "${VCC_TEST_ACTIVITY_RESPONSE:-}" > "$output" ;;
+  */agents/runs)
+    [ "$method" = POST ] && [ "$data" = '{"taskId":42,"projectId":15,"boardNumber":1,"source":"runtime"}' ] || exit 93
+    printf '%s' '{"success":true,"run":{"id":"fixture-run"}}' > "$output" ;;
+  */agents/runs/fixture-run)
+    [ "$method" = GET ] || exit 94
+    printf '%s' '{"success":true,"run":{"status":"active"}}' > "$output" ;;
+  */agents/runs/fixture-run/activities)
+    [ "$method" = POST ] && jq -e '.type == "thought" and (.text == "Fixture note" or .text == "- Fixture note")' <<< "$data" >/dev/null || exit 94
+    printf '%s' '{"success":true,"activity":{"id":"fixture-note"}}' > "$output" ;;
+  *) exit 95 ;;
+esac
+printf '%s' "${VCC_TEST_ACTIVITY_CODE:-200}"
+STUB
+chmod +x "$T/bin/curl"
+export VCC_TEST_ACTIVITY_RESPONSE='{"success":true,"activities":[{"createdAt":"2026-11-02T12:00:00Z","agentName":"Fixture Agent","text":"Full note\nNext step","id":"note-1"}]}'
+run bash "$vcc" activity last X-1
+[ "$status" = 0 ] || fail "last failed: $(cat "$T/err")"
+[ "$(< "$T/out")" = $'2026-11-02T12:00:00Z\tFixture Agent\tFull note\\nNext step' ] || fail 'last dropped or changed note text'
+[[ $(< "$VCC_TEST_TRACE") == *'GET https://app.hypertask.ai/api/mcp/tasks/X-1/agent-activity?limit=1'* ]] || fail 'last did not read the ticket route'
+[[ $(< "$VCC_TEST_TRACE") != *POST* ]] || fail 'last wrote to the board'
+
+for suffix in '' '--json'; do
+  run bash "$vcc" activity list X-1 $suffix
+  [ "$status" = 0 ] || fail "list failed: $(cat "$T/err")"
+  if [ "$suffix" = --json ]; then
+    jq -e '.activities[0].text == "Full note\nNext step" and .activities[0].id == "note-1"' "$T/out" >/dev/null || fail 'list lost note content or metadata'
+  else
+    [[ $(< "$T/out") == *$'Fixture Agent\tFull note Next step'* ]] || fail 'list lost note text'
+  fi
+  [[ $(< "$VCC_TEST_TRACE") == *'agent-activity?limit=100'* ]] || fail 'list did not request history'
+  [[ $(< "$VCC_TEST_TRACE") != *POST* ]] || fail 'list wrote to the board'
+done
+run env VCC_HELPER=1 bash "$vcc" activity list X-1 --json
+[ "$status" = 0 ] || fail 'helper could not read activity history'
+run env VCC_ACTIVITY_AGENT_ID=agent-123 bash "$vcc" activity last X-1
+[ "$status" = 0 ] || fail 'claimant read failed'
+[[ $(< "$VCC_TEST_TRACE") == *'limit=1&agent_id=agent-123'* ]] || fail 'claimant filter was lost'
+run env VCC_TEST_ACTIVITY_RESPONSE='{"success":true,"activities":[]}' bash "$vcc" activity last X-1
+[ "$status" = 0 ] && [ ! -s "$T/out" ] || fail 'empty last was not empty success'
+run env VCC_TEST_ACTIVITY_CODE=403 VCC_TEST_ACTIVITY_RESPONSE='{"success":false,"error":"Forbidden"}' bash "$vcc" activity list X-1
+[ "$status" != 0 ] && [ ! -s "$T/out" ] || fail 'forbidden history did not fail closed'
+run env VCC_TEST_ACTIVITY_CODE=404 bash "$vcc" activity last X-1
+[ "$status" = 4 ] || fail 'last lost the unavailable-route exit contract'
+printf 'ok activity reads preserve text, history, caller filters and denied access\n'
+
+printf '%s' '{"tasks":[{"id":42,"ticketNumber":"X-1","projectId":15,"uniqueIndex":1}]}' > "$VCC_TEST_TASK"
+run bash "$vcc" activity list 42 --json
+[ "$status" = 0 ] || fail 'numeric task history failed'
+[[ $(< "$VCC_TEST_TRACE") == *'hypertask tasks get'* && $(< "$VCC_TEST_TRACE") == *'/tasks/X-1/agent-activity?'* ]] || fail 'numeric task reference did not resolve'
+run bash "$vcc" activity add 42 'Fixture note'
+[ "$status" = 0 ] || fail "numeric task add failed: $(cat "$T/err")"
+[ "$(< "$T/out")" = fixture-note ] || fail 'activity add returned no note ID'
+[[ $(< "$VCC_TEST_TRACE") == *'POST https://app.hypertask.ai/api/mcp/agents/runs/fixture-run/activities'* ]] || fail 'activity add did not write the note'
+run bash "$vcc" activity add X-1 '- Fixture note'
+[ "$status" = 0 ] || fail 'ordinary bullet note was mistaken for an option'
+[[ $(< "$VCC_TEST_TRACE") == *'"text":"- Fixture note"'* ]] || fail 'bullet note text changed'
+printf '%s' '{"tasks":[]}' > "$VCC_TEST_TASK"
+run bash "$vcc" activity add 99 'Fixture note'
+[ "$status" != 0 ] || fail 'unresolved numeric task was accepted'
+[[ $(< "$VCC_TEST_TRACE") != *POST* ]] || fail 'unresolved numeric task wrote a note'
+printf 'ok numeric task references resolve for reads and writes and fail closed\n'
 cat > "$T/bin/hypertask" <<'STUB'
 #!/usr/bin/env bash
 printf 'hypertask %s %s\n' "${1:-}" "${2:-}" >> "$VCC_TEST_TRACE"
@@ -638,6 +741,6 @@ run bash "$vcc" activity add HTPR-8740 'positional note'
 [ "$status" = 0 ] || fail "positional text broke: $(cat "$T/err")"
 run bash "$vcc" activity add HTPR-8740 --note hi
 [ "$status" = 1 ] || fail "unknown option was accepted"
-grep -q 'add needs one non-empty text argument' "$T/err" || fail "wrong rejection: $(cat "$T/err")"
+grep -q 'usage: vcc activity' "$T/err" || fail "wrong rejection: $(cat "$T/err")"
 printf 'ok activity add accepts the documented text option\n'
 printf 'vcc helper guard tests passed\n'
