@@ -30,6 +30,17 @@ test("omitted list closes still count three context points", () => {
   assert.throws(() => assertAgentWriting("agent", { text: four }, {}, { houseRules: true }), /three points/);
 });
 
+test("a later question still counts items whose list already closed", () => {
+  const text = `<p><strong>What this is:</strong> Observation gate: the phone stays locked.</p>
+<ul><li>Problem: one.<li>Reason: two.<li>Outcomes: three.<li>Extra: four.</ul>
+<p><strong>Question:</strong> Continue?</p>
+<p><strong>My recommendation:</strong> Yes.</p>
+<p><strong>Why:</strong> The count must hold.</p>
+<p><strong>Yes:</strong> Count four.</p>
+<p><strong>No:</strong> Ignore it.</p>`;
+  assert.throws(() => assertAgentWriting("agent", { text }, {}, { houseRules: true }), /three points/);
+});
+
 test("four real context points are still refused", () => {
   const text = phoneUnlock.replace(
     "<li><p><strong>Question:</strong>",
