@@ -201,6 +201,7 @@ const AgentRunActivityRow = ({
           >
             {icon}
             <span>Agent</span>
+            {laneAuthor}
             {time}
           </div>
           <div
