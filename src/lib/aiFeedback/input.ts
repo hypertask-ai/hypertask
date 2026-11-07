@@ -6,6 +6,8 @@ const credentialToken = /\bBearer\s+\S+|\b(?:(?:vck_|httk_|htk_|htmk_|eyJ|gh[pou
 const credential = /vck_|httk_|htk_|htmk_|(?:^|[^a-z0-9])[a-z]{2,6}_(?=[a-z0-9_.-]*[a-z])(?=[a-z0-9_.-]*\d)[a-z0-9_.-]{8,}(?![a-z0-9])|eyJ|(?:^|[^a-z0-9])sk[-_]|ghp_|gho_|github_pat_|xox|Bearer|\d{6,}|[^ _\-.\/:]{20,}/i
 const slug = z.string().max(40).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i)
   .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed')
+const toolName = z.string().regex(/^[a-z0-9_.:\/-]{1,80}$/i)
+  .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed')
 export const FEEDBACK_KINDS = ['bug', 'friction', 'missing', 'idea'] as const
 
 export const aiFeedbackSchema = z.object({
@@ -13,8 +15,7 @@ export const aiFeedbackSchema = z.object({
   kind: z.enum(FEEDBACK_KINDS).optional()
     .describe("What the reporter saw: bug, friction, missing or idea. Our own team's agents only; kept on the ticket."),
   client: slug.optional(),
-  tool: z.string().regex(/^[a-z0-9_.:\/-]{1,80}$/i)
-    .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed').optional(),
+  tool: toolName.optional(),
   status: z.number().int().min(100).max(599).optional(),
   errorCode: slug.optional(),
   category: z.enum(['call_failed', 'empty_result', 'unexpected_result', 'auth_failed', 'slow', 'user_reported_broken', 'other'])
@@ -69,6 +70,14 @@ export function feedbackFingerprint(input: AutomaticFeedbackInput, stored?: { ki
   const legacy = createHash('sha256').update(parts.join('|').toLowerCase()).digest('hex')
   const kept = [stored?.kind && `kind:${stored.kind}`, stored?.note && `note:${stored.note}`].filter(Boolean)
   return kept.length === 0 ? legacy : createHash('sha256').update([legacy, ...kept].join('|')).digest('hex')
+}
+
+export function feedbackToolSlug(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (toolName.safeParse(trimmed).success) return trimmed
+  if (!/^[A-Za-z0-9]+(?: +[A-Za-z0-9]+)+$/.test(trimmed)) return undefined
+  const candidate = trimmed.toLowerCase().replace(/ +/g, '-').slice(0, 80).replace(/-+$/g, '')
+  return toolName.safeParse(candidate).success && slug.safeParse(candidate).success ? candidate : undefined
 }
 
 export function feedbackClient(value: unknown): string | undefined {

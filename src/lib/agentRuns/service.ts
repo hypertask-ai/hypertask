@@ -47,6 +47,7 @@ import {
 } from "./persistence";
 import { toStoredHtml } from "@/utils/helperFunctions/toStoredHtml";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { feedbackRepeatActivityEnabled, feedbackReportWhere } from "@/lib/aiFeedback/repeatAccess";
 import {
   AGENT_CHAT_EVENT,
   broadcast,
@@ -135,13 +136,16 @@ export async function createRuntimeAgentRun(
 
   const result = await prisma.$transaction(async (tx) => {
     await lockTaskTeamScope(tx, input.taskId, principal.userId, principal.agentId, principal.teamScope);
-    const task = await tx.task.findFirst({
+    const readableProject = {
+      ...projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope),
+      status: { not: Status.Deleted },
+    };
+    let task = await tx.task.findFirst({
       where: {
         id: input.taskId,
         status: { not: Status.Deleted },
         project: {
-          ...projectContentAccessWhere(principal.userId, principal.agentId, principal.teamScope),
-          status: { not: Status.Deleted },
+          ...readableProject,
           members: {
             some: { agentId, status: "Accepted" },
           },
@@ -149,6 +153,12 @@ export async function createRuntimeAgentRun(
       },
       select: { id: true, projectId: true },
     });
+    if (!task && await feedbackRepeatActivityEnabled(principal.userId)) {
+      task = await tx.task.findFirst({
+        where: feedbackReportWhere(input.taskId, readableProject),
+        select: { id: true, projectId: true },
+      });
+    }
     if (!task) return null;
 
     const context = { taskId: task.id, chatSessionId: null };
