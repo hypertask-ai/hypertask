@@ -70,15 +70,15 @@ test("reversible flags ship to everyone and the release migration names each one
     assert.ok(definition, key);
     assert.equal(modeOf(definition), "EVERYONE", key);
     assert.equal(definition.releaseRisk?.highRisk, undefined, key);
-    assert.match(migration, new RegExp(`'${key}'`));
+    assert.equal(migration.includes(`'${key}'`), true, key);
     assert.equal(definition.releaseRisk?.reason?.trim().length > 0, true, key);
   }
-  assert.match(migration, /flag\.mode = 'OWNER_AND_QA'/);
-  assert.match(migration, /live-qa-failed:%/);
-  assert.doesNotMatch(migration, /'htpr-7037-shared-email-layout'/);
-  assert.doesNotMatch(migration, /'htpr-7730-deepseek-flash-fast'/);
-  assert.doesNotMatch(migration, /'htpr-8216-agent-task-share'/);
-  assert.doesNotMatch(migration, /'htpr-7146-agent-scope-enforce'/);
+  assert.equal(migration.includes("flag.mode = 'OWNER_AND_QA'"), true);
+  assert.equal(migration.includes("live-qa-failed:%"), true);
+  assert.equal(migration.includes("'htpr-7037-shared-email-layout'"), false);
+  assert.equal(migration.includes("'htpr-7730-deepseek-flash-fast'"), false);
+  assert.equal(migration.includes("'htpr-8216-agent-task-share'"), false);
+  assert.equal(migration.includes("'htpr-7146-agent-scope-enforce'"), false);
 
   for (const [key, risk] of Object.entries(HELD)) {
     const definition = byKey.get(key);
@@ -88,11 +88,11 @@ test("reversible flags ship to everyone and the release migration names each one
   }
 
   const theme = byKey.get("htpr-7328-rounded-theme");
-  assert.match(theme.releaseRisk.reason, /theme/i);
+  assert.equal(theme.releaseRisk.reason.toLowerCase().includes("theme"), true);
   const share = byKey.get("htpr-8216-agent-task-share");
-  assert.match(share.releaseRisk.reason, /public/);
+  assert.equal(share.releaseRisk.reason.includes("public"), true);
   const price = byKey.get("htpr-7730-deepseek-flash-fast");
-  assert.match(price.releaseRisk.reason, /8 times/);
+  assert.equal(price.releaseRisk.reason.includes("8 times"), true);
   const enforce = byKey.get("htpr-7146-agent-scope-enforce");
   assert.equal(enforce.defaultMode, "OFF");
   const pointer = byKey.get("htpr-7549-first-task-pointer");
