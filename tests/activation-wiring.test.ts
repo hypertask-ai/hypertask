@@ -15,6 +15,7 @@ const timed = (captures: any[]) => captures.map(({ timestamp, ...capture }) => {
 
 function taskController(h: ReturnType<typeof activationHarness>) {
   const noop = async () => undefined;
+  h.mocks["@/lib/flags/approvalWords"] = h.load("src/lib/flags/approvalWords.ts");
   Object.assign(h.mocks, {
     "@/lib/agents/writing": h.load("src/lib/agents/writing.ts"),
     "@/lib/agents/writingEnforcement": {
