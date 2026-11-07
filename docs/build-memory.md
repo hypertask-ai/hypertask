@@ -223,4 +223,12 @@ FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaS
 
 Mark-compact had reduced the live set to about 2783 MB, and the worker was still running when V8 aborted. That is the 3072 MB heap cap, not the SIGKILL from HYCI-177. The build machine is still the standard 8192 MiB machine. Pull request 3038 changed 177 lines of flag defaults and added no dependency. The tree was already on the ceiling.
 
-The build script now sets `--max-old-space-size=3584`. That is 512 MB under the 4096 MB cap that SIGKILL'd the machine, and under half of 8192 MiB. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`. `tests/build-memory-config.test.cjs` requires this exact cap. A SIGKILL at 3584 MB, or another heap abort at 3584 MB, is the paid Enhanced Build Machine, which is Valentin's decision.
+The build script then set `--max-old-space-size=3584`. That is 512 MB under the 4096 MB cap that SIGKILL'd the machine, and under half of 8192 MiB. `NEXT_WEBPACK_PARALLELISM` stays 1 and the builder stays `--webpack`.
+
+That cap was not enough. Deployment 7628217481 (`51fcc525`, `dpl_9tg62h9sytSJHF5iEJKQeftXk7o2`) died in the same phase:
+
+```
+FATAL ERROR: Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory
+```
+
+Mark-compact reduced 3096.9 MB to 3080.7 MB. The worker was still running, so the 8192 MiB machine was not full. The cap is now 4096 MB, half the machine. A SIGKILL or another heap abort at 4096 MB is the paid Enhanced Build Machine, which is Valentin's decision.
