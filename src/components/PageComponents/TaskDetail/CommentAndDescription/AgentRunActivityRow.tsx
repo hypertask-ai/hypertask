@@ -17,6 +17,7 @@ import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import { safeAgentRunActivityLink } from "@/lib/agentRuns/taskActivityFeed";
 import { HTPR_8262_AGENT_LANE_COLLAPSE_FLAG } from "@/lib/flags/definitions/htpr-8262-agent-lane-collapse";
+import { HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG } from "@/lib/flags/definitions/htpr-8846-agent-lane-on-readable-board";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
@@ -38,6 +39,7 @@ const AgentRunActivityRow = ({
   const [pendingValue, setPendingValue] = useState<string | null>(null);
   const selectionLocked = activity.selectedOption !== null || pendingValue !== null;
   const collapseLane = useFlag(HTPR_8262_AGENT_LANE_COLLAPSE_FLAG);
+  const showLaneAuthor = useFlag(HTPR_8846_AGENT_LANE_ON_READABLE_BOARD_FLAG);
   const { stacked } = useTaskContext();
   const laneCollapsed = useMemo(() => {
     const folds = Object.values(stacked ?? {});
@@ -80,6 +82,9 @@ const AgentRunActivityRow = ({
 
   const type = activity.type;
   if (type === "response") return null;
+  const laneAuthor = showLaneAuthor && activity.agentName ? (
+    <span className="shrink-0">{activity.agentName}</span>
+  ) : null;
   const Icon = ACTIVITY_ICONS[type];
   const link = safeAgentRunActivityLink(activity.link);
   const collapsible = collapseLane && type !== "elicitation";
@@ -124,6 +129,7 @@ const AgentRunActivityRow = ({
           strokeWidth={1.75}
           aria-hidden
         />
+        {laneAuthor}
         <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
           {activity.text}
         </span>
@@ -166,6 +172,7 @@ const AgentRunActivityRow = ({
             strokeWidth={1.75}
             aria-hidden
           />
+          {laneAuthor}
           {link ? (
             <a
               href={link}
