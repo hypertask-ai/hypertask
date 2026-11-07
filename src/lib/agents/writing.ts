@@ -161,7 +161,9 @@ function questionHit(html: string): Hit | null {
   const asked = questionLine.replace(/^[\s\S]*\bQuestion\s*:\s*/i, '').trim()
   if (!asked.endsWith('?')) return { reason: 'the question must end with a question mark', offender: questionLine }
   const beforeQuestion = html.replace(/<blockquote\b[\s\S]*?<\/blockquote>/gi, '').split(/Question\s*:/i)[0] ?? ''
-  const bullets = beforeQuestion.match(/<\/li>/gi)?.length ?? 0
+  const opens = beforeQuestion.match(/<li\b/gi)?.length ?? 0
+  const closes = beforeQuestion.match(/<\/li>/gi)?.length ?? 0
+  const bullets = opens > closes ? opens - 1 : opens
   if (bullets > 3) return { reason: 'keep the context to three points', offender: 'Question:' }
   return null
 }

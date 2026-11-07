@@ -95,6 +95,15 @@ class FlagColumnMismatchError extends Error {}
 class OpenObservationGateError extends Error {}
 
 const OPEN_OBSERVATION = /\b(?:unfinished|still open|not finished|not done|incomplete|remains open)\b/i;
+const NEGATED_OPEN = /(?:\bno longer\b|\bnot\b|\bnever\b)\s+$/i;
+
+function affirmativeOpen(text: string, start: number, slice: string): boolean {
+  const finder = new RegExp(OPEN_OBSERVATION.source, "gi");
+  for (const hit of slice.matchAll(finder)) {
+    if (!NEGATED_OPEN.test(text.slice(0, start + (hit.index ?? 0)))) return true;
+  }
+  return false;
+}
 
 export function hasUnfinishedFullDayObservation(text: string): boolean {
   const lines = text
@@ -103,21 +112,26 @@ export function hasUnfinishedFullDayObservation(text: string): boolean {
     .replace(/<[^>]+>/g, " ")
     .replace(/&(?:nbsp|#160);/gi, " ")
     .split(/\n/);
-  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.;,]{0,80}\\bfull[- ]day observation\\b`, "i");
+  const openBefore = new RegExp(`${OPEN_OBSERVATION.source}[^.;,]{0,80}\\bfull[- ]day observation\\b`, "gi");
   const openAfter = /\bfull[- ]day observation(?:\s+gate)?\b[^.;,]{0,80}/gi;
   return lines.some((line) => {
     const plain = line.replace(/\s+/g, " ").trim();
     if (!plain) return false;
-    if (openBefore.test(plain)) return true;
-    return [...plain.matchAll(openAfter)].some((match) => OPEN_OBSERVATION.test(match[0]));
+    for (const match of plain.matchAll(openBefore)) {
+      if (affirmativeOpen(plain, match.index ?? 0, match[0])) return true;
+    }
+    for (const match of plain.matchAll(openAfter)) {
+      if (affirmativeOpen(plain, match.index ?? 0, match[0])) return true;
+    }
+    return false;
   });
 }
 
 function destinationIsDone(section: { section_title: string; isDone?: boolean | null } | null, title: string): boolean {
   if (section?.isDone === true) return true;
   if (section?.isDone === false) return false;
-  const name = ` ${(section?.section_title ?? title).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()} `;
-  return ["done", "complete", "shipped"].some((keyword) => name.includes(` ${keyword} `));
+  const name = (section?.section_title ?? title).trim().toLowerCase();
+  return name === "done" || name === "complete" || name === "shipped";
 }
 
 export const TASK_IDENTITY_CONFLICT_CODE = "TASK_IDENTITY_CONFLICT";

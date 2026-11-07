@@ -20,6 +20,16 @@ test("a phone-unlock question with the observation gate and three points is acce
   assert.doesNotThrow(() => assertAgentWriting("agent", { text: phoneUnlock }, {}, { houseRules: true }));
 });
 
+test("omitted list closes still count three context points", () => {
+  const openItems = phoneUnlock.replaceAll("</li>", "");
+  assert.doesNotThrow(() => assertAgentWriting("agent", { text: openItems }, {}, { houseRules: true }));
+  const four = openItems.replace(
+    "<li><p><strong>Question:</strong>",
+    "<li><p>Extra: one more point.</p><li><p><strong>Question:</strong>",
+  );
+  assert.throws(() => assertAgentWriting("agent", { text: four }, {}, { houseRules: true }), /three points/);
+});
+
 test("four real context points are still refused", () => {
   const text = phoneUnlock.replace(
     "<li><p><strong>Question:</strong>",
@@ -144,6 +154,8 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished; report passed"), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: passed, report unfinished"), false);
   assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: unfinished, report passed"), true);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: no longer unfinished."), false);
+  assert.equal(open.hasUnfinishedFullDayObservation("Full-day observation gate: not done."), true);
   assert.equal(open.hasUnfinishedFullDayObservation("Search now finds reminders."), false);
   const refused = await open.update();
   assert.equal(refused.status, 409);
@@ -202,4 +214,20 @@ test("a done move keeps a ticket with an unfinished full-day observation gate", 
   });
   assert.equal((await clearing.update({ acceptanceCriteria: "" })).status, 200);
   assert.equal(clearing.saved().sectionId, 11);
+
+  const unnamedWorking = moveFixture({
+    section: "Not done",
+    isDone: null,
+    byName: true,
+    description: "<p>Full-day observation gate: still unfinished.</p>",
+  });
+  assert.equal((await unnamedWorking.update()).status, 200);
+
+  const unnamedDone = moveFixture({
+    section: "Done",
+    isDone: null,
+    byName: true,
+    description: "<p>Full-day observation gate: still unfinished.</p>",
+  });
+  assert.equal((await unnamedDone.update()).status, 409);
 });

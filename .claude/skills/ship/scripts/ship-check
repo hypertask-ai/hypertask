@@ -749,14 +749,21 @@ text=re.sub(r"</\s*(?:p|div|li|h[1-6]|tr|section|blockquote)\s*>", "\n", text, f
 text=re.sub(r"<[^>]+>"," ",text)
 text=re.sub(r"&(?:nbsp|#160);"," ",text,flags=re.I)
 open_word=r"(?:unfinished|still open|not finished|not done|incomplete|remains open)"
+def negated(text, index):
+    return re.search(r"(?:\bno longer\b|\bnot\b|\bnever\b)\s+$", text[:index], re.I) is not None
+def affirmative(text, start, slice):
+    return any(not negated(text, start + hit.start()) for hit in re.finditer(rf"\b{open_word}\b", slice, re.I))
 def line_open(line):
     line=re.sub(r"\s+"," ",line).strip()
     if not line:
         return False
-    if re.search(rf"\b{open_word}\b[^.;,]{{0,80}}\bfull[- ]day observation\b", line, re.I):
-        return True
-    spans=re.findall(r"\bfull[- ]day observation(?:\s+gate)?\b[^.;,]{0,80}", line, re.I)
-    return any(re.search(rf"\b{open_word}\b", span, re.I) for span in spans)
+    for match in re.finditer(rf"\b{open_word}\b[^.;,]{{0,80}}\bfull[- ]day observation\b", line, re.I):
+        if affirmative(line, match.start(), match.group(0)):
+            return True
+    for match in re.finditer(r"\bfull[- ]day observation(?:\s+gate)?\b[^.;,]{0,80}", line, re.I):
+        if affirmative(line, match.start(), match.group(0)):
+            return True
+    return False
 sys.exit(0 if any(line_open(line) for line in text.splitlines()) else 1)
 '
 }
